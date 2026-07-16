@@ -35,10 +35,12 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import load_yaml, repo_root  # noqa: E402
@@ -53,6 +55,7 @@ EVIDENCE_CHECKS = [
     ("storage_policies", "scripts/release/check_storage_policies.py"),
     ("implementation_ledger", "scripts/release/check_implementation_ledger.py"),
     ("sdk_conformance", "scripts/release/sdk_conformance.py"),
+    ("required_release_checks", "scripts/release/check_required_checks.py"),
 ]
 
 EXTERNAL_ATTESTATION_ID = "FT-EXT-ATTESTATION"
@@ -239,20 +242,85 @@ def ci_check_section(ci_log: str | None) -> dict:
     }
 
 
-def build_bundle(ci_log: str | None = None) -> dict:
+def hosted_checks_section(path_value: str | None, expected_sha: str) -> dict:
+    """Validate authoritative GitHub check-run evidence for the exact SHA.
+
+    Input is a JSON object with a ``checks`` list.  Every catalog check must be
+    represented and bind its workflow run, timestamp and artifact checksum to
+    the expected commit.  Missing, skipped, cancelled, stale, or cross-SHA
+    evidence never becomes a pass.
+    """
+    catalog = load_yaml("config/required_release_checks.yaml") or {}
+    branch = catalog.get("branch_protection") or {}
+    required = {
+        row["id"]: row for row in catalog.get("checks") or []
+        if row.get("blocks_founding_tenant_release")
+    }
+    if not path_value:
+        return {"captured": False, "authoritative": False, "passed": False,
+                "reason": "github_check_evidence_missing", "checks": [],
+                "external_action": branch.get("unavailable_action")}
+    path = Path(path_value) if os.path.isabs(path_value) else repo_root() / path_value
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"captured": False, "authoritative": False, "passed": False,
+                "reason": "github_check_evidence_invalid", "error": str(exc), "checks": []}
+    supplied = {str(row.get("id")): row for row in payload.get("checks", [])}
+    failures: list[str] = []
+    normalized: list[dict] = []
+    for check_id, definition in required.items():
+        row = supplied.get(check_id)
+        if not row:
+            failures.append(f"{check_id}: missing")
+            continue
+        for field in ("commit_sha", "workflow_run_id", "job_name", "conclusion",
+                      "completed_at", "artifact_name", "artifact_sha256"):
+            if not row.get(field):
+                failures.append(f"{check_id}: missing {field}")
+        if row.get("commit_sha") != expected_sha:
+            failures.append(f"{check_id}: SHA mismatch")
+        if row.get("job_name") != definition.get("job"):
+            failures.append(f"{check_id}: job name mismatch")
+        if row.get("conclusion") not in catalog.get("allowed_terminal_conclusions", []):
+            failures.append(f"{check_id}: conclusion {row.get('conclusion')!r} is not allowed")
+        if row.get("artifact_name") != definition.get("evidence_artifact"):
+            failures.append(f"{check_id}: artifact name mismatch")
+        try:
+            completed = datetime.datetime.fromisoformat(
+                str(row.get("completed_at", "")).replace("Z", "+00:00")
+            )
+            if completed.tzinfo is None:
+                raise ValueError("timezone is required")
+        except ValueError:
+            failures.append(f"{check_id}: invalid completed_at timestamp")
+        checksum = str(row.get("artifact_sha256", ""))
+        if checksum and not re.fullmatch(r"[0-9a-f]{64}", checksum):
+            failures.append(f"{check_id}: invalid artifact checksum")
+        normalized.append({key: row.get(key) for key in (
+            "id", "commit_sha", "workflow_run_id", "job_name", "conclusion",
+            "completed_at", "artifact_name", "artifact_sha256"
+        )})
+    return {"captured": True, "authoritative": not failures, "passed": not failures,
+            "expected_commit_sha": expected_sha, "failures": failures, "checks": normalized}
+
+
+def build_bundle(ci_log: str | None = None, github_checks: str | None = None) -> dict:
     results = {name: _run(script) for name, script in EVIDENCE_CHECKS}
     passed = sum(1 for v in results.values() if v.get("exit_code") == 0)
 
+    git = git_state()
     return {
         "timestamp": _now_iso(),
         "release_train": "FOUNDING_TENANT_PRODUCTION",
-        "git": git_state(),
+        "git": git,
         "evidence_checks": results,
         "implementation_ledger": ledger_section(),
         "route_registry": route_registry_section(),
         "consent_purposes": consent_section(),
         "sdk_conformance": sdk_conformance_section(),
         "ci_check": ci_check_section(ci_log),
+        "github_checks": hosted_checks_section(github_checks, git["commit"]),
         "summary": {"total": len(results), "passed": passed,
                     "failed": len(results) - passed},
         "docs": [
@@ -268,14 +336,25 @@ def main() -> int:
     ap.add_argument("--out", default=None)
     ap.add_argument("--ci-log", default=None,
                     help="path to a saved `make ci-check` log to summarize")
+    ap.add_argument("--github-checks", default=None,
+                    help="authoritative GitHub check-run JSON for the current commit")
+    ap.add_argument("--release-mode", action="store_true",
+                    help="fail closed unless local and hosted evidence are authoritative")
     args = ap.parse_args()
 
-    bundle = build_bundle(ci_log=args.ci_log)
+    bundle = build_bundle(ci_log=args.ci_log, github_checks=args.github_checks)
     text = yaml.safe_dump(bundle, sort_keys=False, width=100)
     print(text)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(text)
+    if args.release_mode:
+        ci = bundle["ci_check"]
+        hosted = bundle["github_checks"]
+        if (not ci.get("captured") or ci.get("gates_failed") != 0
+                or not hosted.get("passed") or bundle["summary"]["failed"]):
+            print("Release evidence is incomplete or failed; refusing a release claim.", file=sys.stderr)
+            return 1
     return 0
 
 

@@ -147,7 +147,9 @@ object Aether : DefaultLifecycleObserver {
     private var consentState: MutableList<String> = mutableListOf()
     private var fingerprintId: String = ""
     private var campaignContext: JSONObject? = null
-    private var appStartTimeMs: Long = SystemClock.elapsedRealtime()
+    // Initialize the monotonic clock only when the Android runtime is available.
+    // Loading the SDK object must remain safe in plain JVM unit tests.
+    private var appStartTimeMs: Long = 0L
     private var foregroundStartMs: Long = 0L
     private var lastActivityMs: Long = 0L
     private var currentJourneyId: String? = null
@@ -383,6 +385,8 @@ object Aether : DefaultLifecycleObserver {
             log("Already initialized")
             return
         }
+
+        appStartTimeMs = SystemClock.elapsedRealtime()
 
         this.config = config
         this.context = application.applicationContext

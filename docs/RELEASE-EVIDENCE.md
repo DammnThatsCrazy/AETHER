@@ -29,6 +29,8 @@ Emits branch, commit SHA, dirty status, and the founding-tenant gate inventory.
 ```bash
 python scripts/release/collect_evidence.py --out evidence.yaml
 python scripts/release/collect_evidence.py --ci-log ci-check.log --out evidence.yaml
+python scripts/release/collect_evidence.py --ci-log ci-check.log \
+  --github-checks github-checks.json --release-mode --out evidence.yaml
 ```
 
 Assembles the bundle from **real repo state** — nothing is asserted by hand:
@@ -62,9 +64,20 @@ Assembles the bundle from **real repo state** — nothing is asserted by hand:
 - **ci-check summary** — parsed from a saved `make ci-check` log when
   provided via `--ci-log`; otherwise recorded as *not captured*. It is never
   fabricated.
+- **Hosted check results** — validated against
+  `config/required_release_checks.yaml` and bound to the exact commit SHA,
+  workflow run, job, completion timestamp, artifact name, and SHA-256. Missing,
+  skipped, cancelled, failed, cross-SHA, or malformed results remain failed.
+  `--release-mode` exits non-zero unless both local CI and hosted check evidence
+  are complete and successful; absence of GitHub access therefore cannot be
+  represented as a pass. Branch protection is an external control: when its
+  ruleset cannot be read, the bundle emits the exact administrator action from
+  the canonical catalog instead of marking the control complete.
 
-It is an **index**, not a gate — it always exits 0; the `make validate-*`
-targets and `make ci-check` are the gates.
+Without `--release-mode` it is an index. Release mode is deliberately a
+fail-closed gate; `make sdk-release-gate` separately validates SDK metadata,
+derived conformance, and drift between the required-check catalog and hosted
+workflow jobs.
 
 ## Gates
 

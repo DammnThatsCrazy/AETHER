@@ -290,6 +290,12 @@ class ServiceCredentialService:
             raise SessionValidationError("service credential revoked")
         if _expired(rec.get("expires_at"), _now()):
             raise SessionValidationError("service credential expired")
+        account_id = rec.get("service_account_id")
+        account = await self._accounts.find_by_id(account_id) if account_id else None
+        if not account or account.get("status") != "active":
+            raise SessionValidationError("service account inactive")
+        if account.get("tenant_id") != rec.get("tenant_id"):
+            raise SessionValidationError("service account tenant mismatch")
         return rec
 
     async def rotate_credential(self, credential_id: str) -> None:

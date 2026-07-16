@@ -54,6 +54,16 @@ def test_every_mounted_route_is_classified():
     )
 
 
+def test_runtime_inventory_uses_route_templates_and_has_no_unknowns():
+    import main
+    from services.security.route_registry import validate_mounted_routes
+
+    inventory = validate_mounted_routes(main.app.routes)
+    assert inventory
+    assert all(item["policy"] is not None for item in inventory)
+    assert all("literal-tenant" not in item["route_template"] for item in inventory)
+
+
 def test_kyber_routes_require_operator_and_audit():
     from services.security.route_registry import classify
     offenders = []

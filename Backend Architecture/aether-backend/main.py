@@ -353,6 +353,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         consumer_specs_for_role,
     )
     from services.runtime.roles import should_start_consumers, should_start_workers
+    from services.security.route_registry import validate_mounted_routes
+
+    # Resolve the actual post-feature-flag route set.  Unknown routes abort
+    # non-local startup before any database/broker connections are opened.
+    if settings.route_registry.route_registry_enforced:
+        app.state.route_policy_inventory = validate_mounted_routes(app.routes)
 
     # Runtime-role gating (PR 4 / FT-4). With WORKER_ROLES_ENABLED off, both
     # gates are True → this lifespan is byte-identical to before. With it on, a

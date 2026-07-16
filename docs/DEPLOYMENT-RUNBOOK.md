@@ -18,10 +18,11 @@ workflows as references).
 
 ## Artifacts
 
-- Images: backend (`Backend Architecture/aether-backend/Dockerfile`), Aether
-  (`frontend/aether/Dockerfile`), Kyber (`frontend/kyber/Dockerfile`), ML
-  (`ML Models/aether-ml/docker/Dockerfile`).
-- CI build/push: `.github/workflows/deploy.yml` (ECR + ECS, manual or on main).
+- Immutable backend image by digest, static Aether and Kyber archives, migration
+  archive, and runtime configuration are bound in `release.json`.
+- CI build/push: `.github/workflows/deploy.yml`. A push to `main` builds once
+  and targets staging only. Production promotion is manual and requires the
+  staged workflow-run ID plus the approved release-manifest checksum.
 - Local/staging stack: `docker-compose.yml` (+ profiles) and
   `deploy/staging/{bootstrap.sh,docker-compose.staging.yml,kafka_topics.sh}`.
 
@@ -36,14 +37,26 @@ workflows as references).
 
 ## Deploy
 
-1. Build + push images (CI `deploy.yml` or manual `docker build`).
-2. Apply migrations: `alembic upgrade head` against the target `DATABASE_URL`.
-3. Roll out backend, then frontends (env-driven `VITE_API_BASE_URL`).
-4. Verify `GET /v1/health` is green and `GET /v1/status` responds.
+1. Allow `deploy.yml` to build the commit once and deploy it to staging.
+2. Retain the workflow run ID and `release.json.sha256` from staging evidence.
+3. After staging validation and approval, dispatch the same workflow for
+   `production` with those two values. Do not rebuild artifacts.
+4. The workflow verifies every checksum, registers one exact task-definition
+   revision per required role, and fails if any expected ECS service is absent.
+5. Aether and Kyber archives are uploaded to private S3 origins. Versioned
+   assets receive immutable caching; `index.html` is always no-cache.
+6. Verify readiness, smoke, and deployment evidence for the selected release.
+
+For infrastructure changes, dispatch `Reviewed Terraform promotion` with
+`action=plan`. After review and environment approval, dispatch `action=apply`
+with the plan run ID and checksum. Apply downloads and verifies that plan and
+runs `terraform apply reviewed.tfplan`; it never creates a replacement plan.
 
 ## Rollback
 
-1. Re-deploy the previous image tag.
+1. Promote the previous verified release manifest. The workflow re-verifies
+   the manifest and artifacts before registering its task revisions and static
+   bundles; mutable tags are not rollback inputs.
 2. If a migration must be reverted, apply the documented down-revision
    (alembic) and restore from backup if data changed — see
    [Backup & Restore](BACKUP-RESTORE.md) when available.

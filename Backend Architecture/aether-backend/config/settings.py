@@ -500,14 +500,12 @@ class TrustPlaneConfig:
 # Route Policy Registry (PR 2) — authorization-as-protocol.
 #
 # The per-route Kyber operator gate (services/security/request_context.py) is
-# always active. These flags govern the OPTIONAL middleware authorization hook
+# always active. These flags govern the middleware authorization boundary
 # that classifies every request against config/route_registry.yaml:
-#   - policy_enforcement_enabled: run the hook at all (observe/log by default).
+#   - policy_enforcement_enabled: run the policy boundary.
 #   - route_registry_enforced: when True, the hook DENIES unclassified routes and
-#     Kyber routes reached by non-operators; when False (default) it observes
-#     (logs + metrics) without blocking, so the ~180-router surface is not
-#     destabilized. The CI coverage gate (test_route_registry_coverage) is the
-#     enforced guarantee regardless of this runtime flag.
+#     Kyber routes reached by non-operators. False is an explicit local/dev
+#     observe mode; staging and production reject it during validation.
 #   - kyber_operator_gate_enforced: informational — the canonical per-route gate
 #     is unconditional; documents that operator gating is active.
 # ---------------------------------------------------------------------------
@@ -515,7 +513,9 @@ class TrustPlaneConfig:
 @dataclass(frozen=True)
 class RouteRegistryConfig:
     policy_enforcement_enabled: bool = _env_bool("POLICY_ENFORCEMENT_ENABLED", True)
-    route_registry_enforced: bool = _env_bool("ROUTE_REGISTRY_ENFORCED", False)
+    route_registry_enforced: bool = _env_bool(
+        "ROUTE_REGISTRY_ENFORCED", _env("AETHER_ENV", "local") not in ("local", "dev", "test")
+    )
     kyber_operator_gate_enforced: bool = _env_bool("KYBER_OPERATOR_GATE_ENFORCED", True)
 
 
@@ -1195,6 +1195,18 @@ class Settings:
             raise RuntimeError(
                 "DATABASE_URL must be set in non-local environments. "
                 "Example: postgresql://aether:pass@db:5432/aether"
+            )
+
+        # Route policy is a runtime boundary, not just a registry coverage
+        # check.  Staging/production may never boot in observe-only mode.
+        if _is_non_local and not (
+            self.route_registry.policy_enforcement_enabled
+            and self.route_registry.route_registry_enforced
+            and self.route_registry.kyber_operator_gate_enforced
+        ):
+            raise RuntimeError(
+                "ROUTE_POLICY_ENFORCEMENT_REQUIRED: POLICY_ENFORCEMENT_ENABLED, "
+                "ROUTE_REGISTRY_ENFORCED, and KYBER_OPERATOR_GATE_ENFORCED must be true"
             )
 
         # ── BYOK encryption key ────────────────────────────────────────────────

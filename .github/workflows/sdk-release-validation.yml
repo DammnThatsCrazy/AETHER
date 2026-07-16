@@ -14,6 +14,8 @@ on:
       - 'docs/reports/**'
       - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
+      - 'scripts/release/sdk_conformance.py'
+      - 'packages/shared/sdk-parity.json'
       - '.github/workflows/sdk-release-validation.yml'
   pull_request:
     paths:
@@ -27,6 +29,8 @@ on:
       - 'docs/reports/**'
       - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
+      - 'scripts/release/sdk_conformance.py'
+      - 'packages/shared/sdk-parity.json'
       - '.github/workflows/sdk-release-validation.yml'
   workflow_dispatch:
 
@@ -56,18 +60,29 @@ jobs:
           npm pack --workspace=packages/shared --dry-run
           npm pack --workspace=packages/web --dry-run
           npm pack --workspace=packages/react-native --dry-run
+      - name: Record JS release evidence
+        run: |
+          mkdir -p release-evidence
+          printf '{"sha":"%s","job":"sdk-js"}\n' "$GITHUB_SHA" > release-evidence/sdk-js.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-js-release-evidence
+          path: release-evidence/sdk-js.json
       - name: Secret pattern scan
         run: |
           if grep -rE '(-----BEGIN (RSA|EC|PRIVATE)|PRIVATE_KEY\s*=\s*["\x27][A-Za-z0-9+/]{20})' packages/; then
             echo "ERROR: Possible secret detected in packages/" && exit 1
           fi
       - name: CHANGELOG entry check
-        run: grep -q 'SDK Productization' CHANGELOG.md || (echo "ERROR: CHANGELOG missing SDK Productization entry" && exit 1)
+        run: >-
+          grep -q 'SDK Productization' CHANGELOG.md ||
+          (echo "ERROR: CHANGELOG missing SDK Productization entry" && exit 1)
       - name: Audit doc existence check
-        run: test -f docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md || (echo "ERROR: Audit doc missing" && exit 1)
+        run: >-
+          test -f docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md ||
+          (echo "ERROR: Audit doc missing" && exit 1)
 
   android:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,18 +99,38 @@ jobs:
       - name: Android release build and Maven dry run
         working-directory: packages/android
         run: gradle assembleRelease publishToMavenLocal
+      - name: Record Android release evidence
+        run: |
+          mkdir -p release-evidence
+          printf '{"sha":"%s","job":"android"}\n' "$GITHUB_SHA" > release-evidence/android.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release-evidence
+          path: release-evidence/android.json
 
   ios:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Select an available iPhone simulator
+        id: simulator
+        run: |
+          simulator_udid="$(
+            xcrun simctl list devices available -j |
+              python3 -c 'import json, sys; data = json.load(sys.stdin); devices = [device for runtime, entries in data["devices"].items() if "iOS" in runtime for device in entries if device["name"].startswith("iPhone")]; print(devices[0]["udid"] if devices else "")'
+          )"
+          if [ -z "$simulator_udid" ]; then
+            echo 'ERROR: No available iPhone simulator was found.'
+            exit 1
+          fi
+          echo "Using iPhone simulator $simulator_udid"
+          echo "udid=$simulator_udid" >> "$GITHUB_OUTPUT"
       - name: Swift package tests with coverage
         working-directory: packages/ios
         run: |
           xcodebuild test \
             -scheme AetherSDK \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' \
             -enableCodeCoverage YES \
             -quiet
       - name: CocoaPods podspec dry-run lint
@@ -103,3 +138,11 @@ jobs:
           gem install cocoapods --no-document
           pod spec lint packages/ios/AetherSDK.podspec --allow-warnings --quick
           pod spec lint packages/react-native/aether-react-native.podspec --allow-warnings --quick
+      - name: Record iOS release evidence
+        run: |
+          mkdir -p release-evidence
+          printf '{"sha":"%s","job":"ios"}\n' "$GITHUB_SHA" > release-evidence/ios.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-evidence
+          path: release-evidence/ios.json

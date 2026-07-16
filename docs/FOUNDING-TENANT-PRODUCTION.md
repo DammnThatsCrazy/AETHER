@@ -34,6 +34,7 @@ The founding-tenant control plane is data-first and validated by tooling:
 | `config/control_catalog.yaml` | Internal control catalog with framework *mapping references* (not attestations). |
 | `config/posture/founding_tenant_production.yaml` | Commercial stage, permitted/prohibited data classes, and which trust-plane flags are ON. |
 | `config/deployment_profiles.yaml` | Canonical profile matrix and the production-lean cost policy. |
+| `config/founding_tenant_release.yaml` | Exact founding-tenant route, role, consumer, backend, control, rollout, and rollback surface. |
 
 Validate the spine:
 
@@ -43,6 +44,8 @@ make validate-profile-config    # deployment profiles + posture schema
 make validate-cost-policy       # production-lean forbidden/required resources
 make validate-route-registry    # route policy registry seed schema
 make validate-storage-policies  # storage policy registry seed schema
+make validate-founding-tenant-surface # manifest-to-code parity and rollout controls
+make runtime-readiness-gate     # durable topology and consumer ownership
 make founding-tenant-release-gate
 ```
 
@@ -103,26 +106,28 @@ Authorization is a protocol, not scattered route logic.
   route whose prefix is not classified fails
   `tests/unit/test_route_registry_coverage.py` (the default-deny ratchet), which
   also asserts every `/kyber` route is operator-required + audited.
-- **Runtime hook.** A middleware step (`POLICY_ENFORCEMENT_ENABLED`) classifies
-  each request; it is **observe-mode by default** (logs unclassified / Kyber
-  mismatches) and denies only when `ROUTE_REGISTRY_ENFORCED` is on, so the large
-  router surface is not destabilized. The CI coverage gate is the enforced
-  guarantee regardless.
+- **Runtime hook.** The canonical middleware resolves the matched route template
+  and applies its policy before application logic. Non-local startup rejects an
+  observe-only combination, and unknown routes deny when the production posture
+  enables `POLICY_ENFORCEMENT_ENABLED` and `ROUTE_REGISTRY_ENFORCED`.
 
-## What is deferred
+## Controlled activation and durable rehearsal
 
-The release train continues beyond this session. The implementation ledger
-records the following as `not_started` follow-ups: server-authoritative consent
-at ingestion, runtime worker separation, ingestion V2 (typed Bronze +
-transactional outbox), the elastic data plane (storage descriptors +
-object-backed Bronze), and SDK conformance + frontend session migration.
-Terraform deployment-profile enforcement is in progress on a separate branch.
-See `config/implementation_ledger.yaml`.
+`config/founding_tenant_release.yaml` is the machine-readable allowlist. It
+excludes advanced economic, financial, payment, rewards, derivative,
+stablecoin, and agent-execution domains from the first-tenant blast radius. Its
+rollouts progress through `disabled`, integration, staging, internal canary,
+founding-tenant canary, founding-tenant enabled, and only then a GA-candidate
+stage. Tenant selection comes from `FOUNDING_TENANT_ALLOWLIST`; no tenant ID is
+compiled into source.
 
-The release train continues beyond this session. The implementation ledger
-records the following as `not_started` follow-ups: server-authoritative consent
-at ingestion, the route-policy registry with default-deny, runtime worker
-separation, ingestion V2 (typed Bronze + transactional outbox), the elastic
-data plane (storage descriptors + object-backed Bronze), Terraform
-deployment-profile enforcement, and SDK conformance + frontend session
-migration. See `config/implementation_ledger.yaml`.
+The durable integration topology in
+`deploy/integration/docker-compose.durable.yml` runs PostgreSQL, Redis, S3/SNS/
+SQS-compatible LocalStack, the API-only process, and every dedicated runtime
+role. `make integration-durable` and `make integration-faults` require Docker;
+they are distinct from unit evidence and must not be silently skipped for a
+release verdict.
+
+External AWS plan/apply, staging soak, penetration testing, legal review, and
+formal assessment remain external evidence. Their absence must yield a
+conditional or no-go verdict rather than a production-readiness claim.

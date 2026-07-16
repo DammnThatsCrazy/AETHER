@@ -36,7 +36,7 @@ in `config/deployment_profiles.yaml` and is validated by
 ## production-lean cost policy
 
 `production-lean` is the founding-tenant target. It **must** provision
-CloudFront/S3 static frontends, an ALB, a single ECS backend, Aurora Serverless
+CloudFront/S3 static frontends, an ALB, explicit ECS runtime-role services, Aurora Serverless
 v2, SQS/SNS, DynamoDB, an S3 object lake, Secrets/KMS, CloudWatch alarms, inline
 ML, and a Postgres graph.
 
@@ -128,3 +128,17 @@ Each profile declares a selector for every backend dimension (`database`,
 `cache`, `event`, `graph`, `analytics`, `object`, `ml`). Runtime enforcement of
 these selectors (rejecting memory backends in production, explicit worker roles)
 is tracked in the ledger as `FT-4-RUNTIME-ROLES`.
+
+## Runtime-role deployment topology
+
+`config/runtime_deployment.yaml` is the deployable topology contract. Each
+non-local profile gives `api`, `outbox-relay`, `stream-worker`,
+`identity-worker`, `graph-writer`, `measurement-worker`, `materializer`, and
+`maintenance` its own service sizing. The local/test convenience role `all` is
+not deployable. `make validate-delivery-topology` compares this contract to the
+canonical Python role registry and fails when a role is missing or duplicated.
+
+The production-lean contract also requires static Aether and Kyber bundles and
+inline ML. It does not allow frontend ECS services or a dedicated ML service.
+Deployment registers a new task-definition revision for every required role,
+waits for every service, and treats a missing service as an error.

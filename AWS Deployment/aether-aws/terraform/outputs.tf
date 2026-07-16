@@ -93,6 +93,11 @@ output "ecs_backend_service_name" {
   value       = module.ecs.backend_service_name
 }
 
+output "ecs_runtime_role_service_names" {
+  description = "ECS services keyed by canonical dedicated runtime role"
+  value       = module.ecs.runtime_role_service_names
+}
+
 output "ecs_ml_service_name" {
   description = "ECS service name for ml-serving"
   value       = module.ecs.ml_service_name

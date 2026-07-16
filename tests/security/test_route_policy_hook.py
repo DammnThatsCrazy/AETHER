@@ -33,6 +33,14 @@ class _Req:
     class _Url:
         path = "/"
 
+    method = "GET"
+    headers = {}
+
+    class _State:
+        request_id = "corr-test"
+
+    state = _State()
+
 
 def _req():
     return _Req()
@@ -78,3 +86,40 @@ def test_disabled_hook_is_noop():
     with _route_flags(policy_enforcement_enabled=False, route_registry_enforced=True):
         hook = _hook()
         assert hook(_req(), "/v1/unknown-surface/y", _ADMIN) is None
+
+
+def test_tenant_organization_membership_and_credential_state_fail_closed():
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        hook = _hook()
+        for field in (
+            "tenant_status", "organization_status", "membership_status", "credential_status"
+        ):
+            context = dataclasses.replace(_ADMIN, **{field: "suspended"})
+            denial = hook(_req(), "/v1/profile/{entity_id}", context)
+            assert _is_denial(denial), field
+
+
+def test_public_ingest_identifier_cannot_cross_credential_boundary():
+    context = TenantContext(
+        tenant_id="t", credential_class="public_ingest_identifier", permissions=["ingest"]
+    )
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        ingest_request = _req()
+        ingest_request.method = "POST"
+        assert _hook()(ingest_request, "/v1/batch", context) is None
+        assert _is_denial(_hook()(_req(), "/v1/profile/{entity_id}", context))
+
+
+def test_tenant_header_must_agree_with_authenticated_context():
+    request = _req()
+    request.headers = {"X-Tenant-ID": "other-tenant"}
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        assert _is_denial(_hook()(request, "/v1/profile/{entity_id}", _ADMIN))
+
+
+def test_service_credential_requires_explicit_scope():
+    context = TenantContext(
+        tenant_id="t", credential_class="service_credential", permissions=[]
+    )
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        assert _is_denial(_hook()(_req(), "/v1/profile/{entity_id}", context))

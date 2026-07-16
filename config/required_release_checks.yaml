@@ -1,0 +1,37 @@
+version: 1
+allowed_terminal_conclusions: [success]
+branch_protection:
+  repository: origin
+  branch: main
+  verification_required_for_release: true
+  unavailable_action: >-
+    A repository administrator must require every blocks_pr_merge check on main
+    and attach exported GitHub ruleset evidence to the release bundle.
+checks:
+  - id: sdk-js
+    workflow: .github/workflows/sdk-release-validation.yml
+    job: sdk-js
+    applicability: [shared_contracts, web_sdk, react_native_sdk, sdk_metadata]
+    blocks_pr_merge: true
+    blocks_sdk_release: true
+    blocks_founding_tenant_release: true
+    runner_class: ubuntu
+    evidence_artifact: sdk-js-release-evidence
+  - id: android
+    workflow: .github/workflows/sdk-release-validation.yml
+    job: android
+    applicability: [shared_contracts, android_sdk, sdk_metadata]
+    blocks_pr_merge: true
+    blocks_sdk_release: true
+    blocks_founding_tenant_release: true
+    runner_class: ubuntu
+    evidence_artifact: android-release-evidence
+  - id: ios
+    workflow: .github/workflows/sdk-release-validation.yml
+    job: ios
+    applicability: [shared_contracts, ios_sdk, react_native_sdk, sdk_metadata]
+    blocks_pr_merge: true
+    blocks_sdk_release: true
+    blocks_founding_tenant_release: true
+    runner_class: macos
+    evidence_artifact: ios-release-evidence

@@ -237,8 +237,18 @@ def register_middleware(app: FastAPI) -> None:
         quota_headers: dict[str, str] = {}
         access_tier_header: Optional[str] = None
 
+        # Resolve the matched FastAPI template when available. Starlette sets
+        # this before the inner application executes; unit/direct invocation
+        # falls back to the literal path and remains fail closed.
+        route_template = _matched_route_template(app, request.scope)
+        if route_template is None and settings.route_registry.route_registry_enforced:
+            from shared.common.common import ForbiddenError
+            denial = ForbiddenError("ROUTE_POLICY_UNKNOWN_ROUTE")
+            return JSONResponse(status_code=denial.code.value, content=denial.to_dict())
+        route_template = route_template or request.url.path
+
         # --- Auth (skip public paths) ---
-        if not _is_public_path(request.url.path):
+        if not _is_public_path(route_template):
             try:
                 registry = get_registry()
                 context = await _authenticate_async(
@@ -250,7 +260,7 @@ def register_middleware(app: FastAPI) -> None:
             request.state.tenant_id = context.tenant_id
             # PR 2 route policy hook (observe by default; enforced mode denies
             # unclassified / Kyber-mismatch routes). Never raises.
-            _policy_denial = _evaluate_route_policy(request, request.url.path, context)
+            _policy_denial = _evaluate_route_policy(request, route_template, context)
             if _policy_denial is not None:
                 return JSONResponse(
                     status_code=_policy_denial.code.value, content=_policy_denial.to_dict()
@@ -677,18 +687,14 @@ async def _run_extraction_mesh(
 
 
 def _evaluate_route_policy(request: Request, path: str, context) -> Optional[AetherError]:
-    """PR 2 route policy hook — authorization as protocol.
+    """Apply the canonical route policy and return a stable denial.
 
-    Observe-mode by DEFAULT: classifies the request against the route registry
-    and logs/metrics unclassified routes or Kyber routes reached by
-    non-operators, WITHOUT blocking (so the large router surface is not
-    destabilized). When ``route_registry_enforced`` is on, returns an
-    :class:`AetherError` to deny. Returns None to allow. Never raises — a hook
-    failure must not break request handling.
+    In enforced mode any evaluator error is itself denied.  This deliberately
+    avoids the old fail-open exception handler.  Local observe mode retains
+    diagnostics without blocking development.
     """
+    rr = getattr(settings, "route_registry", None)
     try:
-        from config.settings import settings as _settings
-        rr = getattr(_settings, "route_registry", None)
         if rr is None or not rr.policy_enforcement_enabled:
             return None
         from services.security.route_registry import classify
@@ -697,7 +703,7 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
         pol = classify(path)
         if pol is None:
             if rr.route_registry_enforced:
-                return ForbiddenError("route not classified in policy registry")
+                return ForbiddenError("ROUTE_POLICY_UNCLASSIFIED")
             logger.warning(f"route policy: unclassified route {path}")
             try:
                 metrics.increment("route_policy_unclassified")
@@ -710,17 +716,90 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
             if not is_kyber_operator(context):
                 if rr.route_registry_enforced:
                     return ForbiddenError(
-                        "Kyber operator access required; Aether tenants may not access Kyber"
+                        "ROUTE_POLICY_KYBER_OPERATOR_REQUIRED"
                     )
                 logger.warning(f"route policy: non-operator on kyber route {path}")
                 try:
                     metrics.increment("route_policy_kyber_observed")
                 except Exception:
                     pass
+        if context is None:
+            if pol.requires_auth:
+                return ForbiddenError("ROUTE_POLICY_AUTH_REQUIRED")
+            return None
+
+        # State is rehydrated by the trust-plane validators on each request.
+        state_checks = (
+            ("tenant_status", "ROUTE_POLICY_TENANT_INACTIVE"),
+            ("organization_status", "ROUTE_POLICY_ORGANIZATION_INACTIVE"),
+            ("membership_status", "ROUTE_POLICY_MEMBERSHIP_INACTIVE"),
+            ("credential_status", "ROUTE_POLICY_CREDENTIAL_INACTIVE"),
+        )
+        for attr, reason in state_checks:
+            if getattr(context, attr, "active") != "active":
+                return ForbiddenError(reason)
+
+        credential_class = getattr(context, "credential_class", "legacy")
+        if credential_class == "public_ingest_identifier":
+            if path not in ("/v1/batch", "/v1/track") and not path.startswith("/v1/ingest"):
+                return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
+        if credential_class == "service_credential" and not context.permissions:
+            return ForbiddenError("ROUTE_POLICY_SERVICE_SCOPE_REQUIRED")
+
+        requested_tenant = getattr(request, "headers", {}).get("X-Tenant-ID")
+        if requested_tenant and requested_tenant != context.tenant_id:
+            return ForbiddenError("ROUTE_POLICY_TENANT_MISMATCH")
+
+        method = getattr(request, "method", "GET").upper()
+        if method in {"POST", "PUT", "PATCH", "DELETE"}:
+            permission = "ingest" if path in ("/v1/batch", "/v1/track") or path.startswith("/v1/ingest") else "write"
+            if not context.has_permission(permission):
+                return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
+        elif pol.tenant_scoped and credential_class != "legacy" and not context.has_permission("read"):
+            return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
+
+        if pol.audit_required:
+            logger.info(
+                "route_policy_decision",
+                extra={
+                    "route_template": path,
+                    "method": method,
+                    "tenant_id": context.tenant_id,
+                    "actor_id": context.user_id or "machine",
+                    "credential_class": credential_class,
+                    "decision": "allow",
+                    "request_id": getattr(request.state, "request_id", ""),
+                },
+            )
         return None
-    except Exception as e:  # observe hook must never break requests
-        logger.debug(f"route policy hook error on {path}: {e}")
+    except Exception as e:
+        logger.error(f"route policy evaluation error on {path}: {type(e).__name__}")
+        if rr is not None and rr.route_registry_enforced:
+            from shared.common.common import ForbiddenError
+            return ForbiddenError("ROUTE_POLICY_EVALUATION_FAILED")
         return None
+
+
+def _matched_route_template(app: FastAPI, scope: dict) -> Optional[str]:
+    """Match a request scope to its mounted template before dispatch.
+
+    Middleware runs outside Starlette's router, so ``scope['route']`` is not
+    reliably populated yet.  Matching here ensures literal tenant/entity IDs
+    never become authorization inputs.
+    """
+    from starlette.routing import Match
+
+    existing = scope.get("route")
+    if existing is not None:
+        return getattr(existing, "path", None)
+    for route in app.routes:
+        try:
+            match, _ = route.matches(scope)
+        except (AttributeError, KeyError, TypeError):
+            continue
+        if match is Match.FULL:
+            return getattr(route, "path", None)
+    return None
 
 
 async def _authenticate_async(
@@ -810,6 +889,12 @@ async def _resolve_session_token(token: str) -> Optional[TenantContext]:
         user_id=rec.get("principal_id"),
         role=Role.EDITOR,
         permissions=list(rec.get("permissions", ["read", "write", "ingest", "analytics"])),
+        credential_class=rec.get("credential_class", "human_session"),
+        credential_status=rec.get("status", "inactive"),
+        tenant_status=rec.get("tenant_status", "active"),
+        organization_id=rec.get("organization_id"),
+        organization_status=rec.get("organization_status", "active"),
+        membership_status=rec.get("membership_status", "active"),
     )
 
 
@@ -825,6 +910,9 @@ async def _resolve_public_ingest(identifier: str) -> Optional[TenantContext]:
         tenant_id=rec.get("tenant_id", ""),
         role=Role.VIEWER,
         permissions=["ingest"],
+        credential_class=rec.get("credential_class", "public_ingest_identifier"),
+        credential_status=rec.get("status", "inactive"),
+        tenant_status=rec.get("tenant_status", "active"),
     )
 
 
@@ -838,4 +926,9 @@ async def _resolve_service_credential(cred: str) -> Optional[TenantContext]:
         tenant_id=rec.get("tenant_id", ""),
         role=Role.EDITOR,
         permissions=list(rec.get("permissions", [])),
+        credential_class=rec.get("credential_class", "service_credential"),
+        credential_status=rec.get("status", "inactive"),
+        tenant_status=rec.get("tenant_status", "active"),
+        organization_id=rec.get("organization_id"),
+        organization_status=rec.get("organization_status", "active"),
     )

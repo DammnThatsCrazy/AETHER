@@ -1,22 +1,28 @@
-name: Deploy
+name: Immutable delivery
 
-# Triggers: automatic on push to main, or manual for staging/production
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       environment:
-        description: Target environment
+        description: Explicit promotion target
         type: choice
         options: [staging, production]
-        default: production
+        default: staging
         required: true
+      source_run_id:
+        description: Successful staging build run containing the release manifest (required for production)
+        type: string
+        required: false
+      release_manifest_checksum:
+        description: Approved sha256 checksum of release.json (required for production)
+        type: string
+        required: false
 
 concurrency:
-  group: deploy-${{ github.event.inputs.environment || 'production' }}
-  cancel-in-progress: false  # never cancel an active deployment
-
+  group: deploy-${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+  cancel-in-progress: false
 permissions:
   contents: read
 
@@ -24,255 +30,195 @@ env:
   AWS_REGION: us-east-1
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────
-  # 1. Build Docker images and push to ECR
-  # ─────────────────────────────────────────────────────────────────────────
-  build-and-push:
-    name: Build & Push images
+  build:
+    name: Build immutable release once
+    if: github.event_name == 'push' || inputs.environment == 'staging'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # OIDC auth with AWS
       contents: read
+      id-token: write
     outputs:
-      image_tag:    ${{ steps.tag.outputs.tag }}
-      ecr_registry: ${{ steps.ecr-login.outputs.registry }}
-
+      manifest_checksum: ${{ steps.manifest.outputs.checksum }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to ECR
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set image tag
-        id: tag
-        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # ── Backend ────────────────────────────────────────────────────────────
-      # Build context is repo root (Dockerfile COPYs from repo-relative paths)
-      - name: Build & push aether-backend
-        uses: docker/build-push-action@v5
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend by commit
+        id: backend
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Backend Architecture/aether-backend/Dockerfile
           push: true
-          tags: |
-            ${{ steps.ecr-login.outputs.registry }}/aether-backend:${{ steps.tag.outputs.tag }}
-            ${{ steps.ecr-login.outputs.registry }}/aether-backend:latest
+          tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
-          cache-to:   type=gha,scope=backend,mode=max
-
-      # ── ML serving ─────────────────────────────────────────────────────────
-      - name: Build & push aether-ml-serving
-        uses: docker/build-push-action@v5
+          cache-to: type=gha,scope=backend,mode=max
+      - name: Build static frontends
+        env:
+          VITE_AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
+          VITE_AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE }}
+          VITE_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL }}
+        run: |
+          npm ci
+          npm --workspace frontend/aether run build
+          npm --workspace frontend/kyber run build
+          tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C frontend/aether/dist .
+          tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
+          tar --sort=name --mtime='UTC 1970-01-01' -czf migrations.tar.gz \
+            'Backend Architecture/aether-backend/alembic.ini' 'Backend Architecture/aether-backend/alembic'
+          cp config/runtime_deployment.yaml runtime_deployment.yaml
+      - name: Create commit-bound release manifest
+        id: manifest
+        env:
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          digest() { printf 'sha256:%s' "$(sha256sum "$1" | cut -d' ' -f1)"; }
+          python - <<'PY'
+          import json, os, hashlib
+          from pathlib import Path
+          def digest(p): return 'sha256:' + hashlib.sha256(Path(p).read_bytes()).hexdigest()
+          data = {
+            'schema_version': 1, 'commit_sha': os.environ['GITHUB_SHA'],
+            'workflow_run_id': os.environ['GITHUB_RUN_ID'], 'profile': 'staging',
+            'artifacts': {
+              'backend_image': {'uri': f"{os.environ['REGISTRY']}/aether-backend@{os.environ['BACKEND_DIGEST']}", 'digest': os.environ['BACKEND_DIGEST']},
+              'aether_spa': {'file': 'aether-spa.tar.gz', 'digest': digest('aether-spa.tar.gz')},
+              'kyber_spa': {'file': 'kyber-spa.tar.gz', 'digest': digest('kyber-spa.tar.gz')},
+              'migration_package': {'file': 'migrations.tar.gz', 'digest': digest('migrations.tar.gz')},
+              'configuration': {'file': 'runtime_deployment.yaml', 'digest': digest('runtime_deployment.yaml')},
+            }}
+          Path('release.json').write_text(json.dumps(data))
+          PY
+          python scripts/release/release_manifest.py release.json --expected-sha "$GITHUB_SHA" --write-checksum
+          echo "checksum=$(cat release.json.sha256)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
         with:
-          context: ML Models/aether-ml
-          file: ML Models/aether-ml/docker/Dockerfile
-          target: serving
-          push: true
-          tags: |
-            ${{ steps.ecr-login.outputs.registry }}/aether-ml-serving:${{ steps.tag.outputs.tag }}
-            ${{ steps.ecr-login.outputs.registry }}/aether-ml-serving:latest
-          cache-from: type=gha,scope=ml-serving
-          cache-to:   type=gha,scope=ml-serving,mode=max
+          name: release-${{ github.sha }}
+          path: |
+            release.json
+            release.json.sha256
+            aether-spa.tar.gz
+            kyber-spa.tar.gz
+            migrations.tar.gz
+            runtime_deployment.yaml
+          if-no-files-found: error
+          retention-days: 30
 
-      # ── Aether SPA ─────────────────────────────────────────────────────────
-      # Auth0 config is baked into the Vite bundle at build time.
-      # VITE_AUTH0_CLIENT_ID comes from the Terraform output:
-      #   terraform output -raw aether_client_id
-      # Set it as a GitHub Actions variable (AETHER_AUTH0_CLIENT_ID) per environment.
-      - name: Build & push aether-ui
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: frontend/aether/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.ecr-login.outputs.registry }}/aether-aether:${{ steps.tag.outputs.tag }}
-            ${{ steps.ecr-login.outputs.registry }}/aether-aether:latest
-          build-args: |
-            VITE_AUTH0_DOMAIN=${{ vars.AUTH0_DOMAIN }}
-            VITE_AUTH0_CLIENT_ID=${{ vars.AETHER_AUTH0_CLIENT_ID }}
-            VITE_AUTH0_AUDIENCE=${{ vars.AUTH0_AUDIENCE }}
-            VITE_API_BASE_URL=${{ vars.AETHER_API_BASE_URL }}
-          cache-from: type=gha,scope=aether-ui
-          cache-to:   type=gha,scope=aether-ui,mode=max
-
-      # ── Kyber SPA ──────────────────────────────────────────────────────────
-      # VITE_AUTH0_CLIENT_ID comes from: terraform output -raw kyber_client_id
-      # Set it as KYBER_AUTH0_CLIENT_ID GitHub Actions variable per environment.
-      - name: Build & push kyber-ui
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: frontend/kyber/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.ecr-login.outputs.registry }}/aether-kyber:${{ steps.tag.outputs.tag }}
-            ${{ steps.ecr-login.outputs.registry }}/aether-kyber:latest
-          build-args: |
-            VITE_AUTH0_DOMAIN=${{ vars.AUTH0_DOMAIN }}
-            VITE_AUTH0_CLIENT_ID=${{ vars.KYBER_AUTH0_CLIENT_ID }}
-            VITE_AUTH0_AUDIENCE=${{ vars.AUTH0_AUDIENCE }}
-            VITE_API_BASE_URL=${{ vars.KYBER_API_BASE_URL }}
-            VITE_WS_BASE_URL=${{ vars.KYBER_WS_BASE_URL }}
-          cache-from: type=gha,scope=kyber-ui
-          cache-to:   type=gha,scope=kyber-ui,mode=max
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # 2. Staging preflight — fail-closed gate before any deployment
-  # ─────────────────────────────────────────────────────────────────────────
-  preflight:
-    name: Staging preflight (${{ github.event.inputs.environment || 'production' }})
+  acquire-release:
+    name: Acquire approved staged release
+    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
     runs-on: ubuntu-latest
-    needs: build-and-push
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: 'pyproject.toml'
-
-      - name: Install Python dependencies
+      - name: Require explicit immutable approval inputs
         run: |
-          pip install uv
-          uv pip install --system -e ".[dev,security,backend,agent]" alembic
+          test -n '${{ inputs.source_run_id }}' || { echo '::error::source_run_id is required'; exit 1; }
+          test -n '${{ inputs.release_manifest_checksum }}' || { echo '::error::release_manifest_checksum is required'; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          pattern: release-*
+          merge-multiple: true
+      - name: Verify approved manifest and every artifact
+        run: |
+          SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
+          python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum '${{ inputs.release_manifest_checksum }}'
+          python - <<'PY'
+          import hashlib,json,pathlib
+          m=json.load(open('release.json'))
+          for key in ('aether_spa','kyber_spa','migration_package','configuration'):
+              a=m['artifacts'][key]; actual='sha256:'+hashlib.sha256(pathlib.Path(a['file']).read_bytes()).hexdigest()
+              if actual != a['digest']: raise SystemExit(f'{key} artifact checksum mismatch')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: approved-release
+          path: |
+            release.json
+            release.json.sha256
+            aether-spa.tar.gz
+            kyber-spa.tar.gz
+            migrations.tar.gz
+            runtime_deployment.yaml
+          retention-days: 1
 
-      # CI does not hold live staging credentials; the dry-run proves the
-      # gate's fail-closed logic, and the post-deploy /v1/ready gate performs
-      # the authoritative in-environment readiness check (DB, migrations
-      # head, cache, event bus, auth config).
-      - name: Staging preflight (dry-run self-test)
-        run: python scripts/staging_preflight.py --dry-run
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # 3. Force new ECS deployments and wait for stability
-  # ─────────────────────────────────────────────────────────────────────────
   deploy:
-    name: Deploy to ECS (${{ github.event.inputs.environment || 'production' }})
+    name: Deploy exact release (${{ github.event_name == 'push' && 'staging' || inputs.environment }})
+    needs: [build, acquire-release]
+    if: always() && !cancelled() && ((needs.build.result == 'success' && needs.acquire-release.result == 'skipped') || (needs.acquire-release.result == 'success' && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
-    needs: [build-and-push, preflight]
-    environment: ${{ github.event.inputs.environment || 'production' }}
+    environment: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
     permissions:
-      id-token: write   # OIDC auth with AWS
       contents: read
-
-    env:
-      ENV: ${{ github.event.inputs.environment || 'production' }}
-
+      id-token: write
     steps:
-      - name: Configure AWS credentials (OIDC)
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.acquire-release.result == 'success' && 'approved-release' || format('release-{0}', github.sha) }}
+      - name: Verify release immediately before mutation
+        run: |
+          CHECKSUM=$(cat release.json.sha256)
+          SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
+          python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum "$CHECKSUM"
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Force new deployments
-        run: |
-          CLUSTER="AETHER-${ENV}"
-          for svc in \
-            "AETHER-${ENV}-backend" \
-            "AETHER-${ENV}-ml-serving" \
-            "AETHER-${ENV}-aether-ui" \
-            "AETHER-${ENV}-kyber-ui"; do
-            echo "Deploying ${svc} to cluster ${CLUSTER}..."
-            aws ecs update-service \
-              --cluster "$CLUSTER" \
-              --service "$svc" \
-              --force-new-deployment \
-              --region "${{ env.AWS_REGION }}" || \
-            echo "::warning::Service ${svc} not found — skipping (not yet provisioned)"
-          done
-
-      - name: Wait for services to stabilise
-        run: |
-          CLUSTER="AETHER-${ENV}"
-          # Collect only services that exist in the cluster
-          EXISTING=$(aws ecs list-services --cluster "$CLUSTER" \
-            --query 'serviceArns[*]' --output text | tr '\t' '\n' | \
-            grep -E "backend|ml-serving|aether-ui|kyber-ui" | tr '\n' ' ')
-          if [ -n "$EXISTING" ]; then
-            aws ecs wait services-stable \
-              --cluster "$CLUSTER" \
-              --services $EXISTING \
-              --region "${{ env.AWS_REGION }}"
-          fi
-
-      - name: Health check (liveness gate)
-        # Quick liveness check — blocks traffic promotion until the ALB responds.
-        # ALB_DNS_NAME is a GitHub Actions variable set per environment
-        # (set it to the Terraform output: terraform output -raw alb_dns_name)
-        run: |
-          for i in 1 2 3; do
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-              "https://${{ vars.ALB_DNS_NAME }}/v1/health" 2>/dev/null || echo "000")
-            if [ "$STATUS" = "200" ]; then
-              echo "Health check passed (attempt $i)"
-              exit 0
-            fi
-            echo "Health check returned HTTP $STATUS (attempt $i), retrying in 10s..."
-            sleep 10
-          done
-          echo "::error::Health check failed after 3 attempts"
-          exit 1
-
-      - name: Readiness check (deployable gate)
-        # /v1/ready is the authoritative in-environment gate: DB connectivity,
-        # migrations current == head (set RUN_MIGRATIONS=1 in the task env to
-        # auto-apply), cache, event bus, and auth config. A live service that
-        # is not READY must not be treated as a successful deploy.
-        run: |
-          for i in 1 2 3 4 5; do
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-              "https://${{ vars.ALB_DNS_NAME }}/v1/ready" 2>/dev/null || echo "000")
-            if [ "$STATUS" = "200" ]; then
-              echo "Readiness check passed (attempt $i)"
-              exit 0
-            fi
-            echo "Readiness returned HTTP $STATUS (attempt $i), retrying in 15s..."
-            curl -s "https://${{ vars.ALB_DNS_NAME }}/v1/ready" | head -c 2000 || true
-            sleep 15
-          done
-          echo "::error::Readiness check failed after 5 attempts — service is alive but not deployable-ready"
-          exit 1
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # 4. Golden-path smoke test — runs after ECS stabilises
-  # ─────────────────────────────────────────────────────────────────────────
-  smoke-test:
-    name: Smoke test (${{ github.event.inputs.environment || 'production' }})
-    runs-on: ubuntu-latest
-    needs: deploy
-    environment: ${{ github.event.inputs.environment || 'production' }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Run smoke tests
-        # SMOKE_API_KEY — a long-lived read-only API key set as a GitHub Actions secret.
-        # ALB_DNS_NAME  — the Terraform-output ALB DNS name set as a GitHub Actions variable.
+      - name: Register exact task revision for every required role
         env:
-          ALB_DNS_NAME:  ${{ vars.ALB_DNS_NAME }}
-          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
         run: |
-          python scripts/smoke_test.py \
-            --base-url "https://${ALB_DNS_NAME}" \
-            --api-key  "${SMOKE_API_KEY}" \
-            --timeout 15
+          set -euo pipefail
+          PROFILE=$([ "$TARGET_ENV" = production ] && echo production-lean || echo staging)
+          CLUSTER="AETHER-${TARGET_ENV}"
+          IMAGE=$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['uri'])")
+          mapfile -t ROLES < <(python -c "import yaml; print(*yaml.safe_load(open('runtime_deployment.yaml'))['profiles']['$PROFILE']['roles'], sep='\n')")
+          aws ecs describe-clusters --clusters "$CLUSTER" --query 'failures' --output text | grep -q '^None$\|^$'
+          for role in "${ROLES[@]}"; do
+            service="AETHER-${TARGET_ENV}-${role}"
+            current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
+            test "$current" != None || { echo "::error::required service missing: $service"; exit 1; }
+            aws ecs describe-task-definition --task-definition "$current" --query taskDefinition > task.json
+            jq --arg image "$IMAGE" --arg role "$role" '
+              .containerDefinitions[0].image=$image |
+              .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE"))) + [{name:"AETHER_ROLE",value:$role}] |
+              del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task.json > rendered.json
+            revision=$(aws ecs register-task-definition --cli-input-json file://rendered.json --query 'taskDefinition.taskDefinitionArn' --output text)
+            aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "$revision" >/dev/null
+            aws ecs wait services-stable --cluster "$CLUSTER" --services "$service"
+            running=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
+            test "$running" = "$revision" || { echo "::error::$service did not adopt $revision"; exit 1; }
+            printf '%s %s %s\n' "$role" "$revision" "$IMAGE" >> deployment-evidence.txt
+          done
+      - name: Publish private static SPA origins
+        env:
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+        run: |
+          set -euo pipefail
+          for app in aether kyber; do
+            bucket_var=$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')
+            bucket=$(aws ssm get-parameter --name "/aether/${TARGET_ENV}/${bucket_var}" --query Parameter.Value --output text)
+            mkdir -p "dist-$app"; tar -xzf "$app-spa.tar.gz" -C "dist-$app"
+            aws s3 sync "dist-$app" "s3://$bucket" --delete --cache-control 'public,max-age=31536000,immutable' --exclude index.html
+            aws s3 cp "dist-$app/index.html" "s3://$bucket/index.html" --cache-control 'no-cache,no-store,must-revalidate'
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-evidence-${{ github.run_id }}
+          path: deployment-evidence.txt
+          if-no-files-found: error

@@ -214,7 +214,9 @@ module "ecs" {
   private_subnet_ids       = module.vpc.private_subnet_ids
   ecs_sg_id                = module.vpc.ecs_sg_id
   ecr_backend_url          = module.ecr.repository_urls["aether-backend"]
+  backend_image_digest     = var.backend_image_digest
   ecr_ml_url               = module.ecr.repository_urls["aether-ml-serving"]
+  ml_image_digest          = var.ml_image_digest
   alb_backend_tg_arn       = module.alb.backend_target_group_arn
   alb_ml_tg_arn            = module.alb.ml_target_group_arn
   secret_arns              = merge(module.secrets.secret_arns, {
