@@ -40,6 +40,8 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_temporal_state_total",
     "ingestion_temporal_reason_total",
     "ingestion_temporal_blocked_total",
+    # Server-derived context enrichment (context_enricher.py hook in batch.py)
+    "ingestion_context_enrichment_total",
     # Ingestion V2 — typed Bronze + transactional outbox (PR 5, bronze_bulk.py)
     "ingestion_v2_batch_received_total",
     "ingestion_v2_bronze_accepted_total",

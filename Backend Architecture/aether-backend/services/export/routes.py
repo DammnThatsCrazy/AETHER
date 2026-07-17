@@ -23,6 +23,7 @@ from services.export.service import (
 )
 from services.security.export_governance import audit_export_governance
 from shared.logger.logger import get_logger, metrics
+from shared.privacy.ip_hmac import audit_ip_token
 
 logger = get_logger("aether.export.routes")
 
@@ -59,7 +60,7 @@ async def create_export(body: ExportRequestBody, request: Request):
         has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
         target_tenant=tenant.tenant_id,
         manifest={"params": body.params, "format": body.format},
-        ip_address=request.client.host if request.client else None,
+        ip_address=audit_ip_token(request.client.host if request.client else None, tenant.tenant_id),
     )
     params = {**body.params, "format": body.format}
     return await request_export(
@@ -105,7 +106,7 @@ async def download_artifact(artifact_id: str, request: Request):
         export_id=artifact_id,
         has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
         expires_at=meta.get("expires_at"),
-        ip_address=request.client.host if request.client else None,
+        ip_address=audit_ip_token(request.client.host if request.client else None, tenant.tenant_id),
     )
     meta, content = await repo.get_content(tenant.tenant_id, artifact_id)
     metrics.increment(

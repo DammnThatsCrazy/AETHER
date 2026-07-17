@@ -270,12 +270,14 @@ async def ingest_batch(
     # the canary list, route to the transactional typed-Bronze + outbox path.
     # The V1 path below is left entirely unchanged for every other tenant.
     request_privacy = RequestPrivacySignals.from_headers(getattr(request, "headers", {}))
+    server_context = _build_server_context(request, tenant.tenant_id)
     iv2 = settings.ingestion_v2
     if iv2.enabled or tenant.tenant_id in iv2.canary_tenants:
         return await _ingest_batch_v2(
             body=body,
             tenant=tenant,
             request_privacy=request_privacy,
+            server_context=server_context,
         )
 
     received_dt = utc_now()
@@ -323,6 +325,8 @@ async def ingest_batch(
             normalized = validation.normalized_event
             if normalized is None:  # pragma: no cover - typed invariant
                 raise RuntimeError("accepted validation missing normalized event")
+            if server_context is not None:
+                normalized["server_context"] = server_context
             accepted_events.append(Event(
                 topic=Topic.SDK_EVENTS_VALIDATED,
                 tenant_id=tenant.tenant_id,
@@ -470,6 +474,7 @@ async def _ingest_batch_v2(
     body: BatchRequest,
     tenant,
     request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
+    server_context: Optional[dict] = None,
 ) -> dict:
     """Transactional /v1/batch path.
 
@@ -531,6 +536,8 @@ async def _ingest_batch_v2(
         results[-1] = temporal_result
         if temporal_result.status != "accepted":
             continue
+        if server_context is not None:
+            normalized["server_context"] = server_context
 
         entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
         candidates.append(BronzeSDKEvent(
@@ -654,6 +661,36 @@ async def _process_single_event(
         )
 
     return EventResult(id=sdk_event.id, status="accepted")
+
+
+def _build_server_context(request: Request, tenant_id: str) -> Optional[dict]:
+    """Server-derived network context (flag-gated, default off — zero cost).
+
+    Computed once per batch; the raw IP never leaves the enricher. Enrichment
+    failures produce explicit states and never reject events.
+    """
+    if not settings.context_intelligence.enrichment_enabled:
+        return None
+    from services.ingestion.context_enricher import enrich_request_context
+
+    try:
+        headers = getattr(request, "headers", {}) or {}
+        client = getattr(request, "client", None)
+        context = enrich_request_context(
+            tenant_id=tenant_id,
+            at=utc_now(),
+            peer_ip=getattr(client, "host", None) if client else None,
+            forwarded_for=headers.get("X-Forwarded-For"),
+            cf_connecting_ip=headers.get("CF-Connecting-IP"),
+        )
+        metrics.increment(
+            "ingestion_context_enrichment_total",
+            labels={"tenant_id": tenant_id, "state": context.enrichment_state},
+        )
+        return context.as_payload()
+    except Exception as exc:  # enrichment must never break ingestion
+        logger.warning("Context enrichment failed (event continues): %s", exc)
+        return None
 
 
 def _apply_temporal_enforcement(
