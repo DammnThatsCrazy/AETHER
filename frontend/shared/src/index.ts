@@ -4,27 +4,10 @@ export { cn } from './utils/cn';
 export { createStore, useStore } from './state/index';
 export type { Store } from './state/index';
 
-// Shared exploration fabric — registry-driven filter + URL primitives.
-export {
-  allFilterFields,
-  getFilterField,
-  isKnownField,
-  operatorsForField,
-  isOperatorValidForField,
-  surfaceCapability,
-  filterFieldsForSurface,
-  isKnownSurface,
-  isValuelessOperator,
-  isMultiValueOperator,
-  isRangeOperator,
-  sanitizeFilterGroup,
-  encodeFilterGroup,
-  decodeFilterGroup,
-  encodeExplorationContext,
-  decodeExplorationContext,
-  decodedSurfaceIsKnown,
-} from './exploration/index';
-export type { DecodeDefaults } from './exploration/index';
+// The exploration fabric is exposed via the '@aether/ui/exploration' subpath
+// (like '@aether/ui/query'), NOT this barrel: it value-imports the CJS-only
+// '@aether/shared' registries, and keeping it off the main entry means apps
+// pulling '@aether/ui' for components don't drag that chain into their bundle.
 
 // Shared time system — the ONLY sanctioned home for Intl date/time formatting.
 export {

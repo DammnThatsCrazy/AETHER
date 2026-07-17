@@ -7,14 +7,16 @@
  * place and gives the UI a single, typed source of truth.
  */
 
+// Import registry VALUES from their leaf modules (not the '@aether/shared'
+// barrel): the barrel's built dist re-exports via CJS __exportStar, which the
+// app bundler (rollup) cannot statically analyse for named value exports.
+import { filterFields, type FilterFieldDefinition } from '@aether/shared/filter-fields';
 import {
-  filterFields,
   surfaceCapabilities,
-  type FilterFieldDefinition,
-  type FilterOperator,
   type ExplorationSurfaceId,
   type SurfaceCapability,
-} from '@aether/shared';
+} from '@aether/shared/surface-capabilities';
+import type { FilterOperator } from '@aether/shared/graph-contract';
 
 const FIELD_BY_ID: ReadonlyMap<string, FilterFieldDefinition> = new Map(
   filterFields.map((f) => [f.id, f]),
