@@ -3,6 +3,12 @@ canonical_source: config/runtime_deployment.yaml
 
 # Every non-local process has one role and one ECS service.  The API never owns
 # consumers; `all` is deliberately absent because it is local/test-only.
+#
+# ECS service naming: a worker role maps 1:1 to the service
+# "<project>-<env>-<role>". The `api` role is the one exception — it is served
+# by the Terraform-provisioned "<project>-<env>-backend" service
+# (aws_ecs_service.backend in modules/ecs). The deploy workflow special-cases
+# api -> backend; scripts/release/check_delivery_topology.py pins the mapping.
 profiles:
   staging:
     static_frontends: true
