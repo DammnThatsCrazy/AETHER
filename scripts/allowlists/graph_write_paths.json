@@ -15,7 +15,6 @@
   "Backend Architecture/aether-backend/services/fraud_networks/routes.py",
   "Backend Architecture/aether-backend/services/imports/commit.py",
   "Backend Architecture/aether-backend/services/lake/graph_mutations.py",
-  "Backend Architecture/aether-backend/services/notification_intelligence/lifecycle.py",
   "Backend Architecture/aether-backend/services/onchain/action_recorder.py",
   "Backend Architecture/aether-backend/services/profile360_workers/workers.py",
   "Backend Architecture/aether-backend/services/protocol_observability/routes.py",

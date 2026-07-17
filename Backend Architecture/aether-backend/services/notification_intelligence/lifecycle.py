@@ -99,13 +99,28 @@ class LifecycleEngine:
         entity_ids = gp.get("entity_ids", [])
 
         if entity_ids and graph and getattr(config, "auto_propagate_on_approve", True):
+            from shared.graph.mutation_gateway import GraphMutationGateway
+            from shared.graph.mutation_intents import vertex_intent
+
+            gateway = GraphMutationGateway(graph_client=graph)
+            tenant_id = notification.get("tenant_id", "")
             for entity_id in entity_ids:
                 try:
                     vertex = await graph.get_vertex(entity_id)
                     if vertex:
                         vertex.properties["notification_state"] = "acknowledged"
                         vertex.properties["last_operator_review"] = datetime.now(timezone.utc).isoformat()
-                        await graph.upsert_vertex(vertex)
+                        await gateway.apply(vertex_intent(
+                            vertex,
+                            operation="node_versioned",
+                            tenant_id=tenant_id or str(vertex.properties.get("tenant_id", "")),
+                            actor_kind="human",
+                            actor_id=actor_user_id,
+                            subject_kind="entity",
+                            subject_id=entity_id,
+                            reason_code="operator_approved",
+                            causality_class="declared_reason",
+                        ))
                 except Exception as exc:
                     logger.warning("graph_update_failed entity=%s error=%s", entity_id, exc)
 
