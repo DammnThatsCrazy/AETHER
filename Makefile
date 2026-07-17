@@ -21,6 +21,7 @@
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
+        temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
         validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger \
@@ -322,6 +323,21 @@ test\:ingestion-roundtrip: ## Run SDK→Bronze field round-trip tests
 
 validate-meter-names: ## Check metrics.increment() names in ingestion/connector paths are canonical
 	python scripts/validate_meter_names.py
+
+# ── Unified Intelligence Plane gates ────────────────────────────────────────
+temporal-integrity: ## Temporal static gates + kernel/ingestion temporal tests
+	python scripts/validate_temporal_integrity.py
+	python -m pytest tests/unit/temporal -q -o addopts=""
+
+temporal-contract-parity: ## Temporal + platform contract generators clean, TS/Py parity green
+	python scripts/generate_platform_contracts.py --check
+	python -m pytest tests/contracts -q -o addopts=""
+
+mutation-gateway-check: ## Graph write-path freeze (direct writers pending gateway migration)
+	python scripts/validate_graph_write_paths.py
+
+exploration-readiness: ## Exploration fabric contract + registry gates (grows per PR)
+	python -m pytest tests/contracts/test_exploration_contract_parity.py -q -o addopts=""
 
 production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
 	python scripts/production_status.py

@@ -225,10 +225,39 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="fix common/model_registry.py or common/feature_contracts.py, then rerun make repo-doctor-fix",
     )
 
+    run(
+        ["python", "scripts/generate_platform_contracts.py"],
+        name="Regenerate unified-platform contract artifacts (platform registries)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="fix packages/shared/contracts/*-registry.json or the generator, then rerun make repo-doctor-fix",
+    )
+
     if args.ci or args.check:
         _check_clean(
             ["docs/_generated"],
             name="Generated artifacts — no uncommitted diff",
+            results=results,
+            stop_on_failure=stop,
+        )
+        _check_clean(
+            [
+                "packages/shared/temporal-policy.ts",
+                "Backend Architecture/aether-backend/shared/temporal/generated_policy.py",
+                "packages/shared/interaction-contract.ts",
+                "Backend Architecture/aether-backend/shared/product/generated_vocabulary.py",
+                "packages/shared/context-capsule.ts",
+                "Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py",
+                "packages/shared/graph-mutation.ts",
+                "Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py",
+                "packages/shared/filter-fields.ts",
+                "Backend Architecture/aether-backend/shared/exploration/generated_fields.py",
+                "packages/shared/surface-capabilities.ts",
+                "Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py",
+                "packages/shared/comparison-contract.ts",
+                "Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py",
+            ],
+            name="Unified-platform generated contracts — no uncommitted diff",
             results=results,
             stop_on_failure=stop,
         )
@@ -320,6 +349,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="export public declaration types from package barrels and fix package.json exports",
+    )
+    run(
+        ["python", "scripts/validate_temporal_integrity.py"],
+        name="Temporal integrity static gates (naive datetimes, ad-hoc frontend formatting, CH DateTime64, single Alembic head)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="use shared/temporal (Py) or frontend/shared/src/time (TS); shrink scripts/allowlists/* only",
+    )
+    run(
+        ["python", "scripts/validate_graph_write_paths.py"],
+        name="Graph write-path freeze (direct writers pending mutation-gateway migration)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="route graph writes through the canonical mutation gateway; shrink scripts/allowlists/graph_write_paths.json only",
     )
     run(
         ["python", "scripts/validate_financial_value_semantics.py"],

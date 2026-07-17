@@ -263,6 +263,13 @@ object Aether : DefaultLifecycleObserver {
         "form_submitted" to "analytics", "form_abandoned" to "analytics",
         "search_reformulated" to "analytics", "retry_observed" to "analytics",
         "journey_stalled" to "analytics", "backtrack_observed" to "analytics",
+        // Interaction family
+        "surface_entered" to "analytics", "surface_exited" to "analytics",
+        "interaction_observed" to "analytics", "feature_started" to "analytics",
+        "feature_completed" to "analytics", "feature_abandoned" to "analytics",
+        "action_attempted" to "analytics", "action_succeeded" to "analytics",
+        "action_failed" to "analytics", "action_cancelled" to "analytics",
+        "active_interval_observed" to "analytics",
         // Server observation family
         "api_request_observed" to "analytics", "webhook_delivery_observed" to "analytics",
         "connector_sync_started" to "analytics", "connector_sync_completed" to "analytics",
@@ -1052,15 +1059,18 @@ object Aether : DefaultLifecycleObserver {
         }
 
         val scrubbed = scrubSensitiveFields(properties)
+        // Single occurrence instant shared by the timestamp and the temporal
+        // provenance so zone/offset evidence matches the stamped clock reading.
+        val eventDate = Date()
         val event = JSONObject().apply {
             put("id", UUID.randomUUID().toString())
             put("type", type)
-            put("timestamp", dateFormat.format(Date()))
+            put("timestamp", dateFormat.format(eventDate))
             put("sessionId", sessionId)
             put("anonymousId", anonymousId)
             put("userId", userId ?: JSONObject.NULL)
             put("properties", JSONObject(scrubbed.mapValues { it.value ?: JSONObject.NULL }))
-            put("context", buildContext())
+            put("context", buildContext(eventDate))
         }
 
         // Enforce max queue size to prevent OOM under prolonged offline
@@ -1225,7 +1235,7 @@ object Aether : DefaultLifecycleObserver {
         }
     }
 
-    private fun buildContext(): JSONObject = JSONObject().apply {
+    private fun buildContext(eventDate: Date): JSONObject = JSONObject().apply {
         put("os", JSONObject().apply {
             put("name", "Android")
             put("version", Build.VERSION.RELEASE)
@@ -1237,6 +1247,11 @@ object Aether : DefaultLifecycleObserver {
         })
         put("locale", Locale.getDefault().toLanguageTag())
         put("timezone", TimeZone.getDefault().id)
+        // Temporal provenance at the event's occurrence instant (offset is
+        // zone-at-instant, so DST transitions are captured correctly).
+        put("utcOffsetMinutes", TimeZone.getDefault().getOffset(eventDate.time) / 60000)
+        put("timeZoneSource", "device")
+        put("clockSource", "device")
         put("network", JSONObject().apply {
             put("type", getNetworkType())
         })

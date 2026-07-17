@@ -1000,6 +1000,11 @@ class AetherSDK implements AetherSDKInterface {
           : undefined,
         locale: typeof navigator !== 'undefined' ? navigator.language : undefined,
         timezone: Intl?.DateTimeFormat?.()?.resolvedOptions?.()?.timeZone,
+        // Temporal provenance captured at event occurrence (not SDK init) so
+        // the backend temporal kernel can cross-check zone vs offset per event.
+        utcOffsetMinutes: -new Date().getTimezoneOffset(),
+        timeZoneSource: 'device',
+        clockSource: 'device',
         consent,
         semantic,
         trafficSource: this.trafficTracker?.toEventPayload(),

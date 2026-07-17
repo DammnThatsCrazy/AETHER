@@ -16,6 +16,7 @@
     "friction",
     "identity",
     "identity_lc",
+    "interaction",
     "interop",
     "journey",
     "location",
@@ -1209,6 +1210,72 @@
       "family": "friction",
       "consent_purpose": "analytics",
       "section_comment": "friction"
+    },
+    {
+      "name": "surface_entered",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "surface_exited",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "interaction_observed",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "feature_started",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "feature_completed",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "feature_abandoned",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "action_attempted",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "action_succeeded",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "action_failed",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "action_cancelled",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "active_interval_observed",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
     },
     {
       "name": "api_request_observed",

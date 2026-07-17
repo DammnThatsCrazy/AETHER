@@ -145,6 +145,11 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case dead_click_observed, rage_click_observed, scroll_depth_observed
     case form_started, form_field_interaction, form_validation_failed, form_submitted, form_abandoned
     case search_reformulated, retry_observed, journey_stalled, backtrack_observed
+    // Interaction family
+    case surface_entered, surface_exited, interaction_observed
+    case feature_started, feature_completed, feature_abandoned
+    case action_attempted, action_succeeded, action_failed, action_cancelled
+    case active_interval_observed
     // Server observation family
     case api_request_observed, webhook_delivery_observed
     case connector_sync_started, connector_sync_completed, connector_sync_failed
@@ -250,6 +255,13 @@ public struct EventContext: Codable {
     public var network: String?
     public var thermalState: String?
     public var consent: [String: Bool]?
+    // Temporal provenance captured at event occurrence (not SDK init) —
+    // top-level on the wire context, matching the ingestion contract
+    // (packages/shared/events.ts::EventContext).
+    public var timezone: String?
+    public var utcOffsetMinutes: Int?
+    public var timeZoneSource: String?
+    public var clockSource: String?
 
     public struct LibraryInfo: Codable {
         public let name: String
@@ -491,6 +503,13 @@ public final class Aether: NSObject {
         .form_submitted: "analytics", .form_abandoned: "analytics",
         .search_reformulated: "analytics", .retry_observed: "analytics",
         .journey_stalled: "analytics", .backtrack_observed: "analytics",
+        // Interaction family
+        .surface_entered: "analytics", .surface_exited: "analytics",
+        .interaction_observed: "analytics", .feature_started: "analytics",
+        .feature_completed: "analytics", .feature_abandoned: "analytics",
+        .action_attempted: "analytics", .action_succeeded: "analytics",
+        .action_failed: "analytics", .action_cancelled: "analytics",
+        .active_interval_observed: "analytics",
         // Server observation family
         .api_request_observed: "analytics", .webhook_delivery_observed: "analytics",
         .connector_sync_started: "analytics", .connector_sync_completed: "analytics",
@@ -1268,15 +1287,18 @@ public final class Aether: NSObject {
         }
 
         let scrubbedProps = scrubSensitiveFields(properties)
+        // Single occurrence instant shared by the timestamp and the temporal
+        // provenance so zone/offset evidence matches the stamped clock reading.
+        let eventDate = Date()
         let event = AetherEvent(
             id: UUID().uuidString,
             type: type,
-            timestamp: ISO8601DateFormatter().string(from: Date()),
+            timestamp: ISO8601DateFormatter().string(from: eventDate),
             sessionId: sessionId,
             anonymousId: anonymousId,
             userId: userId,
             properties: scrubbedProps,
-            context: buildContext()
+            context: buildContext(at: eventDate)
         )
 
         serialQueue.async { [weak self] in
@@ -1411,7 +1433,7 @@ public final class Aether: NSObject {
         }.resume()
     }
 
-    private func buildContext() -> EventContext {
+    private func buildContext(at eventDate: Date) -> EventContext {
         let granted = Set(consentState)
 
         #if canImport(UIKit)
@@ -1440,7 +1462,13 @@ public final class Aether: NSObject {
                 "web3": granted.contains("web3"),
                 "agent": granted.contains("agent"),
                 "commerce": granted.contains("commerce"),
-            ]
+            ],
+            // Temporal provenance at the event's occurrence instant (offset is
+            // zone-at-instant, so DST transitions are captured correctly).
+            timezone: TimeZone.current.identifier,
+            utcOffsetMinutes: TimeZone.current.secondsFromGMT(for: eventDate) / 60,
+            timeZoneSource: "device",
+            clockSource: "device"
         )
     }
 

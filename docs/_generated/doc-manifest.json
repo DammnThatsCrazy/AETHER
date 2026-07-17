@@ -5181,6 +5181,11 @@
       "path": "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md"
     },
     {
+      "path": "docs/source-of-truth/COMPARISON_INTELLIGENCE.md",
+      "title": "Continuous Relationship Decision Intelligence Source of Truth",
+      "status": "stable"
+    },
+    {
       "path": "docs/source-of-truth/CONNECTOR_LAKE_POLICY.md",
       "title": "Connector Lake Policy",
       "slug": "architecture/connector-lake-policy",
@@ -5209,6 +5214,11 @@
       "status": "draft",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md",
+      "title": "Contextual Session Intelligence Source of Truth",
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
@@ -5393,6 +5403,11 @@
       "status": "draft",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/EXPLORATION_FABRIC.md",
+      "title": "Unified Exploration Fabric Source of Truth",
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
@@ -5584,6 +5599,11 @@
       "path": "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md"
     },
     {
+      "path": "docs/source-of-truth/PRODUCT_INTELLIGENCE.md",
+      "title": "Product & Experience Intelligence Source of Truth",
+      "status": "stable"
+    },
+    {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
       "title": "Repo Consistency Ownership",
       "slug": "source-of-truth/repo-consistency-ownership",
@@ -5692,6 +5712,21 @@
     },
     {
       "path": "docs/source-of-truth/SUGGESTION_INTELLIGENCE.md"
+    },
+    {
+      "path": "docs/source-of-truth/TEMPORAL_INTEGRITY.md",
+      "title": "Temporal Integrity Plane Source of Truth",
+      "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/TEMPORAL_OBSERVATORY.md",
+      "title": "Temporal Observatory & Decision Memory Source of Truth",
+      "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md",
+      "title": "Unified Intelligence Plane — Baseline Audit",
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/UNIQUE_SIGNAL_FEATURES.md",

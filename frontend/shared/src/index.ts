@@ -1,5 +1,29 @@
 export { cn } from './utils/cn';
 
+// Shared time system — the ONLY sanctioned home for Intl date/time formatting.
+export {
+  TimeProvider,
+  useTime,
+  useTimeContext,
+  resolveViewerContext,
+  formatInstant,
+  formatDate,
+  formatTime,
+  formatDateTime,
+  formatRelative,
+  describeZone,
+  toCanonicalUtc,
+  TIME_LENSES,
+  UTC_CONTEXT,
+} from './time/index';
+export type {
+  TimeContext,
+  TimeLens,
+  TimeZoneResolution,
+  ResolvedViewerTime,
+  TimeProviderPreferences,
+} from './time/index';
+
 export { TimeWindowSelector } from './components/time-window-selector';
 export type { TimeWindow } from './components/time-window-selector';
 export { FreshnessIndicator } from './components/freshness-indicator';

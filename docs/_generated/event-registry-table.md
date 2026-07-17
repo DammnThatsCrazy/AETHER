@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (378 types, contract v8.12.0)
+# Aether Event Registry (389 types, contract v8.12.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -194,6 +194,17 @@
 | `retry_observed` | `friction` | analytics | behavioral | User or system retry observed |
 | `journey_stalled` | `friction` | analytics | behavioral | Journey stalled at a step |
 | `backtrack_observed` | `friction` | analytics | behavioral | User backtracked to a previous step |
+| `surface_entered` | `interaction` | analytics | behavioral | Actor entered a surface (route, screen, view, modal, API surface) |
+| `surface_exited` | `interaction` | analytics | behavioral | Actor exited a surface; closes the surface interval |
+| `interaction_observed` | `interaction` | analytics | behavioral | Canonical interaction on a control (typed via the interaction vocabulary) |
+| `feature_started` | `interaction` | analytics | behavioral | Feature usage began (distinct from exposure) |
+| `feature_completed` | `interaction` | analytics | behavioral | Feature usage reached its defined completion |
+| `feature_abandoned` | `interaction` | analytics | behavioral | Feature usage abandoned before completion |
+| `action_attempted` | `interaction` | analytics | behavioral | Domain action attempted (interaction truth, not outcome truth) |
+| `action_succeeded` | `interaction` | analytics | behavioral | Domain action reported success by its owning system |
+| `action_failed` | `interaction` | analytics | behavioral | Domain action reported failure by its owning system |
+| `action_cancelled` | `interaction` | analytics | behavioral | Domain action cancelled before completion |
+| `active_interval_observed` | `interaction` | analytics | behavioral | Bounded active/visible/idle interval evidence for a surface |
 | `api_request_observed` | `server` | analytics | behavioral | API request observed from server-side (no request/response body) |
 | `webhook_delivery_observed` | `server` | analytics | behavioral | Webhook delivery attempt observed |
 | `connector_sync_started` | `server` | analytics | behavioral | Connector sync started |

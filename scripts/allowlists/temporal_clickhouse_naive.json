@@ -1,0 +1,17 @@
+[
+  "Data Lake Architecture/schemas/gold_ad_spend.py",
+  "Data Lake Architecture/schemas/gold_asset_composition.py",
+  "Data Lake Architecture/schemas/gold_credit_signals.py",
+  "Data Lake Architecture/schemas/gold_derivatives_exposure.py",
+  "Data Lake Architecture/schemas/gold_entity_pnl.py",
+  "Data Lake Architecture/schemas/gold_entity_tiers.py",
+  "Data Lake Architecture/schemas/gold_interop_paths.py",
+  "Data Lake Architecture/schemas/gold_journey_economics.py",
+  "Data Lake Architecture/schemas/gold_location_history.py",
+  "Data Lake Architecture/schemas/gold_plaid_accounts.py",
+  "Data Lake Architecture/schemas/gold_social_intelligence.py",
+  "Data Lake Architecture/schemas/gold_stablecoin_flows.py",
+  "Data Lake Architecture/schemas/gold_temporal_heatmap.py",
+  "Data Lake Architecture/schemas/gold_tradfi_portfolio.py",
+  "Data Lake Architecture/schemas/gold_trading_profile.py"
+]

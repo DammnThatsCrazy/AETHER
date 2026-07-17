@@ -14,6 +14,12 @@ export interface SemanticContextEnvelope {
   viewport: { width: number; height: number };
   locale: string;
   timezone: string;
+  /** UTC offset in minutes captured AT COLLECT TIME (not SDK init): -new Date().getTimezoneOffset(). */
+  utcOffsetMinutes: number;
+  /** Where the timezone claim came from (canonical vocabulary in @aether/shared temporal.ts). */
+  timeZoneSource: string;
+  /** Which clock produced the envelope timestamp (canonical vocabulary in @aether/shared temporal.ts). */
+  clockSource: string;
   sessionId: string;
   screenPath: string[];
 }
@@ -45,6 +51,11 @@ export class RNSemanticContextCollector {
       viewport: { width, height },
       locale: 'en', // RN doesn't expose locale easily without native module
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      // Temporal provenance at collect (= event occurrence) time. Timestamps
+      // and lifecycle events stay native-owned — this is evidence only.
+      utcOffsetMinutes: -new Date().getTimezoneOffset(),
+      timeZoneSource: 'device',
+      clockSource: 'device',
       sessionId,
       screenPath: [...screenPath],
     };

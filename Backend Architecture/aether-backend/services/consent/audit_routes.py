@@ -36,6 +36,7 @@ from services.security.export_governance import audit_export_governance
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
+from shared.privacy.ip_hmac import audit_ip_token
 
 logger = get_logger("aether.service.audit")
 router = APIRouter(prefix="/v1/audit", tags=["Audit"])
@@ -253,7 +254,7 @@ async def request_export(body: ExportRequest, request: Request):
             "per_source": per_source,
             "rows_digest": rows_digest,
         },
-        ip_address=request.client.host if request.client else None,
+        ip_address=audit_ip_token(request.client.host if request.client else None, tenant.tenant_id),
     )
     record = {
         "export_id": export_id,
@@ -302,7 +303,7 @@ async def get_export(export_id: str, request: Request):
         actor_type='tenant_user', tenant_id=tenant.tenant_id, export_id=export_id,
         has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
         expires_at=record.get("expires_at"),
-        ip_address=request.client.host if request.client else None,
+        ip_address=audit_ip_token(request.client.host if request.client else None, tenant.tenant_id),
     )
     return APIResponse(data=record).to_dict()
 

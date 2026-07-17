@@ -35,6 +35,13 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_sensitive_scrub_total",
     "ingestion_request_privacy_blocked_total",
     "ingestion_data_policy_blocked_total",
+    # Temporal enforcement (temporal_enforcement.py hook in batch.py; mode ladder
+    # off/shadow/warn/enforce — meters identical in every active mode)
+    "ingestion_temporal_state_total",
+    "ingestion_temporal_reason_total",
+    "ingestion_temporal_blocked_total",
+    # Server-derived context enrichment (context_enricher.py hook in batch.py)
+    "ingestion_context_enrichment_total",
     # Ingestion V2 — typed Bronze + transactional outbox (PR 5, bronze_bulk.py)
     "ingestion_v2_batch_received_total",
     "ingestion_v2_bronze_accepted_total",

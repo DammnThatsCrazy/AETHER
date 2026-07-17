@@ -222,6 +222,18 @@ export type EventType =
   | 'retry_observed'
   | 'journey_stalled'
   | 'backtrack_observed'
+  // interaction
+  | 'surface_entered'
+  | 'surface_exited'
+  | 'interaction_observed'
+  | 'feature_started'
+  | 'feature_completed'
+  | 'feature_abandoned'
+  | 'action_attempted'
+  | 'action_succeeded'
+  | 'action_failed'
+  | 'action_cancelled'
+  | 'active_interval_observed'
   // server
   | 'api_request_observed'
   | 'webhook_delivery_observed'
@@ -430,6 +442,7 @@ export type EventFamily =
   | 'friction'
   | 'identity'
   | 'identity_lc'
+  | 'interaction'
   | 'interop'
   | 'journey'
   | 'location'
@@ -633,6 +646,17 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   retry_observed: 'friction',
   journey_stalled: 'friction',
   backtrack_observed: 'friction',
+  surface_entered: 'interaction',
+  surface_exited: 'interaction',
+  interaction_observed: 'interaction',
+  feature_started: 'interaction',
+  feature_completed: 'interaction',
+  feature_abandoned: 'interaction',
+  action_attempted: 'interaction',
+  action_succeeded: 'interaction',
+  action_failed: 'interaction',
+  action_cancelled: 'interaction',
+  active_interval_observed: 'interaction',
   api_request_observed: 'server',
   webhook_delivery_observed: 'server',
   connector_sync_started: 'server',
@@ -1018,6 +1042,17 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   retry_observed: 'analytics',
   journey_stalled: 'analytics',
   backtrack_observed: 'analytics',
+  surface_entered: 'analytics',
+  surface_exited: 'analytics',
+  interaction_observed: 'analytics',
+  feature_started: 'analytics',
+  feature_completed: 'analytics',
+  feature_abandoned: 'analytics',
+  action_attempted: 'analytics',
+  action_succeeded: 'analytics',
+  action_failed: 'analytics',
+  action_cancelled: 'analytics',
+  active_interval_observed: 'analytics',
   api_request_observed: 'analytics',
   webhook_delivery_observed: 'analytics',
   connector_sync_started: 'analytics',
@@ -1397,6 +1432,12 @@ export interface EventContext {
   ip?: string;
   locale?: string;
   timezone?: string;
+  /** UTC offset in minutes AT EVENT OCCURRENCE (not SDK init): -new Date().getTimezoneOffset(). */
+  utcOffsetMinutes?: number;
+  /** Where the timezone claim came from (canonical vocabulary in temporal.ts). */
+  timeZoneSource?: import('./temporal').TimeZoneSource;
+  /** Which clock produced the event timestamp (canonical vocabulary in temporal.ts). */
+  clockSource?: import('./temporal').ClockSource;
   userAgent?: string;
   consent?: ConsentState;
   provenance?: Provenance;

@@ -1053,6 +1053,80 @@ class InteropIntelligenceConfig:
     noesis_enabled: bool = _env_bool("AETHER_INTEROP_NOESIS_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_INTEROP_OPS_ENABLED", False)
 
+
+# ---------------------------------------------------------------------------
+# Unified Intelligence Plane — capability flags (all default OFF; safety
+# defaults ON). New planes must add zero runtime cost while disabled: every
+# consumer checks its flag before doing any work, and nothing here is read
+# eagerly at import time by hot paths.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class TemporalIntegrityConfig:
+    """Strict-ingestion mode ladder: off → shadow → warn → enforce.
+
+    Reason codes and meters are computed identically in every active mode so
+    shadow telemetry predicts enforcement impact. Canary tenants get the
+    configured mode while everyone else stays at ``off``.
+    """
+
+    enforcement_mode: str = _env("AETHER_TEMPORAL_ENFORCEMENT_MODE", "off")
+    canary_tenants: list[str] = field(
+        default_factory=lambda: _env_list("AETHER_TEMPORAL_CANARY_TENANTS", "")
+    )
+    viewer_preferences_enabled: bool = _env_bool(
+        "AETHER_VIEWER_TIMEZONE_ENABLED", False
+    )
+
+    def mode_for_tenant(self, tenant_id: str) -> str:
+        if self.enforcement_mode == "off":
+            return "off"
+        if not self.canary_tenants or tenant_id in self.canary_tenants:
+            return self.enforcement_mode
+        return "off"
+
+
+@dataclass(frozen=True)
+class ProductIntelligenceConfig:
+    enabled: bool = _env_bool("AETHER_PRODUCT_INTELLIGENCE_ENABLED", False)
+    catalog_enabled: bool = _env_bool("AETHER_PRODUCT_CATALOG_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class ContextIntelligenceConfig:
+    enrichment_enabled: bool = _env_bool("AETHER_CONTEXT_ENRICHMENT_ENABLED", False)
+    capsule_enabled: bool = _env_bool("AETHER_CONTEXT_CAPSULES_ENABLED", False)
+    # Safety defaults — ON. Raw IP must never persist; context/behavior alone
+    # must never merge identities or cause adverse action.
+    block_raw_ip: bool = _env_bool("AETHER_RAW_IP_PERSISTENCE_BLOCKED", True)
+    location_identity_merge_blocked: bool = _env_bool(
+        "AETHER_LOCATION_IDENTITY_MERGE_BLOCKED", True
+    )
+    trusted_proxy_cidrs: list[str] = field(
+        default_factory=lambda: _env_list("AETHER_TRUSTED_PROXY_CIDRS", "")
+    )
+    cloudflare_proxy_enabled: bool = _env_bool(
+        "AETHER_CLOUDFLARE_PROXY_ENABLED", False
+    )
+    ip_hmac_rotation_hours: int = _env_int("AETHER_IP_HMAC_ROTATION_HOURS", 24)
+
+
+@dataclass(frozen=True)
+class TemporalObservatoryConfig:
+    enabled: bool = _env_bool("AETHER_TEMPORAL_OBSERVATORY_ENABLED", False)
+    mutation_gateway_mode: str = _env("AETHER_MUTATION_GATEWAY_MODE", "off")
+
+
+@dataclass(frozen=True)
+class ExplorationConfig:
+    enabled: bool = _env_bool("AETHER_EXPLORATION_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class ComparisonConfig:
+    enabled: bool = _env_bool("AETHER_COMPARISON_INTELLIGENCE_ENABLED", False)
+
+
 @dataclass
 class Settings:
     env: Environment = Environment(_env("AETHER_ENV", "local"))
@@ -1169,6 +1243,14 @@ class Settings:
     derivatives: DerivativesIntelligenceConfig = field(default_factory=DerivativesIntelligenceConfig)
     interop: InteropIntelligenceConfig = field(default_factory=InteropIntelligenceConfig)
 
+    # Unified Intelligence Plane
+    temporal_integrity: TemporalIntegrityConfig = field(default_factory=TemporalIntegrityConfig)
+    product_intelligence: ProductIntelligenceConfig = field(default_factory=ProductIntelligenceConfig)
+    context_intelligence: ContextIntelligenceConfig = field(default_factory=ContextIntelligenceConfig)
+    temporal_observatory: TemporalObservatoryConfig = field(default_factory=TemporalObservatoryConfig)
+    exploration: ExplorationConfig = field(default_factory=ExplorationConfig)
+    comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
+
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL
         _is_prod = self.env == Environment.PRODUCTION
@@ -1178,6 +1260,18 @@ class Settings:
             raise RuntimeError(
                 f"PRICING_OPTION must be one of A, B, C "
                 f"(got: {self.rate_limit.pricing_option!r})"
+            )
+
+        # ── Unified-platform mode flags ──────────────────────────────────────
+        if self.temporal_integrity.enforcement_mode not in ("off", "shadow", "warn", "enforce"):
+            raise RuntimeError(
+                "AETHER_TEMPORAL_ENFORCEMENT_MODE must be one of off, shadow, warn, enforce "
+                f"(got: {self.temporal_integrity.enforcement_mode!r})"
+            )
+        if self.temporal_observatory.mutation_gateway_mode not in ("off", "shadow", "enforce"):
+            raise RuntimeError(
+                "AETHER_MUTATION_GATEWAY_MODE must be one of off, shadow, enforce "
+                f"(got: {self.temporal_observatory.mutation_gateway_mode!r})"
             )
 
         # ── Interop flag coherence ────────────────────────────────────────────

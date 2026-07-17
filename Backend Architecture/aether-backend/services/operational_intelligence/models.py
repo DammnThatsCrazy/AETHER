@@ -575,40 +575,15 @@ class GraphCompareResult(ContractModel):
 
 
 # ── Phase 4: Boolean Filter Language ──────────────────────────────────────────
+# Canonical definitions moved to shared/contracts_models/filters.py so shared
+# planes (exploration, comparison) can compose the filter language without a
+# services dependency. Re-exported here unchanged for existing importers.
 
-class FilterOperator(str, Enum):
-    EQ = "eq"
-    NEQ = "neq"
-    GT = "gt"
-    GTE = "gte"
-    LT = "lt"
-    LTE = "lte"
-    IN = "in"
-    NOT_IN = "not_in"
-    EXISTS = "exists"
-    NOT_EXISTS = "not_exists"
-    CONTAINS = "contains"
-    STARTS_WITH = "starts_with"
-    BETWEEN = "between"
-    RELATIVE_TIME = "relative_time"
-    THRESHOLD = "threshold"
-
-    @classmethod
-    def valid_values(cls) -> frozenset[str]:
-        return frozenset(m.value for m in cls)
-
-
-class FilterExpression(ContractModel):
-    field: str
-    op: FilterOperator
-    value: Optional[Any] = None
-
-
-class FilterGroup(ContractModel):
-    logic: Literal["AND", "OR", "NOT"]
-    expressions: list[Union[FilterExpression, "FilterGroup"]]
-
-FilterGroup.model_rebuild()
+from shared.contracts_models.filters import (  # noqa: E402
+    FilterExpression,
+    FilterGroup,
+    FilterOperator,
+)
 
 
 # ── Phase 4: Universal graph query ────────────────────────────────────────────
