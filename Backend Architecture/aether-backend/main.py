@@ -1038,6 +1038,21 @@ def create_app() -> FastAPI:
     else:
         logger.info("Kyber Interop Ops disabled (KYBER_INTEROP_OPS_ENABLED=false)")
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # Unified Intelligence Plane — all routers in this block are flag-gated
+    # (default OFF) and lazily imported: zero startup cost while disabled.
+    # ═══════════════════════════════════════════════════════════════════════
+    if settings.temporal_integrity.viewer_preferences_enabled:
+        from services.temporal_preferences.routes import (
+            router as temporal_prefs_router,
+            tenant_router as tenant_temporal_router,
+        )
+        app.include_router(temporal_prefs_router, tags=["Temporal Preferences"])
+        app.include_router(tenant_temporal_router, tags=["Temporal Preferences"])
+        logger.info("Temporal preferences mounted (/v1/preferences/temporal)")
+    else:
+        logger.info("Temporal preferences disabled (AETHER_VIEWER_TIMEZONE_ENABLED=false)")
+
     return app
 
 
