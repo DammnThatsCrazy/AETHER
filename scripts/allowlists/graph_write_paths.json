@@ -17,7 +17,6 @@
   "Backend Architecture/aether-backend/services/identity/graph_reconciliation.py",
   "Backend Architecture/aether-backend/services/imports/commit.py",
   "Backend Architecture/aether-backend/services/intelligence/graph_mutations.py",
-  "Backend Architecture/aether-backend/services/journeys/stitching.py",
   "Backend Architecture/aether-backend/services/lake/graph_mutations.py",
   "Backend Architecture/aether-backend/services/notification_intelligence/lifecycle.py",
   "Backend Architecture/aether-backend/services/onchain/action_recorder.py",
@@ -27,7 +26,5 @@
   "Backend Architecture/aether-backend/services/silver/projectors/silver_graph_projector.py",
   "Backend Architecture/aether-backend/services/web3/classifier.py",
   "Backend Architecture/aether-backend/services/x402/economic_graph.py",
-  "Backend Architecture/aether-backend/services/x402/economic_mutations.py",
-  "Backend Architecture/aether-backend/shared/graph/edge_properties.py",
-  "Backend Architecture/aether-backend/shared/graph/write_validator.py"
+  "Backend Architecture/aether-backend/services/x402/economic_mutations.py"
 ]

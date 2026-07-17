@@ -18,15 +18,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
 import sys
+import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 BACKEND = ROOT / "Backend Architecture" / "aether-backend"
 ALLOWLIST = ROOT / "scripts" / "allowlists" / "graph_write_paths.json"
 
+_WRITE_METHODS = frozenset({"add_edge", "upsert_vertex", "add_vertex", "revoke_edge"})
+# Conservative fallback used only when a file fails to tokenize.
 _WRITE_CALL = re.compile(r"\.(add_edge|upsert_vertex|add_vertex|revoke_edge)\s*\(")
 
 # The graph client itself and (future) canonical gateway are the sanctioned owners.
@@ -34,6 +38,34 @@ _EXEMPT = (
     "shared/graph/graph.py",
     "shared/graph/mutation_gateway.py",
 )
+
+
+def _writes_directly(text: str) -> bool:
+    """Return True iff the source contains a real ``.<write>(`` call token.
+
+    Tokenizing (rather than a bare regex) means references to the write
+    methods inside docstrings, comments, or string literals — e.g. a
+    ``GraphClient.add_edge()`` mention in module documentation — are not
+    mistaken for direct writers. A genuine attribute call still trips the
+    gate. If a file cannot be tokenized we fall back to the regex so a parse
+    error can never hide a real writer.
+    """
+    try:
+        toks = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError, ValueError):
+        return bool(_WRITE_CALL.search(text))
+    for i in range(len(toks) - 2):
+        dot, name, paren = toks[i], toks[i + 1], toks[i + 2]
+        if (
+            dot.type == tokenize.OP
+            and dot.string == "."
+            and name.type == tokenize.NAME
+            and name.string in _WRITE_METHODS
+            and paren.type == tokenize.OP
+            and paren.string == "("
+        ):
+            return True
+    return False
 
 
 def scan() -> set[str]:
@@ -47,7 +79,7 @@ def scan() -> set[str]:
                 text = path.read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
-            if _WRITE_CALL.search(text):
+            if _writes_directly(text):
                 offenders.add(rel)
     return offenders
 
