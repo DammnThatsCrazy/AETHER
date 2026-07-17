@@ -339,6 +339,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="export public declaration types from package barrels and fix package.json exports",
     )
     run(
+        ["python", "scripts/validate_temporal_integrity.py"],
+        name="Temporal integrity static gates (naive datetimes, ad-hoc frontend formatting, CH DateTime64, single Alembic head)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="use shared/temporal (Py) or frontend/shared/src/time (TS); shrink scripts/allowlists/* only",
+    )
+    run(
+        ["python", "scripts/validate_graph_write_paths.py"],
+        name="Graph write-path freeze (direct writers pending mutation-gateway migration)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="route graph writes through the canonical mutation gateway; shrink scripts/allowlists/graph_write_paths.json only",
+    )
+    run(
         ["python", "scripts/validate_financial_value_semantics.py"],
         name="Financial value semantics (USD-first contract + no cross-currency sums)",
         results=results,
