@@ -724,6 +724,16 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
                 pass
             return None
 
+        # Founding-tenant release surface: domains the release manifest
+        # excludes are not part of the release. The exclusion set is lazily
+        # loaded and empty for every profile other than the manifest's own,
+        # so this is a cached frozenset lookup outside that profile.
+        from services.security.route_registry import founding_domain_excluded
+        if founding_domain_excluded(
+            pol.domain, settings.runtime.deployment_profile
+        ):
+            return ForbiddenError("ROUTE_POLICY_DOMAIN_EXCLUDED")
+
         if pol.kyber_operator_required:
             from services.security.request_context import is_kyber_operator
             if not is_kyber_operator(context):

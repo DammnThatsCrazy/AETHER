@@ -47,7 +47,8 @@ def validate(root: Path = ROOT) -> list[str]:
         if check.get("runner_class") not in ALLOWED_RUNNERS:
             errors.append(f"{check_id}: unknown runner_class {check.get('runner_class')!r}")
         if not any(check.get(flag) is True for flag in (
-            "blocks_pr_merge", "blocks_sdk_release", "blocks_founding_tenant_release"
+            "blocks_pr_merge", "blocks_pr_merge_when_paths_touched",
+            "blocks_sdk_release", "blocks_founding_tenant_release"
         )):
             errors.append(f"{check_id}: check does not block any release surface")
         rel = str(check.get("workflow", ""))
@@ -67,6 +68,25 @@ def validate(root: Path = ROOT) -> list[str]:
         # for trigger checks rather than accepting an ambiguous parsed key.
         if "pull_request:" not in text:
             errors.append(f"{check_id}: workflow is not triggered for pull requests")
+        # Honest merge-blocker semantics: a workflow whose pull_request trigger
+        # is filtered by `paths:` does not run on every PR, so it can never be
+        # a universal merge blocker. Such checks must declare the path-scoped
+        # flag instead.
+        triggers = doc.get("on") if isinstance(doc.get("on"), dict) else doc.get(True)
+        pr_trigger = (triggers or {}).get("pull_request") if isinstance(triggers, dict) else None
+        pr_paths = pr_trigger.get("paths") if isinstance(pr_trigger, dict) else None
+        if check.get("blocks_pr_merge") is True and pr_paths:
+            errors.append(
+                f"{check_id}: workflow filters pull_request by paths — a "
+                "path-filtered check cannot claim blocks_pr_merge; declare "
+                "blocks_pr_merge_when_paths_touched instead"
+            )
+        if check.get("blocks_pr_merge_when_paths_touched") is True and not pr_paths:
+            errors.append(
+                f"{check_id}: blocks_pr_merge_when_paths_touched requires a "
+                "paths-filtered pull_request trigger; an unfiltered workflow "
+                "should declare blocks_pr_merge"
+            )
         if "shared_contracts" in (check.get("applicability") or []) and SHARED_TRIGGER not in text:
             errors.append(f"{check_id}: workflow does not trigger on {SHARED_TRIGGER}")
         artifact = str(check.get("evidence_artifact", ""))
