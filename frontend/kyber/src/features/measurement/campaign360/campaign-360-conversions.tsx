@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState } from '@aether/ui';
+import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, formatDate, useTimeContext } from '@aether/ui';
 import { useCampaign360Conversions } from '../use-campaign-360';
 
 interface Props {
@@ -12,6 +12,7 @@ export function Campaign360Conversions({ campaignId, timeStart, timeEnd }: Props
   const [clusterId, setClusterId] = useState('');
   const [channel, setChannel] = useState('');
   const [includeUnattributed, setIncludeUnattributed] = useState(false);
+  const timeCtx = useTimeContext();
 
   const { data, loading, error } = useCampaign360Conversions({
     campaignId,
@@ -69,7 +70,7 @@ export function Campaign360Conversions({ campaignId, timeStart, timeEnd }: Props
                     { key: 'status', header: 'Status', render: r => String(r.conversion_status ?? '—') },
                     { key: 'gross_value', header: 'Gross $', render: r => `$${Number(r.gross_value ?? 0).toFixed(2)}` },
                     { key: 'net_value', header: 'Net $', render: r => `$${Number(r.net_value ?? 0).toFixed(2)}` },
-                    { key: 'occurred_at', header: 'Occurred', render: r => r.occurred_at ? new Date(String(r.occurred_at)).toLocaleDateString() : '—' },
+                    { key: 'occurred_at', header: 'Occurred', render: r => r.occurred_at ? formatDate(String(r.occurred_at), timeCtx) : '—' },
                   ]}
                 />
               )

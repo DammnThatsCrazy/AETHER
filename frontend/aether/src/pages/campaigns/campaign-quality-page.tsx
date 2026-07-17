@@ -1,6 +1,7 @@
 import {
   Card, CardContent, CardHeader,
   ErrorState, LoadingState,
+  formatCount, useTimeContext,
 } from '@aether/ui';
 import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
 
@@ -46,6 +47,7 @@ function MetricCard({ label, value, description, variant }: QualityMetric) {
 }
 
 export function CampaignQualityPage() {
+  const timeCtx = useTimeContext();
   const { data, isLoading, error } = useCampaignQuality();
 
   const q = (data ?? {}) as Record<string, unknown>;
@@ -61,26 +63,26 @@ export function CampaignQualityPage() {
   const metrics: QualityMetric[] = [
     {
       label: 'Open mapping reviews',
-      value: openReviews !== undefined ? openReviews.toLocaleString() : '—',
+      value: openReviews !== undefined ? formatCount(openReviews, timeCtx) : '—',
       description: 'Evidence items awaiting manual campaign assignment',
       variant: openReviews === undefined ? 'neutral' : openReviews === 0 ? 'good' : openReviews < 50 ? 'warn' : 'bad',
     },
     {
       label: 'Total campaigns',
-      value: totalCampaigns !== undefined ? totalCampaigns.toLocaleString() : '—',
+      value: totalCampaigns !== undefined ? formatCount(totalCampaigns, timeCtx) : '—',
       description: 'Canonical campaigns in registry (all origins)',
       variant: 'neutral',
     },
     {
       label: 'External campaigns',
-      value: externalCampaigns !== undefined ? externalCampaigns.toLocaleString() : '—',
+      value: externalCampaigns !== undefined ? formatCount(externalCampaigns, timeCtx) : '—',
       description: 'Campaigns imported from connected ad platforms',
       variant: 'neutral',
     },
     {
       label: 'Resolved spend records',
       value: resolvedSpend !== undefined && totalSpend !== undefined
-        ? `${resolvedSpend.toLocaleString()} / ${totalSpend.toLocaleString()}`
+        ? `${formatCount(resolvedSpend, timeCtx)} / ${formatCount(totalSpend, timeCtx)}`
         : '—',
       description: 'Spend records with canonical campaign UUID',
       variant: resolvedSpend === undefined ? 'neutral' : (resolvedSpend / (totalSpend ?? 1)) >= 0.95 ? 'good' : 'warn',

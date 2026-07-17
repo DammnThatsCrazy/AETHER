@@ -3,6 +3,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   DataTable, EmptyState, ErrorState, LoadingState, ScrollArea,
   Tabs, TabsList, TabsTrigger, TabsContent,
+  formatDecimal, useTimeContext, type TimeContext,
 } from '@aether/ui';
 import { useCluster360 } from '@aether-app/features/cluster360/use-cluster360';
 import type {
@@ -37,8 +38,8 @@ function relativeTime(iso: string | null | undefined): string {
   return `${Math.floor(d / 365)}y ago`;
 }
 
-function fmt(n: number, decimals = 2): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+function fmt(n: number, ctx: TimeContext, decimals = 2): string {
+  return formatDecimal(n, ctx, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
@@ -157,14 +158,15 @@ function TimelineTab({ events }: { events: ClusterTimelineEvent[] }) {
 // ── Economic Tab ──────────────────────────────────────────────────────────────
 
 function EconomicTab({ economic }: { economic: ClusterEconomicSummary | null }) {
+  const timeCtx = useTimeContext();
   if (!economic) return <EmptyState title="No economic data" description="Economic data not available." />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         {[
-          ['Total Revenue', `${economic.currency} ${fmt(economic.total_revenue)}`],
-          ['Total Spend', `${economic.currency} ${fmt(economic.total_spend)}`],
-          ['LTV Estimate', `${economic.currency} ${fmt(economic.ltv_estimate)}`],
+          ['Total Revenue', `${economic.currency} ${fmt(economic.total_revenue, timeCtx)}`],
+          ['Total Spend', `${economic.currency} ${fmt(economic.total_spend, timeCtx)}`],
+          ['LTV Estimate', `${economic.currency} ${fmt(economic.ltv_estimate, timeCtx)}`],
           ['Transactions', economic.transaction_count],
           ['Value Tier', <Badge key="tier" variant={economic.value_tier === 'high' ? 'success' : economic.value_tier === 'medium' ? 'warning' : 'default'}>{economic.value_tier}</Badge>],
         ].map(([label, val]) => (
@@ -184,7 +186,7 @@ function EconomicTab({ economic }: { economic: ClusterEconomicSummary | null }) 
               .map(m => (
                 <div key={m.entity_id} className="flex justify-between text-xs">
                   <code className="text-text-muted truncate max-w-[140px]">{m.entity_id}</code>
-                  <span className="text-text-primary font-mono">{economic.currency} {fmt(m.revenue)}</span>
+                  <span className="text-text-primary font-mono">{economic.currency} {fmt(m.revenue, timeCtx)}</span>
                 </div>
               ))}
           </div>
@@ -197,6 +199,7 @@ function EconomicTab({ economic }: { economic: ClusterEconomicSummary | null }) 
 // ── Campaign Tab ──────────────────────────────────────────────────────────────
 
 function CampaignTab({ campaigns }: { campaigns: ClusterCampaignSummary | null }) {
+  const timeCtx = useTimeContext();
   if (!campaigns || campaigns.attributed_campaigns.length === 0) {
     return <EmptyState title="No campaigns" description="No campaign attribution data found." />;
   }
@@ -204,7 +207,7 @@ function CampaignTab({ campaigns }: { campaigns: ClusterCampaignSummary | null }
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         {[
-          ['Attributed Revenue', `$${fmt(campaigns.total_attributed_revenue)}`],
+          ['Attributed Revenue', `$${fmt(campaigns.total_attributed_revenue, timeCtx)}`],
           ['Top Channel', campaigns.top_acquisition_channel ?? '—'],
           ['Conversion Rate', campaigns.conversion_rate !== null ? `${((campaigns.conversion_rate ?? 0) * 100).toFixed(1)}%` : '—'],
           ['Campaigns', campaigns.attributed_campaigns.length],
@@ -221,7 +224,7 @@ function CampaignTab({ campaigns }: { campaigns: ClusterCampaignSummary | null }
           {campaigns.attributed_campaigns.slice(0, 10).map(c => (
             <div key={c.campaign_id} className="flex justify-between text-xs">
               <code className="text-text-muted truncate max-w-[160px]">{c.campaign_id}</code>
-              <span className="text-text-primary font-mono">${fmt(c.attributed_revenue)}</span>
+              <span className="text-text-primary font-mono">${fmt(c.attributed_revenue, timeCtx)}</span>
             </div>
           ))}
         </div>

@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle, LoadingState, ErrorState, Badge } from '@aether/ui';
+import { Card, CardContent, CardHeader, CardTitle, LoadingState, ErrorState, Badge, formatCount, useTimeContext } from '@aether/ui';
 import { useCampaign360Overview } from '../use-campaign-360';
 import type { Campaign360OverviewParams } from '../use-campaign-360';
 
@@ -24,6 +24,7 @@ function QualityRow({ label, value, status }: { label: string; value: string; st
 
 export function Campaign360Quality({ params }: Props) {
   const { data, loading, error } = useCampaign360Overview(params);
+  const timeCtx = useTimeContext();
 
   if (loading) return <LoadingState lines={5} />;
   if (error) return <ErrorState title="Quality data unavailable" message={error} />;
@@ -69,7 +70,7 @@ export function Campaign360Quality({ params }: Props) {
           <QualityRow label="Run ID" value={d.attribution_run_id ? String(d.attribution_run_id) : 'none'} />
           <QualityRow label="Model" value={String(d.attribution_model ?? '—')} />
           <QualityRow label="Total credit weight" value={Number(d.total_credit_weight ?? 0).toFixed(6)} />
-          <QualityRow label="Touchpoints" value={Number(d.touchpoint_count ?? 0).toLocaleString()} />
+          <QualityRow label="Touchpoints" value={formatCount(Number(d.touchpoint_count ?? 0), timeCtx)} />
         </CardContent>
       </Card>
     </div>

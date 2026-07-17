@@ -3,6 +3,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   DataTable, EmptyState, ErrorState, LoadingState,
   Tabs, TabsContent, TabsList, TabsTrigger,
+  formatCount, useTimeContext,
 } from '@aether/ui';
 import { useRewardsDecisions } from '@aether-app/features/rewards/use-rewards';
 
@@ -165,6 +166,7 @@ function DecisionTable({ rows }: { rows: DecisionRow[] }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function RewardDecisionsPage() {
+  const timeCtx = useTimeContext();
   const [tab, setTab] = useState<'all' | 'eligible' | 'needs_review' | 'blocked'>('all');
 
   const { data, isLoading, error, refetch } = useRewardsDecisions({ limit: 200 });
@@ -203,10 +205,10 @@ export function RewardDecisionsPage() {
       {/* Stats row */}
       {!isLoading && !error && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Total decisions" value={allDecisions.length.toLocaleString()} />
-          <Stat label="Eligible" value={eligible.length.toLocaleString()} accent="text-success" />
-          <Stat label="Needs review" value={needsReview.length.toLocaleString()} accent="text-warning" />
-          <Stat label="Blocked / Ineligible" value={blocked.length.toLocaleString()} accent="text-danger" />
+          <Stat label="Total decisions" value={formatCount(allDecisions.length, timeCtx)} />
+          <Stat label="Eligible" value={formatCount(eligible.length, timeCtx)} accent="text-success" />
+          <Stat label="Needs review" value={formatCount(needsReview.length, timeCtx)} accent="text-warning" />
+          <Stat label="Blocked / Ineligible" value={formatCount(blocked.length, timeCtx)} accent="text-danger" />
         </div>
       )}
 

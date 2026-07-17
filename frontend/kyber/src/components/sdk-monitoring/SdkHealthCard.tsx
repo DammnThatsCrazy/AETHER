@@ -1,4 +1,4 @@
-import { Card, CardContent } from '@aether/ui';
+import { Card, CardContent, formatTime, useTimeContext } from '@aether/ui';
 import { AsciiStatusGlyph } from '@kyber/components/ascii';
 import type { SDKHealthScore } from '@kyber/types/sdk-health';
 
@@ -23,6 +23,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 }
 
 export function SdkHealthCard({ score, className }: SdkHealthCardProps) {
+  const timeCtx = useTimeContext();
   const statusColor =
     score.status === 'healthy'
       ? 'text-green-400'
@@ -60,7 +61,7 @@ export function SdkHealthCard({ score, className }: SdkHealthCardProps) {
 
         {/* Footer */}
         <div className="text-[10px] text-text-muted pt-1 border-t border-border-subtle">
-          Last heartbeat: {new Date(score.last_heartbeat_at).toLocaleTimeString()}
+          Last heartbeat: {formatTime(score.last_heartbeat_at, timeCtx)}
         </div>
       </CardContent>
     </Card>

@@ -6,7 +6,11 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  formatCount,
+  formatInstant,
+  useTimeContext,
   useToast,
+  type TimeContext,
 } from '@aether/ui';
 import type { ImportStatus } from '@aether/shared';
 import { useImports, useCreateImport } from '@aether-app/features/imports';
@@ -39,12 +43,10 @@ export function ImportStatusBadge({ status }: { readonly status: ImportStatus })
   return <Badge variant={STATUS_VARIANTS[status] ?? 'default'}>{status}</Badge>;
 }
 
-export function formatImportDate(iso: string | null | undefined): string {
+export function formatImportDate(iso: string | null | undefined, ctx: TimeContext): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
+    return formatInstant(iso, ctx);
   } catch {
     return iso;
   }
@@ -57,6 +59,7 @@ function shortId(id: string): string {
 export function ImportsPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
   const { imports, loading, error, refresh } = useImports();
   const { create, loading: creating } = useCreateImport();
 
@@ -90,7 +93,7 @@ export function ImportsPage() {
       key: 'file_count',
       header: 'Files',
       render: (row: ImportSessionRecord) => (
-        <span className="font-mono">{row.file_count.toLocaleString()}</span>
+        <span className="font-mono">{formatCount(row.file_count, timeCtx)}</span>
       ),
     },
     {
@@ -98,7 +101,7 @@ export function ImportsPage() {
       header: 'Rows',
       render: (row: ImportSessionRecord) => (
         <span className="font-mono text-text-secondary">
-          {row.row_count !== null && row.row_count !== undefined ? row.row_count.toLocaleString() : '—'}
+          {row.row_count !== null && row.row_count !== undefined ? formatCount(row.row_count, timeCtx) : '—'}
         </span>
       ),
     },
@@ -106,7 +109,7 @@ export function ImportsPage() {
       key: 'created_at',
       header: 'Created',
       render: (row: ImportSessionRecord) => (
-        <span className="text-xs text-text-muted">{formatImportDate(row.created_at)}</span>
+        <span className="text-xs text-text-muted">{formatImportDate(row.created_at, timeCtx)}</span>
       ),
     },
   ];

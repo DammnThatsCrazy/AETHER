@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatDate, useTimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useConversionExplorer } from '@kyber/features/measurement';
 import { useState } from 'react';
@@ -28,6 +28,7 @@ export function ConversionExplorerPage() {
     ...(submitted.channel ? { channel: submitted.channel } : {}),
     ...(submitted.conversion_type ? { conversion_type: submitted.conversion_type } : {}),
   });
+  const timeCtx = useTimeContext();
 
   const hasFilters = Object.values(submitted).some(Boolean);
 
@@ -92,7 +93,7 @@ export function ConversionExplorerPage() {
                 { key: 'currency', header: 'Currency', render: r => String(r.currency ?? 'USD') },
                 { key: 'authority', header: 'Authority', render: r => String(r.authority_rank ?? 0) },
                 { key: 'eligible', header: 'Attribution eligible', render: r => r.attribution_eligible ? <Badge variant="success">Yes</Badge> : <Badge variant="default">No</Badge> },
-                { key: 'occurred', header: 'Occurred', render: r => r.occurred_at ? new Date(String(r.occurred_at)).toLocaleDateString() : '—' },
+                { key: 'occurred', header: 'Occurred', render: r => r.occurred_at ? formatDate(String(r.occurred_at), timeCtx) : '—' },
               ]} />
           }
         </CardContent>

@@ -3,6 +3,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   DataTable, EmptyState, ErrorState, LoadingState, Modal,
   ModalBody, ModalFooter, ModalHeader, useToast,
+  formatDateTime, useTimeContext,
 } from '@aether/ui';
 import { PermissionGate } from '@kyber/features/permissions';
 import {
@@ -44,6 +45,7 @@ type DecisionRow = Record<string, unknown>;
 
 export function FraudDecisionsPage() {
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
 
   const [riskTierFilter, setRiskTierFilter] = useState('');
   const [decisionFilter, setDecisionFilter] = useState('');
@@ -204,7 +206,7 @@ export function FraudDecisionsPage() {
                     key: 'evaluated',
                     header: 'Evaluated',
                     render: (r: DecisionRow) =>
-                      r.evaluated_at ? new Date(String(r.evaluated_at)).toLocaleString() : '—',
+                      r.evaluated_at ? formatDateTime(String(r.evaluated_at), timeCtx) : '—',
                   },
                   {
                     key: 'actions',

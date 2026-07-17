@@ -4,6 +4,7 @@
  * Owner: Mission page, Live page
  * Feature module: features/commerce
  */
+import { formatTime, useTimeContext } from '@aether/ui';
 import type { Settlement } from '@kyber/lib/schemas/commerce';
 
 interface SpendTimelineProps {
@@ -13,6 +14,7 @@ interface SpendTimelineProps {
 }
 
 export function SpendTimeline({ settlements, agentId, maxItems = 20 }: SpendTimelineProps) {
+  const timeCtx = useTimeContext();
   const items = agentId
     ? settlements.filter((s) => s.challenge_id.includes(agentId))
     : settlements;
@@ -32,7 +34,7 @@ export function SpendTimeline({ settlements, agentId, maxItems = 20 }: SpendTime
         {visible.map((s) => (
           <li key={s.settlement_id} className={`spend-timeline__item spend-timeline__item--${s.state}`}>
             <span className="spend-timeline__time">
-              {s.settled_at ? new Date(s.settled_at).toLocaleTimeString() : '—'}
+              {s.settled_at ? formatTime(s.settled_at, timeCtx) : '—'}
             </span>
             <span className="spend-timeline__chain">{s.chain.split(':')[0]}</span>
             <span className="spend-timeline__asset">{s.facilitator_id}</span>

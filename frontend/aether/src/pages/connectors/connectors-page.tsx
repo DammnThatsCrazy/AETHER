@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, useTimeContext } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 import { ConnectorConfigModal } from './connector-config-modal';
 
@@ -30,6 +30,7 @@ export function ConnectorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configuring, setConfiguring] = useState<AnyRecord | null>(null);
+  const timeCtx = useTimeContext();
 
   function load() {
     setLoading(true);
@@ -80,7 +81,7 @@ export function ConnectorsPage() {
                         </Badge>
                         {c.last_sync_at && (
                           <div className="text-xs text-text-muted mt-0.5">
-                            {new Date(c.last_sync_at as string).toLocaleString()}
+                            {formatDateTime(c.last_sync_at as string, timeCtx)}
                           </div>
                         )}
                         {c.last_error_message && c.sync_status === 'error' && (

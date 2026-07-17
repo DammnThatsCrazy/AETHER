@@ -19,7 +19,10 @@ import {
   TerminalSeparator,
   Tooltip,
   Badge,
+  formatDate,
+  useTimeContext,
   useToast,
+  type TimeContext,
 } from '@aether/ui';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@aether-app/features/account';
 import type { ApiKey } from '@aether-app/features/account';
@@ -29,7 +32,7 @@ import { SdkFleetSection } from './sdk-fleet-section';
 import { NotificationsSection } from './notifications-section';
 import { WebhooksSection } from './webhooks-section';
 
-function formatRelative(iso: string | null): string {
+function formatRelative(iso: string | null, ctx: TimeContext): string {
   if (!iso) return 'never';
   const diff = Date.now() - new Date(iso).getTime();
   const h = Math.floor(diff / 3600000);
@@ -37,10 +40,11 @@ function formatRelative(iso: string | null): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso, ctx);
 }
 
 function LastUsedCell({ lastUsed }: { lastUsed: string | null }) {
+  const timeCtx = useTimeContext();
   if (!lastUsed) {
     return (
       <span className="flex items-center gap-1 text-xs">
@@ -54,7 +58,7 @@ function LastUsedCell({ lastUsed }: { lastUsed: string | null }) {
   return (
     <span className="flex items-center gap-1 text-xs">
       <StatusIndicator status={status} />
-      <span className="text-text-secondary">{formatRelative(lastUsed)}</span>
+      <span className="text-text-secondary">{formatRelative(lastUsed, timeCtx)}</span>
     </span>
   );
 }

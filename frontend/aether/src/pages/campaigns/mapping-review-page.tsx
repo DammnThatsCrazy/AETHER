@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Badge, Button, Card, CardContent, CardHeader,
   EmptyState, ErrorState, LoadingState,
+  formatCount, useTimeContext,
 } from '@aether/ui';
 import { useMappingReviews, useResolveReview, useIgnoreReview } from '@aether-app/features/campaigns/use-mapping-review';
 
@@ -40,6 +41,7 @@ function ReviewCard({
   onResolve: (reviewId: string) => void;
   onIgnore: (reviewId: string) => void;
 }) {
+  const timeCtx = useTimeContext();
   const reviewId = fmt(review.review_id ?? review.id);
   const evidence = (review.evidence ?? {}) as Record<string, unknown>;
   const count = review.observed_count as number | undefined;
@@ -54,10 +56,10 @@ function ReviewCard({
           <div className="flex items-center gap-2">
             <Badge variant="warning" size="sm">open</Badge>
             {count !== undefined && (
-              <span className="text-xs text-text-muted">{count.toLocaleString()} observation{count !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-text-muted">{formatCount(count, timeCtx)} observation{count !== 1 ? 's' : ''}</span>
             )}
             {affected !== undefined && affected > 0 && (
-              <span className="text-xs text-text-muted">{affected.toLocaleString()} touchpoint{affected !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-text-muted">{formatCount(affected, timeCtx)} touchpoint{affected !== 1 ? 's' : ''}</span>
             )}
           </div>
           <span className="text-xs text-text-muted font-mono">{reviewId.slice(0, 8)}</span>

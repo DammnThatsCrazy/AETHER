@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, useTimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useMeasurementOverview } from '@kyber/features/measurement';
 import { useState } from 'react';
@@ -32,6 +32,7 @@ function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'defa
 export function MeasurementOverviewPage() {
   const [window, setWindow] = useState('30d');
   const { data, loading, error } = useMeasurementOverview(window);
+  const timeCtx = useTimeContext();
 
   if (loading) return <PageWrapper title="Measurement Overview"><LoadingState lines={8} /></PageWrapper>;
   if (error) return <PageWrapper title="Measurement Overview"><ErrorState title="Unable to load measurement data" message={error} /></PageWrapper>;
@@ -58,8 +59,8 @@ export function MeasurementOverviewPage() {
       }
     >
       <section aria-label="Performance metrics" className="grid gap-4 md:grid-cols-4">
-        <Metric label="Total spend" value={`$${Number(overview.campaign_spend?.usd_amount ?? 0).toLocaleString()}`} />
-        <Metric label="Attributed revenue" value={`$${Number(overview.attributed_revenue?.usd_amount ?? 0).toLocaleString()}`} />
+        <Metric label="Total spend" value={`$${formatCount(Number(overview.campaign_spend?.usd_amount ?? 0), timeCtx)}`} />
+        <Metric label="Attributed revenue" value={`$${formatCount(Number(overview.attributed_revenue?.usd_amount ?? 0), timeCtx)}`} />
         <Metric label="ROAS" value={overview.roas ? `${Number(overview.roas).toFixed(2)}x` : '—'} sub="Actual spend basis" />
         <Metric label="Entities tracked" value={overview.entity_count ?? 0} />
       </section>

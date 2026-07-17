@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, useTimeContext, type TimeContext } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
 function useTenantId(): string {
@@ -29,9 +29,9 @@ const STATE_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default'
   cancelled: 'default',
 };
 
-function formatTs(ts: string | null | undefined): string {
+function formatTs(ts: string | null | undefined, ctx: TimeContext): string {
   if (!ts) return '—';
-  try { return new Date(ts as string).toLocaleString(); } catch { return String(ts); }
+  try { return formatDateTime(ts as string, ctx); } catch { return String(ts); }
 }
 
 function ms(v: unknown): string {
@@ -44,6 +44,7 @@ interface AttemptRowProps {
 }
 
 function AttemptRow({ attempt }: AttemptRowProps) {
+  const timeCtx = useTimeContext();
   const outcome = String(attempt.outcome ?? '—');
   const variant = outcome === 'SUCCESS' ? 'success' : outcome.includes('ERROR') || outcome.includes('TIMEOUT') ? 'danger' : 'default';
   return (
@@ -53,7 +54,7 @@ function AttemptRow({ attempt }: AttemptRowProps) {
       <td className="py-1 px-2 text-text-muted">{String(attempt.http_status ?? '—')}</td>
       <td className="py-1 px-2 text-text-muted">{ms(attempt.latency_ms)}</td>
       <td className="py-1 px-2 text-text-muted truncate max-w-xs">{attempt.error_message ? String(attempt.error_message) : '—'}</td>
-      <td className="py-1 px-2 text-text-muted">{formatTs(attempt.started_at as string)}</td>
+      <td className="py-1 px-2 text-text-muted">{formatTs(attempt.started_at as string, timeCtx)}</td>
     </tr>
   );
 }
@@ -67,6 +68,7 @@ interface JobRowProps {
 }
 
 function JobRow({ job, receipt, attempts, expanded, onToggle }: JobRowProps) {
+  const timeCtx = useTimeContext();
   const state = String(job.state ?? '—');
   return (
     <>
@@ -84,7 +86,7 @@ function JobRow({ job, receipt, attempts, expanded, onToggle }: JobRowProps) {
               : <span>{String(receipt.external_id)}</span>
             : '—'}
         </td>
-        <td className="py-2 px-3 text-text-muted text-xs">{formatTs(job.created_at as string)}</td>
+        <td className="py-2 px-3 text-text-muted text-xs">{formatTs(job.created_at as string, timeCtx)}</td>
         <td className="py-2 px-3 text-text-muted text-xs">{expanded ? '▲' : '▼'}</td>
       </tr>
       {expanded && (
@@ -128,6 +130,7 @@ interface IntentCardProps {
 }
 
 function IntentCard({ intent, tenantId }: IntentCardProps) {
+  const timeCtx = useTimeContext();
   const [jobs, setJobs] = useState<AnyRecord[]>([]);
   const [receipts, setReceipts] = useState<Record<string, AnyRecord>>({});
   const [attempts, setAttempts] = useState<Record<string, AnyRecord[]>>({});
@@ -175,7 +178,7 @@ function IntentCard({ intent, tenantId }: IntentCardProps) {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-sm font-mono">{String(intent.id).slice(0, 8)}…</CardTitle>
-            <p className="text-xs text-text-muted mt-0.5">{source} · {channels} · {formatTs(intent.created_at as string)}</p>
+            <p className="text-xs text-text-muted mt-0.5">{source} · {channels} · {formatTs(intent.created_at as string, timeCtx)}</p>
           </div>
           <Badge variant={STATE_VARIANT[state] ?? 'default'}>{state}</Badge>
         </div>

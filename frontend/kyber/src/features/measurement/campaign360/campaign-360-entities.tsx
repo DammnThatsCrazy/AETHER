@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState } from '@aether/ui';
+import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, formatCount, formatDate, useTimeContext } from '@aether/ui';
 import { useCampaign360Entities } from '../use-campaign-360';
 
 const ENTITY_TYPES = ['', 'profile', 'cluster', 'account', 'organization', 'anonymous'];
@@ -14,6 +14,7 @@ interface Props {
 export function Campaign360Entities({ campaignId, timeStart, timeEnd }: Props) {
   const [entityType, setEntityType] = useState('');
   const navigate = useNavigate();
+  const timeCtx = useTimeContext();
 
   const { data, loading, error } = useCampaign360Entities({
     campaignId,
@@ -63,10 +64,10 @@ export function Campaign360Entities({ campaignId, timeStart, timeEnd }: Props) {
                     )},
                     { key: 'entity_type', header: 'Type', render: r => String(r.entity_type ?? '—') },
                     { key: 'cluster_id', header: 'Cluster', render: r => r.cluster_id ? <span className="font-mono text-xs">{String(r.cluster_id).slice(0, 12)}…</span> : '—' },
-                    { key: 'touchpoint_count', header: 'Touchpoints', render: r => Number(r.touchpoint_count ?? 0).toLocaleString() },
-                    { key: 'conversion_count', header: 'Conversions', render: r => Number(r.conversion_count ?? 0).toLocaleString() },
+                    { key: 'touchpoint_count', header: 'Touchpoints', render: r => formatCount(Number(r.touchpoint_count ?? 0), timeCtx) },
+                    { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
                     { key: 'attributed_revenue', header: 'Attributed $', render: r => `$${Number(r.attributed_revenue ?? 0).toFixed(2)}` },
-                    { key: 'last_activity_at', header: 'Last active', render: r => r.last_activity_at ? new Date(String(r.last_activity_at)).toLocaleDateString() : '—' },
+                    { key: 'last_activity_at', header: 'Last active', render: r => r.last_activity_at ? formatDate(String(r.last_activity_at), timeCtx) : '—' },
                   ]}
                 />
               )

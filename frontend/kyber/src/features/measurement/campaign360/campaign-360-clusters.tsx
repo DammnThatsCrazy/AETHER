@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState } from '@aether/ui';
+import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, formatCount, useTimeContext } from '@aether/ui';
 import { useCampaign360Clusters } from '../use-campaign-360';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
 
 export function Campaign360Clusters({ campaignId, attributionRunId, timeStart, timeEnd }: Props) {
   const navigate = useNavigate();
+  const timeCtx = useTimeContext();
   const { data, loading, error } = useCampaign360Clusters({
     campaignId,
     ...(attributionRunId !== undefined ? { attribution_run_id: attributionRunId } : {}),
@@ -47,7 +48,7 @@ export function Campaign360Clusters({ campaignId, attributionRunId, timeStart, t
                     )
                     : <span className="text-text-muted text-xs">unresolved</span>
                 )},
-                { key: 'conversion_count', header: 'Conversions', render: r => Number(r.conversion_count ?? 0).toLocaleString() },
+                { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
                 { key: 'attributed_gross_revenue', header: 'Gross $', render: r => `$${Number(r.attributed_gross_revenue ?? 0).toFixed(2)}` },
                 { key: 'attributed_net_revenue', header: 'Net $', render: r => `$${Number(r.attributed_net_revenue ?? 0).toFixed(2)}` },
                 { key: 'identity_confidence', header: 'Confidence', render: r => r.identity_confidence != null ? `${(Number(r.identity_confidence) * 100).toFixed(0)}%` : '—' },

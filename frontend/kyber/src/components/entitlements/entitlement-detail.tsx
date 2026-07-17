@@ -3,6 +3,7 @@
  * Full details for a single entitlement.
  * Owner: Entities page
  */
+import { formatDateTime, useTimeContext } from '@aether/ui';
 import type { Entitlement } from '@kyber/lib/schemas/commerce';
 
 interface EntitlementDetailProps {
@@ -12,6 +13,7 @@ interface EntitlementDetailProps {
 }
 
 export function EntitlementDetail({ entitlement: e, loading = false, error = null }: EntitlementDetailProps) {
+  const timeCtx = useTimeContext();
   if (loading) {
     return <div className="entitlement-detail entitlement-detail--loading" aria-busy="true">loading…</div>;
   }
@@ -33,14 +35,14 @@ export function EntitlementDetail({ entitlement: e, loading = false, error = nul
         <dt>scope</dt><dd>{e.scope}</dd>
         <dt>holder</dt><dd>{e.holder_id} ({e.holder_type})</dd>
         <dt>settlement</dt><dd>{e.settlement_id}</dd>
-        <dt>issued</dt><dd>{new Date(e.issued_at).toLocaleString()}</dd>
-        <dt>expires</dt><dd>{new Date(e.expires_at).toLocaleString()}</dd>
+        <dt>issued</dt><dd>{formatDateTime(e.issued_at, timeCtx)}</dd>
+        <dt>expires</dt><dd>{formatDateTime(e.expires_at, timeCtx)}</dd>
         <dt>reuse count</dt><dd>{e.reuse_count}</dd>
-        {e.last_reused_at && <><dt>last reused</dt><dd>{new Date(e.last_reused_at).toLocaleString()}</dd></>}
+        {e.last_reused_at && <><dt>last reused</dt><dd>{formatDateTime(e.last_reused_at, timeCtx)}</dd></>}
         {e.siwx_binding && <><dt>siwx binding</dt><dd>{e.siwx_binding}</dd></>}
         {e.revoked_at && (
           <>
-            <dt>revoked at</dt><dd>{new Date(e.revoked_at).toLocaleString()}</dd>
+            <dt>revoked at</dt><dd>{formatDateTime(e.revoked_at, timeCtx)}</dd>
             <dt>revoked by</dt><dd>{e.revoked_by}</dd>
             <dt>revoke reason</dt><dd>{e.revoke_reason}</dd>
           </>

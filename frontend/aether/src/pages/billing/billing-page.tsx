@@ -17,6 +17,10 @@ import {
   Skeleton,
   StatusIndicator,
   TerminalSeparator,
+  formatCount,
+  formatCurrency,
+  formatDate,
+  useTimeContext,
   useToast,
 } from '@aether/ui';
 import {
@@ -42,6 +46,7 @@ function PlanCard({
   onUpgrade: () => void;
   loading: boolean;
 }) {
+  const timeCtx = useTimeContext();
   const isHighTier = ['P3', 'P4'].includes(plan.plan_id);
   return (
     <Card className={isCurrent ? 'border-accent/50 bg-accent/5' : ''}>
@@ -57,8 +62,8 @@ function PlanCard({
           <span className="text-xs text-text-muted">/mo</span>
         </div>
         <div className="text-xs font-mono text-text-secondary space-y-0.5">
-          <div>{plan.monthly_quota.toLocaleString()} events/mo</div>
-          <div>{plan.burst_rpm.toLocaleString()} req/min burst</div>
+          <div>{formatCount(plan.monthly_quota, timeCtx)} events/mo</div>
+          <div>{formatCount(plan.burst_rpm, timeCtx)} req/min burst</div>
         </div>
         <ul className="space-y-1">
           {plan.features.map(f => (
@@ -243,6 +248,7 @@ function EnterpriseCard({ onContact, disabled }: { onContact: () => void; disabl
 export function BillingPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
   const { data: plans, isLoading: plansLoading, error: plansError } = useBillingPlans();
   const { data: profile } = useMeProfile();
   const { data: invoices, isLoading: invoicesLoading } = useInvoices();
@@ -327,10 +333,10 @@ export function BillingPage() {
           {invoices.map(inv => (
             <div key={inv.id} className="flex items-center justify-between text-xs py-2 border-b border-border-subtle last:border-0">
               <span className="text-text-secondary font-mono">
-                {new Date(inv.period_start).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                {formatDate(inv.period_start, timeCtx)}
               </span>
               <span className="text-text-primary font-mono">
-                {(inv.amount / 100).toLocaleString(undefined, { style: 'currency', currency: inv.currency.toUpperCase() })}
+                {formatCurrency(inv.amount / 100, inv.currency, timeCtx)}
               </span>
               <Badge
                 variant={inv.status === 'paid' ? 'default' : 'default'}

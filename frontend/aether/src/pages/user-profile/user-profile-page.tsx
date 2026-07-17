@@ -5,7 +5,7 @@ import {
   DataTable, EmptyState, ErrorState, EvidenceDrawer, FreshnessIndicator,
   GlyphIcon, LoadingState, Modal, ModalBody, ModalFooter, ModalHeader,
   Skeleton, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger,
-  TerminalSeparator, TimeWindowSelector, formatUSD, useToast,
+  TerminalSeparator, TimeWindowSelector, formatUSD, formatCount, formatDecimal, useTimeContext, useToast,
 } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
 import {
@@ -455,6 +455,7 @@ function JourneysTab({ userId }: { userId: string }) {
 // ── Wallets tab ────────────────────────────────────────────────────────────────
 
 function WalletsTab({ userId }: { userId: string }) {
+  const timeCtx = useTimeContext();
   const { data, isLoading, error } = useUserWallets(userId);
   const wallets = asList(asRecord(data).items ?? asRecord(data).wallets ?? data);
 
@@ -489,7 +490,7 @@ function WalletsTab({ userId }: { userId: string }) {
                       )}
                       {portfolio !== undefined && (
                         <span className="text-sm font-medium text-text-primary">
-                          ${Number(portfolio).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          ${formatDecimal(Number(portfolio), timeCtx, { maximumFractionDigits: 0 })}
                         </span>
                       )}
                     </div>
@@ -522,8 +523,8 @@ function WalletsTab({ userId }: { userId: string }) {
                           { key: 'token', header: 'Token', render: t => <span className="font-medium text-text-primary">{fmt(t.symbol)}</span> },
                           { key: 'type', header: 'Type', render: t => <Badge variant="default" size="sm">{fmt(t.token_type)}</Badge> },
                           { key: 'chain', header: 'Chain', render: t => <span className="text-text-secondary">{fmt(t.chain_id)}</span> },
-                          { key: 'balance', header: 'Balance', render: t => <span className="font-mono text-text-primary">{Number(t.balance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span> },
-                          { key: 'value', header: 'Value (USD)', render: t => t.value_usd !== undefined ? <span className="text-text-primary">${Number(t.value_usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span> : <span className="text-text-muted">—</span> },
+                          { key: 'balance', header: 'Balance', render: t => <span className="font-mono text-text-primary">{formatDecimal(Number(t.balance ?? 0), timeCtx, { maximumFractionDigits: 4 })}</span> },
+                          { key: 'value', header: 'Value (USD)', render: t => t.value_usd !== undefined ? <span className="text-text-primary">${formatDecimal(Number(t.value_usd), timeCtx, { maximumFractionDigits: 2 })}</span> : <span className="text-text-muted">—</span> },
                           { key: 'price_chg', header: '24h', render: t => {
                             const chg = t.price_change_24h as number | undefined;
                             if (chg === undefined) return <span className="text-text-muted">—</span>;
@@ -546,8 +547,8 @@ function WalletsTab({ userId }: { userId: string }) {
                           { key: 'category', header: 'Category', render: p => <Badge variant="default" size="sm">{fmt(p.category)}</Badge> },
                           { key: 'chain', header: 'Chain', render: p => <span className="text-text-secondary">{fmt(p.chain_id)}</span> },
                           { key: 'count', header: 'Interactions', render: p => fmt(p.interaction_count) },
-                          { key: 'volume', header: 'Volume', render: p => p.volume_usd !== undefined ? <span>${Number(p.volume_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
-                          { key: 'position', header: 'Position', render: p => p.current_position_usd !== undefined ? <span className="text-success">${Number(p.current_position_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
+                          { key: 'volume', header: 'Volume', render: p => p.volume_usd !== undefined ? <span>${formatDecimal(Number(p.volume_usd), timeCtx, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
+                          { key: 'position', header: 'Position', render: p => p.current_position_usd !== undefined ? <span className="text-success">${formatDecimal(Number(p.current_position_usd), timeCtx, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
                           { key: 'last', header: 'Last', render: p => relTime(p.last_interaction_at as string) },
                         ]}
                       />
@@ -566,7 +567,7 @@ function WalletsTab({ userId }: { userId: string }) {
                           { key: 'type', header: 'Type', render: t => <Badge variant="default" size="sm">{fmt(t.transaction_type)}</Badge> },
                           { key: 'protocol', header: 'Protocol', render: t => fmt(t.protocol_name) },
                           { key: 'method', header: 'Method', render: t => <span className="text-text-secondary">{fmt(t.method_name)}</span> },
-                          { key: 'value', header: 'Value', render: t => t.value_usd !== undefined ? <span>${Number(t.value_usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span> : <span className="text-text-muted">—</span> },
+                          { key: 'value', header: 'Value', render: t => t.value_usd !== undefined ? <span>${formatDecimal(Number(t.value_usd), timeCtx, { maximumFractionDigits: 2 })}</span> : <span className="text-text-muted">—</span> },
                           { key: 'status', header: 'Status', render: t => <Badge variant={t.success ? 'success' : 'danger'} size="sm">{t.success ? 'OK' : 'Failed'}</Badge> },
                           { key: 'when', header: 'When', render: t => relTime(t.timestamp as string) },
                         ]}
@@ -585,6 +586,7 @@ function WalletsTab({ userId }: { userId: string }) {
 // ── Financials tab ────────────────────────────────────────────────────────────
 
 function FinancialsTab({ userId }: { userId: string }) {
+  const timeCtx = useTimeContext();
   const { data, isLoading, error } = useUserFinancials(userId);
   const f = asRecord(data);
   const web2 = asRecord(f.web2);
@@ -595,9 +597,9 @@ function FinancialsTab({ userId }: { userId: string }) {
   return (
     <Section title="Financial profile (Web2 + Web3)" loading={isLoading} error={error}>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-        <Stat label="Lifetime value" value={f.lifetime_value_usd !== undefined ? `$${Number(f.lifetime_value_usd).toLocaleString()}` : '—'} />
-        <Stat label="Total inflow" value={f.total_inflow_usd !== undefined ? `$${Number(f.total_inflow_usd).toLocaleString()}` : web3.total_inflow_usd !== undefined ? `$${Number(web3.total_inflow_usd).toLocaleString()}` : '—'} />
-        <Stat label="Total outflow" value={f.total_outflow_usd !== undefined ? `$${Number(f.total_outflow_usd).toLocaleString()}` : web3.total_outflow_usd !== undefined ? `$${Number(web3.total_outflow_usd).toLocaleString()}` : '—'} />
+        <Stat label="Lifetime value" value={f.lifetime_value_usd !== undefined ? `$${formatCount(Number(f.lifetime_value_usd), timeCtx)}` : '—'} />
+        <Stat label="Total inflow" value={f.total_inflow_usd !== undefined ? `$${formatCount(Number(f.total_inflow_usd), timeCtx)}` : web3.total_inflow_usd !== undefined ? `$${formatCount(Number(web3.total_inflow_usd), timeCtx)}` : '—'} />
+        <Stat label="Total outflow" value={f.total_outflow_usd !== undefined ? `$${formatCount(Number(f.total_outflow_usd), timeCtx)}` : web3.total_outflow_usd !== undefined ? `$${formatCount(Number(web3.total_outflow_usd), timeCtx)}` : '—'} />
         <Stat label="Web2 payments" value={fmt(web2.payment_count)} />
         <Stat label="Subscriptions" value={fmt(web2.subscription_count)} />
         <Stat label="On-chain tx" value={fmt(web3.transaction_count)} />
@@ -611,7 +613,7 @@ function FinancialsTab({ userId }: { userId: string }) {
             columns={[
               { key: 'entity', header: 'Entity', render: c => <code className="text-xs text-text-primary">{fmt(c.entity_id ?? c.address)}</code> },
               { key: 'type', header: 'Type', render: c => <Badge variant="default" size="sm">{fmt(c.kind ?? c.type)}</Badge> },
-              { key: 'volume', header: 'Volume', render: c => c.volume_usd !== undefined ? <span>${Number(c.volume_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
+              { key: 'volume', header: 'Volume', render: c => c.volume_usd !== undefined ? <span>${formatDecimal(Number(c.volume_usd), timeCtx, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
               { key: 'tx', header: 'Transactions', render: c => fmt(c.transaction_count ?? c.count) },
               { key: 'dir', header: 'Direction', render: c => c.direction ? <Badge variant="default" size="sm">{fmt(c.direction)}</Badge> : <span className="text-text-muted">—</span> },
             ]}
@@ -766,6 +768,7 @@ function AttributionTab({ userId }: { userId: string }) {
 // ── Relationships / Graph tab ─────────────────────────────────────────────────
 
 function RelationshipsTab({ userId }: { userId: string }) {
+  const timeCtx = useTimeContext();
   const { data: graphData, isLoading: gl, error: ge } = useUserGraph(userId);
   const { data: clusterData, isLoading: cl } = useUserCluster(userId);
 
@@ -838,7 +841,7 @@ function RelationshipsTab({ userId }: { userId: string }) {
             { key: 'weight', header: 'Weight', render: e => `${Math.round(Number(e.weight ?? 0) * 100)}%` },
             { key: 'conf', header: 'Confidence', render: e => `${Math.round(Number(e.confidence ?? 0) * 100)}%` },
             { key: 'inferred', header: 'Source', render: e => <Badge variant={e.is_inferred ? 'warning' : 'success'} size="sm">{e.is_inferred ? 'Inferred' : 'Explicit'}</Badge> },
-            { key: 'volume', header: 'Volume', render: e => e.volume_usd !== undefined ? <span>${Number(e.volume_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
+            { key: 'volume', header: 'Volume', render: e => e.volume_usd !== undefined ? <span>${formatDecimal(Number(e.volume_usd), timeCtx, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
           ]}
         />
       </Section>
@@ -881,6 +884,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 function SocialTab({ userId, window }: { userId: string; window: TimeWindow }) {
+  const timeCtx = useTimeContext();
   const { data, isLoading, error } = useUserSocialIntelligence(userId, window);
 
   if (isLoading) return <LoadingState lines={6} />;
@@ -905,7 +909,7 @@ function SocialTab({ userId, window }: { userId: string; window: TimeWindow }) {
         {data?.total_followers_deduped != null && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-text-muted font-mono">Total reach (deduped)</span>
-            <span className="text-xl font-mono text-accent">{data.total_followers_deduped.toLocaleString()}</span>
+            <span className="text-xl font-mono text-accent">{formatCount(data.total_followers_deduped, timeCtx)}</span>
           </div>
         )}
         {data?.computed_at && (
@@ -932,12 +936,12 @@ function SocialTab({ userId, window }: { userId: string; window: TimeWindow }) {
                   <p className="text-xs font-mono text-accent">@{p.handle}</p>
                   {p.followers != null && (
                     <p className="text-xs text-text-secondary">
-                      {p.followers.toLocaleString()} followers
+                      {formatCount(p.followers, timeCtx)} followers
                       {p.engagement_rate != null && ` · ${(p.engagement_rate * 100).toFixed(1)}% eng.`}
                     </p>
                   )}
                   {p.content_count != null && (
-                    <p className="text-xs text-text-muted">{p.content_count.toLocaleString()} posts</p>
+                    <p className="text-xs text-text-muted">{formatCount(p.content_count, timeCtx)} posts</p>
                   )}
                 </div>
               ) : (

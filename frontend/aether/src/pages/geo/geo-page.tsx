@@ -4,6 +4,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   DataTable, ErrorState, GlyphIcon, LoadingState, Skeleton,
   TerminalSeparator, TimeWindowSelector,
+  formatCount, useTimeContext,
 } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
 import { useGeoSummary, useGeoEntities } from '@aether-app/features/geo/use-geo';
@@ -82,6 +83,7 @@ const METRICS: { value: GeoMetric; label: string }[] = [
 export function GeoPage() {
   const navigate = useNavigate();
   const params = useParams<{ level?: string; geoId?: string }>();
+  const timeCtx = useTimeContext();
 
   const currentLevel = (params.level as GeoLevel) ?? 'global';
   const currentGeoId = params.geoId ?? null;
@@ -184,7 +186,7 @@ export function GeoPage() {
               <CardContent className="p-4">
                 <p className="text-xs text-text-muted font-mono">Entities</p>
                 <p className="text-2xl font-mono text-accent mt-1">
-                  {(summary.entity_count ?? 0).toLocaleString()}
+                  {formatCount(summary.entity_count ?? 0, timeCtx)}
                 </p>
               </CardContent>
             </Card>
@@ -222,7 +224,7 @@ export function GeoPage() {
                 {Object.entries(summary.tier_distribution).map(([tier, count]) => (
                   <div key={tier} className="bg-surface-raised border border-border-default rounded px-3 py-2 text-xs font-mono">
                     <span className="text-text-muted">{tier}: </span>
-                    <span className="text-text-primary">{(count as number).toLocaleString()}</span>
+                    <span className="text-text-primary">{formatCount(count as number, timeCtx)}</span>
                   </div>
                 ))}
               </div>
@@ -250,7 +252,7 @@ export function GeoPage() {
                       </button>
                     ),
                   },
-                  { key: 'entities', header: 'Entities', render: c => <span className="font-mono">{(c.entity_count as number ?? 0).toLocaleString()}</span> },
+                  { key: 'entities', header: 'Entities', render: c => <span className="font-mono">{formatCount(c.entity_count as number ?? 0, timeCtx)}</span> },
                   { key: 'conv', header: 'Conv. rate', render: c => fmtPct(c.conversion_rate as number | null) },
                   {
                     key: 'anomaly',
@@ -300,7 +302,7 @@ export function GeoPage() {
                 key: 'ltv',
                 header: 'LTV',
                 render: e => e.ltv != null
-                  ? <span className="font-mono">${(e.ltv as number).toLocaleString()}</span>
+                  ? <span className="font-mono">${formatCount(e.ltv as number, timeCtx)}</span>
                   : <span className="text-text-muted">—</span>,
               },
               {

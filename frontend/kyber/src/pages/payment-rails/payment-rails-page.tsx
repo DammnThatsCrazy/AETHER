@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, useTimeContext, type TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 import { isFeatureEnabled } from '@kyber/lib/featureFlags';
@@ -68,10 +68,10 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, ' ');
 }
 
-function formatTs(ts: string | null | undefined): string {
+function formatTs(ts: string | null | undefined, ctx: TimeContext): string {
   if (!ts) return '—';
   try {
-    return new Date(ts).toLocaleString();
+    return formatDateTime(ts, ctx);
   } catch {
     return ts;
   }
@@ -113,6 +113,7 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
   const [detail, setDetail] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const timeCtx = useTimeContext();
 
   useEffect(() => {
     let cancelled = false;
@@ -175,7 +176,7 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
                 <DiagnosticsRow label="Unresolved" value={String(health.sessions_unresolved ?? 0)} tone={Number(health.sessions_unresolved ?? 0) > 0 ? 'warning' : 'default'} />
                 <DiagnosticsRow label="Matched rate" value={formatRate(health.reconciliation_matched_rate)} />
                 <DiagnosticsRow label="Conflicts" value={String(health.reconciliation_conflicts ?? 0)} tone={Number(health.reconciliation_conflicts ?? 0) > 0 ? 'danger' : 'default'} />
-                <DiagnosticsRow label="Last event" value={formatTs(health.last_event_at as string | null)} />
+                <DiagnosticsRow label="Last event" value={formatTs(health.last_event_at as string | null, timeCtx)} />
               </CardContent>
             </Card>
           );

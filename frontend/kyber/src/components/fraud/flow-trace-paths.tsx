@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatCount, useTimeContext } from '@aether/ui';
 import { useFlowTracePaths } from '@kyber/features/fraud/use-fraud';
 
 interface FlowTracePathsProps {
@@ -30,6 +30,7 @@ function patternVariant(tag: string): 'default' | 'warning' | 'danger' {
 type PathRow = Record<string, unknown>;
 
 export function FlowTracePaths({ traceId }: FlowTracePathsProps) {
+  const timeCtx = useTimeContext();
   const { data, isLoading } = useFlowTracePaths(traceId);
 
   const raw = asRec(data as unknown);
@@ -64,7 +65,7 @@ export function FlowTracePaths({ traceId }: FlowTracePathsProps) {
                 <div className="flex items-center gap-2">
                   {totalAmount !== undefined && (
                     <span className="text-xs text-text-muted">
-                      ${Number(totalAmount).toLocaleString()}
+                      ${formatCount(Number(totalAmount), timeCtx)}
                     </span>
                   )}
                   <Badge variant={riskVariant(riskScore)}>

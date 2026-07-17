@@ -1,6 +1,6 @@
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, Tabs, TabsContent, TabsList, TabsTrigger } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, Tabs, TabsContent, TabsList, TabsTrigger, formatCount, formatDate, formatDateTime, formatDecimal, useTimeContext, type TimeContext } from '@aether/ui';
 import { CardLinkedOutcomesTab } from './card-linked-outcomes-tab';
 import { api } from '@aether-app/lib/api/endpoints';
 import {
@@ -23,8 +23,8 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function fmtUSD(n: number) {
-  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtUSD(n: number, ctx: TimeContext) {
+  return `$${formatDecimal(n, ctx, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function fmtPct(n: number | null | undefined) {
@@ -35,6 +35,7 @@ function fmtPct(n: number | null | undefined) {
 // ── Overview tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { campaignId: string; timeStart?: string; timeEnd?: string; attributionModel: string }) {
+  const timeCtx = useTimeContext();
   const { data, loading, error } = useCampaign360Overview(campaignId, {
     ...(timeStart !== undefined ? { time_start: timeStart } : {}),
     ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
@@ -50,12 +51,12 @@ function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { cam
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <Metric label="Spend" value={fmtUSD(Number(d.spend_usd ?? 0))} />
-        <Metric label="Impressions" value={Number(d.impressions ?? 0).toLocaleString()} />
-        <Metric label="Clicks" value={Number(d.clicks ?? 0).toLocaleString()} />
+        <Metric label="Spend" value={fmtUSD(Number(d.spend_usd ?? 0), timeCtx)} />
+        <Metric label="Impressions" value={formatCount(Number(d.impressions ?? 0), timeCtx)} />
+        <Metric label="Clicks" value={formatCount(Number(d.clicks ?? 0), timeCtx)} />
         <Metric label="ROAS" value={d.roas != null ? `${Number(d.roas).toFixed(2)}x` : '—'} />
-        <Metric label="Gross revenue" value={fmtUSD(Number(d.gross_attributed_revenue ?? 0))} />
-        <Metric label="Net revenue" value={fmtUSD(Number(d.net_attributed_revenue ?? 0))} />
+        <Metric label="Gross revenue" value={fmtUSD(Number(d.gross_attributed_revenue ?? 0), timeCtx)} />
+        <Metric label="Net revenue" value={fmtUSD(Number(d.net_attributed_revenue ?? 0), timeCtx)} />
       </div>
 
       <div>
@@ -68,7 +69,7 @@ function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { cam
             { label: 'Converted', key: 'converted_count' },
             { label: 'Attributed', key: 'attributed_count' },
           ].map(({ label, key }) => (
-            <Metric key={key} label={label} value={Number(d[key] ?? 0).toLocaleString()} />
+            <Metric key={key} label={label} value={formatCount(Number(d[key] ?? 0), timeCtx)} />
           ))}
         </div>
       </div>
@@ -76,7 +77,7 @@ function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { cam
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Metric label="Attribution model" value={String(d.attribution_model ?? 'last_touch')} />
         <Metric label="Resolution rate" value={fmtPct(d.identity_resolution_rate as number | null)} />
-        <Metric label="Touchpoints" value={Number(d.touchpoint_count ?? 0).toLocaleString()} />
+        <Metric label="Touchpoints" value={formatCount(Number(d.touchpoint_count ?? 0), timeCtx)} />
       </div>
     </div>
   );
@@ -85,6 +86,7 @@ function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { cam
 // ── Population tab ────────────────────────────────────────────────────────────
 
 function PopulationTab({ campaignId, timeStart, timeEnd }: { campaignId: string; timeStart?: string; timeEnd?: string }) {
+  const timeCtx = useTimeContext();
   const [population, setPopulation] = useState('observed');
   const { data, loading, error } = useCampaign360Population(campaignId, {
     population,
@@ -116,10 +118,10 @@ function PopulationTab({ campaignId, timeStart, timeEnd }: { campaignId: string;
                   columns={[
                     { key: 'entity_id', header: 'Entity', render: r => <span className="font-mono text-xs">{String(r.entity_id ?? '').slice(0, 16)}…</span> },
                     { key: 'entity_type', header: 'Type', render: r => String(r.entity_type ?? '—') },
-                    { key: 'touchpoint_count', header: 'Touchpoints', render: r => Number(r.touchpoint_count ?? 0).toLocaleString() },
-                    { key: 'conversion_count', header: 'Conversions', render: r => Number(r.conversion_count ?? 0).toLocaleString() },
-                    { key: 'attributed_revenue', header: 'Attributed $', render: r => fmtUSD(Number(r.attributed_revenue ?? 0)) },
-                    { key: 'last_activity_at', header: 'Last active', render: r => r.last_activity_at ? new Date(String(r.last_activity_at)).toLocaleDateString() : '—' },
+                    { key: 'touchpoint_count', header: 'Touchpoints', render: r => formatCount(Number(r.touchpoint_count ?? 0), timeCtx) },
+                    { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
+                    { key: 'attributed_revenue', header: 'Attributed $', render: r => fmtUSD(Number(r.attributed_revenue ?? 0), timeCtx) },
+                    { key: 'last_activity_at', header: 'Last active', render: r => r.last_activity_at ? formatDate(String(r.last_activity_at), timeCtx) : '—' },
                   ]}
                 />
               )
@@ -134,6 +136,7 @@ function PopulationTab({ campaignId, timeStart, timeEnd }: { campaignId: string;
 // ── Clusters tab ──────────────────────────────────────────────────────────────
 
 function ClustersTab({ campaignId }: { campaignId: string }) {
+  const timeCtx = useTimeContext();
   const { data, loading, error } = useCampaign360Clusters(campaignId, { limit: 50 });
   const items = (data as AnyRecord)?.items as AnyRecord[] | undefined;
 
@@ -152,9 +155,9 @@ function ClustersTab({ campaignId }: { campaignId: string }) {
               keyExtractor={r => String(r.cluster_id ?? Math.random())}
               columns={[
                 { key: 'cluster_id', header: 'Cluster', render: r => r.cluster_id ? <span className="font-mono text-xs">{String(r.cluster_id).slice(0, 16)}…</span> : <span className="text-text-muted text-xs">unresolved</span> },
-                { key: 'conversion_count', header: 'Conversions', render: r => Number(r.conversion_count ?? 0).toLocaleString() },
-                { key: 'attributed_gross_revenue', header: 'Gross $', render: r => fmtUSD(Number(r.attributed_gross_revenue ?? 0)) },
-                { key: 'attributed_net_revenue', header: 'Net $', render: r => fmtUSD(Number(r.attributed_net_revenue ?? 0)) },
+                { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
+                { key: 'attributed_gross_revenue', header: 'Gross $', render: r => fmtUSD(Number(r.attributed_gross_revenue ?? 0), timeCtx) },
+                { key: 'attributed_net_revenue', header: 'Net $', render: r => fmtUSD(Number(r.attributed_net_revenue ?? 0), timeCtx) },
               ]}
             />
           )
@@ -167,6 +170,7 @@ function ClustersTab({ campaignId }: { campaignId: string }) {
 // ── Conversions tab ───────────────────────────────────────────────────────────
 
 function ConversionsTab({ campaignId, timeStart, timeEnd }: { campaignId: string; timeStart?: string; timeEnd?: string }) {
+  const timeCtx = useTimeContext();
   const { data, loading, error } = useCampaign360Conversions(campaignId, {
     ...(timeStart !== undefined ? { after: timeStart } : {}),
     ...(timeEnd !== undefined ? { before: timeEnd } : {}),
@@ -190,9 +194,9 @@ function ConversionsTab({ campaignId, timeStart, timeEnd }: { campaignId: string
               columns={[
                 { key: 'conversion_id', header: 'ID', render: r => <span className="font-mono text-xs">{String(r.conversion_id ?? '').slice(0, 16)}…</span> },
                 { key: 'conversion_type', header: 'Type', render: r => String(r.conversion_type ?? '—') },
-                { key: 'gross_value', header: 'Gross $', render: r => fmtUSD(Number(r.gross_value ?? 0)) },
-                { key: 'net_value', header: 'Net $', render: r => fmtUSD(Number(r.net_value ?? 0)) },
-                { key: 'occurred_at', header: 'Date', render: r => r.occurred_at ? new Date(String(r.occurred_at)).toLocaleDateString() : '—' },
+                { key: 'gross_value', header: 'Gross $', render: r => fmtUSD(Number(r.gross_value ?? 0), timeCtx) },
+                { key: 'net_value', header: 'Net $', render: r => fmtUSD(Number(r.net_value ?? 0), timeCtx) },
+                { key: 'occurred_at', header: 'Date', render: r => r.occurred_at ? formatDate(String(r.occurred_at), timeCtx) : '—' },
               ]}
             />
           )
@@ -209,6 +213,7 @@ function MessageDetailDrawer({ campaignId, externalMessageId, onClose }: {
   externalMessageId: string;
   onClose: () => void;
 }) {
+  const timeCtx = useTimeContext();
   const [detail, setDetail] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -254,11 +259,11 @@ function MessageDetailDrawer({ campaignId, externalMessageId, onClose }: {
         {!loading && !error && (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <Metric label="Delivered" value={Number(stats.delivered ?? 0).toLocaleString()} />
-              <Metric label="Human clicks" value={Number(stats.human_clicks ?? 0).toLocaleString()} />
-              <Metric label="Replies" value={Number(stats.replies ?? 0).toLocaleString()} />
-              <Metric label="Bounces" value={Number(stats.bounces ?? 0).toLocaleString()} />
-              <Metric label="Machine events" value={Number(stats.machine_events ?? 0).toLocaleString()} />
+              <Metric label="Delivered" value={formatCount(Number(stats.delivered ?? 0), timeCtx)} />
+              <Metric label="Human clicks" value={formatCount(Number(stats.human_clicks ?? 0), timeCtx)} />
+              <Metric label="Replies" value={formatCount(Number(stats.replies ?? 0), timeCtx)} />
+              <Metric label="Bounces" value={formatCount(Number(stats.bounces ?? 0), timeCtx)} />
+              <Metric label="Machine events" value={formatCount(Number(stats.machine_events ?? 0), timeCtx)} />
               <Metric label="Sequence step" value={message.sequence_step != null ? String(message.sequence_step) : '—'} />
             </div>
             <div className="text-xs text-text-secondary space-y-1">
@@ -266,7 +271,7 @@ function MessageDetailDrawer({ campaignId, externalMessageId, onClose }: {
               <p>Template: <span className="font-mono">{String(message.external_template_id ?? '—')}</span></p>
               <p>Variant: <span className="font-mono">{String(message.variant_id ?? '—')}</span></p>
               <p>Status: <Badge variant={message.status === 'active' ? 'success' : 'default'}>{String(message.status ?? '—')}</Badge></p>
-              <p>First seen: {message.first_seen_at ? new Date(String(message.first_seen_at)).toLocaleString() : '—'}</p>
+              <p>First seen: {message.first_seen_at ? formatDateTime(String(message.first_seen_at), timeCtx) : '—'}</p>
             </div>
             <div>
               <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">Links</h3>
@@ -278,7 +283,7 @@ function MessageDetailDrawer({ campaignId, externalMessageId, onClose }: {
                     keyExtractor={r => String(r.link_id)}
                     columns={[
                       { key: 'link_id', header: 'Link', render: r => <span className="font-mono text-xs break-all">{String(r.link_id ?? '')}</span> },
-                      { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
+                      { key: 'human_clicks', header: 'Human clicks', render: r => formatCount(Number(r.human_clicks ?? 0), timeCtx) },
                     ]}
                   />
                 )
@@ -294,6 +299,7 @@ function MessageDetailDrawer({ campaignId, externalMessageId, onClose }: {
 const POPULATION_STAGES = ['all', 'attempted', 'delivered', 'engaged', 'replied'] as const;
 
 function CommsRecipientsSection({ campaignId }: { campaignId: string }) {
+  const timeCtx = useTimeContext();
   const [stage, setStage] = useState<(typeof POPULATION_STAGES)[number]>('all');
   const [rows, setRows] = useState<AnyRecord[]>([]);
   const [stageCounts, setStageCounts] = useState<AnyRecord>({});
@@ -344,9 +350,9 @@ function CommsRecipientsSection({ campaignId }: { campaignId: string }) {
                 columns={[
                   { key: 'recipient_display', header: 'Recipient', render: r => <span className="font-mono text-xs">{String(r.recipient_display ?? r.recipient_key ?? '').slice(0, 24)}</span> },
                   { key: 'stage', header: 'Stage', render: r => <Badge variant={r.stage === 'replied' ? 'success' : r.stage === 'engaged' ? 'success' : 'default'}>{String(r.stage)}</Badge> },
-                  { key: 'delivered', header: 'Delivered', render: r => Number(r.delivered ?? 0).toLocaleString() },
-                  { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
-                  { key: 'replies', header: 'Replies', render: r => Number(r.replies ?? 0).toLocaleString() },
+                  { key: 'delivered', header: 'Delivered', render: r => formatCount(Number(r.delivered ?? 0), timeCtx) },
+                  { key: 'human_clicks', header: 'Human clicks', render: r => formatCount(Number(r.human_clicks ?? 0), timeCtx) },
+                  { key: 'replies', header: 'Replies', render: r => formatCount(Number(r.replies ?? 0), timeCtx) },
                   {
                     key: 'flags', header: 'Flags',
                     render: r => (
@@ -374,6 +380,7 @@ function CommsRecipientsSection({ campaignId }: { campaignId: string }) {
 }
 
 function MessagesTab({ campaignId }: { campaignId: string }) {
+  const timeCtx = useTimeContext();
   const [funnel, setFunnel] = useState<AnyRecord | null>(null);
   const [messages, setMessages] = useState<AnyRecord[] | null>(null);
   const [links, setLinks] = useState<AnyRecord[] | null>(null);
@@ -454,11 +461,11 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <Metric label="Sent" value={Number(selected.sent ?? 0).toLocaleString()} />
-        <Metric label="Delivered" value={Number(selected.delivered ?? 0).toLocaleString()} />
-        <Metric label={mode === 'human_qualified' ? 'Human opens' : 'Reported opens'} value={Number(selected.opens ?? 0).toLocaleString()} />
-        <Metric label={mode === 'human_qualified' ? 'Human clicks' : 'Reported clicks'} value={Number(selected.clicks ?? 0).toLocaleString()} />
-        <Metric label="Replies" value={Number(((modes.human_qualified as AnyRecord) ?? {}).replies ?? 0).toLocaleString()} />
+        <Metric label="Sent" value={formatCount(Number(selected.sent ?? 0), timeCtx)} />
+        <Metric label="Delivered" value={formatCount(Number(selected.delivered ?? 0), timeCtx)} />
+        <Metric label={mode === 'human_qualified' ? 'Human opens' : 'Reported opens'} value={formatCount(Number(selected.opens ?? 0), timeCtx)} />
+        <Metric label={mode === 'human_qualified' ? 'Human clicks' : 'Reported clicks'} value={formatCount(Number(selected.clicks ?? 0), timeCtx)} />
+        <Metric label="Replies" value={formatCount(Number(((modes.human_qualified as AnyRecord) ?? {}).replies ?? 0), timeCtx)} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -468,9 +475,9 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Metric label="Hard bounces" value={Number(delivery.hard_bounces ?? 0).toLocaleString()} />
-        <Metric label="Complaints" value={Number(delivery.complaints ?? 0).toLocaleString()} />
-        <Metric label="Unsubscribes" value={Number(delivery.unsubscribes ?? 0).toLocaleString()} />
+        <Metric label="Hard bounces" value={formatCount(Number(delivery.hard_bounces ?? 0), timeCtx)} />
+        <Metric label="Complaints" value={formatCount(Number(delivery.complaints ?? 0), timeCtx)} />
+        <Metric label="Unsubscribes" value={formatCount(Number(delivery.unsubscribes ?? 0), timeCtx)} />
         <Metric label="Suspected machine events" value={fmtPct(quality.machine_event_rate as number | null)} />
       </div>
 
@@ -487,11 +494,11 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
                   { key: 'name', header: 'Message', render: r => String(r.name ?? r.external_message_id ?? '—') },
                   { key: 'sequence_step', header: 'Step', render: r => r.sequence_step != null ? String(r.sequence_step) : '—' },
                   { key: 'status', header: 'Status', render: r => <Badge variant={r.status === 'active' ? 'success' : 'default'}>{String(r.status ?? '—')}</Badge> },
-                  { key: 'delivered', header: 'Delivered', render: r => Number(r.delivered ?? 0).toLocaleString() },
-                  { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
-                  { key: 'replies', header: 'Replies', render: r => Number(r.replies ?? 0).toLocaleString() },
-                  { key: 'bounces', header: 'Bounces', render: r => Number(r.bounces ?? 0).toLocaleString() },
-                  { key: 'machine_events', header: 'Machine', render: r => Number(r.machine_events ?? 0).toLocaleString() },
+                  { key: 'delivered', header: 'Delivered', render: r => formatCount(Number(r.delivered ?? 0), timeCtx) },
+                  { key: 'human_clicks', header: 'Human clicks', render: r => formatCount(Number(r.human_clicks ?? 0), timeCtx) },
+                  { key: 'replies', header: 'Replies', render: r => formatCount(Number(r.replies ?? 0), timeCtx) },
+                  { key: 'bounces', header: 'Bounces', render: r => formatCount(Number(r.bounces ?? 0), timeCtx) },
+                  { key: 'machine_events', header: 'Machine', render: r => formatCount(Number(r.machine_events ?? 0), timeCtx) },
                   {
                     key: 'detail', header: '',
                     render: r => (
@@ -523,8 +530,8 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
                 columns={[
                   { key: 'link_id', header: 'Link', render: r => <span className="font-mono text-xs break-all">{String(r.link_id ?? '')}</span> },
                   { key: 'external_message_id', header: 'Message', render: r => String(r.external_message_id ?? '—') },
-                  { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
-                  { key: 'unique_clickers', header: 'Unique clickers', render: r => r.unique_clickers != null ? Number(r.unique_clickers).toLocaleString() : '—' },
+                  { key: 'human_clicks', header: 'Human clicks', render: r => formatCount(Number(r.human_clicks ?? 0), timeCtx) },
+                  { key: 'unique_clickers', header: 'Unique clickers', render: r => r.unique_clickers != null ? formatCount(Number(r.unique_clickers), timeCtx) : '—' },
                 ]}
               />
             )
@@ -548,6 +555,7 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
 // ── Attribution tab ───────────────────────────────────────────────────────────
 
 function AttributionTab({ campaignId }: { campaignId: string }) {
+  const timeCtx = useTimeContext();
   const { data, loading, error } = useCampaign360Attribution(campaignId, { model: 'last_touch' });
   if (loading) return <LoadingState lines={4} />;
   if (error) return <ErrorState title="Attribution unavailable" message={error} />;
@@ -570,8 +578,8 @@ function AttributionTab({ campaignId }: { campaignId: string }) {
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
             <Metric label="Conversions" value={String(d.conversions ?? '—')} />
-            <Metric label="Gross revenue" value={d.attributed_gross_revenue != null ? fmtUSD(Number(d.attributed_gross_revenue)) : '—'} />
-            <Metric label="Net revenue" value={d.attributed_net_revenue != null ? fmtUSD(Number(d.attributed_net_revenue)) : '—'} />
+            <Metric label="Gross revenue" value={d.attributed_gross_revenue != null ? fmtUSD(Number(d.attributed_gross_revenue), timeCtx) : '—'} />
+            <Metric label="Net revenue" value={d.attributed_net_revenue != null ? fmtUSD(Number(d.attributed_net_revenue), timeCtx) : '—'} />
           </div>
           <div className="text-xs text-text-muted">
             Model: <strong>{String(d.model ?? 'last_touch')}</strong>
@@ -606,8 +614,8 @@ function AttributionTab({ campaignId }: { campaignId: string }) {
                   { key: 'actor', header: 'Actor', render: r => String(r.actor_type ?? r.actor ?? '—') },
                   { key: 'role', header: 'Journey role', render: r => String(r.journey_role ?? r.role ?? '—') },
                   { key: 'verification', header: 'Verification', render: r => String(r.verification_level ?? '—') },
-                  { key: 'conversions', header: 'Conversions', render: r => Number(r.conversions ?? r.attributed_conversions ?? 0).toLocaleString() },
-                  { key: 'net_revenue', header: 'Net revenue', render: r => fmtUSD(Number(r.attributed_net_revenue ?? r.net_revenue ?? 0)) },
+                  { key: 'conversions', header: 'Conversions', render: r => formatCount(Number(r.conversions ?? r.attributed_conversions ?? 0), timeCtx) },
+                  { key: 'net_revenue', header: 'Net revenue', render: r => fmtUSD(Number(r.attributed_net_revenue ?? r.net_revenue ?? 0), timeCtx) },
                 ]}
               />
             )

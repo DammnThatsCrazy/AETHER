@@ -1,4 +1,4 @@
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, formatCount, formatDateTime, useTimeContext, type TimeContext } from '@aether/ui';
 
 interface EdgeDrawerProps {
   readonly edgeId: string;
@@ -18,12 +18,13 @@ function riskVariant(score: unknown): 'default' | 'warning' | 'danger' {
   return 'default';
 }
 
-function fmtDate(iso: unknown): string {
+function fmtDate(iso: unknown, ctx: TimeContext): string {
   if (!iso) return '—';
-  try { return new Date(String(iso)).toLocaleString(); } catch { return String(iso); }
+  try { return formatDateTime(String(iso), ctx); } catch { return String(iso); }
 }
 
 export function EdgeDrawer({ edgeId, edgeData = {}, onClose }: EdgeDrawerProps) {
+  const timeCtx = useTimeContext();
   const linkType = fmt(edgeData.link_type ?? edgeData.type);
   const riskScore = edgeData.risk_score;
   const fromId = fmt(edgeData.from ?? edgeData.source ?? edgeData.from_entity_id);
@@ -77,7 +78,7 @@ export function EdgeDrawer({ edgeId, edgeData = {}, onClose }: EdgeDrawerProps) 
             <dl className="flex flex-col gap-1.5 text-xs">
               <div className="flex justify-between">
                 <dt className="text-text-muted">Total Amount (USD)</dt>
-                <dd>{amount !== '—' ? `$${Number(amount).toLocaleString()}` : '—'}</dd>
+                <dd>{amount !== '—' ? `$${formatCount(Number(amount), timeCtx)}` : '—'}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-text-muted">Transfer Count</dt>

@@ -9,6 +9,8 @@ import {
   ErrorState,
   Skeleton,
   StatusIndicator,
+  formatDate,
+  useTimeContext,
   useToast,
   queryCache,
 } from '@aether/ui';
@@ -120,6 +122,7 @@ function SilentSdks() {
 
 function RemoteConfig() {
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
   const { data: manifest, isLoading: mLoading } = useSdkManifest();
   const { data: rollout, isLoading: rLoading } = useSdkRollout();
   const { data: me } = useMeProfile();
@@ -194,7 +197,7 @@ function RemoteConfig() {
             <div><span className="text-text-muted">Schema</span><div className="font-mono text-text-secondary">{manifest.schema_version}</div></div>
             <div><span className="text-text-muted">Min SDK</span><div className="font-mono text-text-secondary">{manifest.min_sdk_version}</div></div>
             <div><span className="text-text-muted">Rollout</span><div className="font-mono text-text-secondary">{pct(manifest.rollout_percentage)}</div></div>
-            <div><span className="text-text-muted">Published</span><div className="font-mono text-text-secondary">{manifest.published_at ? new Date(manifest.published_at).toLocaleDateString() : '—'}</div></div>
+            <div><span className="text-text-muted">Published</span><div className="font-mono text-text-secondary">{manifest.published_at ? formatDate(manifest.published_at, timeCtx) : '—'}</div></div>
           </div>
         )}
 
