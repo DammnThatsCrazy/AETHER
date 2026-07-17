@@ -1,5 +1,5 @@
 import { useState, type FC } from 'react';
-import { formatUSD } from '@aether/ui';
+import { formatInstant, formatUSD, useTimeContext } from '@aether/ui';
 import type { JourneyStep, ActivityFamily } from './use-unified-journey';
 
 const FAMILY_COLORS: Record<ActivityFamily, string> = {
@@ -60,6 +60,7 @@ interface Props {
 }
 
 export const JourneyStepCard: FC<Props> = ({ step, position }) => {
+  const timeCtx = useTimeContext();
   const [expanded, setExpanded] = useState(false);
   const family = step.activity_family as ActivityFamily;
   const borderColor = FAMILY_COLORS[family] ?? 'border-l-gray-300';
@@ -69,7 +70,7 @@ export const JourneyStepCard: FC<Props> = ({ step, position }) => {
   const isRestrictedOrDeleted = step.activity_status === 'tombstoned' || step.activity_status === 'consent_restricted';
 
   const formattedTime = step.occurred_at
-    ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(step.occurred_at))
+    ? formatInstant(step.occurred_at, timeCtx)
     : '—';
   const formattedAttributedRevenue = step.attributed_net_revenue == null
     ? null

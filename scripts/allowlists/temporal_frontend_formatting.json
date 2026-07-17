@@ -1,9 +1,4 @@
 [
-  "frontend/aether/src/components/graph/path-inspector.tsx",
-  "frontend/aether/src/components/outcome-ledger-panel.tsx",
-  "frontend/aether/src/components/playbook-system-panel.tsx",
-  "frontend/aether/src/features/journey/journey-step-card.tsx",
-  "frontend/aether/src/features/targeting-intelligence/components/targeting-shared.tsx",
   "frontend/aether/src/pages/ai-efficiency/ai-efficiency-page.tsx",
   "frontend/aether/src/pages/ai-efficiency/ai-efficiency-shared.tsx",
   "frontend/aether/src/pages/billing/billing-page.tsx",

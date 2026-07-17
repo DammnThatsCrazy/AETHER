@@ -1,4 +1,4 @@
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState, useTimeContext} from '@aether/ui';
 import {
   useCampaignJourneyDeltas,
   useCampaignTargetingIntelligence,
@@ -33,6 +33,7 @@ function IntendedVsObservedSection({ intent, observation }: {
   readonly intent: TargetingIntentRecord | null;
   readonly observation: TargetingObservationRecord | null;
 }) {
+  const timeCtx = useTimeContext();
   if (!intent) {
     return (
       <EmptyState
@@ -51,7 +52,7 @@ function IntendedVsObservedSection({ intent, observation }: {
         {intent.graphMode && <Badge variant="default" size="sm">graph: {humanize(intent.graphMode)}</Badge>}
         <Badge variant="warning" size="sm">external execution required</Badge>
         {observation
-          ? <span>Observed {formatDateTime(observation.observedAt)} via {observation.sourceProvider ?? 'unknown provider'}</span>
+          ? <span>Observed {formatDateTime(observation.observedAt, timeCtx)} via {observation.sourceProvider ?? 'unknown provider'}</span>
           : <span>No targeting observation yet — reach indicators appear after external execution is observed.</span>}
       </div>
       <ClusterChipGroup
@@ -94,6 +95,7 @@ function ThresholdStat({ label, value }: { readonly label: string; readonly valu
 }
 
 function EligibilitySnapshotSection({ snapshot }: { readonly snapshot: EligibilitySnapshotRecord | null | undefined }) {
+  const timeCtx = useTimeContext();
   if (!snapshot) {
     return (
       <EmptyState
@@ -109,14 +111,14 @@ function EligibilitySnapshotSection({ snapshot }: { readonly snapshot: Eligibili
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap text-xs text-text-muted">
         <span className="font-mono text-text-primary">{snapshot.snapshotId}</span>
-        <span>as of {formatDateTime(snapshot.asOf)}</span>
+        <span>as of {formatDateTime(snapshot.asOf, timeCtx)}</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Eligible clusters', value: formatCount((snapshot.eligibleClusters ?? []).length) },
-          { label: 'Excluded clusters', value: formatCount((snapshot.excludedClusters ?? []).length) },
-          { label: 'Holdout clusters', value: formatCount((snapshot.holdoutClusters ?? []).length) },
-          { label: 'Eligible members', value: formatCount(memberTotal) },
+          { label: 'Eligible clusters', value: formatCount((snapshot.eligibleClusters ?? []).length, timeCtx) },
+          { label: 'Excluded clusters', value: formatCount((snapshot.excludedClusters ?? []).length, timeCtx) },
+          { label: 'Holdout clusters', value: formatCount((snapshot.holdoutClusters ?? []).length, timeCtx) },
+          { label: 'Eligible members', value: formatCount(memberTotal, timeCtx) },
         ].map(({ label, value }) => (
           <div key={label} className="bg-surface-raised border border-border-default rounded-md px-4 py-3">
             <p className="text-xs text-text-secondary">{label}</p>
@@ -138,6 +140,7 @@ function EligibilitySnapshotSection({ snapshot }: { readonly snapshot: Eligibili
 // ── Exclusion leakage findings ─────────────────────────────────────────────────
 
 function LeakageFindingRow({ finding }: { readonly finding: LeakageFindingRecord }) {
+  const timeCtx = useTimeContext();
   return (
     <div className="border border-border-default rounded-md px-3 py-2.5 space-y-1.5">
       <div className="flex items-center gap-2 flex-wrap">
@@ -147,7 +150,7 @@ function LeakageFindingRow({ finding }: { readonly finding: LeakageFindingRecord
       </div>
       <div className="flex items-center gap-4 flex-wrap text-xs font-mono text-text-muted">
         <span>Leakage rate: <span className="text-danger">{formatRate(finding.leakageRate)}</span></span>
-        <span>{formatCount(finding.reachedEntityCount)} of {formatCount(finding.excludedEntityCount)} excluded entities reached</span>
+        <span>{formatCount(finding.reachedEntityCount, timeCtx)} of {formatCount(finding.excludedEntityCount, timeCtx)} excluded entities reached</span>
         <span>{(finding.evidenceRefs ?? []).length} evidence refs</span>
       </div>
       {(finding.likelyCauses ?? []).length > 0 && (
@@ -172,6 +175,7 @@ function freshnessVariant(freshness: string): 'success' | 'warning' | 'danger' |
 }
 
 function MappingQualitySection({ quality }: { readonly quality: ProviderMappingQualityRecord | null | undefined }) {
+  const timeCtx = useTimeContext();
   if (!quality) {
     return (
       <EmptyState
@@ -193,7 +197,7 @@ function MappingQualitySection({ quality }: { readonly quality: ProviderMappingQ
         <Badge variant={freshnessVariant(quality.providerSyncFreshness ?? 'unknown')} size="sm">
           sync: {quality.providerSyncFreshness ?? 'unknown'}
         </Badge>
-        <span className="text-text-muted">computed {formatDateTime(quality.computedAt)}</span>
+        <span className="text-text-muted">computed {formatDateTime(quality.computedAt, timeCtx)}</span>
       </div>
       <div className="space-y-1">
         <ThresholdStat label="Mapping rate" value={formatRate(quality.mappingRate)} />
@@ -201,7 +205,7 @@ function MappingQualitySection({ quality }: { readonly quality: ProviderMappingQ
         <ThresholdStat label="Identity resolution" value={formatRate(quality.identityResolutionRate)} />
         <ThresholdStat label="Cluster assignment" value={formatRate(quality.clusterAssignmentRate)} />
         <ThresholdStat label="Quality score" value={formatRate(quality.qualityScore)} />
-        <ThresholdStat label="Unresolved aliases" value={formatCount(quality.unresolvedAliasCount)} />
+        <ThresholdStat label="Unresolved aliases" value={formatCount(quality.unresolvedAliasCount, timeCtx)} />
       </div>
       {(quality.reasons ?? []).length > 0 && (
         <ul className="list-disc list-inside space-y-0.5">
@@ -217,6 +221,7 @@ function MappingQualitySection({ quality }: { readonly quality: ProviderMappingQ
 // ── Journey deltas ─────────────────────────────────────────────────────────────
 
 function JourneyDeltaRow({ delta }: { readonly delta: JourneyDeltaRecord }) {
+  const timeCtx = useTimeContext();
   const stageDeltas = Object.entries(delta.populationStageDeltas ?? {});
   return (
     <div className="border border-border-default rounded-md px-3 py-2.5 space-y-1.5">
@@ -229,11 +234,11 @@ function JourneyDeltaRow({ delta }: { readonly delta: JourneyDeltaRecord }) {
         )}
       </div>
       <div className="flex items-center gap-4 flex-wrap text-xs font-mono text-text-muted">
-        <span>Reached {formatCount(delta.reachedCount)}</span>
-        <span>Engaged {formatCount(delta.engagedCount)}</span>
-        <span>Converted {formatCount(delta.convertedCount)}</span>
-        <span>Attributed {formatCount(delta.attributedCount)}</span>
-        <span>Non-progressed {formatCount(delta.nonProgressedCount)}</span>
+        <span>Reached {formatCount(delta.reachedCount, timeCtx)}</span>
+        <span>Engaged {formatCount(delta.engagedCount, timeCtx)}</span>
+        <span>Converted {formatCount(delta.convertedCount, timeCtx)}</span>
+        <span>Attributed {formatCount(delta.attributedCount, timeCtx)}</span>
+        <span>Non-progressed {formatCount(delta.nonProgressedCount, timeCtx)}</span>
       </div>
       {stageDeltas.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
