@@ -69,3 +69,4 @@ export * from './imports';
 // Unified-platform registries (generated from packages/shared/contracts/*.json
 // by scripts/generate_platform_contracts.py)
 export * from './interaction-contract';
+export * from './context-capsule';

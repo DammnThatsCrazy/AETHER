@@ -246,6 +246,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "Backend Architecture/aether-backend/shared/temporal/generated_policy.py",
                 "packages/shared/interaction-contract.ts",
                 "Backend Architecture/aether-backend/shared/product/generated_vocabulary.py",
+                "packages/shared/context-capsule.ts",
+                "Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py",
             ],
             name="Unified-platform generated contracts — no uncommitted diff",
             results=results,

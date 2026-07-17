@@ -9,6 +9,7 @@ unified intelligence program; new registries plug into the REGISTRIES table.
 Sources (read-only — canonical source of truth):
   packages/shared/contracts/temporal-policy-registry.json
   packages/shared/contracts/interaction-vocabulary.json
+  packages/shared/contracts/context-capsule-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -17,6 +18,9 @@ Generated outputs:
   packages/shared/interaction-contract.ts
   Backend Architecture/aether-backend/shared/product/generated_vocabulary.py
   docs/_generated/interaction-vocabulary-table.md
+  packages/shared/context-capsule.ts
+  Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py
+  docs/_generated/context-capsule-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -515,6 +519,279 @@ def _summary_interaction(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: context-capsule
+# ---------------------------------------------------------------------------
+
+CONTEXT_CAPSULE_JSON = CONTRACTS / "context-capsule-registry.json"
+CONTEXT_CAPSULE_TS = ROOT / "packages" / "shared" / "context-capsule.ts"
+CONTEXT_CAPSULE_PY = BACKEND / "shared" / "context_capsule" / "generated_taxonomy.py"
+CONTEXT_CAPSULE_MD = ROOT / "docs" / "_generated" / "context-capsule-table.md"
+
+_CONTEXT_CAPSULE_VOCAB_KEYS = (
+    "locationSources",
+    "locationSemantics",
+    "precisionClasses",
+    "conflictStates",
+    "contextStates",
+    "capsuleTransitionTypes",
+)
+
+# Emission order for retention-policy keys (fixed, so output is deterministic).
+_RETENTION_POLICY_KEYS = ("maxHours", "maxDays", "tenantPolicy", "inheritsStrictest", "aggregateOnly")
+
+# TS twin of shared/context_capsule/models.py::LocationObservation — parity-tested.
+# Deliberately has NO raw-IP and NO lat/lon field: precise coordinates never
+# enter the contract; the finest grain is a coarse cell + accuracy radius.
+_LOCATION_OBSERVATION_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("observation_id", "string", True),
+    ("tenant_id", "string", True),
+    ("subject_type", "string", False),
+    ("subject_id", "string", False),
+    ("session_id", "string", False),
+    ("source_event_id", "string", False),
+    ("source", "string", True),
+    ("semantics", "string", True),
+    ("precision_class", "string", True),
+    ("country_code", "string", False),
+    ("region_code", "string", False),
+    ("city", "string", False),
+    ("coarse_cell", "string", False),
+    ("accuracy_radius_meters", "number", False),
+    ("confidence", "number", False),
+    ("observed_at", "string", True),
+    ("received_at", "string", False),
+    ("provider", "string", False),
+    ("provider_database_version", "string", False),
+    ("vpn_likelihood", "number", False),
+    ("proxy_likelihood", "number", False),
+    ("tor_likelihood", "number", False),
+    ("datacenter_likelihood", "number", False),
+    ("consent_snapshot_id", "string", False),
+    ("retention_class", "string", False),
+    ("suppression_state", "string", False),
+    ("schema_version", "string", False),
+)
+
+# TS twin of shared/context_capsule/models.py::ContextCapsule — parity-tested.
+_CONTEXT_CAPSULE_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("capsule_id", "string", True),
+    ("tenant_id", "string", True),
+    ("session_id", "string", False),
+    ("capsule_version", "number", True),
+    ("valid_from", "string", True),
+    ("valid_to", "string", False),
+    ("actor_id", "string", False),
+    ("actor_kind", "string", False),
+    ("canonical_entity_id", "string", False),
+    ("identity_confidence", "number", False),
+    ("device_id", "string", False),
+    ("device_platform", "string", False),
+    ("device_class", "string", False),
+    ("app_version", "string", False),
+    ("sdk_name", "string", False),
+    ("sdk_version", "string", False),
+    ("network_observation_id", "string", False),
+    ("network_connection_type", "string", False),
+    ("network_asn_class", "string", False),
+    ("network_vpn_likelihood", "number", False),
+    ("network_proxy_likelihood", "number", False),
+    ("network_datacenter_likelihood", "number", False),
+    ("geo_resolved_location_id", "string", False),
+    ("geo_source_semantics", "string", False),
+    ("geo_country_code", "string", False),
+    ("geo_region_code", "string", False),
+    ("geo_city", "string", False),
+    ("geo_coarse_cell", "string", False),
+    ("geo_confidence", "number", False),
+    ("geo_conflict_state", "string", False),
+    ("campaign_id", "string", False),
+    ("campaign_source", "string", False),
+    ("campaign_medium", "string", False),
+    ("journey_id", "string", False),
+    ("journey_stage", "string", False),
+    ("prior_capsule_id", "string", False),
+    ("consent_snapshot_id", "string", False),
+    ("policy_jurisdiction", "string", False),
+    ("retention_class", "string", False),
+    ("suppression_state", "string", False),
+    ("source_event_id", "string", False),
+    ("schema_version", "string", False),
+    ("context_hash", "string", False),
+)
+
+
+def validate_context_capsule(reg: dict, ctx: dict) -> None:
+    for key in _CONTEXT_CAPSULE_VOCAB_KEYS:
+        _require_idents("context-capsule-registry", key, reg[key])
+    retention = reg["retentionClasses"]
+    if not isinstance(retention, dict) or not retention:
+        _fail("context-capsule-registry.retentionClasses must be a non-empty object")
+    for name, policy in retention.items():
+        if not _IDENT_RE.match(name):
+            _fail(f"retention class {name!r} is not a lower_snake identifier")
+        if not isinstance(policy, dict) or not policy:
+            _fail(f"retentionClasses[{name!r}] must be a non-empty object")
+        unknown = set(policy) - set(_RETENTION_POLICY_KEYS)
+        if unknown:
+            _fail(f"retentionClasses[{name!r}] has unknown keys {sorted(unknown)}")
+        for key, value in policy.items():
+            if key in ("maxHours", "maxDays"):
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    _fail(f"retentionClasses[{name!r}][{key}] must be a non-negative integer")
+            elif value is not True:
+                _fail(f"retentionClasses[{name!r}][{key}] must be true when present")
+
+
+def _retention_policy_items(policy: dict) -> list[tuple[str, object]]:
+    return [(k, policy[k]) for k in _RETENTION_POLICY_KEYS if k in policy]
+
+
+def gen_context_capsule_ts(reg: dict) -> str:
+    lines = _ts_header(CONTEXT_CAPSULE_JSON)
+    lines.append(f"export const contextCapsuleContractVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "locationSources", "LocationSource", reg["locationSources"],
+        "Where a location observation came from.",
+    )
+    lines += _ts_const_array(
+        "locationSemantics", "LocationSemantic", reg["locationSemantics"],
+        "What a location observation actually means.",
+    )
+    lines += _ts_const_array(
+        "locationPrecisionClasses", "LocationPrecisionClass", reg["precisionClasses"],
+        "Coarsest-to-finest location precision classes.",
+    )
+    lines += _ts_const_array(
+        "locationConflictStates", "LocationConflictState", reg["conflictStates"],
+        "Agreement state between concurrent location observations.",
+    )
+    lines += _ts_const_array(
+        "contextStates", "ContextState", reg["contextStates"],
+        "Interpreted context state for a subject at capsule time.",
+    )
+    lines += _ts_const_array(
+        "contextRetentionClassNames", "ContextRetentionClass",
+        sorted(reg["retentionClasses"]),
+        "Named retention classes (constraints in contextRetentionClasses).",
+    )
+    lines.append("/** Retention constraint attached to each retention class. */")
+    lines.append("export interface ContextRetentionPolicy {")
+    lines.append("  maxHours?: number;")
+    lines.append("  maxDays?: number;")
+    lines.append("  tenantPolicy?: boolean;")
+    lines.append("  inheritsStrictest?: boolean;")
+    lines.append("  aggregateOnly?: boolean;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export const contextRetentionClasses: Record<ContextRetentionClass, ContextRetentionPolicy> = {")
+    for name in sorted(reg["retentionClasses"]):
+        items = ", ".join(
+            f"{k}: {str(v).lower() if isinstance(v, bool) else v}"
+            for k, v in _retention_policy_items(reg["retentionClasses"][name])
+        )
+        lines.append(f"  {name}: {{ {items} }},")
+    lines.append("};")
+    lines.append("")
+    lines += _ts_const_array(
+        "capsuleTransitionTypes", "CapsuleTransitionType", reg["capsuleTransitionTypes"],
+        "Why a new context capsule superseded the previous one.",
+    )
+    lines += _ts_interface(
+        "LocationObservation",
+        _LOCATION_OBSERVATION_FIELDS,
+        "One privacy-shaped location observation — no raw IP, no lat/lon "
+        "(Python twin: shared/context_capsule/models.py).",
+    )
+    lines += _ts_interface(
+        "ContextCapsule",
+        _CONTEXT_CAPSULE_FIELDS,
+        "Versioned context capsule for a session slice "
+        "(Python twin: shared/context_capsule/models.py).",
+    )
+    return "\n".join(lines)
+
+
+def gen_context_capsule_py(reg: dict) -> str:
+    lines = _py_header(
+        CONTEXT_CAPSULE_JSON,
+        "Generated context-capsule taxonomy (location sources/semantics, states, retention).",
+    )
+    lines.append(f'CONTEXT_CAPSULE_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("LOCATION_SOURCES", reg["locationSources"],
+                       "Where a location observation came from.")
+    lines += _py_tuple("LOCATION_SEMANTICS", reg["locationSemantics"],
+                       "What a location observation actually means.")
+    lines += _py_tuple("LOCATION_PRECISION_CLASSES", reg["precisionClasses"],
+                       "Coarsest-to-finest location precision classes.")
+    lines += _py_tuple("LOCATION_CONFLICT_STATES", reg["conflictStates"],
+                       "Agreement state between concurrent location observations.")
+    lines += _py_tuple("CONTEXT_STATES", reg["contextStates"],
+                       "Interpreted context state for a subject at capsule time.")
+    lines += _py_tuple("CONTEXT_RETENTION_CLASS_NAMES", sorted(reg["retentionClasses"]),
+                       "Named retention classes (constraints in CONTEXT_RETENTION_CLASSES).")
+    lines.append("# Retention constraint attached to each retention class.")
+    lines.append("CONTEXT_RETENTION_CLASSES: dict[str, dict[str, int | bool]] = {")
+    for name in sorted(reg["retentionClasses"]):
+        items = ", ".join(
+            f'"{k}": {v}' for k, v in _retention_policy_items(reg["retentionClasses"][name])
+        )
+        lines.append(f'    "{name}": {{{items}}},')
+    lines.append("}")
+    lines.append("")
+    lines += _py_tuple("CAPSULE_TRANSITION_TYPES", reg["capsuleTransitionTypes"],
+                       "Why a new context capsule superseded the previous one.")
+    lines.append("__all__ = [")
+    lines.append('    "CONTEXT_CAPSULE_CONTRACT_VERSION",')
+    lines.append('    "LOCATION_SOURCES",')
+    lines.append('    "LOCATION_SEMANTICS",')
+    lines.append('    "LOCATION_PRECISION_CLASSES",')
+    lines.append('    "LOCATION_CONFLICT_STATES",')
+    lines.append('    "CONTEXT_STATES",')
+    lines.append('    "CONTEXT_RETENTION_CLASS_NAMES",')
+    lines.append('    "CONTEXT_RETENTION_CLASSES",')
+    lines.append('    "CAPSULE_TRANSITION_TYPES",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_context_capsule_md(reg: dict) -> str:
+    lines = _md_header(CONTEXT_CAPSULE_JSON)
+    lines.append("# Context Capsule Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines += _md_vocab_section("Location sources", reg["locationSources"])
+    lines += _md_vocab_section("Location semantics", reg["locationSemantics"])
+    lines += _md_vocab_section("Precision classes", reg["precisionClasses"])
+    lines += _md_vocab_section("Conflict states", reg["conflictStates"])
+    lines += _md_vocab_section("Context states", reg["contextStates"])
+    lines.append("## Retention classes")
+    lines.append("")
+    lines.append("| Class | Constraint |")
+    lines.append("|---|---|")
+    for name in sorted(reg["retentionClasses"]):
+        items = ", ".join(
+            f"{k}={v}" for k, v in _retention_policy_items(reg["retentionClasses"][name])
+        )
+        lines.append(f"| `{name}` | {items} |")
+    lines.append("")
+    lines += _md_vocab_section("Capsule transition types", reg["capsuleTransitionTypes"])
+    return "\n".join(lines)
+
+
+def _summary_context_capsule(reg: dict) -> str:
+    return (
+        f"context-capsule v{reg['contractVersion']} — "
+        f"{len(reg['locationSources'])} location sources, "
+        f"{len(reg['contextStates'])} context states, "
+        f"{len(reg['retentionClasses'])} retention classes"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -531,6 +808,16 @@ REGISTRIES: tuple = (
             (INTERACTION_MD, gen_interaction_md),
         ),
         _summary_interaction,
+    ),
+    (
+        CONTEXT_CAPSULE_JSON,
+        validate_context_capsule,
+        (
+            (CONTEXT_CAPSULE_TS, gen_context_capsule_ts),
+            (CONTEXT_CAPSULE_PY, gen_context_capsule_py),
+            (CONTEXT_CAPSULE_MD, gen_context_capsule_md),
+        ),
+        _summary_context_capsule,
     ),
 )
 
