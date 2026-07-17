@@ -13,6 +13,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/graph-mutation-registry.json
   packages/shared/contracts/filter-field-registry.json
   packages/shared/contracts/surface-capability-registry.json
+  packages/shared/contracts/comparison-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -33,6 +34,9 @@ Generated outputs:
   packages/shared/surface-capabilities.ts
   Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py
   docs/_generated/surface-capability-table.md
+  packages/shared/comparison-contract.ts
+  Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py
+  docs/_generated/comparison-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -1386,6 +1390,221 @@ def _summary_surface_capabilities(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: comparison
+# ---------------------------------------------------------------------------
+
+COMPARISON_JSON = CONTRACTS / "comparison-registry.json"
+COMPARISON_TS = ROOT / "packages" / "shared" / "comparison-contract.ts"
+COMPARISON_PY = BACKEND / "services" / "intelligence" / "comparison" / "generated_vocabulary.py"
+COMPARISON_MD = ROOT / "docs" / "_generated" / "comparison-table.md"
+
+# (json key, TS const, TS type, Python tuple, doc)
+_COMPARISON_VOCABS: tuple[tuple[str, str, str, str, str], ...] = (
+    ("comparisonModes", "comparisonModes", "ComparisonMode", "COMPARISON_MODES",
+     "What is being compared against what."),
+    ("baselineTypes", "baselineTypes", "BaselineType", "BASELINE_TYPES",
+     "Where the baseline side of a comparison comes from."),
+    ("alignmentOutcomes", "alignmentOutcomes", "AlignmentOutcome", "ALIGNMENT_OUTCOMES",
+     "How well the two sides could be aligned before comparing."),
+    ("runStates", "comparisonRunStates", "ComparisonRunState", "COMPARISON_RUN_STATES",
+     "Lifecycle states of a comparison run."),
+    ("severities", "comparisonSeverities", "ComparisonSeverity", "COMPARISON_SEVERITIES",
+     "Severity ladder for comparison findings."),
+    ("dispositions", "comparisonDispositions", "ComparisonDisposition", "COMPARISON_DISPOSITIONS",
+     "Recommended handling of a comparison finding."),
+    ("factLinkageStates", "factLinkageStates", "FactLinkageState", "FACT_LINKAGE_STATES",
+     "How a finding's supporting facts are linked to the subject."),
+    ("causalClaimLevels", "causalClaimLevels", "CausalClaimLevel", "CAUSAL_CLAIM_LEVELS",
+     "Strength ladder for causal claims attached to a finding."),
+    ("comparisonDimensions", "comparisonDimensions", "ComparisonDimension", "COMPARISON_DIMENSIONS",
+     "Dimensions along which two subjects can be compared."),
+    ("materialityComponents", "materialityComponents", "MaterialityComponent", "MATERIALITY_COMPONENTS",
+     "Components blended into a finding's materiality score."),
+)
+
+# TS twin of services/intelligence/comparison/contracts.py::ComparisonSubject.
+_COMPARISON_SUBJECT_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("subject_type", "string", True),
+    ("subject_id", "string", True),
+    ("tenant_id", "string", False),
+    ("label", "string", False),
+    ("as_of", "string", False),
+)
+
+# TS twin of services/intelligence/comparison/contracts.py::BaselineSpec.
+_BASELINE_SPEC_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("baseline_type", "string", True),
+    ("subject", "ComparisonSubject", False),
+    ("window_start", "string", False),
+    ("window_end", "string", False),
+    ("rolling_window_days", "number", False),
+    ("cohort_definition_id", "string", False),
+    ("policy_id", "string", False),
+    ("scenario_id", "string", False),
+)
+
+# TS twin of services/intelligence/comparison/contracts.py::ComparisonDefinition.
+_COMPARISON_DEFINITION_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("definition_id", "string", True),
+    ("tenant_id", "string", True),
+    ("name", "string", False),
+    ("mode", "string", True),
+    ("subject", "ComparisonSubject", True),
+    ("baseline", "BaselineSpec", True),
+    ("dimensions", "string[]", False),
+    ("temporal_mode", "string", False),
+    ("created_at", "string", False),
+    ("created_by", "string", False),
+    ("schema_version", "string", False),
+)
+
+# TS twin of services/intelligence/comparison/contracts.py::ComparisonRun.
+_COMPARISON_RUN_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("run_id", "string", True),
+    ("definition_id", "string", True),
+    ("tenant_id", "string", True),
+    ("state", "string", True),
+    ("requested_at", "string", False),
+    ("started_at", "string", False),
+    ("completed_at", "string", False),
+    ("as_of", "string", False),
+    ("graph_watermark", "string", False),
+    ("alignment_outcome", "string", False),
+    ("finding_count", "number", False),
+    ("degraded_reason", "string", False),
+    ("error_code", "string", False),
+    ("schema_version", "string", False),
+)
+
+# TS twin of services/intelligence/comparison/contracts.py::ComparisonFinding.
+_COMPARISON_FINDING_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("id", "string", True),
+    ("comparison_run_id", "string", True),
+    ("tenant_id", "string", True),
+    ("finding_type", "string", True),
+    ("title", "string", False),
+    ("narrative", "string", False),
+    ("subject_refs", "string[]", False),
+    ("dimension", "string", False),
+    ("metric", "string", False),
+    ("observed_value", "number", False),
+    ("baseline_value", "number", False),
+    ("delta", "number", False),
+    ("normalized_delta", "number", False),
+    ("direction", "string", False),
+    ("severity", "string", False),
+    ("materiality", "number", False),
+    ("confidence", "number", False),
+    ("evidence_status", "string", False),
+    ("reconciliation_state", "string", False),
+    ("first_observed_at", "string", False),
+    ("last_observed_at", "string", False),
+    ("persistence", "number", False),
+    ("affected_entity_count", "number", False),
+    ("economic_impact", "number", False),
+    ("risk_impact", "number", False),
+    ("policy_impact", "number", False),
+    ("recommended_disposition", "string", False),
+    ("recommendation_id", "string", False),
+    ("investigation_id", "string", False),
+    ("suppression_reason", "string", False),
+)
+
+
+def validate_comparison(reg: dict, ctx: dict) -> None:
+    for json_key, _ts_const, _ts_type, _py_name, _doc in _COMPARISON_VOCABS:
+        _require_idents("comparison-registry", json_key, reg[json_key])
+
+
+def gen_comparison_ts(reg: dict) -> str:
+    lines = _ts_header(COMPARISON_JSON)
+    lines.append(f"export const comparisonContractVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    for json_key, ts_const, ts_type, _py_name, doc in _COMPARISON_VOCABS:
+        lines += _ts_const_array(ts_const, ts_type, reg[json_key], doc)
+    lines += _ts_interface(
+        "ComparisonSubject",
+        _COMPARISON_SUBJECT_FIELDS,
+        "One side of a comparison "
+        "(Python twin: services/intelligence/comparison/contracts.py).",
+    )
+    lines += _ts_interface(
+        "BaselineSpec",
+        _BASELINE_SPEC_FIELDS,
+        "How the baseline side of a comparison is resolved "
+        "(Python twin: services/intelligence/comparison/contracts.py).",
+    )
+    lines += _ts_interface(
+        "ComparisonDefinition",
+        _COMPARISON_DEFINITION_FIELDS,
+        "Saved definition of a comparison "
+        "(Python twin: services/intelligence/comparison/contracts.py).",
+    )
+    lines += _ts_interface(
+        "ComparisonRun",
+        _COMPARISON_RUN_FIELDS,
+        "One execution of a comparison definition "
+        "(Python twin: services/intelligence/comparison/contracts.py).",
+    )
+    lines += _ts_interface(
+        "ComparisonFinding",
+        _COMPARISON_FINDING_FIELDS,
+        "One materiality-scored difference surfaced by a comparison run "
+        "(Python twin: services/intelligence/comparison/contracts.py).",
+    )
+    return "\n".join(lines)
+
+
+def gen_comparison_py(reg: dict) -> str:
+    lines = _py_header(
+        COMPARISON_JSON,
+        "Generated comparison vocabulary (modes, baselines, states, severities, materiality).",
+    )
+    lines.append(f'COMPARISON_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    for json_key, _ts_const, _ts_type, py_name, doc in _COMPARISON_VOCABS:
+        lines += _py_tuple(py_name, reg[json_key], doc)
+    lines.append("__all__ = [")
+    lines.append('    "COMPARISON_CONTRACT_VERSION",')
+    for _json_key, _ts_const, _ts_type, py_name, _doc in _COMPARISON_VOCABS:
+        lines.append(f'    "{py_name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_comparison_md(reg: dict) -> str:
+    lines = _md_header(COMPARISON_JSON)
+    lines.append("# Comparison Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    titles = {
+        "comparisonModes": "Comparison modes",
+        "baselineTypes": "Baseline types",
+        "alignmentOutcomes": "Alignment outcomes",
+        "runStates": "Run states",
+        "severities": "Severities",
+        "dispositions": "Dispositions",
+        "factLinkageStates": "Fact linkage states",
+        "causalClaimLevels": "Causal claim levels",
+        "comparisonDimensions": "Comparison dimensions",
+        "materialityComponents": "Materiality components",
+    }
+    for json_key, _ts_const, _ts_type, _py_name, _doc in _COMPARISON_VOCABS:
+        lines += _md_vocab_section(titles[json_key], reg[json_key])
+    return "\n".join(lines)
+
+
+def _summary_comparison(reg: dict) -> str:
+    return (
+        f"comparison v{reg['contractVersion']} — "
+        f"{len(reg['comparisonModes'])} modes, {len(reg['comparisonDimensions'])} dimensions, "
+        f"{len(reg['materialityComponents'])} materiality components"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -1442,6 +1661,16 @@ REGISTRIES: tuple = (
             (SURFACE_CAPABILITY_MD, gen_surface_capabilities_md),
         ),
         _summary_surface_capabilities,
+    ),
+    (
+        COMPARISON_JSON,
+        validate_comparison,
+        (
+            (COMPARISON_TS, gen_comparison_ts),
+            (COMPARISON_PY, gen_comparison_py),
+            (COMPARISON_MD, gen_comparison_md),
+        ),
+        _summary_comparison,
     ),
 )
 

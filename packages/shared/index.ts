@@ -73,3 +73,4 @@ export * from './context-capsule';
 export * from './graph-mutation';
 export * from './filter-fields';
 export * from './surface-capabilities';
+export * from './comparison-contract';
