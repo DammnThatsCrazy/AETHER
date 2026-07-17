@@ -5694,6 +5694,16 @@
       "path": "docs/source-of-truth/SUGGESTION_INTELLIGENCE.md"
     },
     {
+      "path": "docs/source-of-truth/TEMPORAL_INTEGRITY.md",
+      "title": "Temporal Integrity Plane Source of Truth",
+      "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md",
+      "title": "Unified Intelligence Plane — Baseline Audit",
+      "status": "stable"
+    },
+    {
       "path": "docs/source-of-truth/UNIQUE_SIGNAL_FEATURES.md",
       "title": "Unique Signal Features",
       "slug": "architecture/unique-signal-features",
