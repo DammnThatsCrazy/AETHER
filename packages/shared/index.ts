@@ -66,3 +66,12 @@ export * from './temporal';
 export * from './temporal-policy';
 export * from './exploration-contract';
 export * from './imports';
+
+// Unified-platform registries (generated from packages/shared/contracts/*.json
+// by scripts/generate_platform_contracts.py)
+export * from './interaction-contract';
+export * from './context-capsule';
+export * from './graph-mutation';
+export * from './filter-fields';
+export * from './surface-capabilities';
+export * from './comparison-contract';
