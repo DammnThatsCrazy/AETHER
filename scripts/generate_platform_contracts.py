@@ -1212,9 +1212,36 @@ _SURFACE_BOOL_KEYS = (
 )
 
 
+def _exploration_contract_vocab(name: str) -> set[str]:
+    """Vocabulary owned by the hand-authored exploration-contract.ts."""
+    import re as _re
+
+    text = (ROOT / "packages" / "shared" / "exploration-contract.ts").read_text()
+    m = _re.search(rf"{name}[^\[]*\[(.*?)\]\s*as const", text, _re.S)
+    if not m:
+        _fail(f"exploration-contract.ts const array {name!r} not found")
+    return set(_re.findall(r"'([a-z_]+)'", m.group(1)))
+
+
 def validate_surface_capabilities(reg: dict, ctx: dict) -> None:
     for key in ("temporalModes", "views", "filterDispositions"):
         _require_idents("surface-capability-registry", key, reg[key])
+    # Single vocabulary owner: exploration-contract.ts. The registry's copies
+    # must match exactly (the generated TS imports the types instead of
+    # re-declaring the consts — no barrel collisions).
+    for json_key, ts_name in (
+        ("temporalModes", "explorationTemporalModes"),
+        ("views", "explorationViews"),
+        ("filterDispositions", "filterDispositions"),
+    ):
+        owner = _exploration_contract_vocab(ts_name)
+        if set(reg[json_key]) != owner:
+            _fail(
+                f"surface-capability-registry.{json_key} drifted from "
+                f"exploration-contract.ts {ts_name}: registry-only="
+                f"{sorted(set(reg[json_key]) - owner)}, contract-only="
+                f"{sorted(owner - set(reg[json_key]))}"
+            )
     temporal_modes = set(reg["temporalModes"])
     views = set(reg["views"])
     field_categories = ctx["filter_field_categories"]
@@ -1255,6 +1282,12 @@ def gen_surface_capabilities_ts(reg: dict) -> str:
     surfaces = sorted(reg["surfaces"], key=lambda s: s["surfaceId"])
     lines = _ts_header(SURFACE_CAPABILITY_JSON)
     lines.append("import type { FilterFieldCategory } from './filter-fields';")
+    lines.append("// Vocabulary owner: exploration-contract.ts — the registry's copies are")
+    lines.append("// validated equal at generation time (single source, no barrel collisions).")
+    lines.append("import type {")
+    lines.append("  ExplorationTemporalMode,")
+    lines.append("  ExplorationView,")
+    lines.append("} from './exploration-contract';")
     lines.append("")
     lines.append(f"export const surfaceCapabilitiesContractVersion = '{reg['contractVersion']}' as const;")
     lines.append("")
@@ -1262,18 +1295,6 @@ def gen_surface_capabilities_ts(reg: dict) -> str:
         "explorationSurfaceIds", "ExplorationSurfaceId",
         [s["surfaceId"] for s in surfaces],
         "Exploration surfaces registered with the fabric (sorted).",
-    )
-    lines += _ts_const_array(
-        "explorationTemporalModes", "ExplorationTemporalMode", reg["temporalModes"],
-        "Temporal query modes a surface may support.",
-    )
-    lines += _ts_const_array(
-        "explorationViews", "ExplorationView", reg["views"],
-        "Render views a surface may support.",
-    )
-    lines += _ts_const_array(
-        "filterDispositions", "FilterDisposition", reg["filterDispositions"],
-        "What the fabric did with one filter on one surface — never silently dropped.",
     )
     lines.append("/** Declared capabilities of one exploration surface. */")
     lines.append("export interface SurfaceCapability {")

@@ -30,6 +30,10 @@ from shared.exploration.generated_surfaces import (  # noqa: E402
 )
 
 TS_PATH = REPO_ROOT / "packages" / "shared" / "surface-capabilities.ts"
+# The disposition/view/mode vocabularies are OWNED by exploration-contract.ts;
+# the generated surface module imports their types instead of re-declaring the
+# consts, so vocabulary parity is asserted against the owner file.
+EXPLORATION_CONTRACT_TS = REPO_ROOT / "packages" / "shared" / "exploration-contract.ts"
 REGISTRY_PATH = REPO_ROOT / "packages" / "shared" / "contracts" / "surface-capability-registry.json"
 
 _EXPECTED_SURFACES = {
@@ -46,8 +50,8 @@ _EXPECTED_SURFACES = {
 }
 
 
-def _const_array(name: str) -> list[str]:
-    text = TS_PATH.read_text(encoding="utf-8")
+def _const_array(name: str, path=None) -> list[str]:
+    text = (path or TS_PATH).read_text(encoding="utf-8")
     m = re.search(rf"{name}[^\[]*\[(.*?)\]\s*as const", text, re.S)
     assert m, f"const array {name!r} not found in surface-capabilities.ts"
     return re.findall(r"'([a-z0-9_]+)'", m.group(1))
@@ -59,17 +63,17 @@ def test_surface_ids_parity():
 
 
 def test_temporal_modes_parity():
-    assert set(_const_array("explorationTemporalModes")) == set(EXPLORATION_TEMPORAL_MODES)
+    assert set(_const_array("explorationTemporalModes", EXPLORATION_CONTRACT_TS)) == set(EXPLORATION_TEMPORAL_MODES)
     assert set(EXPLORATION_TEMPORAL_MODES) == {"window", "as_of", "compare", "relative"}
 
 
 def test_views_parity():
-    assert set(_const_array("explorationViews")) == set(EXPLORATION_VIEWS)
+    assert set(_const_array("explorationViews", EXPLORATION_CONTRACT_TS)) == set(EXPLORATION_VIEWS)
     assert set(EXPLORATION_VIEWS) == {"graph", "table", "map", "timeline", "flow", "comparison"}
 
 
 def test_filter_dispositions_parity():
-    assert set(_const_array("filterDispositions")) == set(FILTER_DISPOSITIONS)
+    assert set(_const_array("filterDispositions", EXPLORATION_CONTRACT_TS)) == set(FILTER_DISPOSITIONS)
     assert set(FILTER_DISPOSITIONS) == {
         "applied", "translated", "unsupported", "suppressed", "not_applicable",
     }

@@ -4,6 +4,12 @@
  */
 
 import type { FilterFieldCategory } from './filter-fields';
+// Vocabulary owner: exploration-contract.ts — the registry's copies are
+// validated equal at generation time (single source, no barrel collisions).
+import type {
+  ExplorationTemporalMode,
+  ExplorationView,
+} from './exploration-contract';
 
 export const surfaceCapabilitiesContractVersion = '1.0.0' as const;
 
@@ -21,31 +27,6 @@ export const explorationSurfaceIds = [
   'timeline',
 ] as const;
 export type ExplorationSurfaceId = typeof explorationSurfaceIds[number];
-
-/** Temporal query modes a surface may support. */
-export const explorationTemporalModes = ['window', 'as_of', 'compare', 'relative'] as const;
-export type ExplorationTemporalMode = typeof explorationTemporalModes[number];
-
-/** Render views a surface may support. */
-export const explorationViews = [
-  'graph',
-  'table',
-  'map',
-  'timeline',
-  'flow',
-  'comparison',
-] as const;
-export type ExplorationView = typeof explorationViews[number];
-
-/** What the fabric did with one filter on one surface — never silently dropped. */
-export const filterDispositions = [
-  'applied',
-  'translated',
-  'unsupported',
-  'suppressed',
-  'not_applicable',
-] as const;
-export type FilterDisposition = typeof filterDispositions[number];
 
 /** Declared capabilities of one exploration surface. */
 export interface SurfaceCapability {
