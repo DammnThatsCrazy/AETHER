@@ -71,3 +71,4 @@ export * from './imports';
 export * from './interaction-contract';
 export * from './context-capsule';
 export * from './graph-mutation';
+export * from './filter-fields';

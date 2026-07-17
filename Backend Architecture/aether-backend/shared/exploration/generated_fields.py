@@ -1,0 +1,296 @@
+# DO NOT EDIT — generated from packages/shared/contracts/filter-field-registry.json
+# Run: python scripts/generate_platform_contracts.py
+"""Generated filter-field registry (categories, data types, sensitivities, fields)."""
+
+from __future__ import annotations
+
+FILTER_FIELDS_CONTRACT_VERSION = "1.0.0"
+
+# Categories a filterable field can belong to.
+FILTER_FIELD_CATEGORIES: tuple[str, ...] = (
+    "entity",
+    "time",
+    "geography",
+    "device",
+    "graph",
+    "risk",
+    "campaign",
+    "economic",
+    "truth",
+)
+
+# Value shape of a filterable field.
+FILTER_FIELD_DATA_TYPES: tuple[str, ...] = (
+    "string",
+    "number",
+    "boolean",
+    "datetime",
+    "enum",
+    "entity_ref",
+    "geography",
+)
+
+# Governance sensitivity of a filterable field.
+FILTER_FIELD_SENSITIVITIES: tuple[str, ...] = (
+    "public",
+    "tenant_internal",
+    "sensitive",
+    "restricted",
+    "pii",
+)
+
+# Canonical filter-field registry keyed by dotted field id (sorted).
+# operators are a subset of the canonical FilterOperator union in
+# packages/shared/graph-contract.ts — never a second filter system.
+FILTER_FIELDS: dict[str, dict] = {
+    "campaign.attribution_model": {
+        "label": "Attribution model",
+        "category": "campaign",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "marketing",
+    },
+    "campaign.channel": {
+        "label": "Campaign channel",
+        "category": "campaign",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "marketing",
+    },
+    "campaign.id": {
+        "label": "Campaign",
+        "category": "campaign",
+        "data_type": "entity_ref",
+        "operators": ("eq", "neq", "in", "not_in", "exists", "not_exists"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "marketing",
+    },
+    "campaign.source": {
+        "label": "Campaign source",
+        "category": "campaign",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "marketing",
+    },
+    "device.app_version": {
+        "label": "App version",
+        "category": "device",
+        "data_type": "string",
+        "operators": ("eq", "neq", "in", "not_in", "starts_with"),
+        "sensitivity": "tenant_internal",
+    },
+    "device.class": {
+        "label": "Device class",
+        "category": "device",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+    "device.os": {
+        "label": "Operating system",
+        "category": "device",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+    "device.platform": {
+        "label": "Platform",
+        "category": "device",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+    "economic.ltv_usd": {
+        "label": "Lifetime value (USD)",
+        "category": "economic",
+        "data_type": "number",
+        "operators": ("gt", "gte", "lt", "lte", "between", "threshold"),
+        "sensitivity": "sensitive",
+        "consent_purpose": "economic_observability",
+    },
+    "economic.payment_rail": {
+        "label": "Payment rail",
+        "category": "economic",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "financial_activity",
+    },
+    "economic.revenue_usd": {
+        "label": "Revenue (USD)",
+        "category": "economic",
+        "data_type": "number",
+        "operators": ("gt", "gte", "lt", "lte", "between", "threshold"),
+        "sensitivity": "sensitive",
+        "consent_purpose": "economic_observability",
+    },
+    "entity.cluster_id": {
+        "label": "Identity cluster",
+        "category": "entity",
+        "data_type": "entity_ref",
+        "operators": ("eq", "neq", "in", "not_in", "exists", "not_exists"),
+        "sensitivity": "sensitive",
+    },
+    "entity.id": {
+        "label": "Entity ID",
+        "category": "entity",
+        "data_type": "entity_ref",
+        "operators": ("eq", "neq", "in", "not_in", "exists", "not_exists"),
+        "sensitivity": "tenant_internal",
+    },
+    "entity.lifecycle_state": {
+        "label": "Lifecycle state",
+        "category": "entity",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+    "entity.tags": {
+        "label": "Tags",
+        "category": "entity",
+        "data_type": "string",
+        "operators": ("contains", "in", "not_in", "exists", "not_exists"),
+        "sensitivity": "tenant_internal",
+    },
+    "entity.type": {
+        "label": "Entity type",
+        "category": "entity",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "public",
+    },
+    "geography.city": {
+        "label": "City",
+        "category": "geography",
+        "data_type": "geography",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "location",
+        "minimum_cohort_size": 25,
+    },
+    "geography.country": {
+        "label": "Country",
+        "category": "geography",
+        "data_type": "geography",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "location",
+    },
+    "geography.region": {
+        "label": "Region",
+        "category": "geography",
+        "data_type": "geography",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+        "consent_purpose": "location",
+    },
+    "graph.depth": {
+        "label": "Traversal depth",
+        "category": "graph",
+        "data_type": "number",
+        "operators": ("eq", "gt", "gte", "lt", "lte", "between"),
+        "sensitivity": "tenant_internal",
+    },
+    "graph.edge_confidence": {
+        "label": "Edge confidence",
+        "category": "graph",
+        "data_type": "number",
+        "operators": ("gt", "gte", "lt", "lte", "between", "threshold"),
+        "sensitivity": "tenant_internal",
+    },
+    "graph.edge_type": {
+        "label": "Edge type",
+        "category": "graph",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+    "graph.relationship_layer": {
+        "label": "Relationship layer",
+        "category": "graph",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+    "risk.anomaly_score": {
+        "label": "Anomaly score",
+        "category": "risk",
+        "data_type": "number",
+        "operators": ("gt", "gte", "lt", "lte", "between", "threshold"),
+        "sensitivity": "sensitive",
+    },
+    "risk.fraud_network_member": {
+        "label": "Fraud network member",
+        "category": "risk",
+        "data_type": "boolean",
+        "operators": ("eq",),
+        "sensitivity": "restricted",
+    },
+    "risk.score": {
+        "label": "Risk score",
+        "category": "risk",
+        "data_type": "number",
+        "operators": ("gt", "gte", "lt", "lte", "between", "threshold"),
+        "sensitivity": "sensitive",
+    },
+    "risk.trust_score": {
+        "label": "Trust score",
+        "category": "risk",
+        "data_type": "number",
+        "operators": ("gt", "gte", "lt", "lte", "between", "threshold"),
+        "sensitivity": "sensitive",
+    },
+    "time.first_seen": {
+        "label": "First seen",
+        "category": "time",
+        "data_type": "datetime",
+        "operators": ("gt", "gte", "lt", "lte", "between", "relative_time"),
+        "sensitivity": "public",
+    },
+    "time.last_seen": {
+        "label": "Last seen",
+        "category": "time",
+        "data_type": "datetime",
+        "operators": ("gt", "gte", "lt", "lte", "between", "relative_time"),
+        "sensitivity": "public",
+    },
+    "time.occurred_at": {
+        "label": "Occurred at",
+        "category": "time",
+        "data_type": "datetime",
+        "operators": ("gt", "gte", "lt", "lte", "between", "relative_time"),
+        "sensitivity": "public",
+    },
+    "truth.confidence_min": {
+        "label": "Minimum confidence",
+        "category": "truth",
+        "data_type": "number",
+        "operators": ("gt", "gte", "lt", "lte", "threshold"),
+        "sensitivity": "tenant_internal",
+    },
+    "truth.dimension_state": {
+        "label": "Dimension state",
+        "category": "truth",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+    "truth.evidence_basis": {
+        "label": "Evidence basis",
+        "category": "truth",
+        "data_type": "enum",
+        "operators": ("eq", "neq", "in", "not_in"),
+        "sensitivity": "tenant_internal",
+    },
+}
+
+__all__ = [
+    "FILTER_FIELDS_CONTRACT_VERSION",
+    "FILTER_FIELD_CATEGORIES",
+    "FILTER_FIELD_DATA_TYPES",
+    "FILTER_FIELD_SENSITIVITIES",
+    "FILTER_FIELDS",
+]

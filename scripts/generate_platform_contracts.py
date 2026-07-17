@@ -11,6 +11,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/interaction-vocabulary.json
   packages/shared/contracts/context-capsule-registry.json
   packages/shared/contracts/graph-mutation-registry.json
+  packages/shared/contracts/filter-field-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -25,6 +26,9 @@ Generated outputs:
   packages/shared/graph-mutation.ts
   Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py
   docs/_generated/graph-mutation-table.md
+  packages/shared/filter-fields.ts
+  Backend Architecture/aether-backend/shared/exploration/generated_fields.py
+  docs/_generated/filter-field-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -978,6 +982,211 @@ def _summary_graph_mutation(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: filter-field
+# ---------------------------------------------------------------------------
+
+FILTER_FIELD_JSON = CONTRACTS / "filter-field-registry.json"
+CONSENT_REGISTRY_JSON = CONTRACTS / "consent-registry.json"
+GRAPH_CONTRACT_TS = ROOT / "packages" / "shared" / "graph-contract.ts"
+FILTER_FIELD_TS = ROOT / "packages" / "shared" / "filter-fields.ts"
+FILTER_FIELD_PY = BACKEND / "shared" / "exploration" / "generated_fields.py"
+FILTER_FIELD_MD = ROOT / "docs" / "_generated" / "filter-field-table.md"
+
+_FIELD_ID_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
+
+
+def _ts_filter_operators() -> set[str]:
+    """The canonical FilterOperator union in graph-contract.ts — never redefined."""
+    text = GRAPH_CONTRACT_TS.read_text()
+    m = re.search(r"export type FilterOperator =(.*?)\n\n", text, re.S)
+    if not m:
+        _fail("FilterOperator type not found in packages/shared/graph-contract.ts")
+    operators = set(re.findall(r"'([a-z_]+)'", m.group(1)))
+    if not operators:
+        _fail("FilterOperator union parsed empty from graph-contract.ts")
+    return operators
+
+
+def validate_filter_fields(reg: dict, ctx: dict) -> None:
+    for key in ("categories", "dataTypes", "sensitivities"):
+        _require_idents("filter-field-registry", key, reg[key])
+    categories = set(reg["categories"])
+    data_types = set(reg["dataTypes"])
+    sensitivities = set(reg["sensitivities"])
+    operators_allowed = ctx["filter_operators"]
+    consent_purposes = ctx["consent_purposes"]
+
+    if not isinstance(reg["fields"], list) or not reg["fields"]:
+        _fail("filter-field-registry.fields must be a non-empty list")
+    ids_seen: set[str] = set()
+    for field in reg["fields"]:
+        fid = field["id"]
+        if not _FIELD_ID_RE.match(fid):
+            _fail(f"filter field id {fid!r} is not a dotted lower_snake id")
+        if fid in ids_seen:
+            _fail(f"duplicate filter field id {fid!r}")
+        ids_seen.add(fid)
+        prefix = fid.split(".", 1)[0]
+        if field["category"] not in categories:
+            _fail(f"filter field {fid!r} has unknown category {field['category']!r}")
+        if prefix != field["category"]:
+            _fail(f"filter field {fid!r} prefix must match its category {field['category']!r}")
+        if not isinstance(field["label"], str) or not field["label"]:
+            _fail(f"filter field {fid!r} must have a non-empty label")
+        if field["dataType"] not in data_types:
+            _fail(f"filter field {fid!r} has unknown dataType {field['dataType']!r}")
+        ops = field["operators"]
+        if not isinstance(ops, list) or not ops or len(set(ops)) != len(ops):
+            _fail(f"filter field {fid!r} operators must be a non-empty unique list")
+        unknown_ops = set(ops) - operators_allowed
+        if unknown_ops:
+            _fail(
+                f"filter field {fid!r} uses operators {sorted(unknown_ops)} not in the "
+                "FilterOperator union of packages/shared/graph-contract.ts"
+            )
+        if field["sensitivity"] not in sensitivities:
+            _fail(f"filter field {fid!r} has unknown sensitivity {field['sensitivity']!r}")
+        if "consentPurpose" in field and field["consentPurpose"] not in consent_purposes:
+            _fail(
+                f"filter field {fid!r} consentPurpose {field['consentPurpose']!r} is not a "
+                "purpose key in consent-registry.json"
+            )
+        if "minimumCohortSize" in field:
+            size = field["minimumCohortSize"]
+            if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+                _fail(f"filter field {fid!r} minimumCohortSize must be a positive integer")
+        unknown_keys = set(field) - {
+            "id", "label", "category", "dataType", "operators", "sensitivity",
+            "consentPurpose", "minimumCohortSize",
+        }
+        if unknown_keys:
+            _fail(f"filter field {fid!r} has unknown keys {sorted(unknown_keys)}")
+
+
+def gen_filter_fields_ts(reg: dict) -> str:
+    lines = _ts_header(FILTER_FIELD_JSON)
+    lines.append("import type { FilterOperator } from './graph-contract';")
+    lines.append("")
+    lines.append(f"export const filterFieldsContractVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "filterFieldCategories", "FilterFieldCategory", reg["categories"],
+        "Categories a filterable field can belong to.",
+    )
+    lines += _ts_const_array(
+        "filterFieldDataTypes", "FilterFieldDataType", reg["dataTypes"],
+        "Value shape of a filterable field.",
+    )
+    lines += _ts_const_array(
+        "filterFieldSensitivities", "FilterFieldSensitivity", reg["sensitivities"],
+        "Governance sensitivity of a filterable field.",
+    )
+    lines.append("/** One filterable field: operators are a subset of the canonical FilterOperator union. */")
+    lines.append("export interface FilterFieldDefinition {")
+    lines.append("  id: string;")
+    lines.append("  label: string;")
+    lines.append("  category: FilterFieldCategory;")
+    lines.append("  dataType: FilterFieldDataType;")
+    lines.append("  operators: readonly FilterOperator[];")
+    lines.append("  sensitivity: FilterFieldSensitivity;")
+    lines.append("  consentPurpose?: string;")
+    lines.append("  minimumCohortSize?: number;")
+    lines.append("}")
+    lines.append("")
+    lines.append("/** Canonical filter-field registry (sorted by id). */")
+    lines.append("export const filterFields: readonly FilterFieldDefinition[] = [")
+    for field in sorted(reg["fields"], key=lambda f: f["id"]):
+        lines.append("  {")
+        lines.append(f"    id: '{field['id']}',")
+        lines.append(f"    label: '{field['label']}',")
+        lines.append(f"    category: '{field['category']}',")
+        lines.append(f"    dataType: '{field['dataType']}',")
+        ops = ", ".join(f"'{op}'" for op in field["operators"])
+        lines.append(f"    operators: [{ops}],")
+        lines.append(f"    sensitivity: '{field['sensitivity']}',")
+        if "consentPurpose" in field:
+            lines.append(f"    consentPurpose: '{field['consentPurpose']}',")
+        if "minimumCohortSize" in field:
+            lines.append(f"    minimumCohortSize: {field['minimumCohortSize']},")
+        lines.append("  },")
+    lines.append("];")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_filter_fields_py(reg: dict) -> str:
+    lines = _py_header(
+        FILTER_FIELD_JSON,
+        "Generated filter-field registry (categories, data types, sensitivities, fields).",
+    )
+    lines.append(f'FILTER_FIELDS_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("FILTER_FIELD_CATEGORIES", reg["categories"],
+                       "Categories a filterable field can belong to.")
+    lines += _py_tuple("FILTER_FIELD_DATA_TYPES", reg["dataTypes"],
+                       "Value shape of a filterable field.")
+    lines += _py_tuple("FILTER_FIELD_SENSITIVITIES", reg["sensitivities"],
+                       "Governance sensitivity of a filterable field.")
+    lines.append("# Canonical filter-field registry keyed by dotted field id (sorted).")
+    lines.append("# operators are a subset of the canonical FilterOperator union in")
+    lines.append("# packages/shared/graph-contract.ts — never a second filter system.")
+    lines.append("FILTER_FIELDS: dict[str, dict] = {")
+    for field in sorted(reg["fields"], key=lambda f: f["id"]):
+        lines.append(f'    "{field["id"]}": {{')
+        lines.append(f'        "label": "{field["label"]}",')
+        lines.append(f'        "category": "{field["category"]}",')
+        lines.append(f'        "data_type": "{field["dataType"]}",')
+        ops = ", ".join(f'"{op}"' for op in field["operators"])
+        lines.append(f'        "operators": ({ops}{"," if len(field["operators"]) == 1 else ""}),')
+        lines.append(f'        "sensitivity": "{field["sensitivity"]}",')
+        if "consentPurpose" in field:
+            lines.append(f'        "consent_purpose": "{field["consentPurpose"]}",')
+        if "minimumCohortSize" in field:
+            lines.append(f'        "minimum_cohort_size": {field["minimumCohortSize"]},')
+        lines.append("    },")
+    lines.append("}")
+    lines.append("")
+    lines.append("__all__ = [")
+    lines.append('    "FILTER_FIELDS_CONTRACT_VERSION",')
+    lines.append('    "FILTER_FIELD_CATEGORIES",')
+    lines.append('    "FILTER_FIELD_DATA_TYPES",')
+    lines.append('    "FILTER_FIELD_SENSITIVITIES",')
+    lines.append('    "FILTER_FIELDS",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_filter_fields_md(reg: dict) -> str:
+    lines = _md_header(FILTER_FIELD_JSON)
+    lines.append("# Filter Field Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append(f"Categories: {', '.join(f'`{c}`' for c in reg['categories'])}")
+    lines.append("")
+    lines.append("| Field | Label | Category | Type | Operators | Sensitivity | Consent purpose | Min cohort |")
+    lines.append("|---|---|---|---|---|---|---|---|")
+    for field in sorted(reg["fields"], key=lambda f: f["id"]):
+        ops = ", ".join(f"`{op}`" for op in field["operators"])
+        consent = f"`{field['consentPurpose']}`" if "consentPurpose" in field else "—"
+        cohort = str(field["minimumCohortSize"]) if "minimumCohortSize" in field else "—"
+        lines.append(
+            f"| `{field['id']}` | {field['label']} | {field['category']} | "
+            f"{field['dataType']} | {ops} | {field['sensitivity']} | {consent} | {cohort} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_filter_fields(reg: dict) -> str:
+    return (
+        f"filter-field v{reg['contractVersion']} — "
+        f"{len(reg['fields'])} fields across {len(reg['categories'])} categories"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -1015,14 +1224,27 @@ REGISTRIES: tuple = (
         ),
         _summary_graph_mutation,
     ),
+    (
+        FILTER_FIELD_JSON,
+        validate_filter_fields,
+        (
+            (FILTER_FIELD_TS, gen_filter_fields_ts),
+            (FILTER_FIELD_PY, gen_filter_fields_py),
+            (FILTER_FIELD_MD, gen_filter_fields_md),
+        ),
+        _summary_filter_fields,
+    ),
 )
 
 
 def _load_context() -> dict:
     """Cross-registry facts used by validators (never mutated by emitters)."""
     event_reg = json.loads(EVENT_REGISTRY_JSON.read_text())
+    consent_reg = json.loads(CONSENT_REGISTRY_JSON.read_text())
     return {
         "event_families": {e["family"] for e in event_reg["events"]},
+        "consent_purposes": {p["key"] for p in consent_reg["purposes"]},
+        "filter_operators": _ts_filter_operators(),
     }
 
 
