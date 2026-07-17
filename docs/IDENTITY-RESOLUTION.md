@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "5a44e9e"
+last_synced_commit: "0ef7d96"
 ---
 # Aether Identity Resolution v8.12.0 — Technical Guide
 
@@ -25,6 +25,8 @@ Aether's Identity Resolution system unifies user profiles across devices, browse
 ## Architecture
 
 The production implementation lives in `services/identity/` — `resolver.py` orchestrates a 15-step pipeline via `IdentityResolutionService`, backed by 9 specialized repository classes (`repository.py`), HMAC-SHA256 PII hashing (`hashing.py`), merge/split policy engines (`merge_policy.py`, `split_policy.py`), a conflict manager (`conflicts.py`), an audit writer (`audit.py`), and a graph writer (`graph_writer.py`). Confidence scoring uses a 5-tier model (BLOCKED → NONE → LOW → MEDIUM → HIGH → DETERMINISTIC) in `confidence.py`.
+
+The graph writer's graph mirror routes through the canonical **Graph Mutation Gateway** (`shared/graph/mutation_gateway.py`): merge edges are expressed as `identity_merged` mutations (other identity edges as `edge_created`, split revokes as `identity_split`), each carrying the decision's reason codes, source-event evidence, and confidence as ledger metadata. At `AETHER_MUTATION_GATEWAY_MODE=off` the gateway delegates straight to the GraphClient (pre-gateway behavior); in `shadow`/`enforce` modes every mirror write is also recorded in the append-only `graph_mutation_ledger`. Repo-backed identity edges remain the source of truth — mirror failures stay non-fatal.
 
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
 

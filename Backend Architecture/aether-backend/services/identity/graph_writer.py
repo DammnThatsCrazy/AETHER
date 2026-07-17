@@ -8,13 +8,27 @@ Rules:
 5. Campaign edges do not imply identity sameness.
 6. Agent edges preserve agent/human separation.
 7. Wallet ownership edges distinguish verified from observed.
+
+Graph writes route through the canonical Graph Mutation Gateway (WP2.5):
+the graph mirror is expressed as MutationIntents (identity_merged /
+edge_created / identity_split) so every mirror write is validated,
+idempotent, and — in shadow/enforce modes — recorded in the append-only
+mutation ledger. At mode=off the gateway delegates straight to the
+GraphClient, preserving the pre-gateway behavior exactly.
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
+from shared.common.common import utc_now
+from shared.graph.edge_properties import build_edge_properties
 from shared.graph.graph import Edge
+from shared.graph.mutation_gateway import (
+    EdgeRevocation,
+    GraphMutationGateway,
+    MutationIntent,
+)
 from shared.logger.logger import get_logger
 
 from .models import (
@@ -42,10 +56,18 @@ class IdentityGraphWriter:
         repo: IdentityResolutionRepository,
         metrics: IdentityMetrics,
         graph_client: Optional[Any] = None,
+        mutation_gateway: Optional[GraphMutationGateway] = None,
     ) -> None:
         self._repo = repo
         self._metrics = metrics
         self._graph = graph_client
+        self._mutation_gateway = mutation_gateway
+
+    def _gateway(self) -> GraphMutationGateway:
+        """Gateway bound to this writer's graph client (mirror target)."""
+        if self._mutation_gateway is None:
+            self._mutation_gateway = GraphMutationGateway(graph_client=self._graph)
+        return self._mutation_gateway
 
     async def write_decision(
         self,
@@ -77,6 +99,7 @@ class IdentityGraphWriter:
                     decision.reason_codes,
                     source_event_ids,
                     consent_snapshot,
+                    operation="identity_merged",
                 )
                 if edge:
                     written.append(edge["id"])
@@ -230,16 +253,28 @@ class IdentityGraphWriter:
         )
         self._metrics.record_graph_edge_writes(-len(revoked))
 
-        # Mirror the revoke onto the graph backend (best-effort).
+        # Mirror the revoke onto the graph via the mutation gateway
+        # (best-effort; identity_split soft-revokes, never deletes).
         if self._graph is not None:
             for target in same_as_targets:
                 try:
-                    await self._graph.revoke_edge(
-                        from_vertex_id=original_entity_id,
-                        to_vertex_id=target,
-                        edge_type=EdgeType.SAME_AS.value,
-                        reason="fragment_split",
-                        tenant_id=tenant_id,
+                    await self._gateway().apply(
+                        MutationIntent(
+                            operation="identity_split",
+                            tenant_id=tenant_id,
+                            revocation=EdgeRevocation(
+                                from_vertex_id=original_entity_id,
+                                to_vertex_id=target,
+                                edge_type=EdgeType.SAME_AS.value,
+                                reason="fragment_split",
+                            ),
+                            actor_kind="system",
+                            actor_id="identity_resolver",
+                            subject_kind="entity",
+                            subject_id=original_entity_id,
+                            reason_code="fragment_split",
+                            causality_class="declared_reason",
+                        )
                     )
                 except Exception as exc:  # pragma: no cover — graph is a mirror
                     logger.debug("graph edge revoke mirror skipped: %s", exc)
@@ -258,6 +293,7 @@ class IdentityGraphWriter:
         reason_codes: list[str],
         source_event_ids: list[str],
         consent_snapshot: Optional[dict],
+        operation: str = "edge_created",
     ) -> Optional[dict]:
         try:
             edge = await self._repo.create_identity_edge(
@@ -271,27 +307,29 @@ class IdentityGraphWriter:
                 source_event_ids=source_event_ids,
                 consent_snapshot=consent_snapshot,
             )
-            # Mirror to Neptune graph when client is available (production path).
-            # Failure is non-fatal: repo-backed edge is the source of truth.
+            # Mirror to the graph via the canonical mutation gateway when a
+            # client is available (production path). Failure is non-fatal:
+            # the repo-backed edge is the source of truth.
             if edge and self._graph is not None:
                 try:
-                    graph_edge = Edge(
-                        edge_type=edge_type.value,
-                        from_vertex_id=source_entity_id,
-                        to_vertex_id=target_entity_id,
-                        properties={
-                            "tenant_id": tenant_id,
-                            "edge_id": edge["id"],
-                            "confidence": str(confidence),
-                            "confidence_tier": confidence_tier.value,
-                            "reason_codes": ",".join(reason_codes or []),
-                            "source_event_ids": ",".join(source_event_ids or []),
-                        },
+                    await self._gateway().apply(
+                        self._mirror_intent(
+                            operation=operation,
+                            tenant_id=tenant_id,
+                            source_entity_id=source_entity_id,
+                            target_entity_id=target_entity_id,
+                            edge_type=edge_type,
+                            edge_id=edge["id"],
+                            confidence=confidence,
+                            confidence_tier=confidence_tier,
+                            reason_codes=reason_codes,
+                            source_event_ids=source_event_ids,
+                            consent_snapshot=consent_snapshot,
+                        )
                     )
-                    await self._graph.add_edge(graph_edge)
                 except Exception as graph_exc:
                     logger.warning(
-                        "Neptune mirror write failed (non-fatal): %s→%s: %s",
+                        "Graph mirror write failed (non-fatal): %s→%s: %s",
                         source_entity_id, target_entity_id, graph_exc,
                     )
             return edge
@@ -303,3 +341,63 @@ class IdentityGraphWriter:
             )
             self._metrics.record_graph_edge_error()
             return None
+
+    @staticmethod
+    def _mirror_intent(
+        operation: str,
+        tenant_id: str,
+        source_entity_id: str,
+        target_entity_id: str,
+        edge_type: EdgeType,
+        edge_id: str,
+        confidence: float,
+        confidence_tier: ConfidenceTier,
+        reason_codes: list[str],
+        source_event_ids: list[str],
+        consent_snapshot: Optional[dict],
+    ) -> MutationIntent:
+        """Express one identity edge mirror as a gateway MutationIntent.
+
+        Edge properties are built through the canonical helper so the mirror
+        carries the full required property set (idempotency key included);
+        the ledger record captures the identity evidence (reason codes,
+        source events, consent reference) as first-class mutation metadata.
+        """
+        primary_event = source_event_ids[0] if source_event_ids else ""
+        graph_edge = Edge(
+            edge_type=edge_type.value,
+            from_vertex_id=source_entity_id,
+            to_vertex_id=target_entity_id,
+            properties=build_edge_properties(
+                tenant_id=tenant_id,
+                edge_type=edge_type.value,
+                from_vertex_id=source_entity_id,
+                to_vertex_id=target_entity_id,
+                actor_kind="system",
+                actor_id="identity_resolver",
+                provenance="identity_resolution",
+                valid_from=utc_now().isoformat(),
+                confidence=confidence,
+                source_event_id=primary_event,
+                edge_id=edge_id,
+                confidence_tier=confidence_tier.value,
+                reason_codes=",".join(reason_codes or []),
+                source_event_ids=",".join(source_event_ids or []),
+            ),
+        )
+        consent_id = (consent_snapshot or {}).get("consent_id")
+        return MutationIntent(
+            operation=operation,
+            tenant_id=tenant_id,
+            edge=graph_edge,
+            actor_kind="system",
+            actor_id="identity_resolver",
+            subject_kind="entity",
+            subject_id=source_entity_id,
+            source_event_id=primary_event or None,
+            reason_code=(reason_codes[0] if reason_codes else None),
+            causality_class="observed_sequence",
+            confidence=confidence,
+            evidence_refs=list(source_event_ids) if source_event_ids else None,
+            consent_refs=[str(consent_id)] if consent_id else None,
+        )

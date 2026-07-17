@@ -1145,6 +1145,15 @@
           "value": "aether.reconciliation.drift_detected"
         }
       ]
+    },
+    {
+      "name": "\u2500\u2500 Graph plane \u2014 canonical mutation gateway (WP2.5) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "topics": [
+        {
+          "member": "GRAPH_MUTATED",
+          "value": "aether.graph.mutated"
+        }
+      ]
     }
   ],
   "all_topics": [
@@ -2091,6 +2100,10 @@
     {
       "member": "RECONCILIATION_DRIFT_DETECTED",
       "value": "aether.reconciliation.drift_detected"
+    },
+    {
+      "member": "GRAPH_MUTATED",
+      "value": "aether.graph.mutated"
     }
   ]
 }

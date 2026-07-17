@@ -46,17 +46,23 @@ def test_every_layer_has_edges() -> None:
         assert len(edges) > 0, f"Layer {layer} has no registered edge types"
 
 
-def test_every_layer_has_vertex_types() -> None:
-    """Every relationship layer must have registered vertex types."""
-    for layer in RelationshipLayer:
+def test_every_canonical_layer_has_vertex_types() -> None:
+    """Every CANONICAL relationship layer must have registered vertex types.
+
+    EXCLUDED is a non-canonical classification for edges intentionally
+    outside the four operational layers; it has no vertex-type registry.
+    """
+    for layer in CANONICAL_LAYERS:
         vtypes = VERTEX_TYPES_BY_LAYER.get(layer, frozenset())
         assert len(vtypes) > 0, f"Layer {layer} has no registered vertex types"
 
 
 def test_every_edge_maps_to_known_layer() -> None:
-    """Every edge type in the edge layer map must map to a canonical layer."""
+    """Every edge type maps to a canonical layer or the explicit EXCLUDED
+    classification — never to an unknown value."""
+    known = set(CANONICAL_LAYERS) | {RelationshipLayer.EXCLUDED}
     for edge_type, layer in _EDGE_LAYER_MAP.items():
-        assert layer in CANONICAL_LAYERS, (
+        assert layer in known, (
             f"Edge {edge_type} maps to unknown layer {layer}"
         )
 

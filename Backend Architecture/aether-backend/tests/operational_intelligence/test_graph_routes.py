@@ -107,7 +107,11 @@ def test_contracts_diagnostic_endpoint_lists_graph_surface_with_four_layers() ->
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["routes"] == ["traverse", "path", "temporal", "overlay", "filter"]
+    assert data["routes"] == [
+        "traverse", "path", "temporal", "compare",
+        "query", "facets", "explain", "export", "capabilities",
+        "overlay", "filter",
+    ]
     # All four relationship layers must be declared
     layers = data["relationship_layers"]
     assert "H2H" in layers

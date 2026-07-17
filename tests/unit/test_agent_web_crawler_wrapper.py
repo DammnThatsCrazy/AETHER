@@ -16,16 +16,28 @@ AGENT_ROOT = ROOT / 'Agent Layer'
 @contextmanager
 def agent_module_path():
     original = list(sys.path)
-    for prefix in ('config', 'models', 'workers', 'web_crawler'):
-        sys.modules.pop(prefix, None)
-        for name in list(sys.modules):
-            if name == prefix or name.startswith(f'{prefix}.'):
-                sys.modules.pop(name, None)
+    prefixes = ('config', 'models', 'workers', 'web_crawler')
+
+    def _purge():
+        for prefix in prefixes:
+            sys.modules.pop(prefix, None)
+            for name in list(sys.modules):
+                if name == prefix or name.startswith(f'{prefix}.'):
+                    sys.modules.pop(name, None)
+
+    _purge()
     sys.path.insert(0, str(AGENT_ROOT))
     try:
         yield
     finally:
         sys.path[:] = original
+        # Symmetric teardown: the ``Agent Layer`` root shares bare top-level
+        # package names (``config``/``models``/``workers``) with the backend
+        # and repo root. Leaving Agent Layer's copies cached in ``sys.modules``
+        # poisons any backend test that later runs in the same pytest-xdist
+        # worker. Purge on exit so the next import resolves against the caller's
+        # own ``sys.path``.
+        _purge()
 
 
 def test_top_level_web_crawler_wraps_canonical_worker():

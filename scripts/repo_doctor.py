@@ -256,6 +256,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py",
                 "packages/shared/comparison-contract.ts",
                 "Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py",
+                "Backend Architecture/aether-backend/services/silver/generated_ownership.py",
             ],
             name="Unified-platform generated contracts — no uncommitted diff",
             results=results,
@@ -363,6 +364,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="route graph writes through the canonical mutation gateway; shrink scripts/allowlists/graph_write_paths.json only",
+    )
+    run(
+        ["python", "scripts/validate_projector_ownership.py"],
+        name="Silver projector ownership (registry == dispatcher; one activity owner per event type)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align packages/shared/contracts/projector-ownership-registry.json with services/silver/dispatcher.py, then regenerate via make repo-doctor-fix",
     )
     run(
         ["python", "scripts/validate_financial_value_semantics.py"],
