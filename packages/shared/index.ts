@@ -70,3 +70,4 @@ export * from './imports';
 // by scripts/generate_platform_contracts.py)
 export * from './interaction-contract';
 export * from './context-capsule';
+export * from './graph-mutation';

@@ -10,6 +10,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/temporal-policy-registry.json
   packages/shared/contracts/interaction-vocabulary.json
   packages/shared/contracts/context-capsule-registry.json
+  packages/shared/contracts/graph-mutation-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -21,6 +22,9 @@ Generated outputs:
   packages/shared/context-capsule.ts
   Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py
   docs/_generated/context-capsule-table.md
+  packages/shared/graph-mutation.ts
+  Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py
+  docs/_generated/graph-mutation-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -792,6 +796,188 @@ def _summary_context_capsule(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: graph-mutation
+# ---------------------------------------------------------------------------
+
+GRAPH_MUTATION_JSON = CONTRACTS / "graph-mutation-registry.json"
+GRAPH_MUTATION_TS = ROOT / "packages" / "shared" / "graph-mutation.ts"
+GRAPH_MUTATION_PY = BACKEND / "shared" / "graph" / "generated_mutation_taxonomy.py"
+GRAPH_MUTATION_MD = ROOT / "docs" / "_generated" / "graph-mutation-table.md"
+
+_GRAPH_MUTATION_VOCAB_KEYS = (
+    "mutationTypes",
+    "actorKinds",
+    "causalityClasses",
+    "explanationTypes",
+)
+
+# Aggregates a mutation can target (mirrored by the pydantic Literal).
+_MUTATION_AGGREGATE_TYPES = ("node", "edge", "cluster", "score")
+
+# TS twin of shared/graph/mutation_models.py::MutationRecord — parity-tested.
+# The bitemporal field names (valid_from/valid_to/recorded_at/superseded_at)
+# deliberately match shared/graph/edge_properties.py::BITEMPORAL_EDGE_PROPERTIES.
+_MUTATION_RECORD_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("mutation_id", "string", True),
+    ("tenant_id", "string", True),
+    ("aggregate_type", " | ".join(f"'{t}'" for t in _MUTATION_AGGREGATE_TYPES), True),
+    ("aggregate_id", "string", True),
+    ("operation", "string", True),
+    ("actor_kind", "string", False),
+    ("actor_id", "string", False),
+    ("subject_kind", "string", False),
+    ("subject_id", "string", False),
+    ("valid_from", "string", False),
+    ("valid_to", "string", False),
+    ("recorded_at", "string", True),
+    ("superseded_at", "string", False),
+    ("correlation_id", "string", False),
+    ("causation_id", "string", False),
+    ("source_event_id", "string", False),
+    ("idempotency_key", "string", False),
+    ("reason_code", "string", False),
+    ("causality_class", "string", False),
+    ("confidence", "number", False),
+    ("evidence_refs", "string[]", False),
+    ("model_refs", "string[]", False),
+    ("policy_refs", "string[]", False),
+    ("consent_refs", "string[]", False),
+    ("before_version_id", "string", False),
+    ("after_version_id", "string", False),
+    ("change_set_id", "string", False),
+    ("schema_version", "string", False),
+)
+
+# TS twin of shared/graph/mutation_models.py::DecisionRecord — parity-tested.
+# Named GraphDecisionRecord in TS because decision-outcome-intelligence.ts
+# already exports a DecisionRecord through the barrel.
+_GRAPH_DECISION_RECORD_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("decision_id", "string", True),
+    ("tenant_id", "string", True),
+    ("decision_type", "string", True),
+    ("subject_refs", "string[]", False),
+    ("input_fact_versions", "Record<string, string>", False),
+    ("graph_watermark", "string", False),
+    ("model_versions", "Record<string, string>", False),
+    ("policy_versions", "Record<string, string>", False),
+    ("decision", "string", False),
+    ("confidence", "number", False),
+    ("human_override", "boolean", False),
+    ("action_observed", "boolean", False),
+    ("outcome_refs", "string[]", False),
+    ("valid_at", "string", False),
+    ("recorded_at", "string", False),
+)
+
+# TS twin of shared/graph/mutation_models.py::ChangeSet — parity-tested.
+_CHANGE_SET_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("change_set_id", "string", True),
+    ("tenant_id", "string", True),
+    ("scope_type", "string", False),
+    ("scope_id", "string", False),
+    ("baseline_ref", "string", False),
+    ("target_ref", "string", False),
+    ("added_node_count", "number", False),
+    ("removed_node_count", "number", False),
+    ("changed_edge_count", "number", False),
+    ("digest", "string", False),
+)
+
+
+def validate_graph_mutation(reg: dict, ctx: dict) -> None:
+    for key in _GRAPH_MUTATION_VOCAB_KEYS:
+        _require_idents("graph-mutation-registry", key, reg[key])
+
+
+def gen_graph_mutation_ts(reg: dict) -> str:
+    lines = _ts_header(GRAPH_MUTATION_JSON)
+    lines.append(f"export const graphMutationContractVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "graphMutationTypes", "GraphMutationType", reg["mutationTypes"],
+        "Every way the graph plane may change (append-only ledger vocabulary).",
+    )
+    lines += _ts_const_array(
+        "mutationActorKinds", "MutationActorKind", reg["actorKinds"],
+        "Who (or what) performed a graph mutation.",
+    )
+    lines += _ts_const_array(
+        "mutationCausalityClasses", "MutationCausalityClass", reg["causalityClasses"],
+        "Strength of the causal claim attached to a mutation.",
+    )
+    lines += _ts_const_array(
+        "mutationExplanationTypes", "MutationExplanationType", reg["explanationTypes"],
+        "How a mutation (or decision) is explained to reviewers.",
+    )
+    lines += _ts_interface(
+        "MutationRecord",
+        _MUTATION_RECORD_FIELDS,
+        "One append-only graph mutation; bitemporal field names match "
+        "BITEMPORAL_EDGE_PROPERTIES (Python twin: shared/graph/mutation_models.py).",
+    )
+    lines += _ts_interface(
+        "GraphDecisionRecord",
+        _GRAPH_DECISION_RECORD_FIELDS,
+        "Point-in-time decision snapshot pinned to fact/model/policy versions "
+        "(Python twin: DecisionRecord in shared/graph/mutation_models.py).",
+    )
+    lines += _ts_interface(
+        "ChangeSet",
+        _CHANGE_SET_FIELDS,
+        "Digest of graph deltas between two refs "
+        "(Python twin: shared/graph/mutation_models.py).",
+    )
+    return "\n".join(lines)
+
+
+def gen_graph_mutation_py(reg: dict) -> str:
+    lines = _py_header(
+        GRAPH_MUTATION_JSON,
+        "Generated graph-mutation taxonomy (mutation types, actors, causality, explanations).",
+    )
+    lines.append(f'GRAPH_MUTATION_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("GRAPH_MUTATION_TYPES", reg["mutationTypes"],
+                       "Every way the graph plane may change (append-only ledger vocabulary).")
+    lines += _py_tuple("MUTATION_ACTOR_KINDS", reg["actorKinds"],
+                       "Who (or what) performed a graph mutation.")
+    lines += _py_tuple("MUTATION_CAUSALITY_CLASSES", reg["causalityClasses"],
+                       "Strength of the causal claim attached to a mutation.")
+    lines += _py_tuple("MUTATION_EXPLANATION_TYPES", reg["explanationTypes"],
+                       "How a mutation (or decision) is explained to reviewers.")
+    lines.append("__all__ = [")
+    lines.append('    "GRAPH_MUTATION_CONTRACT_VERSION",')
+    lines.append('    "GRAPH_MUTATION_TYPES",')
+    lines.append('    "MUTATION_ACTOR_KINDS",')
+    lines.append('    "MUTATION_CAUSALITY_CLASSES",')
+    lines.append('    "MUTATION_EXPLANATION_TYPES",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_graph_mutation_md(reg: dict) -> str:
+    lines = _md_header(GRAPH_MUTATION_JSON)
+    lines.append("# Graph Mutation Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines += _md_vocab_section("Mutation types", reg["mutationTypes"])
+    lines += _md_vocab_section("Actor kinds", reg["actorKinds"])
+    lines += _md_vocab_section("Causality classes", reg["causalityClasses"])
+    lines += _md_vocab_section("Explanation types", reg["explanationTypes"])
+    return "\n".join(lines)
+
+
+def _summary_graph_mutation(reg: dict) -> str:
+    return (
+        f"graph-mutation v{reg['contractVersion']} — "
+        f"{len(reg['mutationTypes'])} mutation types, "
+        f"{len(reg['causalityClasses'])} causality classes"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -818,6 +1004,16 @@ REGISTRIES: tuple = (
             (CONTEXT_CAPSULE_MD, gen_context_capsule_md),
         ),
         _summary_context_capsule,
+    ),
+    (
+        GRAPH_MUTATION_JSON,
+        validate_graph_mutation,
+        (
+            (GRAPH_MUTATION_TS, gen_graph_mutation_ts),
+            (GRAPH_MUTATION_PY, gen_graph_mutation_py),
+            (GRAPH_MUTATION_MD, gen_graph_mutation_md),
+        ),
+        _summary_graph_mutation,
     ),
 )
 
