@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_graph, get_producer
 from repositories.repos import (
@@ -102,18 +104,27 @@ async def record_transfer(
     )
 
     try:
-        await graph.add_edge(Edge(
-            edge_type=EdgeType.TRANSFERRED,
-            from_vertex_id=body.from_entity_id,
-            to_vertex_id=body.to_entity_id,
-            properties={
-                "tenant_id": tenant.tenant_id,
-                "transfer_id": transfer_id,
-                "asset_id": body.asset_id,
-                "amount": str(body.amount),
-                "attributed_agent_id": body.attributed_agent_id or "",
-                "attributed_event_id": body.attributed_event_id or "",
-            },
+        await GraphMutationGateway(graph_client=graph).apply(edge_intent(
+            Edge(
+                edge_type=EdgeType.TRANSFERRED,
+                from_vertex_id=body.from_entity_id,
+                to_vertex_id=body.to_entity_id,
+                properties={
+                    "tenant_id": tenant.tenant_id,
+                    "transfer_id": transfer_id,
+                    "asset_id": body.asset_id,
+                    "amount": str(body.amount),
+                    "attributed_agent_id": body.attributed_agent_id or "",
+                    "attributed_event_id": body.attributed_event_id or "",
+                },
+            ),
+            operation="edge_created",
+            tenant_id=tenant.tenant_id,
+            actor_kind="human",
+            actor_id="flows_api",
+            subject_kind="entity",
+            subject_id=body.from_entity_id,
+            source_event_id=body.attributed_event_id or None,
         ))
     except Exception as e:  # pragma: no cover
         logger.warning(f"Graph projection failed for transfer {transfer_id}: {e}")
@@ -169,20 +180,34 @@ async def link_wallet(
         address=body.address,
     )
     # Project: ensure wallet vertex exists, then OWNS edge.
-    await graph.upsert_vertex(Vertex(
-        vertex_type=VertexType.WALLET,
-        vertex_id=wallet_id,
-        properties={
-            "tenant_id": tenant.tenant_id,
-            "chain": body.chain,
-            "address": body.address,
-        },
+    gateway = GraphMutationGateway(graph_client=graph)
+    await gateway.apply(vertex_intent(
+        Vertex(
+            vertex_type=VertexType.WALLET,
+            vertex_id=wallet_id,
+            properties={
+                "tenant_id": tenant.tenant_id,
+                "chain": body.chain,
+                "address": body.address,
+            },
+        ),
+        operation="node_versioned",
+        tenant_id=tenant.tenant_id,
+        actor_id="flows_api",
     ))
-    await graph.add_edge(Edge(
-        edge_type=EdgeType.OWNS,
-        from_vertex_id=body.owner_entity_id,
-        to_vertex_id=wallet_id,
-        properties={"tenant_id": tenant.tenant_id, "kind": "wallet"},
+    await gateway.apply(edge_intent(
+        Edge(
+            edge_type=EdgeType.OWNS,
+            from_vertex_id=body.owner_entity_id,
+            to_vertex_id=wallet_id,
+            properties={"tenant_id": tenant.tenant_id, "kind": "wallet"},
+        ),
+        operation="edge_created",
+        tenant_id=tenant.tenant_id,
+        actor_kind="human",
+        actor_id="flows_api",
+        subject_kind="entity",
+        subject_id=body.owner_entity_id,
     ))
     await producer.publish(Event(
         topic=Topic.FLOW_WALLET_LINKED,
