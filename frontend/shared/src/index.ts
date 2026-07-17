@@ -1,5 +1,31 @@
 export { cn } from './utils/cn';
 
+// External store primitive (framework-agnostic core + React binding).
+export { createStore, useStore } from './state/index';
+export type { Store } from './state/index';
+
+// Shared exploration fabric — registry-driven filter + URL primitives.
+export {
+  allFilterFields,
+  getFilterField,
+  isKnownField,
+  operatorsForField,
+  isOperatorValidForField,
+  surfaceCapability,
+  filterFieldsForSurface,
+  isKnownSurface,
+  isValuelessOperator,
+  isMultiValueOperator,
+  isRangeOperator,
+  sanitizeFilterGroup,
+  encodeFilterGroup,
+  decodeFilterGroup,
+  encodeExplorationContext,
+  decodeExplorationContext,
+  decodedSurfaceIsKnown,
+} from './exploration/index';
+export type { DecodeDefaults } from './exploration/index';
+
 // Shared time system — the ONLY sanctioned home for Intl date/time formatting.
 export {
   TimeProvider,
