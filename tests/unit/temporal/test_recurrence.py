@@ -5,7 +5,10 @@ from datetime import time
 
 import pytest
 
-from shared.temporal.instant import parse_instant_strict, to_iso_utc
+# NOTE: all shared.temporal imports bind at collection time (one module
+# generation) — some legacy suites pop shared.* from sys.modules mid-run, so a
+# mid-test re-import would see a DIFFERENT TemporalError class identity.
+from shared.temporal.instant import TemporalError, parse_instant_strict, to_iso_utc
 from shared.temporal.recurrence import next_occurrence_utc
 
 NY = "America/New_York"
@@ -66,8 +69,6 @@ def test_weekly_frequency():
 
 
 def test_invalid_zone_rejected():
-    from shared.temporal.instant import TemporalError
-
     with pytest.raises(TemporalError):
         next_occurrence_utc(
             after=parse_instant_strict("2026-07-01T00:00:00Z"),
