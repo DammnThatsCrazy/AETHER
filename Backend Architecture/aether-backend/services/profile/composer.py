@@ -11,6 +11,7 @@ import asyncio
 from typing import Any, Optional
 
 from shared.common.common import utc_now
+from shared.dimension_state import DimensionEnvelope, rollup_state
 from shared.graph.graph import GraphClient
 from shared.cache.cache import CacheClient
 from shared.scoring.trust_score import TrustScoreComposite
@@ -61,6 +62,64 @@ def _vertex_to_node(vertex: Any) -> dict:
             "drill": None,
         },
     }
+
+
+def _edge_weight(properties: dict[str, Any]) -> float:
+    """Edge weight from the real edge confidence when present (else 1.0)."""
+    raw = properties.get("confidence")
+    if raw is None:
+        return 1.0
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def _edge_label(edge_type: str) -> str:
+    """Human-readable label derived from the real edge type."""
+    return edge_type.replace("_", " ").strip().lower() or "related"
+
+
+# Edge properties safe to surface in the graph view metadata (real provenance,
+# never internal bookkeeping like idempotency_key / revoked flags).
+_PUBLIC_EDGE_PROPS = (
+    "confidence", "provenance", "causality_class", "valid_from",
+    "valid_to", "source_event_id", "confidence_tier",
+)
+
+
+def _edge_public_metadata(properties: dict[str, Any], tenant_id: str) -> dict:
+    meta: dict[str, Any] = {"tenant_id": tenant_id}
+    for key in _PUBLIC_EDGE_PROPS:
+        if properties.get(key) not in (None, ""):
+            meta[key] = properties[key]
+    return meta
+
+
+def _dimension_envelope(dimension: str, value: Any) -> DimensionEnvelope:
+    """Canonical envelope for a successfully-composed dimension.
+
+    ``ready`` when the dimension carries data; ``empty`` (honest absence) when
+    it is genuinely empty — never a blank that reads as "no activity".
+    """
+    if value is None:
+        return DimensionEnvelope(dimension=dimension, state="empty", reason_code="no_data", count=0)
+    if isinstance(value, (list, dict, str)):
+        size = len(value)
+        if size == 0:
+            return DimensionEnvelope(dimension=dimension, state="empty", reason_code="no_data", count=0)
+        return DimensionEnvelope(
+            dimension=dimension,
+            state="ready",
+            reason_code="ok",
+            count=size if isinstance(value, list) else None,
+        )
+    return DimensionEnvelope(dimension=dimension, state="ready", reason_code="ok")
+
+
+# Envelope states that represent a genuine degradation (surfaced to operators),
+# as opposed to honest absence (``empty`` / ``not_applicable``) or readiness.
+_DEGRADED_STATES = frozenset({"degraded", "error", "stale", "suppressed", "insufficient_data"})
 
 
 def _timeline_event(event: dict, fallback_id: str) -> dict:
@@ -156,7 +215,7 @@ class ProfileComposer:
         )
 
         values: dict[str, Any] = {}
-        degraded: list[dict] = []
+        envelopes: list[DimensionEnvelope] = []
         for (key, _factory, default), res in zip(active, results):
             if isinstance(res, Exception):
                 logger.warning(
@@ -165,14 +224,27 @@ class ProfileComposer:
                 )
                 metrics.increment("profile_360_dimension_failed", labels={"dimension": key})
                 values[key] = default
-                degraded.append(
-                    {"dimension": key, "state": "error", "reason": type(res).__name__}
-                )
+                envelopes.append(DimensionEnvelope(
+                    dimension=key,
+                    state="degraded",
+                    reason_code="dependency_failed",
+                    message=type(res).__name__,
+                ))
             else:
                 values[key] = res
+                envelopes.append(_dimension_envelope(key, res))
         # Disabled dimensions carry their default (not queried, not degraded).
         for (key, _factory, default, enabled) in specs:
             values.setdefault(key, default)
+
+        # Canonical readiness: per-dimension DimensionEnvelopes rolled up to the
+        # single worst state (a surface never looks readier than its weakest
+        # dimension). degraded_dimensions surfaces only genuine degradations.
+        dimension_envelopes = [e.model_dump_safe() for e in envelopes]
+        degraded_dimensions = [
+            payload for payload, env in zip(dimension_envelopes, envelopes)
+            if env.state in _DEGRADED_STATES
+        ]
 
         metrics.increment("profile_360_composed")
         return {
@@ -188,8 +260,9 @@ class ProfileComposer:
             "agent_economic": values["agent_economic"],
             "computed_at": now,
             "readiness": {
-                "state": "degraded" if degraded else "ready",
-                "degraded_dimensions": degraded,
+                "state": rollup_state(envelopes),
+                "dimensions": dimension_envelopes,
+                "degraded_dimensions": degraded_dimensions,
             },
             "provenance": {
                 "source": "profile_360_composer",
@@ -249,6 +322,7 @@ class ProfileComposer:
             scoped_neighbors.append(vertex)
 
         limited = scoped_neighbors[:limit]
+        scoped_ids = {v.vertex_id for v in limited}
         root_node = _vertex_to_node(root) if root else {
             "id": user_id,
             "type": "human",
@@ -264,18 +338,27 @@ class ProfileComposer:
             },
         }
         nodes = [root_node, *[_vertex_to_node(v) for v in limited]]
-        edges = [
-            {
-                "id": f"{user_id}-{v.vertex_id}-{index}",
-                "source": user_id,
-                "target": v.vertex_id,
-                "type": "RELATED_TO",
-                "weight": 1,
-                "label": "related",
-                "metadata": {"tenant_id": tenant_id, "profile360_inferred": True},
-            }
-            for index, v in enumerate(limited)
-        ]
+        # Real relationships: use the actual graph edge type/direction/provenance
+        # rather than synthesizing a generic RELATED_TO. Only edges to in-scope
+        # (tenant-aligned) neighbors are surfaced.
+        raw_edges = await self._graph.get_edges(
+            user_id, direction="both", include_revoked=False
+        )
+        edges = []
+        for index, e in enumerate(raw_edges):
+            other = e.to_vertex_id if e.from_vertex_id == user_id else e.from_vertex_id
+            if other not in scoped_ids:
+                continue
+            props = dict(getattr(e, "properties", {}) or {})
+            edges.append({
+                "id": props.get("edge_id") or f"{e.from_vertex_id}-{e.to_vertex_id}-{e.edge_type}-{index}",
+                "source": e.from_vertex_id,
+                "target": e.to_vertex_id,
+                "type": e.edge_type,
+                "weight": _edge_weight(props),
+                "label": _edge_label(e.edge_type),
+                "metadata": _edge_public_metadata(props, tenant_id),
+            })
         return {
             "neighbor_count": len(scoped_neighbors),
             "neighbors": [
