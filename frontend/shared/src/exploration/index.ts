@@ -26,3 +26,23 @@ export {
   decodedSurfaceIsKnown,
 } from './url-codec';
 export type { DecodeDefaults } from './url-codec';
+
+export {
+  createExplorationStore,
+  explorationActions,
+  useExplorationStore,
+  initialExplorationState,
+  withAddedFilter,
+  withoutFilterAt,
+} from './store';
+export type { ExplorationState, ExplorationStatus, ExplorationActions } from './store';
+
+export {
+  ExplorationProvider,
+  useExploration,
+  useExplorationSelector,
+  useExplorationContext,
+  useExplorationStatus,
+  useExplorationFilters,
+} from './provider';
+export type { ExplorationProviderProps } from './provider';
