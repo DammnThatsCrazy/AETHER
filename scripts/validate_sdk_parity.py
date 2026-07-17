@@ -86,6 +86,25 @@ def main() -> int:
     _require("ios", ios, ["verifyManifestSignature"], "manifest signature verification [§2.9]")
     _require("android", android, ["verifyManifestSignature"], "manifest signature verification [§2.9]")
 
+    # Temporal provenance emission — every SDK stamps timezone/clock provenance
+    # on the event context at occurrence time (temporal kernel evidence:
+    # utcOffsetMinutes / timeZoneSource / clockSource on the wire context).
+    # Server SDK emits server-clock provenance and never fabricates a device
+    # offset, so utcOffsetMinutes is intentionally absent there. The Python
+    # agentic package is a pure event-builder library relayed by the caller's
+    # server (server clock authority applies at ingestion), so it is exempt.
+    _require("web", web, ["utcOffsetMinutes", "timeZoneSource: 'device'", "clockSource: 'device'"],
+             "temporal provenance emission")
+    _require("server", server, ["timeZoneSource: 'server'", "clockSource: 'server'"],
+             "temporal provenance emission")
+    _require("ios", ios, ["utcOffsetMinutes", "timeZoneSource: \"device\"", "clockSource: \"device\""],
+             "temporal provenance emission")
+    _require("android", android,
+             ["utcOffsetMinutes", "put(\"timeZoneSource\", \"device\")", "put(\"clockSource\", \"device\")"],
+             "temporal provenance emission")
+    _require("react-native", rn, ["utcOffsetMinutes", "timeZoneSource: 'device'", "clockSource: 'device'"],
+             "temporal provenance emission")
+
     # §2.8 — batch-response health metrics surfaced to SDK consumers.
     _require("server", server, ["BatchHealth", "dropped_by_consent", "queue_depth"],
              "batch health metrics [§2.8]")
