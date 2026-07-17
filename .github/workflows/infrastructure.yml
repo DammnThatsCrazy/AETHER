@@ -45,6 +45,8 @@ jobs:
           TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
+          TF_ML_IMAGE_DIGEST: ${{ secrets.TF_ML_IMAGE_DIGEST }}
         run: |
           missing=()
           for name in \
@@ -58,7 +60,9 @@ jobs:
             TF_AUTH0_MANAGEMENT_CLIENT_ID \
             TF_AUTH0_MANAGEMENT_CLIENT_SECRET \
             TF_AETHER_APP_URL \
-            TF_KYBER_APP_URL
+            TF_KYBER_APP_URL \
+            TF_BACKEND_IMAGE_DIGEST \
+            TF_ML_IMAGE_DIGEST
           do
             if [ -z "${!name}" ]; then
               missing+=("$name")
@@ -101,6 +105,9 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: |
           cp "profiles/${PROFILE}.tfvars" profile.auto.tfvars
+          # backend/ml digests: provider-mocked configuration plans never touch
+          # infrastructure, so a syntactically valid placeholder digest is fine
+          # here. Real plans always receive the release-manifest digests.
           cat > ci.auto.tfvars.json <<'JSON'
           {
             "acm_certificate_arn": "arn:aws:acm:us-east-1:111122223333:certificate/00000000-0000-0000-0000-000000000000",
@@ -110,7 +117,9 @@ jobs:
             "auth0_management_client_id": "terraform-ci",
             "auth0_management_client_secret": "not-a-production-secret",
             "aether_app_url": "https://app.ci.aether.invalid",
-            "kyber_app_url": "https://kyber.ci.aether.invalid"
+            "kyber_app_url": "https://kyber.ci.aether.invalid",
+            "backend_image_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "ml_image_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
           }
           JSON
 
@@ -165,6 +174,10 @@ jobs:
       TF_VAR_auth0_management_client_secret: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
+      # Immutable image digests are required root variables (no defaults):
+      # remote plans/applies must pin the currently approved release digests.
+      TF_VAR_backend_image_digest: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
+      TF_VAR_ml_image_digest: ${{ secrets.TF_ML_IMAGE_DIGEST }}
     steps:
       - uses: actions/checkout@v4
 
@@ -255,6 +268,10 @@ jobs:
       TF_VAR_auth0_management_client_secret: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
+      # Immutable image digests are required root variables (no defaults):
+      # remote plans/applies must pin the currently approved release digests.
+      TF_VAR_backend_image_digest: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
+      TF_VAR_ml_image_digest: ${{ secrets.TF_ML_IMAGE_DIGEST }}
     steps:
       - uses: actions/checkout@v4
 

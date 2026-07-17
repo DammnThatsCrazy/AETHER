@@ -6,6 +6,9 @@
 
 deployment_profile = "staging"
 
+# Root default is production — staging must say so explicitly.
+environment = "staging"
+
 # Network — single shared NAT, no HA (cost).
 enable_nat_gateway_ha = false
 
