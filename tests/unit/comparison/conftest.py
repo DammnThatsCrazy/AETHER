@@ -32,11 +32,31 @@ from comparison_fakes import FakeAnalytics  # noqa: E402
 _COLLECTION_MODULE_SNAPSHOT: dict[str, object] = {}
 
 
+# Backend package trees whose *class identity* the comparison test modules
+# capture at collection time and later assert against — ``services.*`` for the
+# engine/routes/contracts, ``shared.common``/``shared.auth`` for the exception
+# and permission classes used with ``pytest.raises`` (``BadRequestError`` /
+# ``NotFoundError`` / ``ForbiddenError``), ``config`` for the settings the
+# route flag-gate reads, and ``repositories`` for the in-memory stores. Sibling
+# suites (e.g. ``tests/graph``) purge and re-import ``shared.*`` mid-worker,
+# which would otherwise give the raised exceptions a different class generation
+# than the one ``pytest.raises`` holds, so a correctly-raised error would
+# escape uncaught. Pinning all of these to the single collection-time
+# generation keeps every party on the same classes.
+_PINNED_PREFIXES = ("services", "shared.common", "shared.auth", "config", "repositories")
+
+
+def _is_pinned(name: str) -> bool:
+    return name in _PINNED_PREFIXES or any(
+        name.startswith(f"{prefix}.") for prefix in _PINNED_PREFIXES
+    )
+
+
 def pytest_collection_finish(session) -> None:  # noqa: ANN001
     if _COLLECTION_MODULE_SNAPSHOT:
         return
     for name, module in list(sys.modules.items()):
-        if name == "services" or name.startswith("services."):
+        if _is_pinned(name):
             _COLLECTION_MODULE_SNAPSHOT[name] = module
 
 
