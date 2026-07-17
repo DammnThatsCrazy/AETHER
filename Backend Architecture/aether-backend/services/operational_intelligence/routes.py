@@ -489,7 +489,7 @@ async def _build_overlays(
     Scores are returned separately and surfaced in ExplainabilityMetadata.features
     so they survive Pydantic serialization (GraphOverlay has no scores field).
     Every overlay carries an explicit status: ``computed`` when the tenant graph
-    has records, ``no_data`` otherwise — never a placeholder.
+    has records, ``no_data`` otherwise — never a fabricated stand-in value.
     """
     overlays = []
     scores: dict[str, float] = {}
