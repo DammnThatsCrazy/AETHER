@@ -11,6 +11,13 @@ x-runtime: &runtime
   environment: &runtime-env
     AETHER_ENV: integration
     DATABASE_URL: postgresql://aether:aether@postgres:5432/aether
+    # Integration is non-local: Settings() fail-closed startup checks demand
+    # explicit non-default secrets. These are hermetic, integration-only values.
+    JWT_SECRET: integration-only-jwt-secret-not-production
+    WATERMARK_SECRET_KEY: integration-only-watermark-secret
+    CANARY_SECRET_SEED: integration-only-canary-seed
+    EXTRACTION_CANARY_SEED: integration-only-extraction-canary-seed
+    SDK_CONFIG_SECRET: integration-only-sdk-config-secret
     CACHE_BACKEND: redis
     REDIS_URL: redis://redis:6379/0
     EVENT_BACKEND: sns_sqs
@@ -62,28 +69,28 @@ services:
   outbox-relay:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: outbox-relay}
-    command: python -m services.runtime.run_role
+    command: python -m services.runtime.run_role outbox-relay
   stream-worker:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: stream-worker}
-    command: python -m services.runtime.run_role
+    command: python -m services.runtime.run_role stream-worker
   identity-worker:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: identity-worker}
-    command: python -m services.runtime.run_role
+    command: python -m services.runtime.run_role identity-worker
   graph-writer:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: graph-writer}
-    command: python -m services.runtime.run_role
+    command: python -m services.runtime.run_role graph-writer
   measurement-worker:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: measurement-worker}
-    command: python -m services.runtime.run_role
+    command: python -m services.runtime.run_role measurement-worker
   materializer:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: materializer}
-    command: python -m services.runtime.run_role
+    command: python -m services.runtime.run_role materializer
   maintenance:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: maintenance}
-    command: python -m services.runtime.run_role
+    command: python -m services.runtime.run_role maintenance

@@ -178,7 +178,16 @@ locals {
         "sqs:GetQueueUrl",
         "sqs:ChangeMessageVisibility",
       ]
-      Resource = var.sqs_queue_arn
+      Resource = concat([var.sqs_queue_arn], values(var.sqs_role_queue_arns))
+    }
+  ] : []
+
+  sns_statements = var.sns_topic_arn != "" ? [
+    {
+      Sid      = "SNSFanoutPublish"
+      Effect   = "Allow"
+      Action   = ["sns:Publish"]
+      Resource = var.sns_topic_arn
     }
   ] : []
 
@@ -244,6 +253,7 @@ resource "aws_iam_role_policy" "task" {
         },
       ])),
       jsondecode(jsonencode(local.sqs_statements)),
+      jsondecode(jsonencode(local.sns_statements)),
       jsondecode(jsonencode(local.dynamodb_statements)),
     )
   })
@@ -327,11 +337,18 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "ML_SERVING_URL",    value = var.ml_serving_url },
           { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
         ],
-        # SQS event broker — set when sqs_queue_url is provided; otherwise Kafka
-        var.sqs_queue_url != "" ? [
-          { name = "EVENT_BROKER", value = "sns_sqs" },
-          { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
-        ] : [
+        # SQS event broker — set when sqs_queue_url is provided; otherwise Kafka.
+        # SNS_TOPIC_ARN makes the producer publish through the fanout topic so
+        # every per-role consumer queue receives the event.
+        var.sqs_queue_url != "" ? concat(
+          [
+            { name = "EVENT_BROKER", value = "sns_sqs" },
+            { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
+          ],
+          var.sns_topic_arn != "" ? [
+            { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
+          ] : [],
+        ) : [
           { name = "EVENT_BROKER",            value = "kafka" },
           { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
         ],
@@ -376,14 +393,15 @@ resource "aws_ecs_task_definition" "backend" {
 
 
 # Dedicated worker task definitions. They use the same immutable application
-# image as the API but execute only their canonical role entrypoint.
+# image as the API but execute only their canonical role entrypoint. Sizing
+# comes from the profile matrix in config/runtime_deployment.yaml.
 resource "aws_ecs_task_definition" "runtime_role" {
   for_each                 = var.runtime_roles
   family                   = "${var.project}-${var.environment}-${each.key}"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 512
-  memory                   = 1024
+  cpu                      = each.value.cpu
+  memory                   = each.value.memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
   container_definitions = jsonencode([{
@@ -391,14 +409,36 @@ resource "aws_ecs_task_definition" "runtime_role" {
     image     = "${var.ecr_backend_url}@${var.backend_image_digest}"
     essential = true
     command   = ["python", "-m", "services.runtime.run_role", each.key]
-    environment = [
-      { name = "APP_ENV", value = var.environment },
-      { name = "AETHER_ENV", value = var.environment },
-      { name = "AETHER_ROLE", value = each.key },
-      { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
-      { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
-      { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
-    ]
+    environment = concat(
+      [
+        { name = "APP_ENV", value = var.environment },
+        { name = "AETHER_ENV", value = var.environment },
+        { name = "AETHER_ROLE", value = each.key },
+        { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
+      ],
+      # Same conditional broker selection as the API task: without it workers
+      # default to kafka and never consume SQS. Consumer roles receive their
+      # dedicated SNS-subscribed queue; other roles use the shared events queue.
+      var.sqs_queue_url != "" ? concat(
+        [
+          { name = "EVENT_BROKER", value = "sns_sqs" },
+          { name = "SQS_QUEUE_URL", value = lookup(var.sqs_role_queue_urls, each.key, var.sqs_queue_url) },
+        ],
+        var.sns_topic_arn != "" ? [
+          { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
+        ] : [],
+      ) : [
+        { name = "EVENT_BROKER",            value = "kafka" },
+        { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
+      ],
+      # DynamoDB cache when provided; otherwise Redis (mirrors the API task).
+      var.dynamodb_cache_table != "" ? [
+        { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
+      ] : [
+        { name = "REDIS_HOST", value = var.redis_host },
+        { name = "REDIS_PORT", value = tostring(var.redis_port) },
+      ],
+    )
     secrets = local.backend_secrets_block
     logConfiguration = {
       logDriver = "awslogs"
@@ -419,7 +459,7 @@ resource "aws_ecs_service" "runtime_role" {
   name            = "${var.project}-${var.environment}-${each.key}"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.runtime_role[each.key].arn
-  desired_count   = 1
+  desired_count   = each.value.desired_count
   capacity_provider_strategy {
     capacity_provider = "FARGATE"
     base              = 1

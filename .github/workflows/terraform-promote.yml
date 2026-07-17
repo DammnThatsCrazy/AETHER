@@ -12,6 +12,14 @@ on:
         options: [plan, apply]
         default: plan
         required: true
+      backend_image_digest:
+        description: Immutable backend image digest from the approved release manifest (sha256:...) — required for plan
+        type: string
+        required: false
+      ml_image_digest:
+        description: Immutable ML serving image digest from the approved release manifest (sha256:...) — required for plan
+        type: string
+        required: false
       plan_run_id:
         description: Plan workflow run ID (required for apply)
         type: string
@@ -25,11 +33,22 @@ permissions:
 concurrency:
   group: terraform-${{ inputs.profile }}
   cancel-in-progress: false
+env:
+  AWS_REGION: us-east-1
 jobs:
   plan:
     if: inputs.action == 'plan'
     runs-on: ubuntu-latest
     permissions: {contents: read, id-token: write}
+    env:
+      TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+      TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
+      TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+      TF_VAR_auth0_domain: ${{ secrets.TF_AUTH0_DOMAIN }}
+      TF_VAR_auth0_management_client_id: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+      TF_VAR_auth0_management_client_secret: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+      TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
+      TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -37,17 +56,42 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Require immutable image digests
+        env:
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+        run: |
+          set -euo pipefail
+          test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for plan'; exit 1; }
+          test -n "$ML_IMAGE_DIGEST" || { echo '::error::ml_image_digest is required for plan'; exit 1; }
       - name: Create immutable reviewed plan
         working-directory: AWS Deployment/aether-aws/terraform
+        env:
+          PROFILE: ${{ inputs.profile }}
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+          COMMIT_SHA: ${{ github.sha }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
-          terraform init -input=false
+          set -euo pipefail
+          terraform init -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
           terraform validate
-          terraform plan -input=false -var-file="profiles/${{ inputs.profile }}.tfvars" -out=reviewed.tfplan
+          terraform plan -input=false -lock-timeout=5m \
+            -var-file="profiles/${PROFILE}.tfvars" \
+            -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+            -var "ml_image_digest=${ML_IMAGE_DIGEST}" \
+            -out=reviewed.tfplan
           terraform show -json reviewed.tfplan > reviewed.tfplan.json
           terraform show -no-color reviewed.tfplan > reviewed.tfplan.txt
           sha256sum reviewed.tfplan > reviewed.tfplan.sha256
-          printf '%s\n' '${{ github.sha }}' > reviewed.commit
-          printf '%s\n' '${{ inputs.profile }}' > reviewed.profile
+          printf '%s\n' "$COMMIT_SHA" > reviewed.commit
+          printf '%s\n' "$PROFILE" > reviewed.profile
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ inputs.profile }}-${{ github.sha }}
@@ -62,9 +106,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Require explicit reviewed plan identity
+        env:
+          PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+          PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
         run: |
-          test -n '${{ inputs.plan_run_id }}' || { echo '::error::plan_run_id required'; exit 1; }
-          test -n '${{ inputs.plan_checksum }}' || { echo '::error::plan_checksum required'; exit 1; }
+          set -euo pipefail
+          test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id required'; exit 1; }
+          test -n "$PLAN_CHECKSUM" || { echo '::error::plan_checksum required'; exit 1; }
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
@@ -79,12 +127,23 @@ jobs:
           aws-region: us-east-1
       - name: Apply the exact approved plan (never re-plan)
         working-directory: AWS Deployment/aether-aws/terraform
+        env:
+          PROFILE: ${{ inputs.profile }}
+          PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
+          COMMIT_SHA: ${{ github.sha }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
-          test "$(cat reviewed.profile)" = '${{ inputs.profile }}'
-          test "$(cat reviewed.commit)" = '${{ github.sha }}'
-          test "$(sha256sum reviewed.tfplan | cut -d' ' -f1)" = '${{ inputs.plan_checksum }}'
-          terraform init -input=false
+          test "$(cat reviewed.profile)" = "$PROFILE"
+          test "$(cat reviewed.commit)" = "$COMMIT_SHA"
+          test "$(sha256sum reviewed.tfplan | cut -d' ' -f1)" = "$PLAN_CHECKSUM"
+          terraform init -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256
       - uses: actions/upload-artifact@v4

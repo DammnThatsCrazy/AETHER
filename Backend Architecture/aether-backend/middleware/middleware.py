@@ -237,6 +237,19 @@ def register_middleware(app: FastAPI) -> None:
         quota_headers: dict[str, str] = {}
         access_tier_header: Optional[str] = None
 
+        # Valid CORS preflights (OPTIONS + Origin + Access-Control-Request-Method)
+        # carry no credentials by design and are answered by the inner
+        # CORSMiddleware. Route templates never declare OPTIONS, so route-policy
+        # matching would 403 every preflight before CORS could reply. Only real
+        # preflights bypass; plain OPTIONS requests stay fully enforced, and the
+        # actual (non-preflight) request that follows is enforced as usual.
+        if (
+            request.method == "OPTIONS"
+            and "origin" in request.headers
+            and "access-control-request-method" in request.headers
+        ):
+            return await call_next(request)
+
         # Resolve the matched FastAPI template when available. Starlette sets
         # this before the inner application executes; unit/direct invocation
         # falls back to the literal path and remains fail closed.
@@ -711,6 +724,16 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
                 pass
             return None
 
+        # Founding-tenant release surface: domains the release manifest
+        # excludes are not part of the release. The exclusion set is lazily
+        # loaded and empty for every profile other than the manifest's own,
+        # so this is a cached frozenset lookup outside that profile.
+        from services.security.route_registry import founding_domain_excluded
+        if founding_domain_excluded(
+            pol.domain, settings.runtime.deployment_profile
+        ):
+            return ForbiddenError("ROUTE_POLICY_DOMAIN_EXCLUDED")
+
         if pol.kyber_operator_required:
             from services.security.request_context import is_kyber_operator
             if not is_kyber_operator(context):
@@ -878,6 +901,37 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
     return None
 
 
+async def _current_tenant_status(rec: dict) -> str:
+    """Authoritative tenant status for a trust-plane credential record.
+
+    A credential-carried ``tenant_status`` is used only as the fresh fast-path
+    (the issuing service stamped it at validation time). When the record does
+    not carry one — session/service-credential/public-ingest records do not —
+    the durable tenant record (the same row ``deactivate_tenant`` flips to
+    ``inactive``) is authoritative. Anything unresolvable fails closed as
+    ``inactive`` so a deactivated or deleted tenant's surviving credentials
+    never keep working.
+    """
+    carried = rec.get("tenant_status")
+    if carried is not None:
+        return str(carried)
+    tenant_id = rec.get("tenant_id") or ""
+    if not tenant_id:
+        return "inactive"
+    try:
+        from repositories.repos import AdminRepository
+        tenant = await AdminRepository().find_by_id(tenant_id)
+    except Exception as e:
+        logger.warning(
+            "tenant status lookup failed for %s (%s) — failing closed",
+            tenant_id, type(e).__name__,
+        )
+        return "inactive"
+    if not tenant:
+        return "inactive"
+    return str(tenant.get("status", "inactive"))
+
+
 async def _resolve_session_token(token: str) -> Optional[TenantContext]:
     try:
         from services.auth.sessions import session_service
@@ -891,7 +945,7 @@ async def _resolve_session_token(token: str) -> Optional[TenantContext]:
         permissions=list(rec.get("permissions", ["read", "write", "ingest", "analytics"])),
         credential_class=rec.get("credential_class", "human_session"),
         credential_status=rec.get("status", "inactive"),
-        tenant_status=rec.get("tenant_status", "active"),
+        tenant_status=await _current_tenant_status(rec),
         organization_id=rec.get("organization_id"),
         organization_status=rec.get("organization_status", "active"),
         membership_status=rec.get("membership_status", "active"),
@@ -912,7 +966,7 @@ async def _resolve_public_ingest(identifier: str) -> Optional[TenantContext]:
         permissions=["ingest"],
         credential_class=rec.get("credential_class", "public_ingest_identifier"),
         credential_status=rec.get("status", "inactive"),
-        tenant_status=rec.get("tenant_status", "active"),
+        tenant_status=await _current_tenant_status(rec),
     )
 
 
@@ -928,7 +982,7 @@ async def _resolve_service_credential(cred: str) -> Optional[TenantContext]:
         permissions=list(rec.get("permissions", [])),
         credential_class=rec.get("credential_class", "service_credential"),
         credential_status=rec.get("status", "inactive"),
-        tenant_status=rec.get("tenant_status", "active"),
+        tenant_status=await _current_tenant_status(rec),
         organization_id=rec.get("organization_id"),
         organization_status=rec.get("organization_status", "active"),
     )

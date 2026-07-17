@@ -399,7 +399,7 @@ sdk-release-gate: ## SDK metadata, conformance, and hosted required-check contra
 audit-readiness-check: ## Validate the founding-tenant control spine (ledger + catalog + posture)
 	python scripts/release/check_foundation.py
 
-founding-tenant-release-gate: ## ci-check + control-spine validators + evidence bundle index
+founding-tenant-release-gate: ## control-spine validators + durable-suite proof + evidence bundle (never passes without the durable suites)
 	python scripts/repo_doctor.py --ci
 	python scripts/release/check_foundation.py
 	python scripts/release/check_implementation_ledger.py
@@ -412,7 +412,19 @@ founding-tenant-release-gate: ## ci-check + control-spine validators + evidence 
 	python scripts/validate_sdk_release_alignment.py
 	python scripts/release/sdk_conformance.py --quiet
 	python scripts/release/check_required_checks.py
-	python scripts/release/collect_evidence.py
+	@if [ -n "$(FOUNDING_GATE_HOSTED_EVIDENCE)" ]; then \
+		echo "Founding gate: verifying hosted evidence via collect_evidence.py --release-mode (requires GITHUB_TOKEN/GITHUB_REPOSITORY and FOUNDING_GATE_CI_LOG)"; \
+		python scripts/release/collect_evidence.py --release-mode \
+			--github-checks "$(FOUNDING_GATE_HOSTED_EVIDENCE)" \
+			$(if $(FOUNDING_GATE_CI_LOG),--ci-log "$(FOUNDING_GATE_CI_LOG)"); \
+	else \
+		echo "Founding gate: running the durable suites locally (set FOUNDING_GATE_HOSTED_EVIDENCE=<checks.json> to substitute API-verified hosted evidence). Missing Docker or staging access is a gate FAILURE, not a skip."; \
+		$(MAKE) runtime-readiness-gate; \
+		$(MAKE) integration-durable; \
+		$(MAKE) integration-faults; \
+		$(MAKE) staging-preflight; \
+		python scripts/release/collect_evidence.py; \
+	fi
 
 validate-founding-tenant-surface: ## Validate founding-tenant routes, roles, consumers, flags, and rollout controls
 	python scripts/release/check_founding_tenant_surface.py

@@ -61,15 +61,27 @@ jobs:
           tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
-      - name: Build static frontends
+      - name: Build static frontends (per-app Auth0 client and endpoints)
+        # Each SPA is built with its own Auth0 client ID and API endpoints.
+        # AETHER_AUTH0_CLIENT_ID / KYBER_AUTH0_CLIENT_ID come from the
+        # Terraform outputs aether_client_id / kyber_client_id.
         env:
           VITE_AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
           VITE_AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE }}
-          VITE_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL }}
+          AETHER_AUTH0_CLIENT_ID: ${{ secrets.AETHER_AUTH0_CLIENT_ID }}
+          AETHER_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL }}
+          KYBER_AUTH0_CLIENT_ID: ${{ secrets.KYBER_AUTH0_CLIENT_ID }}
+          KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL }}
+          KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL }}
         run: |
           npm ci
-          npm --workspace frontend/aether run build
-          npm --workspace frontend/kyber run build
+          VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
+            VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
+            npm --workspace frontend/aether run build
+          VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID" \
+            VITE_API_BASE_URL="$KYBER_API_BASE_URL" \
+            VITE_WS_BASE_URL="$KYBER_WS_BASE_URL" \
+            npm --workspace frontend/kyber run build
           tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C frontend/aether/dist .
           tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
           tar --sort=name --mtime='UTC 1970-01-01' -czf migrations.tar.gz \
@@ -123,9 +135,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Require explicit immutable approval inputs
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
         run: |
-          test -n '${{ inputs.source_run_id }}' || { echo '::error::source_run_id is required'; exit 1; }
-          test -n '${{ inputs.release_manifest_checksum }}' || { echo '::error::release_manifest_checksum is required'; exit 1; }
+          set -euo pipefail
+          test -n "$SOURCE_RUN_ID" || { echo '::error::source_run_id is required'; exit 1; }
+          test -n "$RELEASE_MANIFEST_CHECKSUM" || { echo '::error::release_manifest_checksum is required'; exit 1; }
+      - name: Verify source run identity before trusting its artifacts
+        # The source run must be a successful run of THIS workflow file whose
+        # staging deploy job completed; otherwise its artifacts are untrusted.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")
+          run_path=$(jq -r '.path' <<<"$run_json")
+          run_conclusion=$(jq -r '.conclusion' <<<"$run_json")
+          test "$run_path" = '.github/workflows/deploy.yml' || {
+            echo "::error::source run ${SOURCE_RUN_ID} belongs to ${run_path}, not this workflow"; exit 1; }
+          test "$run_conclusion" = 'success' || {
+            echo "::error::source run ${SOURCE_RUN_ID} concluded ${run_conclusion}, not success"; exit 1; }
+          jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")
+          staging_ok=$(jq -r '[.jobs[] | select((.name | startswith("Deploy exact release (staging)")) and .conclusion == "success")] | length' <<<"$jobs_json")
+          test "$staging_ok" -ge 1 || {
+            echo "::error::source run ${SOURCE_RUN_ID} has no successful staging deploy job"; exit 1; }
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
@@ -133,9 +168,12 @@ jobs:
           pattern: release-*
           merge-multiple: true
       - name: Verify approved manifest and every artifact
+        env:
+          RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
         run: |
+          set -euo pipefail
           SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
-          python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum '${{ inputs.release_manifest_checksum }}'
+          python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum "$RELEASE_MANIFEST_CHECKSUM"
           python - <<'PY'
           import hashlib,json,pathlib
           m=json.load(open('release.json'))
@@ -166,6 +204,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install workflow Python dependencies
+        run: pip install pyyaml
       - uses: actions/download-artifact@v4
         with:
           name: ${{ needs.acquire-release.result == 'success' && 'approved-release' || format('release-{0}', github.sha) }}
@@ -179,7 +221,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Register exact task revision for every required role
+      - name: Apply packaged migrations, then register exact task revision for every required role
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
         run: |
@@ -188,9 +230,16 @@ jobs:
           CLUSTER="AETHER-${TARGET_ENV}"
           IMAGE=$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['uri'])")
           mapfile -t ROLES < <(python -c "import yaml; print(*yaml.safe_load(open('runtime_deployment.yaml'))['profiles']['$PROFILE']['roles'], sep='\n')")
+          # api first: the packaged migrations must land before any service
+          # adopts the new image (expand-before-rollout).
+          ORDERED=(api)
+          for r in "${ROLES[@]}"; do [ "$r" = api ] || ORDERED+=("$r"); done
           aws ecs describe-clusters --clusters "$CLUSTER" --query 'failures' --output text | grep -q '^None$\|^$'
-          for role in "${ROLES[@]}"; do
-            service="AETHER-${TARGET_ENV}-${role}"
+          for role in "${ORDERED[@]}"; do
+            # Canonical role -> ECS service mapping: the api role is served by the
+            # Terraform-provisioned "-backend" service; every worker role maps 1:1.
+            # Documented in config/runtime_deployment.yaml.
+            service="AETHER-${TARGET_ENV}-$([ "$role" = api ] && echo backend || echo "$role")"
             current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
             test "$current" != None || { echo "::error::required service missing: $service"; exit 1; }
             aws ecs describe-task-definition --task-definition "$current" --query taskDefinition > task.json
@@ -199,12 +248,57 @@ jobs:
               .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE"))) + [{name:"AETHER_ROLE",value:$role}] |
               del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task.json > rendered.json
             revision=$(aws ecs register-task-definition --cli-input-json file://rendered.json --query 'taskDefinition.taskDefinitionArn' --output text)
+            if [ "$role" = api ]; then
+              # Apply the packaged migrations with the exact release image before
+              # any service rollout. The migration archive digest is bound to this
+              # image by the verified release manifest; /v1/ready re-verifies
+              # DB revision == packaged head after rollout.
+              container=$(jq -r '.containerDefinitions[0].name' rendered.json)
+              netcfg=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].networkConfiguration' --output json)
+              migration_task=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$revision" \
+                --launch-type FARGATE --network-configuration "$netcfg" \
+                --overrides "{\"containerOverrides\":[{\"name\":\"$container\",\"command\":[\"alembic\",\"upgrade\",\"head\"]}]}" \
+                --query 'tasks[0].taskArn' --output text)
+              aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$migration_task"
+              migration_exit=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$migration_task" --query 'tasks[0].containers[0].exitCode' --output text)
+              test "$migration_exit" = "0" || { echo "::error::packaged migration task failed (exit $migration_exit)"; exit 1; }
+              printf 'migrations %s %s\n' "$migration_task" "$IMAGE" >> deployment-evidence.txt
+            fi
             aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "$revision" >/dev/null
             aws ecs wait services-stable --cluster "$CLUSTER" --services "$service"
             running=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
             test "$running" = "$revision" || { echo "::error::$service did not adopt $revision"; exit 1; }
             printf '%s %s %s\n' "$role" "$revision" "$IMAGE" >> deployment-evidence.txt
           done
+      - name: Readiness gate (/v1/ready — DB, migrations head, cache, event bus, auth)
+        # /v1/ready is the authoritative in-environment gate: it fails unless the
+        # database alembic revision matches the deployed release's migration head.
+        env:
+          ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+        run: |
+          set -euo pipefail
+          test -n "$ALB_DNS_NAME" || { echo '::error::ALB_DNS_NAME environment variable is required for the readiness gate'; exit 1; }
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "https://${ALB_DNS_NAME}/v1/ready" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Readiness check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Readiness returned HTTP $STATUS (attempt $i), retrying in 15s..."
+            curl -s "https://${ALB_DNS_NAME}/v1/ready" | head -c 2000 || true
+            sleep 15
+          done
+          echo "::error::Readiness check failed after 5 attempts — service is alive but not deployable-ready"
+          exit 1
+      - name: Golden-path smoke test
+        env:
+          ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+        run: |
+          python scripts/smoke_test.py \
+            --base-url "https://${ALB_DNS_NAME}" \
+            --api-key "${SMOKE_API_KEY}" \
+            --timeout 15
       - name: Publish private static SPA origins
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}

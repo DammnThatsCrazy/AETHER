@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -242,16 +243,99 @@ def ci_check_section(ci_log: str | None) -> dict:
     }
 
 
-def hosted_checks_section(path_value: str | None, expected_sha: str) -> dict:
+def _github_api(repo: str, path: str, token: str) -> dict:
+    """GET a GitHub REST resource with stdlib urllib. Raises on any error."""
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}{path}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "aether-release-evidence",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - fixed https host
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _verify_hosted_check(check_id: str, definition: dict, row: dict,
+                         expected_sha: str, allowed: list,
+                         repo: str, token: str) -> list[str]:
+    """Verify one claimed check against the GitHub REST API (fail closed)."""
+    failures: list[str] = []
+    run_id = row.get("workflow_run_id")
+    try:
+        run = _github_api(repo, f"/actions/runs/{run_id}", token)
+        jobs = _github_api(repo, f"/actions/runs/{run_id}/jobs?per_page=100", token)
+        artifacts = _github_api(repo, f"/actions/runs/{run_id}/artifacts?per_page=100", token)
+    except Exception as exc:
+        return [f"{check_id}: GitHub API verification failed ({type(exc).__name__}: {exc})"]
+    if run.get("head_sha") != expected_sha:
+        failures.append(f"{check_id}: hosted run head SHA mismatch")
+    if run.get("path") != definition.get("workflow"):
+        failures.append(
+            f"{check_id}: hosted run belongs to {run.get('path')!r}, "
+            f"not {definition.get('workflow')!r}"
+        )
+    if run.get("conclusion") not in allowed:
+        failures.append(
+            f"{check_id}: hosted run conclusion {run.get('conclusion')!r} is not allowed"
+        )
+    job = next(
+        (j for j in jobs.get("jobs", []) if j.get("name") == definition.get("job")),
+        None,
+    )
+    if job is None:
+        failures.append(f"{check_id}: hosted run has no job {definition.get('job')!r}")
+    elif job.get("conclusion") not in allowed:
+        failures.append(
+            f"{check_id}: hosted job conclusion {job.get('conclusion')!r} is not allowed"
+        )
+    artifact = next(
+        (a for a in artifacts.get("artifacts", [])
+         if a.get("name") == definition.get("evidence_artifact")),
+        None,
+    )
+    if artifact is None:
+        failures.append(
+            f"{check_id}: evidence artifact {definition.get('evidence_artifact')!r} "
+            "missing from hosted run"
+        )
+    elif artifact.get("expired"):
+        failures.append(f"{check_id}: evidence artifact expired on the hosted run")
+    # When a local copy of the artifact is provided, its checksum is
+    # recomputed — the claimed digest is never trusted on its own.
+    artifact_path = row.get("artifact_path")
+    if artifact_path:
+        local = Path(artifact_path)
+        local = local if local.is_absolute() else repo_root() / local
+        try:
+            digest = hashlib.sha256(local.read_bytes()).hexdigest()
+        except OSError as exc:
+            failures.append(f"{check_id}: local artifact unreadable ({exc})")
+        else:
+            if digest != row.get("artifact_sha256"):
+                failures.append(f"{check_id}: local artifact checksum mismatch")
+    return failures
+
+
+def hosted_checks_section(path_value: str | None, expected_sha: str,
+                          repo: str | None = None, token: str | None = None) -> dict:
     """Validate authoritative GitHub check-run evidence for the exact SHA.
 
     Input is a JSON object with a ``checks`` list.  Every catalog check must be
     represented and bind its workflow run, timestamp and artifact checksum to
-    the expected commit.  Missing, skipped, cancelled, stale, or cross-SHA
-    evidence never becomes a pass.
+    the expected commit.  The claims are then verified against the GitHub REST
+    API (run head SHA, workflow path, run/job conclusions, artifact presence;
+    local artifact checksums are recomputed when provided) — a local JSON file
+    on its own is NEVER authoritative.  Missing token/repository, network
+    errors, skipped/cancelled/stale or cross-SHA evidence never become a pass.
     """
     catalog = load_yaml("config/required_release_checks.yaml") or {}
     branch = catalog.get("branch_protection") or {}
+    allowed = catalog.get("allowed_terminal_conclusions", [])
     required = {
         row["id"]: row for row in catalog.get("checks") or []
         if row.get("blocks_founding_tenant_release")
@@ -282,7 +366,7 @@ def hosted_checks_section(path_value: str | None, expected_sha: str) -> dict:
             failures.append(f"{check_id}: SHA mismatch")
         if row.get("job_name") != definition.get("job"):
             failures.append(f"{check_id}: job name mismatch")
-        if row.get("conclusion") not in catalog.get("allowed_terminal_conclusions", []):
+        if row.get("conclusion") not in allowed:
             failures.append(f"{check_id}: conclusion {row.get('conclusion')!r} is not allowed")
         if row.get("artifact_name") != definition.get("evidence_artifact"):
             failures.append(f"{check_id}: artifact name mismatch")
@@ -301,11 +385,37 @@ def hosted_checks_section(path_value: str | None, expected_sha: str) -> dict:
             "id", "commit_sha", "workflow_run_id", "job_name", "conclusion",
             "completed_at", "artifact_name", "artifact_sha256"
         )})
-    return {"captured": True, "authoritative": not failures, "passed": not failures,
-            "expected_commit_sha": expected_sha, "failures": failures, "checks": normalized}
+
+    # Hosted verification: the local claims above are structural only. They
+    # become authoritative ONLY after the GitHub REST API confirms them for
+    # this exact commit. No token / repository / network => non-authoritative.
+    token = token if token is not None else os.environ.get("GITHUB_TOKEN", "")
+    repo = repo if repo is not None else os.environ.get("GITHUB_REPOSITORY", "")
+    github_verified = False
+    if not failures:
+        if not token or not repo:
+            failures.append(
+                "hosted verification unavailable: GITHUB_TOKEN and "
+                "GITHUB_REPOSITORY (or --github-repo) are required to verify "
+                "check evidence against the GitHub API"
+            )
+        else:
+            for check_id, definition in required.items():
+                failures.extend(_verify_hosted_check(
+                    check_id, definition, supplied[check_id],
+                    expected_sha, allowed, repo, token,
+                ))
+            github_verified = not failures
+    return {"captured": True, "authoritative": github_verified,
+            "passed": github_verified,
+            "github_verified": github_verified,
+            "repository": repo or None,
+            "expected_commit_sha": expected_sha, "failures": failures,
+            "checks": normalized}
 
 
-def build_bundle(ci_log: str | None = None, github_checks: str | None = None) -> dict:
+def build_bundle(ci_log: str | None = None, github_checks: str | None = None,
+                 github_repo: str | None = None) -> dict:
     results = {name: _run(script) for name, script in EVIDENCE_CHECKS}
     passed = sum(1 for v in results.values() if v.get("exit_code") == 0)
 
@@ -320,7 +430,8 @@ def build_bundle(ci_log: str | None = None, github_checks: str | None = None) ->
         "consent_purposes": consent_section(),
         "sdk_conformance": sdk_conformance_section(),
         "ci_check": ci_check_section(ci_log),
-        "github_checks": hosted_checks_section(github_checks, git["commit"]),
+        "github_checks": hosted_checks_section(github_checks, git["commit"],
+                                               repo=github_repo),
         "summary": {"total": len(results), "passed": passed,
                     "failed": len(results) - passed},
         "docs": [
@@ -337,12 +448,18 @@ def main() -> int:
     ap.add_argument("--ci-log", default=None,
                     help="path to a saved `make ci-check` log to summarize")
     ap.add_argument("--github-checks", default=None,
-                    help="authoritative GitHub check-run JSON for the current commit")
+                    help="claimed GitHub check-run JSON for the current commit "
+                         "(verified against the GitHub REST API before it "
+                         "counts as authoritative)")
+    ap.add_argument("--github-repo", default=None,
+                    help="owner/repo used for hosted verification "
+                         "(default: GITHUB_REPOSITORY)")
     ap.add_argument("--release-mode", action="store_true",
                     help="fail closed unless local and hosted evidence are authoritative")
     args = ap.parse_args()
 
-    bundle = build_bundle(ci_log=args.ci_log, github_checks=args.github_checks)
+    bundle = build_bundle(ci_log=args.ci_log, github_checks=args.github_checks,
+                          github_repo=args.github_repo)
     text = yaml.safe_dump(bundle, sort_keys=False, width=100)
     print(text)
     if args.out:

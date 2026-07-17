@@ -52,7 +52,14 @@ def check() -> int:
     r.require(":latest" not in terraform and '@${var.backend_image_digest}' in terraform,
               "Terraform task definitions use immutable image digests",
               "Terraform task definitions contain mutable image references")
+    r.require('resource "aws_ecs_service" "backend"' in terraform
+              and 'name            = "${var.project}-${var.environment}-backend"' in terraform,
+              "Terraform serves the api role via the -backend ECS service",
+              "Terraform api/backend ECS service naming drifted")
     workflow = (repo_root() / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
+    r.require('$([ "$role" = api ] && echo backend || echo "$role")' in workflow,
+              "workflow maps role api to the -backend ECS service",
+              "deploy workflow lost the canonical api -> backend service mapping")
     r.require(":latest" not in workflow, "workflow has no mutable latest reference", "deploy workflow uses :latest")
     r.require("|| 'production'" not in workflow and "default: production" not in workflow,
               "workflow never defaults an absent input to production",
