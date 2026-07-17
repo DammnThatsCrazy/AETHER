@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical surface-capability registry for the Unified Exploration Fabric. Each exploration surface declares which filter-field categories, temporal modes, and views it supports plus its feature switches, so the fabric can report every filter's disposition honestly instead of silently dropping it. Generated artifacts: packages/shared/surface-capabilities.ts, Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py, docs/_generated/surface-capability-table.md (via scripts/generate_platform_contracts.py).",
+  "temporalModes": ["window", "as_of", "compare", "relative"],
+  "views": ["graph", "table", "map", "timeline", "flow", "comparison"],
+  "filterDispositions": ["applied", "translated", "unsupported", "suppressed", "not_applicable"],
+  "surfaces": [
+    {
+      "surfaceId": "graph",
+      "supportedFieldCategories": ["entity", "time", "geography", "device", "graph", "risk", "campaign", "economic", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "relative"],
+      "supportedViews": ["graph", "table"],
+      "supportsFacets": true,
+      "supportsComparison": false,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "profile360",
+      "supportedFieldCategories": ["entity", "time", "geography", "device", "campaign", "economic", "risk", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "relative"],
+      "supportedViews": ["table", "timeline"],
+      "supportsFacets": false,
+      "supportsComparison": true,
+      "supportsSelectionSets": false,
+      "supportsSavedViews": false,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "campaign360",
+      "supportedFieldCategories": ["entity", "time", "geography", "campaign", "economic", "truth"],
+      "supportedTemporalModes": ["window", "compare", "relative"],
+      "supportedViews": ["table", "flow", "timeline"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "cluster360",
+      "supportedFieldCategories": ["entity", "time", "graph", "risk", "truth"],
+      "supportedTemporalModes": ["window", "as_of"],
+      "supportedViews": ["graph", "table"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": false,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "geo",
+      "supportedFieldCategories": ["entity", "time", "geography", "campaign", "risk"],
+      "supportedTemporalModes": ["window", "compare", "relative"],
+      "supportedViews": ["map", "table"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "journeys",
+      "supportedFieldCategories": ["entity", "time", "device", "campaign", "truth"],
+      "supportedTemporalModes": ["window", "relative"],
+      "supportedViews": ["flow", "table", "timeline"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "timeline",
+      "supportedFieldCategories": ["entity", "time", "device", "campaign", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "relative"],
+      "supportedViews": ["timeline", "table"],
+      "supportsFacets": false,
+      "supportsComparison": false,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": false,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "product_intelligence",
+      "supportedFieldCategories": ["entity", "time", "device", "campaign", "economic", "truth"],
+      "supportedTemporalModes": ["window", "compare", "relative"],
+      "supportedViews": ["table", "timeline", "flow"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "temporal_observatory",
+      "supportedFieldCategories": ["entity", "time", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "compare", "relative"],
+      "supportedViews": ["timeline", "table"],
+      "supportsFacets": false,
+      "supportsComparison": true,
+      "supportsSelectionSets": false,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "comparison_workbench",
+      "supportedFieldCategories": ["entity", "time", "geography", "device", "graph", "risk", "campaign", "economic", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "compare", "relative"],
+      "supportedViews": ["comparison", "table", "graph", "timeline"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    }
+  ]
+}

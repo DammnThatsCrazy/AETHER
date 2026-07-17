@@ -12,6 +12,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/context-capsule-registry.json
   packages/shared/contracts/graph-mutation-registry.json
   packages/shared/contracts/filter-field-registry.json
+  packages/shared/contracts/surface-capability-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -29,6 +30,9 @@ Generated outputs:
   packages/shared/filter-fields.ts
   Backend Architecture/aether-backend/shared/exploration/generated_fields.py
   docs/_generated/filter-field-table.md
+  packages/shared/surface-capabilities.ts
+  Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py
+  docs/_generated/surface-capability-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -1187,6 +1191,201 @@ def _summary_filter_fields(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: surface-capability
+# ---------------------------------------------------------------------------
+
+SURFACE_CAPABILITY_JSON = CONTRACTS / "surface-capability-registry.json"
+SURFACE_CAPABILITY_TS = ROOT / "packages" / "shared" / "surface-capabilities.ts"
+SURFACE_CAPABILITY_PY = BACKEND / "shared" / "exploration" / "generated_surfaces.py"
+SURFACE_CAPABILITY_MD = ROOT / "docs" / "_generated" / "surface-capability-table.md"
+
+_SURFACE_BOOL_KEYS = (
+    "supportsFacets",
+    "supportsComparison",
+    "supportsSelectionSets",
+    "supportsSavedViews",
+    "supportsExport",
+)
+
+
+def validate_surface_capabilities(reg: dict, ctx: dict) -> None:
+    for key in ("temporalModes", "views", "filterDispositions"):
+        _require_idents("surface-capability-registry", key, reg[key])
+    temporal_modes = set(reg["temporalModes"])
+    views = set(reg["views"])
+    field_categories = ctx["filter_field_categories"]
+
+    if not isinstance(reg["surfaces"], list) or not reg["surfaces"]:
+        _fail("surface-capability-registry.surfaces must be a non-empty list")
+    ids_seen: set[str] = set()
+    for surface in reg["surfaces"]:
+        sid = surface["surfaceId"]
+        if not _IDENT_RE.match(sid):
+            _fail(f"surfaceId {sid!r} is not a lower_snake identifier")
+        if sid in ids_seen:
+            _fail(f"duplicate surfaceId {sid!r}")
+        ids_seen.add(sid)
+        for key, allowed, source in (
+            ("supportedFieldCategories", field_categories, "filter-field-registry categories"),
+            ("supportedTemporalModes", temporal_modes, "temporalModes"),
+            ("supportedViews", views, "views"),
+        ):
+            values = surface[key]
+            if not isinstance(values, list) or not values or len(set(values)) != len(values):
+                _fail(f"surface {sid!r} {key} must be a non-empty unique list")
+            unknown = set(values) - allowed
+            if unknown:
+                _fail(f"surface {sid!r} {key} has values {sorted(unknown)} outside {source}")
+        for key in _SURFACE_BOOL_KEYS:
+            if not isinstance(surface[key], bool):
+                _fail(f"surface {sid!r} {key} must be a boolean")
+        unknown_keys = set(surface) - {
+            "surfaceId", "supportedFieldCategories", "supportedTemporalModes",
+            "supportedViews", *_SURFACE_BOOL_KEYS,
+        }
+        if unknown_keys:
+            _fail(f"surface {sid!r} has unknown keys {sorted(unknown_keys)}")
+
+
+def gen_surface_capabilities_ts(reg: dict) -> str:
+    surfaces = sorted(reg["surfaces"], key=lambda s: s["surfaceId"])
+    lines = _ts_header(SURFACE_CAPABILITY_JSON)
+    lines.append("import type { FilterFieldCategory } from './filter-fields';")
+    lines.append("")
+    lines.append(f"export const surfaceCapabilitiesContractVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "explorationSurfaceIds", "ExplorationSurfaceId",
+        [s["surfaceId"] for s in surfaces],
+        "Exploration surfaces registered with the fabric (sorted).",
+    )
+    lines += _ts_const_array(
+        "explorationTemporalModes", "ExplorationTemporalMode", reg["temporalModes"],
+        "Temporal query modes a surface may support.",
+    )
+    lines += _ts_const_array(
+        "explorationViews", "ExplorationView", reg["views"],
+        "Render views a surface may support.",
+    )
+    lines += _ts_const_array(
+        "filterDispositions", "FilterDisposition", reg["filterDispositions"],
+        "What the fabric did with one filter on one surface — never silently dropped.",
+    )
+    lines.append("/** Declared capabilities of one exploration surface. */")
+    lines.append("export interface SurfaceCapability {")
+    lines.append("  surfaceId: ExplorationSurfaceId;")
+    lines.append("  supportedFieldCategories: readonly FilterFieldCategory[];")
+    lines.append("  supportedTemporalModes: readonly ExplorationTemporalMode[];")
+    lines.append("  supportedViews: readonly ExplorationView[];")
+    lines.append("  supportsFacets: boolean;")
+    lines.append("  supportsComparison: boolean;")
+    lines.append("  supportsSelectionSets: boolean;")
+    lines.append("  supportsSavedViews: boolean;")
+    lines.append("  supportsExport: boolean;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export const surfaceCapabilities: Record<ExplorationSurfaceId, SurfaceCapability> = {")
+    for surface in surfaces:
+        lines.append(f"  {surface['surfaceId']}: {{")
+        lines.append(f"    surfaceId: '{surface['surfaceId']}',")
+        for key in ("supportedFieldCategories", "supportedTemporalModes", "supportedViews"):
+            values = ", ".join(f"'{v}'" for v in surface[key])
+            lines.append(f"    {key}: [{values}],")
+        for key in _SURFACE_BOOL_KEYS:
+            lines.append(f"    {key}: {str(surface[key]).lower()},")
+        lines.append("  },")
+    lines.append("};")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_surface_capabilities_py(reg: dict) -> str:
+    surfaces = sorted(reg["surfaces"], key=lambda s: s["surfaceId"])
+    lines = _py_header(
+        SURFACE_CAPABILITY_JSON,
+        "Generated surface-capability registry (surfaces, temporal modes, views, dispositions).",
+    )
+    lines.append(f'SURFACE_CAPABILITIES_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("EXPLORATION_SURFACE_IDS", [s["surfaceId"] for s in surfaces],
+                       "Exploration surfaces registered with the fabric (sorted).")
+    lines += _py_tuple("EXPLORATION_TEMPORAL_MODES", reg["temporalModes"],
+                       "Temporal query modes a surface may support.")
+    lines += _py_tuple("EXPLORATION_VIEWS", reg["views"],
+                       "Render views a surface may support.")
+    lines += _py_tuple("FILTER_DISPOSITIONS", reg["filterDispositions"],
+                       "What the fabric did with one filter on one surface — never silently dropped.")
+    lines.append("# Declared capabilities per surface (sorted by surface id).")
+    lines.append("SURFACE_CAPABILITIES: dict[str, dict] = {")
+    for surface in surfaces:
+        lines.append(f'    "{surface["surfaceId"]}": {{')
+        for json_key, py_key in (
+            ("supportedFieldCategories", "supported_field_categories"),
+            ("supportedTemporalModes", "supported_temporal_modes"),
+            ("supportedViews", "supported_views"),
+        ):
+            values = ", ".join(f'"{v}"' for v in surface[json_key])
+            if len(surface[json_key]) == 1:
+                values += ","
+            lines.append(f'        "{py_key}": ({values}),')
+        for json_key, py_key in (
+            ("supportsFacets", "supports_facets"),
+            ("supportsComparison", "supports_comparison"),
+            ("supportsSelectionSets", "supports_selection_sets"),
+            ("supportsSavedViews", "supports_saved_views"),
+            ("supportsExport", "supports_export"),
+        ):
+            lines.append(f'        "{py_key}": {surface[json_key]},')
+        lines.append("    },")
+    lines.append("}")
+    lines.append("")
+    lines.append("__all__ = [")
+    lines.append('    "SURFACE_CAPABILITIES_CONTRACT_VERSION",')
+    lines.append('    "EXPLORATION_SURFACE_IDS",')
+    lines.append('    "EXPLORATION_TEMPORAL_MODES",')
+    lines.append('    "EXPLORATION_VIEWS",')
+    lines.append('    "FILTER_DISPOSITIONS",')
+    lines.append('    "SURFACE_CAPABILITIES",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_surface_capabilities_md(reg: dict) -> str:
+    surfaces = sorted(reg["surfaces"], key=lambda s: s["surfaceId"])
+    lines = _md_header(SURFACE_CAPABILITY_JSON)
+    lines.append("# Surface Capability Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines += _md_vocab_section("Temporal modes", reg["temporalModes"])
+    lines += _md_vocab_section("Views", reg["views"])
+    lines += _md_vocab_section("Filter dispositions", reg["filterDispositions"])
+    lines.append("## Surfaces")
+    lines.append("")
+    lines.append(
+        "| Surface | Field categories | Temporal modes | Views | Facets | Comparison | "
+        "Selection sets | Saved views | Export |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|---|")
+    for surface in surfaces:
+        cats = ", ".join(f"`{c}`" for c in surface["supportedFieldCategories"])
+        modes = ", ".join(f"`{m}`" for m in surface["supportedTemporalModes"])
+        views = ", ".join(f"`{v}`" for v in surface["supportedViews"])
+        flags = " | ".join("yes" if surface[k] else "no" for k in _SURFACE_BOOL_KEYS)
+        lines.append(f"| `{surface['surfaceId']}` | {cats} | {modes} | {views} | {flags} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_surface_capabilities(reg: dict) -> str:
+    return (
+        f"surface-capability v{reg['contractVersion']} — "
+        f"{len(reg['surfaces'])} surfaces, {len(reg['filterDispositions'])} filter dispositions"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -1234,6 +1433,16 @@ REGISTRIES: tuple = (
         ),
         _summary_filter_fields,
     ),
+    (
+        SURFACE_CAPABILITY_JSON,
+        validate_surface_capabilities,
+        (
+            (SURFACE_CAPABILITY_TS, gen_surface_capabilities_ts),
+            (SURFACE_CAPABILITY_PY, gen_surface_capabilities_py),
+            (SURFACE_CAPABILITY_MD, gen_surface_capabilities_md),
+        ),
+        _summary_surface_capabilities,
+    ),
 )
 
 
@@ -1241,10 +1450,12 @@ def _load_context() -> dict:
     """Cross-registry facts used by validators (never mutated by emitters)."""
     event_reg = json.loads(EVENT_REGISTRY_JSON.read_text())
     consent_reg = json.loads(CONSENT_REGISTRY_JSON.read_text())
+    filter_reg = json.loads(FILTER_FIELD_JSON.read_text())
     return {
         "event_families": {e["family"] for e in event_reg["events"]},
         "consent_purposes": {p["key"] for p in consent_reg["purposes"]},
         "filter_operators": _ts_filter_operators(),
+        "filter_field_categories": set(filter_reg["categories"]),
     }
 
 

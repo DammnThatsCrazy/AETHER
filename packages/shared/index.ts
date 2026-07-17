@@ -72,3 +72,4 @@ export * from './interaction-contract';
 export * from './context-capsule';
 export * from './graph-mutation';
 export * from './filter-fields';
+export * from './surface-capabilities';

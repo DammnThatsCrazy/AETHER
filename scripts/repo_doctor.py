@@ -252,6 +252,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py",
                 "packages/shared/filter-fields.ts",
                 "Backend Architecture/aether-backend/shared/exploration/generated_fields.py",
+                "packages/shared/surface-capabilities.ts",
+                "Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py",
             ],
             name="Unified-platform generated contracts — no uncommitted diff",
             results=results,
