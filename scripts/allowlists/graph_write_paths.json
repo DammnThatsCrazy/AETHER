@@ -8,7 +8,6 @@
   "Backend Architecture/aether-backend/services/agentic_observability/outbox_worker.py",
   "Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py",
   "Backend Architecture/aether-backend/services/commerce/service.py",
-  "Backend Architecture/aether-backend/services/comms/graph_projection.py",
   "Backend Architecture/aether-backend/services/delegation/routes.py",
   "Backend Architecture/aether-backend/services/entities/routes.py",
   "Backend Architecture/aether-backend/services/flow_trace/routes.py",
@@ -23,7 +22,6 @@
   "Backend Architecture/aether-backend/services/profile360_workers/workers.py",
   "Backend Architecture/aether-backend/services/protocol_observability/routes.py",
   "Backend Architecture/aether-backend/services/resolution/repository.py",
-  "Backend Architecture/aether-backend/services/silver/projectors/silver_graph_projector.py",
   "Backend Architecture/aether-backend/services/web3/classifier.py",
   "Backend Architecture/aether-backend/services/x402/economic_graph.py",
   "Backend Architecture/aether-backend/services/x402/economic_mutations.py"
