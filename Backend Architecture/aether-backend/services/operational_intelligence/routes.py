@@ -479,25 +479,40 @@ _OVERLAY_SCORE_KEY: dict[str, str] = {
 
 
 async def _build_overlays(
-    overlay_ids: list[str], tenant_id: str
+    overlay_ids: list[str],
+    tenant_id: str,
+    node_count: int = 0,
+    edge_count: int = 0,
 ) -> tuple[list[GraphOverlay], dict[str, float]]:
     """Return (GraphOverlay list, {overlay_id: score}) with real quality scores.
 
     Scores are returned separately and surfaced in ExplainabilityMetadata.features
     so they survive Pydantic serialization (GraphOverlay has no scores field).
+    Every overlay carries an explicit status: ``computed`` when the tenant graph
+    has records, ``no_data`` otherwise — never a placeholder.
     """
     overlays = []
     scores: dict[str, float] = {}
+    has_records = bool(node_count or edge_count)
     for oid in overlay_ids:
         dims = _OVERLAY_DIMENSIONS.get(oid, ["operational"])
         score_key = _OVERLAY_SCORE_KEY.get(oid, "graph")
         report = intelligence_quality_service.dimension_report(score_key, tenant_id)
         score_value = float(report.get("quality_score", 0.8))
         scores[oid] = score_value
+        properties: dict[str, Any] = {
+            "status": "computed" if has_records else "no_data",
+            "node_count": node_count,
+            "edge_count": edge_count,
+            "computed_at": _utc_now(),
+        }
+        if not has_records:
+            properties["reason"] = "no graph records found for tenant/time window"
         overlays.append(GraphOverlay(
             id=oid,
             name=oid.replace("_", " ").title(),
             dimensions=dims,  # type: ignore[arg-type]
+            properties=properties,
         ))
     return overlays, scores
 
@@ -973,7 +988,12 @@ async def graph_overlay(
     overlays = None
     overlay_scores: dict[str, float] = {}
     if body.overlays:
-        overlays, overlay_scores = await _build_overlays(body.overlays, body.tenantId)
+        overlays, overlay_scores = await _build_overlays(
+            body.overlays,
+            body.tenantId,
+            node_count=len(result.nodes),
+            edge_count=len(result.edges),
+        )
 
     # Augment overlay_scores with graph-level quality + contamination metrics
     graph_report = intelligence_quality_service.dimension_report("graph", body.tenantId)
@@ -989,12 +1009,18 @@ async def graph_overlay(
         "contamination_count": float(contamination_count),
     }
 
+    status_note = (
+        "Overlay computed from graph records"
+        if (result.nodes or result.edges)
+        else "no graph records found for tenant/time window"
+    )
     return GraphResult(
         nodes=[_vertex_to_node(v) for v in result.nodes],
         edges=[_edge_to_graph_edge(e) for e in result.edges],
         overlays=overlays,
         explainability=ExplainabilityMetadata(
             summary=(
+                f"{status_note} | "
                 f"Graph quality score: {graph_score:.3f} | "
                 f"Open drift events: {len(open_drift)} | "
                 f"Open contamination events: {contamination_count}"
