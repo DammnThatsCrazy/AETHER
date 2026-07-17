@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-import config.settings as settings_module
-from config.settings import TemporalObservatoryConfig
 from repositories.graph_mutation_ledger import (
     GraphMutationLedgerRepository,
     reset_graph_ledger_memory,
@@ -42,10 +40,16 @@ def _reset_ledger():
 @pytest.fixture
 def set_mode(monkeypatch):
     def _set(mode: str) -> None:
+        # Resolve config.settings at CALL time: other suites (e.g.
+        # tests/graph) evict backend modules from sys.modules, so a
+        # collection-time module reference can go stale. The gateway reads
+        # the mode from whatever module is live in sys.modules — patch that.
+        import config.settings as settings_module
+
         monkeypatch.setattr(
             settings_module.settings,
             "temporal_observatory",
-            TemporalObservatoryConfig(mutation_gateway_mode=mode),
+            settings_module.TemporalObservatoryConfig(mutation_gateway_mode=mode),
         )
 
     return _set
