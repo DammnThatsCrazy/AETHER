@@ -70,8 +70,5 @@
   "frontend/kyber/src/pages/noesis/fleet-graph-page.tsx",
   "frontend/kyber/src/pages/payment-rails/payment-rails-page.tsx",
   "frontend/kyber/src/pages/rewards/rewards-drilldown-page.tsx",
-  "frontend/kyber/src/pages/tenants/tenants-page.tsx",
-  "frontend/shared/src/components/evidence-drawer.tsx",
-  "frontend/shared/src/components/freshness-indicator.tsx",
-  "frontend/shared/src/components/usage-bar.tsx"
+  "frontend/kyber/src/pages/tenants/tenants-page.tsx"
 ]

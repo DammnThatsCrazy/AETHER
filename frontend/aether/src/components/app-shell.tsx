@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { cn, Badge, Button, GlyphIcon, useTheme } from '@aether/ui';
+import { cn, Badge, Button, GlyphIcon, TimeLensControl, useTheme } from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth } from '@aether-app/features/auth';
 import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
@@ -115,6 +115,7 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* Footer */}
         <div className="px-2 py-3 border-t border-border-default space-y-1">
+          <TimeLensControl className="px-3 py-1 flex-wrap" />
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors"

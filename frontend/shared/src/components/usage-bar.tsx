@@ -1,3 +1,5 @@
+import { formatCount } from '../format/number';
+import { useTimeContext } from '../time/time-provider';
 import { cn } from '../utils/cn';
 
 interface UsageBarProps {
@@ -23,6 +25,7 @@ export function UsageBar({
   onDowngrade,
   className,
 }: UsageBarProps) {
+  const context = useTimeContext();
   const pct = total > 0 ? used / total : 0;
   const filledCount = Math.min(20, Math.round(pct * 20));
   const bar = '█'.repeat(filledCount) + '░'.repeat(20 - filledCount);
@@ -41,13 +44,13 @@ export function UsageBar({
       </span>
       <div className="flex items-center justify-between gap-4">
         <span className="text-text-muted">
-          {used.toLocaleString()} / {total.toLocaleString()} {unit}
+          {formatCount(used, context)} / {formatCount(total, context)} {unit}
         </span>
         {showRemaining && (
           <span className={isOver ? 'text-danger' : 'text-text-muted'}>
             {isOver
-              ? `${(used - total).toLocaleString()} ${unit} over limit`
-              : `${(total - used).toLocaleString()} remaining`}
+              ? `${formatCount(used - total, context)} ${unit} over limit`
+              : `${formatCount(total - used, context)} remaining`}
           </span>
         )}
       </div>

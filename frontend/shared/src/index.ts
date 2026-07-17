@@ -6,6 +6,7 @@ export {
   useTime,
   useTimeContext,
   resolveViewerContext,
+  useNow,
   formatInstant,
   formatDate,
   formatTime,
@@ -26,6 +27,11 @@ export type {
 
 export { TimeWindowSelector } from './components/time-window-selector';
 export type { TimeWindow } from './components/time-window-selector';
+export { TimeLensControl } from './components/time-lens-control';
+
+// Locale-explicit number formatting (same attribution rules as time).
+export { formatCount, formatDecimal, formatCurrency } from './format/number';
+export type { LocaleContext, FormatDecimalOptions } from './format/number';
 export { FreshnessIndicator } from './components/freshness-indicator';
 export { EvidenceDrawer } from './components/evidence-drawer';
 export type { EvidenceRef } from './components/evidence-drawer';

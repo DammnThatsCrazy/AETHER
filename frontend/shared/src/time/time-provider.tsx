@@ -143,8 +143,23 @@ export function useTime(): TimeContextValue {
   return value;
 }
 
-/** The active rendering context for the current lens. */
+/**
+ * The active rendering context for the current lens.
+ *
+ * Outside a <TimeProvider> (isolated component tests, storybook) this
+ * resolves exactly as an unconfigured provider would — device zone/locale,
+ * else UTC — via the same `resolveViewerContext` path, so rendering stays
+ * attributable. The apps always mount <TimeProvider> at the root; only
+ * `useTime()` (lens switching) hard-requires it.
+ */
 export function useTimeContext(eventTimeZone?: string | null): TimeContext {
-  const { lens, contextFor } = useTime();
-  return contextFor(lens, eventTimeZone);
+  const value = useContext(TimeReactContext);
+  if (!value) {
+    const { context } = resolveViewerContext(undefined, {
+      zone: deviceZone(),
+      locale: deviceLocale(),
+    });
+    return eventTimeZone ? { ...context, timeZone: eventTimeZone, lens: 'event' } : context;
+  }
+  return value.contextFor(value.lens, eventTimeZone);
 }
