@@ -22,3 +22,13 @@ output "fanout_topic_arn" {
   description = "ARN of the SNS fanout topic"
   value       = aws_sns_topic.fanout.arn
 }
+
+output "role_queue_urls" {
+  description = "Consumer role -> dedicated SNS-subscribed queue URL"
+  value       = { for role, queue in aws_sqs_queue.role : role => queue.url }
+}
+
+output "role_queue_arns" {
+  description = "Consumer role -> dedicated SNS-subscribed queue ARN"
+  value       = { for role, queue in aws_sqs_queue.role : role => queue.arn }
+}
