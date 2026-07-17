@@ -35,6 +35,19 @@ locals {
   graph_backend = local.enable_neptune ? "neptune" : "postgres"
   cache_backend = local.enable_elasticache ? "redis" : "dynamodb"
   event_broker  = local.enable_msk ? "kafka" : "sns_sqs"
+
+  # Per-role runtime sizing from the canonical deployment matrix, so
+  # production-scale / enterprise-isolated actually scale. The api role is
+  # excluded: the -backend service is sized by the ecs_backend_* variables.
+  runtime_deployment = yamldecode(file("${path.module}/../../../config/runtime_deployment.yaml"))
+  runtime_role_settings = {
+    for role, cfg in local.runtime_deployment.profiles[var.deployment_profile].roles :
+    role => {
+      cpu           = cfg.cpu
+      memory        = cfg.memory
+      desired_count = cfg.desired_count
+    } if role != "api"
+  }
 }
 
 # ----------------------------------------------------------------------------

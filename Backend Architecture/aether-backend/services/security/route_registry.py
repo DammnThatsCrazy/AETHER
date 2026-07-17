@@ -119,6 +119,48 @@ def is_public_path(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES)
 
 
+@lru_cache(maxsize=4)
+def founding_excluded_domains(active_profile: str) -> frozenset[str]:
+    """Excluded route domains for the founding-tenant release surface.
+
+    ``config/founding_tenant_release.yaml`` narrows the release surface by
+    domain. The manifest is loaded lazily on first use and ONLY applies when
+    the active deployment profile matches the profile the manifest declares —
+    every other profile resolves to an empty frozenset (no startup cost, and
+    the cached lookup is free per request).
+    """
+    try:
+        here = Path(__file__).resolve()
+        manifest_path = None
+        for parent in here.parents:
+            candidate = parent / "config" / "founding_tenant_release.yaml"
+            if candidate.exists():
+                manifest_path = candidate
+                break
+        if manifest_path is None:
+            return frozenset()
+        with manifest_path.open("r", encoding="utf-8") as fh:
+            manifest = yaml.safe_load(fh) or {}
+        if str(manifest.get("profile", "")) != active_profile:
+            return frozenset()
+        surface = manifest.get("release_surface") or {}
+        return frozenset(str(d) for d in (surface.get("excluded_domains") or []))
+    except Exception:  # pragma: no cover - malformed manifest: registry stays authoritative
+        return frozenset()
+
+
+def founding_domain_excluded(domain: str, active_profile: str) -> bool:
+    """True when the founding-tenant manifest excludes ``domain``.
+
+    Plural route domains (``stablecoins``) match their singular manifest entry
+    (``stablecoin``); nothing matches when the founding profile is not active.
+    """
+    excluded = founding_excluded_domains(active_profile)
+    if not excluded:
+        return False
+    return domain in excluded or (domain.endswith("s") and domain[:-1] in excluded)
+
+
 def classify(path: str) -> Optional[RoutePolicy]:
     """Return the RoutePolicy for a path, or None if its prefix is unclassified."""
     cat = _catalog()

@@ -123,11 +123,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "role",
+        nargs="?",
+        default=None,
         choices=sorted(ALL_ROLES),
-        help="Which runtime role to boot (api | all | a worker role).",
+        help=(
+            "Which runtime role to boot (api | all | a worker role). "
+            "When omitted, falls back to the AETHER_ROLE environment variable."
+        ),
     )
     args = parser.parse_args(argv)
-    return run(args.role)
+    # Explicit positional wins; AETHER_ROLE is the deployment-env fallback so
+    # task/compose definitions that only export the variable still boot the
+    # role they declare. run() re-validates either source.
+    role = args.role or os.environ.get("AETHER_ROLE", "")
+    if not role:
+        parser.error("role argument required (or set AETHER_ROLE)")
+    return run(role)
 
 
 if __name__ == "__main__":  # pragma: no cover — process entrypoint

@@ -294,3 +294,93 @@ class TestLegacyPreserved:
                 FakeRequest(),
             ))
             assert "api_key" in resp["data"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Tenant status rehydration — deactivated tenants cannot ride old credentials
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class _PolicyRequest:
+    """Minimal request shape for _evaluate_route_policy."""
+
+    class _State:
+        request_id = "req-test"
+
+    def __init__(self):
+        self.headers = {}
+        self.method = "GET"
+        self.state = self._State()
+
+
+class TestTenantStatusRehydration:
+    """Trust-plane records carry no tenant_status; the durable tenant record
+    (the row deactivate_tenant flips) must be authoritative, failing closed."""
+
+    def test_deactivated_tenant_existing_session_is_rejected(self):
+        with trust_flags(**_ON):
+            sessions = importlib.import_module("services.auth.sessions")
+            repos = importlib.import_module("repositories.repos")
+            mw = importlib.import_module("middleware.middleware")
+
+            _run(repos.AdminRepository().insert(
+                "t-deact", {"name": "T", "contact_email": "d@x.io", "status": "active"}
+            ))
+            issue = _run(sessions.SessionService().create_session("t-deact", "p-1"))
+
+            # Active tenant: session resolves active and passes the state check.
+            ctx = _run(mw._resolve_session_token(issue.token))
+            assert ctx.tenant_status == "active"
+            assert mw._evaluate_route_policy(_PolicyRequest(), "/v1/batch", ctx) is None
+
+            # Deactivate the tenant (same durable record deactivate_tenant flips).
+            _run(repos.AdminRepository().update("t-deact", {"status": "inactive"}))
+
+            ctx = _run(mw._resolve_session_token(issue.token))
+            assert ctx.tenant_status == "inactive"
+            denial = mw._evaluate_route_policy(_PolicyRequest(), "/v1/batch", ctx)
+            assert denial is not None
+            assert "ROUTE_POLICY_TENANT_INACTIVE" in str(denial.to_dict())
+
+    def test_missing_tenant_record_fails_closed(self):
+        with trust_flags(**_ON):
+            sessions = importlib.import_module("services.auth.sessions")
+            mw = importlib.import_module("middleware.middleware")
+
+            issue = _run(sessions.SessionService().create_session("t-ghost", "p-1"))
+            ctx = _run(mw._resolve_session_token(issue.token))
+            assert ctx.tenant_status == "inactive"
+            denial = mw._evaluate_route_policy(_PolicyRequest(), "/v1/batch", ctx)
+            assert denial is not None
+
+    def test_service_credential_rehydrates_tenant_status(self):
+        with trust_flags(**_ON):
+            sessions = importlib.import_module("services.auth.sessions")
+            repos = importlib.import_module("repositories.repos")
+            mw = importlib.import_module("middleware.middleware")
+
+            _run(repos.AdminRepository().insert(
+                "t-svc", {"name": "S", "contact_email": "s@x.io", "status": "active"}
+            ))
+            svc = sessions.ServiceCredentialService()
+            acct = _run(svc.create_service_account("t-svc", "ci"))
+            raw, _cred = _run(svc.issue_credential(
+                "t-svc", acct["id"], purpose="ci", permissions=["ingest", "read"]
+            ))
+            ctx = _run(mw._resolve_service_credential(raw))
+            assert ctx is not None and ctx.tenant_status == "active"
+
+            _run(repos.AdminRepository().update("t-svc", {"status": "inactive"}))
+            ctx = _run(mw._resolve_service_credential(raw))
+            assert ctx is not None and ctx.tenant_status == "inactive"
+
+    def test_carried_tenant_status_is_used_as_fast_path(self):
+        with trust_flags(**_ON):
+            mw = importlib.import_module("middleware.middleware")
+            # A record that carries a status uses it directly (no durable lookup).
+            assert _run(mw._current_tenant_status(
+                {"tenant_id": "t-any", "tenant_status": "active"}
+            )) == "active"
+            assert _run(mw._current_tenant_status(
+                {"tenant_id": "t-any", "tenant_status": "suspended"}
+            )) == "suspended"

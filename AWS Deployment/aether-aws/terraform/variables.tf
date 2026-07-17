@@ -13,10 +13,11 @@ variable "deployment_profile" {
   }
 }
 
+# No default: every plan must pin the exact digest approved by the release
+# manifest. terraform-promote.yml passes these as explicit -var inputs.
 variable "backend_image_digest" {
   type        = string
   description = "Immutable backend image digest selected by the release manifest"
-  default     = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   validation {
     condition     = can(regex("^sha256:[0-9a-f]{64}$", var.backend_image_digest))
     error_message = "backend_image_digest must be an immutable sha256 digest."
@@ -26,7 +27,6 @@ variable "backend_image_digest" {
 variable "ml_image_digest" {
   type        = string
   description = "Immutable optional ML serving image digest selected by the release manifest"
-  default     = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   validation {
     condition     = can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
     error_message = "ml_image_digest must be an immutable sha256 digest."

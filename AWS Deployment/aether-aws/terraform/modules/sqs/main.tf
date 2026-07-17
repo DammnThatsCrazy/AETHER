@@ -98,3 +98,83 @@ resource "aws_sqs_queue_policy" "events" {
     ]
   })
 }
+
+# --------------------------------------------------------------------------
+# Per-consumer-role queues
+#
+# One shared queue would let consumer roles steal (and delete) each other's
+# events. Each consumer role from the ConsumerSpec registry
+# (Backend Architecture/aether-backend/services/runtime/consumer_specs.py)
+# therefore gets its own SNS-subscribed queue.
+#
+# Known limitation: the producer publishes no SNS message attributes, so no
+# filter policies are possible — every role queue receives every event and each
+# role's canonical handler group processes only the topics it subscribes to.
+# --------------------------------------------------------------------------
+
+resource "aws_sqs_queue" "role_dlq" {
+  for_each                   = var.consumer_role_queues
+  name                       = "${var.project}-${var.environment}-events-${each.key}-dlq"
+  message_retention_seconds  = 1209600 # 14 days
+  visibility_timeout_seconds = 30
+
+  tags = {
+    Name = "${var.project}-${var.environment}-events-${each.key}-dlq"
+    Role = each.key
+  }
+}
+
+resource "aws_sqs_queue" "role" {
+  for_each                   = var.consumer_role_queues
+  name                       = "${var.project}-${var.environment}-events-${each.key}"
+  visibility_timeout_seconds = var.visibility_timeout_seconds
+  message_retention_seconds  = var.message_retention_seconds
+  receive_wait_time_seconds  = 20 # long-poll to reduce empty receives
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.role_dlq[each.key].arn
+    maxReceiveCount     = var.max_receive_count
+  })
+
+  tags = {
+    Name          = "${var.project}-${var.environment}-events-${each.key}"
+    Role          = each.key
+    ConsumerGroup = each.value
+  }
+}
+
+resource "aws_sns_topic_subscription" "role" {
+  for_each  = var.consumer_role_queues
+  topic_arn = aws_sns_topic.fanout.arn
+  protocol  = "sqs"
+  endpoint  = aws_sqs_queue.role[each.key].arn
+
+  # Unwrap the SNS envelope so consumers see the original message body.
+  # No filter_policy: SNS publishes carry no message attributes today.
+  raw_message_delivery = true
+}
+
+resource "aws_sqs_queue_policy" "role" {
+  for_each  = var.consumer_role_queues
+  queue_url = aws_sqs_queue.role[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowSNSPublish"
+        Effect = "Allow"
+        Principal = {
+          Service = "sns.amazonaws.com"
+        }
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.role[each.key].arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_sns_topic.fanout.arn
+          }
+        }
+      },
+    ]
+  })
+}

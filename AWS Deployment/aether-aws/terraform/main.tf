@@ -231,6 +231,10 @@ module "ecs" {
   # Old MSK/ElastiCache vars left wired so rollback is a single variable swap.
   sqs_queue_url            = module.sqs.queue_url
   sqs_queue_arn            = module.sqs.queue_arn
+  sqs_role_queue_urls      = module.sqs.role_queue_urls
+  sqs_role_queue_arns      = module.sqs.role_queue_arns
+  sns_topic_arn            = module.sqs.fanout_topic_arn
+  runtime_roles            = local.runtime_role_settings
   dynamodb_cache_table     = module.dynamodb_cache.table_name
   dynamodb_cache_table_arn = module.dynamodb_cache.table_arn
   # kafka/redis kept but no longer used by the task definition when sqs/dynamo are set
@@ -312,4 +316,59 @@ module "auth0" {
   kyber_callback_urls  = ["${var.kyber_app_url}/callback"]
   kyber_logout_urls    = [var.kyber_app_url]
   kyber_web_origins    = [var.kyber_app_url]
+}
+
+# ---------------------------------------------------------------------------
+# 10. Static SPA origins + SSM parameters
+# Private S3 origins for the immutable SPA bundles. The deploy workflow
+# resolves the bucket names from /aether/<env>/AETHER_STATIC_BUCKET and
+# /aether/<env>/KYBER_STATIC_BUCKET before publishing.
+# ---------------------------------------------------------------------------
+
+locals {
+  static_frontends = {
+    aether = "AETHER_STATIC_BUCKET"
+    kyber  = "KYBER_STATIC_BUCKET"
+  }
+}
+
+resource "aws_s3_bucket" "static_frontend" {
+  for_each = local.static_frontends
+  bucket   = lower("${var.project}-${var.environment}-${each.key}-static")
+
+  tags = {
+    Name    = lower("${var.project}-${var.environment}-${each.key}-static")
+    Purpose = "Immutable static SPA origin (${each.key})"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "static_frontend" {
+  for_each                = local.static_frontends
+  bucket                  = aws_s3_bucket.static_frontend[each.key].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "static_frontend" {
+  for_each = local.static_frontends
+  bucket   = aws_s3_bucket.static_frontend[each.key].id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_ssm_parameter" "static_frontend_bucket" {
+  for_each = local.static_frontends
+  name     = "/aether/${var.environment}/${each.value}"
+  type     = "String"
+  value    = aws_s3_bucket.static_frontend[each.key].bucket
+
+  tags = {
+    Purpose = "Static SPA origin bucket name consumed by the deploy workflow"
+  }
 }

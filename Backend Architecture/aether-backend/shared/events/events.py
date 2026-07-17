@@ -60,6 +60,10 @@ def _sqs_queue_url() -> str:
     return os.getenv("SQS_QUEUE_URL", "")
 
 
+def _sns_topic_arn() -> str:
+    return os.getenv("SNS_TOPIC_ARN", "")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # EVENT TOPICS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -521,6 +525,8 @@ class EventProducer:
         self._kafka_producer: Optional[Any] = None
         self._sqs_client: Optional[Any] = None
         self._sqs_queue_url: str = ""
+        self._sns_client: Optional[Any] = None
+        self._sns_topic_arn: str = ""
         self._mode = "uninitialized"
 
     async def connect(self) -> None:
@@ -531,8 +537,22 @@ class EventProducer:
                 None, lambda: _boto3_events.client("sqs")  # type: ignore[union-attr]
             )
             self._sqs_queue_url = _sqs_queue_url()
+            if _sns_topic_arn():
+                # Fanout: when SNS_TOPIC_ARN is set, publish through the SNS
+                # topic so every per-role consumer queue (subscribed in
+                # Terraform modules/sqs) receives the event. A direct SQS send
+                # would land in this process's own queue only and starve every
+                # other consumer role.
+                self._sns_client = await loop.run_in_executor(
+                    None, lambda: _boto3_events.client("sns")  # type: ignore[union-attr]
+                )
+                self._sns_topic_arn = _sns_topic_arn()
             self._mode = "sqs"
-            logger.info(f"EventProducer connected (SQS: {self._sqs_queue_url})")
+            logger.info(
+                "EventProducer connected (SQS: %s%s)",
+                self._sqs_queue_url,
+                f", SNS fanout: {self._sns_topic_arn}" if self._sns_topic_arn else "",
+            )
         elif bootstrap and KAFKA_AVAILABLE:
             try:
                 self._kafka_producer = AIOKafkaProducer(
@@ -573,6 +593,7 @@ class EventProducer:
             await self._kafka_producer.stop()
             self._kafka_producer = None
         self._sqs_client = None
+        self._sns_client = None
         self._connected = False
         logger.info("EventProducer closed")
 
@@ -583,7 +604,20 @@ class EventProducer:
 
         for attempt in range(self.MAX_RETRIES):
             try:
-                if self._sqs_client:
+                if self._sns_client:
+                    # SNS fanout: one publish reaches every subscribed
+                    # per-role consumer queue (raw message delivery keeps the
+                    # body identical to a direct SQS send).
+                    body = event.serialize()
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        None,
+                        lambda: self._sns_client.publish(  # type: ignore[union-attr]
+                            TopicArn=self._sns_topic_arn,
+                            Message=body,
+                        ),
+                    )
+                elif self._sqs_client:
                     body = event.serialize()
                     loop = asyncio.get_event_loop()
                     is_fifo = self._sqs_queue_url.endswith(".fifo")

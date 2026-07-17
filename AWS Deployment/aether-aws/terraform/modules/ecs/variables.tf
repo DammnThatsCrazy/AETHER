@@ -38,14 +38,19 @@ variable "backend_image_digest" {
 }
 
 variable "runtime_roles" {
-  type        = set(string)
-  description = "Dedicated non-API runtime roles. The local-only role all is forbidden."
-  default = [
-    "outbox-relay", "stream-worker", "identity-worker", "graph-writer",
-    "measurement-worker", "materializer", "maintenance"
-  ]
+  type = map(object({
+    cpu           = number
+    memory        = number
+    desired_count = number
+  }))
+  description = <<-EOT
+    Dedicated non-API runtime roles with per-role sizing, derived from the
+    selected profile in config/runtime_deployment.yaml (see root profiles.tf).
+    The api role is served by the -backend service; the local-only role all is
+    forbidden.
+  EOT
   validation {
-    condition     = !contains(var.runtime_roles, "api") && !contains(var.runtime_roles, "all")
+    condition     = !contains(keys(var.runtime_roles), "api") && !contains(keys(var.runtime_roles), "all")
     error_message = "runtime_roles must contain dedicated workers only; api/all are forbidden."
   }
 }
@@ -172,6 +177,24 @@ variable "dynamodb_cache_table" {
 variable "sqs_queue_arn" {
   type        = string
   description = "SQS events queue ARN (used for IAM policy scoping; empty string = no SQS permissions)"
+  default     = ""
+}
+
+variable "sqs_role_queue_urls" {
+  type        = map(string)
+  description = "Consumer role -> dedicated SNS-subscribed queue URL. Consumer roles receive their own queue; other roles fall back to the shared events queue."
+  default     = {}
+}
+
+variable "sqs_role_queue_arns" {
+  type        = map(string)
+  description = "Consumer role -> dedicated queue ARN (IAM policy scoping)"
+  default     = {}
+}
+
+variable "sns_topic_arn" {
+  type        = string
+  description = "SNS fanout topic ARN. When set with the SQS broker, producers publish to SNS so every per-role queue receives the event (empty string = direct SQS publish)."
   default     = ""
 }
 

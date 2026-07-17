@@ -14,6 +14,12 @@ from typing import Optional
 class Environment(str, Enum):
     LOCAL = "local"
     DEV = "dev"
+    # Hermetic CI/compose environment (deploy/integration/*): production-shaped
+    # strictness — non-local fail-closed startup checks apply and explicit
+    # integration-only secrets/backends must be provided — but never a deploy
+    # target, so staging/production-only gates (e.g. mandatory route-policy
+    # enforcement, strict worker-start abort) do not apply.
+    INTEGRATION = "integration"
     STAGING = "staging"
     PRODUCTION = "production"
 
@@ -1199,7 +1205,10 @@ class Settings:
 
         # Route policy is a runtime boundary, not just a registry coverage
         # check.  Staging/production may never boot in observe-only mode.
-        if _is_non_local and not (
+        # Dev/integration keep explicit flag control: default dev configs run
+        # observe-only, so the mandatory check applies to deploy targets only.
+        _is_deploy_target = self.env in (Environment.STAGING, Environment.PRODUCTION)
+        if _is_deploy_target and not (
             self.route_registry.policy_enforcement_enabled
             and self.route_registry.route_registry_enforced
             and self.route_registry.kyber_operator_gate_enforced
@@ -1362,6 +1371,7 @@ class Settings:
         return {
             Environment.LOCAL: "DEBUG",
             Environment.DEV: "DEBUG",
+            Environment.INTEGRATION: "INFO",
             Environment.STAGING: "INFO",
             Environment.PRODUCTION: "WARNING",
         }.get(self.env, "INFO")

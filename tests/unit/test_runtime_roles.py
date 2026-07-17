@@ -286,3 +286,89 @@ def test_run_role_worker_dispatches_to_worker_loop(monkeypatch):
         assert rc == 0
         assert captured["role"] == "maintenance"
         assert os.environ.get("AETHER_ROLE") == "maintenance"
+
+
+def test_run_role_main_falls_back_to_aether_role_env(monkeypatch):
+    monkeypatch.setenv("AETHER_ROLE", "maintenance")
+    with backend_on_path():
+        run_role = importlib.import_module("services.runtime.run_role")
+        captured = {}
+
+        def _fake_run(role):
+            captured["role"] = role
+            return 0
+
+        monkeypatch.setattr(run_role, "run", _fake_run)
+        assert run_role.main([]) == 0
+        assert captured["role"] == "maintenance"
+
+
+def test_run_role_main_positional_overrides_env(monkeypatch):
+    monkeypatch.setenv("AETHER_ROLE", "maintenance")
+    with backend_on_path():
+        run_role = importlib.import_module("services.runtime.run_role")
+        captured = {}
+
+        def _fake_run(role):
+            captured["role"] = role
+            return 0
+
+        monkeypatch.setattr(run_role, "run", _fake_run)
+        assert run_role.main(["materializer"]) == 0
+        assert captured["role"] == "materializer"
+
+
+def test_run_role_main_requires_role_or_env(monkeypatch):
+    monkeypatch.delenv("AETHER_ROLE", raising=False)
+    with backend_on_path():
+        run_role = importlib.import_module("services.runtime.run_role")
+        with pytest.raises(SystemExit) as excinfo:
+            run_role.main([])
+        assert excinfo.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# Environment.INTEGRATION (deploy/integration compose environment)
+# ---------------------------------------------------------------------------
+
+
+def test_integration_env_constructs_with_explicit_role_and_secrets():
+    proc = _construct_settings({"AETHER_ENV": "integration", "AETHER_ROLE": "api"})
+    assert "SETTINGS_OK" in proc.stdout, proc.stderr
+
+
+def test_integration_env_rejects_role_all():
+    proc = _construct_settings({"AETHER_ENV": "integration", "AETHER_ROLE": "all"})
+    assert proc.returncode != 0
+    assert "AETHER_ROLE=all is not allowed" in (proc.stdout + proc.stderr)
+
+
+def test_integration_env_keeps_fail_closed_secret_checks():
+    proc = _construct_settings({
+        "AETHER_ENV": "integration",
+        "AETHER_ROLE": "api",
+        "JWT_SECRET": "change-me-in-production",
+    })
+    assert proc.returncode != 0
+    assert "JWT_SECRET" in (proc.stdout + proc.stderr)
+
+
+def test_dev_allows_observe_only_route_policy():
+    # The mandatory route-policy startup check applies to deploy targets
+    # (staging/production) only; default dev configs run observe-only.
+    proc = _construct_settings({
+        "AETHER_ENV": "dev",
+        "AETHER_ROLE": "api",
+        "POLICY_ENFORCEMENT_ENABLED": "false",
+    })
+    assert "SETTINGS_OK" in proc.stdout, proc.stderr
+
+
+def test_staging_requires_route_policy_enforcement():
+    proc = _construct_settings({
+        "AETHER_ENV": "staging",
+        "AETHER_ROLE": "api",
+        "POLICY_ENFORCEMENT_ENABLED": "false",
+    })
+    assert proc.returncode != 0
+    assert "ROUTE_POLICY_ENFORCEMENT_REQUIRED" in (proc.stdout + proc.stderr)
