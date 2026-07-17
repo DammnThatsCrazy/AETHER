@@ -15,6 +15,37 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 from comparison_fakes import FakeAnalytics  # noqa: E402
 
+# ── Module-generation pinning ────────────────────────────────────────────────
+# ``tests/contracts/test_comparison_contract_parity.py`` verifies the lazy-import
+# invariant by deleting *every* ``services.*`` module from ``sys.modules`` and
+# re-importing ``services.intelligence`` fresh. That purge is a global side
+# effect: any test that later imports a comparison submodule fresh (e.g. inside
+# a test body) gets a NEW class generation, which no longer matches the classes
+# these test modules captured at collection time — Pydantic then rejects a
+# perfectly valid instance with a ``model_type`` error.
+#
+# We snapshot the one consistent generation present right after collection (all
+# test-module top-level imports have run, no test has purged anything yet) and
+# re-pin it before each test. This makes in-body fresh imports resolve to the
+# same class objects the test module holds, without weakening the invariant
+# guard (which completes entirely within its own test, before this runs).
+_COLLECTION_MODULE_SNAPSHOT: dict[str, object] = {}
+
+
+def pytest_collection_finish(session) -> None:  # noqa: ANN001
+    if _COLLECTION_MODULE_SNAPSHOT:
+        return
+    for name, module in list(sys.modules.items()):
+        if name == "services" or name.startswith("services."):
+            _COLLECTION_MODULE_SNAPSHOT[name] = module
+
+
+@pytest.fixture(autouse=True)
+def _pin_module_generation():
+    for name, module in _COLLECTION_MODULE_SNAPSHOT.items():
+        sys.modules[name] = module
+    yield
+
 
 @pytest.fixture()
 def fake_analytics() -> FakeAnalytics:
