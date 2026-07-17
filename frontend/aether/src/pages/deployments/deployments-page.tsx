@@ -11,6 +11,8 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  formatCount,
+  useTimeContext,
   useToast,
 } from '@aether/ui';
 import {
@@ -156,6 +158,7 @@ function RegisterDeploymentModal({ open, onClose }: RegisterModalProps) {
 }
 
 export function DeploymentsPage() {
+  const timeCtx = useTimeContext();
   const navigate = useNavigate();
   const [status, setStatus] = useState('');
   const [platform, setPlatform] = useState('');
@@ -199,42 +202,42 @@ export function DeploymentsPage() {
       key: 'events',
       header: 'Events 24h',
       render: (row: AgentDeploymentRecord) => (
-        <span className="font-mono">{row.event_count_24h.toLocaleString()}</span>
+        <span className="font-mono">{formatCount(row.event_count_24h, timeCtx)}</span>
       ),
     },
     {
       key: 'accepted',
       header: 'Accepted',
       render: (row: AgentDeploymentRecord) => (
-        <span className="font-mono text-success">{row.accepted_count_24h.toLocaleString()}</span>
+        <span className="font-mono text-success">{formatCount(row.accepted_count_24h, timeCtx)}</span>
       ),
     },
     {
       key: 'rejected',
       header: 'Rejected',
       render: (row: AgentDeploymentRecord) => (
-        <span className="font-mono text-warning">{row.rejected_count_24h.toLocaleString()}</span>
+        <span className="font-mono text-warning">{formatCount(row.rejected_count_24h, timeCtx)}</span>
       ),
     },
     {
       key: 'errors',
       header: 'Errors',
       render: (row: AgentDeploymentRecord) => (
-        <span className="font-mono text-danger">{row.error_count_24h.toLocaleString()}</span>
+        <span className="font-mono text-danger">{formatCount(row.error_count_24h, timeCtx)}</span>
       ),
     },
     {
       key: 'consent_blocked',
       header: 'Consent blocked',
       render: (row: AgentDeploymentRecord) => (
-        <span className="font-mono text-text-secondary">{row.consent_blocked_count_24h.toLocaleString()}</span>
+        <span className="font-mono text-text-secondary">{formatCount(row.consent_blocked_count_24h, timeCtx)}</span>
       ),
     },
     {
       key: 'last_event',
       header: 'Last event',
       render: (row: AgentDeploymentRecord) => (
-        <span className="text-xs text-text-muted">{formatDateTime(row.last_event_at)}</span>
+        <span className="text-xs text-text-muted">{formatDateTime(row.last_event_at, timeCtx)}</span>
       ),
     },
   ];

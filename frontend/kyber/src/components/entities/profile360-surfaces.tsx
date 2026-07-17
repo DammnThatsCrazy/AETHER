@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { Entity, EntityNeighborhood, Profile360Analytics, Profile360DrillItem, Profile360Metric, Profile360Relationship, TimelineEvent } from '@kyber/types';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Tabs, TabsContent, TabsList, TabsTrigger } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Tabs, TabsContent, TabsList, TabsTrigger, useTimeContext, useNow, formatRelative } from '@aether/ui';
 import { GraphCanvas } from '@kyber/components/graph';
-import { cn, formatRelativeTime } from '@kyber/lib/utils';
+import { cn } from '@kyber/lib/utils';
 import { eventToDrillItem, relationshipToDrillItem } from './profile360-utils';
 
 interface DrillHandlerProps {
@@ -17,6 +17,8 @@ function severityVariant(severity: string): 'default' | 'info' | 'warning' | 'da
 }
 
 export function UnifiedTemporalActivityTimeline({ timeline, onDrill }: { readonly timeline: readonly TimelineEvent[] } & DrillHandlerProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   const [filter, setFilter] = useState('all');
   const [grouped, setGrouped] = useState(false);
   const filtered = useMemo(() => filter === 'all' ? timeline : timeline.filter((event) => event.type.includes(filter)), [filter, timeline]);
@@ -62,7 +64,7 @@ export function UnifiedTemporalActivityTimeline({ timeline, onDrill }: { readonl
                             </div>
                           )}
                         </div>
-                        <span className="shrink-0 text-xs text-neutral-500">{formatRelativeTime(event.timestamp)}</span>
+                        <span className="shrink-0 text-xs text-neutral-500">{formatRelative(event.timestamp, timeCtx, now)}</span>
                       </div>
                     </button>
                   ))}
@@ -77,6 +79,8 @@ export function UnifiedTemporalActivityTimeline({ timeline, onDrill }: { readonl
 }
 
 export function RelationshipGraphSurface({ relationships, onDrill }: { readonly relationships: readonly Profile360Relationship[] } & DrillHandlerProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   const [filter, setFilter] = useState('');
   const visible = useMemo(() => relationships.filter((rel) => `${rel.relationshipType} ${rel.targetLabel} ${rel.targetType}`.toLowerCase().includes(filter.toLowerCase())), [filter, relationships]);
 
@@ -103,8 +107,8 @@ export function RelationshipGraphSurface({ relationships, onDrill }: { readonly 
                 </div>
               </div>
               <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-neutral-500">
-                {relationship.firstSeen && <span>first {formatRelativeTime(relationship.firstSeen)}</span>}
-                {relationship.lastSeen && <span>last {formatRelativeTime(relationship.lastSeen)}</span>}
+                {relationship.firstSeen && <span>first {formatRelative(relationship.firstSeen, timeCtx, now)}</span>}
+                {relationship.lastSeen && <span>last {formatRelative(relationship.lastSeen, timeCtx, now)}</span>}
               </div>
             </button>
           ))}
@@ -115,6 +119,8 @@ export function RelationshipGraphSurface({ relationships, onDrill }: { readonly 
 }
 
 export function RealtimeEventIntelligenceFeed({ events, onDrill }: { readonly events: readonly TimelineEvent[] } & DrillHandlerProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   const recent = events.slice(0, 8);
   return (
     <Card>
@@ -131,7 +137,7 @@ export function RealtimeEventIntelligenceFeed({ events, onDrill }: { readonly ev
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {event.causalityId && <Badge variant="accent" className="text-[10px]">chain</Badge>}
-              <span className="text-[11px] text-neutral-500">{formatRelativeTime(event.timestamp)}</span>
+              <span className="text-[11px] text-neutral-500">{formatRelative(event.timestamp, timeCtx, now)}</span>
             </div>
           </button>
         ))}

@@ -1,7 +1,7 @@
 import type { ControllerSchedule, ControllerDisplayMode, ControllerName } from '@kyber/types';
 import { CONTROLLER_FUNCTIONAL_NAMES, CONTROLLER_EXPRESSIVE_NAMES } from '@kyber/types';
-import { Badge, DataTable, Toggle } from '@aether/ui';
-import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
+import { Badge, DataTable, Toggle, useTimeContext, useNow, formatRelative, formatDateTime } from '@aether/ui';
+import { cn } from '@kyber/lib/utils';
 
 interface ScheduleTableProps {
   readonly schedules: readonly ControllerSchedule[];
@@ -27,6 +27,8 @@ const typeVariant: Record<ControllerSchedule['type'], 'accent' | 'info' | 'warni
 };
 
 export function ScheduleTable({ schedules, displayMode, className }: ScheduleTableProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   const columns = [
     {
       key: 'controller',
@@ -56,8 +58,8 @@ export function ScheduleTable({ schedules, displayMode, className }: ScheduleTab
       key: 'nextRun',
       header: 'Next Run',
       render: (row: ControllerSchedule) => (
-        <span className="font-mono" title={formatTimestamp(row.nextRun)}>
-          {formatRelativeTime(row.nextRun)}
+        <span className="font-mono" title={formatDateTime(row.nextRun, timeCtx)}>
+          {formatRelative(row.nextRun, timeCtx, now)}
         </span>
       ),
     },
@@ -66,8 +68,8 @@ export function ScheduleTable({ schedules, displayMode, className }: ScheduleTab
       header: 'Last Run',
       render: (row: ControllerSchedule) =>
         row.lastRun ? (
-          <span className="font-mono" title={formatTimestamp(row.lastRun)}>
-            {formatRelativeTime(row.lastRun)}
+          <span className="font-mono" title={formatDateTime(row.lastRun, timeCtx)}>
+            {formatRelative(row.lastRun, timeCtx, now)}
           </span>
         ) : (
           <span className="text-text-muted">&mdash;</span>

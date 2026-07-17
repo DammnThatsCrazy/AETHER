@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatInstant, useTimeContext } from '@aether/ui';
+import type { TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 import { isFeatureEnabled } from '@kyber/lib/featureFlags';
@@ -43,10 +44,10 @@ function statusColor(status: string): 'success' | 'warning' | 'danger' | 'defaul
   return 'default';
 }
 
-function formatTs(ts: string | null | undefined): string {
+function formatTs(ts: string | null | undefined, timeCtx: TimeContext): string {
   if (!ts) return '—';
   try {
-    return new Date(ts).toLocaleString();
+    return formatInstant(ts, timeCtx);
   } catch {
     return ts;
   }
@@ -79,6 +80,7 @@ interface DetailDrawerProps {
 }
 
 function DeploymentDetailDrawer({ tenantId, deploymentId, onClose }: DetailDrawerProps) {
+  const timeCtx = useTimeContext();
   const [detail, setDetail] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +125,7 @@ function DeploymentDetailDrawer({ tenantId, deploymentId, onClose }: DetailDrawe
               <div className="flex justify-between"><span className="text-text-muted">Environment</span><span>{String(deployment.environment ?? '—')}</span></div>
               <div className="flex justify-between"><span className="text-text-muted">Status</span><Badge variant={statusColor(String(deployment.status ?? ''))}>{String(deployment.status ?? '—')}</Badge></div>
               <div className="flex justify-between"><span className="text-text-muted">Consent mode</span><span>{String(deployment.consent_mode ?? '—')}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">Last event</span><span>{formatTs(deployment.last_event_at as string | null)}</span></div>
+              <div className="flex justify-between"><span className="text-text-muted">Last event</span><span>{formatTs(deployment.last_event_at as string | null, timeCtx)}</span></div>
             </CardContent>
           </Card>
 
@@ -167,7 +169,7 @@ function DeploymentDetailDrawer({ tenantId, deploymentId, onClose }: DetailDrawe
                   {recentActivity.map((entry, i) => (
                     <div key={String(entry.id ?? i)} className="flex justify-between border-b border-border-subtle last:border-0 py-1">
                       <span className="text-text-primary">{String(entry.action ?? '—')}</span>
-                      <span className="text-text-muted">{formatTs(entry.occurred_at as string | null)}</span>
+                      <span className="text-text-muted">{formatTs(entry.occurred_at as string | null, timeCtx)}</span>
                     </div>
                   ))}
                 </div>

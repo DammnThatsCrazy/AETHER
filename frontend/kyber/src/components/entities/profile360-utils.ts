@@ -8,6 +8,7 @@ import type {
   Profile360Summary,
   TimelineEvent,
 } from '@kyber/types';
+import { formatCount, type LocaleContext } from '@aether/ui';
 
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -37,7 +38,7 @@ export function metric(label: string, value: string | number, tone: Profile360Me
   return { label, value, tone, detail };
 }
 
-export function getProfile360Summary(entity: Entity, timeline: readonly TimelineEvent[], neighborhood: EntityNeighborhood | null): Profile360Summary {
+export function getProfile360Summary(entity: Entity, timeline: readonly TimelineEvent[], neighborhood: EntityNeighborhood | null, locale: LocaleContext): Profile360Summary {
   const m = entity.metadata;
   const analytics = readRecord(m['analytics'] ?? m['behavioral'] ?? m['intelligence']);
   const financial = readRecord(m['financial'] ?? m['wallets']);
@@ -68,7 +69,7 @@ export function getProfile360Summary(entity: Entity, timeline: readonly Timeline
     ]
     : entity.type === 'organization'
       ? [
-        metric('Treasury', readString(financial['treasury'] ?? m['treasury'], `$${readMetric(financial, ['treasury_usd', 'treasuryUsd'], 0).toLocaleString()}`), 'info'),
+        metric('Treasury', readString(financial['treasury'] ?? m['treasury'], `$${formatCount(readMetric(financial, ['treasury_usd', 'treasuryUsd'], 0), locale)}`), 'info'),
         metric('Members', readMetric(system, ['active_members', 'activeMembers'], neighborhood?.nodes.filter((n) => n.type === 'human' || n.type === 'customer').length ?? 0), 'default'),
         metric('Workflows', readMetric(system, ['workflows', 'active_workflows'], 0), 'default'),
         metric('Delegations', readMetric(system, ['delegations', 'permission_delegations'], neighborhood?.edges.filter((e) => e.type.includes('delegation')).length ?? 0), 'warn'),

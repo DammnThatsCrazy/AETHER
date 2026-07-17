@@ -9,6 +9,8 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  formatCount,
+  useTimeContext,
 } from '@aether/ui';
 import { aiInvocationStatuses } from '@aether/shared';
 import {
@@ -119,6 +121,7 @@ interface OverviewCardsProps {
 }
 
 function OverviewCards({ summary }: OverviewCardsProps) {
+  const timeCtx = useTimeContext();
   const currencies = Object.keys(summary.totals_by_currency ?? {}).sort();
 
   return (
@@ -127,9 +130,9 @@ function OverviewCards({ summary }: OverviewCardsProps) {
         <CardContent className="space-y-2">
           <div className="text-xs text-text-muted font-mono">Invocations observed</div>
           <div className="text-2xl font-semibold text-text-primary font-mono">
-            {(summary.invocation_count ?? 0).toLocaleString()}
+            {formatCount(summary.invocation_count ?? 0, timeCtx)}
           </div>
-          <SummaryStat label="Completed workflows" value={(summary.completed_workflow_count ?? 0).toLocaleString()} />
+          <SummaryStat label="Completed workflows" value={formatCount(summary.completed_workflow_count ?? 0, timeCtx)} />
           <SummaryStat label="Human correction rate" value={formatRate(summary.human_correction_rate)} />
         </CardContent>
       </Card>
@@ -164,6 +167,7 @@ function OverviewCards({ summary }: OverviewCardsProps) {
 }
 
 export function AIEfficiencyPage() {
+  const timeCtx = useTimeContext();
   const [provider, setProvider] = useState('');
   const [status, setStatus] = useState('');
 
@@ -195,7 +199,7 @@ export function AIEfficiencyPage() {
       key: 'invocations',
       header: 'Invocations',
       render: (row: AIWorkflowEconomicsRecord) => (
-        <span className="font-mono">{row.total_invocations.toLocaleString()}</span>
+        <span className="font-mono">{formatCount(row.total_invocations, timeCtx)}</span>
       ),
     },
     {
@@ -203,9 +207,9 @@ export function AIEfficiencyPage() {
       header: 'Success',
       render: (row: AIWorkflowEconomicsRecord) => (
         <div className="font-mono text-xs">
-          <span className="text-success">{(row.successful_invocations ?? 0).toLocaleString()}</span>
+          <span className="text-success">{formatCount(row.successful_invocations ?? 0, timeCtx)}</span>
           <span className="text-text-muted"> / </span>
-          <span className="text-danger">{(row.failed_invocations ?? 0).toLocaleString()} failed</span>
+          <span className="text-danger">{formatCount(row.failed_invocations ?? 0, timeCtx)} failed</span>
         </div>
       ),
     },
@@ -213,7 +217,7 @@ export function AIEfficiencyPage() {
       key: 'retries',
       header: 'Retries',
       render: (row: AIWorkflowEconomicsRecord) => (
-        <span className="font-mono">{(row.total_retries ?? 0).toLocaleString()}</span>
+        <span className="font-mono">{formatCount(row.total_retries ?? 0, timeCtx)}</span>
       ),
     },
     {
@@ -259,7 +263,7 @@ export function AIEfficiencyPage() {
       key: 'invocations',
       header: 'Invocations',
       render: (row: AIModelUsageRecord) => (
-        <span className="font-mono">{row.invocations.toLocaleString()}</span>
+        <span className="font-mono">{formatCount(row.invocations, timeCtx)}</span>
       ),
     },
     {
@@ -281,7 +285,7 @@ export function AIEfficiencyPage() {
       key: 'latency',
       header: 'Avg latency',
       render: (row: AIModelUsageRecord) => (
-        <span className="font-mono text-text-muted">{formatLatency(row.avg_latency_ms)}</span>
+        <span className="font-mono text-text-muted">{formatLatency(row.avg_latency_ms, timeCtx)}</span>
       ),
     },
     {
@@ -348,7 +352,7 @@ export function AIEfficiencyPage() {
       header: 'Latency',
       render: (row: AIExecutionFactRecord) => (
         <div className="font-mono text-xs">
-          <div className="text-text-muted">{formatLatency(row.latency_ms)}</div>
+          <div className="text-text-muted">{formatLatency(row.latency_ms, timeCtx)}</div>
           {(row.retry_count ?? 0) > 0 && (
             <div className="text-[10px] text-warning">{row.retry_count} retries</div>
           )}
@@ -359,7 +363,7 @@ export function AIEfficiencyPage() {
       key: 'observed_at',
       header: 'Observed',
       render: (row: AIExecutionFactRecord) => (
-        <span className="text-xs text-text-muted">{formatDateTime(row.observed_at)}</span>
+        <span className="text-xs text-text-muted">{formatDateTime(row.observed_at, timeCtx)}</span>
       ),
     },
   ];

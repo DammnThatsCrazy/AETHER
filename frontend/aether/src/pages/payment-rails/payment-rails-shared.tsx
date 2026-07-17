@@ -1,4 +1,4 @@
-import { Badge } from '@aether/ui';
+import { Badge, formatInstant, type TimeContext } from '@aether/ui';
 import type {
   FundingFlowType,
   FundingSessionStatus,
@@ -87,12 +87,10 @@ export function flowTypeLabel(flowType: FundingFlowType): string {
   return FLOW_TYPE_LABELS[flowType] ?? flowType;
 }
 
-export function formatDateTime(iso: string | null | undefined): string {
+export function formatDateTime(iso: string | null | undefined, timeCtx: TimeContext): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
+    return formatInstant(iso, timeCtx);
   } catch {
     return iso;
   }

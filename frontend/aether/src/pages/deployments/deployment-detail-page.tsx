@@ -14,6 +14,8 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  formatCount,
+  useTimeContext,
   useToast,
 } from '@aether/ui';
 import {
@@ -37,13 +39,14 @@ interface CounterProps {
 }
 
 function Counter({ label, value, tone = 'default' }: CounterProps) {
+  const timeCtx = useTimeContext();
   const toneClass =
     tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : tone === 'danger' ? 'text-danger' : 'text-text-primary';
   return (
     <Card>
       <CardContent>
         <div className="text-xs text-text-muted font-mono">{label}</div>
-        <div className={`mt-1 text-2xl font-mono font-semibold ${toneClass}`}>{value.toLocaleString()}</div>
+        <div className={`mt-1 text-2xl font-mono font-semibold ${toneClass}`}>{formatCount(value, timeCtx)}</div>
       </CardContent>
     </Card>
   );
@@ -113,6 +116,7 @@ const ACTION_LABELS: Record<DeploymentLifecycleAction, { pending: string; succes
 };
 
 export function DeploymentDetailPage() {
+  const timeCtx = useTimeContext();
   const { id } = useParams<{ id: string }>();
   const deploymentId = id ?? null;
   const { toast } = useToast();
@@ -261,19 +265,19 @@ export function DeploymentDetailPage() {
               </div>
               <div>
                 <div className="text-text-muted font-mono">First seen</div>
-                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.first_seen_at)}</div>
+                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.first_seen_at, timeCtx)}</div>
               </div>
               <div>
                 <div className="text-text-muted font-mono">Last seen</div>
-                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.last_seen_at)}</div>
+                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.last_seen_at, timeCtx)}</div>
               </div>
               <div>
                 <div className="text-text-muted font-mono">Created</div>
-                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.created_at)}</div>
+                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.created_at, timeCtx)}</div>
               </div>
               <div>
                 <div className="text-text-muted font-mono">Updated</div>
-                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.updated_at)}</div>
+                <div className="text-text-secondary mt-0.5">{formatDateTime(deployment.updated_at, timeCtx)}</div>
               </div>
             </div>
             <ScopeList title="Allowed event families" items={deployment.allowed_event_families} />
@@ -307,7 +311,7 @@ export function DeploymentDetailPage() {
                         <div className="text-[10px] text-text-muted font-mono mt-1">req: {entry.request_id}</div>
                       )}
                     </div>
-                    <span className="text-xs text-text-muted whitespace-nowrap">{formatDateTime(entry.occurred_at)}</span>
+                    <span className="text-xs text-text-muted whitespace-nowrap">{formatDateTime(entry.occurred_at, timeCtx)}</span>
                   </li>
                 ))}
               </ul>
