@@ -1060,6 +1060,24 @@ def create_app() -> FastAPI:
     else:
         logger.info("Product Catalog disabled (AETHER_PRODUCT_CATALOG_ENABLED=false)")
 
+    if settings.comparison.enabled:
+        from services.intelligence.comparison.jobs import register_comparison_handlers
+        from services.intelligence.comparison.routes import router as comparison_router
+        register_comparison_handlers()  # comparison.run on the jobs plane
+        app.include_router(comparison_router, tags=["Comparison Intelligence"])
+        logger.info("Comparison Intelligence mounted (/v1/intelligence/comparisons)")
+    else:
+        logger.info(
+            "Comparison Intelligence disabled (AETHER_COMPARISON_INTELLIGENCE_ENABLED=false)"
+        )
+
+    if settings.exploration.enabled:
+        from services.exploration.routes import router as exploration_router
+        app.include_router(exploration_router, tags=["Exploration Fabric"])
+        logger.info("Exploration Fabric mounted (/v1/explore)")
+    else:
+        logger.info("Exploration Fabric disabled (AETHER_EXPLORATION_ENABLED=false)")
+
     return app
 
 
