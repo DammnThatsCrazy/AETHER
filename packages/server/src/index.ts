@@ -103,6 +103,14 @@ export class AetherServerSDK {
       ...event,
       timestamp: ts,
       properties: event.properties ? scrubSensitiveFields(event.properties) : undefined,
+      context: {
+        // Temporal provenance: server-side events are stamped by the server
+        // clock in the server's zone context — never a fabricated device
+        // offset. Caller-supplied context (e.g. relayed device evidence) wins.
+        timeZoneSource: 'server',
+        clockSource: 'server',
+        ...event.context,
+      },
     };
     const enqueued = this.queue.enqueue({
       writeKey: this.config.writeKey,

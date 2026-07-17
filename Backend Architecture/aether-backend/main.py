@@ -1053,6 +1053,13 @@ def create_app() -> FastAPI:
     else:
         logger.info("Temporal preferences disabled (AETHER_VIEWER_TIMEZONE_ENABLED=false)")
 
+    if settings.product_intelligence.catalog_enabled:
+        from services.product_catalog.routes import router as product_catalog_router
+        app.include_router(product_catalog_router, tags=["Product Catalog"])
+        logger.info("Product Catalog mounted (/v1/product-catalog)")
+    else:
+        logger.info("Product Catalog disabled (AETHER_PRODUCT_CATALOG_ENABLED=false)")
+
     return app
 
 

@@ -255,6 +255,13 @@ public struct EventContext: Codable {
     public var network: String?
     public var thermalState: String?
     public var consent: [String: Bool]?
+    // Temporal provenance captured at event occurrence (not SDK init) —
+    // top-level on the wire context, matching the ingestion contract
+    // (packages/shared/events.ts::EventContext).
+    public var timezone: String?
+    public var utcOffsetMinutes: Int?
+    public var timeZoneSource: String?
+    public var clockSource: String?
 
     public struct LibraryInfo: Codable {
         public let name: String
@@ -1280,15 +1287,18 @@ public final class Aether: NSObject {
         }
 
         let scrubbedProps = scrubSensitiveFields(properties)
+        // Single occurrence instant shared by the timestamp and the temporal
+        // provenance so zone/offset evidence matches the stamped clock reading.
+        let eventDate = Date()
         let event = AetherEvent(
             id: UUID().uuidString,
             type: type,
-            timestamp: ISO8601DateFormatter().string(from: Date()),
+            timestamp: ISO8601DateFormatter().string(from: eventDate),
             sessionId: sessionId,
             anonymousId: anonymousId,
             userId: userId,
             properties: scrubbedProps,
-            context: buildContext()
+            context: buildContext(at: eventDate)
         )
 
         serialQueue.async { [weak self] in
@@ -1423,7 +1433,7 @@ public final class Aether: NSObject {
         }.resume()
     }
 
-    private func buildContext() -> EventContext {
+    private func buildContext(at eventDate: Date) -> EventContext {
         let granted = Set(consentState)
 
         #if canImport(UIKit)
@@ -1452,7 +1462,13 @@ public final class Aether: NSObject {
                 "web3": granted.contains("web3"),
                 "agent": granted.contains("agent"),
                 "commerce": granted.contains("commerce"),
-            ]
+            ],
+            // Temporal provenance at the event's occurrence instant (offset is
+            // zone-at-instant, so DST transitions are captured correctly).
+            timezone: TimeZone.current.identifier,
+            utcOffsetMinutes: TimeZone.current.secondsFromGMT(for: eventDate) / 60,
+            timeZoneSource: "device",
+            clockSource: "device"
         )
     }
 

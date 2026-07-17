@@ -556,6 +556,12 @@ export interface EventContext {
   ip?: string;
   locale?: string;
   timezone?: string;
+  /** UTC offset in minutes captured AT EVENT OCCURRENCE (not SDK init): -new Date().getTimezoneOffset(). */
+  utcOffsetMinutes?: number;
+  /** Where the timezone claim came from (canonical vocabulary in @aether/shared temporal.ts). */
+  timeZoneSource?: string;
+  /** Which clock produced the event timestamp (canonical vocabulary in @aether/shared temporal.ts). */
+  clockSource?: string;
   userAgent?: string;
   consent?: ConsentState;
   semantic?: Record<string, unknown>;
