@@ -8,11 +8,15 @@ unified intelligence program; new registries plug into the REGISTRIES table.
 
 Sources (read-only — canonical source of truth):
   packages/shared/contracts/temporal-policy-registry.json
+  packages/shared/contracts/interaction-vocabulary.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
   Backend Architecture/aether-backend/shared/temporal/generated_policy.py
   docs/_generated/temporal-policy-table.md
+  packages/shared/interaction-contract.ts
+  Backend Architecture/aether-backend/shared/product/generated_vocabulary.py
+  docs/_generated/interaction-vocabulary-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -20,7 +24,7 @@ Usage:
 
 Guarantees:
   - Idempotent: running twice produces identical output
-  - Sorted: all lists and maps are emitted in sorted order
+  - Sorted: all keyed collections are emitted in sorted order
   - Validates: registry internal consistency before any write
 """
 
@@ -28,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -95,7 +100,7 @@ def resolved_family_bounds(reg: dict, event_families: set[str]) -> dict[str, dic
 
 
 # ---------------------------------------------------------------------------
-# Emitters
+# Emitters (temporal policy)
 # ---------------------------------------------------------------------------
 
 def gen_temporal_policy_ts(reg: dict, families: dict[str, dict]) -> str:
@@ -230,8 +235,313 @@ def gen_temporal_policy_md(reg: dict, families: dict[str, dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Shared emission / validation helpers (used by the REGISTRIES table)
+# ---------------------------------------------------------------------------
+
+_IDENT_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _require_idents(registry: str, key: str, values: object) -> None:
+    """A vocabulary list must be non-empty, unique lower_snake identifiers."""
+    if not isinstance(values, list) or not values:
+        _fail(f"{registry}.{key} must be a non-empty list")
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str) or not _IDENT_RE.match(value):
+            _fail(f"{registry}.{key} entry {value!r} is not a lower_snake identifier")
+        if value in seen:
+            _fail(f"{registry}.{key} has duplicate entry {value!r}")
+        seen.add(value)
+
+
+def _ts_header(source: Path) -> list[str]:
+    return [
+        "/**",
+        f" * DO NOT EDIT — generated from {source.relative_to(ROOT).as_posix()}",
+        " * Run: python scripts/generate_platform_contracts.py",
+        " */",
+        "",
+    ]
+
+
+def _py_header(source: Path, docstring: str) -> list[str]:
+    return [
+        f"# DO NOT EDIT — generated from {source.relative_to(ROOT).as_posix()}",
+        "# Run: python scripts/generate_platform_contracts.py",
+        f'"""{docstring}"""',
+        "",
+        "from __future__ import annotations",
+        "",
+    ]
+
+
+def _md_header(source: Path) -> list[str]:
+    return [
+        f"<!-- DO NOT EDIT — generated from {source.relative_to(ROOT).as_posix()} -->",
+        "<!-- Run: python scripts/generate_platform_contracts.py -->",
+        "",
+    ]
+
+
+def _ts_const_array(name: str, type_name: str, values: list[str], doc: str | None = None) -> list[str]:
+    lines: list[str] = []
+    if doc:
+        lines.append(f"/** {doc} */")
+    joined = ", ".join(f"'{v}'" for v in values)
+    single = f"export const {name} = [{joined}] as const;"
+    if len(single) <= 100:
+        lines.append(single)
+    else:
+        lines.append(f"export const {name} = [")
+        for value in values:
+            lines.append(f"  '{value}',")
+        lines.append("] as const;")
+    lines.append(f"export type {type_name} = typeof {name}[number];")
+    lines.append("")
+    return lines
+
+
+def _py_tuple(name: str, values: list[str], comment: str | None = None) -> list[str]:
+    lines: list[str] = []
+    if comment:
+        lines.append(f"# {comment}")
+    joined = ", ".join(f'"{v}"' for v in values)
+    if len(values) == 1:
+        joined += ","
+    single = f"{name}: tuple[str, ...] = ({joined})"
+    if len(single) <= 100:
+        lines.append(single)
+    else:
+        lines.append(f"{name}: tuple[str, ...] = (")
+        for value in values:
+            lines.append(f'    "{value}",')
+        lines.append(")")
+    lines.append("")
+    return lines
+
+
+def _ts_interface(name: str, fields: tuple[tuple[str, str, bool], ...], doc: str) -> list[str]:
+    """Emit a TS interface from (field, ts_type, required) triples (snake_case)."""
+    lines = [f"/** {doc} */", f"export interface {name} {{"]
+    for field, ts_type, required in fields:
+        if required:
+            lines.append(f"  {field}: {ts_type};")
+        else:
+            lines.append(f"  {field}?: {ts_type} | null;")
+    lines.append("}")
+    lines.append("")
+    return lines
+
+
+def _md_vocab_section(title: str, values: list[str]) -> list[str]:
+    return [f"## {title}", "", ", ".join(f"`{v}`" for v in values), ""]
+
+
+# ---------------------------------------------------------------------------
+# Registry: interaction-vocabulary
+# ---------------------------------------------------------------------------
+
+INTERACTION_VOCAB_JSON = CONTRACTS / "interaction-vocabulary.json"
+INTERACTION_TS = ROOT / "packages" / "shared" / "interaction-contract.ts"
+INTERACTION_PY = BACKEND / "shared" / "product" / "generated_vocabulary.py"
+INTERACTION_MD = ROOT / "docs" / "_generated" / "interaction-vocabulary-table.md"
+
+_INTERACTION_VOCAB_KEYS = (
+    "interactionTypes",
+    "customNamespaces",
+    "resultStates",
+    "evidenceBasis",
+    "actorKinds",
+)
+
+# TS twin of shared/product/models.py::InteractionPayload — parity-tested.
+_INTERACTION_PAYLOAD_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("tenant_id", "string", True),
+    ("event_id", "string", True),
+    ("occurred_at", "string", True),
+    ("actor_kind", "string", False),
+    ("canonical_entity_id", "string", False),
+    ("anonymous_id", "string", False),
+    ("user_id", "string", False),
+    ("organization_id", "string", False),
+    ("workspace_id", "string", False),
+    ("agent_id", "string", False),
+    ("wallet_id", "string", False),
+    ("session_id", "string", False),
+    ("device_id", "string", False),
+    ("product_id", "string", False),
+    ("product_area_id", "string", False),
+    ("feature_id", "string", False),
+    ("feature_version_id", "string", False),
+    ("surface_id", "string", False),
+    ("control_id", "string", False),
+    ("interaction_type", "string", False),
+    ("action_type", "string", False),
+    ("result_state", "string", False),
+    ("status_detail", "string", False),
+    ("journey_id", "string", False),
+    ("journey_step_id", "string", False),
+    ("campaign_id", "string", False),
+    ("experiment_id", "string", False),
+    ("variant_id", "string", False),
+    ("channel", "string", False),
+    ("platform", "string", False),
+    ("application_id", "string", False),
+    ("application_version", "string", False),
+    ("sdk_name", "string", False),
+    ("sdk_version", "string", False),
+    ("chain_id", "string", False),
+    ("contract_address", "string", False),
+    ("transaction_hash", "string", False),
+    ("payment_rail", "string", False),
+    ("payment_provider", "string", False),
+    ("elapsed_ms", "number", False),
+    ("visible_ms", "number", False),
+    ("active_ms", "number", False),
+    ("engaged_ms", "number", False),
+    ("idle_ms", "number", False),
+    ("network_wait_ms", "number", False),
+    ("external_wait_ms", "number", False),
+    ("provider_wait_ms", "number", False),
+    ("execution_wait_ms", "number", False),
+    ("scroll_pct", "number", False),
+    ("viewable_pct", "number", False),
+    ("completion_pct", "number", False),
+    ("attempt_number", "number", False),
+    ("friction_type", "string", False),
+    ("error_code", "string", False),
+    ("failure_category", "string", False),
+    ("evidence_basis", "string", False),
+    ("confidence", "number", False),
+    ("consent_state", "string", False),
+    ("mapping_version", "string", False),
+    ("mapping_source", "string", False),
+    ("mapping_confidence", "number", False),
+    ("source_event_id", "string", False),
+    ("correlation_id", "string", False),
+)
+
+
+def validate_interaction_vocabulary(reg: dict, ctx: dict) -> None:
+    for key in _INTERACTION_VOCAB_KEYS:
+        _require_idents("interaction-vocabulary", key, reg[key])
+    if not isinstance(reg.get("customNamespaceRule"), str) or not reg["customNamespaceRule"]:
+        _fail("interaction-vocabulary.customNamespaceRule must be a non-empty string")
+
+
+def gen_interaction_ts(reg: dict) -> str:
+    lines = _ts_header(INTERACTION_VOCAB_JSON)
+    lines.append(f"export const interactionVocabularyVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "interactionTypes", "InteractionType", reg["interactionTypes"],
+        "Closed canonical interaction-type vocabulary.",
+    )
+    lines += _ts_const_array(
+        "interactionCustomNamespaces", "InteractionCustomNamespace", reg["customNamespaces"],
+        reg["customNamespaceRule"],
+    )
+    lines += _ts_const_array(
+        "interactionResultStates", "InteractionResultState", reg["resultStates"],
+        "Canonical result state of an interaction.",
+    )
+    lines += _ts_const_array(
+        "interactionEvidenceBasis", "InteractionEvidenceBasis", reg["evidenceBasis"],
+        "How strongly the recorded interaction is evidenced.",
+    )
+    lines += _ts_const_array(
+        "interactionActorKinds", "InteractionActorKind", reg["actorKinds"],
+        "Who (or what) performed the interaction.",
+    )
+    lines += _ts_interface(
+        "InteractionPayload",
+        _INTERACTION_PAYLOAD_FIELDS,
+        "Canonical interaction payload (Python twin: shared/product/models.py).",
+    )
+    return "\n".join(lines)
+
+
+def gen_interaction_py(reg: dict) -> str:
+    lines = _py_header(
+        INTERACTION_VOCAB_JSON,
+        "Generated interaction vocabulary (types, namespaces, result states, evidence, actors).",
+    )
+    lines.append(f'INTERACTION_VOCABULARY_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("INTERACTION_TYPES", reg["interactionTypes"],
+                       "Closed canonical interaction-type vocabulary.")
+    lines += _py_tuple("INTERACTION_CUSTOM_NAMESPACES", reg["customNamespaces"],
+                       reg["customNamespaceRule"])
+    lines += _py_tuple("INTERACTION_RESULT_STATES", reg["resultStates"],
+                       "Canonical result state of an interaction.")
+    lines += _py_tuple("INTERACTION_EVIDENCE_BASIS", reg["evidenceBasis"],
+                       "How strongly the recorded interaction is evidenced.")
+    lines += _py_tuple("INTERACTION_ACTOR_KINDS", reg["actorKinds"],
+                       "Who (or what) performed the interaction.")
+    lines.append("__all__ = [")
+    lines.append('    "INTERACTION_VOCABULARY_VERSION",')
+    lines.append('    "INTERACTION_TYPES",')
+    lines.append('    "INTERACTION_CUSTOM_NAMESPACES",')
+    lines.append('    "INTERACTION_RESULT_STATES",')
+    lines.append('    "INTERACTION_EVIDENCE_BASIS",')
+    lines.append('    "INTERACTION_ACTOR_KINDS",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_interaction_md(reg: dict) -> str:
+    lines = _md_header(INTERACTION_VOCAB_JSON)
+    lines.append("# Interaction Vocabulary")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines += _md_vocab_section("Interaction types", reg["interactionTypes"])
+    lines += _md_vocab_section("Custom namespaces", reg["customNamespaces"])
+    lines.append(f"> {reg['customNamespaceRule']}")
+    lines.append("")
+    lines += _md_vocab_section("Result states", reg["resultStates"])
+    lines += _md_vocab_section("Evidence basis", reg["evidenceBasis"])
+    lines += _md_vocab_section("Actor kinds", reg["actorKinds"])
+    return "\n".join(lines)
+
+
+def _summary_interaction(reg: dict) -> str:
+    return (
+        f"interaction-vocabulary v{reg['contractVersion']} — "
+        f"{len(reg['interactionTypes'])} interaction types, "
+        f"{len(reg['resultStates'])} result states"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
+
+# Each entry: (registry json path, validate(reg, ctx), ((output path, gen(reg)), ...),
+# summary(reg)). Temporal policy predates the table and keeps its bespoke wiring
+# in main() because its emitters take the default-resolved family bounds.
+REGISTRIES: tuple = (
+    (
+        INTERACTION_VOCAB_JSON,
+        validate_interaction_vocabulary,
+        (
+            (INTERACTION_TS, gen_interaction_ts),
+            (INTERACTION_PY, gen_interaction_py),
+            (INTERACTION_MD, gen_interaction_md),
+        ),
+        _summary_interaction,
+    ),
+)
+
+
+def _load_context() -> dict:
+    """Cross-registry facts used by validators (never mutated by emitters)."""
+    event_reg = json.loads(EVENT_REGISTRY_JSON.read_text())
+    return {
+        "event_families": {e["family"] for e in event_reg["events"]},
+    }
+
 
 def _apply(path: Path, content: str, check: bool, diffs: list[str]) -> None:
     if path.exists():
@@ -256,17 +566,28 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    event_reg = json.loads(EVENT_REGISTRY_JSON.read_text())
-    event_families = {e["family"] for e in event_reg["events"]}
+    ctx = _load_context()
 
     temporal_reg = json.loads(TEMPORAL_POLICY_JSON.read_text())
-    validate_temporal_policy(temporal_reg, event_families)
-    families = resolved_family_bounds(temporal_reg, event_families)
+    validate_temporal_policy(temporal_reg, ctx["event_families"])
+    families = resolved_family_bounds(temporal_reg, ctx["event_families"])
 
     diffs: list[str] = []
     _apply(TEMPORAL_POLICY_TS, gen_temporal_policy_ts(temporal_reg, families), args.check, diffs)
     _apply(TEMPORAL_POLICY_PY, gen_temporal_policy_py(temporal_reg, families), args.check, diffs)
     _apply(TEMPORAL_POLICY_MD, gen_temporal_policy_md(temporal_reg, families), args.check, diffs)
+
+    summaries = [
+        f"temporal policy v{temporal_reg['policyVersion']} — "
+        f"{len(temporal_reg['reasonCodes'])} reason codes, {len(families)} families"
+    ]
+
+    for json_path, validate, artifacts, summarize in REGISTRIES:
+        reg = json.loads(json_path.read_text())
+        validate(reg, ctx)
+        for out_path, gen in artifacts:
+            _apply(out_path, gen(reg), args.check, diffs)
+        summaries.append(summarize(reg))
 
     if diffs:
         print("DRIFT: generated files differ from committed versions:", file=sys.stderr)
@@ -275,11 +596,8 @@ def main() -> int:
         print("Run: python scripts/generate_platform_contracts.py", file=sys.stderr)
         return 1
 
-    print(
-        f"OK: temporal policy v{temporal_reg['policyVersion']} — "
-        f"{len(temporal_reg['reasonCodes'])} reason codes, {len(families)} families "
-        f"— all artifacts up-to-date"
-    )
+    for summary in summaries:
+        print(f"OK: {summary} — all artifacts up-to-date")
     return 0
 
 

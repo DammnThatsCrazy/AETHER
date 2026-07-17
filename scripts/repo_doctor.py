@@ -227,7 +227,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     run(
         ["python", "scripts/generate_platform_contracts.py"],
-        name="Regenerate unified-platform contract artifacts (temporal policy)",
+        name="Regenerate unified-platform contract artifacts (platform registries)",
         results=results,
         stop_on_failure=stop,
         remediation="fix packages/shared/contracts/*-registry.json or the generator, then rerun make repo-doctor-fix",
@@ -244,6 +244,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             [
                 "packages/shared/temporal-policy.ts",
                 "Backend Architecture/aether-backend/shared/temporal/generated_policy.py",
+                "packages/shared/interaction-contract.ts",
+                "Backend Architecture/aether-backend/shared/product/generated_vocabulary.py",
             ],
             name="Unified-platform generated contracts — no uncommitted diff",
             results=results,
