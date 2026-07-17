@@ -60,6 +60,8 @@ from services.operational_intelligence.models import EntityRef, EvidenceRef, Inv
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.fraud_networks")
@@ -343,7 +345,11 @@ async def build_network(
                 "status": "active",
             },
         )
-        await graph.upsert_vertex(vertex)
+        gateway = GraphMutationGateway(graph_client=graph)
+        await gateway.apply(vertex_intent(
+            vertex, operation="node_versioned",
+            tenant_id=body.tenant_id, actor_id="fraud_networks",
+        ))
         for eid in body.anchor_entity_ids:
             edge = Edge(
                 edge_type=EdgeType.MEMBER_OF_FRAUD_NETWORK,
@@ -351,7 +357,12 @@ async def build_network(
                 to_vertex_id=network_id,
                 properties={"role": "anchor", "tenant_id": body.tenant_id},
             )
-            await graph.add_edge(edge)
+            await gateway.apply(edge_intent(
+                edge, operation="edge_created",
+                tenant_id=body.tenant_id, actor_id="fraud_networks",
+                subject_kind="entity", subject_id=eid,
+                causality_class="inferred_influence",
+            ))
     except Exception as exc:
         logger.warning("fraud_network_graph_projection_failed", extra={"error": str(exc)})
 
@@ -610,7 +621,11 @@ async def open_investigation(
             to_vertex_id=case_id,
             properties={"tenant_id": body.tenant_id},
         )
-        await graph.add_edge(edge)
+        await GraphMutationGateway(graph_client=graph).apply(edge_intent(
+            edge, operation="edge_created",
+            tenant_id=body.tenant_id, actor_id="fraud_networks",
+            subject_kind="fraud_network", subject_id=network_id,
+        ))
     except Exception as exc:
         logger.warning("fraud_network_case_graph_edge_failed", extra={"error": str(exc)})
 
