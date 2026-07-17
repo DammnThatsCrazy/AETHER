@@ -27,24 +27,32 @@ def _make_edge(from_id: str, to_id: str, edge_type: str) -> Edge:
 
 
 # ── Layer enum parity ──────────────────────────────────────────────────────────
+# Four CANONICAL operational layers plus the non-canonical EXCLUDED
+# classification (edges intentionally outside the four layers — see
+# shared/graph/graph_contract.py::CANONICAL_LAYERS).
 
-def test_relationship_layer_enum_has_four_values() -> None:
+def test_relationship_layer_enum_has_four_canonical_values() -> None:
     layers = list(RelationshipLayer)
-    assert len(layers) == 4
+    assert len(layers) == 5  # 4 canonical + EXCLUDED
     assert RelationshipLayer.H2H in layers
     assert RelationshipLayer.H2A in layers
     assert RelationshipLayer.A2H in layers
     assert RelationshipLayer.A2A in layers
+    assert RelationshipLayer.EXCLUDED in layers
 
 
 def test_a2h_layer_value() -> None:
     assert RelationshipLayer.A2H.value == "A2H"
 
 
-def test_all_four_layers_have_string_values() -> None:
-    expected = {"H2H", "H2A", "A2H", "A2A"}
+def test_all_four_canonical_layers_have_string_values() -> None:
+    expected = {"H2H", "H2A", "A2H", "A2A", "EXCLUDED"}
     actual = {layer.value for layer in RelationshipLayer}
     assert actual == expected
+    # EXCLUDED is the ONLY non-canonical classification.
+    from shared.graph.graph_contract import CANONICAL_LAYERS
+
+    assert {layer.value for layer in CANONICAL_LAYERS} == {"H2H", "H2A", "A2H", "A2A"}
 
 
 # ── Edge classification ────────────────────────────────────────────────────────
@@ -124,12 +132,16 @@ def test_get_layer_stats_returns_all_four_layers() -> None:
 
 def test_get_layer_stats_empty_edges() -> None:
     stats = get_layer_stats([])
-    assert stats == {"H2H": 0, "H2A": 0, "A2H": 0, "A2A": 0}
+    assert stats == {
+        "H2H": 0, "H2A": 0, "A2H": 0, "A2A": 0,
+        # Non-canonical buckets: intentionally excluded edges + unclassifiable.
+        "EXCLUDED": 0, "unknown": 0,
+    }
 
 
-def test_get_layer_stats_keys_are_exactly_four_layers() -> None:
+def test_get_layer_stats_keys_are_four_layers_plus_excluded_and_unknown() -> None:
     stats = get_layer_stats([])
-    assert set(stats.keys()) == {"H2H", "H2A", "A2H", "A2A"}
+    assert set(stats.keys()) == {"H2H", "H2A", "A2H", "A2A", "EXCLUDED", "unknown"}
 
 
 # ── Edge map completeness ──────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/filter-field-registry.json
   packages/shared/contracts/surface-capability-registry.json
   packages/shared/contracts/comparison-registry.json
+  packages/shared/contracts/projector-ownership-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -37,6 +38,8 @@ Generated outputs:
   packages/shared/comparison-contract.ts
   Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py
   docs/_generated/comparison-table.md
+  Backend Architecture/aether-backend/services/silver/generated_ownership.py
+  docs/_generated/projector-ownership-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -1626,6 +1629,275 @@ def _summary_comparison(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: projector-ownership (WP2.4 — Silver projection plane)
+# ---------------------------------------------------------------------------
+
+PROJECTOR_OWNERSHIP_JSON = CONTRACTS / "projector-ownership-registry.json"
+PROJECTOR_OWNERSHIP_PY = BACKEND / "services" / "silver" / "generated_ownership.py"
+PROJECTOR_OWNERSHIP_MD = ROOT / "docs" / "_generated" / "projector-ownership-table.md"
+
+_PROJECTOR_LIST_KEYS = (
+    "eventFamilies",
+    "eventTypes",
+    "ownedActivityEventTypes",
+    "convergentActivityEventTypes",
+    "unregisteredEventTypes",
+)
+
+
+def validate_projector_ownership(reg: dict, ctx: dict) -> None:
+    """Internal consistency of the ownership registry (registry-vs-dispatcher
+    parity is enforced separately by scripts/validate_projector_ownership.py)."""
+    roles = set(reg["activityRoles"])
+    statuses = set(reg["noProjectionStatuses"])
+    event_families: set[str] = ctx["event_families"]
+
+    names_seen: set[str] = set()
+    owned_families: set[str] = set()
+    owner_by_type: dict[str, str] = {}
+    for entry in reg["projectors"]:
+        name = entry["name"]
+        if name in names_seen:
+            _fail(f"duplicate projector entry {name!r}")
+        names_seen.add(name)
+        if entry["activityRole"] not in roles:
+            _fail(f"projector {name!r} has unknown activityRole {entry['activityRole']!r}")
+        if not entry.get("table"):
+            _fail(f"projector {name!r} is missing its silver table")
+        for key in _PROJECTOR_LIST_KEYS:
+            values = entry.get(key)
+            if values is None:
+                continue
+            if values != sorted(values):
+                _fail(f"projector {name!r}.{key} must be sorted")
+            if len(set(values)) != len(values):
+                _fail(f"projector {name!r}.{key} has duplicates")
+        types = set(entry["eventTypes"])
+        unregistered = set(entry.get("unregisteredEventTypes", ()))
+        if not unregistered <= types:
+            _fail(f"projector {name!r}: unregisteredEventTypes must be a subset of eventTypes")
+        owned = set(entry["ownedActivityEventTypes"])
+        convergent = set(entry.get("convergentActivityEventTypes", ()))
+        if not owned <= types or not convergent <= types:
+            _fail(f"projector {name!r}: activity event types must be a subset of eventTypes")
+        if owned & convergent:
+            _fail(f"projector {name!r}: owned and convergent activity types overlap")
+        if entry["activityRole"] == "no_activity" and (owned or convergent):
+            _fail(f"projector {name!r}: no_activity projectors cannot emit canonical activity")
+        unknown_families = set(entry["eventFamilies"]) - event_families
+        if unknown_families:
+            _fail(f"projector {name!r} references unknown families {sorted(unknown_families)}")
+        owned_families |= set(entry["eventFamilies"])
+        for event_type in owned:
+            # ADR-C4: no event type may be claimed by two activity owners.
+            if event_type in owner_by_type:
+                _fail(
+                    f"event type {event_type!r} claimed by two activity owners: "
+                    f"{owner_by_type[event_type]!r} and {name!r}"
+                )
+            owner_by_type[event_type] = name
+
+    no_projection_families: set[str] = set()
+    for entry in reg["noProjection"]:
+        family = entry["family"]
+        if family in no_projection_families:
+            _fail(f"duplicate noProjection family {family!r}")
+        no_projection_families.add(family)
+        if entry["status"] not in statuses:
+            _fail(f"noProjection[{family!r}] has unknown status {entry['status']!r}")
+        if family not in event_families:
+            _fail(f"noProjection references unknown family {family!r}")
+        if family in owned_families:
+            _fail(f"family {family!r} is both projected and declared noProjection")
+
+    uncovered = event_families - owned_families - no_projection_families
+    if uncovered:
+        _fail(
+            "event families neither owned by a projector nor declared noProjection: "
+            f"{sorted(uncovered)}"
+        )
+    if not any(e["name"] == "SilverGraphProjector" for e in reg["outOfBand"]):
+        _fail("outOfBand must declare the SilverGraphProjector")
+
+
+def gen_projector_ownership_py(reg: dict) -> str:
+    lines = _py_header(
+        PROJECTOR_OWNERSHIP_JSON,
+        "Generated Silver projector ownership (dispatcher order, activity owners, gaps).",
+    )
+    lines.append(
+        f'PROJECTOR_OWNERSHIP_CONTRACT_VERSION = "{reg["contractVersion"]}"'
+    )
+    lines.append("")
+    lines.append("# Deterministic dispatcher order (ADR-C3) — must match _ALL_PROJECTORS.")
+    lines.append("PROJECTOR_ORDER: tuple[str, ...] = (")
+    for entry in reg["projectors"]:
+        lines.append(f'    "{entry["name"]}",')
+    lines.append(")")
+    lines.append("")
+    lines.append("# Silver table each projector writes.")
+    lines.append("PROJECTOR_TABLES: dict[str, str] = {")
+    for entry in reg["projectors"]:
+        lines.append(f'    "{entry["name"]}": "{entry["table"]}",')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Canonical-activity role per projector (ADR-C4).")
+    lines.append("PROJECTOR_ACTIVITY_ROLES: dict[str, str] = {")
+    for entry in reg["projectors"]:
+        lines.append(f'    "{entry["name"]}": "{entry["activityRole"]}",')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Event-registry families each projector projects facts for.")
+    lines.append("PROJECTOR_EVENT_FAMILIES: dict[str, tuple[str, ...]] = {")
+    for entry in reg["projectors"]:
+        joined = ", ".join(f'"{f}"' for f in entry["eventFamilies"])
+        if len(entry["eventFamilies"]) == 1:
+            joined += ","
+        lines.append(f'    "{entry["name"]}": ({joined}),')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Exact dispatcher handles per projector.")
+    lines.append("PROJECTOR_EVENT_TYPES: dict[str, tuple[str, ...]] = {")
+    for entry in reg["projectors"]:
+        lines.append(f'    "{entry["name"]}": (')
+        for event_type in entry["eventTypes"]:
+            lines.append(f'        "{event_type}",')
+        lines.append("    ),")
+    lines.append("}")
+    lines.append("")
+    lines.append("# ADR-C4: the single canonical-activity owner per event type.")
+    lines.append("ACTIVITY_OWNER_BY_EVENT_TYPE: dict[str, str] = {")
+    owner_by_type: dict[str, str] = {}
+    for entry in reg["projectors"]:
+        for event_type in entry["ownedActivityEventTypes"]:
+            owner_by_type[event_type] = entry["name"]
+    for event_type in sorted(owner_by_type):
+        lines.append(f'    "{event_type}": "{owner_by_type[event_type]}",')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Later adapter-backed emitters converging on the owner's activity row.")
+    lines.append("CONVERGENT_ACTIVITY_EVENT_TYPES: dict[str, tuple[str, ...]] = {")
+    for entry in reg["projectors"]:
+        convergent = entry.get("convergentActivityEventTypes")
+        if not convergent:
+            continue
+        joined = ", ".join(f'"{t}"' for t in convergent)
+        if len(convergent) == 1:
+            joined += ","
+        lines.append(f'    "{entry["name"]}": ({joined}),')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Accepted event families with no dispatcher projector (family → status).")
+    lines.append("NO_PROJECTION_FAMILIES: dict[str, str] = {")
+    for entry in sorted(reg["noProjection"], key=lambda e: e["family"]):
+        lines.append(f'    "{entry["family"]}": "{entry["status"]}",')
+    lines.append("}")
+    lines.append("")
+    out_of_band = ", ".join(f'"{e["name"]}"' for e in reg["outOfBand"])
+    if len(reg["outOfBand"]) == 1:
+        out_of_band += ","
+    lines.append("# Dispatcher stages outside the fact-projector list.")
+    lines.append(f"OUT_OF_BAND_PROJECTORS: tuple[str, ...] = ({out_of_band})")
+    lines.append("")
+    lines.append("__all__ = [")
+    for name in (
+        "PROJECTOR_OWNERSHIP_CONTRACT_VERSION",
+        "PROJECTOR_ORDER",
+        "PROJECTOR_TABLES",
+        "PROJECTOR_ACTIVITY_ROLES",
+        "PROJECTOR_EVENT_FAMILIES",
+        "PROJECTOR_EVENT_TYPES",
+        "ACTIVITY_OWNER_BY_EVENT_TYPE",
+        "CONVERGENT_ACTIVITY_EVENT_TYPES",
+        "NO_PROJECTION_FAMILIES",
+        "OUT_OF_BAND_PROJECTORS",
+    ):
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_projector_ownership_md(reg: dict) -> str:
+    lines = _md_header(PROJECTOR_OWNERSHIP_JSON)
+    lines.append("# Silver Projector Ownership Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append(
+        "Projectors in EXACT dispatcher order (ADR-C3). Activity ownership is "
+        "ADR-C4: one real-world event, one canonical activity owner."
+    )
+    lines.append("")
+    lines.append("| # | Projector | Table | Activity role | Families | Types | Owned activity types |")
+    lines.append("|---|---|---|---|---|---|---|")
+    for position, entry in enumerate(reg["projectors"], start=1):
+        families = ", ".join(f"`{f}`" for f in entry["eventFamilies"]) or "—"
+        lines.append(
+            f"| {position} | `{entry['name']}` | `{entry['table']}` "
+            f"| {entry['activityRole']} | {families} "
+            f"| {len(entry['eventTypes'])} | {len(entry['ownedActivityEventTypes'])} |"
+        )
+    lines.append("")
+    convergent_rows = [
+        (entry["name"], entry["convergentActivityEventTypes"])
+        for entry in reg["projectors"]
+        if entry.get("convergentActivityEventTypes")
+    ]
+    if convergent_rows:
+        lines.append("## Convergent activity emitters")
+        lines.append("")
+        lines.append(
+            "These projectors also emit canonical activity for the listed event "
+            "types but converge on the owner's row via the idempotent upsert."
+        )
+        lines.append("")
+        lines.append("| Projector | Event types |")
+        lines.append("|---|---|")
+        for name, types in convergent_rows:
+            lines.append(f"| `{name}` | {', '.join(f'`{t}`' for t in types)} |")
+        lines.append("")
+    unregistered_rows = [
+        (entry["name"], entry["unregisteredEventTypes"])
+        for entry in reg["projectors"]
+        if entry.get("unregisteredEventTypes")
+    ]
+    if unregistered_rows:
+        lines.append("## Handled types absent from the event registry")
+        lines.append("")
+        lines.append("| Projector | Event types |")
+        lines.append("|---|---|")
+        for name, types in unregistered_rows:
+            lines.append(f"| `{name}` | {', '.join(f'`{t}`' for t in types)} |")
+        lines.append("")
+    lines.append("## Families with no projector")
+    lines.append("")
+    lines.append("| Family | Status | Target tables | Reason |")
+    lines.append("|---|---|---|---|")
+    for entry in sorted(reg["noProjection"], key=lambda e: e["family"]):
+        targets = ", ".join(f"`{t}`" for t in entry.get("targetTables", ())) or "—"
+        lines.append(
+            f"| `{entry['family']}` | {entry['status']} | {targets} | {entry['reason']} |"
+        )
+    lines.append("")
+    lines.append("## Out-of-band stages")
+    lines.append("")
+    for entry in reg["outOfBand"]:
+        lines.append(f"- `{entry['name']}` ({entry['role']}): {entry['description']}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_projector_ownership(reg: dict) -> str:
+    owned = sum(len(e["ownedActivityEventTypes"]) for e in reg["projectors"])
+    return (
+        f"projector ownership v{reg['contractVersion']} — "
+        f"{len(reg['projectors'])} projectors, {owned} activity-owned event types, "
+        f"{len(reg['noProjection'])} no-projection families"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -1692,6 +1964,15 @@ REGISTRIES: tuple = (
             (COMPARISON_MD, gen_comparison_md),
         ),
         _summary_comparison,
+    ),
+    (
+        PROJECTOR_OWNERSHIP_JSON,
+        validate_projector_ownership,
+        (
+            (PROJECTOR_OWNERSHIP_PY, gen_projector_ownership_py),
+            (PROJECTOR_OWNERSHIP_MD, gen_projector_ownership_md),
+        ),
+        _summary_projector_ownership,
     ),
 )
 

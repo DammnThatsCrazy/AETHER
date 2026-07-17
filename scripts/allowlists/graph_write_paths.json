@@ -15,7 +15,6 @@
   "Backend Architecture/aether-backend/services/flows/routes.py",
   "Backend Architecture/aether-backend/services/fraud_networks/routes.py",
   "Backend Architecture/aether-backend/services/identity/graph_reconciliation.py",
-  "Backend Architecture/aether-backend/services/identity/graph_writer.py",
   "Backend Architecture/aether-backend/services/imports/commit.py",
   "Backend Architecture/aether-backend/services/intelligence/graph_mutations.py",
   "Backend Architecture/aether-backend/services/journeys/stitching.py",

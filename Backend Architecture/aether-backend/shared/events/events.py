@@ -390,6 +390,11 @@ class Topic(str, Enum):
     RECONCILIATION_COMPLETED = "aether.reconciliation.completed"
     RECONCILIATION_DRIFT_DETECTED = "aether.reconciliation.drift_detected"
 
+    # ── Graph plane — canonical mutation gateway (WP2.5) ────────────────────
+    # Emitted once per NEW ledger row appended by the Graph Mutation Gateway
+    # (shared/graph/mutation_gateway.py); deduplicated replays do not re-emit.
+    GRAPH_MUTATED = "aether.graph.mutated"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # EVENT SCHEMA

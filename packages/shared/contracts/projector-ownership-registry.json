@@ -1,0 +1,777 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical ownership map for the Silver projection plane (WP2.4). One entry per projector in services/silver/dispatcher.py::_ALL_PROJECTORS, in EXACT dispatcher order (ADR-C3 deterministic semantic order). eventTypes are the projector's dispatcher handles; eventFamilies are the event-registry families those types belong to; unregisteredEventTypes are handled types absent from event-registry.json (declared honestly, not hidden). Canonical-activity ownership (ADR-C4: one real-world event, one activity) is per event type: the CommsProjector owns activity for all communication events, the TouchpointProjector owns its non-comms types, and otherwise the first adapter-backed projector in dispatcher order owns the type while later adapter-backed emitters converge via the idempotent canonical_activity upsert (convergentActivityEventTypes). activityRole=no_activity marks projectors whose table has no canonical-activity adapter. Families with no dispatcher projector are declared under noProjection with an honest status. Enforced against the live dispatcher by scripts/validate_projector_ownership.py; generated artifacts: Backend Architecture/aether-backend/services/silver/generated_ownership.py, docs/_generated/projector-ownership-table.md (via scripts/generate_platform_contracts.py).",
+  "activityRoles": [
+    "comms_owner",
+    "touchpoint_owner",
+    "fact_emitter",
+    "no_activity"
+  ],
+  "noProjectionStatuses": [
+    "no_projection",
+    "pending",
+    "pending_pr2"
+  ],
+  "projectors": [
+    {
+      "name": "CommsProjector",
+      "table": "silver_comms_facts",
+      "activityRole": "comms_owner",
+      "eventFamilies": [
+        "comms"
+      ],
+      "eventTypes": [
+        "email_bounced",
+        "email_clicked",
+        "email_deferred",
+        "email_delivered",
+        "email_dropped",
+        "email_opened",
+        "email_processed",
+        "email_queued",
+        "email_replied",
+        "email_sent",
+        "email_spam_complaint",
+        "email_suppressed",
+        "message_received_observed",
+        "message_replied_observed",
+        "message_sent_observed",
+        "notification_clicked",
+        "notification_delivered",
+        "notification_opened",
+        "unsubscribe_observed"
+      ],
+      "ownedActivityEventTypes": [
+        "email_bounced",
+        "email_clicked",
+        "email_deferred",
+        "email_delivered",
+        "email_dropped",
+        "email_opened",
+        "email_processed",
+        "email_queued",
+        "email_replied",
+        "email_sent",
+        "email_spam_complaint",
+        "email_suppressed",
+        "message_received_observed",
+        "message_replied_observed",
+        "message_sent_observed",
+        "notification_clicked",
+        "notification_delivered",
+        "notification_opened",
+        "unsubscribe_observed"
+      ]
+    },
+    {
+      "name": "IdentityEvidenceProjector",
+      "table": "silver_identity_evidence_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "identity_lc"
+      ],
+      "eventTypes": [
+        "account_recovery_completed",
+        "account_recovery_started",
+        "alias_link_confirmed",
+        "alias_link_requested",
+        "alias_revoked",
+        "device_registered",
+        "device_revoked",
+        "identity_verified",
+        "login_failed",
+        "login_succeeded",
+        "logout_observed",
+        "mfa_challenge_observed",
+        "signup_completed",
+        "signup_started",
+        "sso_observed"
+      ],
+      "ownedActivityEventTypes": [
+        "account_recovery_completed",
+        "account_recovery_started",
+        "alias_link_confirmed",
+        "alias_link_requested",
+        "alias_revoked",
+        "device_registered",
+        "device_revoked",
+        "identity_verified",
+        "login_failed",
+        "login_succeeded",
+        "logout_observed",
+        "mfa_challenge_observed",
+        "signup_completed",
+        "signup_started",
+        "sso_observed"
+      ]
+    },
+    {
+      "name": "TouchpointProjector",
+      "table": "silver_campaign_touchpoint_facts",
+      "activityRole": "touchpoint_owner",
+      "eventFamilies": [
+        "comms",
+        "core",
+        "ecommerce",
+        "exposure",
+        "outcome"
+      ],
+      "eventTypes": [
+        "ad_click",
+        "ad_exposed",
+        "checkout_started",
+        "click",
+        "email_clicked",
+        "email_delivered",
+        "email_opened",
+        "email_replied",
+        "impression",
+        "landing",
+        "message_replied_observed",
+        "notification_clicked",
+        "notification_presented",
+        "offer_exposed",
+        "outcome_observed",
+        "page",
+        "page_view",
+        "pageview",
+        "product_viewed",
+        "recommendation_exposed",
+        "screen",
+        "search_performed",
+        "session_start",
+        "session_started"
+      ],
+      "ownedActivityEventTypes": [
+        "ad_click",
+        "ad_exposed",
+        "checkout_started",
+        "click",
+        "impression",
+        "landing",
+        "notification_presented",
+        "offer_exposed",
+        "outcome_observed",
+        "page",
+        "page_view",
+        "pageview",
+        "product_viewed",
+        "recommendation_exposed",
+        "screen",
+        "search_performed",
+        "session_start",
+        "session_started"
+      ],
+      "unregisteredEventTypes": [
+        "ad_click",
+        "click",
+        "impression",
+        "landing",
+        "page_view",
+        "pageview",
+        "search_performed",
+        "session_start",
+        "session_started"
+      ]
+    },
+    {
+      "name": "ExposureProjector",
+      "table": "silver_exposure_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "exposure"
+      ],
+      "eventTypes": [
+        "ad_exposed",
+        "content_impression",
+        "decision_observed",
+        "feature_exposed",
+        "notification_presented",
+        "offer_exposed",
+        "recommendation_exposed",
+        "search_result_exposed"
+      ],
+      "ownedActivityEventTypes": [
+        "content_impression",
+        "decision_observed",
+        "feature_exposed",
+        "search_result_exposed"
+      ]
+    },
+    {
+      "name": "OutcomeProjector",
+      "table": "silver_outcome_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "outcome"
+      ],
+      "eventTypes": [
+        "churn_observed",
+        "feedback_submitted",
+        "goal_achieved",
+        "goal_failed",
+        "human_override_observed",
+        "outcome_observed",
+        "recommendation_accepted",
+        "recommendation_rejected",
+        "retention_observed"
+      ],
+      "ownedActivityEventTypes": [
+        "churn_observed",
+        "feedback_submitted",
+        "goal_achieved",
+        "goal_failed",
+        "human_override_observed",
+        "recommendation_accepted",
+        "recommendation_rejected",
+        "retention_observed"
+      ]
+    },
+    {
+      "name": "RevenueProjector",
+      "table": "silver_revenue_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "commerce",
+        "ecommerce"
+      ],
+      "eventTypes": [
+        "chargeback_observed",
+        "invoice_failed",
+        "invoice_issued",
+        "invoice_paid",
+        "order_cancelled",
+        "order_completed",
+        "order_refunded",
+        "payment_failed",
+        "payment_intent_created",
+        "payment_succeeded",
+        "subscription_cancelled",
+        "subscription_downgrade_observed",
+        "subscription_renewed",
+        "subscription_started",
+        "subscription_upgrade_observed",
+        "trial_converted",
+        "trial_started"
+      ],
+      "ownedActivityEventTypes": [
+        "chargeback_observed",
+        "invoice_failed",
+        "invoice_issued",
+        "invoice_paid",
+        "order_cancelled",
+        "order_completed",
+        "order_refunded",
+        "payment_failed",
+        "payment_intent_created",
+        "payment_succeeded",
+        "subscription_cancelled",
+        "subscription_downgrade_observed",
+        "subscription_renewed",
+        "subscription_started",
+        "subscription_upgrade_observed",
+        "trial_converted",
+        "trial_started"
+      ],
+      "unregisteredEventTypes": [
+        "payment_intent_created",
+        "payment_succeeded"
+      ]
+    },
+    {
+      "name": "FrictionProjector",
+      "table": "silver_friction_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "friction"
+      ],
+      "eventTypes": [
+        "backtrack_observed",
+        "dead_click_observed",
+        "form_abandoned",
+        "form_field_interaction",
+        "form_started",
+        "form_submitted",
+        "form_validation_failed",
+        "journey_stalled",
+        "rage_click_observed",
+        "retry_observed",
+        "scroll_depth_observed",
+        "search_reformulated"
+      ],
+      "ownedActivityEventTypes": []
+    },
+    {
+      "name": "AccountActivityProjector",
+      "table": "silver_account_activity_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "b2b"
+      ],
+      "eventTypes": [
+        "api_key_created",
+        "api_key_revoked",
+        "integration_connected",
+        "integration_disconnected",
+        "member_invited",
+        "member_joined",
+        "member_removed",
+        "organization_observed",
+        "project_archived",
+        "project_created",
+        "role_changed",
+        "seat_assigned",
+        "seat_released",
+        "service_account_created",
+        "service_account_revoked",
+        "workflow_completed",
+        "workflow_failed",
+        "workflow_started",
+        "workspace_created",
+        "workspace_updated"
+      ],
+      "ownedActivityEventTypes": [
+        "api_key_created",
+        "api_key_revoked",
+        "integration_connected",
+        "integration_disconnected",
+        "member_invited",
+        "member_joined",
+        "member_removed",
+        "organization_observed",
+        "project_archived",
+        "project_created",
+        "role_changed",
+        "seat_assigned",
+        "seat_released",
+        "service_account_created",
+        "service_account_revoked",
+        "workflow_completed",
+        "workflow_failed",
+        "workflow_started",
+        "workspace_created",
+        "workspace_updated"
+      ]
+    },
+    {
+      "name": "ServerOperationProjector",
+      "table": "silver_server_operation_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "server"
+      ],
+      "eventTypes": [
+        "api_request_observed",
+        "connector_sync_completed",
+        "connector_sync_failed",
+        "connector_sync_started",
+        "dependency_failure_observed",
+        "export_completed",
+        "job_completed",
+        "job_failed",
+        "job_started",
+        "rate_limit_observed",
+        "webhook_delivery_observed"
+      ],
+      "ownedActivityEventTypes": []
+    },
+    {
+      "name": "AgentExecutionProjector",
+      "table": "silver_agent_execution_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "agent"
+      ],
+      "eventTypes": [
+        "agent_cost_observed",
+        "agent_evaluation_observed",
+        "agent_grounding_observed",
+        "agent_guardrail_observed",
+        "agent_handoff_observed",
+        "agent_human_override_observed",
+        "agent_step_observed",
+        "agent_task_completed",
+        "agent_task_failed",
+        "agent_task_started",
+        "agent_tool_call_observed",
+        "agentic_session_abandoned",
+        "agentic_session_completed",
+        "agentic_session_started"
+      ],
+      "ownedActivityEventTypes": [
+        "agent_cost_observed",
+        "agent_evaluation_observed",
+        "agent_grounding_observed",
+        "agent_guardrail_observed",
+        "agent_handoff_observed",
+        "agent_human_override_observed",
+        "agent_step_observed",
+        "agent_task_completed",
+        "agent_task_failed",
+        "agent_task_started",
+        "agent_tool_call_observed",
+        "agentic_session_abandoned",
+        "agentic_session_completed",
+        "agentic_session_started"
+      ],
+      "unregisteredEventTypes": [
+        "agent_handoff_observed",
+        "agent_step_observed",
+        "agent_tool_call_observed",
+        "agentic_session_abandoned",
+        "agentic_session_completed",
+        "agentic_session_started"
+      ]
+    },
+    {
+      "name": "AIInvocationProjector",
+      "table": "ai_execution_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "agent"
+      ],
+      "eventTypes": [
+        "ai_invocation_observed"
+      ],
+      "ownedActivityEventTypes": []
+    },
+    {
+      "name": "Web3TransactionProjector",
+      "table": "silver_web3_transaction_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "wallet",
+        "web3_lc"
+      ],
+      "eventTypes": [
+        "allowance_changed_observed",
+        "bridge_transfer_observed",
+        "contract_action",
+        "settlement_finality_observed",
+        "token_approval_observed",
+        "transaction_confirmed",
+        "transaction_confirmed_observed",
+        "transaction_failed",
+        "transaction_initiated",
+        "transaction_pending_observed",
+        "transaction_reorged_observed",
+        "transaction_reverted_observed",
+        "transaction_submitted",
+        "wallet_connected",
+        "wallet_disconnected"
+      ],
+      "ownedActivityEventTypes": [
+        "allowance_changed_observed",
+        "bridge_transfer_observed",
+        "contract_action",
+        "settlement_finality_observed",
+        "token_approval_observed",
+        "transaction_confirmed",
+        "transaction_confirmed_observed",
+        "transaction_failed",
+        "transaction_initiated",
+        "transaction_pending_observed",
+        "transaction_reorged_observed",
+        "transaction_reverted_observed",
+        "transaction_submitted",
+        "wallet_connected",
+        "wallet_disconnected"
+      ],
+      "unregisteredEventTypes": [
+        "transaction_confirmed",
+        "transaction_failed",
+        "transaction_initiated",
+        "transaction_submitted",
+        "wallet_connected",
+        "wallet_disconnected"
+      ]
+    },
+    {
+      "name": "X402FlowProjector",
+      "table": "silver_x402_flow_facts",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [],
+      "eventTypes": [
+        "x402_payment_failed_observed",
+        "x402_payment_initiated_observed",
+        "x402_payment_required_observed",
+        "x402_payment_verified_observed",
+        "x402_resource_unlocked_observed",
+        "x402_settlement_confirmed_observed"
+      ],
+      "ownedActivityEventTypes": [
+        "x402_payment_failed_observed",
+        "x402_payment_initiated_observed",
+        "x402_payment_required_observed",
+        "x402_payment_verified_observed",
+        "x402_resource_unlocked_observed",
+        "x402_settlement_confirmed_observed"
+      ],
+      "unregisteredEventTypes": [
+        "x402_payment_failed_observed",
+        "x402_payment_initiated_observed",
+        "x402_payment_required_observed",
+        "x402_payment_verified_observed",
+        "x402_resource_unlocked_observed",
+        "x402_settlement_confirmed_observed"
+      ]
+    },
+    {
+      "name": "StablecoinProjector",
+      "table": "silver_stablecoin_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "stablecoin"
+      ],
+      "eventTypes": [
+        "stablecoin_balance_snapshot_observed",
+        "stablecoin_bridge_inbound_observed",
+        "stablecoin_bridge_outbound_observed",
+        "stablecoin_burn_observed",
+        "stablecoin_depeg_detected",
+        "stablecoin_depeg_resolved",
+        "stablecoin_finality_confirmed",
+        "stablecoin_holder_concentration_observed",
+        "stablecoin_mint_observed",
+        "stablecoin_observation_corrected",
+        "stablecoin_payment_observed",
+        "stablecoin_payout_observed",
+        "stablecoin_reconciliation_run_completed",
+        "stablecoin_reconciliation_variance_detected",
+        "stablecoin_reconciliation_variance_resolved",
+        "stablecoin_reorg_detected",
+        "stablecoin_supply_snapshot_observed",
+        "stablecoin_support_asserted",
+        "stablecoin_support_revoked",
+        "stablecoin_swap_observed",
+        "stablecoin_transfer_observed",
+        "stablecoin_treasury_movement_observed",
+        "stablecoin_valuation_observed",
+        "stablecoin_venue_deposit_observed",
+        "stablecoin_venue_withdrawal_observed",
+        "stablecoin_x402_settlement_observed"
+      ],
+      "ownedActivityEventTypes": []
+    },
+    {
+      "name": "DerivativesProjector",
+      "table": "silver_derivatives_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "derivatives"
+      ],
+      "eventTypes": [
+        "derivatives_account_link_revoked",
+        "derivatives_account_linked",
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_exposure_snapshot_materialized",
+        "derivatives_fee_observed",
+        "derivatives_fill_corrected",
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_market_status_changed",
+        "derivatives_order_cancelled_observed",
+        "derivatives_order_expired_observed",
+        "derivatives_order_observed",
+        "derivatives_order_rejected_observed",
+        "derivatives_order_updated_observed",
+        "derivatives_pnl_snapshot_materialized",
+        "derivatives_position_adl_observed",
+        "derivatives_position_closed_observed",
+        "derivatives_position_corrected",
+        "derivatives_position_increased_observed",
+        "derivatives_position_liquidated_observed",
+        "derivatives_position_opened_observed",
+        "derivatives_position_reduced_observed",
+        "derivatives_position_settled_observed",
+        "derivatives_price_observation_recorded",
+        "derivatives_reconciliation_run_completed",
+        "derivatives_reconciliation_variance_detected",
+        "derivatives_reconciliation_variance_resolved",
+        "derivatives_risk_policy_registered",
+        "derivatives_risk_threshold_breached",
+        "derivatives_strategy_registered",
+        "derivatives_strategy_version_registered"
+      ],
+      "ownedActivityEventTypes": []
+    },
+    {
+      "name": "InteropProjector",
+      "table": "silver_interop_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "interop"
+      ],
+      "eventTypes": [
+        "interop_asset_leg_burned_observed",
+        "interop_asset_leg_locked_observed",
+        "interop_asset_leg_minted_observed",
+        "interop_asset_leg_released_observed",
+        "interop_fee_observed",
+        "interop_intent_fulfilled_observed",
+        "interop_intent_observed",
+        "interop_message_cancelled",
+        "interop_message_corrected",
+        "interop_message_correlated",
+        "interop_message_delivered",
+        "interop_message_delivery_attempt_observed",
+        "interop_message_discovered",
+        "interop_message_executed_observed",
+        "interop_message_expired",
+        "interop_message_failed",
+        "interop_message_recovered",
+        "interop_message_refunded_observed",
+        "interop_message_reorged",
+        "interop_message_sent_observed",
+        "interop_message_settled",
+        "interop_message_source_confirmed",
+        "interop_message_timeout",
+        "interop_message_verification_observed",
+        "interop_message_verified",
+        "interop_reconciliation_run_completed",
+        "interop_reconciliation_variance_detected",
+        "interop_reconciliation_variance_resolved",
+        "interop_security_policy_changed",
+        "interop_security_policy_snapshot_recorded",
+        "interop_verification_quorum_observed"
+      ],
+      "ownedActivityEventTypes": []
+    },
+    {
+      "name": "ConversionProjector",
+      "table": "canonical_conversions",
+      "activityRole": "fact_emitter",
+      "eventFamilies": [
+        "ecommerce",
+        "identity_lc"
+      ],
+      "eventTypes": [
+        "checkout_completed",
+        "lead_created",
+        "opportunity_closed_won",
+        "order_completed",
+        "payment_confirmed",
+        "reward_redeemed",
+        "signup_completed",
+        "subscription_started",
+        "trial_started",
+        "x402_settled"
+      ],
+      "ownedActivityEventTypes": [
+        "checkout_completed",
+        "lead_created",
+        "opportunity_closed_won",
+        "payment_confirmed",
+        "reward_redeemed",
+        "x402_settled"
+      ],
+      "convergentActivityEventTypes": [
+        "order_completed",
+        "signup_completed",
+        "subscription_started",
+        "trial_started"
+      ],
+      "unregisteredEventTypes": [
+        "checkout_completed",
+        "lead_created",
+        "opportunity_closed_won",
+        "payment_confirmed",
+        "reward_redeemed",
+        "x402_settled"
+      ]
+    },
+    {
+      "name": "CardLinkedProjector",
+      "table": "card_linked_flow_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "commerce",
+        "reward",
+        "wallet"
+      ],
+      "eventTypes": [
+        "conversion",
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated",
+        "reward_action_queued",
+        "transaction"
+      ],
+      "ownedActivityEventTypes": []
+    }
+  ],
+  "outOfBand": [
+    {
+      "name": "SilverGraphProjector",
+      "role": "graph_emission",
+      "description": "Fire-and-forget Silver->graph mutation emission invoked by the dispatcher after each successful fact projection; evidence-backed (provenance_class=silver, source_event_id required) and never a canonical-activity owner.",
+      "tables": [
+        "silver_comms_facts",
+        "silver_exposure_facts",
+        "silver_outcome_facts",
+        "silver_revenue_facts",
+        "silver_agent_execution_facts"
+      ]
+    }
+  ],
+  "noProjection": [
+    {
+      "family": "consent",
+      "status": "no_projection",
+      "reason": "Consent is control-plane state owned by the consent authority, not a Silver analytics fact."
+    },
+    {
+      "family": "credit",
+      "status": "pending",
+      "targetTables": [
+        "credit_signal_facts"
+      ],
+      "reason": "Registry declares silverProjection=credit_signal_facts; no dispatcher projector exists yet."
+    },
+    {
+      "family": "identity",
+      "status": "pending",
+      "targetTables": [
+        "identity_evidence_facts"
+      ],
+      "reason": "The bare identify call is not routed; identity evidence is currently projected from identity_lc lifecycle events only."
+    },
+    {
+      "family": "interaction",
+      "status": "pending_pr2",
+      "targetTables": [
+        "feature_transition_facts",
+        "product_interaction_facts",
+        "surface_interval_facts"
+      ],
+      "reason": "The interaction family currently has NO projector; its silverProjection targets land with the PR 2 interaction plane."
+    },
+    {
+      "family": "journey",
+      "status": "pending",
+      "targetTables": [
+        "journey_step_facts"
+      ],
+      "reason": "Registry declares silverProjection=journey_step_facts; no dispatcher projector exists yet (journey materialization runs outside the Silver dispatcher)."
+    },
+    {
+      "family": "location",
+      "status": "pending",
+      "targetTables": [
+        "location_observation_facts"
+      ],
+      "reason": "Registry declares silverProjection=location_observation_facts; no dispatcher projector exists yet."
+    },
+    {
+      "family": "x402",
+      "status": "pending",
+      "targetTables": [
+        "x402_flow_facts"
+      ],
+      "reason": "X402FlowProjector handles legacy *_observed event types that are not in the event registry; the registry's x402 family types are not yet routed by the dispatcher."
+    }
+  ]
+}
