@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS gold_trading_profile (
     avg_trade_size_usd      Decimal(18, 6),
     tx_success_rate         Float32,                   -- 0–1
     avg_gas_cost_usd        Decimal(18, 6),
-    computed_at             DateTime
+    computed_at             DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(computed_at)

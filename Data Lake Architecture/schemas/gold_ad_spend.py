@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS gold_ad_spend (
     ctr                     Float32,   -- click-through rate (0-1)
     conversions             UInt32,
     revenue_attributed_usd  Decimal(18, 6),
-    ingested_at             DateTime
+    ingested_at             DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(date)

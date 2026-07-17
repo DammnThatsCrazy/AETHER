@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS gold_entity_pnl (
     -- Cost basis metadata
     cost_basis_method       LowCardinality(String),    -- FIFO or LIFO
     data_confidence         LowCardinality(String),    -- exact or estimated
-    computed_at             DateTime
+    computed_at             DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(computed_at)
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS gold_entity_pnl_daily (
     realized_pnl_usd        Decimal(18, 6),
     unrealized_pnl_usd      Decimal(18, 6),
     tvl_usd                 Decimal(18, 6),
-    computed_at             DateTime
+    computed_at             DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(date)

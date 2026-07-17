@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS gold_social_intelligence (
     total_followers_deduped UInt32,
     influence_level         LowCardinality(String),  -- high, medium, low
     engagement_rate         Float32,
-    computed_at             DateTime,
-    last_refreshed_at       DateTime
+    computed_at             DateTime64(3, 'UTC'),
+    last_refreshed_at       DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(computed_at)

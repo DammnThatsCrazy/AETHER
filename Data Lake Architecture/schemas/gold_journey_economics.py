@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS gold_journey_economics (
     time_visit_to_connect_ms            Nullable(Int64),
     time_connect_to_swap_ms             Nullable(Int64),
     time_swap_to_liquidity_ms           Nullable(Int64),
-    computed_at                         DateTime
+    computed_at                         DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(computed_at)

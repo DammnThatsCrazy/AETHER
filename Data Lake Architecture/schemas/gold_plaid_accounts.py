@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS gold_plaid_accounts (
     balance_available_usd Nullable(Decimal(18, 6)),
     balance_limit_usd   Nullable(Decimal(18, 6)),
     currency_code       LowCardinality(String),
-    last_sync_at        DateTime
+    last_sync_at        DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(last_sync_at)
 ORDER BY (tenant_id, entity_id, account_id)
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS gold_plaid_transactions (
     merchant_name       Nullable(String),
     merchant_entity_id  Nullable(String),
     status              LowCardinality(String),  -- posted, pending
-    ingested_at         DateTime
+    ingested_at         DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(date)
