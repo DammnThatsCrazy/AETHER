@@ -37,6 +37,8 @@ from shared.common.common import BadRequestError, ConflictError, NotFoundError
 from shared.cis.mutation_gateway import get_gateway
 from shared.graph.edge_properties import build_edge_properties, make_edge_idempotency_key
 from shared.graph.graph import Edge, GraphClient, Vertex, _escape_gremlin
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.graph.write_validator import GraphWriteValidator
 from shared.logger.logger import get_logger, metrics
 from services.agent.runtime_repository import (
@@ -199,6 +201,7 @@ async def commit_approved_mutations(
         raise ConflictError(f"Cannot commit review batch in status '{batch.get('status')}'")
 
     client = graph or _graph_client()
+    gateway = GraphMutationGateway(graph_client=client)
     validator = GraphWriteValidator()
     results: list[dict[str, Any]] = []
 
@@ -282,9 +285,17 @@ async def commit_approved_mutations(
 
         try:
             if vertex is not None:
-                await client.add_vertex(vertex)
+                await gateway.apply(vertex_intent(
+                    vertex, operation="node_created",
+                    tenant_id=tenant_id, actor_kind="human", actor_id=actor,
+                    correlation_id=mutation["mutation_id"],
+                ))
             elif edge is not None:
-                await client.add_edge(edge)
+                await gateway.apply(edge_intent(
+                    edge, operation="edge_created",
+                    tenant_id=tenant_id, actor_kind="human", actor_id=actor,
+                    correlation_id=mutation["mutation_id"],
+                ))
         except Exception as exc:
             # Graph unreachable / write rejected: quarantine-style failure,
             # preserved for operator retry — never dropped.

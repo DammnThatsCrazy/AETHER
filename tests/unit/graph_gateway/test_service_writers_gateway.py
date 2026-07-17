@@ -88,3 +88,25 @@ async def test_delegation_projector_off_mode_no_ledger(set_mode):
     await DelegationProjector(graph=client, repo=_FakeDelegationRepo()).handle(_event())
     assert len(await client.get_edges("grantor-1")) == 1
     assert await ledger.list_records(TENANT) == []
+
+
+@pytest.mark.asyncio
+async def test_agentic_observability_persist_mutations_ledgered(set_mode, monkeypatch):
+    """foundation.persist_mutations routes node_created + edge_created writes."""
+    from shared.graph.graph import Edge, Vertex
+
+    set_mode("shadow")
+    client = GraphClient()
+    monkeypatch.setattr(
+        "dependencies.providers.get_graph", lambda: client, raising=False
+    )
+    from services.agentic_observability import foundation
+
+    vertex = Vertex("Agent", "agent-obs-1", {"tenant_id": TENANT})
+    edge = Edge("OBSERVED", "agent-obs-1", "svc-1", {"tenant_id": TENANT})
+    result = await foundation.persist_mutations([vertex, edge], tenant_id=TENANT)
+    assert result.graph_mutations_persisted == 2
+
+    rows = await GraphMutationLedgerRepository().list_records(TENANT)
+    assert [r["operation"] for r in rows] == ["node_created", "edge_created"]
+    assert replay_ledger(rows) == await current_graph_digest(client, TENANT)

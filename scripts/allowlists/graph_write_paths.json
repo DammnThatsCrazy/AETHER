@@ -1,12 +1,9 @@
 [
   "Backend Architecture/aether-backend/repositories/repos.py",
   "Backend Architecture/aether-backend/services/agent/lifecycle_mapper.py",
-  "Backend Architecture/aether-backend/services/agent/mutation_commit.py",
   "Backend Architecture/aether-backend/services/agent/routes.py",
   "Backend Architecture/aether-backend/services/agent/user_agents.py",
-  "Backend Architecture/aether-backend/services/agentic_observability/foundation.py",
   "Backend Architecture/aether-backend/services/agentic_observability/outbox_worker.py",
-  "Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py",
   "Backend Architecture/aether-backend/services/commerce/service.py",
   "Backend Architecture/aether-backend/services/flow_trace/routes.py",
   "Backend Architecture/aether-backend/services/fraud_networks/routes.py",
