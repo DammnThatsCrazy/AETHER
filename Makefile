@@ -336,8 +336,11 @@ temporal-contract-parity: ## Temporal + platform contract generators clean, TS/P
 mutation-gateway-check: ## Graph write-path freeze (direct writers pending gateway migration)
 	python scripts/validate_graph_write_paths.py
 
-exploration-readiness: ## Exploration fabric contract + registry gates (grows per PR)
-	python -m pytest tests/contracts/test_exploration_contract_parity.py -q -o addopts=""
+exploration-readiness: ## Exploration fabric contract + registry + planner gates (grows per PR)
+	python -m pytest tests/contracts/test_exploration_contract_parity.py \
+		tests/contracts/test_filter_field_registry_parity.py \
+		tests/contracts/test_surface_capability_parity.py \
+		tests/unit/exploration -q -o addopts=""
 
 production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
 	python scripts/production_status.py
