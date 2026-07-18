@@ -40,6 +40,7 @@ ROOT = Path(__file__).parent.parent
 EVENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 METRIC_REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "metric-registry.json"
+INTEGRATION_CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "integration-consent-registry.json"
 
 CONSENT_TS = ROOT / "packages" / "shared" / "consent.ts"
 EVENTS_TS = ROOT / "packages" / "shared" / "events.ts"
@@ -56,6 +57,17 @@ METRIC_TABLE_MD = ROOT / "docs" / "_generated" / "metric-registry-table.md"
 WEB_CONSENT_MAP_TS = (
     ROOT / "packages" / "web" / "src" / "core" / "generated-consent-map.ts"
 )
+INTEGRATION_CONSENT_TS = ROOT / "packages" / "shared" / "integration-consent.ts"
+INTEGRATION_CONSENT_PY = (
+    ROOT / "Backend Architecture" / "aether-backend" / "shared" / "privacy" / "generated_integration_consent.py"
+)
+INTEGRATION_CONSENT_SWIFT = (
+    ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "GeneratedIntegrationConsent.swift"
+)
+INTEGRATION_CONSENT_KT = (
+    ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "GeneratedIntegrationConsent.kt"
+)
+INTEGRATION_CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "integration-consent-registry-table.md"
 
 # Markers used in events.ts to delimit the generated section
 GENERATED_START = "// @generated-start"
@@ -71,11 +83,12 @@ GENERATED_PY_HEADER = """\
 # Registry loading and validation
 # ---------------------------------------------------------------------------
 
-def load_registries() -> tuple[dict, dict, dict]:
+def load_registries() -> tuple[dict, dict, dict, dict]:
     event_reg = json.loads(EVENT_REGISTRY.read_text())
     consent_reg = json.loads(CONSENT_REGISTRY.read_text())
     metric_reg = json.loads(METRIC_REGISTRY_JSON.read_text())
-    return event_reg, consent_reg, metric_reg
+    integration_reg = json.loads(INTEGRATION_CONSENT_REGISTRY.read_text())
+    return event_reg, consent_reg, metric_reg, integration_reg
 
 
 def validate_metrics(metric_reg: dict) -> None:
@@ -128,6 +141,117 @@ def validate(event_reg: dict, consent_reg: dict) -> None:
             if field not in p:
                 print(f"ERROR: consent purpose {p.get('key')!r} missing field {field!r}", file=sys.stderr)
                 sys.exit(1)
+
+
+def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> None:
+    """Validate the provider-neutral connector governance registry."""
+    required = {
+        "connectorType",
+        "connectorClass",
+        "provider",
+        "category",
+        "dataFlowDirection",
+        "riskTier",
+        "implementationStatus",
+        "supportedCapabilities",
+        "requiredTenantPermissions",
+        "requiresProviderAdminInstall",
+        "requiresTenantAdminApproval",
+        "requiredSubjectPurposes",
+        "supportedProcessingBases",
+        "defaultProcessingBasis",
+        "dataCategories",
+        "identitySignals",
+        "allowsIdentityLinking",
+        "allowsGraphProjection",
+        "allowsModelTraining",
+        "allowsPreConsentProcessing",
+        "complianceEvidenceEvents",
+        "suppressionEvents",
+        "retentionClass",
+        "rawPayloadPolicy",
+        "quarantinePolicy",
+        "providerConsentBridge",
+        "providerSignatureScheme",
+        "supportsHistoricalBackfill",
+        "supportsOutboundActivation",
+    }
+    expected = {
+        "slack",
+        "generic_webhook",
+        "shopify",
+        "stripe",
+        "hubspot",
+        "salesforce",
+        "klaviyo",
+        "segment",
+        "posthog",
+        "ga4",
+        "jira",
+        "linear",
+        "zendesk",
+        "intercom",
+        "dune",
+        "apple_pay",
+        "google_pay",
+        "outbound_activation",
+    }
+    purposes = {p["key"] for p in consent_reg.get("purposes", [])}
+    seen: set[str] = set()
+
+    for entry in integration_reg.get("connectors", []):
+        connector_type = entry.get("connectorType")
+        if not connector_type:
+            print("ERROR: integration connector missing connectorType", file=sys.stderr)
+            sys.exit(1)
+        if connector_type in seen:
+            print(f"ERROR: duplicate integration connector {connector_type!r}", file=sys.stderr)
+            sys.exit(1)
+        seen.add(connector_type)
+
+        missing = sorted(required - set(entry))
+        if missing:
+            print(
+                f"ERROR: integration connector {connector_type!r} missing fields {missing}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        for purpose in entry.get("requiredSubjectPurposes", []):
+            if purpose not in purposes:
+                print(
+                    f"ERROR: integration connector {connector_type!r} references unknown purpose {purpose!r}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+        if not entry.get("retentionClass") or not entry.get("rawPayloadPolicy"):
+            print(
+                f"ERROR: integration connector {connector_type!r} lacks retention/raw payload policy",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        signature = entry.get("providerSignatureScheme")
+        if entry.get("supportsHistoricalBackfill") and signature in {"", "none", None}:
+            print(
+                f"ERROR: integration connector {connector_type!r} lacks provider signature scheme",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    missing_expected = sorted(expected - seen)
+    extra = sorted(seen - expected)
+    if missing_expected or extra:
+        print(
+            f"ERROR: integration connector set drift missing={missing_expected} extra={extra}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def _ts_literal(value) -> str:
+    return json.dumps(value, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +521,252 @@ def gen_web_consent_map_ts(event_reg: dict) -> str:
     )
 
 
+def gen_integration_consent_ts(reg: dict) -> str:
+    connectors = reg["connectors"]
+    version = reg["contractVersion"]
+    connector_union = "\n".join(f"  | '{c['connectorType']}'" for c in connectors)
+    entries = ",\n".join(
+        f"  {json.dumps(c['connectorType'])}: {_ts_literal(c)}" for c in connectors
+    )
+    flags = [
+        "AETHER_CONSENT_CONTROL_PLANE_V2",
+        "AETHER_CONNECTOR_POLICY_GATE",
+        "AETHER_INTEGRATION_DISCOVERY",
+        "AETHER_PREFERENCE_CENTER_V1",
+        "AETHER_CHECKOUT_HARDENING_V1",
+        "AETHER_CONSENT_LIFECYCLE_ENFORCEMENT",
+    ]
+    flag_union = "\n".join(f"  | '{flag}'" for flag in flags)
+    flag_entries = "\n".join(f"  {json.dumps(flag)}: false," for flag in flags)
+
+    return textwrap.dedent(f"""\
+        // =============================================================================
+        // Aether SDK — Integration Consent Governance Registry (v{version})
+        // DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json
+        // Run: python scripts/generate_contracts.py
+        // =============================================================================
+
+        import type {{ ConsentPurpose }} from './consent';
+
+        export type IntegrationConnectorType =
+        {connector_union}
+          ;
+
+        export type AetherConsentControlPlaneFlag =
+        {flag_union}
+          ;
+
+        export interface ProcessingDecision {{
+          decisionId: string;
+          tenantId: string;
+          connectorType?: IntegrationConnectorType | string;
+          sourceKind: string;
+          subjectId?: string;
+          anonymousId?: string;
+          purpose?: ConsentPurpose | string;
+          processingBasis?: string;
+          allowed: boolean;
+          reasonCode?: string;
+          identityLinkingAllowed: boolean;
+          graphProjectionAllowed: boolean;
+          modelTrainingAllowed: boolean;
+          activationAllowed: boolean;
+          retentionClass: string;
+          quarantineRequired: boolean;
+          policyVersion: string;
+          consentReceiptId?: string;
+          evaluatedAt: string;
+        }}
+
+        export interface CanonicalConsentReceipt {{
+          receipt_id: string;
+          tenant_id: string;
+          subject_id?: string;
+          anonymous_id?: string;
+          purposes: readonly ConsentPurpose[];
+          state: 'granted' | 'denied' | 'revoked' | 'expired';
+          source: string;
+          provider?: string;
+          policy_version: string;
+          jurisdiction_context?: string;
+          mode?: string;
+          lawful_basis?: string;
+          granted_at?: string;
+          denied_at?: string;
+          revoked_at?: string;
+          expires_at?: string;
+          gpc_observed?: boolean;
+          dnt_observed?: boolean;
+          provider_consent_id?: string;
+          integrity_hash: string;
+          idempotency_key: string;
+          metadata?: Readonly<Record<string, unknown>>;
+        }}
+
+        export interface IntegrationConsentPolicy {{
+          connectorType: IntegrationConnectorType;
+          connectorClass: string;
+          provider: string;
+          category: string;
+          dataFlowDirection: string;
+          riskTier: string;
+          implementationStatus: string;
+          supportedCapabilities: readonly string[];
+          requiredTenantPermissions: readonly string[];
+          requiresProviderAdminInstall: boolean;
+          requiresTenantAdminApproval: boolean;
+          requiredSubjectPurposes: readonly ConsentPurpose[];
+          supportedProcessingBases: readonly string[];
+          defaultProcessingBasis: string;
+          dataCategories: readonly string[];
+          identitySignals: readonly string[];
+          allowsIdentityLinking: boolean;
+          allowsGraphProjection: boolean;
+          allowsModelTraining: boolean;
+          allowsPreConsentProcessing: boolean;
+          complianceEvidenceEvents: readonly string[];
+          suppressionEvents: readonly string[];
+          retentionClass: string;
+          rawPayloadPolicy: string;
+          quarantinePolicy: string;
+          providerConsentBridge: string;
+          providerSignatureScheme: string;
+          supportsHistoricalBackfill: boolean;
+          supportsOutboundActivation: boolean;
+          notes?: string;
+        }}
+
+        export const INTEGRATION_CONSENT_REGISTRY_VERSION = '{version}';
+
+        export const AETHER_CONSENT_CONTROL_PLANE_FLAGS: Readonly<Record<AetherConsentControlPlaneFlag, false>> = {{
+        {flag_entries}
+        }} as const;
+
+        export const INTEGRATION_CONSENT_POLICIES: Readonly<Record<IntegrationConnectorType, IntegrationConsentPolicy>> = {{
+        {entries}
+        }} as const;
+        """)
+
+
+def gen_integration_consent_py(reg: dict) -> str:
+    flags = [
+        "AETHER_CONSENT_CONTROL_PLANE_V2",
+        "AETHER_CONNECTOR_POLICY_GATE",
+        "AETHER_INTEGRATION_DISCOVERY",
+        "AETHER_PREFERENCE_CENTER_V1",
+        "AETHER_CHECKOUT_HARDENING_V1",
+        "AETHER_CONSENT_LIFECYCLE_ENFORCEMENT",
+    ]
+    return (
+        "# DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json\n"
+        "# Run: python scripts/generate_contracts.py\n"
+        "from dataclasses import dataclass\n\n"
+        "@dataclass(frozen=True)\n"
+        "class ProcessingDecision:\n"
+        "    decisionId: str\n"
+        "    tenantId: str\n"
+        "    sourceKind: str\n"
+        "    allowed: bool\n"
+        "    identityLinkingAllowed: bool\n"
+        "    graphProjectionAllowed: bool\n"
+        "    modelTrainingAllowed: bool\n"
+        "    activationAllowed: bool\n"
+        "    retentionClass: str\n"
+        "    quarantineRequired: bool\n"
+        "    policyVersion: str\n"
+        "    evaluatedAt: str\n"
+        "    connectorType: str | None = None\n"
+        "    subjectId: str | None = None\n"
+        "    anonymousId: str | None = None\n"
+        "    purpose: str | None = None\n"
+        "    processingBasis: str | None = None\n"
+        "    reasonCode: str | None = None\n"
+        "    consentReceiptId: str | None = None\n\n"
+        f"INTEGRATION_CONSENT_REGISTRY_VERSION = {reg['contractVersion']!r}\n"
+        f"AETHER_CONSENT_CONTROL_PLANE_FLAGS = {dict.fromkeys(flags, False)!r}\n"
+        f"INTEGRATION_CONSENT_POLICIES = {reg['connectors']!r}\n"
+        "INTEGRATION_CONSENT_POLICY_BY_TYPE = {p['connectorType']: p for p in INTEGRATION_CONSENT_POLICIES}\n"
+    )
+
+
+def gen_integration_consent_swift(reg: dict) -> str:
+    cases = "\n".join(
+        f"    case {c['connectorType'].replace('_', '')} = \"{c['connectorType']}\""
+        for c in reg["connectors"]
+    )
+    return f"""// DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json
+// Run: python scripts/generate_contracts.py
+import Foundation
+
+public let integrationConsentRegistryVersion = "{reg['contractVersion']}"
+
+public enum IntegrationConnectorType: String, CaseIterable {{
+{cases}
+}}
+
+public struct ProcessingDecision: Codable, Equatable {{
+    public let decisionId: String
+    public let tenantId: String
+    public let connectorType: String?
+    public let sourceKind: String
+    public let subjectId: String?
+    public let anonymousId: String?
+    public let purpose: String?
+    public let processingBasis: String?
+    public let allowed: Bool
+    public let reasonCode: String?
+    public let identityLinkingAllowed: Bool
+    public let graphProjectionAllowed: Bool
+    public let modelTrainingAllowed: Bool
+    public let activationAllowed: Bool
+    public let retentionClass: String
+    public let quarantineRequired: Bool
+    public let policyVersion: String
+    public let consentReceiptId: String?
+    public let evaluatedAt: String
+}}
+"""
+
+
+def gen_integration_consent_kotlin(reg: dict) -> str:
+    entries = ",\n".join(
+        f"    {c['connectorType'].upper()}(\"{c['connectorType']}\")"
+        for c in reg["connectors"]
+    )
+    return f"""// DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json
+// Run: python scripts/generate_contracts.py
+package com.aether.sdk
+
+const val INTEGRATION_CONSENT_REGISTRY_VERSION: String = "{reg['contractVersion']}"
+
+enum class IntegrationConnectorType(val connectorType: String) {{
+{entries}
+}}
+
+data class ProcessingDecision(
+    val decisionId: String,
+    val tenantId: String,
+    val connectorType: String? = null,
+    val sourceKind: String,
+    val subjectId: String? = null,
+    val anonymousId: String? = null,
+    val purpose: String? = null,
+    val processingBasis: String? = null,
+    val allowed: Boolean,
+    val reasonCode: String? = null,
+    val identityLinkingAllowed: Boolean,
+    val graphProjectionAllowed: Boolean,
+    val modelTrainingAllowed: Boolean,
+    val activationAllowed: Boolean,
+    val retentionClass: String,
+    val quarantineRequired: Boolean,
+    val policyVersion: String,
+    val consentReceiptId: String? = null,
+    val evaluatedAt: String,
+)
+"""
+
+
 # ---------------------------------------------------------------------------
 # measurement-contract.ts + generated_registry.py (metric) generators
 # ---------------------------------------------------------------------------
@@ -603,6 +973,29 @@ def gen_metric_table_md(metric_reg: dict) -> str:
     )
 
 
+def gen_integration_consent_table_md(reg: dict) -> str:
+    rows: list[str] = []
+    for c in reg["connectors"]:
+        purposes = ", ".join(c["requiredSubjectPurposes"])
+        rows.append(
+            f"| `{c['connectorType']}` | {c['provider']} | {c['category']} | "
+            f"{c['riskTier']} | {c['implementationStatus']} | {purposes} | "
+            f"{c['defaultProcessingBasis']} | {c['rawPayloadPolicy']} | "
+            f"{c['providerSignatureScheme']} |"
+        )
+    rows_str = "\n".join(rows)
+    return (
+        "<!-- DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json -->\n"
+        "<!-- Run: python scripts/generate_contracts.py -->\n"
+        "\n"
+        f"# Aether Integration Consent Registry ({len(reg['connectors'])} connectors/adapters, contract v{reg['contractVersion']})\n"
+        "\n"
+        "| Connector | Provider | Category | Risk | Status | Purposes | Default basis | Raw payload policy | Signature scheme |\n"
+        "|---|---|---|---|---|---|---|---|---|\n"
+        f"{rows_str}\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Write / check helpers
 # ---------------------------------------------------------------------------
@@ -649,9 +1042,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    event_reg, consent_reg, metric_reg = load_registries()
+    event_reg, consent_reg, metric_reg, integration_reg = load_registries()
     validate(event_reg, consent_reg)
     validate_metrics(metric_reg)
+    validate_integration_consent(integration_reg, consent_reg)
 
     diffs: list[str] = []
 
@@ -664,6 +1058,16 @@ def main() -> int:
     _apply(CONSENT_TABLE_MD, gen_consent_table_md(consent_reg), args.check, diffs)
     _apply(METRIC_TABLE_MD, gen_metric_table_md(metric_reg), args.check, diffs)
     _apply(WEB_CONSENT_MAP_TS, gen_web_consent_map_ts(event_reg), args.check, diffs)
+    _apply(INTEGRATION_CONSENT_TS, gen_integration_consent_ts(integration_reg), args.check, diffs)
+    _apply(INTEGRATION_CONSENT_PY, gen_integration_consent_py(integration_reg), args.check, diffs)
+    _apply(INTEGRATION_CONSENT_SWIFT, gen_integration_consent_swift(integration_reg), args.check, diffs)
+    _apply(INTEGRATION_CONSENT_KT, gen_integration_consent_kotlin(integration_reg), args.check, diffs)
+    _apply(
+        INTEGRATION_CONSENT_TABLE_MD,
+        gen_integration_consent_table_md(integration_reg),
+        args.check,
+        diffs,
+    )
 
     if diffs:
         print("DRIFT: generated files differ from committed versions:", file=sys.stderr)
@@ -675,8 +1079,9 @@ def main() -> int:
     n = len(event_reg["events"])
     np = len(consent_reg["purposes"])
     nm = len(metric_reg["metrics"])
+    ni = len(integration_reg["connectors"])
     print(
-        f"OK: {n} event types, {np} consent purposes, {nm} metrics "
+        f"OK: {n} event types, {np} consent purposes, {nm} metrics, {ni} integration policies "
         f"— all artifacts up-to-date"
     )
     return 0
