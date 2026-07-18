@@ -26,6 +26,8 @@ Legacy aliases:
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Optional
 
 from repositories.repos import DelegationRepository, AgentExecutionRepository
@@ -105,16 +107,48 @@ class AgentLifecycleMapper:
             v, operation="node_versioned", actor_id="agent_lifecycle_mapper",
         ))
 
-    async def _put_edge(self, e: Edge) -> None:
+    async def _put_edge(self, e: Edge, *, source_event_id: Optional[str] = None) -> None:
         """Add a lifecycle edge through the gateway (edge_created).
 
         tenant_id flows from the edge property (every lifecycle edge carries
         it); subject is the edge source vertex.
+
+        Lifecycle edges repeat the same (tenant, type, from, to) tuple across
+        distinct events — e.g. an agent CALLED_TOOL the same tool many times.
+        Without a distinguishing key those distinct observations would collapse
+        onto one enforce/shadow idempotency key and only the first would
+        project. Derive a stable per-event source_event_id from the edge's own
+        per-observation metadata (execution_id / task_id / timestamps carried in
+        the properties) so distinct calls each project while a replay of the
+        same event still dedups. Off mode is untouched (edge_intent never
+        mutates the edge; the derived key only travels on the intent).
         """
+        sid = source_event_id or self._edge_source_event_id(e)
         await self._gateway.apply(edge_intent(
             e, operation="edge_created", actor_id="agent_lifecycle_mapper",
-            subject_id=e.from_vertex_id,
+            subject_id=e.from_vertex_id, source_event_id=sid,
         ))
+
+    @staticmethod
+    def _edge_source_event_id(e: Edge) -> Optional[str]:
+        """Deterministic per-observation key from the edge's event metadata.
+
+        Hashes every distinguishing (non-empty) edge property except tenant_id
+        (constant across a tenant's edges) and any pre-existing idempotency
+        fields. Returns ``None`` when there is no distinguishing metadata, in
+        which case the edge keeps its natural (tenant/type/from/to) identity.
+        """
+        props = e.properties or {}
+        distinguishing = {
+            k: v
+            for k, v in props.items()
+            if k not in ("tenant_id", "source_event_id", "idempotency_key")
+            and v not in (None, "")
+        }
+        if not distinguishing:
+            return None
+        raw = json.dumps(distinguishing, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode()).hexdigest()
 
     # ─────────────────────────────────────────────────────────────────────
     # Public API
