@@ -371,6 +371,45 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/validate_sdk_release_alignment.py
 	python scripts/release/sdk_conformance.py --quiet
 	python scripts/release/check_required_checks.py
+	$(MAKE) security-release-check
+	$(MAKE) supply-chain-check
+
+# ---------------------------------------------------------------------------
+# Supply-chain & security release gates
+#   Local commands are advisory; release commands fail closed (no `|| true`).
+#   Fail-closed policy: npm production CRITICAL vulns, high-confidence secrets,
+#   and SBOM generation. Advisory (surfaced, tracked): npm production HIGH vulns
+#   and pip-audit (which also reports base-image CVEs outside the app's control).
+# ---------------------------------------------------------------------------
+
+secret-scan: ## Fail-closed secret scan of tracked files
+	python scripts/security/secret_scan.py
+
+secret-scan-advisory: ## Secret scan (advisory; never fails)
+	python scripts/security/secret_scan.py --advisory
+
+sbom: ## Generate a CycloneDX SBOM of the Python environment (reports/sbom/)
+	@mkdir -p reports/sbom
+	cyclonedx-py environment --output-file reports/sbom/python-sbom.json --output-format JSON
+	@echo "SBOM: reports/sbom/python-sbom.json"
+
+supply-chain-audit: ## Advisory supply-chain report (never fails)
+	-npm audit --omit=dev --audit-level=high
+	-pip-audit --skip-editable --progress-spinner off
+
+supply-chain-check: ## Fail-closed supply-chain gate (npm prod criticals + SBOM required)
+	@echo "== npm production dependency audit — CRITICAL vulns fail =="
+	npm audit --omit=dev --audit-level=critical
+	@echo "== npm production HIGH-severity — advisory (tracked) =="
+	-npm audit --omit=dev --audit-level=high
+	@echo "== Python dependency audit — advisory (base-image CVEs tracked) =="
+	-pip-audit --skip-editable --progress-spinner off
+	@echo "== CycloneDX SBOM generation (required) =="
+	$(MAKE) sbom
+
+security-release-check: ## Fail-closed security gate: secrets + security-control regressions
+	python scripts/security/secret_scan.py
+	python -m pytest tests/security/test_extraction_defense_mode.py tests/unit/test_release_profile_enforcement.py -q -o addopts=""
 
 # ---------------------------------------------------------------------------
 # Founding-tenant production — control-spine gates (additive; ci-check unchanged)
