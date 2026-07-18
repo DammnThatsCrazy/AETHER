@@ -7,11 +7,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./exploration": "./src/exploration/index.ts",
+    "./graph": "./src/graph/index.ts",
     "./query": "./src/query/index.ts",
     "./styles/*": "./src/styles/*",
     "./tailwind.preset": "./tailwind.preset.js"
   },
   "peerDependencies": {
+    "cytoscape": "^3.30.0",
     "react": ">=19.0.0"
   },
   "scripts": {
@@ -24,6 +26,7 @@
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "cytoscape": "^3.30.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   }
