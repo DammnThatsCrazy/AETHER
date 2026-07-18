@@ -1,0 +1,1261 @@
+        // =============================================================================
+        // Aether SDK — Integration Consent Governance Registry (v8.13.0)
+        // DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json
+        // Run: python scripts/generate_contracts.py
+        // =============================================================================
+
+        import type { ConsentPurpose } from './consent';
+
+        export type IntegrationConnectorType =
+          | 'slack'
+  | 'generic_webhook'
+  | 'shopify'
+  | 'stripe'
+  | 'hubspot'
+  | 'salesforce'
+  | 'klaviyo'
+  | 'segment'
+  | 'posthog'
+  | 'ga4'
+  | 'jira'
+  | 'linear'
+  | 'zendesk'
+  | 'intercom'
+  | 'dune'
+  | 'apple_pay'
+  | 'google_pay'
+  | 'outbound_activation'
+          ;
+
+        export type AetherConsentControlPlaneFlag =
+          | 'AETHER_CONSENT_CONTROL_PLANE_V2'
+  | 'AETHER_CONNECTOR_POLICY_GATE'
+  | 'AETHER_INTEGRATION_DISCOVERY'
+  | 'AETHER_PREFERENCE_CENTER_V1'
+  | 'AETHER_CHECKOUT_HARDENING_V1'
+  | 'AETHER_CONSENT_LIFECYCLE_ENFORCEMENT'
+          ;
+
+        export interface ProcessingDecision {
+          decisionId: string;
+          tenantId: string;
+          connectorType?: IntegrationConnectorType | string;
+          sourceKind: string;
+          subjectId?: string;
+          anonymousId?: string;
+          purpose?: ConsentPurpose | string;
+          processingBasis?: string;
+          allowed: boolean;
+          reasonCode?: string;
+          identityLinkingAllowed: boolean;
+          graphProjectionAllowed: boolean;
+          modelTrainingAllowed: boolean;
+          activationAllowed: boolean;
+          retentionClass: string;
+          quarantineRequired: boolean;
+          policyVersion: string;
+          consentReceiptId?: string;
+          evaluatedAt: string;
+        }
+
+        export interface CanonicalConsentReceipt {
+          receipt_id: string;
+          tenant_id: string;
+          subject_id?: string;
+          anonymous_id?: string;
+          purposes: readonly ConsentPurpose[];
+          state: 'granted' | 'denied' | 'revoked' | 'expired';
+          source: string;
+          provider?: string;
+          policy_version: string;
+          jurisdiction_context?: string;
+          mode?: string;
+          lawful_basis?: string;
+          granted_at?: string;
+          denied_at?: string;
+          revoked_at?: string;
+          expires_at?: string;
+          gpc_observed?: boolean;
+          dnt_observed?: boolean;
+          provider_consent_id?: string;
+          integrity_hash: string;
+          idempotency_key: string;
+          metadata?: Readonly<Record<string, unknown>>;
+        }
+
+        export interface IntegrationConsentPolicy {
+          connectorType: IntegrationConnectorType;
+          connectorClass: string;
+          provider: string;
+          category: string;
+          dataFlowDirection: string;
+          riskTier: string;
+          implementationStatus: string;
+          supportedCapabilities: readonly string[];
+          requiredTenantPermissions: readonly string[];
+          requiresProviderAdminInstall: boolean;
+          requiresTenantAdminApproval: boolean;
+          requiredSubjectPurposes: readonly ConsentPurpose[];
+          supportedProcessingBases: readonly string[];
+          defaultProcessingBasis: string;
+          dataCategories: readonly string[];
+          identitySignals: readonly string[];
+          allowsIdentityLinking: boolean;
+          allowsGraphProjection: boolean;
+          allowsModelTraining: boolean;
+          allowsPreConsentProcessing: boolean;
+          complianceEvidenceEvents: readonly string[];
+          suppressionEvents: readonly string[];
+          retentionClass: string;
+          rawPayloadPolicy: string;
+          quarantinePolicy: string;
+          providerConsentBridge: string;
+          providerSignatureScheme: string;
+          supportsHistoricalBackfill: boolean;
+          supportsOutboundActivation: boolean;
+          notes?: string;
+        }
+
+        export const INTEGRATION_CONSENT_REGISTRY_VERSION = '8.13.0';
+
+        export const AETHER_CONSENT_CONTROL_PLANE_FLAGS: Readonly<Record<AetherConsentControlPlaneFlag, false>> = {
+          "AETHER_CONSENT_CONTROL_PLANE_V2": false,
+  "AETHER_CONNECTOR_POLICY_GATE": false,
+  "AETHER_INTEGRATION_DISCOVERY": false,
+  "AETHER_PREFERENCE_CENTER_V1": false,
+  "AETHER_CHECKOUT_HARDENING_V1": false,
+  "AETHER_CONSENT_LIFECYCLE_ENFORCEMENT": false,
+        } as const;
+
+        export const INTEGRATION_CONSENT_POLICIES: Readonly<Record<IntegrationConnectorType, IntegrationConsentPolicy>> = {
+          "slack": {
+  "connectorType": "slack",
+  "connectorClass": "workspace_connector",
+  "provider": "Slack",
+  "category": "workspace_collaboration",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "agent"
+  ],
+  "supportedProcessingBases": [
+    "legitimate_interest",
+    "contract",
+    "consent"
+  ],
+  "defaultProcessingBasis": "legitimate_interest",
+  "dataCategories": [
+    "workspace_metadata",
+    "message_metadata",
+    "allowlisted_message_content"
+  ],
+  "identitySignals": [
+    "provider_user_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "operational_short",
+  "rawPayloadPolicy": "quarantine_verified_allowlist",
+  "quarantinePolicy": "private_dm_or_unknown_fields",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "slack_signing_secret",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "generic_webhook": {
+  "connectorType": "generic_webhook",
+  "connectorClass": "webhook_connector",
+  "provider": "Generic Webhook",
+  "category": "custom_ingest",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": false,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "contract",
+    "legitimate_interest"
+  ],
+  "defaultProcessingBasis": "explicit_manifest_required",
+  "dataCategories": [
+    "declared_schema_fields"
+  ],
+  "identitySignals": [
+    "declared_aliases"
+  ],
+  "allowsIdentityLinking": false,
+  "allowsGraphProjection": false,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "declared_manifest",
+  "rawPayloadPolicy": "quarantine_until_schema_approved",
+  "quarantinePolicy": "unknown_schema_quarantine_only",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "aether_hmac_sha256",
+  "supportsHistoricalBackfill": false,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "shopify": {
+  "connectorType": "shopify",
+  "connectorClass": "commerce_connector",
+  "provider": "Shopify",
+  "category": "commerce",
+  "dataFlowDirection": "inbound",
+  "riskTier": "medium",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "commerce",
+    "analytics",
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "consent",
+    "legal_obligation"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "orders",
+    "payments",
+    "refunds",
+    "disputes",
+    "storefront_behavior"
+  ],
+  "identitySignals": [
+    "shopify_customer_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": true,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "financial_or_behavioral_by_event",
+  "rawPayloadPolicy": "prohibit_customer_email_addresses",
+  "quarantinePolicy": "unknown_customer_fields",
+  "providerConsentBridge": "shopify_customer_privacy",
+  "providerSignatureScheme": "shopify_hmac_sha256",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "stripe": {
+  "connectorType": "stripe",
+  "connectorClass": "payment_connector",
+  "provider": "Stripe",
+  "category": "payments",
+  "dataFlowDirection": "inbound",
+  "riskTier": "medium",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "commerce"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "legal_obligation"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "payment_lifecycle",
+    "invoice",
+    "refund",
+    "dispute"
+  ],
+  "identitySignals": [
+    "stripe_customer_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": true,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "financial_legal",
+  "rawPayloadPolicy": "prohibit_payment_method_objects",
+  "quarantinePolicy": "raw_payment_object_rejected",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "stripe_v1",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "hubspot": {
+  "connectorType": "hubspot",
+  "connectorClass": "crm_connector",
+  "provider": "HubSpot",
+  "category": "crm",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "consent",
+    "legitimate_interest"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "crm_field_allowlist",
+    "contact_alias"
+  ],
+  "identitySignals": [
+    "hubspot_contact_id",
+    "tenant_scoped_email_alias",
+    "vault_reference"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "crm_operational",
+  "rawPayloadPolicy": "field_allowlist_only",
+  "quarantinePolicy": "unknown_fields",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "provider_native_or_oauth_pull",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": true,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "salesforce": {
+  "connectorType": "salesforce",
+  "connectorClass": "crm_connector",
+  "provider": "Salesforce",
+  "category": "crm",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "consent",
+    "legitimate_interest"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "crm_field_allowlist",
+    "contact_alias"
+  ],
+  "identitySignals": [
+    "salesforce_record_id",
+    "tenant_scoped_email_alias",
+    "vault_reference"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "crm_operational",
+  "rawPayloadPolicy": "field_allowlist_only",
+  "quarantinePolicy": "unknown_fields",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "provider_native_or_oauth_pull",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": true,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "klaviyo": {
+  "connectorType": "klaviyo",
+  "connectorClass": "marketing_connector",
+  "provider": "Klaviyo",
+  "category": "marketing",
+  "dataFlowDirection": "inbound",
+  "riskTier": "medium",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "legal_obligation"
+  ],
+  "defaultProcessingBasis": "consent",
+  "dataCategories": [
+    "engagement",
+    "suppression",
+    "spam_complaint"
+  ],
+  "identitySignals": [
+    "klaviyo_profile_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": true,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "marketing_or_compliance",
+  "rawPayloadPolicy": "prohibit_recipient_email",
+  "quarantinePolicy": "unknown_profile_fields",
+  "providerConsentBridge": "optional_provider_bridge",
+  "providerSignatureScheme": "klaviyo_native_or_oauth_pull",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": true,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "segment": {
+  "connectorType": "segment",
+  "connectorClass": "event_router_connector",
+  "provider": "Segment",
+  "category": "event_router",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "marketing",
+    "personalization"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "legitimate_interest",
+    "contract"
+  ],
+  "defaultProcessingBasis": "classification_required",
+  "dataCategories": [
+    "classified_track",
+    "classified_identify",
+    "suppression_context"
+  ],
+  "identitySignals": [
+    "segment_user_id",
+    "anonymous_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "classified_by_event",
+  "rawPayloadPolicy": "unknown_properties_quarantine",
+  "quarantinePolicy": "arbitrary_payload_classification",
+  "providerConsentBridge": "optional_provider_bridge",
+  "providerSignatureScheme": "segment_signature_or_writekey",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": true,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "posthog": {
+  "connectorType": "posthog",
+  "connectorClass": "analytics_connector",
+  "provider": "PostHog",
+  "category": "product_analytics",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "personalization"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "legitimate_interest"
+  ],
+  "defaultProcessingBasis": "legitimate_interest",
+  "dataCategories": [
+    "product_events",
+    "approved_person_properties"
+  ],
+  "identitySignals": [
+    "posthog_distinct_id",
+    "tenant_scoped_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "behavioral",
+  "rawPayloadPolicy": "quarantine_arbitrary_person_properties",
+  "quarantinePolicy": "session_replay_unsupported",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "posthog_webhook_signature",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "ga4": {
+  "connectorType": "ga4",
+  "connectorClass": "analytics_connector",
+  "provider": "Google Analytics 4",
+  "category": "analytics",
+  "dataFlowDirection": "inbound",
+  "riskTier": "medium",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "legitimate_interest"
+  ],
+  "defaultProcessingBasis": "aggregate_analytics",
+  "dataCategories": [
+    "aggregate_reports",
+    "classified_user_level_exports"
+  ],
+  "identitySignals": [
+    "ga_client_id",
+    "google_consent_state"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "aggregate_or_behavioral",
+  "rawPayloadPolicy": "aggregate_preferred_user_level_gated",
+  "quarantinePolicy": "advertising_identity_unapproved",
+  "providerConsentBridge": "google_consent_mode",
+  "providerSignatureScheme": "google_oauth_or_signed_export",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "jira": {
+  "connectorType": "jira",
+  "connectorClass": "workspace_connector",
+  "provider": "Jira",
+  "category": "workspace_operations",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "legitimate_interest"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "issue_metadata",
+    "allowlisted_issue_fields"
+  ],
+  "identitySignals": [
+    "jira_account_id",
+    "workspace_user_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "operational",
+  "rawPayloadPolicy": "field_controls_required",
+  "quarantinePolicy": "comments_attachments_unknown",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "jira_webhook_signature",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "linear": {
+  "connectorType": "linear",
+  "connectorClass": "workspace_connector",
+  "provider": "Linear",
+  "category": "workspace_operations",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "legitimate_interest"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "issue_metadata",
+    "allowlisted_issue_fields"
+  ],
+  "identitySignals": [
+    "linear_user_id",
+    "workspace_user_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "operational",
+  "rawPayloadPolicy": "field_controls_required",
+  "quarantinePolicy": "comments_attachments_unknown",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "linear_hmac_sha256",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "zendesk": {
+  "connectorType": "zendesk",
+  "connectorClass": "support_connector",
+  "provider": "Zendesk",
+  "category": "support",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "consent"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "ticket_metadata",
+    "allowlisted_conversation_text"
+  ],
+  "identitySignals": [
+    "zendesk_user_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "support_account",
+  "rawPayloadPolicy": "sensitive_text_controls_required",
+  "quarantinePolicy": "unknown_ticket_fields",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "zendesk_signature",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "intercom": {
+  "connectorType": "intercom",
+  "connectorClass": "support_connector",
+  "provider": "Intercom",
+  "category": "support",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "analytics",
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "contract",
+    "consent"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "conversation_metadata",
+    "allowlisted_conversation_text"
+  ],
+  "identitySignals": [
+    "intercom_user_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "support_account",
+  "rawPayloadPolicy": "sensitive_text_controls_required",
+  "quarantinePolicy": "unknown_conversation_fields",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "intercom_signature",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "dune": {
+  "connectorType": "dune",
+  "connectorClass": "data_connector",
+  "provider": "Dune",
+  "category": "public_reference_data",
+  "dataFlowDirection": "inbound",
+  "riskTier": "high",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": false,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "economic_observability",
+    "web3"
+  ],
+  "supportedProcessingBases": [
+    "public_reference",
+    "consent",
+    "contract"
+  ],
+  "defaultProcessingBasis": "public_reference",
+  "dataCategories": [
+    "public_aggregate",
+    "classified_query_rows"
+  ],
+  "identitySignals": [
+    "wallet_alias_if_authorized"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "reference_or_declared_contract",
+  "rawPayloadPolicy": "no_raw_row_promotion_without_contract",
+  "quarantinePolicy": "arbitrary_rows",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "dune_oauth_or_api_key_pull",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "apple_pay": {
+  "connectorType": "apple_pay",
+  "connectorClass": "payment_adapter",
+  "provider": "Apple Pay",
+  "category": "native_payment_adapter",
+  "dataFlowDirection": "sdk_adapter",
+  "riskTier": "medium",
+  "implementationStatus": "contract_only",
+  "supportedCapabilities": [
+    "typed_sdk_api"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": false,
+  "requiresTenantAdminApproval": false,
+  "requiredSubjectPurposes": [
+    "commerce"
+  ],
+  "supportedProcessingBases": [
+    "contract"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "typed_payment_lifecycle_metadata"
+  ],
+  "identitySignals": [
+    "none_from_contacts"
+  ],
+  "allowsIdentityLinking": false,
+  "allowsGraphProjection": false,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": true,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "financial_legal",
+  "rawPayloadPolicy": "reject_pkpayment_tokens_contacts",
+  "quarantinePolicy": "raw_payment_object_rejected",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "not_applicable_typed_sdk_api",
+  "supportsHistoricalBackfill": false,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "google_pay": {
+  "connectorType": "google_pay",
+  "connectorClass": "payment_adapter",
+  "provider": "Google Pay",
+  "category": "native_payment_adapter",
+  "dataFlowDirection": "sdk_adapter",
+  "riskTier": "medium",
+  "implementationStatus": "contract_only",
+  "supportedCapabilities": [
+    "typed_sdk_api"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": false,
+  "requiresTenantAdminApproval": false,
+  "requiredSubjectPurposes": [
+    "commerce"
+  ],
+  "supportedProcessingBases": [
+    "contract"
+  ],
+  "defaultProcessingBasis": "contract",
+  "dataCategories": [
+    "typed_payment_lifecycle_metadata"
+  ],
+  "identitySignals": [
+    "none_from_contacts"
+  ],
+  "allowsIdentityLinking": false,
+  "allowsGraphProjection": false,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": true,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [],
+  "retentionClass": "financial_legal",
+  "rawPayloadPolicy": "reject_paymentdata_tokens_contacts",
+  "quarantinePolicy": "raw_payment_object_rejected",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "not_applicable_typed_sdk_api",
+  "supportsHistoricalBackfill": false,
+  "supportsOutboundActivation": false,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "outbound_activation": {
+  "connectorType": "outbound_activation",
+  "connectorClass": "outbound_provider",
+  "provider": "Outbound Providers",
+  "category": "activation",
+  "dataFlowDirection": "outbound",
+  "riskTier": "high",
+  "implementationStatus": "contract_only",
+  "supportedCapabilities": [
+    "dispatch_time_gate"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": false,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "marketing",
+    "commerce",
+    "analytics"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "contract",
+    "legal_obligation"
+  ],
+  "defaultProcessingBasis": "dispatch_time_decision_required",
+  "dataCategories": [
+    "dispatch_payload_allowlist",
+    "suppression_state"
+  ],
+  "identitySignals": [
+    "channel_alias",
+    "provider_profile_id",
+    "vault_reference"
+  ],
+  "allowsIdentityLinking": false,
+  "allowsGraphProjection": false,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": false,
+  "complianceEvidenceEvents": [
+    "consent_denial",
+    "consent_revocation",
+    "unsubscribe",
+    "suppression",
+    "spam_complaint",
+    "security_incident",
+    "fraud_decision",
+    "refund",
+    "chargeback",
+    "dispute",
+    "legal_hold"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "delivery_audit",
+  "rawPayloadPolicy": "payload_allowlist_only",
+  "quarantinePolicy": "dispatch_policy_denial",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "provider_native_dispatch_auth",
+  "supportsHistoricalBackfill": false,
+  "supportsOutboundActivation": true,
+  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+}
+        } as const;

@@ -7,6 +7,7 @@ export * from './schema-version';
 export * from './sdk-version';
 export * from './provenance';
 export * from './consent';
+export * from './integration-consent';
 export * from './measurement-contract';
 export * from './wallet';
 export * from './identity';

@@ -5485,6 +5485,10 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/INTEGRATION_CONSENT_REGISTRY.md",
+      "title": "Integration Consent Registry Source of Truth"
+    },
+    {
       "path": "docs/source-of-truth/INTEROP_CONSENT_MODEL.md",
       "title": "Interoperability Consent Model",
       "slug": "source-of-truth/interop-consent-model",
