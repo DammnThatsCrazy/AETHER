@@ -96,6 +96,7 @@ known_prefixes:
   - /v1/events
   - /v1/expectations
   - /v1/experiments
+  - /v1/explore
   - /v1/exports
   - /v1/flows
   - /v1/fraud

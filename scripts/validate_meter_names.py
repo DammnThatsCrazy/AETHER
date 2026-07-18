@@ -73,6 +73,22 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",
+    # Comparison Intelligence (services/intelligence/comparison — WP3.5)
+    "comparison_runs_total",
+    "comparison_findings_total",
+    "comparison_findings_suppressed_total",
+    "comparison_finding_dispositions_total",
+    "comparison_finding_investigations_total",
+    "comparison_finding_recommendations_total",
+    "comparison_refusals_total",
+    "comparison_scenarios_total",
+    # Exploration Fabric (services/exploration — WP3.4)
+    "exploration_queries_total",
+    "exploration_validate_total",
+    "exploration_facets_total",
+    "exploration_facet_suppressed_total",
+    "exploration_filter_dispositions_total",
+    "exploration_saved_views_total",
     # Stablecoin / Derivatives / Interoperability intelligence
     "stablecoin_observation_ingested",
     "stablecoin_flow_materialized",
