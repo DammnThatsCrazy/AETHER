@@ -38,7 +38,7 @@ def edge_intent(
     *,
     operation: str = "edge_created",
     tenant_id: Optional[str] = None,
-    actor_kind: str = "system",
+    actor_kind: Optional[str] = None,
     actor_id: Optional[str] = None,
     subject_kind: Optional[str] = None,
     subject_id: Optional[str] = None,
@@ -54,17 +54,23 @@ def edge_intent(
 ) -> MutationIntent:
     """Express one edge write as a gateway intent (edge passed through as-is).
 
-    ``tenant_id`` / ``actor_id`` / ``source_event_id`` / ``confidence`` fall
-    back to the corresponding edge properties when not given explicitly, so a
-    writer that already built canonical properties (via ``build_edge_properties``)
-    does not have to repeat them.
+    ``tenant_id`` / ``actor_kind`` / ``actor_id`` / ``source_event_id`` /
+    ``confidence`` fall back to the corresponding edge properties when not given
+    explicitly, so a writer that already built canonical properties (via
+    ``build_edge_properties``) does not have to repeat them. In particular a
+    writer that canonicalised ``actor_kind`` on the edge (e.g. ``"service"``)
+    but omits it here gets that same actor_kind on the ledger record and CIS
+    context, instead of a hardcoded ``"system"`` that would disagree with the
+    projected edge.
     """
     props = edge.properties or {}
     return MutationIntent(
         operation=operation,
         tenant_id=tenant_id if tenant_id is not None else str(props.get("tenant_id", "")),
         edge=edge,
-        actor_kind=actor_kind,
+        actor_kind=actor_kind
+        if actor_kind is not None
+        else (props.get("actor_kind") or "system"),
         actor_id=actor_id if actor_id is not None else props.get("actor_id"),
         subject_kind=subject_kind,
         subject_id=subject_id,
