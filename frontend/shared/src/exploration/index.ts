@@ -61,3 +61,10 @@ export { FilterBuilder } from './components/filter-builder';
 export type { FilterBuilderProps } from './components/filter-builder';
 export { FilterBar } from './components/filter-bar';
 export type { FilterBarProps } from './components/filter-bar';
+
+// Truth + facets.
+export { dimensionStateStyle, suppressedFilterCount, completenessNotices } from './truth-model';
+export { TruthBanner } from './components/truth-banner';
+export type { TruthBannerProps } from './components/truth-banner';
+export { FacetPanel, cohortMinimumFor } from './components/facet-panel';
+export type { FacetPanelProps, FacetGroup, FacetBucket } from './components/facet-panel';
