@@ -4670,6 +4670,185 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/productization/staging-capstone/CREDENTIAL_SECRET_REFERENCE.md",
+      "title": "Credential & Secret Reference",
+      "slug": "productization/staging-capstone/credential-secret-reference",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md",
+      "title": "Credential-Waiting Promotion Guide",
+      "slug": "productization/staging-capstone/credential-waiting-promotion-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/DESIGN_PARTNER_PRIVATE_BETA_OPERATING_GUIDE.md",
+      "title": "Design-Partner / Private-Beta Operating Guide",
+      "slug": "productization/staging-capstone/design-partner-private-beta-operating-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/DISASTER_RECOVERY_GUIDE.md",
+      "title": "Disaster Recovery Guide",
+      "slug": "productization/staging-capstone/disaster-recovery-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/EXTERNAL_AUDIT_PREPARATION_GUIDE.md",
+      "title": "External Audit Preparation Guide",
+      "slug": "productization/staging-capstone/external-audit-preparation-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/LIMITATIONS_AND_NON_GOALS.md",
+      "title": "Limitations & Non-Goals",
+      "slug": "productization/staging-capstone/limitations-and-non-goals",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "architect",
+        "ops",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/PARTNER_ONBOARDING_GUIDE.md",
+      "title": "Partner Onboarding Guide",
+      "slug": "productization/staging-capstone/partner-onboarding-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/PILOT_EVIDENCE_GUIDE.md",
+      "title": "Pilot Evidence Guide",
+      "slug": "productization/staging-capstone/pilot-evidence-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md",
+      "title": "Provider Capability Matrix Guide",
+      "slug": "productization/staging-capstone/provider-capability-matrix-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/README.md",
+      "title": "Staging Capstone — Operating Guide Set",
+      "slug": "productization/staging-capstone/readme",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/staging-capstone/STAGING_DEPLOYMENT_GUIDE.md",
+      "title": "Staging Deployment Guide",
+      "slug": "productization/staging-capstone/staging-deployment-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/productization/truth-kernel-follow-ups.md",
       "title": "Truth Kernel — Documented Follow-Ups",
       "slug": "operations/truth-kernel-follow-ups",
@@ -4863,6 +5042,20 @@
       "since_version": "8.11.0"
     },
     {
+      "path": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
+      "title": "Agent Runtime & Mutation Review Runbook",
+      "slug": "runbooks/agent-runtime-mutation-review",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/CAMPAIGN-360-ATTRIBUTION-RUN-FAILED.md",
       "title": "Runbook — Attribution Run Failed (Campaign 360)",
       "slug": "runbooks/campaign-360-attribution-run-failed",
@@ -4923,6 +5116,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/CARD_LINKED_RUNBOOK.md",
+      "title": "Card-Linked Payment Rails Runbook",
+      "slug": "runbooks/card-linked",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/CREDENTIAL-ROTATION.md",
       "title": "Credential Rotation Runbook",
       "slug": "runbooks/credential-rotation",
@@ -4961,6 +5168,35 @@
       "audience": [
         "ops",
         "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
+      "title": "Derivatives Stream Runbook",
+      "slug": "runbooks/derivatives-stream",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+      "title": "EVM Deploy & Emergency Runbook",
+      "slug": "runbooks/evm-deploy-emergency",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "security"
       ],
       "status": "stable",
       "since_version": "8.12.0",
@@ -5012,6 +5248,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
+      "title": "Interoperability Observer Runbook",
+      "slug": "runbooks/interop-observer",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/INTEROP_PROVIDER_OPERATIONS_RUNBOOK.md",
       "title": "Interop Provider Operations Runbook",
       "slug": "runbooks/interop-provider-operations",
@@ -5058,6 +5308,20 @@
       "canonical_owner": "ml@aether"
     },
     {
+      "path": "docs/runbooks/PAYMENT_RAILS_RUNBOOK.md",
+      "title": "Payment Rail Observability Runbook",
+      "slug": "runbooks/payment-rails",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/RECONCILIATION.md",
       "title": "Delivery Reconciliation Runbook",
       "slug": "runbooks/reconciliation",
@@ -5070,6 +5334,34 @@
       "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/REWARD_DELIVERY_RUNBOOK.md",
+      "title": "Reward Delivery Runbook",
+      "slug": "runbooks/reward-delivery",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
+      "title": "Stablecoin Observer Runbook",
+      "slug": "runbooks/stablecoin-observer",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5099,6 +5391,21 @@
       "status": "stable",
       "estimated_read_minutes": 7,
       "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/SVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+      "title": "SVM (Solana) Deploy & Emergency Runbook",
+      "slug": "runbooks/svm-deploy-emergency",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
     },
     {

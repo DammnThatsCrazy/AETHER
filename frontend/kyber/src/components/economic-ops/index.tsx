@@ -4,7 +4,7 @@
  * honest empty state instead of mounting a dead surface.
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { Badge, EmptyState } from '@aether/ui';
+import { CapabilityStateBadge, CapabilityStatePanel, resolveCapabilityState } from '@aether/ui';
 import { isFeatureEnabled, type featureFlags } from '@kyber/lib/featureFlags';
 
 type Row = Record<string, unknown>;
@@ -15,11 +15,13 @@ export function FlagGate({ flag, domainLabel, children }: {
   readonly children: ReactNode;
 }) {
   if (!isFeatureEnabled(flag)) {
+    // Flag-off is an operator-disabled capability — render it as the canonical
+    // `disabled` state so it reads distinctly from not-configured / error.
     return (
-      <EmptyState
-        title={`${domainLabel} ops is not enabled`}
+      <CapabilityStatePanel
+        state="disabled"
+        title={`${domainLabel} ops is disabled`}
         description={`Enable the ${String(flag)} feature flag (and the matching backend flags) to operate this observation-only domain.`}
-        icon="◌"
       />
     );
   }
@@ -48,11 +50,12 @@ export function useOpsData<T>(fetcher: () => Promise<T>): {
 
 export function implementationStatusBadge(status: unknown): ReactNode {
   const value = String(status ?? 'unknown');
-  const variant =
-    value === 'provider_live' ? 'success'
-    : value === 'credential_gated' ? 'warning'
-    : 'default'; // scaffolded / mocked_local — honest, not alarming
-  return <Badge variant={variant}>{value}</Badge>;
+  // Map the backend ImplementationStatus onto the canonical capability matrix,
+  // keeping the exact backend token as the label so operators still see truth.
+  const state = resolveCapabilityState(value) ?? 'not_configured';
+  // Keep the exact backend token as the label so operators still see the truth;
+  // the capability state only drives the tone/glyph.
+  return <CapabilityStateBadge state={state} label={value} reason={`implementation_status=${value}`} />;
 }
 
 export function fmtCell(v: unknown, fallback = '—'): string {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, useTimeContext, type TimeContext } from '@aether/ui';
+import { Badge, Button, CapabilityStateBadge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, resolveCapabilityState, useTimeContext, type TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 import { isFeatureEnabled } from '@kyber/lib/featureFlags';
@@ -57,15 +57,23 @@ function Metric({ label, value }: { readonly label: string; readonly value: unkn
   );
 }
 
-function statusColor(status: string): 'success' | 'warning' | 'danger' | 'default' {
-  if (status === 'healthy') return 'success';
-  if (status === 'degraded') return 'warning';
-  if (status === 'error') return 'danger';
-  return 'default';
-}
-
 function statusLabel(status: string): string {
   return status.replace(/_/g, ' ');
+}
+
+/**
+ * Provider/tenant fleet health is a capability credential-lifecycle signal, so
+ * it renders on the canonical capability matrix. The raw server term stays as
+ * the label so operators still see the exact status word.
+ */
+function HealthBadge({ status }: { readonly status: string }) {
+  return (
+    <CapabilityStateBadge
+      state={resolveCapabilityState(status) ?? 'not_configured'}
+      label={statusLabel(status)}
+      reason={`fleet health: ${status}`}
+    />
+  );
 }
 
 function formatTs(ts: string | null | undefined, ctx: TimeContext): string {
@@ -158,7 +166,7 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{providerLabel(provider)}</CardTitle>
-                  <Badge variant={statusColor(healthStatus)}>{statusLabel(healthStatus)}</Badge>
+                  <HealthBadge status={healthStatus} />
                 </div>
               </CardHeader>
               <CardContent className="text-xs font-mono space-y-1">
@@ -262,7 +270,7 @@ export function PaymentRailsPage() {
                   {providers.map((row) => (
                     <tr key={row.provider} className="border-b border-border-subtle">
                       <td className="py-2 px-2 font-semibold text-text-primary">{providerLabel(row.provider)}</td>
-                      <td className="py-2 px-2"><Badge variant={statusColor(row.status)}>{statusLabel(row.status)}</Badge></td>
+                      <td className="py-2 px-2"><HealthBadge status={row.status} /></td>
                       <td className="py-2 px-2 text-right">{row.configured_tenants}</td>
                       <td className="py-2 px-2 text-right text-success">{row.webhook_verified_24h}</td>
                       <td className="py-2 px-2 text-right text-warning">{row.webhook_rejected_24h}</td>
@@ -311,7 +319,7 @@ export function PaymentRailsPage() {
                       onClick={() => setSelectedTenantId(row.tenant_id)}
                     >
                       <td className="py-2 px-2 font-semibold text-text-primary">{row.tenant_id}</td>
-                      <td className="py-2 px-2"><Badge variant={statusColor(row.status)}>{statusLabel(row.status)}</Badge></td>
+                      <td className="py-2 px-2"><HealthBadge status={row.status} /></td>
                       <td className="py-2 px-2 text-right">{row.providers_configured}</td>
                       <td className="py-2 px-2 text-right text-warning">{row.providers_degraded}</td>
                       <td className="py-2 px-2 text-right">{row.sessions_observed_24h}</td>

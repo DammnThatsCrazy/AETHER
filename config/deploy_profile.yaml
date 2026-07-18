@@ -1,0 +1,148 @@
+# =============================================================================
+# Aether — Canonical Deploy Profile (capability topology).
+#
+# Single source of truth proving the SAME deployment profile spans
+# local -> staging -> prod with NO source changes between them. Each capability
+# maps its LOCAL representation (a docker-compose service and/or a runtime role)
+# to its CLOUD representation (a Terraform module or inline root reference).
+#
+# Consumed by scripts/staging_capability_matrix.py, which fails closed if a
+# capability declared `present` has a missing compose service / terraform module
+# / runtime role, or if a required capability is neither present nor an
+# explicitly documented gap.
+#
+# status:
+#   present  - implemented in both local and cloud (validator asserts existence)
+#   partial  - implemented but narrower than the full capability (asserted + note)
+#   optional - present but gated off in the founding profile by cost policy
+#   gap      - not yet implemented; MUST carry a `gap` note (validator asserts note)
+#
+# Roles come from Backend Architecture/aether-backend/services/runtime/roles.py
+# (WORKER_ROLES + api). Terraform modules live under
+# AWS Deployment/aether-aws/terraform/modules/<name>.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/deploy_profile.yaml
+compose_file: docker-compose.yml
+terraform_modules_dir: AWS Deployment/aether-aws/terraform/modules
+runtime_roles_source: Backend Architecture/aether-backend/services/runtime/roles.py
+
+# The full required capability set. Every id here must appear in `capabilities`.
+required_capabilities:
+  - api
+  - frontends
+  - postgres
+  - redis
+  - kafka
+  - clickhouse
+  - graph
+  - object_store
+  - secrets
+  - workers
+  - scheduled_jobs
+  - migrations
+  - metrics
+  - logs
+  - traces
+  - dashboards_alerts
+  - backup_restore
+  - readiness_probes
+
+capabilities:
+  - id: api
+    status: present
+    role: api
+    local: {compose_service: backend}
+    cloud: {terraform_module: ecs, ref: "aws_ecs_service.backend"}
+
+  - id: frontends
+    status: present
+    local: {compose_services: [kyber, aether-frontend]}
+    cloud: {inline_ref: "static_frontends (aether, kyber) in terraform/main.tf"}
+
+  - id: postgres
+    status: present
+    local: {compose_service: postgres}
+    cloud: {terraform_module: aurora, ref: "aurora_postgres (rds module = legacy)"}
+
+  - id: redis
+    status: present
+    local: {compose_service: redis}
+    cloud: {terraform_module: elasticache, note: "dynamodb_cache is the lean-profile cache; elasticache for scale"}
+
+  - id: kafka
+    status: present
+    local: {compose_service: kafka}
+    cloud: {terraform_module: msk, note: "sqs module (SQS/SNS) is the lean-profile event bus"}
+
+  - id: clickhouse
+    status: optional
+    local: {compose_service: clickhouse}
+    cloud: {inline_ref: "enable_clickhouse flag in profiles.tf"}
+    gap: "ClickHouse is FORBIDDEN in production-lean by cost policy; postgres serves analytics there. No dedicated Terraform module yet (flagged only)."
+
+  - id: graph
+    status: present
+    role: graph-writer
+    local: {compose_service: graph-writer, note: "postgres-backed graph in lean profile"}
+    cloud: {terraform_module: neptune, note: "postgres_graph in lean; neptune for scale"}
+
+  - id: object_store
+    status: present
+    local: {compose_service: localstack, note: "localstack S3 (integration profile)"}
+    cloud: {terraform_module: s3}
+
+  - id: secrets
+    status: present
+    local: {compose_env_ref: "JWT_SECRET/BYOK_ENCRYPTION_KEY via env / .env"}
+    cloud: {terraform_module: secrets, ref: "secrets + rotation.tf"}
+
+  - id: workers
+    status: present
+    roles: [outbox-relay, stream-worker, identity-worker, graph-writer, measurement-worker, materializer, maintenance]
+    local: {compose_services: [outbox-relay, stream-worker, identity-worker, graph-writer, measurement-worker, materializer, maintenance]}
+    cloud: {terraform_module: ecs, ref: "aws_ecs_service.runtime_role for_each var.runtime_roles"}
+
+  - id: scheduled_jobs
+    status: present
+    role: maintenance
+    local: {compose_service: maintenance, note: "maintenance role owns job_scheduler + crons"}
+    cloud: {terraform_module: ml_drift_lambda, note: "maintenance ECS role + ml_drift_lambda CloudWatch cron"}
+
+  - id: migrations
+    status: present
+    local: {compose_service: migrate, note: "alembic upgrade head one-shot (RUN_MIGRATIONS=1)"}
+    cloud: {terraform_module: ecs, ref: "RUN_MIGRATIONS=1 one-off ECS task in deploy workflow"}
+
+  - id: metrics
+    status: present
+    local: {compose_service: prometheus}
+    cloud: {terraform_module: monitoring, ref: "CloudWatch metrics + alarms"}
+
+  - id: logs
+    status: present
+    local: {compose_service: grafana, note: "Loki/promtail overlay in deploy/observability/loki"}
+    cloud: {terraform_module: monitoring, ref: "CloudWatch log groups + log-archive S3"}
+
+  - id: traces
+    status: gap
+    local: {note: "OTLP collector overlay not yet in compose"}
+    cloud: {note: "no X-Ray/OTel module"}
+    gap: "Distributed tracing (X-Ray/OTel) is not yet implemented in either local compose or Terraform. Metrics + structured logs cover observability for the founding pilot; tracing is a post-pilot follow-up."
+
+  - id: dashboards_alerts
+    status: present
+    local: {compose_service: grafana, note: "deploy/observability/grafana dashboards + prometheus alert_rules.yml + alertmanager"}
+    cloud: {terraform_module: monitoring, ref: "CloudWatch dashboards + metric alarms + SNS"}
+
+  - id: backup_restore
+    status: partial
+    local: {compose_service: postgres, note: "volume-backed; restore exercised by integration fault suite"}
+    cloud: {terraform_module: aurora, ref: "automated snapshots/backups (aurora/rds/neptune)"}
+    gap: "Backups are DB-level automated snapshots (aurora/rds/neptune). No dedicated AWS Backup vault/plan module yet; cross-service point-in-time restore is a follow-up."
+
+  - id: readiness_probes
+    status: present
+    local: {compose_service: backend, note: "healthcheck curl /v1/health; /v1/ready checks alembic head"}
+    cloud: {terraform_module: alb, ref: "ALB target-group health checks + ECS container healthCheck"}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Badge,
   Button,
+  CapabilityStateBadge,
   Card,
   CardContent,
   CardHeader,
@@ -191,10 +192,10 @@ function RuntimeHealthStrip() {
           <div className="flex items-center gap-2 flex-wrap">
             {killEngaged === null ? (
               <Badge variant="default">kill switch unknown</Badge>
+            ) : killEngaged ? (
+              <CapabilityStateBadge state="kill_switch_active" label="kill switch engaged" />
             ) : (
-              <Badge variant={killEngaged ? 'danger' : 'success'}>
-                {killEngaged ? 'kill switch engaged' : 'kill switch clear'}
-              </Badge>
+              <CapabilityStateBadge state="partner_live" label="kill switch clear" reason="agent kill switch is clear" />
             )}
             <KillSwitchControl engaged={killEngaged === true} onChanged={setKillEngaged} />
           </div>

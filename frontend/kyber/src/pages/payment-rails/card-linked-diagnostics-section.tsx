@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Button, CapabilityStatePanel, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
 import { api } from '@kyber/lib/api';
 import { isFeatureEnabled } from '@kyber/lib/featureFlags';
 
@@ -76,7 +76,8 @@ export function CardLinkedDiagnosticsSection() {
       <Card>
         <CardHeader><CardTitle>Card-linked Payment Rails</CardTitle></CardHeader>
         <CardContent>
-          <EmptyState
+          <CapabilityStatePanel
+            state="disabled"
             title="Card-linked observability is disabled"
             description='Enable the "enableCardLinkedPaymentRails" feature flag (VITE_FEATURE_FLAGS) to view card-linked diagnostics.'
           />

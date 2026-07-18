@@ -57,6 +57,17 @@ export function isLocalMocked() {
   return env.VITE_KYBER_ENV === 'local-mocked';
 }
 
+/**
+ * Whether `VITE_KYBER_ENV` was explicitly set. A missing var defaults to
+ * `local-mocked` (see schema), which silently serves MSW mocks — the mock-mode
+ * banner escalates its warning when this returns false so mocks never ship
+ * looking live.
+ */
+export function isEnvExplicit() {
+  const raw = import.meta.env.VITE_KYBER_ENV as string | undefined;
+  return raw != null && raw !== '';
+}
+
 export function isMockAuthAllowed() {
   return env.VITE_KYBER_ENV === 'local-mocked' || env.VITE_KYBER_ENV === 'local-live';
 }

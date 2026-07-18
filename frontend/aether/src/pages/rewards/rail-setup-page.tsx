@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
-  EmptyState, ErrorState, Input, LoadingState,
-  Modal, ModalBody, ModalFooter, ModalHeader,
+  CapabilityStateBadge, EmptyState, ErrorState, Input, LoadingState,
+  Modal, ModalBody, ModalFooter, ModalHeader, resolveCapabilityState,
 } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 import { useRewardsRails } from '@aether-app/features/rewards/use-rewards';
@@ -23,8 +23,6 @@ function fmt(v: unknown, fallback = '—'): string {
 }
 
 // ── Rail metadata ─────────────────────────────────────────────────────────────
-
-type RailStatusVariant = 'success' | 'warning' | 'danger' | 'default';
 
 interface RailMeta {
   id: string;
@@ -128,13 +126,6 @@ const BETA_RAILS: RailMeta[] = [
     beta: true,
   },
 ];
-
-function railStatusVariant(status: string): RailStatusVariant {
-  if (status === 'configured' || status === 'active') return 'success';
-  if (status === 'pending_verification') return 'warning';
-  if (status === 'error' || status === 'failed') return 'danger';
-  return 'default';
-}
 
 // ── Rail config form ──────────────────────────────────────────────────────────
 
@@ -339,8 +330,8 @@ interface RailCardProps {
 }
 
 function RailCard({ meta, serverRail, onConfigure }: RailCardProps) {
-  const status = serverRail ? fmt(serverRail.status, 'not_configured') : 'not_configured';
-  const isConfigured = status !== 'not_configured' && status !== '—';
+  const rawStatus = serverRail ? fmt(serverRail.status, 'not_configured') : 'not_configured';
+  const state = resolveCapabilityState(rawStatus) ?? 'not_configured';
 
   return (
     <div className="flex items-start justify-between rounded-lg border border-border-default px-4 py-3 gap-4">
@@ -348,9 +339,12 @@ function RailCard({ meta, serverRail, onConfigure }: RailCardProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm text-text-primary">{meta.label}</span>
           {meta.beta && <Badge variant="warning" size="sm">Beta</Badge>}
-          <Badge variant={isConfigured ? railStatusVariant(status) : 'default'} size="sm">
-            {isConfigured ? status.replace(/_/g, ' ') : 'not configured'}
-          </Badge>
+          <CapabilityStateBadge
+            state={state}
+            label={rawStatus.replace(/_/g, ' ')}
+            reason={`rail status: ${rawStatus}`}
+            size="sm"
+          />
         </div>
         <p className="text-xs text-text-muted">{meta.description}</p>
         <p className="text-xs text-text-secondary italic">{meta.tenantNote}</p>

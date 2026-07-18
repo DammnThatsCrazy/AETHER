@@ -1,0 +1,223 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aether.io/schemas/pilot-manifest.schema.json",
+  "title": "Aether Pilot Manifest",
+  "description": "Versioned, tenant-scoped declaration of exactly what a founding-tenant pilot ingests, computes, delivers, and is bounded by. Secrets are referenced by name only — never inlined. Reward/meter/quota amounts are integers (minor units) or decimal strings; never floats. Validated by scripts/validate_pilot_manifest.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "tenant_id",
+    "mode",
+    "shadow_mode",
+    "pilot",
+    "region_policy",
+    "backfill",
+    "retention",
+    "enabled_features",
+    "providers",
+    "chains",
+    "secret_refs",
+    "consent",
+    "entitlements",
+    "meters",
+    "quotas",
+    "alert_destinations",
+    "kill_switches"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "description": "Version of THIS schema the manifest targets.",
+      "const": 1
+    },
+    "manifest_version": {
+      "type": "string",
+      "description": "Semver of this particular manifest document (bump on every change).",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Stable slug identifying the pilot tenant. No PII.",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+    },
+    "mode": {
+      "type": "string",
+      "description": "observation = read/compute only; participation = may deliver/execute.",
+      "enum": ["observation", "participation"]
+    },
+    "shadow_mode": {
+      "type": "boolean",
+      "description": "When true, outputs are computed and recorded but NOT delivered to external systems. Observation pilots MUST set this true."
+    },
+    "pilot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "description": "ISO-8601 UTC instant."},
+        "end": {"type": "string", "description": "ISO-8601 UTC instant. Must be after start."}
+      }
+    },
+    "region_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary_region", "allowed_regions", "data_residency"],
+      "properties": {
+        "primary_region": {"type": "string"},
+        "allowed_regions": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "data_residency": {"type": "string", "enum": ["strict", "preferred", "none"]}
+      }
+    },
+    "backfill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start"],
+      "properties": {
+        "start": {"type": "string", "description": "ISO-8601 UTC instant to backfill history from. Must be <= pilot.start."},
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_days", "derived_days"],
+      "properties": {
+        "raw_days": {"type": "integer", "minimum": 1},
+        "derived_days": {"type": "integer", "minimum": 1},
+        "audit_days": {"type": "integer", "minimum": 1}
+      }
+    },
+    "enabled_features": {
+      "type": "array",
+      "description": "Explicit opt-in feature ids. Nothing pilot-scoped is on unless listed here.",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "providers": {
+      "type": "array",
+      "description": "Provider selections per domain (must resolve in the credentialless certification matrix).",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["domain", "provider"],
+        "properties": {
+          "domain": {"type": "string"},
+          "provider": {"type": "string"},
+          "adapter": {"type": "string"},
+          "credential_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "chains": {
+      "type": "array",
+      "description": "Chain/network selections with RPC references, contract/program refs, and venue selections.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chain", "network", "rpc_ref"],
+        "properties": {
+          "chain": {"type": "string"},
+          "network": {"type": "string", "enum": ["mainnet", "testnet", "devnet"]},
+          "rpc_ref": {"type": "string", "description": "Reference to an RPC endpoint secret/config — never an inline URL with an embedded key."},
+          "contract_refs": {"type": "array", "items": {"type": "string"}},
+          "program_refs": {"type": "array", "items": {"type": "string"}},
+          "venues": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "secret_refs": {
+      "type": "array",
+      "description": "Declared secret reference NAMES (env var names, secret:// paths, or ARNs). Values are NEVER stored here.",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_purposes"],
+      "properties": {
+        "required_purposes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "consent_required": {"type": "boolean"}
+      }
+    },
+    "entitlements": {
+      "type": "array",
+      "description": "Capabilities the tenant is entitled to for the pilot.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "enabled"],
+        "properties": {
+          "name": {"type": "string"},
+          "enabled": {"type": "boolean"},
+          "limit": {"type": "integer"}
+        }
+      }
+    },
+    "meters": {
+      "type": "array",
+      "description": "Usage meters. Amounts are integers (minor units) — never floats.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "unit", "aggregation"],
+        "properties": {
+          "name": {"type": "string"},
+          "unit": {"type": "string"},
+          "aggregation": {"type": "string", "enum": ["sum", "max", "last", "unique"]}
+        }
+      }
+    },
+    "quotas": {
+      "type": "object",
+      "description": "Per-meter integer ceilings (minor units / counts). No floats.",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "rewards": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional reward program. All amounts are integer minor units — never floats.",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "currency": {"type": "string"},
+        "budget_minor_units": {"type": "integer", "minimum": 0},
+        "per_action_minor_units": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+      }
+    },
+    "alert_destinations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "target_ref"],
+        "properties": {
+          "name": {"type": "string"},
+          "type": {"type": "string", "enum": ["pagerduty", "slack", "email", "webhook", "sns"]},
+          "target_ref": {"type": "string", "description": "Reference to the destination secret/config — never an inline URL with a token."}
+        }
+      }
+    },
+    "kill_switches": {
+      "type": "array",
+      "description": "Named kill switches that fail the pilot closed. At least one global/pilot-scoped switch is required.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "scope", "default_state"],
+        "properties": {
+          "name": {"type": "string"},
+          "scope": {"type": "string", "enum": ["global", "pilot", "provider", "feature"]},
+          "default_state": {"type": "string", "enum": ["armed", "tripped"]}
+        }
+      }
+    }
+  }
+}

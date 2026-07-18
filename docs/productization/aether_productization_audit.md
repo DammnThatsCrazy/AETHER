@@ -11,12 +11,12 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: c198b6b
+last_synced_commit: "ac900d5"
 ---
 
 # AETHER Productization Audit
 
-**Audit date:** 2026-07-11 (platform v8.12.0)
+**Audit date:** 2026-07-18 (platform v8.12.0)
 **Live counterpart:** `make production-status` (`scripts/production_status.py`) is the
 machine-checkable version of this audit. This document is the dated narrative
 snapshot; the script is the routine. If they disagree, re-run the routine and
@@ -73,6 +73,44 @@ What this audit pass changed (June 2026):
   `make production-status`, `make release-gate`) and a 12-hour scheduled
   workflow (`.github/workflows/production-status.yml`, no secrets required).
 - Added this audit as a repo artifact.
+
+What the July 2026 staging-capstone pass changed (PRs 1–6):
+
+- Added a **credentialless provider certification plane** (new scorecard area,
+  4/5): a `CredentialReadiness` truth model (8 ranked states) plus a
+  `ReadinessDimensions` record whose validators refuse to infer `production_ready`
+  from structure. `build_capability_matrix()` resolves every provider's state
+  **from source** into `docs/_generated/adapter-certification-matrix.json`, and
+  `make credentialless-certification-strict` gates the floor. The plane is wired
+  into `production_status.py` as a live consistency check.
+- **All 18 first-release providers now resolve to `CREDENTIAL_WAITING`** —
+  derivatives ×4, interop ×7, payments ×5, stablecoin-chain ×2 — code-complete +
+  infra-defined + credential-gated, none `SCAFFOLDED` and none `PARTNER_LIVE`.
+  This is an honest, evidence-backed advance from the earlier mix of
+  `CREDENTIAL_GATED`/`SCAFFOLDED`, **not** a production claim. The economic domain
+  scores are unchanged (stablecoin/derivatives/interop/payments at 3, card-linked
+  at 2) — credential-waiting is pre-production, not release-ready.
+- **Durable delivery/outbox + security correctness:** reward delivery runs on a
+  durable outbox with SSRF-checked-before-enqueue and the "never delivered
+  without a receipt" invariant (timeout→retry→dead-letter→redeliver).
+- **Supervised agent real seam (PR6):** `commit_approved_mutations` /
+  `rollback_mutation` enforce approval invariants, record partial failures loudly
+  per-mutation, preserve graph-write errors as `failed_commit`, and mark a
+  rollback that could not restore state `rollback_repair_required` (never a false
+  clean undo). Stale runs are swept and replayable. `graph mutation safety` stays
+  4/5 (hosted mode still needs durable storage).
+- Added a **credentialless load/chaos/recovery suite** (`tests/chaos/`, 41 tests)
+  that runs inside `pytest tests/`: provider rate-limit/timeout, duplicate-webhook
+  storm, out-of-order, worker/consumer restart, Redis/ClickHouse interruption
+  (mocked), graph write failure, RPC failure, chain reorg, WebSocket disconnect,
+  cursor drift, reward-delivery timeout, agent stale run, partial mutation commit,
+  and rollback failure. External-service legs are covered as in-process fault
+  models and clearly marked; the live legs remain staging work.
+- Added the **staging-capstone operating guide set** (`docs/productization/
+  staging-capstone/`) and nine domain runbooks (payment-rails, card-linked,
+  stablecoin-observer, derivatives-stream, interop-observer, reward-delivery,
+  EVM/SVM deploy-emergency, agent-runtime-mutation-review). The EVM/SVM runbooks
+  reference the existing audit packages rather than duplicating them.
 
 ## 2. Classified Findings
 
@@ -136,10 +174,14 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | docs | 4 |
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
+| provider certification plane | 4 |
+| stablecoin intelligence | 3 |
+| derivatives intelligence | 3 |
+| interoperability intelligence | 3 |
 | payment rail observability | 3 |
 | card-linked payment rails | 2 |
 
-**Overall: ~3.82/5 — pre-production** (canonical live figure from
+**Overall: ~3.83/5 — pre-production** (canonical live figure from
 `make production-status`; this table is a dated excerpt of the full scorecard).
 Profile 360 and customer frontend are now 5/5. Security / compliance advanced to
 4/5 with VM dependency-audit and secret-scan controls CI-gated. Customer
@@ -157,6 +199,12 @@ runbook — held at 4 pending a tenant UI, a Silver import projector, and
 production traffic). Payment rail observability (3) and card-linked payment rails
 (2) are wired and tested but flag-off with no live provider validated. All other
 areas with minor gaps remain at 4 until they carry production traffic at scale.
+The new **provider certification plane** (4/5) is the only score added this pass:
+it is a real, tested, gate-enforced credentialless framework, but it certifies
+readiness rather than conferring it — all 18 first-release providers it tracks are
+`CREDENTIAL_WAITING`, so the economic domain scores did **not** move. No area was
+promoted to production-ready or live-validated this pass; credential-waiting and
+pilot-ready are deliberately distinguished from production-ready throughout.
 
 ## 4. Release Blockers (ordered)
 

@@ -71,6 +71,31 @@ export { SeverityBadge } from './components/severity-badge';
 export { Skeleton } from './components/skeleton';
 export { StatusIndicator } from './components/status-indicator';
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './components/tabs';
+
+// Canonical capability credential-lifecycle state matrix (shared by both apps).
+export {
+  capabilityStates,
+  capabilityStateStyle,
+  capabilityStatePrecedence,
+  worstCapabilityState,
+  isCapabilityState,
+  toneVariant,
+  fromImplementationStatus,
+  fromDimensionState,
+  resolveCapabilityState,
+  CapabilityStateBadge,
+  CapabilityStatePanel,
+  MockModeBanner,
+} from './status/index';
+export type {
+  CapabilityState,
+  CapabilityTone,
+  CapabilityStateStyle,
+  CapabilityStateBadgeProps,
+  CapabilityStatePanelProps,
+  MockModeBannerProps,
+  RuntimeDataMode,
+} from './status/index';
 export { TerminalSeparator } from './components/terminal-separator';
 export { Toggle } from './components/toggle';
 export { Tooltip } from './components/tooltip';

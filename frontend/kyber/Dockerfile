@@ -1,3 +1,16 @@
+# =============================================================================
+# Kyber operator console — production image.
+#
+# Build context is the REPOSITORY ROOT (npm workspaces monorepo). The app lives
+# at frontend/kyber and depends on three workspace packages:
+#   @aether/shared -> packages/shared
+#   @aether/web    -> packages/web
+#   @aether/ui     -> frontend/shared
+#
+# Referenced from the root docker-compose.yml `kyber` service as:
+#   build: { context: ., dockerfile: frontend/kyber/Dockerfile }
+# =============================================================================
+
 # ─── Stage 1: Build ───────────────────────────────────────────────
 FROM node:18-alpine AS builder
 
@@ -5,20 +18,21 @@ WORKDIR /app
 
 # Copy workspace root manifests first (layer-cache friendly)
 COPY package.json package-lock.json ./
-COPY apps/kyber/package.json             ./apps/kyber/
-COPY packages/shared/package.json        ./packages/shared/
-COPY packages/web/package.json           ./packages/web/
-COPY packages/react-native/package.json  ./packages/react-native/
+COPY frontend/kyber/package.json    ./frontend/kyber/
+COPY frontend/shared/package.json   ./frontend/shared/
+COPY packages/shared/package.json   ./packages/shared/
+COPY packages/web/package.json      ./packages/web/
 
-# Install all workspace dependencies
-RUN npm ci --workspace=apps/kyber
+# Install the kyber workspace subtree (pulls its workspace deps)
+RUN npm ci --workspace=frontend/kyber
 
-# Copy workspace package source (shared + web are TypeScript-source packages)
+# Copy workspace package source (shared/ui/web are TypeScript-source packages)
 COPY packages/shared/ ./packages/shared/
 COPY packages/web/    ./packages/web/
+COPY frontend/shared/ ./frontend/shared/
 
 # Copy app source
-COPY apps/kyber/ ./apps/kyber/
+COPY frontend/kyber/ ./frontend/kyber/
 
 # Auth0 and API config — baked into the Vite bundle at build time
 ARG VITE_AUTH0_DOMAIN
@@ -27,7 +41,7 @@ ARG VITE_AUTH0_AUDIENCE
 ARG VITE_API_BASE_URL
 ARG VITE_WS_BASE_URL
 
-WORKDIR /app/apps/kyber
+WORKDIR /app/frontend/kyber
 RUN npm run build
 
 # ─── Stage 2: Serve ───────────────────────────────────────────────
@@ -38,11 +52,11 @@ RUN addgroup -g 1001 -S kyber && \
     adduser  -u 1001 -S kyber -G kyber
 
 # Copy built assets
-COPY --from=builder /app/apps/kyber/dist /usr/share/nginx/html
+COPY --from=builder /app/frontend/kyber/dist /usr/share/nginx/html
 
 # Nginx config stored as a template; entrypoint substitutes ${BACKEND_URL}
-COPY apps/kyber/nginx.conf    /etc/nginx/templates/default.conf.template
-COPY apps/kyber/entrypoint.sh /entrypoint.sh
+COPY frontend/kyber/nginx.conf    /etc/nginx/templates/default.conf.template
+COPY frontend/kyber/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Health check

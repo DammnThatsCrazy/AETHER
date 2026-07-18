@@ -7,7 +7,7 @@
  * error string. NotEnabledOrError renders that honestly as an empty
  * state instead of a scary failure.
  */
-import { EmptyState, ErrorState } from '@aether/ui';
+import { CapabilityStatePanel, ErrorState } from '@aether/ui';
 
 export function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -36,11 +36,13 @@ export function NotEnabledOrError({
   readonly onRetry?: () => void;
 }) {
   if (isNotEnabledError(error)) {
+    // Feature-flagged off is an operator-disabled capability — render the
+    // canonical `disabled` state so it reads distinctly from a real error.
     return (
-      <EmptyState
+      <CapabilityStatePanel
+        state="disabled"
         title={`${domainLabel} is not enabled`}
         description="This observation-only intelligence domain is feature-flagged off for your deployment. Contact your operator to enable it."
-        icon="◌"
       />
     );
   }
