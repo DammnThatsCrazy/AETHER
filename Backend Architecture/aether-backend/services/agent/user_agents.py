@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError
 from shared.events.events import Event, EventEnvelopeV2, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_cache, get_graph, get_producer
 from repositories.repos import (
@@ -112,21 +114,31 @@ async def register(
         risk_tolerance=body.risk_tolerance,
     )
     # Project agent + ownership.
-    await graph.upsert_vertex(Vertex(
-        vertex_type=VertexType.AGENT,
-        vertex_id=agent_id,
-        properties={
-            "tenant_id": tenant.tenant_id,
-            "owner_entity_id": body.owner_entity_id,
-            "model": body.model,
-            "risk_tolerance": body.risk_tolerance,
-        },
+    gateway = GraphMutationGateway(graph_client=graph)
+    await gateway.apply(vertex_intent(
+        Vertex(
+            vertex_type=VertexType.AGENT,
+            vertex_id=agent_id,
+            properties={
+                "tenant_id": tenant.tenant_id,
+                "owner_entity_id": body.owner_entity_id,
+                "model": body.model,
+                "risk_tolerance": body.risk_tolerance,
+            },
+        ),
+        operation="node_versioned", tenant_id=tenant.tenant_id,
+        actor_kind="human", actor_id="user_agents_api",
     ))
-    await graph.add_edge(Edge(
-        edge_type=EdgeType.OWNS,
-        from_vertex_id=body.owner_entity_id,
-        to_vertex_id=agent_id,
-        properties={"tenant_id": tenant.tenant_id, "kind": "agent"},
+    await gateway.apply(edge_intent(
+        Edge(
+            edge_type=EdgeType.OWNS,
+            from_vertex_id=body.owner_entity_id,
+            to_vertex_id=agent_id,
+            properties={"tenant_id": tenant.tenant_id, "kind": "agent"},
+        ),
+        operation="edge_created", tenant_id=tenant.tenant_id,
+        actor_kind="human", actor_id="user_agents_api",
+        subject_kind="entity", subject_id=body.owner_entity_id,
     ))
     metrics.increment("user_agents_registered")
     return APIResponse(data=record).to_dict()
@@ -275,15 +287,20 @@ async def execute(
     )
 
     try:
-        await graph.add_edge(Edge(
-            edge_type=EdgeType.EXECUTED,
-            from_vertex_id=agent_id,
-            to_vertex_id=execution_id,
-            properties={
-                "tenant_id": tenant.tenant_id,
-                "delegation_id": decision.delegation_id or "",
-                "action": body.action,
-            },
+        await GraphMutationGateway(graph_client=graph).apply(edge_intent(
+            Edge(
+                edge_type=EdgeType.EXECUTED,
+                from_vertex_id=agent_id,
+                to_vertex_id=execution_id,
+                properties={
+                    "tenant_id": tenant.tenant_id,
+                    "delegation_id": decision.delegation_id or "",
+                    "action": body.action,
+                },
+            ),
+            operation="edge_created", tenant_id=tenant.tenant_id,
+            actor_kind="agent", actor_id=agent_id,
+            subject_kind="agent", subject_id=agent_id,
         ))
     except Exception as e:  # pragma: no cover
         logger.warning(f"Graph projection failed for execution {execution_id}: {e}")

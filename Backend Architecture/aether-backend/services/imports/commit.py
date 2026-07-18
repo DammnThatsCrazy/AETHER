@@ -253,8 +253,11 @@ async def _apply_graph(
     """Upsert vertices and add edges idempotently; return the edges actually
     created (so a rollback can revoke exactly them)."""
     from shared.graph.graph import Edge, Vertex, get_graph_client
+    from shared.graph.mutation_gateway import GraphMutationGateway
+    from shared.graph.mutation_intents import edge_intent, vertex_intent
 
     graph = get_graph_client()
+    gateway = GraphMutationGateway(graph_client=graph)
     for v in vertices:
         existing = await graph.get_vertex(v["vertex_id"])
         existing_props = dict(existing.properties or {}) if existing is not None else {}
@@ -274,23 +277,28 @@ async def _apply_graph(
         }
         if existing is None:
             props["import_commit_id"] = commit_id
-        await graph.upsert_vertex(
-            Vertex(vertex_type=v["vertex_type"], vertex_id=v["vertex_id"], properties=props)
-        )
+        await gateway.apply(vertex_intent(
+            Vertex(vertex_type=v["vertex_type"], vertex_id=v["vertex_id"], properties=props),
+            operation="node_versioned", tenant_id=tenant_id,
+            actor_kind="import", actor_id=commit_id, correlation_id=commit_id,
+        ))
 
     created: list[dict] = []
     for e in edges:
         existing = await graph.get_edges(e["from"], edge_type=e["type"], direction="out")
         if any(x.to_vertex_id == e["to"] for x in existing):
             continue  # idempotent: this edge already connects these vertices
-        await graph.add_edge(
+        await gateway.apply(edge_intent(
             Edge(
                 edge_type=e["type"],
                 from_vertex_id=e["from"],
                 to_vertex_id=e["to"],
                 properties={"tenant_id": tenant_id, "import_commit_id": commit_id},
-            )
-        )
+            ),
+            operation="edge_created", tenant_id=tenant_id,
+            actor_kind="import", actor_id=commit_id,
+            correlation_id=commit_id, causality_class="declared_reason",
+        ))
         created.append(e)
     return created
 
@@ -429,13 +437,22 @@ async def rollback_import(
 
 async def _revoke_commit_edges(tenant_id: str, commit: dict, reason: str) -> int:
     from shared.graph.graph import get_graph_client
+    from shared.graph.mutation_gateway import GraphMutationGateway
+    from shared.graph.mutation_intents import revocation_intent
 
     graph = get_graph_client()
+    gateway = GraphMutationGateway(graph_client=graph)
+    commit_id = commit.get("commit_id") or ""
     revoked = 0
     for e in commit.get("created_edges", []):
-        revoked += await graph.revoke_edge(
-            e["from"], e["to"], e["type"], reason=reason, tenant_id=tenant_id
-        )
+        outcome = await gateway.apply(revocation_intent(
+            from_vertex_id=e["from"], to_vertex_id=e["to"], edge_type=e["type"],
+            reason=reason, tenant_id=tenant_id,
+            operation="edge_tombstoned", actor_kind="import", actor_id=commit_id,
+            reason_code="import_rolled_back", correlation_id=commit_id,
+        ))
+        result = outcome.projection_result
+        revoked += result if isinstance(result, int) else 0
     return revoked
 
 
