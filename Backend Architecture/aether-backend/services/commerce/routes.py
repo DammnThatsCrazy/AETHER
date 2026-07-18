@@ -28,7 +28,7 @@ _analytics = CommerceEconomicAnalytics()
 async def record_payment(body: PaymentRecord, request: Request):
     """Record a payment and create PAYS edge in the intelligence graph."""
     request.state.tenant.require_permission("commerce:write")
-    result = await _service.record_payment(body)
+    result = await _service.record_payment(body, request.state.tenant.tenant_id)
     return APIResponse(data=result.model_dump()).to_dict()
 
 
@@ -36,7 +36,7 @@ async def record_payment(body: PaymentRecord, request: Request):
 async def record_hire(body: AgentHireRecord, request: Request):
     """Record an agent hiring another agent and create HIRED edge."""
     request.state.tenant.require_permission("commerce:write")
-    result = await _service.record_hire(body)
+    result = await _service.record_hire(body, request.state.tenant.tenant_id)
     return APIResponse(data=result.model_dump()).to_dict()
 
 
