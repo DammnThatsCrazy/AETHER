@@ -68,3 +68,11 @@ export { TruthBanner } from './components/truth-banner';
 export type { TruthBannerProps } from './components/truth-banner';
 export { FacetPanel, cohortMinimumFor } from './components/facet-panel';
 export type { FacetPanelProps, FacetGroup, FacetBucket } from './components/facet-panel';
+
+// Chrome: breadcrumbs + saved views.
+export { breadcrumbsFromContext, surfaceSupportsSavedViews } from './chrome-model';
+export type { Crumb } from './chrome-model';
+export { ExplorationBreadcrumbs } from './components/breadcrumbs';
+export type { ExplorationBreadcrumbsProps } from './components/breadcrumbs';
+export { SavedViewChrome } from './components/saved-view-chrome';
+export type { SavedViewChromeProps, SavedView } from './components/saved-view-chrome';
