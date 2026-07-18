@@ -53,6 +53,27 @@ async def test_compose_graph_uses_real_edge_type_not_related_to():
 
 
 @pytest.mark.asyncio
+async def test_compose_graph_excludes_cross_tenant_edge_between_in_tenant_vertices():
+    """A relationship whose own tenant_id belongs to another tenant must not be
+    surfaced/relabeled as the requesting tenant, even when both endpoints are
+    in-tenant vertices (F1 regression)."""
+    graph = GraphClient()
+    await graph.add_vertex(Vertex(VertexType.USER, "user-1", {"tenant_id": "tenant-a"}))
+    await graph.add_vertex(Vertex(VertexType.WALLET, "wallet-a", {"tenant_id": "tenant-a"}))
+    # Edge between two in-tenant vertices, but carrying tenant-b provenance.
+    await graph.add_edge(Edge(
+        "OWNS_WALLET", "user-1", "wallet-a",
+        {"tenant_id": "tenant-b", "provenance": "tenant_b_only_secret"},
+    ))
+
+    result = await _composer(graph)._compose_graph("user-1", tenant_id="tenant-a")
+
+    # The other tenant's relationship is not leaked (no relabel to tenant-a).
+    assert result["edges"] == []
+    assert result["alignment_audit"]["cross_tenant_edges_excluded"] == 1
+
+
+@pytest.mark.asyncio
 async def test_compose_graph_no_synthetic_edge_type_anywhere():
     graph = GraphClient()
     await graph.add_vertex(Vertex(VertexType.USER, "user-1", {"tenant_id": "tenant-a"}))

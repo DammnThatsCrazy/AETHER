@@ -345,11 +345,20 @@ class ProfileComposer:
             user_id, direction="both", include_revoked=False
         )
         edges = []
+        cross_tenant_edges = 0
         for index, e in enumerate(raw_edges):
             other = e.to_vertex_id if e.from_vertex_id == user_id else e.from_vertex_id
             if other not in scoped_ids:
                 continue
             props = dict(getattr(e, "properties", {}) or {})
+            # An edge between two in-tenant vertices can itself carry a different
+            # tenant's tenant_id on its properties. Surfacing it would relabel
+            # another tenant's relationship type/provenance as this tenant's, so
+            # skip any edge whose own tenant_id does not match (legacy unscoped
+            # edges are allowed, mirroring the neighbor-vertex handling above).
+            if not _tenant_matches(props, tenant_id):
+                cross_tenant_edges += 1
+                continue
             edges.append({
                 "id": props.get("edge_id") or f"{e.from_vertex_id}-{e.to_vertex_id}-{e.edge_type}-{index}",
                 "source": e.from_vertex_id,
@@ -370,6 +379,7 @@ class ProfileComposer:
             "alignment_audit": {
                 "cross_tenant_neighbors_excluded": cross_tenant,
                 "legacy_unscoped_neighbors": legacy_unscoped,
+                "cross_tenant_edges_excluded": cross_tenant_edges,
                 "tenant_id": tenant_id,
                 "depth": depth,
             },
