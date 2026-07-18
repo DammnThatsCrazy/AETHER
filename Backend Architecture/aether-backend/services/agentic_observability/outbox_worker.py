@@ -60,26 +60,42 @@ class AgenticGraphOutboxWorker:
         )
 
     async def _project(self, row: dict) -> None:
-        """Graph projection sink: one outbox row → one vertex/edge write."""
+        """Graph projection sink: one outbox row → one vertex/edge write.
+
+        Routed through the canonical mutation gateway; tenant flows from the
+        outbox row (which is drained per tenant) or the projected properties.
+        """
+        from shared.graph.mutation_gateway import GraphMutationGateway
+        from shared.graph.mutation_intents import edge_intent, vertex_intent
+
         outbox_id = str(row.get("outbox_id") or row.get("id", ""))
         mutation_type = row.get("mutation_type", "vertex")
         payload = row.get("payload", {}) or {}
+        props = payload.get("properties", {}) or {}
+        tenant_id = str(row.get("tenant_id") or props.get("tenant_id", ""))
+        gateway = GraphMutationGateway(graph_client=self._graph)
 
         if mutation_type == "vertex":
             v = Vertex(
                 vertex_type=payload.get("vertex_type", "AgentObservation"),
                 vertex_id=payload.get("vertex_id", outbox_id),
-                properties=payload.get("properties", {}),
+                properties=props,
             )
-            await self._graph.add_vertex(v)
+            await gateway.apply(vertex_intent(
+                v, operation="node_created", tenant_id=tenant_id,
+                actor_id="agentic_graph_outbox",
+            ))
         else:
             e = Edge(
                 edge_type=payload.get("edge_type", "observed"),
                 from_vertex_id=payload.get("from_vertex_id", ""),
                 to_vertex_id=payload.get("to_vertex_id", ""),
-                properties=payload.get("properties", {}),
+                properties=props,
             )
-            await self._graph.add_edge(e)
+            await gateway.apply(edge_intent(
+                e, operation="edge_created", tenant_id=tenant_id,
+                actor_id="agentic_graph_outbox",
+            ))
 
     async def process_batch(
         self, tenant_id: str, limit: int = 100

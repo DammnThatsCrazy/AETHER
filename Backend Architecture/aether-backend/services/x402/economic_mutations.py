@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import Optional
 
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger
 
 from .commerce_models import (
@@ -40,6 +42,7 @@ class EconomicGraphMutations:
 
     def __init__(self, graph_client: Optional[GraphClient] = None):
         self._graph = graph_client or GraphClient()
+        self._gateway = GraphMutationGateway(graph_client=self._graph)
         self._writes: list[dict] = []  # trace log for explainability
 
     def _trace(self, kind: str, label: str, props: dict) -> None:
@@ -47,6 +50,28 @@ class EconomicGraphMutations:
 
     def get_trace(self) -> list[dict]:
         return list(self._writes)
+
+    async def _put_vertex(self, v: Vertex) -> None:
+        """Route a commerce vertex upsert through the gateway (node_versioned).
+
+        tenant flows from the vertex's own ``tenant_id`` property.
+        """
+        await self._gateway.apply(vertex_intent(
+            v, operation="node_versioned", actor_id="x402_economic_mutations",
+        ))
+
+    async def _put_edge(self, e: Edge, tenant_id: str, *, subject_id: Optional[str] = None) -> None:
+        """Route a commerce edge through the gateway (edge_created).
+
+        Commerce edges carry their state in ``properties`` but not tenant_id;
+        stamp it so the edge stays inside the tenant-scoped graph digest
+        (shadow parity) — the endpoints are already tenant-prefixed.
+        """
+        e.properties.setdefault("tenant_id", tenant_id)
+        await self._gateway.apply(edge_intent(
+            e, operation="edge_created", tenant_id=tenant_id,
+            actor_id="x402_economic_mutations", subject_id=subject_id,
+        ))
 
     async def write_resource(self, resource: ProtectedResource) -> None:
         v = Vertex(
@@ -61,7 +86,7 @@ class EconomicGraphMutations:
                 "tenant_id": resource.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(v)
+        await self._put_vertex(v)
         self._trace("vertex", VertexType.PROTECTED_RESOURCE, v.properties)
 
     async def write_challenge(self, req: PaymentRequirement, resource: ProtectedResource) -> None:
@@ -78,7 +103,7 @@ class EconomicGraphMutations:
                 "tenant_id": req.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(v)
+        await self._put_vertex(v)
         self._trace("vertex", VertexType.PAYMENT_REQUIREMENT, v.properties)
 
         edge = Edge(
@@ -87,7 +112,7 @@ class EconomicGraphMutations:
             to_vertex_id=_tkey(req.tenant_id, req.challenge_id),
             properties={"amount_usd": str(req.amount_usd)},
         )
-        await self._graph.add_edge(edge)
+        await self._put_edge(edge, req.tenant_id, subject_id=_tkey(req.tenant_id, resource.resource_id))
         self._trace("edge", EdgeType.REQUIRES_PAYMENT, edge.properties)
 
     async def write_policy_decision(self, decision: PolicyDecision) -> None:
@@ -101,7 +126,7 @@ class EconomicGraphMutations:
                 "tenant_id": decision.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(v)
+        await self._put_vertex(v)
         self._trace("vertex", VertexType.POLICY_DECISION, v.properties)
 
         e = Edge(
@@ -110,7 +135,7 @@ class EconomicGraphMutations:
             to_vertex_id=_tkey(decision.tenant_id, decision.decision_id),
             properties={"outcome": decision.outcome.value},
         )
-        await self._graph.add_edge(e)
+        await self._put_edge(e, decision.tenant_id, subject_id=_tkey(decision.tenant_id, decision.challenge_id))
         self._trace("edge", EdgeType.GOVERNED_BY_POLICY, e.properties)
 
     async def write_approval_request(self, approval: ApprovalRequest) -> None:
@@ -126,7 +151,7 @@ class EconomicGraphMutations:
                 "tenant_id": approval.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(v)
+        await self._put_vertex(v)
         self._trace("vertex", VertexType.APPROVAL_REQUEST, v.properties)
 
     async def write_approval_decision(self, approval: ApprovalRequest, decision: ApprovalDecision) -> None:
@@ -141,7 +166,7 @@ class EconomicGraphMutations:
                 "tenant_id": decision.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(v)
+        await self._put_vertex(v)
         self._trace("vertex", VertexType.APPROVAL_DECISION, v.properties)
 
         edge_type = EdgeType.APPROVED_BY if decision.action == "approve" else EdgeType.REJECTED_BY
@@ -151,7 +176,7 @@ class EconomicGraphMutations:
             to_vertex_id=decision.decided_by,
             properties={"reason": decision.reason},
         )
-        await self._graph.add_edge(edge)
+        await self._put_edge(edge, decision.tenant_id, subject_id=_tkey(decision.tenant_id, decision.decision_id))
         self._trace("edge", edge_type, edge.properties)
 
         # Link approval -> decision via AUTHORIZED_BY
@@ -161,7 +186,7 @@ class EconomicGraphMutations:
             to_vertex_id=_tkey(approval.tenant_id, approval.approval_id),
             properties={"status": approval.status.value},
         )
-        await self._graph.add_edge(approved_edge)
+        await self._put_edge(approved_edge, approval.tenant_id, subject_id=_tkey(approval.tenant_id, approval.challenge_id))
         self._trace("edge", EdgeType.AUTHORIZED_BY, approved_edge.properties)
 
     async def write_authorization(self, auth: PaymentAuthorization) -> None:
@@ -175,7 +200,7 @@ class EconomicGraphMutations:
                 "tenant_id": auth.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(v)
+        await self._put_vertex(v)
         self._trace("vertex", VertexType.PAYMENT_AUTHORIZATION, v.properties)
 
     async def write_receipt_and_settlement(self, receipt: PaymentReceipt, settlement: Settlement) -> None:
@@ -190,7 +215,7 @@ class EconomicGraphMutations:
                 "tenant_id": receipt.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(rv)
+        await self._put_vertex(rv)
         self._trace("vertex", VertexType.PAYMENT_RECEIPT, rv.properties)
 
         sv = Vertex(
@@ -204,7 +229,7 @@ class EconomicGraphMutations:
                 "tenant_id": settlement.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(sv)
+        await self._put_vertex(sv)
         self._trace("vertex", VertexType.SETTLEMENT, sv.properties)
 
         e = Edge(
@@ -213,7 +238,7 @@ class EconomicGraphMutations:
             to_vertex_id=_tkey(settlement.tenant_id, settlement.settlement_id),
             properties={"state": settlement.state.value},
         )
-        await self._graph.add_edge(e)
+        await self._put_edge(e, receipt.tenant_id, subject_id=_tkey(receipt.tenant_id, receipt.receipt_id))
         self._trace("edge", EdgeType.SETTLED_BY, e.properties)
 
     async def write_entitlement(self, entitlement: Entitlement) -> None:
@@ -229,7 +254,7 @@ class EconomicGraphMutations:
                 "tenant_id": entitlement.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(v)
+        await self._put_vertex(v)
         self._trace("vertex", VertexType.ENTITLEMENT, v.properties)
 
         e = Edge(
@@ -238,7 +263,7 @@ class EconomicGraphMutations:
             to_vertex_id=_tkey(entitlement.tenant_id, entitlement.resource_id),
             properties={"scope": entitlement.scope},
         )
-        await self._graph.add_edge(e)
+        await self._put_edge(e, entitlement.tenant_id, subject_id=_tkey(entitlement.tenant_id, entitlement.entitlement_id))
         self._trace("edge", EdgeType.GRANTS_ACCESS_TO, e.properties)
 
     async def write_agent_economic_identity(
@@ -267,11 +292,11 @@ class EconomicGraphMutations:
             vertex_id=eid_vertex_id,
             properties=props,
         )
-        await self._graph.upsert_vertex(identity_vertex)
+        await self._put_vertex(identity_vertex)
         self._trace("vertex", VertexType.AGENT_ECONOMIC_IDENTITY, props)
 
         # Ensure the AGENT vertex exists before adding the edge
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.AGENT,
             vertex_id=agent_vertex_id,
             properties={"agent_id": agent_id, "tenant_id": tenant_id},
@@ -283,7 +308,7 @@ class EconomicGraphMutations:
             to_vertex_id=eid_vertex_id,
             properties={"tenant_id": tenant_id},
         )
-        await self._graph.add_edge(edge)
+        await self._put_edge(edge, tenant_id, subject_id=agent_vertex_id)
         self._trace("edge", EdgeType.ECONOMICALLY_IDENTIFIED_AS, edge.properties)
 
     async def write_grant_and_fulfillment(self, grant: AccessGrant, fulfillment: Fulfillment) -> None:
@@ -297,7 +322,7 @@ class EconomicGraphMutations:
                 "tenant_id": grant.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(gv)
+        await self._put_vertex(gv)
         self._trace("vertex", VertexType.ACCESS_GRANT, gv.properties)
 
         fv = Vertex(
@@ -310,7 +335,7 @@ class EconomicGraphMutations:
                 "tenant_id": fulfillment.tenant_id,
             },
         )
-        await self._graph.upsert_vertex(fv)
+        await self._put_vertex(fv)
         self._trace("vertex", VertexType.FULFILLMENT, fv.properties)
 
         e = Edge(
@@ -319,5 +344,5 @@ class EconomicGraphMutations:
             to_vertex_id=_tkey(fulfillment.tenant_id, fulfillment.fulfillment_id),
             properties={"status": fulfillment.status},
         )
-        await self._graph.add_edge(e)
+        await self._put_edge(e, grant.tenant_id, subject_id=_tkey(grant.tenant_id, grant.grant_id))
         self._trace("edge", EdgeType.FULFILLED_BY, e.properties)

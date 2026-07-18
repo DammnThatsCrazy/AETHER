@@ -102,7 +102,11 @@ class CardLinkedIngestionService:
             )
             from services.payment_catalog.catalog import PAYMENTSCAN_CARD_PROGRAMS
 
+            from shared.graph.mutation_gateway import GraphMutationGateway
+            from shared.graph.mutation_intents import edge_intent, vertex_intent
+
             graph = get_graph()
+            gateway = GraphMutationGateway(graph_client=graph)
             program_slug = record.get("card_program_id")
             if program_slug and program_slug not in self._projected_programs:
                 self._projected_programs.add(program_slug)
@@ -121,14 +125,26 @@ class CardLinkedIngestionService:
                         },
                     )
                     for vertex in cat_vertices:
-                        await graph.upsert_vertex(vertex)
+                        await gateway.apply(vertex_intent(
+                            vertex, operation="node_versioned",
+                            tenant_id=tenant_id, actor_id="card_linked_ingestion",
+                        ))
                     for edge in cat_edges:
-                        await graph.add_edge(edge)
+                        await gateway.apply(edge_intent(
+                            edge, operation="edge_created",
+                            tenant_id=tenant_id, actor_id="card_linked_ingestion",
+                        ))
             vertices, edges = build_flow_mutations(record)
             for vertex in vertices:
-                await graph.upsert_vertex(vertex)
+                await gateway.apply(vertex_intent(
+                    vertex, operation="node_versioned",
+                    tenant_id=tenant_id, actor_id="card_linked_ingestion",
+                ))
             for edge in edges:
-                await graph.add_edge(edge)
+                await gateway.apply(edge_intent(
+                    edge, operation="edge_created",
+                    tenant_id=tenant_id, actor_id="card_linked_ingestion",
+                ))
         except Exception as exc:  # pragma: no cover — best-effort mirror
             logger.debug("card-linked graph projection skipped: %s", exc)
 

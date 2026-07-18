@@ -36,11 +36,11 @@ CREATE TABLE IF NOT EXISTS gold_location_history (
     connection_type_dominant LowCardinality(String), -- broadband, mobile, datacenter, unknown
     -- Classification based on session_pct thresholds
     classification          LowCardinality(String),  -- primary, secondary, rare, one_time
-    first_seen_at           DateTime,
-    last_seen_at            DateTime,
+    first_seen_at           DateTime64(3, 'UTC'),
+    last_seen_at            DateTime64(3, 'UTC'),
     -- Anomaly detection flag
     is_new_primary          UInt8,   -- 1 if classification=primary AND first_seen_at > now()-7d
-    computed_at             DateTime
+    computed_at             DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(computed_at)

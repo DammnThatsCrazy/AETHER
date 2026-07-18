@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS gold_entity_tiers (
     percentile      Float32,                 -- 0–100 within tenant population
     tvl_usd         Decimal(18, 6),          -- portfolio value driving assignment
     -- Validity window
-    valid_from      DateTime,
-    valid_until     Nullable(DateTime),
-    computed_at     DateTime
+    valid_from      DateTime64(3, 'UTC'),
+    valid_until     Nullable(DateTime64(3, 'UTC')),
+    computed_at     DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(valid_from)

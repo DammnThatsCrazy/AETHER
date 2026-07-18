@@ -39,6 +39,10 @@ def _stub_missing_deps() -> None:
         fake_pydantic = types.ModuleType("pydantic")
         fake_pydantic.BaseModel = object
         fake_pydantic.Field = lambda *a, **kw: None
+        # ConfigDict is used at class-definition time by shared graph mutation
+        # models (imported transitively via the canonical mutation gateway);
+        # the stub must expose it or those modules fail to import.
+        fake_pydantic.ConfigDict = lambda *a, **kw: dict(*a, **kw)
         sys.modules["pydantic"] = fake_pydantic
 
     # starlette stub — each submodule is a separate SimpleNamespace so that

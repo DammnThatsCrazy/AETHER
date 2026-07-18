@@ -202,17 +202,98 @@ async def test_enforce_dedup_short_circuits_projection(set_mode):
 async def test_enforce_rejects_invalid_edge(set_mode):
     set_mode("enforce")
     gateway, client, _ledger = _gateway()
+    # Canonicalisation fills MISSING required properties from intent metadata,
+    # but a writer-supplied value that is actually invalid survives (writer
+    # wins over gateway defaults) and is rejected in enforce mode.
     bad_edge = Edge(
         edge_type="SAME_AS",
         from_vertex_id="entity_a",
         to_vertex_id="entity_b",
-        properties={"tenant_id": TENANT},  # missing required properties
+        properties={"tenant_id": TENANT, "confidence": "5.0"},  # out of [0.0, 1.0]
     )
     with pytest.raises(GraphWriteValidationError):
         await gateway.apply(
             MutationIntent(operation="edge_created", tenant_id=TENANT, edge=bad_edge)
         )
     assert await client.get_edges("entity_a") == []
+
+
+@pytest.mark.asyncio
+async def test_enforce_canonicalizes_edge_from_intent_metadata(set_mode):
+    """An edge carrying only tenant_id passes enforce-mode validation when the
+    actor/confidence/valid_from etc. travel on the intent; the projection and
+    ledger then carry the canonical property set (F4)."""
+    set_mode("enforce")
+    gateway, client, ledger = _gateway()
+    bare = Edge(
+        edge_type="SAME_AS",
+        from_vertex_id="entity_a",
+        to_vertex_id="entity_b",
+        properties={"tenant_id": TENANT},  # only tenant_id on the edge itself
+    )
+    outcome = await gateway.apply(
+        MutationIntent(
+            operation="edge_created",
+            tenant_id=TENANT,
+            edge=bare,
+            actor_kind="agent",
+            actor_id="resolver-7",
+            confidence=0.77,
+            source_event_id="evt-canon",
+            valid_from=VALID_FROM,
+        )
+    )
+    assert outcome.applied and outcome.ledger_recorded
+
+    # Projection carries the canonical required set built from intent metadata.
+    edges = await client.get_edges("entity_a")
+    assert len(edges) == 1
+    props = edges[0].properties
+    for key in (
+        "actor_kind", "actor_id", "schema_version", "provenance",
+        "valid_from", "confidence", "idempotency_key",
+    ):
+        assert key in props, f"canonical property {key!r} missing from projection"
+    assert props["actor_kind"] == "agent"
+    assert props["actor_id"] == "resolver-7"
+    assert props["confidence"] == "0.77"
+    assert props["idempotency_key"] == make_edge_idempotency_key(
+        TENANT, "SAME_AS", "entity_a", "entity_b", "evt-canon"
+    )
+
+    # The ledger fact payload carries the same canonical props.
+    rows = await ledger.list_records(TENANT)
+    assert len(rows) == 1
+    ledger_props = rows[0]["payload"]["properties"]
+    assert ledger_props["actor_kind"] == "agent"
+    assert ledger_props["idempotency_key"] == props["idempotency_key"]
+
+
+@pytest.mark.asyncio
+async def test_off_mode_projects_bare_edge_unchanged(set_mode):
+    """Off mode is byte-identical to a direct write: the intent metadata never
+    touches the edge and no canonical properties are added (F4 invariant)."""
+    set_mode("off")
+    gateway, client, _ledger = _gateway()
+    bare = Edge(
+        edge_type="SAME_AS",
+        from_vertex_id="entity_a",
+        to_vertex_id="entity_b",
+        properties={"tenant_id": TENANT},
+    )
+    await gateway.apply(
+        MutationIntent(
+            operation="edge_created",
+            tenant_id=TENANT,
+            edge=bare,
+            actor_kind="agent",
+            actor_id="resolver-7",
+            confidence=0.77,
+        )
+    )
+    edges = await client.get_edges("entity_a")
+    assert len(edges) == 1
+    assert edges[0].properties == {"tenant_id": TENANT}
 
 
 @pytest.mark.asyncio

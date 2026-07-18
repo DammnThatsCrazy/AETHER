@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS gold_temporal_heatmap (
     evening_intensity       Float32,    -- hours 12-18 local time
     night_intensity         Float32,    -- hours 18-24 local time
     timezone                Nullable(String),
-    computed_at             DateTime
+    computed_at             DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(computed_at)

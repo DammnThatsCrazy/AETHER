@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS gold_tradfi_portfolio (
     unrealized_pnl_usd  Nullable(Decimal(18, 6)),
     currency_code       LowCardinality(String),
     asset_count         UInt32,
-    last_sync_at        DateTime
+    last_sync_at        DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(last_sync_at)
 ORDER BY (tenant_id, entity_id, broker, asset_class, symbol)

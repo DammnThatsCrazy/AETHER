@@ -104,16 +104,28 @@ async def grant(
     # Synchronously project to the graph as a best-effort mirror; the
     # DelegationProjector worker re-converges on event replay.
     try:
-        await graph.add_edge(Edge(
-            edge_type=EdgeType.DELEGATES,
-            from_vertex_id=body.grantor_entity_id,
-            to_vertex_id=body.grantee_entity_id,
-            properties={
-                "tenant_id": tenant.tenant_id,
-                "delegation_id": delegation_id,
-                "valid_from": record["starts_at"],
-                "valid_to": record.get("ends_at") or "",
-            },
+        from shared.graph.mutation_gateway import GraphMutationGateway
+        from shared.graph.mutation_intents import edge_intent
+
+        await GraphMutationGateway(graph_client=graph).apply(edge_intent(
+            Edge(
+                edge_type=EdgeType.DELEGATES,
+                from_vertex_id=body.grantor_entity_id,
+                to_vertex_id=body.grantee_entity_id,
+                properties={
+                    "tenant_id": tenant.tenant_id,
+                    "delegation_id": delegation_id,
+                    "valid_from": record["starts_at"],
+                    "valid_to": record.get("ends_at") or "",
+                },
+            ),
+            operation="edge_created",
+            tenant_id=tenant.tenant_id,
+            actor_kind="human",
+            actor_id="delegation_api",
+            subject_kind="entity",
+            subject_id=body.grantor_entity_id,
+            causality_class="authorized_delegation",
         ))
     except Exception as e:  # pragma: no cover — projection is non-authoritative
         logger.warning(f"Graph projection failed for delegation {delegation_id}: {e}")

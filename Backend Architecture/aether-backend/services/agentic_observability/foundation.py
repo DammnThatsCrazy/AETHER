@@ -100,13 +100,25 @@ async def persist_mutations(mutations: list[Any], *, tenant_id: str, trace_id: s
         return result
     try:
         from dependencies.providers import get_graph
+        from shared.graph.mutation_gateway import GraphMutationGateway
+        from shared.graph.mutation_intents import edge_intent, vertex_intent
+
         graph = get_graph()
+        gateway = GraphMutationGateway(graph_client=graph)
         for mutation in mutations:
             if isinstance(mutation, Vertex):
-                await graph.add_vertex(mutation)
+                await gateway.apply(vertex_intent(
+                    mutation, operation="node_created",
+                    tenant_id=tenant_id, actor_id="agentic_observability",
+                    correlation_id=trace_id,
+                ))
                 result.graph_mutations_persisted += 1
             elif isinstance(mutation, Edge):
-                await graph.add_edge(mutation)
+                await gateway.apply(edge_intent(
+                    mutation, operation="edge_created",
+                    tenant_id=tenant_id, actor_id="agentic_observability",
+                    correlation_id=trace_id,
+                ))
                 result.graph_mutations_persisted += 1
         result.graph_projection_status = "persisted" if result.graph_mutations_persisted == len(mutations) else "partial"
     except Exception as exc:

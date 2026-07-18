@@ -17,11 +17,31 @@ from typing import Any
 from services.silver.projectors.base import ProjectionResult
 from shared.graph.edge_properties import build_edge_properties
 from shared.graph.graph import Edge, EdgeType
+from shared.graph.mutation_gateway import get_mutation_gateway
+from shared.graph.mutation_intents import edge_intent
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.silver.graph_projector")
 
 _EMIT_ENABLED = os.getenv("AETHER_SILVER_GRAPH_EMIT", "true").lower() != "false"
+
+
+async def _emit(edge: Edge, *, subject_id: str = "") -> None:
+    """Route a Silver-sourced edge through the canonical mutation gateway.
+
+    Behaviour is identical to the pre-gateway ``get_graph_client().add_edge``
+    when the gateway mode is ``off`` (default); ``shadow`` / ``enforce`` also
+    record the write in the append-only mutation ledger as ``edge_created``.
+    """
+    await get_mutation_gateway().apply(
+        edge_intent(
+            edge,
+            operation="edge_created",
+            actor_id="silver_projector",
+            subject_kind="entity" if subject_id else None,
+            subject_id=subject_id or None,
+        )
+    )
 
 
 def _edge(
@@ -89,8 +109,6 @@ class SilverGraphProjector:
     # ── Per-table handlers ──────────────────────────────────────────────
 
     async def _emit_exposure(self, result: ProjectionResult, event: dict[str, Any]) -> None:
-        from shared.graph.graph import get_graph_client
-        graph = get_graph_client()
         ctx = event.get("context") or {}
         tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
         user_id = event.get("userId") or event.get("anonymousId", "")
@@ -103,11 +121,9 @@ class SilverGraphProjector:
             EdgeType.EXPOSED_TO, user_id, content_id, tenant_id,
             source_event_id, occurred_at, consent_purpose="analytics",
         )
-        await graph.add_edge(edge)
+        await _emit(edge, subject_id=user_id)
 
     async def _emit_revenue(self, result: ProjectionResult, event: dict[str, Any]) -> None:
-        from shared.graph.graph import get_graph_client
-        graph = get_graph_client()
         ctx = event.get("context") or {}
         tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
         user_id = event.get("userId", "")
@@ -124,7 +140,7 @@ class SilverGraphProjector:
                     EdgeType.PURCHASED, user_id, product_id, tenant_id,
                     source_event_id, occurred_at, consent_purpose="commerce",
                 )
-                await get_graph_client().add_edge(edge)
+                await _emit(edge, subject_id=user_id)
         elif event_type in ("subscription_started", "trial_converted"):
             plan_id = props.get("planId") or props.get("subscriptionId", "")
             if plan_id:
@@ -132,11 +148,9 @@ class SilverGraphProjector:
                     EdgeType.SUBSCRIBES_TO, user_id, plan_id, tenant_id,
                     source_event_id, occurred_at, consent_purpose="commerce",
                 )
-                await get_graph_client().add_edge(edge)
+                await _emit(edge, subject_id=user_id)
 
     async def _emit_outcome(self, result: ProjectionResult, event: dict[str, Any]) -> None:
-        from shared.graph.graph import get_graph_client
-        graph = get_graph_client()
         ctx = event.get("context") or {}
         tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
         user_id = event.get("userId", "")
@@ -150,7 +164,7 @@ class SilverGraphProjector:
             EdgeType.ACHIEVED_OUTCOME, user_id, goal_id, tenant_id,
             source_event_id, occurred_at, consent_purpose="analytics",
         )
-        await graph.add_edge(edge)
+        await _emit(edge, subject_id=user_id)
 
     async def _emit_comms(self, result: ProjectionResult, event: dict[str, Any]) -> None:
         """Aggregated communication relationships (ADR-C6).

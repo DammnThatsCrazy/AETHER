@@ -242,8 +242,10 @@ class CommsGraphProjector:
 
     async def _emit_edge(self, aggregate: dict[str, Any]) -> None:
         try:
-            from shared.graph.graph import Edge, get_graph_client
+            from shared.graph.graph import Edge
             from shared.graph.edge_properties import build_edge_properties
+            from shared.graph.mutation_gateway import get_mutation_gateway
+            from shared.graph.mutation_intents import edge_intent
 
             evidence_refs = aggregate.get("evidence_refs") or []
             props = build_edge_properties(
@@ -274,7 +276,20 @@ class CommsGraphProjector:
                 to_vertex_id=aggregate["recipient_ref"],
                 properties=props,
             )
-            await get_graph_client().add_edge(edge)
+            await get_mutation_gateway().apply(
+                edge_intent(
+                    edge,
+                    operation="edge_created",
+                    actor_id="comms_graph_projector",
+                    subject_kind="entity",
+                    subject_id=aggregate["sender_ref"],
+                    consent_refs=(
+                        [str(aggregate["consent_purpose"])]
+                        if aggregate.get("consent_purpose")
+                        else None
+                    ),
+                )
+            )
             aggregate["graph_emitted"] = True
             await self._mark_flag(aggregate, "graph_emitted")
             metrics.increment(
@@ -288,24 +303,31 @@ class CommsGraphProjector:
     async def _promote_message(self, row: dict[str, Any], aggregate: dict[str, Any]) -> None:
         """Selective message promotion: replied threads become graph vertices."""
         try:
-            from shared.graph.graph import Edge, Vertex, VertexType, get_graph_client
+            from shared.graph.graph import Edge, Vertex, VertexType
             from shared.graph.edge_properties import build_edge_properties
+            from shared.graph.mutation_gateway import get_mutation_gateway
+            from shared.graph.mutation_intents import edge_intent, vertex_intent
 
             tenant_id = row.get("tenant_id", "")
             message_ref = f"message:{tenant_id}:{row['external_message_id']}"
-            client = get_graph_client()
+            gateway = get_mutation_gateway()
             vertex_type = getattr(VertexType, "MESSAGE", "Message")
-            await client.upsert_vertex(Vertex(
-                vertex_type=vertex_type if isinstance(vertex_type, str) else "Message",
-                vertex_id=message_ref,
-                properties={
-                    "tenant_id": tenant_id,
-                    "external_message_id": row["external_message_id"],
-                    "external_thread_id": row.get("external_thread_id") or "",
-                    "channel": row.get("channel", "email"),
-                    "promotion_reason": "replied",
-                    "provider": row.get("provider") or "",
-                },
+            await gateway.apply(vertex_intent(
+                Vertex(
+                    vertex_type=vertex_type if isinstance(vertex_type, str) else "Message",
+                    vertex_id=message_ref,
+                    properties={
+                        "tenant_id": tenant_id,
+                        "external_message_id": row["external_message_id"],
+                        "external_thread_id": row.get("external_thread_id") or "",
+                        "channel": row.get("channel", "email"),
+                        "promotion_reason": "replied",
+                        "provider": row.get("provider") or "",
+                    },
+                ),
+                operation="node_versioned",
+                actor_id="comms_graph_projector",
+                source_event_id=str(row.get("source_event_id") or "") or None,
             ))
             props = build_edge_properties(
                 tenant_id=tenant_id,
@@ -321,11 +343,17 @@ class CommsGraphProjector:
                 consent_purpose=aggregate.get("consent_purpose") or "",
                 confidence=float(aggregate.get("confidence") or 0.5),
             )
-            await client.add_edge(Edge(
-                edge_type="RESPONDED_TO",
-                from_vertex_id=aggregate["sender_ref"],
-                to_vertex_id=message_ref,
-                properties=props,
+            await gateway.apply(edge_intent(
+                Edge(
+                    edge_type="RESPONDED_TO",
+                    from_vertex_id=aggregate["sender_ref"],
+                    to_vertex_id=message_ref,
+                    properties=props,
+                ),
+                operation="edge_created",
+                actor_id="comms_graph_projector",
+                subject_kind="entity",
+                subject_id=aggregate["sender_ref"],
             ))
             aggregate["message_promoted"] = True
             await self._mark_flag(aggregate, "message_promoted")

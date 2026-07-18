@@ -39,6 +39,8 @@ from services.operational_intelligence.models import EvidenceRef
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.flow_trace")
@@ -200,30 +202,44 @@ async def create_trace(
                 "anchor": body.anchor_entity_id,
             },
         )
-        await graph.upsert_vertex(vertex)
-        edge = Edge(
-            edge_type=EdgeType.PART_OF_FLOW_TRACE,
-            from_vertex_id=body.anchor_entity_id,
-            to_vertex_id=trace_id,
-            properties={"tenant_id": body.tenant_id},
-        )
-        await graph.add_edge(edge)
+        gateway = GraphMutationGateway(graph_client=graph)
+        await gateway.apply(vertex_intent(
+            vertex, operation="node_versioned",
+            tenant_id=body.tenant_id, actor_id="flow_trace",
+        ))
+        await gateway.apply(edge_intent(
+            Edge(
+                edge_type=EdgeType.PART_OF_FLOW_TRACE,
+                from_vertex_id=body.anchor_entity_id,
+                to_vertex_id=trace_id,
+                properties={"tenant_id": body.tenant_id},
+            ),
+            operation="edge_created", tenant_id=body.tenant_id,
+            actor_id="flow_trace", subject_kind="entity",
+            subject_id=body.anchor_entity_id,
+        ))
         for sink_id in result["sink_nodes"]:
-            sink_edge = Edge(
-                edge_type=EdgeType.HAS_SINK,
-                from_vertex_id=trace_id,
-                to_vertex_id=sink_id,
-                properties={"tenant_id": body.tenant_id},
-            )
-            await graph.add_edge(sink_edge)
+            await gateway.apply(edge_intent(
+                Edge(
+                    edge_type=EdgeType.HAS_SINK,
+                    from_vertex_id=trace_id,
+                    to_vertex_id=sink_id,
+                    properties={"tenant_id": body.tenant_id},
+                ),
+                operation="edge_created", tenant_id=body.tenant_id,
+                actor_id="flow_trace",
+            ))
         for source_id in result["source_nodes"]:
-            source_edge = Edge(
-                edge_type=EdgeType.HAS_SOURCE,
-                from_vertex_id=trace_id,
-                to_vertex_id=source_id,
-                properties={"tenant_id": body.tenant_id},
-            )
-            await graph.add_edge(source_edge)
+            await gateway.apply(edge_intent(
+                Edge(
+                    edge_type=EdgeType.HAS_SOURCE,
+                    from_vertex_id=trace_id,
+                    to_vertex_id=source_id,
+                    properties={"tenant_id": body.tenant_id},
+                ),
+                operation="edge_created", tenant_id=body.tenant_id,
+                actor_id="flow_trace",
+            ))
     except Exception as exc:
         logger.warning("flow_trace_graph_projection_failed", extra={"error": str(exc)})
 
@@ -392,7 +408,11 @@ async def attach_to_case(
             to_vertex_id=body.case_id,
             properties={"tenant_id": body.tenant_id},
         )
-        await graph.add_edge(edge)
+        await GraphMutationGateway(graph_client=graph).apply(edge_intent(
+            edge, operation="edge_created",
+            tenant_id=body.tenant_id, actor_id="flow_trace",
+            subject_kind="flow_trace", subject_id=trace_id,
+        ))
     except Exception as exc:
         logger.warning("flow_trace_attach_graph_failed", extra={"error": str(exc)})
 

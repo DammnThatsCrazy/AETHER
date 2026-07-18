@@ -31,6 +31,8 @@ from typing import Any, Optional
 from repositories.repos import DelegationRepository, AgentExecutionRepository
 from shared.common.common import utc_now
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.service.agent.lifecycle_mapper")
@@ -85,8 +87,34 @@ class AgentLifecycleMapper:
         executions: Optional[AgentExecutionRepository] = None,
     ) -> None:
         self._graph = graph_client or GraphClient()
+        self._gateway = GraphMutationGateway(graph_client=self._graph)
         self._delegations = delegations or DelegationRepository()
         self._executions = executions or AgentExecutionRepository()
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Graph write helpers (route through the canonical mutation gateway)
+    # ─────────────────────────────────────────────────────────────────────
+
+    async def _put_vertex(self, v: Vertex) -> None:
+        """Upsert a lifecycle vertex through the gateway (node_versioned).
+
+        tenant_id flows from the vertex property (every lifecycle vertex is
+        tenant-scoped); the mapper is the system actor projecting events.
+        """
+        await self._gateway.apply(vertex_intent(
+            v, operation="node_versioned", actor_id="agent_lifecycle_mapper",
+        ))
+
+    async def _put_edge(self, e: Edge) -> None:
+        """Add a lifecycle edge through the gateway (edge_created).
+
+        tenant_id flows from the edge property (every lifecycle edge carries
+        it); subject is the edge source vertex.
+        """
+        await self._gateway.apply(edge_intent(
+            e, operation="edge_created", actor_id="agent_lifecycle_mapper",
+            subject_id=e.from_vertex_id,
+        ))
 
     # ─────────────────────────────────────────────────────────────────────
     # Public API
@@ -157,7 +185,7 @@ class AgentLifecycleMapper:
         agent_id = _require(payload, "agent_id")
         agent_vid = _agent_vid(tenant_id, agent_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.AGENT,
             vertex_id=agent_vid,
             properties={
@@ -174,12 +202,12 @@ class AgentLifecycleMapper:
         owner_user_id = payload.get("owner_user_id")
         if owner_user_id:
             owner_vid = _user_vid(tenant_id, owner_user_id)
-            await self._graph.upsert_vertex(Vertex(
+            await self._put_vertex(Vertex(
                 vertex_type=VertexType.USER,
                 vertex_id=owner_vid,
                 properties={"user_id": owner_user_id, "tenant_id": tenant_id},
             ))
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.OWNS_AGENT,
                 from_vertex_id=owner_vid,
                 to_vertex_id=agent_vid,
@@ -194,7 +222,7 @@ class AgentLifecycleMapper:
     ) -> dict[str, Any]:
         agent_id = _require(payload, "agent_id")
         agent_vid = _agent_vid(tenant_id, agent_id)
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.AGENT,
             vertex_id=agent_vid,
             properties={
@@ -215,7 +243,7 @@ class AgentLifecycleMapper:
         edges = []
         if authorizer_id:
             authorizer_vid = _user_vid(tenant_id, authorizer_id)
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.AUTHORIZED_AGENT,
                 from_vertex_id=authorizer_vid,
                 to_vertex_id=agent_vid,
@@ -233,7 +261,7 @@ class AgentLifecycleMapper:
     ) -> dict[str, Any]:
         agent_id = _require(payload, "agent_id")
         agent_vid = _agent_vid(tenant_id, agent_id)
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.AGENT,
             vertex_id=agent_vid,
             properties={
@@ -256,12 +284,12 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         cap_vid = _capability_vid(tenant_id, capability)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.CAPABILITY,
             vertex_id=cap_vid,
             properties={"capability": capability, "tenant_id": tenant_id},
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.HAS_CAPABILITY,
             from_vertex_id=agent_vid,
             to_vertex_id=cap_vid,
@@ -281,7 +309,7 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         cap_vid = _capability_vid(tenant_id, capability)
 
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.REVOKED_CAPABILITY,
             from_vertex_id=agent_vid,
             to_vertex_id=cap_vid,
@@ -304,7 +332,7 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         task_vid = _task_vid(tenant_id, task_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.TASK,
             vertex_id=task_vid,
             properties={
@@ -315,7 +343,7 @@ class AgentLifecycleMapper:
                 **_pick(payload, "parent_task_id", "description"),
             },
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.CREATED_TASK,
             from_vertex_id=agent_vid,
             to_vertex_id=task_vid,
@@ -326,7 +354,7 @@ class AgentLifecycleMapper:
         parent_task_id = payload.get("parent_task_id")
         if parent_task_id:
             parent_vid = _task_vid(tenant_id, parent_task_id)
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.DECOMPOSED_INTO,
                 from_vertex_id=parent_vid,
                 to_vertex_id=task_vid,
@@ -358,7 +386,7 @@ class AgentLifecycleMapper:
         edges = []
         for subtask_id in subtask_ids:
             subtask_vid = _task_vid(tenant_id, subtask_id)
-            await self._graph.upsert_vertex(Vertex(
+            await self._put_vertex(Vertex(
                 vertex_type=VertexType.TASK,
                 vertex_id=subtask_vid,
                 properties={
@@ -367,7 +395,7 @@ class AgentLifecycleMapper:
                     "tenant_id": tenant_id,
                 },
             ))
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.DECOMPOSED_INTO,
                 from_vertex_id=root_vid,
                 to_vertex_id=subtask_vid,
@@ -385,12 +413,12 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         task_vid = _task_vid(tenant_id, task_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.TASK,
             vertex_id=task_vid,
             properties={"status": "running", "started_at": payload.get("timestamp", ""), "tenant_id": tenant_id},
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.STARTED_TASK,
             from_vertex_id=agent_vid,
             to_vertex_id=task_vid,
@@ -406,12 +434,12 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         task_vid = _task_vid(tenant_id, task_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.TASK,
             vertex_id=task_vid,
             properties={"status": "completed", "completed_at": payload.get("timestamp", ""), "tenant_id": tenant_id},
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.COMPLETED_TASK,
             from_vertex_id=agent_vid,
             to_vertex_id=task_vid,
@@ -427,7 +455,7 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         task_vid = _task_vid(tenant_id, task_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.TASK,
             vertex_id=task_vid,
             properties={
@@ -437,7 +465,7 @@ class AgentLifecycleMapper:
                 "tenant_id": tenant_id,
             },
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.FAILED_TASK,
             from_vertex_id=agent_vid,
             to_vertex_id=task_vid,
@@ -460,12 +488,12 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         tool_vid = _tool_vid(tenant_id, tool_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.TOOL,
             vertex_id=tool_vid,
             properties={"tool_id": tool_id, "tenant_id": tenant_id},
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.CALLED_TOOL,
             from_vertex_id=agent_vid,
             to_vertex_id=tool_vid,
@@ -486,12 +514,12 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         resource_vid = _resource_vid(tenant_id, resource_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.ECONOMIC_RESOURCE,
             vertex_id=resource_vid,
             properties={"resource_id": resource_id, "tenant_id": tenant_id},
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.REQUESTED_RESOURCE,
             from_vertex_id=agent_vid,
             to_vertex_id=resource_vid,
@@ -516,7 +544,7 @@ class AgentLifecycleMapper:
         edges = []
         if delegate_agent_id:
             delegate_vid = _agent_vid(tenant_id, delegate_agent_id)
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.DELEGATED_TO,
                 from_vertex_id=agent_vid,
                 to_vertex_id=delegate_vid,
@@ -539,7 +567,7 @@ class AgentLifecycleMapper:
         edges = []
         if child_agent_id:
             child_vid = _agent_vid(tenant_id, child_agent_id)
-            await self._graph.upsert_vertex(Vertex(
+            await self._put_vertex(Vertex(
                 vertex_type=VertexType.AGENT,
                 vertex_id=child_vid,
                 properties={
@@ -549,7 +577,7 @@ class AgentLifecycleMapper:
                     "spawned_at": payload.get("timestamp", ""),
                 },
             ))
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.SPAWNED_SUBAGENT,
                 from_vertex_id=parent_vid,
                 to_vertex_id=child_vid,
@@ -586,12 +614,12 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         policy_vid = _policy_vid(tenant_id, policy_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.POLICY,
             vertex_id=policy_vid,
             properties={"policy_id": policy_id, "tenant_id": tenant_id},
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.EVALUATED_BY_POLICY,
             from_vertex_id=agent_vid,
             to_vertex_id=policy_vid,
@@ -613,7 +641,7 @@ class AgentLifecycleMapper:
         edges = []
         if target_agent_id:
             target_vid = _agent_vid(tenant_id, target_agent_id)
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.HANDED_OFF_TO,
                 from_vertex_id=agent_vid,
                 to_vertex_id=target_vid,
@@ -635,7 +663,7 @@ class AgentLifecycleMapper:
         edges = []
         if human_user_id:
             human_vid = _user_vid(tenant_id, human_user_id)
-            await self._graph.add_edge(Edge(
+            await self._put_edge(Edge(
                 edge_type=EdgeType.ESCALATED_TO_HUMAN,
                 from_vertex_id=agent_vid,
                 to_vertex_id=human_vid,
@@ -657,7 +685,7 @@ class AgentLifecycleMapper:
         agent_vid = _agent_vid(tenant_id, agent_id)
         outcome_vid = _outcome_vid(tenant_id, outcome_id)
 
-        await self._graph.upsert_vertex(Vertex(
+        await self._put_vertex(Vertex(
             vertex_type=VertexType.OUTCOME,
             vertex_id=outcome_vid,
             properties={
@@ -667,7 +695,7 @@ class AgentLifecycleMapper:
                 "recorded_at": payload.get("timestamp", utc_now().isoformat()),
             },
         ))
-        await self._graph.add_edge(Edge(
+        await self._put_edge(Edge(
             edge_type=EdgeType.RESULTED_IN_OUTCOME,
             from_vertex_id=agent_vid,
             to_vertex_id=outcome_vid,
