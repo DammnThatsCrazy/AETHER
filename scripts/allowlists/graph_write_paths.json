@@ -1,5 +1,4 @@
 [
-  "Backend Architecture/aether-backend/services/agent/routes.py",
   "Backend Architecture/aether-backend/services/agentic_observability/outbox_worker.py",
   "Backend Architecture/aether-backend/services/lake/graph_mutations.py",
   "Backend Architecture/aether-backend/services/onchain/action_recorder.py",
