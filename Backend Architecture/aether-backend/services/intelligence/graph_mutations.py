@@ -59,7 +59,11 @@ async def upsert_recommendation_graph(graph: GraphClient, recommendation: dict) 
     if source_id:
         await _upsert_reference_vertex(gateway, source_id, VertexType.ENTITY, tenant_id)
         await gateway.apply(edge_intent(
-            Edge(EdgeType.HAS_RECOMMENDATION, source_id, rec_id, {"tenant_id": tenant_id}),
+            # HAS_RECOMMENDATION is an A2H edge — enforce-mode validation
+            # requires consent_purpose; "personalization" is the registry
+            # purpose whose data categories cover recommendations.
+            Edge(EdgeType.HAS_RECOMMENDATION, source_id, rec_id,
+                 {"tenant_id": tenant_id, "consent_purpose": "personalization"}),
             tenant_id=tenant_id, actor_id=_ACTOR, subject_kind="entity", subject_id=source_id,
         ))
     for ev in recommendation.get("evidence", []):
@@ -74,11 +78,16 @@ async def upsert_recommendation_graph(graph: GraphClient, recommendation: dict) 
             {"source_type": ev.get("source_type")},
         )
         await gateway.apply(edge_intent(
+            # SUPPORTED_BY is an A2H edge — consent_purpose required in enforce.
             Edge(
                 EdgeType.SUPPORTED_BY,
                 rec_id,
                 evidence_id,
-                {"tenant_id": tenant_id, "source_type": ev.get("source_type")},
+                {
+                    "tenant_id": tenant_id,
+                    "source_type": ev.get("source_type"),
+                    "consent_purpose": "personalization",
+                },
             ),
             tenant_id=tenant_id, actor_id=_ACTOR, subject_kind="recommendation", subject_id=rec_id,
             evidence_refs=[str(evidence_id)],
@@ -94,7 +103,9 @@ async def upsert_decision_graph(graph: GraphClient, decision: dict) -> None:
         operation="node_versioned", tenant_id=tenant_id, actor_id=_ACTOR,
     ))
     await gateway.apply(edge_intent(
-        Edge(EdgeType.SELECTED_BY, decision["recommendation_id"], dec_id, {"tenant_id": tenant_id}),
+        # SELECTED_BY is an A2H edge — consent_purpose required in enforce.
+        Edge(EdgeType.SELECTED_BY, decision["recommendation_id"], dec_id,
+             {"tenant_id": tenant_id, "consent_purpose": "personalization"}),
         tenant_id=tenant_id, actor_id=_ACTOR, subject_kind="decision", subject_id=dec_id,
     ))
 

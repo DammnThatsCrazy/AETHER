@@ -12,7 +12,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
-last_synced_commit: "d5ab36f"
+last_synced_commit: "45c4cf6"
 
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
@@ -274,8 +274,8 @@ All tenant-prefixed vertices use `{tenant_id}:{vertex_id}` keys (consistent with
 | `ESCALATES_PAYMENT_TO` | APPROVAL_REQUEST → USER | reason | escalation |
 | `GUARDED_BY_POLICY` | ProtectedResource → PRICE_POLICY/BUDGET_POLICY | active | policy binding |
 | `ROUTES_VIA` | PAYMENT_AUTHORIZATION → PAYMENT_ROUTE | facilitator_id | route selection |
-| `APPROVED_BY` | APPROVAL_DECISION → USER | role | approver |
-| `REJECTED_BY` | APPROVAL_DECISION → USER | reason | rejecter |
+| `APPROVED_BY` | APPROVAL_DECISION → USER | role, consent_purpose | approver |
+| `REJECTED_BY` | APPROVAL_DECISION → USER | reason, consent_purpose | rejecter |
 | `REQUESTS_APPROVAL_FROM` | APPROVAL_REQUEST → USER | priority | queue assignment |
 | `GOVERNED_BY` | TENANT/AGENT → POLICY_DECISION | context | policy eval |
 

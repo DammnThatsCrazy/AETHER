@@ -134,7 +134,12 @@ async def register(
             edge_type=EdgeType.OWNS,
             from_vertex_id=body.owner_entity_id,
             to_vertex_id=agent_id,
-            properties={"tenant_id": tenant.tenant_id, "kind": "agent"},
+            # OWNS is an H2A ownership edge — consent_purpose required in enforce.
+            properties={
+                "tenant_id": tenant.tenant_id,
+                "kind": "agent",
+                "consent_purpose": "agent",
+            },
         ),
         operation="edge_created", tenant_id=tenant.tenant_id,
         actor_kind="human", actor_id="user_agents_api",

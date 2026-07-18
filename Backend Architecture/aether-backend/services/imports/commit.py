@@ -297,6 +297,12 @@ async def _apply_graph(
             ),
             operation="edge_created", tenant_id=tenant_id,
             actor_kind="import", actor_id=commit_id,
+            # Key the enforce/shadow idempotency on the commit so a replay or a
+            # post-rollback re-commit re-materializes the same relationship as a
+            # fresh edge instead of hitting the prior commit's ledger row and
+            # being deduplicated (which would leave `created` recording an edge
+            # that was never re-projected).
+            source_event_id=commit_id,
             correlation_id=commit_id, causality_class="declared_reason",
         ))
         created.append(e)
@@ -450,6 +456,10 @@ async def _revoke_commit_edges(tenant_id: str, commit: dict, reason: str) -> int
             reason=reason, tenant_id=tenant_id,
             operation="edge_tombstoned", actor_kind="import", actor_id=commit_id,
             reason_code="import_rolled_back", correlation_id=commit_id,
+            # Mirror the create path: key the revocation on the commit so a
+            # replay/rollback of a re-materialized edge is not deduplicated
+            # against a prior commit's revocation of the same edge tuple.
+            source_event_id=commit_id,
         ))
         result = outcome.projection_result
         revoked += result if isinstance(result, int) else 0

@@ -124,7 +124,10 @@ async def record_transfer(
             actor_id="flows_api",
             subject_kind="entity",
             subject_id=body.from_entity_id,
-            source_event_id=body.attributed_event_id or None,
+            # Fall back to the per-transfer id (then tx_hash) so distinct
+            # transfers between the same entities do not collapse onto one
+            # enforce/shadow idempotency key and drop the 2nd+ transfer.
+            source_event_id=body.attributed_event_id or transfer_id or body.tx_hash or None,
         ))
     except Exception as e:  # pragma: no cover
         logger.warning(f"Graph projection failed for transfer {transfer_id}: {e}")

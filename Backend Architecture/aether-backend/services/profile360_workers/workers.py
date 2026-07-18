@@ -252,6 +252,8 @@ class DelegationProjector:
                         "valid_from": record.get("starts_at", ""),
                         "valid_to": record.get("ends_at") or "",
                         "revoked_at": record.get("revoked_at") or "",
+                        # DELEGATES is H2A — consent_purpose required in enforce.
+                        "consent_purpose": "agent",
                     },
                 ),
                 operation="edge_created",
@@ -260,6 +262,10 @@ class DelegationProjector:
                 subject_kind="entity",
                 subject_id=record["grantor_entity_id"],
                 causality_class="authorized_delegation",
+                # Key on the unique delegation_id so distinct delegations between
+                # the same grantor/grantee each project; a re-converge of the
+                # same delegation still dedups.
+                source_event_id=delegation_id,
             ))
             metrics.increment("profile360_delegation_projected")
         except Exception as e:  # pragma: no cover

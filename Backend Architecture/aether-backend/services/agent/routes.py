@@ -705,12 +705,16 @@ async def register_agent(body: AgentRegistration, request: Request):
     ))
 
     # Create LAUNCHED_BY edge: agent -> user
+    # LAUNCHED_BY / DELEGATES are H2A edges; GraphWriteValidator rejects H2A/A2H
+    # edges in enforce mode (and GraphClient.add_edge on Neptune) without a
+    # consent_purpose, so stamp the canonical "agent" purpose (the registry key
+    # EVENT_CONSENT_PURPOSE assigns to agent-lifecycle relationships).
     await gateway.apply(edge_intent(
         Edge(
             edge_type=EdgeType.LAUNCHED_BY,
             from_vertex_id=body.agent_id,
             to_vertex_id=body.owner_user_id,
-            properties={"tenant_id": tenant_id},
+            properties={"tenant_id": tenant_id, "consent_purpose": "agent"},
         ),
         operation="edge_created", tenant_id=tenant_id,
         actor_kind="human", actor_id=body.owner_user_id,
@@ -723,7 +727,11 @@ async def register_agent(body: AgentRegistration, request: Request):
             edge_type=EdgeType.DELEGATES,
             from_vertex_id=body.owner_user_id,
             to_vertex_id=body.agent_id,
-            properties={"tenant_id": tenant_id, "permissions": ",".join(body.permissions)},
+            properties={
+                "tenant_id": tenant_id,
+                "permissions": ",".join(body.permissions),
+                "consent_purpose": "agent",
+            },
         ),
         operation="edge_created", tenant_id=tenant_id,
         actor_kind="human", actor_id=body.owner_user_id,
@@ -944,6 +952,11 @@ async def record_a2h_interaction(agent_id: str, body: A2HInteraction, request: R
             from_vertex_id=agent_id,
             to_vertex_id=body.target_user_id,
             properties={
+                # A2H edge (NOTIFIES/RECOMMENDS/DELIVERS_TO/ESCALATES_TO):
+                # enforce-mode validation requires a consent_purpose. Default to
+                # the canonical "agent" purpose; a caller may override via
+                # body.properties (spread last).
+                "consent_purpose": "agent",
                 "content_summary": body.content_summary,
                 "task_id": body.task_id or "",
                 "confidence": str(body.confidence),

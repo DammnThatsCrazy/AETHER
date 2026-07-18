@@ -34,9 +34,15 @@ function valuePlaceholder(op: FilterOperator): string {
  */
 export function FilterBuilder({ surface, onAdd }: FilterBuilderProps) {
   const fields = filterFieldsForSurface(surface);
-  const [field, setField] = useState<string>(() => fields[0]?.id ?? '');
+  const [selectedField, setSelectedField] = useState<string>(() => fields[0]?.id ?? '');
+  // Clamp the selection to the current surface's registry: `surface`/`fields`
+  // can change without remounting, and useState initializers do not re-run, so
+  // a stale field must never survive — otherwise "Add filter" could emit a
+  // field the new surface does not support. `field`/`op` are always valid here.
+  const field = fields.some((f) => f.id === selectedField) ? selectedField : (fields[0]?.id ?? '');
   const operators = field ? operatorsForField(field) : [];
-  const [op, setOp] = useState<FilterOperator>(() => operators[0] ?? 'eq');
+  const [selectedOp, setSelectedOp] = useState<FilterOperator>(() => operators[0] ?? 'eq');
+  const op = operators.includes(selectedOp) ? selectedOp : (operators[0] ?? 'eq');
   const [raw, setRaw] = useState('');
 
   if (fields.length === 0) {
@@ -44,9 +50,9 @@ export function FilterBuilder({ surface, onAdd }: FilterBuilderProps) {
   }
 
   const onFieldChange = (next: string) => {
-    setField(next);
+    setSelectedField(next);
     const nextOps = operatorsForField(next);
-    setOp(nextOps[0] ?? 'eq');
+    setSelectedOp(nextOps[0] ?? 'eq');
     setRaw('');
   };
 
@@ -71,7 +77,7 @@ export function FilterBuilder({ surface, onAdd }: FilterBuilderProps) {
       <Select
         label="Operator"
         value={op}
-        onChange={(v) => setOp(v as FilterOperator)}
+        onChange={(v) => setSelectedOp(v as FilterOperator)}
         options={operators.map((o) => ({ value: o, label: operatorLabel(o) }))}
       />
       {needsValue && (

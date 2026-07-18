@@ -128,8 +128,11 @@ def build_flow_mutations(flow: dict) -> tuple[list[Vertex], list[Edge]]:
 
     campaign = flow.get("campaign_id")
     if campaign:
+        # ATTRIBUTED_TO is an H2A edge — enforce-mode validation requires a
+        # consent_purpose; "marketing" is the registry purpose whose data
+        # categories cover attribution.
         edges.append(_edge(EdgeType.ATTRIBUTED_TO, flow_vid, f"campaign:{campaign}",
-                           tenant_id, flow_id))
+                           tenant_id, flow_id, consent_purpose="marketing"))
         if entity:
             edges.append(_edge(EdgeType.CAME_FROM, f"user:{entity}", f"campaign:{campaign}",
                                tenant_id, flow_id))

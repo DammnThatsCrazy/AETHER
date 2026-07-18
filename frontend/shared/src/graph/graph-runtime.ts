@@ -12,6 +12,7 @@
 
 import cytoscape, {
   type Core,
+  type CollectionReturnValue,
   type ElementDefinition,
   type EventObject,
   type LayoutOptions,
@@ -71,6 +72,27 @@ function toElementDefinition(el: RuntimeElement): ElementDefinition {
   return { group: el.group, data: el.data, ...(el.classes ? { classes: el.classes } : {}) };
 }
 
+// Cytoscape treats these data keys as immutable structural identity: `id` can
+// never change, and an edge's `source`/`target` can only change by removing and
+// re-adding the edge. We never write them through `data()`.
+const IMMUTABLE_DATA_KEYS = new Set(['id', 'source', 'target']);
+
+/**
+ * Replace an element's data wholesale so fields that disappeared in `next` are
+ * gone. Cytoscape's `ele.data(obj)` MERGES (missing keys survive), which lets a
+ * removed score/label keep coloring overlays from stale data; here we strip the
+ * keys absent from `next` first, then apply the new (mutable) payload.
+ */
+function replaceElementData(ele: CollectionReturnValue, next: RuntimeElement['data']): void {
+  const stale = Object.keys(ele.data()).filter((k) => !IMMUTABLE_DATA_KEYS.has(k) && !(k in next));
+  if (stale.length) ele.removeData(stale.join(' '));
+  const patch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(next)) {
+    if (!IMMUTABLE_DATA_KEYS.has(k)) patch[k] = v;
+  }
+  ele.data(patch);
+}
+
 /** Apply a diff to a live instance inside a single batch (no destroy/recreate). */
 export function applyGraphDiff(cy: Core, diff: GraphDiff): void {
   cy.batch(() => {
@@ -78,15 +100,28 @@ export function applyGraphDiff(cy: Core, diff: GraphDiff): void {
       const el = cy.getElementById(id);
       if (el.length) el.remove();
     }
+    // Edges whose endpoints changed can't be moved in place — collect them and
+    // re-add after node adds so the (possibly new) endpoints already exist.
+    const edgesToRecreate: RuntimeElement[] = [];
     for (const el of diff.updated) {
       const existing = cy.getElementById(el.data.id);
-      if (existing.length) {
-        existing.data(el.data);
-        existing.classes(el.classes ?? '');
+      if (!existing.length) continue;
+      if (
+        el.group === 'edges' &&
+        (existing.data('source') !== el.data.source || existing.data('target') !== el.data.target)
+      ) {
+        existing.remove();
+        edgesToRecreate.push(el);
+        continue;
       }
+      replaceElementData(existing, el.data);
+      existing.classes(el.classes ?? '');
     }
     if (diff.added.length) {
       cy.add(diff.added.map(toElementDefinition));
+    }
+    if (edgesToRecreate.length) {
+      cy.add(edgesToRecreate.map(toElementDefinition));
     }
   });
 }
@@ -113,6 +148,44 @@ export function zoomLevelFor(
 }
 
 const ZOOM_CLASSES = 'zoom-macro zoom-meso zoom-detail';
+
+// ── Incremental placement ────────────────────────────────────────────────────
+
+/**
+ * Position newly-added nodes without re-laying-out the whole graph. Cytoscape
+ * drops every fresh node at the origin, so a small update that skips the full
+ * layout would pile new nodes at (0,0). Each added node is placed near an
+ * already-positioned neighbour (falling back to the centre of the existing
+ * graph when it has none) so it lands with the graph, not stacked at the origin.
+ */
+export function placeIncrementalNodes(cy: Core, addedNodeIds: readonly string[]): void {
+  if (addedNodeIds.length === 0) return;
+  const added = new Set(addedNodeIds);
+  const positioned = cy.nodes().filter((n) => !added.has(n.id()));
+
+  let sumX = 0;
+  let sumY = 0;
+  positioned.forEach((n) => {
+    const p = n.position();
+    sumX += p.x;
+    sumY += p.y;
+  });
+  const center = positioned.nonempty()
+    ? { x: sumX / positioned.length, y: sumY / positioned.length }
+    : { x: 0, y: 0 };
+
+  const RADIUS = 50;
+  cy.batch(() => {
+    addedNodeIds.forEach((id, i) => {
+      const node = cy.getElementById(id);
+      if (node.empty() || !node.isNode()) return;
+      const neighbour = node.neighborhood('node').filter((n) => !added.has(n.id())).first();
+      const base = neighbour.nonempty() && neighbour.isNode() ? neighbour.position() : center;
+      const angle = (i / addedNodeIds.length) * Math.PI * 2;
+      node.position({ x: base.x + Math.cos(angle) * RADIUS, y: base.y + Math.sin(angle) * RADIUS });
+    });
+  });
+}
 
 // ── Runtime ──────────────────────────────────────────────────────────────────
 
@@ -214,6 +287,13 @@ export function createGraphRuntime(options: GraphRuntimeOptions): GraphRuntimeHa
       });
       if (firstLoad || diff.structuralChange > layoutThreshold) {
         runLayout();
+      } else {
+        // Below the re-layout threshold: place just the new nodes so they don't
+        // stack at the origin, without disturbing the existing layout/viewport.
+        placeIncrementalNodes(
+          cy,
+          diff.added.filter((e) => e.group === 'nodes').map((e) => e.data.id),
+        );
       }
     },
     setNodeClass(cls, ids) {
