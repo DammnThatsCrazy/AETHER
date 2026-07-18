@@ -169,6 +169,9 @@ class RecommendOnlyAdapter(RewardRailAdapter):
             "rail": self.rail_name,
             "execution_mode": "recommend_only",
             "status": "ready",
+            # Top-level reward mirror so callers can read the recommended reward
+            # without reaching into the nested payload.
+            "reward": decision.reward,
             "payload": {
                 "type": "reward_recommendation",
                 "campaign_id": decision.campaign_id,
@@ -541,15 +544,30 @@ class OnchainClaimAdapter(RewardRailAdapter):
         )
 
         metrics.increment("rewards_proofs_generated_total", labels={"tenant_id": tenant_id})
+        proof_data = {
+            "proof_format": "eip191",
+            "wallet_address": wallet_address,
+            "action_type": rule.get("name", "reward"),
+            "amount": str(amount_atomic),
+            "nonce": proof.nonce,
+            "expiry": proof.expiry,
+            "chain_id": proof.chain_id,
+            "contract_address": proof.contract_address,
+            "message_hash": proof.message_hash,
+            "signature": proof.signature,
+            "signer_address": signer.signer_address,
+        }
         return {
             "rail": self.rail_name,
             "execution_mode": "onchain_claim",
             "status": "ready",
-            "proof_data": {
-                "proof_format": "eip191",
-                "wallet_address": wallet_address,
+            "proof_data": proof_data,
+            # Canonical proof view consumed by routes (`payload.get("proof")`) and
+            # returned to the tenant. `user` mirrors the on-chain claim recipient.
+            "proof": {
+                "user": wallet_address,
                 "action_type": rule.get("name", "reward"),
-                "amount": str(amount_atomic),
+                "amount_wei": str(amount_atomic),
                 "nonce": proof.nonce,
                 "expiry": proof.expiry,
                 "chain_id": proof.chain_id,
@@ -557,6 +575,7 @@ class OnchainClaimAdapter(RewardRailAdapter):
                 "message_hash": proof.message_hash,
                 "signature": proof.signature,
                 "signer_address": signer.signer_address,
+                "proof_format": "eip191",
             },
             "payload": {
                 "type": "onchain_claim_proof",
@@ -589,8 +608,11 @@ class OnchainClaimAdapter(RewardRailAdapter):
         return key
 
     async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
-        # Proof is returned in the action payload; tenant submits on-chain.
-        return DeliveryResult(success=True, status="ready")
+        # True no-op: the proof is already in the action payload and the tenant
+        # (or user) submits the claim on-chain. Aether never submits the tx, so
+        # "delivery" preserves the action's current status rather than inventing
+        # a new one.
+        return DeliveryResult(success=True, status=action.get("status", "ready"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

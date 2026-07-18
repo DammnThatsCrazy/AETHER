@@ -1,0 +1,26 @@
+# Rust / Anchor build artifacts
+target/
+**/*.rs.bk
+# NOTE: Cargo.lock IS committed for the program workspace (reproducible on-chain
+# builds pin the exact dependency tree). Do not ignore it.
+domain/Cargo.lock
+
+# Node
+node_modules/
+.yarn/
+
+# Anchor
+.anchor/
+test-ledger/
+
+# Secrets & keypairs -- NEVER commit. Deploy scripts read these from env/secret refs.
+*.json.key
+*-keypair.json
+id.json
+deploy/*.json
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store

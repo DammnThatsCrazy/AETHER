@@ -17,6 +17,11 @@
  */
 
 const { ethers, network } = require("hardhat");
+const { networkTier, isLocalNetwork } = require("./lib/networks");
+const {
+  assertContractRegistered,
+  assertOracleRegistered,
+} = require("./lib/registry");
 
 function fail(msg) {
   throw new Error(`[post_deploy_verify] ${msg}`);
@@ -44,10 +49,20 @@ async function main() {
 
   console.log("=".repeat(64));
   console.log("Aether post-deploy verification");
-  console.log(`Network: ${network.name}`);
+  console.log(`Network: ${network.name} (${networkTier(network.name)})`);
   console.log(`AnalyticsRewards: ${rewardsAddr}`);
   console.log(`RewardRegistry: ${registryAddr}`);
   console.log("=".repeat(64));
+
+  // ── Fail-closed registry enforcement (skipped only on local networks) ──
+  // The target contract addresses and the expected oracle must be registered
+  // for this network before verification is allowed to pass.
+  if (!isLocalNetwork(network.name)) {
+    assertContractRegistered(network.name, rewardsAddr, "AnalyticsRewards");
+    assertContractRegistered(network.name, registryAddr, "RewardRegistry");
+    assertOracleRegistered(network.name, expectedOracle);
+    console.log("✅ registry checks: contract addresses + oracle signer registered");
+  }
 
   const Rewards = await ethers.getContractFactory("AnalyticsRewards");
   const Registry = await ethers.getContractFactory("RewardRegistry");

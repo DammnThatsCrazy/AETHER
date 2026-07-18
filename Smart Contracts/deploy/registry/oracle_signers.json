@@ -1,0 +1,15 @@
+{
+  "_comment": "Allowlist of AUTHORIZED oracle signer addresses per Hardhat network name. Deploy fails closed on non-local networks unless ORACLE_ADDRESS is listed here. Contains PUBLIC addresses only — never private keys. Populate via a reviewed change before each testnet/mainnet deploy; empty arrays intentionally block deploys (fail-closed).",
+  "networks": {
+    "sepolia": [],
+    "amoy": [],
+    "arbitrumSepolia": [],
+    "baseSepolia": [],
+    "optimismSepolia": [],
+    "mainnet": [],
+    "polygon": [],
+    "arbitrum": [],
+    "base": [],
+    "optimism": []
+  }
+}

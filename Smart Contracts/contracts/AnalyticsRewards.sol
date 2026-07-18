@@ -114,6 +114,12 @@ contract AnalyticsRewards is
     error ZeroAmount();
     error InvalidOracleRotation(address oldOracle, address newOracle);
     error InvalidRewardAmount(bytes32 campaignId, uint256 provided, uint256 expected);
+    /// @dev Thrown when ORACLE_ROLE is granted/revoked directly through
+    ///      AccessControl instead of the atomic rotateOracle() path. Keeping
+    ///      the role and the `oracleSigner` mirror in lockstep prevents a
+    ///      desync where a signer could hold ORACLE_ROLE while monitoring
+    ///      (getOracleAddress) reports a different address.
+    error OracleRoleManagedViaRotateOracle();
 
     // ──────────────────────────────────────────────
     //  Constructor

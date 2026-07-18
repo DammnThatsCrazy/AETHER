@@ -396,6 +396,55 @@ def test_beta_rail_deliver_raises_unavailable(adapter_cls):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Web2 rails: honest first-release vs beta split (deliverable 5)
+# ═══════════════════════════════════════════════════════════════════════════
+
+FIRST_RELEASE_RAILS = [
+    "recommend_only", "manual_approval", "manual_export", "tenant_webhook", "onchain_claim",
+]
+BETA_RAILS = ["stripe_credit", "loyalty_points", "coupon", "internal_credit", "x402_credit"]
+
+
+def test_first_release_rails_are_not_beta_stubs():
+    """No first-release rail may be a beta stub, and each has a working adapter."""
+    from services.rewards.rails import _BetaRailStub
+    for rail in FIRST_RELEASE_RAILS:
+        adapter = get_rail_adapter(rail)
+        assert not isinstance(adapter, _BetaRailStub), f"{rail} must be a real adapter, not a beta stub"
+        assert adapter.rail_name == rail
+
+
+def test_beta_rails_are_honest_stubs():
+    """Every beta rail is a stub: flagged in config, unavailable on deliver, and
+    its payload honestly says 'beta' with a manual_export fallback path."""
+    from services.rewards.rails import _BetaRailStub
+    for rail in BETA_RAILS:
+        adapter = get_rail_adapter(rail)
+        assert isinstance(adapter, _BetaRailStub)
+        errors = adapter.validate_config({})
+        assert any("beta" in e.lower() for e in errors)
+        payload = _run(adapter.build_action_payload(
+            _make_decision(rail=rail), _RULE, _CAMPAIGN, TENANT, IDEMPOTENCY_KEY,
+        ))
+        # Honest: routed to manual_export with an explicit beta note.
+        assert payload["execution_mode"] == "manual_export"
+        assert "beta" in payload["payload"]["note"].lower()
+        with pytest.raises(RailUnavailableError):
+            _run(adapter.deliver({}, {}))
+
+
+def test_tenant_webhook_is_first_release_and_durable_ready():
+    """tenant_webhook is a real first-release rail with PR-1 SSRF + a durable
+    outbox path (it must never be a beta stub)."""
+    from services.rewards.rails import _BetaRailStub
+    adapter = get_rail_adapter("tenant_webhook")
+    assert not isinstance(adapter, _BetaRailStub)
+    # The durable outbox reuses this exact adapter for PR-1 SSRF + HMAC signing.
+    from services.rewards.delivery_outbox import RewardWebhookSender
+    assert isinstance(RewardWebhookSender()._adapter, TenantWebhookAdapter)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # TenantWebhookAdapter — SSRF hardening (DEFECT 1)
 # ═══════════════════════════════════════════════════════════════════════════
 

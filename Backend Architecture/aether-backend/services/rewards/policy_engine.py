@@ -141,6 +141,11 @@ class PolicyDecision(BaseModel):
     identity: Optional[dict] = None
     next_action: Optional[dict] = None
     reward: Optional[dict] = None
+    # Durable budget reservation (gate 12). Present when an eligible decision
+    # atomically reserved campaign budget; downstream commits on delivery/receipt
+    # and releases on reject/expiry/fail.
+    reservation_id: Optional[str] = None
+    budget: Optional[dict] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -178,6 +183,7 @@ class RewardPolicyEngine:
         campaign_repo: RewardCampaignRepository,
         rule_repo: RewardRuleRepository,
         decision_repo: RewardDecisionRepository,
+        budget_service: Optional["object"] = None,
     ) -> PolicyDecision:
         env = os.getenv("AETHER_ENV", "local").lower()
         is_local = env in ("local", "test")
@@ -216,6 +222,8 @@ class RewardPolicyEngine:
                     decision_repo=decision_repo,
                     is_local=is_local,
                     recommend_only_without_attribution=recommend_only_without_attribution,
+                    budget_service=budget_service,
+                    idempotency_key=idempotency_key,
                 )
                 if decision is not None:
                     metrics.increment(
@@ -251,6 +259,8 @@ class RewardPolicyEngine:
         decision_repo: RewardDecisionRepository,
         is_local: bool,
         recommend_only_without_attribution: bool,
+        budget_service: Optional["object"] = None,
+        idempotency_key: Optional[str] = None,
     ) -> Optional[PolicyDecision]:
         """
         Evaluate a single rule. Returns None if the rule is irrelevant
@@ -342,8 +352,19 @@ class RewardPolicyEngine:
             if fraud_outcome == "blocked_fraud":
                 metrics.increment("rewards_blocked_fraud_total", labels={"tenant_id": tenant_id})
                 return _deny("blocked_fraud", f"Fraud decision={fraud.decision!r} score={fraud.score:.1f}")
-            if fraud_outcome == "needs_review" or fraud.score > max_fraud:
+            if fraud_outcome == "needs_review":
                 return _deny("needs_review", f"Fraud review required: decision={fraud.decision!r} score={fraud.score:.1f} max={max_fraud:.1f}")
+            # Rule-declared hard fraud ceiling. A score above the rule's
+            # ``max_fraud_score`` is BLOCKED even when the model's decision is
+            # 'approve': the rule ceiling is a hard limit, not a soft review
+            # threshold. (Previously this returned needs_review, letting a
+            # rule-exceeding score still be approved.)
+            if fraud.score > max_fraud:
+                metrics.increment("rewards_blocked_fraud_total", labels={"tenant_id": tenant_id})
+                return _deny(
+                    "blocked_fraud",
+                    f"Fraud score {fraud.score:.1f} exceeds rule maximum {max_fraud:.1f}",
+                )
 
         # ── 8. Attribution weight + confidence ───────────────────────────
         if attribution is None:
@@ -391,21 +412,57 @@ class RewardPolicyEngine:
             if total_count >= int(max_total_uses):
                 return _deny("blocked_cap", f"Campaign total use cap reached: {total_count}/{max_total_uses}")
 
-        # ── 12. Budget policy (observational) ────────────────────────────
+        # ── 12. Budget policy — DURABLE, CONCURRENCY-SAFE RESERVATION ─────
+        # A successful eligibility decision atomically RESERVES budget on the
+        # durable ledger (reserve→commit→release) so concurrent evaluations
+        # cannot oversubscribe the recorded campaign budget. This replaces the
+        # old observational `count * per_reward >= cap` estimate, which was
+        # raceable and never actually reserved anything.
         budget_policy = campaign.get("budget_policy") or {}
         max_budget = budget_policy.get("max_total_reward_amount")
         reward_amount = rule.get("reward_amount")
-        if max_budget is not None and reward_amount is not None and budget_policy.get("track_spend", False):
-            total_count = await decision_repo.get_eligible_count(tenant_id, campaign_id, None, None)
-            # Exact Decimal arithmetic — never binary float for currency/token math.
+        enforce_budget = bool(budget_policy.get("enforce") or budget_policy.get("track_spend"))
+        reservation_id_val: Optional[str] = None
+        budget_summary: Optional[dict] = None
+
+        if max_budget is not None and reward_amount is not None and enforce_budget:
             per_reward = _amount_to_decimal(reward_amount)
             budget_cap = _amount_to_decimal(max_budget)
-            estimated_spend = Decimal(int(total_count)) * per_reward
-            if estimated_spend >= budget_cap:
-                return _deny(
-                    "blocked_budget",
-                    f"Tenant-declared budget policy exceeded: {estimated_spend} >= {budget_cap}",
+
+            if budget_service is not None:
+                # Deterministic reservation key: idempotent per evaluation so a
+                # retry (same idempotency key) never reserves twice; concurrent
+                # DISTINCT evaluations get DISTINCT keys and race the ledger.
+                actor = identity.user_id or identity.wallet_address or ""
+                reservation_key = idempotency_key or f"{campaign_id}:{rule_id}:{actor}"
+                result = await budget_service.reserve(
+                    tenant_id=tenant_id,
+                    campaign_id=campaign_id,
+                    amount=per_reward,
+                    cap=budget_cap,
+                    reservation_key=reservation_key,
                 )
+                if not result.ok:
+                    # NB: the budget service already emits rewards_budget_blocked.
+                    return _deny(
+                        "blocked_budget",
+                        f"Campaign budget exhausted: used {result.used} + {per_reward} > cap {budget_cap}",
+                    )
+                reservation_id_val = result.reservation_id
+                budget_summary = {"reservation_id": result.reservation_id, "used": result.used, "cap": result.cap}
+            else:
+                # Degraded fallback (no reservation service wired): keep a
+                # conservative observational estimate rather than allowing
+                # unbounded spend. Not concurrency-safe — the durable path above
+                # is the production behaviour.
+                total_count = await decision_repo.get_eligible_count(tenant_id, campaign_id, None, None)
+                estimated_spend = Decimal(int(total_count)) * per_reward
+                if estimated_spend + per_reward > budget_cap:
+                    return _deny(
+                        "blocked_budget",
+                        f"Tenant-declared budget policy exceeded (observational): "
+                        f"{estimated_spend} + {per_reward} > {budget_cap}",
+                    )
 
         # ── All gates passed — eligible ───────────────────────────────────
         reward = {
@@ -429,6 +486,8 @@ class RewardPolicyEngine:
             fraud=self._fraud_summary(fraud),
             identity=self._identity_summary(identity),
             reward=reward,
+            reservation_id=reservation_id_val,
+            budget=budget_summary,
             next_action={"type": "create_reward_action_payload"},
         )
 

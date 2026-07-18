@@ -1,0 +1,33 @@
+{
+  "name": "aether-rewards-solana",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Aether Rewards Solana Anchor workspace: tests, deploy scripts, and registries.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "lint": "prettier --check 'tests/**/*.ts' 'scripts/**/*.ts' 'migrations/**/*.ts'",
+    "lint:fix": "prettier --write 'tests/**/*.ts' 'scripts/**/*.ts' 'migrations/**/*.ts'",
+    "test": "anchor test",
+    "test:skip-validator": "anchor test --skip-local-validator",
+    "deploy:localnet": "bash scripts/deploy_localnet.sh",
+    "deploy:testnet": "bash scripts/deploy_testnet.sh",
+    "smoke:testnet": "bash scripts/smoke_test.sh testnet",
+    "registry:verify": "ts-node scripts/register_program.ts --verify"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/web3.js": "^1.95.3"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.1.5",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^20.14.10",
+    "chai": "^4.4.1",
+    "mocha": "^10.6.0",
+    "prettier": "^3.3.2",
+    "ts-mocha": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.3"
+  }
+}

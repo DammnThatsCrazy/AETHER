@@ -1,0 +1,14 @@
+{
+  "network": "mainnet",
+  "timestamp": 1784396506.1062293,
+  "timestamp_iso": "2026-07-18T17:41:46Z",
+  "deployments": {},
+  "errors": {
+    "ethereum": "GATE[AUDIT_GATE]: MAINNET AUDIT GATE: refusing to deploy to 'mainnet'. No external-audit evidence at audit/AUDIT_EVIDENCE.json. Mainnet real-value activation stays BLOCKED until a completed audit sign-off is recorded there (see audit/AUDIT_EVIDENCE.template.json)."
+  },
+  "summary": {
+    "total_chains": 1,
+    "successful": 0,
+    "failed": 1
+  }
+}

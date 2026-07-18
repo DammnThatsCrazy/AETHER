@@ -1,0 +1,14 @@
+{
+  "network": "testnet",
+  "timestamp": 1784396506.1743999,
+  "timestamp_iso": "2026-07-18T17:41:46Z",
+  "deployments": {},
+  "errors": {
+    "ethereum": "GATE[REGISTRY]: Oracle-signer registry has no entries for network 'sepolia'. Add the authorized oracle address to deploy/registry/oracle_signers.json under networks.sepolia (reviewed change) before deploying."
+  },
+  "summary": {
+    "total_chains": 1,
+    "successful": 0,
+    "failed": 1
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "_README": "TEMPLATE ONLY. This file does NOT open the mainnet gate. To unblock mainnet-class deployment, copy this to audit/AUDIT_EVIDENCE.json and fill in real, completed-audit values. The gate (scripts/lib/audit_gate.js and deploy/evm_guards.py) validates: auditor.name non-empty; report.sha256 is a 64-hex digest AND matches report.file if that file is present; report.file non-empty; scope.commit non-empty; scope.contracts a non-empty array; signoff.approved === true; signoff.approver non-empty. Keep signoff.approved=false in THIS template so a stray copy stays blocked.",
+  "auditor": {
+    "name": "",
+    "firm": "",
+    "contact": ""
+  },
+  "report": {
+    "file": "AnalyticsRewards-audit-vX.pdf",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "date": "YYYY-MM-DD"
+  },
+  "scope": {
+    "commit": "",
+    "contracts": [
+      "contracts/AnalyticsRewards.sol",
+      "contracts/RewardRegistry.sol",
+      "contracts/interfaces/IAnalyticsRewards.sol"
+    ],
+    "notes": "Reference audit/SCOPE.md for the full manifest."
+  },
+  "signoff": {
+    "approved": false,
+    "approver": "",
+    "date": "YYYY-MM-DD",
+    "notes": "Set approved=true only after all Critical/High findings are resolved or formally accepted."
+  }
+}

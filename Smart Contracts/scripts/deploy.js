@@ -22,15 +22,21 @@
  */
 
 const { ethers, network } = require("hardhat");
+const { networkTier, isLocalNetwork } = require("./lib/networks");
+const { assertAuditEvidence } = require("./lib/audit_gate");
+const { assertOracleRegistered, recordContracts } = require("./lib/registry");
+const { assertNotDefaultKey } = require("./lib/default_keys");
+const { describeFailure } = require("./lib/failure");
 
 async function main() {
   const [deployer] = await ethers.getSigners();
   const deployerAddress = await deployer.getAddress();
+  const isLocal = isLocalNetwork(network.name);
 
   console.log("=".repeat(60));
   console.log("  Aether Smart Contract Deployment");
   console.log("=".repeat(60));
-  console.log(`  Network  : ${network.name}`);
+  console.log(`  Network  : ${network.name} (${networkTier(network.name)})`);
   console.log(`  Deployer : ${deployerAddress}`);
   console.log(`  Balance  : ${ethers.formatEther(await ethers.provider.getBalance(deployerAddress))} ETH`);
   console.log("=".repeat(60));
@@ -64,6 +70,26 @@ async function main() {
   console.log(`  Oracle   : ${oracleAddress}`);
   console.log(`  Admin    : ${adminAddress}`);
   console.log();
+
+  // ── Fail-closed pre-deploy gates (skipped only on local networks) ──
+  //   1. MAINNET AUDIT GATE — mainnet-class deploys require recorded
+  //      external-audit evidence. Testnets/local unaffected.
+  //   2. DEFAULT-KEY REJECTION — refuse well-known Hardhat/Anvil dev keys
+  //      on any non-local network.
+  //   3. ORACLE-SIGNER REGISTRY — the oracle being wired in must be an
+  //      allow-listed signer for this network.
+  assertAuditEvidence(network.name);
+  assertNotDefaultKey({
+    network: network.name,
+    deployerAddress,
+    privateKey: process.env.DEPLOYER_KEY,
+    isLocal,
+  });
+  assertOracleRegistered(network.name, oracleAddress);
+  if (!isLocal) {
+    console.log("  Pre-deploy gates passed: audit gate, default-key check, oracle registry.");
+    console.log();
+  }
 
   // ── Deploy RewardRegistry ────────────────────────────────────
   console.log("Deploying RewardRegistry...");
@@ -127,11 +153,18 @@ async function main() {
     }
   }
 
-  // ── Post-deploy: register AnalyticsRewards in the registry ───
-  if (network.name === "localhost" || network.name === "hardhat") {
-    console.log("  Local network detected — skipping registry post-setup.");
+  // ── Post-deploy: record addresses in the contract registry ───
+  if (isLocal) {
+    console.log("  Local network detected — skipping registry writeback.");
     console.log("  In production, call RewardRegistry.registerCampaign() to");
     console.log("  link AnalyticsRewards campaigns to the on-chain catalog.");
+  } else {
+    const registryFile = recordContracts(network.name, {
+      AnalyticsRewards: rewardsAddress,
+      RewardRegistry: registryAddress,
+    });
+    console.log(`  Recorded deployed addresses in ${registryFile}`);
+    console.log("  Review the diff and commit it, then run post_deploy_verify.js.");
   }
 
   return { registryAddress, rewardsAddress };
@@ -140,6 +173,6 @@ async function main() {
 main()
   .then(() => process.exit(0))
   .catch((err) => {
-    console.error("Deployment failed:", err);
+    console.error(describeFailure(err));
     process.exit(1);
   });
