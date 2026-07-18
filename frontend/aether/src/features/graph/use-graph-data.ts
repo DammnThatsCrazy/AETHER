@@ -193,7 +193,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
         const resp = await api.graphIntelligence.query({
           tenant_id: tenantId,
           as_of: asOf,
-          limit: 200,
+          limit: 500,
         });
         const data = asRecord(resp);
         const nodes = (Array.isArray(data.nodes) ? data.nodes : []).map(mapNode).filter(n => n.id.length > 0);
@@ -206,7 +206,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
         return { nodes, edges: Array.from(edgeMap.values()), clusters: [] };
       }
       // 1. All entities → nodes
-      const entitiesData = await api.entities.list({ limit: 200 });
+      const entitiesData = await api.entities.list({ limit: 500 });
       const rawEntities: unknown[] = entitiesData.entities;
       const nodes = rawEntities.map(mapNode).filter(n => n.id.length > 0);
 
@@ -328,7 +328,7 @@ export function useGraphZoom(tenantId?: string) {
           'FraudNetworkCluster', 'RiskCluster', 'DormantCohort',
           'ReactivatedCohort', 'UnresolvedCluster',
         ],
-        limit: 200,
+        limit: 500,
       });
       if (cancelRef.current) return;
       const data = asRecord(resp);
