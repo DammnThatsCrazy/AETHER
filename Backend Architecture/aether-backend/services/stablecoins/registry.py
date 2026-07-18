@@ -2,9 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import TYPE_CHECKING, Any, Iterable, Optional
 
 from .models import StablecoinDeployment
+
+if TYPE_CHECKING:  # avoid an import cycle — the connectors import this module
+    from .connector_base import StablecoinRpcClient
+    from .evm_connector import StablecoinEVMIngestionConnector
+    from .price_feed import StablecoinChainlinkPriceConnector
+    from .solana_connector import StablecoinSolanaIngestionConnector
 
 
 @dataclass
@@ -33,6 +39,63 @@ class StablecoinDeploymentRegistry:
             ):
                 return deployment
         return None
+
+
+def resolve_vm_type(deployment: StablecoinDeployment) -> str:
+    """Which ingestion connector family a deployment needs: ``evm`` or ``solana``."""
+    return "solana" if deployment.token_standard.lower().startswith("spl") else "evm"
+
+
+@dataclass
+class StablecoinConnectorRegistry:
+    """Factory that builds concrete, credential-waiting ingestion + price
+    connectors for registered deployments and hands them to the polling
+    scheduler. Connector classes are imported lazily so importing the registry
+    never pulls the connectors (which import the registry) — no import cycle.
+    """
+
+    deployments: StablecoinDeploymentRegistry = field(default_factory=StablecoinDeploymentRegistry)
+
+    def _deployment(self, deployment_id: str) -> StablecoinDeployment:
+        deployment = self.deployments.deployments.get(deployment_id)
+        if deployment is None:
+            raise ValueError(f"unknown stablecoin deployment: {deployment_id}")
+        return deployment
+
+    def build_ingestion_connector(
+        self,
+        deployment_id: str,
+        *,
+        rpc: "Optional[StablecoinRpcClient]" = None,
+        **kwargs: Any,
+    ) -> "StablecoinEVMIngestionConnector | StablecoinSolanaIngestionConnector":
+        """Build the correct chain ingestion connector for a deployment.
+
+        The injectable ``rpc`` client (any object with the ``RPCGateway.execute``
+        shape) is threaded straight into the connector, so tests drive a mock
+        RPC server with no live network.
+        """
+        deployment = self._deployment(deployment_id)
+        if resolve_vm_type(deployment) == "solana":
+            from .solana_connector import StablecoinSolanaIngestionConnector
+
+            return StablecoinSolanaIngestionConnector(deployment=deployment, rpc=rpc, registry=self.deployments, **kwargs)
+        from .evm_connector import StablecoinEVMIngestionConnector
+
+        return StablecoinEVMIngestionConnector(deployment=deployment, rpc=rpc, registry=self.deployments, **kwargs)
+
+    def build_price_connector(
+        self,
+        deployment_id: str,
+        *,
+        feed_address: str,
+        rpc: "Optional[StablecoinRpcClient]" = None,
+        **kwargs: Any,
+    ) -> "StablecoinChainlinkPriceConnector":
+        deployment = self._deployment(deployment_id)
+        from .price_feed import StablecoinChainlinkPriceConnector
+
+        return StablecoinChainlinkPriceConnector(deployment=deployment, feed_address=feed_address, rpc=rpc, **kwargs)
 
 
 PLATFORM_STABLECOIN_REGISTRY = StablecoinDeploymentRegistry.from_iterable([
@@ -66,4 +129,21 @@ PLATFORM_STABLECOIN_REGISTRY = StablecoinDeploymentRegistry.from_iterable([
         decimals=6,
         issuer_verified=True,
     ),
+    StablecoinDeployment(
+        deployment_id="usdc:solana:mainnet:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        canonical_asset_id="usdc",
+        chain_id="solana-mainnet",
+        network="solana-mainnet",
+        token_standard="spl-token",
+        contract_or_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        decimals=6,
+        issuer_verified=True,
+    ),
 ])
+
+# Platform-scoped connector factory bound to the canonical deployment registry.
+# The polling scheduler builds scheduler-ready, credential-waiting connectors
+# from this (see ``services/stablecoins/providers.py`` for the wiring helper).
+PLATFORM_STABLECOIN_CONNECTOR_REGISTRY = StablecoinConnectorRegistry(
+    deployments=PLATFORM_STABLECOIN_REGISTRY
+)
