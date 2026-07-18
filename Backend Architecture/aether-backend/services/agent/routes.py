@@ -375,13 +375,21 @@ async def approve_review_batch(batch_id: str, body: ReviewDecision, request: Req
     # approved-but-uncommitted exactly as before. Commit never runs without
     # this approval — rejection above never reaches this branch.
     commit_summary = None
+    meta: dict[str, Any] | None = None
     if settings.one_person_ops.staged_mutation_review_enabled and batch.get("status") == "approved":
-        from services.agent.mutation_commit import commit_approved_mutations
-        commit_summary = await commit_approved_mutations(
-            tenant.tenant_id, batch_id, _actor_id(request), _request_id(request)
-        )
-        batch = await _runtime_repo.review_batches.get(batch_id) or batch
-    meta = {"commit": commit_summary} if commit_summary is not None else None
+        # The kill switch blocks commit as firmly as it blocks dispatch: the
+        # approval is recorded, but nothing reaches the canonical graph while the
+        # emergency stop is engaged. Release it, then re-approve to commit.
+        kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
+        if kill_switch.get("enabled"):
+            meta = {"commit_blocked": "kill_switch_engaged"}
+        else:
+            from services.agent.mutation_commit import commit_approved_mutations
+            commit_summary = await commit_approved_mutations(
+                tenant.tenant_id, batch_id, _actor_id(request), _request_id(request)
+            )
+            batch = await _runtime_repo.review_batches.get(batch_id) or batch
+            meta = {"commit": commit_summary}
     return _envelope(batch, request, meta=meta)
 
 
@@ -608,6 +616,198 @@ async def toggle_kill_switch(body: KillSwitchAction, request: Request):
     logger.warning("Agent kill switch action=%s tenant=%s request_id=%s", body.action, tenant.tenant_id, _request_id(request))
     metrics.increment("agent_kill_switch_toggled", labels={"enabled": str(enabled).lower()})
     return _envelope({"kill_switch": enabled, "action": body.action, "state": state}, request)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# KYBER COMMAND CENTER — mutation inspection, rollback, reconcile, repairs
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class MutationActionRequest(BaseModel):
+    reason: str = ""
+
+
+def _require_review_flag() -> None:
+    if not settings.one_person_ops.staged_mutation_review_enabled:
+        raise BadRequestError("Staged graph mutation review-to-commit is not enabled")
+
+
+async def _get_mutation_scoped(tenant_id: str, mutation_id: str) -> dict[str, Any]:
+    mutation = await _runtime_repo.staged_mutations.get(mutation_id)
+    if not mutation or mutation.get("tenant_id") != tenant_id:
+        raise NotFoundError("Staged mutation")
+    return mutation
+
+
+@router.get("/mutations/{mutation_id}")
+async def get_mutation(mutation_id: str, request: Request):
+    """Full staged-mutation record (status, versions, approval, rollback state)."""
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    return _envelope(await _get_mutation_scoped(tenant.tenant_id, mutation_id), request)
+
+
+@router.get("/mutations/{mutation_id}/diff")
+async def get_mutation_diff(mutation_id: str, request: Request):
+    """The proposed change (target + diff) plus OCC version context for review."""
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    mutation = await _get_mutation_scoped(tenant.tenant_id, mutation_id)
+    return _envelope({
+        "mutation_id": mutation_id,
+        "status": mutation.get("status"),
+        "mutation_class": mutation.get("mutation_class"),
+        "operation": mutation.get("operation"),
+        "target": mutation.get("target", {}),
+        "diff": mutation.get("diff", {}),
+        "base_version": mutation.get("base_version"),
+        "committed_version": mutation.get("committed_version"),
+        "conflict": mutation.get("conflict"),
+    }, request)
+
+
+@router.get("/mutations/{mutation_id}/evidence")
+async def get_mutation_evidence(mutation_id: str, request: Request):
+    """Evidence/lineage for a staged mutation + its timeline events."""
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    mutation = await _get_mutation_scoped(tenant.tenant_id, mutation_id)
+    events = await _runtime_repo.events_for_tenant(
+        tenant.tenant_id, limit=200, objective_id=mutation.get("objective_id", "")
+    )
+    related = [e for e in events if (e.get("payload") or {}).get("mutation_id") == mutation_id
+               or e.get("event_type", "").startswith("mutation.")]
+    return _envelope({
+        "mutation_id": mutation_id,
+        "proposed_by": mutation.get("proposed_by"),
+        "source": mutation.get("source"),
+        "confidence": (mutation.get("diff") or {}).get("confidence"),
+        "approval": {
+            "approved_by": mutation.get("approved_by"),
+            "approved_at": mutation.get("approved_at"),
+            "approval_fingerprint": mutation.get("approval_fingerprint"),
+        },
+        "rollback": mutation.get("rollback"),
+        "reconciliation": mutation.get("reconciliation"),
+        "events": related,
+    }, request)
+
+
+@router.post("/mutations/{mutation_id}/rollback")
+async def rollback_committed_mutation(mutation_id: str, body: MutationActionRequest, request: Request):
+    """Roll back a committed mutation with verification + repair (item 3).
+
+    Requires ``agent:approve`` — reverting a canonical commit is as sensitive as
+    approving one. Allowed while the kill switch is engaged (rollback is
+    incident remediation, not new agent work)."""
+    _require_review_flag()
+    tenant = request.state.tenant
+    tenant.require_permission("agent:approve")
+    from services.agent.mutation_commit import rollback_mutation
+    mutation = await rollback_mutation(tenant.tenant_id, mutation_id, _actor_id(request), _request_id(request))
+    metrics.increment("agent_mutation_rollbacks", labels={"status": mutation.get("status", "unknown")})
+    return _envelope(mutation, request)
+
+
+@router.post("/mutations/{mutation_id}/rollback-verify")
+async def verify_mutation_state(mutation_id: str, request: Request):
+    """Reconcile a committed/rolled-back mutation receipt against graph state."""
+    _require_review_flag()
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    from services.agent.mutation_commit import reconcile_mutation
+    receipt = await reconcile_mutation(tenant.tenant_id, mutation_id, _actor_id(request), _request_id(request))
+    return _envelope(receipt, request)
+
+
+@router.post("/review-batches/{batch_id}/quarantine")
+async def quarantine_batch(batch_id: str, body: MutationActionRequest, request: Request):
+    """Operator hard-stop: freeze a batch so none of its mutations can commit."""
+    _require_review_flag()
+    tenant = request.state.tenant
+    tenant.require_permission("agent:approve")
+    batch = await _runtime_repo.quarantine_review_batch(
+        tenant.tenant_id, batch_id, _actor_id(request), body.reason, _request_id(request)
+    )
+    if batch is None:
+        raise NotFoundError("Review batch")
+    metrics.increment("agent_mutation_quarantines")
+    return _envelope(batch, request)
+
+
+@router.post("/review-batches/{batch_id}/reapprove")
+async def reapprove_batch(batch_id: str, body: ReviewDecision, request: Request):
+    """Re-grant approval on a modified/quarantined batch, then commit (kill-switch aware)."""
+    _require_review_flag()
+    tenant = request.state.tenant
+    tenant.require_permission("agent:approve")
+    batch = await _runtime_repo.reapprove_batch(
+        tenant.tenant_id, batch_id, _actor_id(request), _request_id(request), notes=body.notes
+    )
+    if batch is None:
+        raise NotFoundError("Review batch")
+    metrics.increment("agent_mutation_reapprovals")
+    commit_summary = None
+    kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
+    if not kill_switch.get("enabled"):
+        from services.agent.mutation_commit import commit_approved_mutations
+        commit_summary = await commit_approved_mutations(
+            tenant.tenant_id, batch_id, _actor_id(request), _request_id(request)
+        )
+        batch = await _runtime_repo.review_batches.get(batch_id) or batch
+    meta = {"commit": commit_summary} if commit_summary is not None else {"commit_blocked": "kill_switch_engaged"}
+    return _envelope(batch, request, meta=meta)
+
+
+@router.post("/review-batches/{batch_id}/reconcile")
+async def reconcile_review_batch(batch_id: str, request: Request):
+    """Reconcile every committed/rolled-back mutation in a batch against the graph."""
+    _require_review_flag()
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    from services.agent.mutation_commit import reconcile_batch
+    summary = await reconcile_batch(tenant.tenant_id, batch_id, _actor_id(request), _request_id(request))
+    return _envelope(summary, request)
+
+
+@router.get("/repairs")
+async def list_repairs(request: Request, status: str | None = None, limit: int = 100):
+    """Durable rollback-repair queue (opened when a rollback can't restore state)."""
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    tasks = await _runtime_repo.list_repair_tasks(tenant.tenant_id, status=status, limit=limit)
+    return _envelope({"repairs": tasks, "total": len(tasks)}, request)
+
+
+@router.post("/repairs/{repair_id}/resolve")
+async def resolve_repair(repair_id: str, body: MutationActionRequest, request: Request):
+    """Mark a rollback-repair task resolved after the operator restores state."""
+    tenant = request.state.tenant
+    tenant.require_permission("agent:approve")
+    task = await _runtime_repo.resolve_repair_task(
+        tenant.tenant_id, repair_id, _actor_id(request), _request_id(request), resolution=body.reason
+    )
+    if task is None:
+        raise NotFoundError("Repair task")
+    return _envelope(task, request)
+
+
+@router.get("/audit/export")
+async def export_audit(request: Request, objective_id: str | None = None, limit: int = 1000):
+    """Compliance export: timeline events + review batches + repairs for a tenant."""
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    events = await _runtime_repo.events_for_tenant(tenant.tenant_id, limit=limit, objective_id=objective_id)
+    batches = await _runtime_repo.list_review_batches(tenant.tenant_id, limit=limit)
+    repairs = await _runtime_repo.list_repair_tasks(tenant.tenant_id, limit=limit)
+    return _envelope({
+        "tenant_id": tenant.tenant_id,
+        "exported_at": utc_now(),
+        "events": events,
+        "review_batches": batches,
+        "repairs": repairs,
+        "counts": {"events": len(events), "review_batches": len(batches), "repairs": len(repairs)},
+    }, request)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

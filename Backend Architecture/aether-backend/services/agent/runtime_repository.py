@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from shared.common.common import BadRequestError, ConflictError
+from shared.logger.logger import metrics
 from shared.store import DurableStore, get_store
 
 
@@ -32,7 +33,19 @@ TERMINAL_OBJECTIVE_STATUSES = {"completed", "failed", "cancelled"}
 
 OBJECTIVE_STATUSES = {"queued", "active", "paused", "blocked", "awaiting_review", "completed", "failed", "cancelled"}
 REVIEW_STATUSES = {"pending", "approved", "rejected", "committed", "quarantined", "rolled_back"}
-MUTATION_STATUSES = {"staged", "approved", "rejected", "committed", "quarantined", "rolled_back", "failed_commit"}
+MUTATION_STATUSES = {
+    "staged", "approved", "rejected", "committed", "quarantined", "rolled_back",
+    "failed_commit",
+    # Rollback verification outcomes (see mutation_commit.rollback_mutation):
+    # rolled_back            → inverse applied AND verified absent from the graph
+    # rollback_repair_required → inverse issued but graph still shows the artifact
+    #                            (a durable repair task is opened for the operator)
+    "rollback_repair_required",
+}
+# How long an operator approval remains valid before a commit must be re-approved.
+# Bounds the window in which a stale approval could commit against a graph that has
+# since moved on; the operator re-approves to reset it.
+APPROVAL_TTL_SECONDS = int(os.getenv("AETHER_AGENT_APPROVAL_TTL_SECONDS", "3600"))
 # Worker run lifecycle: queued → running → completed | failed | retry.
 # dispatch_failed marks runs whose queue publish failed (hosted fail-closed);
 # stale marks runs swept after exceeding RUN_STALE_SECONDS without progress.
@@ -79,6 +92,42 @@ def _age_seconds(iso_ts: str | None) -> float:
 
 def stable_idempotency_key(tenant_id: str, payload: dict[str, Any]) -> str:
     raw = json.dumps({"tenant_id": tenant_id, "payload": payload}, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def target_key_for(target: dict[str, Any] | None) -> str:
+    """Stable identity of the canonical object a mutation writes.
+
+    Optimistic-concurrency versions are tracked per this key so two mutations
+    aimed at the same vertex/edge cannot both commit against the same base
+    version — the second is rejected as stale.
+    """
+    target = target or {}
+    kind = target.get("kind")
+    if kind == "vertex":
+        return f"vertex:{target.get('vertex_type', '')}:{target.get('vertex_id', '')}"
+    if kind == "edge":
+        return (
+            f"edge:{target.get('edge_type', '')}:"
+            f"{target.get('from_vertex_id', '')}->{target.get('to_vertex_id', '')}"
+        )
+    return f"other:{json.dumps(target, sort_keys=True, default=str)}"
+
+
+def mutation_fingerprint(mutation: dict[str, Any]) -> str:
+    """Content hash of the committable payload of a staged mutation.
+
+    An operator approval is bound to this fingerprint; if the target/diff/class
+    changes after approval the fingerprint changes and the commit is refused
+    until the operator re-approves the modified content.
+    """
+    committable = {
+        "mutation_class": mutation.get("mutation_class"),
+        "operation": mutation.get("operation"),
+        "target": mutation.get("target") or {},
+        "diff": mutation.get("diff") or {},
+    }
+    raw = json.dumps(committable, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -131,6 +180,11 @@ class AgentRuntimeRepository:
         self.worker_runs: DurableStore = get_store("agent_worker_runs")
         self.catalyst_triggers: DurableStore = get_store("catalyst_wake_triggers")
         self.control: DurableStore = get_store("agent_control")
+        # Optimistic-concurrency version counter per canonical target (see
+        # target_key_for) and the durable repair queue opened when a rollback
+        # inverse cannot be verified against the graph.
+        self.canonical_versions: DurableStore = get_store("agent_canonical_versions")
+        self.repair_tasks: DurableStore = get_store("agent_rollback_repairs")
 
     async def append_event(
         self,
@@ -624,15 +678,21 @@ class AgentRuntimeRepository:
             mutation_class = int(mutation.get("mutation_class", mutation.get("class", 1)))
             if mutation_class not in MUTATION_CLASSES:
                 raise ValueError("mutation_class must be one of 1, 2, 3, 4, or 5")
+            target = sanitize_payload(mutation.get("target", {}))
+            # Capture the target's version at staging time. This is the ETag the
+            # commit checks: if the canonical target moved on between staging and
+            # commit, the commit is rejected as stale (optimistic concurrency).
+            base_version = await self.canonical_version(tenant_id, target_key_for(target))
             record = {
                 "mutation_id": new_id("mut"),
                 "tenant_id": tenant_id,
                 "objective_id": objective_id,
                 "mutation_class": mutation_class,
                 "operation": mutation.get("operation", "upsert"),
-                "target": sanitize_payload(mutation.get("target", {})),
+                "target": target,
                 "diff": sanitize_payload(mutation.get("diff", {})),
                 "status": "staged",
+                "base_version": base_version,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -683,6 +743,13 @@ class AgentRuntimeRepository:
             if mutation and mutation.get("tenant_id") == tenant_id:
                 mutation["status"] = mutation_status
                 mutation["updated_at"] = now
+                if decision == "approve":
+                    # Bind the approval to the exact content and the moment it was
+                    # granted: the commit later refuses a mutation whose fingerprint
+                    # changed (needs re-approval) or whose approval has expired.
+                    mutation["approved_at"] = now
+                    mutation["approved_by"] = reviewer
+                    mutation["approval_fingerprint"] = mutation_fingerprint(mutation)
                 await self.staged_mutations.set(mutation_id, mutation)
                 await self.append_event(tenant_id, f"mutation.{mutation_status}", "review_queue", mutation, batch.get("objective_id", ""), reviewer, request_id)
         await self.append_event(tenant_id, f"batch.{batch['status']}", "review_queue", batch, batch.get("objective_id", ""), reviewer, request_id)
@@ -724,6 +791,155 @@ class AgentRuntimeRepository:
             rows = await self.events.get_list(tenant_id, limit=limit)
         rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
         return rows[:limit]
+
+    # ── Optimistic concurrency: canonical target version counter ─────────
+
+    async def canonical_version(self, tenant_id: str, target_key: str) -> int:
+        """Current committed version of a canonical target (0 if never written)."""
+        record = await self.canonical_versions.get(f"{tenant_id}:{target_key}")
+        return int(record.get("version", 0)) if record else 0
+
+    async def bump_canonical_version(
+        self, tenant_id: str, target_key: str, mutation_id: str = ""
+    ) -> int:
+        """Increment (and persist) the canonical version after a successful commit."""
+        key = f"{tenant_id}:{target_key}"
+        record = await self.canonical_versions.get(key) or {
+            "tenant_id": tenant_id, "target_key": target_key, "version": 0,
+        }
+        record["version"] = int(record.get("version", 0)) + 1
+        record["updated_at"] = utc_now()
+        record["last_mutation_id"] = mutation_id
+        await self.canonical_versions.set(key, record)
+        return record["version"]
+
+    async def reapprove_batch(
+        self, tenant_id: str, batch_id: str, reviewer: str, request_id: str, notes: str = ""
+    ) -> dict[str, Any] | None:
+        """Re-grant approval on a batch that already passed review.
+
+        Used when a mutation was modified after its first approval (or a prior
+        commit quarantined the batch): the operator re-approves, which re-stamps
+        each still-pending mutation's approval fingerprint + timestamp so the
+        commit gate accepts the current content. Already committed/rejected/
+        rolled_back mutations are left untouched.
+        """
+        batch = await self.review_batches.get(batch_id)
+        if not batch or batch.get("tenant_id") != tenant_id:
+            return None
+        if batch.get("status") not in {"approved", "quarantined"}:
+            raise ConflictError(f"Cannot re-approve batch in status '{batch.get('status')}'")
+        now = utc_now()
+        for mutation_id in batch.get("mutation_ids", []):
+            mutation = await self.staged_mutations.get(mutation_id)
+            if not mutation or mutation.get("tenant_id") != tenant_id:
+                continue
+            if mutation.get("status") in {"committed", "rejected", "rolled_back"}:
+                continue
+            mutation["status"] = "approved"
+            mutation["approved_at"] = now
+            mutation["approved_by"] = reviewer
+            mutation["approval_fingerprint"] = mutation_fingerprint(mutation)
+            mutation["updated_at"] = now
+            mutation.pop("conflict", None)
+            mutation.pop("commit_error", None)
+            await self.staged_mutations.set(mutation_id, mutation)
+            await self.append_event(tenant_id, "mutation.reapproved", "review_queue", mutation, batch.get("objective_id", ""), reviewer, request_id)
+        batch["status"] = "approved"
+        batch["reviewed_by"] = reviewer
+        batch["review_notes"] = sanitize_payload({"notes": notes}).get("notes", "")
+        batch["updated_at"] = now
+        await self.review_batches.set(batch_id, batch)
+        await self.append_event(tenant_id, "batch.reapproved", "review_queue", batch, batch.get("objective_id", ""), reviewer, request_id)
+        return batch
+
+    async def quarantine_review_batch(
+        self, tenant_id: str, batch_id: str, actor_id: str, reason: str, request_id: str
+    ) -> dict[str, Any] | None:
+        """Operator-initiated quarantine: freeze a batch so it cannot commit.
+
+        Marks the batch and every non-terminal mutation ``quarantined``. A
+        quarantined mutation is never committed by commit_approved_mutations
+        (status != approved), so this is a hard human stop distinct from the
+        automatic CIS quarantine band.
+        """
+        batch = await self.review_batches.get(batch_id)
+        if not batch or batch.get("tenant_id") != tenant_id:
+            return None
+        now = utc_now()
+        for mutation_id in batch.get("mutation_ids", []):
+            mutation = await self.staged_mutations.get(mutation_id)
+            if not mutation or mutation.get("tenant_id") != tenant_id:
+                continue
+            if mutation.get("status") in {"committed", "rolled_back", "rejected"}:
+                continue
+            mutation["status"] = "quarantined"
+            mutation["quarantine"] = {"manual": True, "reason": sanitize_payload({"reason": reason}).get("reason", "")}
+            mutation["updated_at"] = now
+            await self.staged_mutations.set(mutation_id, mutation)
+            await self.append_event(tenant_id, "mutation.quarantined", "operator", mutation, batch.get("objective_id", ""), actor_id, request_id)
+        batch["status"] = "quarantined"
+        batch["updated_at"] = now
+        await self.review_batches.set(batch_id, batch)
+        await self.append_event(tenant_id, "batch.quarantined", "operator", {"batch_id": batch_id, "reason": sanitize_payload({"reason": reason}).get("reason", "")}, batch.get("objective_id", ""), actor_id, request_id)
+        return batch
+
+    # ── Rollback repair queue ────────────────────────────────────────────
+
+    async def open_repair_task(
+        self, tenant_id: str, mutation: dict[str, Any], reason: str,
+        detail: dict[str, Any], actor_id: str, request_id: str,
+    ) -> dict[str, Any]:
+        """Record a durable repair task when a rollback cannot restore state."""
+        now = utc_now()
+        task = {
+            "repair_id": new_id("repair"),
+            "tenant_id": tenant_id,
+            "mutation_id": mutation.get("mutation_id", ""),
+            "objective_id": mutation.get("objective_id", ""),
+            "target": mutation.get("target", {}),
+            "reason": reason,
+            "detail": sanitize_payload(detail),
+            "status": "open",
+            "created_at": now,
+            "updated_at": now,
+        }
+        await self.repair_tasks.set(task["repair_id"], task)
+        await self.append_event(
+            tenant_id, "mutation.rollback_repair_required", "commit",
+            {"repair_id": task["repair_id"], "mutation_id": task["mutation_id"], "reason": reason},
+            mutation.get("objective_id", ""), actor_id, request_id,
+        )
+        metrics.increment("agent_rollback_repairs_opened", labels={"reason": reason})
+        return task
+
+    async def list_repair_tasks(
+        self, tenant_id: str, status: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if status:
+            filters["status"] = status
+        rows = await self.repair_tasks.find(**filters)
+        rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
+        return rows[:limit]
+
+    async def resolve_repair_task(
+        self, tenant_id: str, repair_id: str, actor_id: str, request_id: str, resolution: str = ""
+    ) -> dict[str, Any] | None:
+        task = await self.repair_tasks.get(repair_id)
+        if not task or task.get("tenant_id") != tenant_id:
+            return None
+        task["status"] = "resolved"
+        task["resolved_by"] = actor_id
+        task["resolution"] = sanitize_payload({"resolution": resolution}).get("resolution", "")
+        task["updated_at"] = utc_now()
+        await self.repair_tasks.set(repair_id, task)
+        await self.append_event(
+            tenant_id, "mutation.rollback_repair_resolved", "commit",
+            {"repair_id": repair_id, "mutation_id": task.get("mutation_id", "")},
+            task.get("objective_id", ""), actor_id, request_id,
+        )
+        return task
 
     async def set_kill_switch(self, tenant_id: str, enabled: bool, actor_id: str, reason: str, request_id: str) -> dict[str, Any]:
         state = {"tenant_id": tenant_id, "enabled": enabled, "reason": sanitize_payload({"reason": reason}).get("reason", ""), "updated_at": utc_now(), "updated_by": actor_id}
