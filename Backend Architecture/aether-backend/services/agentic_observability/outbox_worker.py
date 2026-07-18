@@ -95,6 +95,13 @@ class AgenticGraphOutboxWorker:
             await gateway.apply(edge_intent(
                 e, operation="edge_created", tenant_id=tenant_id,
                 actor_id="agentic_graph_outbox",
+                # Each outbox row is a distinct queued observation; without a
+                # distinguishing key, queued observations for the same
+                # relationship (tenant/type/from/to) would dedup after the
+                # first while every row is still marked persisted. Prefer any
+                # payload-carried source_event_id, else the unique+stable
+                # outbox_id (so a redelivered row still dedups on retry).
+                source_event_id=str(props.get("source_event_id") or outbox_id),
             ))
 
     async def process_batch(
