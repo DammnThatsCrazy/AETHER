@@ -4,6 +4,18 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // Build identity injected at build time (drift-free: version from the
+  // workspace package.json via npm, SHA/profile from CI env). Falls back to the
+  // env-schema defaults for local dev / typecheck.
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(process.env.npm_package_version ?? 'dev'),
+    'import.meta.env.VITE_GIT_SHA': JSON.stringify(
+      process.env.GIT_SHA ?? process.env.GITHUB_SHA ?? process.env.VITE_GIT_SHA ?? 'dev',
+    ),
+    'import.meta.env.VITE_RELEASE_PROFILE': JSON.stringify(
+      process.env.DEPLOYMENT_PROFILE ?? process.env.VITE_RELEASE_PROFILE ?? '',
+    ),
+  },
   resolve: {
     alias: {
       '@kyber': path.resolve(__dirname, 'src'),

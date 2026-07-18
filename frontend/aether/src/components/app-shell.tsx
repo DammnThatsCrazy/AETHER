@@ -1,6 +1,18 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { cn, Badge, Button, GlyphIcon, MockModeBanner, TimeLensControl, useTheme } from '@aether/ui';
+import {
+  cn,
+  Badge,
+  Button,
+  GlyphIcon,
+  MockModeBanner,
+  TimeLensControl,
+  useTheme,
+  useBuildInfo,
+  useCapabilities,
+  resolveDestinationAvailability,
+  type CapabilityRequirement,
+} from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth } from '@aether-app/features/auth';
 import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
@@ -11,6 +23,35 @@ interface NavItemProps {
   label: string;
   glyph: string;
 }
+
+interface NavEntry {
+  readonly to: string;
+  readonly label: string;
+  readonly glyph: string;
+  /** Backend capability required; excluded domain / off flag hides the link. */
+  readonly requirement?: CapabilityRequirement;
+}
+
+const NAV_ITEMS: readonly NavEntry[] = [
+  { to: '/users', label: 'Users', glyph: '[u]' },
+  { to: '/campaigns', label: 'Campaigns', glyph: '[c]' },
+  { to: '/graph', label: 'Graph', glyph: '[g]' },
+  { to: '/noesis', label: 'Noesis', glyph: '[n]' },
+  { to: '/onboarding', label: 'Onboarding', glyph: '[on]' },
+  { to: '/settings', label: 'Settings', glyph: '[:]' },
+  { to: '/billing', label: 'Billing', glyph: '[$]' },
+  { to: '/me', label: 'Profile', glyph: '[~]' },
+  { to: '/audit-exports', label: 'Audit Exports', glyph: '[a]' },
+  { to: '/value-review', label: 'Value Review', glyph: '[v]' },
+  { to: '/security', label: 'Security', glyph: '[s]' },
+  { to: '/system-status', label: 'System Status', glyph: '[s]' },
+  { to: '/data-quality', label: 'Data Quality', glyph: '[q]', requirement: { flag: 'data_quality_enabled' } },
+  { to: '/integrations', label: 'Integrations', glyph: '[i]', requirement: { flag: 'connectors_enabled' } },
+  { to: '/imports', label: 'Imports', glyph: '[im]' },
+  { to: '/deployments', label: 'Deployments', glyph: '[d]' },
+  { to: '/payment-rails', label: 'Payment Rails', glyph: '[p]', requirement: { domain: 'payments' } },
+  { to: '/ai-efficiency', label: 'AI Efficiency', glyph: '[ai]', requirement: { domain: 'economic' } },
+];
 
 function NavItem({ to, label, glyph }: NavItemProps) {
   return (
@@ -38,6 +79,8 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { capabilities } = useCapabilities();
+  const build = useBuildInfo();
   const navigate = useNavigate();
   const [reAuthBanner, setReAuthBanner] = useState(false);
 
@@ -90,28 +133,20 @@ export function AppShell({ children }: AppShellProps) {
           {user && (
             <p className="text-xs text-text-muted mt-0.5 truncate font-mono">{user.email}</p>
           )}
+          {build && (
+            <p className="text-[10px] text-text-muted mt-1 font-mono truncate">
+              v{build.version} · {build.gitSha.slice(0, 7)} · {build.profile}
+            </p>
+          )}
         </div>
 
-        {/* Navigation */}
+        {/* Navigation — capability-gated: excluded domains / off flags hide links */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          <NavItem to="/users" label="Users" glyph="[u]" />
-          <NavItem to="/campaigns" label="Campaigns" glyph="[c]" />
-          <NavItem to="/graph" label="Graph" glyph="[g]" />
-          <NavItem to="/noesis" label="Noesis" glyph="[n]" />
-          <NavItem to="/onboarding" label="Onboarding" glyph="[on]" />
-          <NavItem to="/settings" label="Settings" glyph="[:]" />
-          <NavItem to="/billing" label="Billing" glyph="[$]" />
-          <NavItem to="/me" label="Profile" glyph="[~]" />
-          <NavItem to="/audit-exports" label="Audit Exports" glyph="[a]" />
-          <NavItem to="/value-review" label="Value Review" glyph="[v]" />
-          <NavItem to="/security" label="Security" glyph="[s]" />
-          <NavItem to="/system-status" label="System Status" glyph="[s]" />
-          <NavItem to="/data-quality" label="Data Quality" glyph="[q]" />
-          <NavItem to="/integrations" label="Integrations" glyph="[i]" />
-          <NavItem to="/imports" label="Imports" glyph="[im]" />
-          <NavItem to="/deployments" label="Deployments" glyph="[d]" />
-          <NavItem to="/payment-rails" label="Payment Rails" glyph="[p]" />
-          <NavItem to="/ai-efficiency" label="AI Efficiency" glyph="[ai]" />
+          {NAV_ITEMS.filter(
+            item => resolveDestinationAvailability(capabilities, item.requirement) === 'available',
+          ).map(item => (
+            <NavItem key={item.to} to={item.to} label={item.label} glyph={item.glyph} />
+          ))}
         </nav>
 
         {/* Footer */}

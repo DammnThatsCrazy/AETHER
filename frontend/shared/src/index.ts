@@ -100,6 +100,31 @@ export { TerminalSeparator } from './components/terminal-separator';
 export { Toggle } from './components/toggle';
 export { Tooltip } from './components/tooltip';
 
+// Runtime capability contract — provider, hook, route guard, and resolver.
+// Drives capability-aware navigation and direct-URL route guards from the
+// backend GET /v1/capabilities release surface.
+export {
+  CapabilityProvider,
+  useCapabilities,
+  useBuildInfo,
+  useDestinationAvailability,
+  RequireCapability,
+  resolveDestinationAvailability,
+  isDestinationVisible,
+  isDomainExcluded,
+} from './capabilities/index';
+export type {
+  Capabilities,
+  ReleaseCapabilities,
+  EnforcementState,
+  ProviderCapability,
+  BuildInfo,
+  CapabilityRequirement,
+  DestinationAvailability,
+  CapabilityProviderProps,
+  RequireCapabilityProps,
+} from './capabilities/index';
+
 export {
   queryCache,
   useQuery,

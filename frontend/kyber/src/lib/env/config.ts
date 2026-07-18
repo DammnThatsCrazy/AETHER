@@ -19,6 +19,10 @@ const envSchema = z.object({
   VITE_SLACK_WEBHOOK_URL: z.string().url().optional(),
   VITE_AUTOMATION_POSTURE: z.enum(['conservative', 'balanced', 'aggressive']).default('conservative'),
   VITE_FEATURE_FLAGS: z.string().default('{}'),
+  // Build identity (injected by vite define at build; 'dev' locally).
+  VITE_APP_VERSION: z.string().default('dev'),
+  VITE_GIT_SHA: z.string().default('dev'),
+  VITE_RELEASE_PROFILE: z.string().default(''),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
