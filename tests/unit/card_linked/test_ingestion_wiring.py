@@ -66,23 +66,27 @@ async def test_ingested_flow_is_mirrored_to_graph(service):
         "tenant-graph", _webhook_payload(provider_event_id="evt-graph-1")
     )
     assert disposition == "created"
+    # Projection is now durable: ingestion enqueues an idempotent outbox row and
+    # the worker applies it through the canonical GraphMutationGateway. Drain the
+    # tenant-scoped batch, then assert the mirror landed.
+    await service.drain_graph_projection("tenant-graph")
     vertex = await graph.get_vertex(f"card_linked_flow:{record['id']}")
     assert vertex is not None, "flow vertex missing — graph projection did not run"
 
 
-async def test_duplicate_ingest_does_not_reproject(service, monkeypatch):
-    calls = []
-
-    async def _spy(tenant_id, result):
-        calls.append(result[1])
-        return None
-
+async def test_duplicate_ingest_does_not_reproject(service):
     payload = _webhook_payload(provider_event_id="evt-dup-1")
-    await service.ingest_provider_webhook("tenant-dup", payload)
-    monkeypatch.setattr(service, "_project_to_graph", _spy)
-    _, disposition = await service.ingest_provider_webhook("tenant-dup", payload)
-    assert disposition == "duplicate"
-    assert calls == ["duplicate"], "projection hook not invoked with duplicate disposition"
+    _, first = await service.ingest_provider_webhook("tenant-dup", payload)
+    assert first == "created"
+    _, second = await service.ingest_provider_webhook("tenant-dup", payload)
+    assert second == "duplicate"
+    # A duplicate ingest must not enqueue a second projection: the durable outbox
+    # holds exactly one flow row for the flow (idempotent, keyed on outbox_id).
+    rows = await service._projection.repo.list_for_tenant("tenant-dup")
+    flow_rows = [r for r in rows if r.get("kind") == "flow"]
+    assert len(flow_rows) == 1, (
+        "duplicate ingest must not enqueue a second flow projection row"
+    )
 
 
 def _force_flag(request, enabled: bool) -> None:

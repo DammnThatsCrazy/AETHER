@@ -345,6 +345,12 @@ exploration-readiness: ## Exploration fabric contract + registry + planner gates
 production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
 	python scripts/production_status.py
 
+credentialless-certification: ## Provider certification matrix + honest CredentialReadiness states (report; exit 0)
+	python scripts/credentialless_certification.py
+
+credentialless-certification-strict: ## Enforce every first-release provider >= CREDENTIAL_WAITING (no SCAFFOLDED); PR7-time gate
+	python scripts/credentialless_certification.py --strict
+
 audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with --check)
 	python scripts/smart_contract_audit_prep.py
 

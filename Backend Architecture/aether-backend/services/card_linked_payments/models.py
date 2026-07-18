@@ -48,6 +48,10 @@ class RegionPolicyMode(StrEnum):
     UK_RESTRICTED = "UK_RESTRICTED"
     APAC_RESTRICTED = "APAC_RESTRICTED"
     GLOBAL_AGGREGATE_ONLY = "GLOBAL_AGGREGATE_ONLY"
+    # Fail-safe default for a region hint we do not recognise: treat it as the
+    # MOST restrictive mode (strip user-level identifiers) rather than silently
+    # granting unrestricted US_STANDARD behavior to an unknown jurisdiction.
+    UNKNOWN_RESTRICTED = "UNKNOWN_RESTRICTED"
 
 
 BLOCKED_CARD_LINKED_FIELDS = {

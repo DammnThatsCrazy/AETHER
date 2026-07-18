@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.rewards.policy_engine import IdentityInput, PolicyDecision
+from services.rewards.policy_engine import IdentityInput, PolicyDecision, _amount_to_decimal
 from services.rewards.rails import (
     CouponAdapter,
     DeliveryResult,
@@ -36,6 +36,8 @@ from services.rewards.rails import (
     StripeCreditAdapter,
     TenantWebhookAdapter,
     X402CreditAdapter,
+    _resolve_asset_decimals,
+    _reward_amount_to_atomic,
     get_rail_adapter,
 )
 
@@ -72,6 +74,7 @@ _RULE = {
     "reward_amount": 10.0,
     "reward_unit": "USD",
     "reward_currency": "USD",
+    "asset_decimals": 18,
     "reward_metadata": {},
 }
 
@@ -390,3 +393,222 @@ def test_beta_rail_deliver_raises_unavailable(adapter_cls):
     with pytest.raises(RailUnavailableError) as exc_info:
         _run(adapter_cls().deliver({}, {}))
     assert exc_info.value.reason == "beta_unavailable"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TenantWebhookAdapter — SSRF hardening (DEFECT 1)
+# ═══════════════════════════════════════════════════════════════════════════
+
+_WEBHOOK_ACTION = {
+    "payload": {"event": "reward.action.ready", "idempotency_key": "idem-ssrf", "tenant_id": "t1"},
+}
+
+
+def _webhook_config(url: str) -> dict:
+    return {"webhook_url": url, "config": {"signing_secret": "s3cr3t", "timeout_ms": 5000}}
+
+
+@pytest.mark.parametrize("url", [
+    "https://169.254.169.254/hook",   # cloud metadata endpoint
+    "https://127.0.0.1/hook",         # loopback
+    "https://10.1.2.3/hook",          # RFC-1918 private
+])
+def test_webhook_ssrf_blocked_no_network(monkeypatch, url):
+    """Outside local mode, an SSRF destination is rejected with success=False and NO HTTP call."""
+    monkeypatch.setenv("AETHER_ENV", "production")
+    adapter = TenantWebhookAdapter()
+
+    with patch("httpx.AsyncClient") as mock_client:
+        result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config(url)))
+
+    assert result.success is False
+    assert result.status == "failed"
+    assert result.error and "SSRF" in result.error
+    # Fail-closed: the HTTP client is never even constructed.
+    assert mock_client.called is False
+
+
+def test_webhook_enforces_https_outside_local(monkeypatch):
+    """A plain-HTTP URL is rejected outside local mode, before any network I/O."""
+    monkeypatch.setenv("AETHER_ENV", "production")
+    adapter = TenantWebhookAdapter()
+
+    with patch("httpx.AsyncClient") as mock_client:
+        result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("http://example.com/hook")))
+
+    assert result.success is False
+    assert result.status == "failed"
+    assert "HTTPS" in (result.error or "")
+    assert mock_client.called is False
+
+
+def test_webhook_malformed_url_rejected_no_network(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "production")
+    adapter = TenantWebhookAdapter()
+
+    with patch("httpx.AsyncClient") as mock_client:
+        result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("not-a-real-url")))
+
+    assert result.success is False
+    assert result.status == "failed"
+    assert mock_client.called is False
+
+
+def test_webhook_allows_loopback_in_local(monkeypatch):
+    """Local/test mode keeps loopback reachable so the HTTP call proceeds."""
+    monkeypatch.setenv("AETHER_ENV", "local")
+    adapter = TenantWebhookAdapter()
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_instance = AsyncMock()
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=None)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_instance.post = AsyncMock(return_value=mock_response)
+        mock_client.return_value = mock_instance
+
+        result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("http://127.0.0.1/hook")))
+
+    assert mock_instance.post.called
+    assert result.success is True
+    assert result.status == "delivered"
+
+
+def test_webhook_follow_redirects_disabled_in_local(monkeypatch):
+    """The httpx client must be constructed with follow_redirects=False."""
+    monkeypatch.setenv("AETHER_ENV", "local")
+    adapter = TenantWebhookAdapter()
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_instance = AsyncMock()
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=None)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_instance.post = AsyncMock(return_value=mock_response)
+        mock_client.return_value = mock_instance
+
+        _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("https://example.com/hook")))
+
+    _, ctor_kwargs = mock_client.call_args
+    assert ctor_kwargs.get("follow_redirects") is False
+
+
+def test_webhook_validate_config_rejects_malformed_url():
+    adapter = TenantWebhookAdapter()
+    errors = adapter.validate_config({"webhook_url": "http://", "signing_secret": "s"})
+    assert any("malformed" in e for e in errors)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Exact reward-amount conversion (DEFECT 2)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("amount, decimals, expected", [
+    ("0.1", 6, 100_000),                                   # 0.1 USDC (6dp)
+    ("1.005", 6, 1_005_000),                               # fractional, exact
+    ("10", 18, 10_000_000_000_000_000_000),               # 10 tokens @ 18dp
+    (10.0, 18, 10_000_000_000_000_000_000),               # float in, via str()
+    ("123456789.123456789", 18, 123456789123456789000000000),  # large + fractional
+    ("0", 18, 0),
+])
+def test_reward_amount_exact_atomic_conversion(amount, decimals, expected):
+    assert _reward_amount_to_atomic(amount, decimals) == expected
+
+
+def test_reward_amount_no_binary_float_artifacts():
+    """The classic float trap: 0.1 must not leak binary-float error into the atomic value."""
+    # float(0.1) * 10**18 == 100000000000000000.00000001 → int() == 100000000000000000
+    # but Decimal("0.1") scaled by 18 is exactly 10**17.
+    assert _reward_amount_to_atomic("0.1", 18) == 100_000_000_000_000_000
+    assert _amount_to_decimal(0.1) == __import__("decimal").Decimal("0.1")
+
+
+def test_reward_amount_inexact_for_decimals_rejected():
+    """More fractional digits than the asset allows → reject, never silently truncate."""
+    with pytest.raises(ValueError, match="not exactly representable"):
+        _reward_amount_to_atomic("1.005", 2)
+
+
+def test_reward_amount_non_numeric_rejected():
+    with pytest.raises(ValueError):
+        _reward_amount_to_atomic("not-a-number", 18)
+
+
+def test_reward_amount_negative_rejected():
+    with pytest.raises(ValueError, match="non-negative"):
+        _reward_amount_to_atomic("-1", 18)
+
+
+def test_resolve_asset_decimals_priority_and_absence():
+    assert _resolve_asset_decimals({"asset_decimals": 6}, {}, {}) == 6
+    assert _resolve_asset_decimals({}, {"decimals": 8}, {}) == 8
+    assert _resolve_asset_decimals({}, {}, {"asset_decimals": 2}) == 2
+    assert _resolve_asset_decimals({}, {}, {}) is None
+
+
+def test_onchain_claim_rejects_ambiguous_decimals(monkeypatch):
+    """A reward amount with no explicit decimals is rejected BEFORE any signing."""
+    monkeypatch.setenv("AETHER_ENV", "local")
+    adapter = OnchainClaimAdapter()
+    decision = PolicyDecision(
+        eligible=True,
+        decision="eligible",
+        campaign_id="camp-001",
+        rule_id="rule-001",
+        rail="onchain_claim",
+        reward={"amount": "10.0", "unit": "TOKEN", "currency": "TOKEN"},
+        identity={"wallet_address": "0xdeadbeef"},
+    )
+    rule = {"id": "rule-001", "name": "R", "reward_amount": "10.0"}  # no decimals anywhere
+    campaign = {"id": "camp-001", "chain_id": 1,
+                "contract_address": "0x5FbDB2315678afecb367f032d93F642f64180aa3"}
+    with pytest.raises(ValueError, match="decimals"):
+        _run(adapter.build_action_payload(decision, rule, campaign, TENANT, "idem-dec"))
+
+
+def test_onchain_claim_threads_exact_decimal_amount(monkeypatch):
+    """With explicit decimals, the proof payload carries the exact atomic amount."""
+    monkeypatch.setenv("AETHER_ENV", "local")
+
+    class _FakeProof:
+        nonce = "abc123"
+        expiry = 9999999999
+        chain_id = 1
+        contract_address = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+        message_hash = "0xhash"
+        signature = "0xsig"
+
+    captured = {}
+
+    class _FakeSigner:
+        signer_address = "0xSigner"
+
+        def __init__(self, config):
+            self.config = config
+
+        async def generate_proof(self, *, user, action_type, amount_wei):
+            captured["amount_wei"] = amount_wei
+            return _FakeProof()
+
+    adapter = OnchainClaimAdapter()
+    decision = PolicyDecision(
+        eligible=True,
+        decision="eligible",
+        campaign_id="camp-001",
+        rule_id="rule-001",
+        rail="onchain_claim",
+        reward={"amount": "1.5", "unit": "TOKEN", "currency": "TOKEN", "asset_decimals": 6},
+        identity={"wallet_address": "0xdeadbeef"},
+    )
+    rule = {"id": "rule-001", "name": "R", "reward_amount": "1.5", "asset_decimals": 6}
+    campaign = {"id": "camp-001", "chain_id": 1,
+                "contract_address": "0x5FbDB2315678afecb367f032d93F642f64180aa3"}
+
+    with patch("services.oracle.signer.OracleProofSigner", _FakeSigner):
+        payload = _run(adapter.build_action_payload(decision, rule, campaign, TENANT, "idem-exact"))
+
+    # 1.5 * 10**6 == 1_500_000, exactly.
+    assert captured["amount_wei"] == 1_500_000
+    assert payload["proof_data"]["amount"] == "1500000"

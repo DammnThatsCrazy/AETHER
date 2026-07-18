@@ -32,6 +32,7 @@ from __future__ import annotations
 import os
 import time
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -44,6 +45,38 @@ from services.rewards.repositories import (
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.rewards.policy_engine")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXACT AMOUNT ARITHMETIC
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _amount_to_decimal(value) -> Decimal:
+    """Convert a reward/budget amount to an exact ``Decimal``.
+
+    Currency and token math must never round-trip through binary ``float``.
+    A ``float`` input is stringified first (``Decimal(str(x))``) so that ``0.1``
+    stays ``0.1`` instead of ``0.1000000000000000055...``; a ``Decimal`` is
+    never constructed directly from a ``float``. Non-numeric input raises
+    ``ValueError`` rather than being silently coerced.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"amount must be numeric, got bool {value!r}")
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, int):
+        return Decimal(value)
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("amount is empty / non-numeric")
+        try:
+            return Decimal(stripped)
+        except InvalidOperation as exc:
+            raise ValueError(f"amount is not a valid decimal: {value!r}") from exc
+    raise ValueError(f"amount has unsupported type {type(value).__name__}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -364,9 +397,15 @@ class RewardPolicyEngine:
         reward_amount = rule.get("reward_amount")
         if max_budget is not None and reward_amount is not None and budget_policy.get("track_spend", False):
             total_count = await decision_repo.get_eligible_count(tenant_id, campaign_id, None, None)
-            estimated_spend = float(total_count) * float(reward_amount)
-            if estimated_spend >= float(max_budget):
-                return _deny("blocked_budget", f"Tenant-declared budget policy exceeded: {estimated_spend} >= {max_budget}")
+            # Exact Decimal arithmetic — never binary float for currency/token math.
+            per_reward = _amount_to_decimal(reward_amount)
+            budget_cap = _amount_to_decimal(max_budget)
+            estimated_spend = Decimal(int(total_count)) * per_reward
+            if estimated_spend >= budget_cap:
+                return _deny(
+                    "blocked_budget",
+                    f"Tenant-declared budget policy exceeded: {estimated_spend} >= {budget_cap}",
+                )
 
         # ── All gates passed — eligible ───────────────────────────────────
         reward = {

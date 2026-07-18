@@ -3933,6 +3933,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/decisions/ADR-007-domain-canonicalization.md",
+      "title": "ADR-007: Domain Canonicalization — One Source of Truth per Domain",
+      "slug": "decisions/adr-007-domain-canonicalization",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/decisions/ADR-007-observation-only-execution-invariant.md",
       "title": "ADR-007: Observation-Only Execution Invariant",
       "slug": "decisions/adr-007-observation-only-execution-invariant",

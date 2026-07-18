@@ -189,7 +189,9 @@ async def ingest_import(request: Request):
         raise HTTPException(status_code=422, detail="body.rows must be a non-empty list")
     try:
         results = await get_ingestion_service().ingest_tenant_import(
-            tenant_id, rows, region_hint=body.get("region_hint")
+            tenant_id, rows,
+            region_hint=body.get("region_hint"),
+            consent_snapshot=body.get("consent_snapshot"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
