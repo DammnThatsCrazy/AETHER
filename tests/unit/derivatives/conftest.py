@@ -13,6 +13,11 @@ BACKEND = str(Path(__file__).parents[3] / "Backend Architecture" / "aether-backe
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
+# Make TEST-TREE-ONLY mock venue servers importable (mock_venues.py lives here).
+_HERE = str(Path(__file__).parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
 
 @pytest.fixture(autouse=True)
 def _reset_typed_stores():

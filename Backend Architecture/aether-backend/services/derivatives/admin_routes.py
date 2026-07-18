@@ -15,7 +15,7 @@ from repositories.derivatives_repos import (
 )
 from shared.auth.auth import Permissions
 from shared.common.common import ForbiddenError
-from services.derivatives.adapters import DERIVATIVES_ADAPTERS, get_adapter
+from services.derivatives.adapters import all_adapters, get_adapter
 from services.derivatives.adapters.conformance import run_conformance
 from services.derivatives.foundation import require_flag
 
@@ -38,11 +38,12 @@ def _gate(request: Request) -> None:
 
 @admin_router.get("/fleet")
 async def adapter_fleet(request: Request):
-    """Adapter registry with honest implementation statuses."""
+    """Adapter registry with honest implementation statuses (simulator + venues)."""
     _gate(request)
+    adapters = all_adapters()
     return {
-        "items": [adapter.descriptor() for adapter in DERIVATIVES_ADAPTERS.values()],
-        "count": len(DERIVATIVES_ADAPTERS),
+        "items": [adapter.descriptor() for adapter in adapters.values()],
+        "count": len(adapters),
     }
 
 

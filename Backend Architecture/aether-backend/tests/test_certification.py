@@ -425,14 +425,13 @@ def test_first_release_scope_present():
 
 def test_states_reflect_source_reality():
     providers = build_capability_matrix()["providers"]
-    # interop: LayerZero decode is credential-gated; the six scaffolds are honest scaffolds
-    assert providers["interop:layerzero"]["state"] == CredentialReadiness.CREDENTIAL_WAITING.value
-    for scaffold in ("wormhole", "axelar", "chainlink_ccip", "hyperlane", "ibc", "debridge"):
-        assert providers[f"interop:{scaffold}"]["state"] == CredentialReadiness.SCAFFOLDED.value
-    # derivatives: hyperliquid connector is production-shaped; the rest have no adapter yet
-    assert providers["derivatives:hyperliquid"]["state"] == CredentialReadiness.CREDENTIAL_WAITING.value
-    for missing in ("dydx", "gmx", "drift"):
-        assert providers[f"derivatives:{missing}"]["state"] == CredentialReadiness.SCAFFOLDED.value
+    # interop: LayerZero + the six former scaffolds are all real, credential-gated
+    # decoders now (source-resolved from INTEROP_PROVIDERS).
+    for pid in ("layerzero", "wormhole", "axelar", "chainlink_ccip", "hyperlane", "ibc", "debridge"):
+        assert providers[f"interop:{pid}"]["state"] == CredentialReadiness.CREDENTIAL_WAITING.value
+    # derivatives: Hyperliquid connector + the real dYdX/GMX/Drift venue adapters.
+    for pid in ("hyperliquid", "dydx", "gmx", "drift"):
+        assert providers[f"derivatives:{pid}"]["state"] == CredentialReadiness.CREDENTIAL_WAITING.value
 
 
 def test_all_descriptors_are_first_release():

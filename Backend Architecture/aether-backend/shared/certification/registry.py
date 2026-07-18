@@ -118,11 +118,16 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
     descriptors: list[AdapterCertificationDescriptor] = []
 
     # Registered read-only venue adapters carry an honest ImplementationStatus.
+    # VENUE_ADAPTERS holds the real Hyperliquid/dYdX/GMX/Drift adapters (keyed by
+    # adapter_id) and wins over the simulator-only DERIVATIVES_ADAPTERS.
     registered: dict[str, Any] = {}
     try:
-        from services.derivatives.adapters import DERIVATIVES_ADAPTERS
+        from services.derivatives.adapters import (
+            DERIVATIVES_ADAPTERS,
+            VENUE_ADAPTERS,
+        )
 
-        registered = DERIVATIVES_ADAPTERS
+        registered = {**DERIVATIVES_ADAPTERS, **VENUE_ADAPTERS}
     except Exception:  # pragma: no cover
         registered = {}
 
