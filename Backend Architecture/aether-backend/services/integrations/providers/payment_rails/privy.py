@@ -37,8 +37,15 @@ class PrivyAdapter(PaymentRailAdapter):
     flows = ("fiat_onramp", "bank_deposit", "crypto_deposit")
     webhook_supported = True
     polling_supported = False
+    # Privy exposes no funding status-poll API — observation is webhook-only.
+    # This is a SUPPORTED terminal capability, not an unfinished adapter.
+    webhook_only = True
     default_rail = "fiat"
     signature_scheme = "timestamped_hex"
+
+    cert_supported_operations = ("webhook_ingest", "normalize", "reconcile")
+    cert_unsupported_operations = ("status_poll", "backfill", "reconciliation_pull")
+    cert_pagination_model = "none"
 
     STATUS_MAP: dict[str, str] = {
         "created": "initiated",

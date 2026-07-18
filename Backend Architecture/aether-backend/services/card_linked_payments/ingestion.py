@@ -26,6 +26,8 @@ from shared.logger.logger import get_logger, metrics
 from services.card_linked_payments.models import (
     CardActivityBasis,
     amount_bucket,
+    assert_evidence_not_overclaimed,
+    classify_evidence_strength,
     onchain_idempotency_key,
     provider_idempotency_key,
     reject_blocked_fields,
@@ -171,6 +173,22 @@ class CardLinkedIngestionService:
             raise
 
     @staticmethod
+    def _stamp_evidence(record: dict[str, Any]) -> dict[str, Any]:
+        """Label a flow by evidence strength and fail closed on overclaim.
+
+        SDK/self-reported/on-chain/benchmark observations are never promoted to
+        provider-confirmed spend — only genuine provider/issuer evidence may be.
+        """
+        strength = classify_evidence_strength(
+            record.get("source"),
+            record.get("reconciliation_state"),
+            record.get("basis"),
+        )
+        assert_evidence_not_overclaimed(record.get("source"), strength)
+        record["evidence_strength"] = strength
+        return record
+
+    @staticmethod
     def _granted_purposes(consent_snapshot: dict[str, bool] | None) -> list[str]:
         """Purposes the snapshot actually grants. A MISSING snapshot grants
         nothing — so the PolicyDecision fails closed for user-level data."""
@@ -276,6 +294,7 @@ class CardLinkedIngestionService:
             payload.get("provider_event_id", flow.id),
         )
         record["amount_bucket"] = amount_bucket(record.get("amount_usd"))
+        record = self._stamp_evidence(record)
         record = await self._apply_region_policy(tenant_id, record, region_hint)
         await self._check_consent(tenant_id, record, consent_snapshot, ("commerce",))
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
@@ -297,6 +316,7 @@ class CardLinkedIngestionService:
             payload.get("tx_hash", flow.id), payload.get("log_index", "0"),
         )
         record["amount_bucket"] = amount_bucket(record.get("amount_usd"))
+        record = self._stamp_evidence(record)
         record = await self._apply_region_policy(tenant_id, record, region_hint)
         await self._check_consent(tenant_id, record, consent_snapshot, ("web3",))
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
@@ -374,6 +394,7 @@ class CardLinkedIngestionService:
             "idempotency_key": sdk_idempotency_key(tenant_id, event.get("event_id", ts)),
         }
         required = ("agent", "commerce") if event.get("agent_id") else ("commerce",)
+        record = self._stamp_evidence(record)
         record = await self._apply_region_policy(tenant_id, record, region_hint)
         await self._check_consent(tenant_id, record, consent_snapshot, required)
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
@@ -395,7 +416,24 @@ class CardLinkedIngestionService:
         row may carry its own ``consent_snapshot`` which overrides the batch.
         """
         results: list[tuple[dict, str]] = []
-        for row in rows:
+        # Route the batch THROUGH the canonical import engine's PII detection +
+        # dry-run validation + review-approval + lineage before persisting.
+        # Best-effort so a bridge hiccup never blocks a governed ingest — the
+        # fail-closed PII/consent/region guards below are the hard gates.
+        try:
+            from services.card_linked_payments.import_bridge import build_import_lineage
+
+            lineage = build_import_lineage(tenant_id, rows)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("card-linked import-engine bridge unavailable: %s", exc)
+            lineage = {"import_id": None, "engine": "services.imports", "bridge_error": str(exc)}
+        if lineage.get("review_required"):
+            await self._repos.audit.record(tenant_id, "import_review_required", {
+                "import_id": lineage.get("import_id"),
+                "reasons": lineage.get("review_reasons"),
+                "pii_columns": lineage.get("pii_columns"),
+            })
+        for index, row in enumerate(rows):
             await self._guard_pii(tenant_id, row, "tenant_import")
             basis_raw = row.get("basis", "unknown")
             basis = CardActivityBasis(basis_raw).value  # raises on unsupported basis
@@ -433,12 +471,17 @@ class CardLinkedIngestionService:
                     tenant_id, row.get("id") or f"import:{ts}:{len(results)}",
                 ),
             }
+            record["import_lineage"] = {**lineage, "row_index": index}
+            record = self._stamp_evidence(record)
             row_consent = row.get("consent_snapshot", consent_snapshot)
             required = ("agent", "commerce") if row.get("agent_id") else ("commerce",)
             record = await self._apply_region_policy(tenant_id, record, region_hint)
             await self._check_consent(tenant_id, record, row_consent, required)
             result = await self._repos.flows.insert_idempotent(tenant_id, record)
             await self._enqueue_projection(tenant_id, result)
+            # Reconcile imported rows against later provider/on-chain evidence
+            # for the same (wallet_hash, program) — reusing the shared matcher.
+            await self._try_reconcile(tenant_id, result[0])
             results.append(result)
         return results
 

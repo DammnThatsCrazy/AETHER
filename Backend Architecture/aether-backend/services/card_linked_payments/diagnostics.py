@@ -24,11 +24,13 @@ async def card_linked_diagnostics(tenant_id: str) -> dict[str, Any]:
     by_reconciliation: dict[str, int] = defaultdict(int)
     by_source: dict[str, int] = defaultdict(int)
     by_basis: dict[str, int] = defaultdict(int)
+    by_evidence: dict[str, int] = defaultdict(int)
     region_restricted = 0
     for flow in flows:
         by_reconciliation[str(flow.get("reconciliation_state") or "unknown")] += 1
         by_source[str(flow.get("source") or "unknown")] += 1
         by_basis[str(flow.get("basis") or "unknown")] += 1
+        by_evidence[str(flow.get("evidence_strength") or "unknown")] += 1
         if flow.get("region_policy") in ("EU_RESTRICTED", "UK_RESTRICTED", "APAC_RESTRICTED"):
             region_restricted += 1
 
@@ -57,6 +59,7 @@ async def card_linked_diagnostics(tenant_id: str) -> dict[str, Any]:
         "flow_count": len(flows),
         "by_source": dict(by_source),
         "by_basis": dict(by_basis),
+        "by_evidence_strength": dict(by_evidence),
         "by_reconciliation_state": dict(by_reconciliation),
         "unmatched_events": unmatched,
         "reconciliation_conflicts": len(conflicts),

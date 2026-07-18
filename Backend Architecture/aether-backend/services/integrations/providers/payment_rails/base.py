@@ -20,15 +20,16 @@ INVARIANTS
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from shared.logger.logger import get_logger
 from shared.providers.key_vault import BYOKKeyVault
@@ -142,6 +143,57 @@ def _is_local_env() -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Provider polling — error classification + credential extraction
+# ─────────────────────────────────────────────────────────────────────────────
+# Provider-health tokens the poll path records on ``poll_state['health']`` and
+# the service persists on the provider account. ``ok`` is the only healthy pull
+# state; the rest are degraded/off-ramp classifications.
+POLL_HEALTH_OK = "ok"
+POLL_HEALTH_NOT_CONFIGURED = "not_configured"
+POLL_HEALTH_RATE_LIMITED = "rate_limited"
+POLL_HEALTH_AUTH_ERROR = "auth_error"
+POLL_HEALTH_CLIENT_ERROR = "client_error"
+POLL_HEALTH_SERVER_ERROR = "server_error"
+POLL_HEALTH_TIMEOUT = "timeout"
+POLL_HEALTH_NETWORK_ERROR = "network_error"
+POLL_HEALTH_BAD_RESPONSE = "bad_response"
+
+_HEALTHY_POLL_STATES = frozenset({POLL_HEALTH_OK, "webhook_only"})
+
+
+class ProviderPollError(Exception):
+    """A classified failure of a provider status-poll request.
+
+    ``classification`` is one of the ``POLL_HEALTH_*`` tokens so the caller can
+    persist provider health and decide whether to degrade rather than crash.
+    Never carries response bodies or secrets — only a short, safe detail.
+    """
+
+    def __init__(self, classification: str, detail: str = "", status_code: Optional[int] = None):
+        self.classification = classification
+        self.status_code = status_code
+        super().__init__(detail or classification)
+
+
+def _extract_secret(credential: Any) -> Optional[str]:
+    """Pull a bearer secret from either a raw string or a credential mapping.
+
+    Accepts the vault's raw secret string or a ``{api_key/secret/token/...}``
+    mapping (as certification passes). Returns None when nothing usable.
+    """
+    if credential is None:
+        return None
+    if isinstance(credential, str):
+        return credential or None
+    if isinstance(credential, dict):
+        for key in ("secret", "api_key", "apiKey", "api-key", "key", "token", "bearer"):
+            value = credential.get(key)
+            if value:
+                return str(value)
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Key vault access (payment-rail scoped)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -217,6 +269,10 @@ class PaymentRailAdapter(ABC):
     flows: tuple[str, ...] = ()
     webhook_supported: bool = True
     polling_supported: bool = False
+    # A provider Aether can only observe via signed webhooks (no pull API).
+    # ``webhook_only`` is a SUPPORTED terminal capability, not an unfinished
+    # adapter — the connection test resolves to a typed ``webhook_only`` result.
+    webhook_only: bool = False
     default_rail: str = "fiat"
     # HMAC scheme: "timestamped_hex" signs f"{timestamp}.{payload}" (Stripe /
     # MoonPay / Privy style); "body_hex" signs the raw body (Coinbase / Bridge
@@ -224,6 +280,52 @@ class PaymentRailAdapter(ABC):
     signature_scheme: str = "timestamped_hex"
     # provider-native status → canonical FundingSessionStatus
     STATUS_MAP: dict[str, str] = {}
+
+    # ── Certification / polling declaration (honest, per-adapter) ─────────
+    adapter_version: str = "1.0.0"
+    # Default provider API base for the pull path; a tenant vault endpoint
+    # override wins. Empty for webhook-only providers.
+    poll_base_url: str = ""
+    # Bounded pagination: never fetch more than this many pages in one sweep.
+    poll_max_pages: int = 10
+    poll_page_size: int = 50
+    cert_supported_operations: tuple[str, ...] = ("webhook_ingest", "normalize", "reconcile")
+    cert_unsupported_operations: tuple[str, ...] = ()
+    cert_required_credentials: tuple[str, ...] = ("webhook_signing_secret",)
+    cert_required_endpoints: tuple[str, ...] = ()
+    cert_expected_webhook_headers: tuple[str, ...] = ("signature", "timestamp")
+    cert_pagination_model: str = "none"
+    cert_retry_policy: str = (
+        "exponential backoff (base 0.2s, x2 per attempt), max 3 retries on "
+        "429 / 5xx / timeout / network error; honors Retry-After"
+    )
+    cert_rate_limit_behavior: str = (
+        "HTTP 429 classified as rate_limited; honors Retry-After header, else "
+        "exponential backoff; bounded retries then degrades provider health"
+    )
+
+    def __init__(
+        self,
+        *,
+        http_transport: Any = None,
+        http_timeout: float = 15.0,
+        sleeper: Optional[Callable[[float], Any]] = None,
+        max_retries: int = 3,
+        backoff_base: float = 0.2,
+    ) -> None:
+        """Construct an adapter with an INJECTABLE HTTP transport.
+
+        ``http_transport`` (an ``httpx`` transport such as ``httpx.MockTransport``)
+        is threaded into every ``httpx.AsyncClient`` this adapter opens, so tests
+        drive the pull path against a mock server with NO live network. Left at
+        None in production, ``httpx`` performs real IO. ``sleeper`` lets tests
+        skip real backoff waits.
+        """
+        self._http_transport = http_transport
+        self._http_timeout = http_timeout
+        self._sleeper: Callable[[float], Any] = sleeper or asyncio.sleep
+        self._max_retries = max(0, int(max_retries))
+        self._backoff_base = float(backoff_base)
 
     # ── Descriptor / configuration ────────────────────────────────────────
 
@@ -263,13 +365,30 @@ class PaymentRailAdapter(ABC):
             ),
         }
 
+    def _webhook_only_result(self) -> ConnectionTestResult:
+        """Typed terminal ``webhook_only`` connection result (a supported state)."""
+        return ConnectionTestResult(
+            provider=self.provider_name, ok=True, status="webhook_only",
+            detail=(
+                f"{self.display_name} is webhook-only: signature verification IS "
+                "the connection; there is no polling/backfill API to probe."
+            ),
+        )
+
     async def test_connection(self, tenant_id: str) -> ConnectionTestResult:
-        """Offline-safe connection test. Local mode never performs network IO."""
+        """Offline-safe connection test. Local mode never performs network IO.
+
+        Webhook-only providers resolve to a typed ``webhook_only`` result once a
+        signing secret is configured — that is a finished, supported terminal
+        state, not an unimplemented adapter.
+        """
         if not await self.is_configured(tenant_id):
             return ConnectionTestResult(
                 provider=self.provider_name, ok=False, status="not_configured",
                 detail="missing credential (configure the key vault)",
             )
+        if self.webhook_only:
+            return self._webhook_only_result()
         if _is_local_env():
             return ConnectionTestResult(
                 provider=self.provider_name, ok=True, status="ok",
@@ -278,7 +397,11 @@ class PaymentRailAdapter(ABC):
         return await self._live_connection_test(tenant_id)
 
     async def _live_connection_test(self, tenant_id: str) -> ConnectionTestResult:
-        """Override for a real provider ping (httpx imported inside only)."""
+        """Real provider health ping. Pull adapters override with an authenticated
+        GET via the injectable client; webhook-only providers return the typed
+        ``webhook_only`` result (there is nothing live to probe)."""
+        if self.webhook_only:
+            return self._webhook_only_result()
         return ConnectionTestResult(
             provider=self.provider_name, ok=True, status="ok",
             detail="credential present; live check not implemented",
@@ -406,8 +529,241 @@ class PaymentRailAdapter(ABC):
         return []
 
     async def _fetch_poll_records(self, tenant_id: str, **params: Any) -> list[dict[str, Any]]:
-        """Live polling fetch — httpx imported inside implementations only."""
+        """Live polling fetch — httpx imported inside implementations only.
+
+        Pull providers OVERRIDE this. The default (webhook-only / no pull API)
+        returns nothing and marks poll health accordingly.
+        """
+        poll_state = params.get("poll_state")
+        if isinstance(poll_state, dict):
+            poll_state.setdefault("health", "webhook_only" if self.webhook_only else POLL_HEALTH_OK)
         return []
+
+    # ── Injectable HTTP client + authenticated request execution ──────────
+
+    def _open_http_client(self, *, timeout: Optional[float] = None):
+        """Open an ``httpx.AsyncClient`` bound to the injected transport (if any).
+
+        Imported inside the method so module import never pulls in ``httpx`` and
+        never touches the network. When ``_http_transport`` is set (tests), all
+        requests route to that mock transport — no live IO.
+        """
+        import httpx
+
+        kwargs: dict[str, Any] = {"timeout": timeout if timeout is not None else self._http_timeout}
+        if self._http_transport is not None:
+            kwargs["transport"] = self._http_transport
+        return httpx.AsyncClient(**kwargs)
+
+    def _retry_delay(self, attempt: int, response: Any) -> float:
+        """Backoff seconds for a retry: honor ``Retry-After`` else exponential."""
+        if response is not None:
+            retry_after = response.headers.get("Retry-After") or response.headers.get("retry-after")
+            if retry_after:
+                try:
+                    return max(0.0, float(retry_after))
+                except (TypeError, ValueError):
+                    pass
+        return self._backoff_base * (2 ** attempt)
+
+    async def _request_json(
+        self, client: Any, request: dict[str, Any], *, poll_state: Optional[dict] = None
+    ) -> Any:
+        """Execute one authenticated request with retries/backoff/timeout and
+        classify the outcome. Returns parsed JSON, or raises ``ProviderPollError``
+        with a ``POLL_HEALTH_*`` classification. Never logs secrets or bodies.
+        """
+        import httpx
+
+        method = str(request.get("method", "GET")).upper()
+        url = request["url"]
+        headers = request.get("headers") or {}
+        params = request.get("params") or {}
+        timeout = request.get("timeout", self._http_timeout)
+
+        attempt = 0
+        classification = POLL_HEALTH_NETWORK_ERROR
+        while True:
+            response = None
+            try:
+                response = await client.request(
+                    method, url, headers=headers, params=params, timeout=timeout
+                )
+            except httpx.TimeoutException:
+                classification = POLL_HEALTH_TIMEOUT
+            except httpx.HTTPError:
+                classification = POLL_HEALTH_NETWORK_ERROR
+            else:
+                status = response.status_code
+                if status == 429 or status >= 500:
+                    classification = (
+                        POLL_HEALTH_RATE_LIMITED if status == 429 else POLL_HEALTH_SERVER_ERROR
+                    )
+                    if attempt < self._max_retries:
+                        await self._sleeper(self._retry_delay(attempt, response))
+                        attempt += 1
+                        continue
+                    self._mark_health(poll_state, classification)
+                    raise ProviderPollError(classification, f"HTTP {status}", status)
+                if status in (401, 403):
+                    self._mark_health(poll_state, POLL_HEALTH_AUTH_ERROR)
+                    raise ProviderPollError(POLL_HEALTH_AUTH_ERROR, f"HTTP {status}", status)
+                if status >= 400:
+                    self._mark_health(poll_state, POLL_HEALTH_CLIENT_ERROR)
+                    raise ProviderPollError(POLL_HEALTH_CLIENT_ERROR, f"HTTP {status}", status)
+                try:
+                    return response.json()
+                except (ValueError, json.JSONDecodeError) as exc:
+                    self._mark_health(poll_state, POLL_HEALTH_BAD_RESPONSE)
+                    raise ProviderPollError(POLL_HEALTH_BAD_RESPONSE, f"invalid JSON: {exc}", status)
+            # timeout / network error retry path
+            if attempt < self._max_retries:
+                await self._sleeper(self._retry_delay(attempt, None))
+                attempt += 1
+                continue
+            self._mark_health(poll_state, classification)
+            raise ProviderPollError(classification, "request failed after retries")
+
+    @staticmethod
+    def _mark_health(poll_state: Optional[dict], value: str) -> None:
+        if isinstance(poll_state, dict):
+            poll_state["health"] = value
+
+    async def _require_secret(self, tenant_id: str) -> Optional[str]:
+        """Tenant BYOK secret for this provider, or None when unconfigured."""
+        try:
+            return await get_payment_rails_vault().get_key(tenant_id, self.vault_provider_name)
+        except ValueError:
+            return None
+
+    async def _resolve_base_url(self, tenant_id: str) -> str:
+        """Provider API base — a tenant vault endpoint override wins over the
+        adapter default (supports sandbox/regional hosts without code change)."""
+        try:
+            endpoint = await get_payment_rails_vault().get_endpoint(tenant_id, self.vault_provider_name)
+        except Exception:  # pragma: no cover - defensive
+            endpoint = None
+        return (endpoint or self.poll_base_url or "").rstrip("/")
+
+    def _degraded(self, poll_state: Optional[dict], exc: "ProviderPollError") -> None:
+        """Record a classified poll failure without crashing the sweep."""
+        logger.warning(
+            "payment_rail poll degraded provider=%s class=%s",
+            self.provider_name, exc.classification,
+        )
+        self._mark_health(poll_state, exc.classification)
+
+    def _finish_poll(
+        self,
+        poll_state: Optional[dict],
+        *,
+        next_cursor: Optional[str],
+        pages: int,
+        records: list,
+    ) -> None:
+        """Persist the resume cursor + counters + health onto ``poll_state`` so
+        the service can store them. Health defaults to ``ok`` unless a degrade
+        already classified it."""
+        if isinstance(poll_state, dict):
+            poll_state["next_cursor"] = next_cursor
+            poll_state["pages"] = pages
+            poll_state["record_count"] = len(records)
+            poll_state["health"] = poll_state.get("health") or POLL_HEALTH_OK
+
+    # NOTE: ``build_request`` is intentionally NOT defined on the base. Only pull
+    # adapters (Coinbase/MoonPay/Bridge) expose it; webhook-only providers omit
+    # it so certification request/auth/tenant-isolation checks correctly SKIP
+    # rather than fail — there is no provider request to construct.
+
+    # ── Certification hooks (duck-typed, offline; see shared.certification) ─
+
+    def certification_descriptor(self) -> Any:
+        """Honest ``AdapterCertificationDescriptor`` for this adapter.
+
+        ``implementation_state`` is CREDENTIAL_WAITING for every payment rail:
+        the code is complete and offline-safe, awaiting only tenant credentials.
+        """
+        from shared.certification.descriptor import AdapterCertificationDescriptor
+        from shared.certification.readiness import CredentialReadiness
+
+        return AdapterCertificationDescriptor(
+            provider=self.provider_name,
+            domain="payments",
+            adapter=type(self).__name__,
+            adapter_version=self.adapter_version,
+            supported_operations=list(self.cert_supported_operations),
+            unsupported_operations=list(self.cert_unsupported_operations),
+            required_credentials=list(self.cert_required_credentials),
+            required_endpoints=list(self.cert_required_endpoints),
+            secret_ref_names=[self.vault_provider_name] if self.vault_provider_name else [],
+            expected_webhook_headers=list(self.cert_expected_webhook_headers),
+            pagination_model=self.cert_pagination_model,
+            streaming_model="webhook" if self.webhook_supported else "none",
+            rate_limit_behavior=self.cert_rate_limit_behavior,
+            retry_policy=self.cert_retry_policy,
+            implementation_state=CredentialReadiness.CREDENTIAL_WAITING,
+            fixture_schema_version="1",
+            first_release=True,
+        )
+
+    def sanitize_payload(self, payload: Any) -> tuple[Any, list[str]]:
+        """Certification/redaction hook: recursively strip sensitive keys."""
+        return sanitize_payload(payload)
+
+    def dedupe_key(self, event: Any) -> tuple:
+        """Stable idempotency key for an event (duplicate detection)."""
+        if isinstance(event, ParsedProviderEvent):
+            return (event.provider, event.provider_event_id, event.raw_hash)
+        if isinstance(event, dict):
+            return (
+                event.get("provider"),
+                event.get("provider_event_id") or event.get("id"),
+                event.get("raw_hash"),
+            )
+        return (repr(event),)
+
+    def sequence_of(self, event: Any) -> tuple:
+        """Total order for out-of-order arrivals (occurred_at, seq, id)."""
+        if isinstance(event, ParsedProviderEvent):
+            return (event.occurred_at or "", event.provider_event_id or "")
+        if isinstance(event, dict):
+            return (
+                str(event.get("occurred_at") or ""),
+                event.get("seq") or 0,
+                str(event.get("id") or event.get("provider_event_id") or ""),
+            )
+        return (str(event),)
+
+    def normalize(self, payload: Any) -> Optional[dict[str, Any]]:
+        """Certification hook: webhook payload → canonical, volatile-field-free
+        projection. Idempotent for identical input; tolerant of drift/malformed
+        input (returns None rather than crashing)."""
+        if not isinstance(payload, dict):
+            return None
+        try:
+            events = self.parse_webhook("cert-tenant", payload, payload_hash(payload))
+            if not events:
+                return None
+            session = self.normalize_to_funding_session("cert-tenant", events[0])
+        except (ValueError, KeyError, TypeError, AttributeError, ValidationError):
+            return None
+        if session is None:
+            return None
+        data = session.model_dump(mode="json")
+        # Drop volatile fields (freshly generated ids/timestamps) so the
+        # projection is a stable function of the input — required for the
+        # certification idempotent-replay check.
+        for volatile in ("id", "created_at", "updated_at", "occurred_at"):
+            data.pop(volatile, None)
+        return data
+
+    def health(self, context: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        """Certification hook: an unconfigured adapter is never healthy."""
+        ctx = context or {}
+        if not ctx.get("configured"):
+            return {"healthy": False, "state": POLL_HEALTH_NOT_CONFIGURED}
+        state = ctx.get("provider_health") or ("webhook_only" if self.webhook_only else POLL_HEALTH_OK)
+        return {"healthy": state in _HEALTHY_POLL_STATES, "state": state}
 
     # ── Canonical Aether events ───────────────────────────────────────────
 

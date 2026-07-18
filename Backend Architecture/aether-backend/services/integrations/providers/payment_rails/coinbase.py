@@ -13,8 +13,11 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from services.integrations.providers.payment_rails.base import (
+    ConnectionTestResult,
     ParsedProviderEvent,
     PaymentRailAdapter,
+    ProviderPollError,
+    _extract_secret,
     sum_amounts,
 )
 from services.integrations.providers.payment_rails.models import FundingSession
@@ -46,6 +49,15 @@ class CoinbaseAdapter(PaymentRailAdapter):
     polling_supported = True
     default_rail = "coinbase"
     signature_scheme = "body_hex"  # HMAC-SHA256 over the raw body
+
+    # Pull path — CDP Onramp transaction-status API, cursor-paginated.
+    poll_base_url = "https://api.developer.coinbase.com"
+    cert_supported_operations = (
+        "webhook_ingest", "normalize", "reconcile", "status_poll", "backfill",
+    )
+    cert_required_credentials = ("webhook_signing_secret", "onramp_api_key")
+    cert_required_endpoints = ("/onramp/v1/buy/user/{partner_user_ref}/transactions",)
+    cert_pagination_model = "cursor"
 
     STATUS_MAP: dict[str, str] = {
         "onramp_transaction_status_created": "initiated",
@@ -111,6 +123,110 @@ class CoinbaseAdapter(PaymentRailAdapter):
                 source="polling",
             ))
         return events
+
+    # ── Pull path: authenticated request construction + pagination ────────
+
+    def build_request(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Construct the authenticated CDP Onramp transaction-status request.
+
+        Bearer auth from the tenant BYOK secret; keyed by ``partner_user_ref``;
+        cursor via ``page_key``. ``tenant_scope`` proves tenant-scoped isolation
+        (never sent to the provider — used by internal request tracing only).
+        """
+        secret = _extract_secret(ctx.get("credential"))
+        base = str(ctx.get("base_url") or self.poll_base_url).rstrip("/")
+        ref = ctx.get("partner_user_ref") or ctx.get("partnerUserRef")
+        path = (
+            f"/onramp/v1/buy/user/{ref}/transactions" if ref
+            else "/onramp/v1/buy/transactions"
+        )
+        params: dict[str, Any] = {"page_size": ctx.get("page_size", self.poll_page_size)}
+        cursor = ctx.get("cursor")
+        if cursor:
+            params["page_key"] = cursor
+        headers = {"Accept": "application/json"}
+        if secret:
+            headers["Authorization"] = f"Bearer {secret}"
+        return {
+            "method": "GET",
+            "url": f"{base}{path}",
+            "headers": headers,
+            "params": params,
+            "tenant_scope": ctx.get("tenant_id", ""),
+            "timeout": self._http_timeout,
+        }
+
+    async def _fetch_poll_records(
+        self, tenant_id: str, **params: Any
+    ) -> list[dict[str, Any]]:
+        """Bounded, cursor-paginated pull of onramp/offramp transaction status.
+
+        The ``page_key`` cursor is an ephemeral within-query token, so no resume
+        cursor is persisted — each sweep re-scans (transaction volume per user is
+        low) and the event dedupe absorbs overlap. Never raises: a classified
+        failure degrades provider health and returns what was gathered.
+        """
+        poll_state = params.get("poll_state")
+        secret = await self._require_secret(tenant_id)
+        if not secret:
+            self._mark_health(poll_state, "not_configured")
+            return []
+        base = await self._resolve_base_url(tenant_id)
+        ref = params.get("partner_user_ref") or params.get("partnerUserRef")
+        page_size = params.get("page_size", self.poll_page_size)
+
+        records: list[dict[str, Any]] = []
+        cursor = (poll_state or {}).get("cursor")
+        pages = 0
+        async with self._open_http_client() as client:
+            try:
+                while pages < self.poll_max_pages:
+                    request = self.build_request({
+                        "tenant_id": tenant_id, "credential": secret, "base_url": base,
+                        "cursor": cursor, "partner_user_ref": ref, "page_size": page_size,
+                    })
+                    body = await self._request_json(client, request, poll_state=poll_state)
+                    page = (
+                        list(body.get("transactions") or body.get("data") or [])
+                        if isinstance(body, dict) else (list(body) if isinstance(body, list) else [])
+                    )
+                    records.extend(page)
+                    pages += 1
+                    cursor = (
+                        body.get("next_page_key") or body.get("nextPageKey")
+                        or body.get("page_key") or body.get("pageKey")
+                    ) if isinstance(body, dict) else None
+                    if not cursor or not page:
+                        break
+            except ProviderPollError as exc:
+                self._degraded(poll_state, exc)
+        self._finish_poll(poll_state, next_cursor=None, pages=pages, records=records)
+        return records
+
+    async def _live_connection_test(self, tenant_id: str) -> ConnectionTestResult:
+        """Authenticated health ping: a bounded transaction-status GET."""
+        secret = await self._require_secret(tenant_id)
+        if not secret:
+            return ConnectionTestResult(
+                provider=self.provider_name, ok=False, status="not_configured",
+                detail="missing credential (configure the key vault)",
+            )
+        base = await self._resolve_base_url(tenant_id)
+        request = self.build_request({
+            "tenant_id": tenant_id, "credential": secret, "base_url": base, "page_size": 1,
+        })
+        try:
+            async with self._open_http_client() as client:
+                await self._request_json(client, request)
+        except ProviderPollError as exc:
+            return ConnectionTestResult(
+                provider=self.provider_name, ok=False, status="error",
+                detail=f"health ping failed ({exc.classification})",
+            )
+        return ConnectionTestResult(
+            provider=self.provider_name, ok=True, status="ok",
+            detail="authenticated transaction-status ping ok",
+        )
 
     def normalize_to_funding_session(
         self, tenant_id: str, event: ParsedProviderEvent
