@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   Card, CardContent, CardHeader, CardTitle,
   Badge, LoadingState, ErrorState, EmptyState,
+  formatDateTime, useTimeContext,
 } from '@aether/ui';
 import {
   useUnifiedJourney,
@@ -46,6 +47,7 @@ function RailSummary({ meta }: { meta: NonNullable<ReturnType<typeof useUnifiedJ
 export function JourneyExplorerPage() {
   const { profileId } = useParams<{ profileId: string }>();
   const id = profileId ?? '';
+  const timeCtx = useTimeContext();
 
   const [activeTab, setActiveTab] = useState<'timeline' | 'risk'>('timeline');
   const [family, setFamily] = useState<ActivityFamily | undefined>(undefined);
@@ -195,7 +197,7 @@ export function JourneyExplorerPage() {
                 <dd>{riskData.fraud_disposition ?? '—'}</dd>
                 <dt className="text-text-muted font-medium">Evaluated at</dt>
                 <dd className="text-text-muted text-xs">
-                  {riskData.evaluated_at ? new Date(riskData.evaluated_at).toLocaleString() : '—'}
+                  {riskData.evaluated_at ? formatDateTime(riskData.evaluated_at, timeCtx) : '—'}
                 </dd>
                 {riskData.risk_explanation && (
                   <>

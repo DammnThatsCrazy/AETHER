@@ -3,6 +3,7 @@
  * Shows how many times an entitlement has been reused and when.
  * Owner: Entities page, Lab page
  */
+import { formatDateTime, useTimeContext } from '@aether/ui';
 import type { Entitlement } from '@kyber/lib/schemas/commerce';
 
 interface ReuseHistoryProps {
@@ -11,6 +12,7 @@ interface ReuseHistoryProps {
 }
 
 export function ReuseHistory({ entitlement: e, maxReuse }: ReuseHistoryProps) {
+  const timeCtx = useTimeContext();
   const utilizationPct = maxReuse && maxReuse > 0
     ? Math.min(100, (e.reuse_count / maxReuse) * 100)
     : null;
@@ -36,9 +38,9 @@ export function ReuseHistory({ entitlement: e, maxReuse }: ReuseHistoryProps) {
         </div>
       )}
       <dl className="reuse-history__dl">
-        <dt>issued</dt><dd>{new Date(e.issued_at).toLocaleString()}</dd>
-        {e.last_reused_at && <><dt>last reused</dt><dd>{new Date(e.last_reused_at).toLocaleString()}</dd></>}
-        <dt>expires</dt><dd>{new Date(e.expires_at).toLocaleString()}</dd>
+        <dt>issued</dt><dd>{formatDateTime(e.issued_at, timeCtx)}</dd>
+        {e.last_reused_at && <><dt>last reused</dt><dd>{formatDateTime(e.last_reused_at, timeCtx)}</dd></>}
+        <dt>expires</dt><dd>{formatDateTime(e.expires_at, timeCtx)}</dd>
         {e.siwx_binding && <><dt>siwx session</dt><dd>{e.siwx_binding}</dd></>}
       </dl>
     </div>

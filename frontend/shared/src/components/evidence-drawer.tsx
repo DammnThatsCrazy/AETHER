@@ -1,3 +1,5 @@
+import { formatInstant } from '../time/format';
+import { useTimeContext } from '../time/time-provider';
 import { cn } from '../utils/cn';
 
 export interface EvidenceRef {
@@ -15,6 +17,8 @@ interface EvidenceDrawerProps {
 }
 
 export function EvidenceDrawer({ signalName, evidence, open, onClose, className }: EvidenceDrawerProps) {
+  const context = useTimeContext();
+
   if (!open) return null;
 
   return (
@@ -36,7 +40,7 @@ export function EvidenceDrawer({ signalName, evidence, open, onClose, className 
                 <span className="text-accent">{ref.event_id}</span>
                 {ref.timestamp && (
                   <span className="text-text-muted">
-                    {new Date(ref.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {formatInstant(ref.timestamp, context)}
                   </span>
                 )}
               </div>

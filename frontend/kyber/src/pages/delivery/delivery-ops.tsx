@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatInstant, useTimeContext } from '@aether/ui';
+import type { TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 
@@ -15,9 +16,9 @@ const STATE_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default'
   cancelled: 'default',
 };
 
-function formatTs(ts: string | null | undefined): string {
+function formatTs(ts: string | null | undefined, timeCtx: TimeContext): string {
   if (!ts) return '—';
-  try { return new Date(ts as string).toLocaleString(); } catch { return String(ts); }
+  try { return formatInstant(ts, timeCtx); } catch { return String(ts); }
 }
 
 function truncate(s: unknown, n = 12): string {
@@ -54,6 +55,7 @@ function ReplayDialog({ job, onConfirm, onCancel }: ReplayDialogProps) {
 }
 
 export function DeliveryOpsPage() {
+  const timeCtx = useTimeContext();
   const [tab, setTab] = useState<TabId>('all');
   const [jobs, setJobs] = useState<AnyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,7 +177,7 @@ export function DeliveryOpsPage() {
                               <td className="py-1.5 px-2">{String(j.provider_adapter ?? '—')}</td>
                               <td className="py-1.5 px-2"><Badge variant={STATE_VARIANT[state] ?? 'default'}>{state}</Badge></td>
                               <td className="py-1.5 px-2 text-right">{String(j.attempt_count ?? 0)}/{String(j.max_attempts ?? '—')}</td>
-                              <td className="py-1.5 px-2 text-text-muted">{formatTs(j.created_at as string)}</td>
+                              <td className="py-1.5 px-2 text-text-muted">{formatTs(j.created_at as string, timeCtx)}</td>
                               <td className="py-1.5 px-2">
                                 {j.external_id
                                   ? j.external_url

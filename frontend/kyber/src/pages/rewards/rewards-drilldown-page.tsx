@@ -11,6 +11,9 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  formatDateTime,
+  useTimeContext,
+  type TimeContext,
 } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
@@ -28,10 +31,10 @@ function fmt(v: unknown, fallback = '—'): string {
   return String(v);
 }
 
-function fmtDate(iso: unknown): string {
+function fmtDate(iso: unknown, ctx: TimeContext): string {
   if (!iso) return '—';
   try {
-    return new Date(String(iso)).toLocaleString();
+    return formatDateTime(String(iso), ctx);
   } catch {
     return String(iso);
   }
@@ -322,6 +325,7 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
   const decisions = usePaginatedSection(tenantId, fetchTenantDecisions);
   const actions = usePaginatedSection(tenantId, fetchTenantActions);
   const auditLog = usePaginatedSection(tenantId, fetchTenantAuditLog);
+  const timeCtx = useTimeContext();
 
   return (
     <div className="space-y-4">
@@ -373,7 +377,7 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
               key: 'created_at',
               header: 'Created',
               render: (r) => (
-                <span className="text-xs text-text-muted">{fmtDate(r.created_at)}</span>
+                <span className="text-xs text-text-muted">{fmtDate(r.created_at, timeCtx)}</span>
               ),
             },
           ]}
@@ -453,7 +457,7 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
               key: 'created_at',
               header: 'When',
               render: (r) => (
-                <span className="text-xs text-text-muted">{fmtDate(r.created_at)}</span>
+                <span className="text-xs text-text-muted">{fmtDate(r.created_at, timeCtx)}</span>
               ),
             },
           ]}
@@ -514,7 +518,7 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
                 key: 'created_at',
                 header: 'Created',
                 render: (r) => (
-                  <span className="text-xs text-text-muted">{fmtDate(r.created_at)}</span>
+                  <span className="text-xs text-text-muted">{fmtDate(r.created_at, timeCtx)}</span>
                 ),
               },
             ]}
@@ -581,7 +585,7 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
               key: 'created_at',
               header: 'When',
               render: (r) => (
-                <span className="text-xs text-text-muted">{fmtDate(r.created_at)}</span>
+                <span className="text-xs text-text-muted">{fmtDate(r.created_at, timeCtx)}</span>
               ),
             },
           ]}

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, Badge } from '@aether/ui';
+import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, Badge, formatDate, useTimeContext } from '@aether/ui';
 import { useCampaign360Journeys } from '../use-campaign-360';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 
 export function Campaign360Journeys({ campaignId, timeStart, timeEnd }: Props) {
   const navigate = useNavigate();
+  const timeCtx = useTimeContext();
   const { data, loading, error } = useCampaign360Journeys({
     campaignId,
     ...(timeStart !== undefined ? { time_start: timeStart } : {}),
@@ -47,8 +48,8 @@ export function Campaign360Journeys({ campaignId, timeStart, timeEnd }: Props) {
                 },
                 { key: 'stage_count', header: 'Stages', render: r => Number(r.stage_count ?? 0) },
                 { key: 'converted', header: 'Converted', render: r => r.converted ? <Badge variant="success">Yes</Badge> : <Badge variant="default">No</Badge> },
-                { key: 'started_at', header: 'Started', render: r => r.started_at ? new Date(String(r.started_at)).toLocaleDateString() : '—' },
-                { key: 'completed_at', header: 'Completed', render: r => r.completed_at ? new Date(String(r.completed_at)).toLocaleDateString() : '—' },
+                { key: 'started_at', header: 'Started', render: r => r.started_at ? formatDate(String(r.started_at), timeCtx) : '—' },
+                { key: 'completed_at', header: 'Completed', render: r => r.completed_at ? formatDate(String(r.completed_at), timeCtx) : '—' },
               ]}
             />
           )

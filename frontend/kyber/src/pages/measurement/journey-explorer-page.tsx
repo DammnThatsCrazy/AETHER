@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatDate, formatDateTime, useTimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useJourneyExplorer, useJourneySteps, useJourneyTransitions, useJourneyExplain, useJourneyHealth } from '@kyber/features/measurement';
 import { useState } from 'react';
@@ -18,6 +18,7 @@ const FAMILY_COLORS: Record<string, string> = {
 
 function StepsPanel({ journeyId }: { journeyId: string }) {
   const [family, setFamily] = useState('');
+  const timeCtx = useTimeContext();
   const { data, loading, error, loadMore } = useJourneySteps(journeyId, family ? { family } : {});
 
   return (
@@ -55,7 +56,7 @@ function StepsPanel({ journeyId }: { journeyId: string }) {
               </Badge>
             )},
             { key: 'transition', header: 'Transition', render: r => <span className="text-xs text-text-muted">{String(r.transition_type ?? '—')}</span> },
-            { key: 'occurred', header: 'When', render: r => r.occurred_at ? new Date(String(r.occurred_at)).toLocaleString() : '—' },
+            { key: 'occurred', header: 'When', render: r => r.occurred_at ? formatDateTime(String(r.occurred_at), timeCtx) : '—' },
             { key: 'confidence', header: 'ID conf.', render: r => r.identity_confidence != null ? `${(Number(r.identity_confidence) * 100).toFixed(0)}%` : '—' },
           ]}
         />
@@ -174,6 +175,7 @@ function RebuildButton({ journeyId, onRebuilt }: { journeyId: string; onRebuilt:
 
 function HealthPanel() {
   const { data, loading, error, refresh } = useJourneyHealth();
+  const timeCtx = useTimeContext();
   if (loading) return <LoadingState lines={3} />;
   if (error) return <ErrorState title="Health fetch failed" message={error} />;
   const s = data.summary;
@@ -231,7 +233,7 @@ function HealthPanel() {
               { key: 'profile', header: 'Profile', render: r => <span className="font-mono text-xs">{String(r.profile_id ?? '—').slice(0, 12)}…</span> },
               { key: 'quality', header: 'Quality', render: r => <Badge variant={QUALITY_VARIANT[String(r.quality_status)] ?? 'default'}>{String(r.quality_status ?? '—')}</Badge> },
               { key: 'compiler', header: 'Compiler', render: r => <span className="font-mono text-xs">{String(r.compiler_version ?? '—')}</span> },
-              { key: 'computed', header: 'Last compiled', render: r => r.computed_at ? new Date(String(r.computed_at)).toLocaleString() : '—' },
+              { key: 'computed', header: 'Last compiled', render: r => r.computed_at ? formatDateTime(String(r.computed_at), timeCtx) : '—' },
             ]}
           />
         </div>
@@ -253,6 +255,7 @@ export function JourneyExplorerPage() {
     ...(submitted.profile_id ? { profile_id: submitted.profile_id } : {}),
     ...(submitted.campaign_id ? { campaign_id: submitted.campaign_id } : {}),
   });
+  const timeCtx = useTimeContext();
 
   function handleSearch() {
     setSubmitted({ profile_id: profileId, campaign_id: campaignId });
@@ -319,7 +322,7 @@ export function JourneyExplorerPage() {
                     { key: 'state', header: 'State', render: r => <Badge variant={r.journey_state === 'converted' ? 'success' : 'default'}>{String(r.journey_state ?? '—')}</Badge> },
                     { key: 'steps', header: 'Steps', render: r => String(r.step_count ?? (r.touchpoint_ids as unknown[] | undefined)?.length ?? 0) },
                     { key: 'compiler', header: 'Compiler', render: r => <span className="font-mono text-xs">{String(r.compiler_version ?? '—')}</span> },
-                    { key: 'started', header: 'Started', render: r => r.started_at ? new Date(String(r.started_at)).toLocaleDateString() : '—' },
+                    { key: 'started', header: 'Started', render: r => r.started_at ? formatDate(String(r.started_at), timeCtx) : '—' },
                   ]}
                 />
             }

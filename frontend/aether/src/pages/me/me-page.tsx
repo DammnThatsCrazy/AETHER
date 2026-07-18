@@ -17,7 +17,11 @@ import {
   StatusIndicator,
   TerminalSeparator,
   UsageBar,
+  formatCount,
+  formatDate as sharedFormatDate,
+  useTimeContext,
   useToast,
+  type TimeContext,
 } from '@aether/ui';
 import { useMeProfile, useUsage } from '@aether-app/features/account';
 import { api } from '@aether-app/lib/api/endpoints';
@@ -27,9 +31,9 @@ function planBadgeVariant(planId: string): 'default' | 'accent' {
   return ['P3', 'P4', 'protocol-plus'].includes(planId) ? 'accent' : 'default';
 }
 
-function formatDate(iso: string | null | undefined): string {
+function formatDate(iso: string | null | undefined, ctx: TimeContext): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return sharedFormatDate(iso, ctx);
 }
 
 interface DeleteModalProps {
@@ -103,6 +107,7 @@ export function MePage() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
   const { data: profile, isLoading: profileLoading, error: profileError, refetch: refetchProfile } = useMeProfile();
   const { data: usage, isLoading: usageLoading } = useUsage();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -166,9 +171,9 @@ export function MePage() {
           )}
           {!usageLoading && !usage?._fallback && usage?.period_start && (
             <p className="text-text-muted text-xs font-mono -mb-1">
-              {new Date(usage.period_start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              {formatDate(usage.period_start, timeCtx)}
               {' – '}
-              {new Date(usage.period_end).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              {formatDate(usage.period_end, timeCtx)}
               {' · data refreshes hourly'}
             </p>
           )}
@@ -209,7 +214,7 @@ export function MePage() {
               <div className="flex items-center gap-1.5">
                 <GlyphIcon glyph="[!]" className="text-danger" />
                 <span className="text-danger">
-                  {(usage!.overage_events).toLocaleString()} events over quota this period
+                  {formatCount(usage!.overage_events, timeCtx)} events over quota this period
                 </span>
               </div>
               <p className="text-text-muted">Overage charges apply. Upgrade your plan to avoid fees.</p>
@@ -228,11 +233,11 @@ export function MePage() {
         <CardContent className="grid grid-cols-2 gap-3 pt-4">
           <div>
             <p className="text-xs text-text-muted">Monthly quota</p>
-            <p className="text-accent font-mono text-sm">{profile.plan.monthly_quota.toLocaleString()} events</p>
+            <p className="text-accent font-mono text-sm">{formatCount(profile.plan.monthly_quota, timeCtx)} events</p>
           </div>
           <div>
             <p className="text-xs text-text-muted">Burst rate</p>
-            <p className="text-accent font-mono text-sm">{profile.plan.burst_rpm.toLocaleString()} req/min</p>
+            <p className="text-accent font-mono text-sm">{formatCount(profile.plan.burst_rpm, timeCtx)} req/min</p>
           </div>
           <div>
             <p className="text-xs text-text-muted">Plan tier</p>
@@ -251,7 +256,7 @@ export function MePage() {
             <span className="text-sm text-text-secondary capitalize font-mono">{subscriptionStatus ?? 'unknown'}</span>
           </div>
           {profile.billing.current_period_end && (
-            <p className="text-xs text-text-muted">Period ends {formatDate(profile.billing.current_period_end)}</p>
+            <p className="text-xs text-text-muted">Period ends {formatDate(profile.billing.current_period_end, timeCtx)}</p>
           )}
           <p className="text-xs text-text-muted">
             {profile.api_key_count} API key{profile.api_key_count !== 1 ? 's' : ''}{' '}

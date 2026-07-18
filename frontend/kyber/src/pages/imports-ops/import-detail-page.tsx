@@ -11,6 +11,8 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  formatCount,
+  useTimeContext,
 } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useImportOpsDetail, useRequeueImport } from '@kyber/features/imports-ops';
@@ -37,6 +39,7 @@ export function ImportOpsDetailPage() {
   const { detail, loading, error, refresh } = useImportOpsDetail(id);
   const { requeue, loading: requeuing, error: requeueError } = useRequeueImport();
   const [requeueMessage, setRequeueMessage] = useState<string | null>(null);
+  const timeCtx = useTimeContext();
 
   const handleRequeue = async () => {
     if (!id) return;
@@ -100,7 +103,7 @@ export function ImportOpsDetailPage() {
       header: 'Rows',
       render: (row: ImportCommitRecord) => (
         <span className="font-mono text-text-secondary">
-          {row.row_count !== null && row.row_count !== undefined ? row.row_count.toLocaleString() : '—'}
+          {row.row_count !== null && row.row_count !== undefined ? formatCount(row.row_count, timeCtx) : '—'}
         </span>
       ),
     },
@@ -109,7 +112,7 @@ export function ImportOpsDetailPage() {
       header: 'Vertices',
       render: (row: ImportCommitRecord) => (
         <span className="font-mono text-text-secondary">
-          {row.vertices_count !== null && row.vertices_count !== undefined ? row.vertices_count.toLocaleString() : '—'}
+          {row.vertices_count !== null && row.vertices_count !== undefined ? formatCount(row.vertices_count, timeCtx) : '—'}
         </span>
       ),
     },
@@ -118,7 +121,7 @@ export function ImportOpsDetailPage() {
       header: 'Edges',
       render: (row: ImportCommitRecord) => (
         <span className="font-mono text-text-secondary">
-          {row.edges_count !== null && row.edges_count !== undefined ? row.edges_count.toLocaleString() : '—'}
+          {row.edges_count !== null && row.edges_count !== undefined ? formatCount(row.edges_count, timeCtx) : '—'}
         </span>
       ),
     },
@@ -132,7 +135,7 @@ export function ImportOpsDetailPage() {
       key: 'created_at',
       header: 'Created',
       render: (row: ImportCommitRecord) => (
-        <span className="text-xs text-text-muted">{formatImportDate(row.created_at)}</span>
+        <span className="text-xs text-text-muted">{formatImportDate(row.created_at, timeCtx)}</span>
       ),
     },
   ];
@@ -170,14 +173,14 @@ export function ImportOpsDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Field label="Tenant">{session.tenant_id}</Field>
             <Field label="Source">{session.source_kind}</Field>
-            <Field label="Files">{session.file_count.toLocaleString()}</Field>
+            <Field label="Files">{formatCount(session.file_count, timeCtx)}</Field>
             <Field label="Rows">
-              {session.row_count !== null && session.row_count !== undefined ? session.row_count.toLocaleString() : '—'}
+              {session.row_count !== null && session.row_count !== undefined ? formatCount(session.row_count, timeCtx) : '—'}
             </Field>
             <Field label="Created by">{session.created_by ?? '—'}</Field>
-            <Field label="Created">{formatImportDate(session.created_at)}</Field>
-            <Field label="Updated">{formatImportDate(session.updated_at)}</Field>
-            <Field label="Commits">{detail.commit_count.toLocaleString()}</Field>
+            <Field label="Created">{formatImportDate(session.created_at, timeCtx)}</Field>
+            <Field label="Updated">{formatImportDate(session.updated_at, timeCtx)}</Field>
+            <Field label="Commits">{formatCount(detail.commit_count, timeCtx)}</Field>
           </div>
           {isFailed && (
             <p className="text-xs text-text-muted mt-4">

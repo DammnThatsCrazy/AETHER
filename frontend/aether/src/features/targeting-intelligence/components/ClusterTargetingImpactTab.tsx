@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState, useTimeContext} from '@aether/ui';
 import { useClusterTargetingImpact } from '../use-targeting-intelligence';
 import type { ClusterTargetingImpactRecord, JourneyDeltaRecord } from '../api';
 import {
@@ -23,13 +23,14 @@ const FUNNEL_STAGES: ReadonlyArray<{ key: keyof ClusterTargetingImpactRecord; la
 ];
 
 function FunnelSection({ impact }: { readonly impact: ClusterTargetingImpactRecord }) {
+  const timeCtx = useTimeContext();
   return (
     <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
       {FUNNEL_STAGES.map(({ key, label }) => (
         <div key={String(key)} className="bg-surface-raised border border-border-default rounded-md px-4 py-3">
           <p className="text-xs text-text-secondary">{label}</p>
           <p className="text-xl font-semibold text-text-primary mt-0.5">
-            {formatCount(impact[key] as number | null | undefined)}
+            {formatCount(impact[key] as number | null | undefined, timeCtx)}
           </p>
         </div>
       ))}
@@ -40,19 +41,20 @@ function FunnelSection({ impact }: { readonly impact: ClusterTargetingImpactReco
 // ── Economics ──────────────────────────────────────────────────────────────────
 
 function EconomicsSection({ impact }: { readonly impact: ClusterTargetingImpactRecord }) {
+  const timeCtx = useTimeContext();
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <div className="bg-surface-raised border border-border-default rounded-md px-4 py-3">
         {/* Amounts always carry their currency label; currencies are never merged. */}
         <p className="text-xs text-text-secondary">Spend (USD)</p>
         <p className="text-sm font-semibold text-text-primary mt-0.5">
-          {formatCurrencyAmount(impact.spendUsd, 'USD')}
+          {formatCurrencyAmount(impact.spendUsd, 'USD', timeCtx)}
         </p>
       </div>
       <div className="bg-surface-raised border border-border-default rounded-md px-4 py-3">
         <p className="text-xs text-text-secondary">Revenue (USD)</p>
         <p className="text-sm font-semibold text-text-primary mt-0.5">
-          {formatCurrencyAmount(impact.revenueUsd, 'USD')}
+          {formatCurrencyAmount(impact.revenueUsd, 'USD', timeCtx)}
         </p>
       </div>
       <div className="bg-surface-raised border border-border-default rounded-md px-4 py-3">
@@ -64,7 +66,7 @@ function EconomicsSection({ impact }: { readonly impact: ClusterTargetingImpactR
       <div className="bg-surface-raised border border-border-default rounded-md px-4 py-3">
         <p className="text-xs text-text-secondary">LTV delta (USD)</p>
         <p className="text-sm font-semibold text-text-primary mt-0.5">
-          {impact.ltvDelta != null ? formatCurrencyAmount(impact.ltvDelta, 'USD') : <span className="font-mono">—</span>}
+          {impact.ltvDelta != null ? formatCurrencyAmount(impact.ltvDelta, 'USD', timeCtx) : <span className="font-mono">—</span>}
         </p>
       </div>
     </div>
@@ -128,6 +130,7 @@ function NegativeOutcomesSection({ impact }: { readonly impact: ClusterTargeting
 // ── Journey deltas ─────────────────────────────────────────────────────────────
 
 function JourneyDeltaCard({ delta }: { readonly delta: JourneyDeltaRecord }) {
+  const timeCtx = useTimeContext();
   const compared = delta.comparedToClusterIds ?? [];
   const stageDeltas = Object.entries(delta.populationStageDeltas ?? {});
   return (
@@ -152,11 +155,11 @@ function JourneyDeltaCard({ delta }: { readonly delta: JourneyDeltaRecord }) {
         )}
       </div>
       <div className="flex items-center gap-4 flex-wrap text-xs font-mono text-text-muted">
-        <span>Reached {formatCount(delta.reachedCount)}</span>
-        <span>Engaged {formatCount(delta.engagedCount)}</span>
-        <span>Converted {formatCount(delta.convertedCount)}</span>
-        <span>Attributed {formatCount(delta.attributedCount)}</span>
-        <span>Non-progressed {formatCount(delta.nonProgressedCount)}</span>
+        <span>Reached {formatCount(delta.reachedCount, timeCtx)}</span>
+        <span>Engaged {formatCount(delta.engagedCount, timeCtx)}</span>
+        <span>Converted {formatCount(delta.convertedCount, timeCtx)}</span>
+        <span>Attributed {formatCount(delta.attributedCount, timeCtx)}</span>
+        <span>Non-progressed {formatCount(delta.nonProgressedCount, timeCtx)}</span>
       </div>
       {stageDeltas.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -174,6 +177,7 @@ function JourneyDeltaCard({ delta }: { readonly delta: JourneyDeltaRecord }) {
 // ── Tab ────────────────────────────────────────────────────────────────────────
 
 export function ClusterTargetingImpactTab({ clusterId }: { readonly clusterId: string }) {
+  const timeCtx = useTimeContext();
   const { response, notConfigured, loading, error, refresh } = useClusterTargetingImpact(clusterId);
 
   if (loading && !response && !error && !notConfigured) return <LoadingState lines={8} />;
@@ -198,7 +202,7 @@ export function ClusterTargetingImpactTab({ clusterId }: { readonly clusterId: s
         {impact.campaignId && impact.campaignId !== 'unknown' && (
           <Badge variant="default" size="sm" className="font-mono">campaign: {impact.campaignId}</Badge>
         )}
-        <span>computed {formatDateTime(impact.computedAt)}</span>
+        <span>computed {formatDateTime(impact.computedAt, timeCtx)}</span>
       </div>
 
       <div>

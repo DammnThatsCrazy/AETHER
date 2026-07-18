@@ -4,6 +4,7 @@
  * Owner: Entities page, Command page
  * Feature module: features/entitlements
  */
+import { formatDateTime, useTimeContext } from '@aether/ui';
 import type { Entitlement } from '@kyber/lib/schemas/commerce';
 
 interface EntitlementListProps {
@@ -16,6 +17,7 @@ interface EntitlementListProps {
 }
 
 export function EntitlementList({ entitlements, loading = false, error = null, onSelect, canRevoke = false, onRevoke }: EntitlementListProps) {
+  const timeCtx = useTimeContext();
   if (loading) {
     return <div className="entitlement-list entitlement-list--loading" aria-busy="true">loading entitlements…</div>;
   }
@@ -51,7 +53,7 @@ export function EntitlementList({ entitlements, loading = false, error = null, o
               <span className="entitlement-list__holder">{e.holder_id} ({e.holder_type})</span>
               <span className="entitlement-list__reuse">reused {e.reuse_count}×</span>
               <span className="entitlement-list__expires">
-                expires {new Date(e.expires_at).toLocaleString()}
+                expires {formatDateTime(e.expires_at, timeCtx)}
               </span>
             </div>
             {canRevoke && e.status === 'active' && onRevoke && (

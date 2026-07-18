@@ -4,6 +4,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader,
   DataTable, EmptyState, ErrorState, LoadingState, Skeleton, Tabs,
   TabsContent, TabsList, TabsTrigger, formatUSD,
+  formatCount, useTimeContext,
 } from '@aether/ui';
 import { useCampaigns, usePlatformOverview, useAutomationInsights } from '@aether-app/features/campaigns/use-campaigns';
 import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
@@ -72,13 +73,14 @@ function FunnelBar({ label, value, max, variant = 'default' }: {
   max: number;
   variant?: 'success' | 'warning' | 'danger' | 'default';
 }) {
+  const timeCtx = useTimeContext();
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   const barColor = variant === 'success' ? 'bg-success' : variant === 'warning' ? 'bg-warning' : variant === 'danger' ? 'bg-danger' : 'bg-accent';
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-text-secondary">{label}</span>
-        <span className="text-text-primary font-medium">{value.toLocaleString()} <span className="text-text-muted">({pct}%)</span></span>
+        <span className="text-text-primary font-medium">{formatCount(value, timeCtx)} <span className="text-text-muted">({pct}%)</span></span>
       </div>
       <div className="h-1.5 bg-surface-overlay rounded-full">
         <div className={`h-1.5 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
@@ -90,6 +92,7 @@ function FunnelBar({ label, value, max, variant = 'default' }: {
 // ── Campaign detail panel ─────────────────────────────────────────────────────
 
 function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
+  const timeCtx = useTimeContext();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const metrics = asRecord(campaign.metrics);
@@ -138,13 +141,13 @@ function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
           {converted > 0 && (
             <div>
               <p className="text-xs text-text-secondary">Conversions</p>
-              <p className="text-sm font-semibold text-text-primary">{converted.toLocaleString()}</p>
+              <p className="text-sm font-semibold text-text-primary">{formatCount(converted, timeCtx)}</p>
             </div>
           )}
           {fraudBlocked !== undefined && Number(fraudBlocked) > 0 && (
             <div>
               <p className="text-xs text-text-secondary">Fraud blocked</p>
-              <p className="text-sm font-semibold text-danger">{Number(fraudBlocked).toLocaleString()}</p>
+              <p className="text-sm font-semibold text-danger">{formatCount(Number(fraudBlocked), timeCtx)}</p>
             </div>
           )}
           <button
@@ -192,7 +195,7 @@ function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
                         {!!c.source && <span className="text-text-muted">{fmt(c.source)}</span>}
                       </div>
                       <div className="flex items-center gap-4 text-right">
-                        {c.conversions !== undefined && <span className="text-text-primary">{Number(c.conversions).toLocaleString()} conv.</span>}
+                        {c.conversions !== undefined && <span className="text-text-primary">{formatCount(Number(c.conversions), timeCtx)} conv.</span>}
                         {c.revenue_usd !== undefined && <span className="text-success">{usdText(c.revenue_usd)}</span>}
                         {c.conversion_rate !== undefined && <span className="text-text-secondary">{fmtPct(c.conversion_rate)}</span>}
                       </div>
@@ -224,6 +227,7 @@ function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
 // ── Overview tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ hours }: { hours: number }) {
+  const timeCtx = useTimeContext();
   const { data, isLoading, error } = usePlatformOverview(hours);
   const { data: insightsData } = useAutomationInsights();
   const ov = asRecord(data);
@@ -240,7 +244,7 @@ function OverviewTab({ hours }: { hours: number }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat
           label="Total sessions"
-          value={ov.total_sessions !== undefined ? Number(ov.total_sessions).toLocaleString() : (isLoading ? <Skeleton className="h-5 w-16" /> : '—')}
+          value={ov.total_sessions !== undefined ? formatCount(Number(ov.total_sessions), timeCtx) : (isLoading ? <Skeleton className="h-5 w-16" /> : '—')}
           sub={`Last ${hours}h`}
         />
         <Stat
@@ -249,11 +253,11 @@ function OverviewTab({ hours }: { hours: number }) {
         />
         <Stat
           label="Fraud blocked"
-          value={ov.fraud_blocked !== undefined ? Number(ov.fraud_blocked).toLocaleString() : '—'}
+          value={ov.fraud_blocked !== undefined ? formatCount(Number(ov.fraud_blocked), timeCtx) : '—'}
         />
         <Stat
           label="Active campaigns"
-          value={ov.active_campaigns !== undefined ? Number(ov.active_campaigns).toLocaleString() : '—'}
+          value={ov.active_campaigns !== undefined ? formatCount(Number(ov.active_campaigns), timeCtx) : '—'}
         />
       </div>
 
@@ -265,7 +269,7 @@ function OverviewTab({ hours }: { hours: number }) {
             <Card>
               <CardHeader><span className="text-sm font-medium text-text-primary">Web2</span></CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
-                <Stat label="Sessions" value={web2.sessions !== undefined ? Number(web2.sessions).toLocaleString() : '—'} />
+                <Stat label="Sessions" value={web2.sessions !== undefined ? formatCount(Number(web2.sessions), timeCtx) : '—'} />
                 <Stat label="Conv. rate" value={fmtPct(web2.conversion_rate)} />
                 <Stat label="Revenue" value={usdText(web2.revenue_usd)} />
                 <Stat label="Avg. LTV" value={usdText(web2.avg_ltv_usd)} />
@@ -274,10 +278,10 @@ function OverviewTab({ hours }: { hours: number }) {
             <Card>
               <CardHeader><span className="text-sm font-medium text-text-primary">Web3</span></CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
-                <Stat label="Wallet sessions" value={web3.sessions !== undefined ? Number(web3.sessions).toLocaleString() : '—'} />
+                <Stat label="Wallet sessions" value={web3.sessions !== undefined ? formatCount(Number(web3.sessions), timeCtx) : '—'} />
                 <Stat label="Conv. rate" value={fmtPct(web3.conversion_rate)} />
                 <Stat label="On-chain vol." value={usdText(web3.volume_usd)} />
-                <Stat label="Wallets active" value={web3.active_wallets !== undefined ? Number(web3.active_wallets).toLocaleString() : '—'} />
+                <Stat label="Wallets active" value={web3.active_wallets !== undefined ? formatCount(Number(web3.active_wallets), timeCtx) : '—'} />
               </CardContent>
             </Card>
           </div>

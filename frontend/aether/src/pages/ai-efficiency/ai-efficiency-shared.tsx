@@ -1,4 +1,4 @@
-import { Badge } from '@aether/ui';
+import { Badge, formatCount, formatInstant, type LocaleContext, type TimeContext } from '@aether/ui';
 import type { AIEfficiencyDetector, AIInvocationStatus, CostBasis } from '@aether/shared';
 
 export const GOVERNED_PROPOSALS_COPY =
@@ -88,17 +88,15 @@ export function formatQuality(score: number | null | undefined): string {
   return score.toFixed(2);
 }
 
-export function formatLatency(ms: number | null | undefined): string {
+export function formatLatency(ms: number | null | undefined, locale: LocaleContext): string {
   if (ms === null || ms === undefined) return '—';
-  return `${Math.round(ms).toLocaleString()} ms`;
+  return `${formatCount(Math.round(ms), locale)} ms`;
 }
 
-export function formatDateTime(iso: string | null | undefined): string {
+export function formatDateTime(iso: string | null | undefined, timeCtx: TimeContext): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
+    return formatInstant(iso, timeCtx);
   } catch {
     return iso;
   }

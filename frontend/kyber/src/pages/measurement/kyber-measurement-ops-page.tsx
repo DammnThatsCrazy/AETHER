@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, useTimeContext, type TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useMeasurementOps } from '@kyber/features/measurement';
 import { api } from '@kyber/lib/api';
@@ -54,31 +54,32 @@ function humanizeKey(key: string): string {
   return key.replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
 }
 
-function compactValue(value: unknown): string {
+function compactValue(value: unknown, ctx: TimeContext): string {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'number') return value.toLocaleString();
-  if (Array.isArray(value)) return value.map(compactValue).join(', ') || '—';
+  if (typeof value === 'number') return formatCount(value, ctx);
+  if (Array.isArray(value)) return value.map(item => compactValue(item, ctx)).join(', ') || '—';
   if (isRow(value)) {
     return Object.entries(value)
-      .map(([key, nestedValue]) => `${humanizeKey(key)}: ${compactValue(nestedValue)}`)
+      .map(([key, nestedValue]) => `${humanizeKey(key)}: ${compactValue(nestedValue, ctx)}`)
       .join(' · ') || '—';
   }
   return String(value);
 }
 
 function HealthBreakdown({ title, value }: { readonly title: string; readonly value: unknown }) {
+  const timeCtx = useTimeContext();
   const rows = Array.isArray(value)
     ? value.map((item, index) => {
-        if (!isRow(item)) return { label: String(index + 1), detail: compactValue(item) };
+        if (!isRow(item)) return { label: String(index + 1), detail: compactValue(item, timeCtx) };
         const labelKey = ['provider', 'ai_provider', 'mediation', 'referral_mediation_type', 'version', 'classifier_version', 'name', 'type']
           .find(key => item[key] != null);
-        const label = labelKey ? compactValue(item[labelKey]) : String(index + 1);
-        const detail = compactValue(Object.fromEntries(Object.entries(item).filter(([key]) => key !== labelKey)));
+        const label = labelKey ? compactValue(item[labelKey], timeCtx) : String(index + 1);
+        const detail = compactValue(Object.fromEntries(Object.entries(item).filter(([key]) => key !== labelKey)), timeCtx);
         return { label, detail };
       })
     : isRow(value)
-      ? Object.entries(value).map(([label, detail]) => ({ label, detail: compactValue(detail) }))
+      ? Object.entries(value).map(([label, detail]) => ({ label, detail: compactValue(detail, timeCtx) }))
       : [];
 
   return (
@@ -134,6 +135,7 @@ export function SourceClassificationHealthCard({
     dryRun: requestIdFactory(),
     live: requestIdFactory(),
   }));
+  const timeCtx = useTimeContext();
 
   const summary = isRow(health.summary) ? health.summary : {};
   const status = String(health.status ?? summary.status ?? 'unknown');
@@ -208,7 +210,7 @@ export function SourceClassificationHealthCard({
               {Object.entries(summary).map(([key, value]) => (
                 <div key={key} className="rounded border border-border-subtle bg-surface-raised p-2">
                   <div className="text-[10px] uppercase tracking-wide text-text-muted">{humanizeKey(key)}</div>
-                  <div className="mt-1 font-mono text-sm text-text-primary break-all">{compactValue(value)}</div>
+                  <div className="mt-1 font-mono text-sm text-text-primary break-all">{compactValue(value, timeCtx)}</div>
                 </div>
               ))}
             </div>
@@ -253,6 +255,7 @@ function CommsFleetHealthCard() {
   const [tenants, setTenants] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const timeCtx = useTimeContext();
 
   useEffect(() => {
     let active = true;
@@ -283,7 +286,7 @@ function CommsFleetHealthCard() {
             ? <EmptyState title="No communication facts" description="Per-tenant projection and resolution health appears once communication events are ingested." />
             : <DataTable data={tenants} keyExtractor={r => String(r.tenant_id)} columns={[
                 { key: 'tenant', header: 'Tenant', render: r => <span className="font-mono text-xs">{String(r.tenant_id ?? '—')}</span> },
-                { key: 'facts', header: 'Comm facts', render: r => Number(r.communication_facts ?? 0).toLocaleString() },
+                { key: 'facts', header: 'Comm facts', render: r => formatCount(Number(r.communication_facts ?? 0), timeCtx) },
                 { key: 'resolution', header: 'Campaign resolution', render: r => (
                   <Badge variant={resolutionVariant(r.campaign_resolution_rate)}>{pct(r.campaign_resolution_rate)}</Badge>
                 )},

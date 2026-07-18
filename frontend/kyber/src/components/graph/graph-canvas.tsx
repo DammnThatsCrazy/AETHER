@@ -1,7 +1,8 @@
-import { useRef, useEffect, useCallback } from 'react';
-import cytoscape, { type Core, type EventObject } from 'cytoscape';
+import { useRef, useEffect, useMemo } from 'react';
 import { cn } from '@kyber/lib/utils';
 import type { GraphNode, GraphEdge, GraphOverlay } from '@kyber/types';
+import { useGraphRuntime, type RuntimeElement } from '@aether/ui/graph';
+import type { StylesheetJson } from 'cytoscape';
 
 // ---------------------------------------------------------------------------
 // Overlay color helpers
@@ -29,7 +30,7 @@ function anomalyColor(score: number | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
-// Props
+// Props (public API — unchanged)
 // ---------------------------------------------------------------------------
 
 interface GraphCanvasProps {
@@ -42,6 +43,93 @@ interface GraphCanvasProps {
   readonly onSelectNode?: ((node: GraphNode | null) => void) | undefined;
   readonly onSelectEdge?: ((edge: GraphEdge | null) => void) | undefined;
   readonly className?: string | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Style (with semantic-zoom label visibility)
+// ---------------------------------------------------------------------------
+
+const GRAPH_STYLE: StylesheetJson = [
+  {
+    selector: 'node',
+    style: {
+      'label': 'data(label)',
+      'font-size': '10px',
+      'text-valign': 'bottom',
+      'text-halign': 'center',
+      'background-color': '#4a6cf7',
+      'width': 30,
+      'height': 30,
+      'color': '#e8e8f0',
+      'text-outline-color': '#0a0a0f',
+      'text-outline-width': 1,
+    },
+  },
+  { selector: 'node.human', style: { 'background-color': '#4a6cf7', 'shape': 'ellipse' } },
+  { selector: 'node.customer', style: { 'background-color': '#4a6cf7', 'shape': 'ellipse' } },
+  { selector: 'node.organization', style: { 'background-color': '#38bdf8', 'shape': 'round-rectangle' } },
+  { selector: 'node.wallet', style: { 'background-color': '#22c55e', 'shape': 'diamond' } },
+  { selector: 'node.agent', style: { 'background-color': '#f59e0b', 'shape': 'rectangle' } },
+  { selector: 'node.journey', style: { 'background-color': '#a855f7', 'shape': 'round-tag' } },
+  { selector: 'node.session', style: { 'background-color': '#14b8a6', 'shape': 'barrel' } },
+  { selector: 'node.protocol', style: { 'background-color': '#8b5cf6', 'shape': 'hexagon' } },
+  { selector: 'node.platform', style: { 'background-color': '#0ea5e9', 'shape': 'round-diamond' } },
+  { selector: 'node.device', style: { 'background-color': '#84cc16', 'shape': 'vee' } },
+  { selector: 'node.browser', style: { 'background-color': '#10b981', 'shape': 'vee' } },
+  { selector: 'node.reward', style: { 'background-color': '#eab308', 'shape': 'star' } },
+  { selector: 'node.financial_activity', style: { 'background-color': '#22c55e', 'shape': 'tag' } },
+  { selector: 'node.delegation', style: { 'background-color': '#f97316', 'shape': 'rhomboid' } },
+  { selector: 'node.relationship', style: { 'background-color': '#94a3b8', 'shape': 'ellipse' } },
+  { selector: 'node.contract', style: { 'background-color': '#06b6d4', 'shape': 'triangle' } },
+  { selector: 'node.cluster', style: { 'background-color': '#ec4899', 'shape': 'octagon' } },
+  { selector: 'node.external', style: { 'background-color': '#64748b', 'shape': 'ellipse' } },
+  { selector: 'node.highlighted', style: { 'border-width': 3, 'border-color': '#4a6cf7' } },
+  { selector: 'node.path', style: { 'border-width': 3, 'border-color': '#a855f7' } },
+  { selector: 'node:selected', style: { 'border-width': 3, 'border-color': '#ffffff' } },
+  // Semantic zoom: hide labels when zoomed out, restore full detail when zoomed in.
+  { selector: 'node.zoom-macro', style: { 'text-opacity': 0 } },
+  { selector: 'node.zoom-meso', style: { 'text-opacity': 0.65 } },
+  { selector: 'node.zoom-detail', style: { 'text-opacity': 1 } },
+  {
+    selector: 'edge',
+    style: {
+      'width': 1,
+      'line-color': '#2a2a3a',
+      'target-arrow-color': '#2a2a3a',
+      'target-arrow-shape': 'triangle',
+      'curve-style': 'bezier',
+      'opacity': 0.6,
+    },
+  },
+  { selector: 'edge.highlighted', style: { 'line-color': '#4a6cf7', 'width': 2, 'opacity': 1 } },
+  { selector: 'edge.path', style: { 'line-color': '#a855f7', 'width': 3, 'opacity': 1 } },
+];
+
+function toElements(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): RuntimeElement[] {
+  const nodeEls: RuntimeElement[] = nodes.map((n) => ({
+    group: 'nodes',
+    data: {
+      id: n.id,
+      label: n.label,
+      type: n.type,
+      trustScore: n.trustScore,
+      riskScore: n.riskScore,
+      anomalyScore: n.anomalyScore,
+    },
+    classes: n.type,
+  }));
+  const edgeEls: RuntimeElement[] = edges.map((e) => ({
+    group: 'edges',
+    data: {
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      label: e.label,
+      weight: e.weight,
+      edgeType: e.type,
+    },
+  }));
+  return [...nodeEls, ...edgeEls];
 }
 
 // ---------------------------------------------------------------------------
@@ -60,182 +148,57 @@ export function GraphCanvas({
   className,
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<Core | null>(null);
-  const onSelectNodeRef = useRef(onSelectNode);
-  const onSelectEdgeRef = useRef(onSelectEdge);
 
-  onSelectNodeRef.current = onSelectNode;
-  onSelectEdgeRef.current = onSelectEdge;
+  const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const edgesById = useMemo(() => new Map(edges.map((e) => [e.id, e])), [edges]);
 
-  // ---- Initialize Cytoscape ----
+  const runtimeRef = useGraphRuntime(containerRef, {
+    style: GRAPH_STYLE,
+    minZoom: 0.2,
+    maxZoom: 5,
+    onSelectNode: (id) => onSelectNode?.(id ? nodesById.get(id) ?? null : null),
+    onSelectEdge: (id) => onSelectEdge?.(id ? edgesById.get(id) ?? null : null),
+  });
+
+  // Data changes → diff + batch apply on the persistent instance.
   useEffect(() => {
-    if (!containerRef.current) return;
+    runtimeRef.current?.setElements(toElements(nodes, edges));
+  }, [runtimeRef, nodes, edges]);
 
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements: [
-        ...nodes.map((n) => ({
-          data: { id: n.id, label: n.label, type: n.type, trustScore: n.trustScore, riskScore: n.riskScore, anomalyScore: n.anomalyScore },
-          classes: n.type,
-        })),
-        ...edges.map((e) => ({
-          data: { id: e.id, source: e.source, target: e.target, label: e.label, weight: e.weight, edgeType: e.type },
-        })),
-      ],
-      style: [
-        {
-          selector: 'node',
-          style: {
-            'label': 'data(label)',
-            'font-size': '10px',
-            'text-valign': 'bottom',
-            'text-halign': 'center',
-            'background-color': '#4a6cf7',
-            'width': 30,
-            'height': 30,
-            'color': '#e8e8f0',
-            'text-outline-color': '#0a0a0f',
-            'text-outline-width': 1,
-          },
-        },
-        { selector: 'node.human', style: { 'background-color': '#4a6cf7', 'shape': 'ellipse' } },
-        { selector: 'node.customer', style: { 'background-color': '#4a6cf7', 'shape': 'ellipse' } },
-        { selector: 'node.organization', style: { 'background-color': '#38bdf8', 'shape': 'round-rectangle' } },
-        { selector: 'node.wallet', style: { 'background-color': '#22c55e', 'shape': 'diamond' } },
-        { selector: 'node.agent', style: { 'background-color': '#f59e0b', 'shape': 'rectangle' } },
-        { selector: 'node.journey', style: { 'background-color': '#a855f7', 'shape': 'round-tag' } },
-        { selector: 'node.session', style: { 'background-color': '#14b8a6', 'shape': 'barrel' } },
-        { selector: 'node.protocol', style: { 'background-color': '#8b5cf6', 'shape': 'hexagon' } },
-        { selector: 'node.platform', style: { 'background-color': '#0ea5e9', 'shape': 'round-diamond' } },
-        { selector: 'node.device', style: { 'background-color': '#84cc16', 'shape': 'vee' } },
-        { selector: 'node.browser', style: { 'background-color': '#10b981', 'shape': 'vee' } },
-        { selector: 'node.reward', style: { 'background-color': '#eab308', 'shape': 'star' } },
-        { selector: 'node.financial_activity', style: { 'background-color': '#22c55e', 'shape': 'tag' } },
-        { selector: 'node.delegation', style: { 'background-color': '#f97316', 'shape': 'rhomboid' } },
-        { selector: 'node.relationship', style: { 'background-color': '#94a3b8', 'shape': 'ellipse' } },
-        { selector: 'node.contract', style: { 'background-color': '#06b6d4', 'shape': 'triangle' } },
-        { selector: 'node.cluster', style: { 'background-color': '#ec4899', 'shape': 'octagon' } },
-        { selector: 'node.external', style: { 'background-color': '#64748b', 'shape': 'ellipse' } },
-        { selector: 'node.highlighted', style: { 'border-width': 3, 'border-color': '#4a6cf7' } },
-        { selector: 'node.path', style: { 'border-width': 3, 'border-color': '#a855f7' } },
-        { selector: 'node:selected', style: { 'border-width': 3, 'border-color': '#ffffff' } },
-        {
-          selector: 'edge',
-          style: {
-            'width': 1,
-            'line-color': '#2a2a3a',
-            'target-arrow-color': '#2a2a3a',
-            'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier',
-            'opacity': 0.6,
-          },
-        },
-        { selector: 'edge.highlighted', style: { 'line-color': '#4a6cf7', 'width': 2, 'opacity': 1 } },
-        { selector: 'edge.path', style: { 'line-color': '#a855f7', 'width': 3, 'opacity': 1 } },
-      ],
-      layout: { name: 'cose', animate: false, nodeDimensionsIncludeLabels: true },
-      minZoom: 0.2,
-      maxZoom: 5,
-    });
-
-    // Node click handler
-    cy.on('tap', 'node', (evt: EventObject) => {
-      const nodeData = evt.target.data();
-      const matched = nodes.find((n) => n.id === nodeData.id);
-      onSelectNodeRef.current?.(matched ?? null);
-    });
-
-    // Edge click handler
-    cy.on('tap', 'edge', (evt: EventObject) => {
-      const edgeData = evt.target.data();
-      const matched = edges.find((e) => e.id === edgeData.id);
-      onSelectEdgeRef.current?.(matched ?? null);
-    });
-
-    // Background click clears selection
-    cy.on('tap', (evt: EventObject) => {
-      if (evt.target === cy) {
-        onSelectNodeRef.current?.(null);
-        onSelectEdgeRef.current?.(null);
-      }
-    });
-
-    cyRef.current = cy;
-
-    return () => {
-      cy.destroy();
-      cyRef.current = null;
-    };
-  }, [nodes, edges]);
-
-  // ---- Apply overlay colors ----
+  // Overlay recolours existing nodes in place (re-applied after data changes).
   useEffect(() => {
-    const cy = cyRef.current;
+    const cy = runtimeRef.current?.cy();
     if (!cy) return;
-
     cy.batch(() => {
       cy.nodes().forEach((node) => {
         const data = node.data();
-        let color: string;
         switch (overlay) {
           case 'trust':
-            color = trustColor(data.trustScore);
+            node.style('background-color', trustColor(data.trustScore as number | undefined));
             break;
           case 'risk':
-            color = riskColor(data.riskScore);
+            node.style('background-color', riskColor(data.riskScore as number | undefined));
             break;
           case 'anomaly':
-            color = anomalyColor(data.anomalyScore);
+            node.style('background-color', anomalyColor(data.anomalyScore as number | undefined));
             break;
           default:
-            // Restore default colors by removing override — use class-based styles
             node.style('background-color', '');
-            return;
         }
-        node.style('background-color', color);
       });
     });
-  }, [overlay]);
+  }, [runtimeRef, overlay, nodes, edges]);
 
-  // ---- Apply highlight classes ----
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
+    runtimeRef.current?.setNodeClass('highlighted', highlightedNodeIds ?? []);
+  }, [runtimeRef, highlightedNodeIds]);
 
-    cy.batch(() => {
-      cy.nodes().removeClass('highlighted');
-      if (highlightedNodeIds && highlightedNodeIds.length > 0) {
-        for (const nid of highlightedNodeIds) {
-          const n = cy.getElementById(nid);
-          if (n.length) n.addClass('highlighted');
-        }
-      }
-    });
-  }, [highlightedNodeIds]);
-
-  // ---- Apply path classes ----
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    cy.batch(() => {
-      cy.nodes().removeClass('path');
-      cy.edges().removeClass('path');
-
-      if (pathNodeIds && pathNodeIds.length > 0) {
-        for (const nid of pathNodeIds) {
-          const n = cy.getElementById(nid);
-          if (n.length) n.addClass('path');
-        }
-      }
-      if (pathEdgeIds && pathEdgeIds.length > 0) {
-        for (const eid of pathEdgeIds) {
-          const e = cy.getElementById(eid);
-          if (e.length) e.addClass('path');
-        }
-      }
-    });
-  }, [pathNodeIds, pathEdgeIds]);
+    const handle = runtimeRef.current;
+    if (!handle) return;
+    handle.setNodeClass('path', pathNodeIds ?? []);
+    handle.setEdgeClass('path', pathEdgeIds ?? []);
+  }, [runtimeRef, pathNodeIds, pathEdgeIds]);
 
   return (
     <div

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, formatDecimal, useTimeContext, type LocaleContext } from '@aether/ui';
 import { usePlaybookPerformance, usePlaybookPerformanceSummary, usePlaybookRuns, usePlaybookTemplates, usePlaybooks } from '@aether-app/features/intelligence';
 import { api } from '@aether-app/lib/api/endpoints';
 
@@ -15,8 +15,8 @@ function text(value: unknown, fallback = '—') {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : fallback;
 }
 
-function numberText(value: unknown) {
-  return Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+function numberText(value: unknown, locale: LocaleContext) {
+  return formatDecimal(Number(value ?? 0), locale, { maximumFractionDigits: 2 });
 }
 
 function pct(value: unknown) {
@@ -108,6 +108,7 @@ export function PlaybookSystemPanel() {
 }
 
 function PlaybookPerformanceSummary({ data }: { readonly data: unknown }) {
+  const timeCtx = useTimeContext();
   const record = data && typeof data === 'object' ? data as { summary?: Record<string, unknown> } : {};
   const summary = record.summary ?? {};
   return (
@@ -115,12 +116,12 @@ function PlaybookPerformanceSummary({ data }: { readonly data: unknown }) {
       <CardHeader><h2 className="text-text-primary font-medium">Playbook ROI</h2></CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <Metric label="Observed" value={`$${numberText(summary.observed_value_total)}`} />
-          <Metric label="Expected" value={`$${numberText(summary.expected_value_total)}`} />
-          <Metric label="Pending" value={`$${numberText(summary.pending_value_total)}`} />
-          <Metric label="Runs" value={numberText(summary.runs_total)} />
-          <Metric label="Stale" value={numberText(summary.stale_run_count)} />
-          <Metric label="Incomplete" value={numberText(summary.incomplete_run_count)} />
+          <Metric label="Observed" value={`$${numberText(summary.observed_value_total, timeCtx)}`} />
+          <Metric label="Expected" value={`$${numberText(summary.expected_value_total, timeCtx)}`} />
+          <Metric label="Pending" value={`$${numberText(summary.pending_value_total, timeCtx)}`} />
+          <Metric label="Runs" value={numberText(summary.runs_total, timeCtx)} />
+          <Metric label="Stale" value={numberText(summary.stale_run_count, timeCtx)} />
+          <Metric label="Incomplete" value={numberText(summary.incomplete_run_count, timeCtx)} />
         </div>
       </CardContent>
     </Card>
@@ -128,6 +129,7 @@ function PlaybookPerformanceSummary({ data }: { readonly data: unknown }) {
 }
 
 function PlaybookDetail({ playbookId }: { readonly playbookId: string }) {
+  const timeCtx = useTimeContext();
   const runs = usePlaybookRuns(playbookId);
   const performance = usePlaybookPerformance(playbookId);
   const perf = performance.data && typeof performance.data === 'object' ? performance.data as Record<string, unknown> : {};
@@ -142,14 +144,14 @@ function PlaybookDetail({ playbookId }: { readonly playbookId: string }) {
       <CardHeader><h2 className="text-text-primary font-medium">Playbook detail</h2></CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <Metric label="Recommendations" value={numberText(perf.recommendations_generated)} />
-          <Metric label="Decisions" value={numberText(perf.decisions_recorded)} />
-          <Metric label="Actions" value={numberText(perf.actions_logged)} />
-          <Metric label="Outcomes" value={numberText(perf.outcomes_observed)} />
+          <Metric label="Recommendations" value={numberText(perf.recommendations_generated, timeCtx)} />
+          <Metric label="Decisions" value={numberText(perf.decisions_recorded, timeCtx)} />
+          <Metric label="Actions" value={numberText(perf.actions_logged, timeCtx)} />
+          <Metric label="Outcomes" value={numberText(perf.outcomes_observed, timeCtx)} />
           <Metric label="Success rate" value={pct(perf.success_rate)} />
           <Metric label="Capture rate" value={pct(perf.outcome_capture_rate)} />
-          <Metric label="Confidence delta" value={numberText(perf.average_confidence_delta)} />
-          <Metric label="Pending value" value={`$${numberText(perf.pending_value_total)}`} />
+          <Metric label="Confidence delta" value={numberText(perf.average_confidence_delta, timeCtx)} />
+          <Metric label="Pending value" value={`$${numberText(perf.pending_value_total, timeCtx)}`} />
         </div>
         <h3 className="mt-4 text-xs font-medium uppercase tracking-wide text-text-secondary">Recent runs</h3>
         {runItems.length === 0 ? <p className="mt-2 text-xs text-text-muted">No runs yet.</p> : (

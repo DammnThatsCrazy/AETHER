@@ -5,6 +5,7 @@ import {
   DataTable, EmptyState, GlyphIcon, LoadingState, Modal,
   ModalBody, ModalFooter, ModalHeader, ScrollArea, Skeleton,
   TerminalSeparator, useToast, useQuery, useMutation,
+  formatDateTime, useTimeContext, type TimeContext,
 } from '@aether/ui';
 import { api } from '@kyber/lib/api/endpoints';
 import { PermissionGate } from '@kyber/features/permissions';
@@ -18,9 +19,9 @@ function fmt(v: unknown, fallback = '—'): string {
   return String(v);
 }
 
-function fmtDate(iso: unknown): string {
+function fmtDate(iso: unknown, ctx: TimeContext): string {
   if (!iso) return '—';
-  try { return new Date(String(iso)).toLocaleString(); } catch { return String(iso); }
+  try { return formatDateTime(String(iso), ctx); } catch { return String(iso); }
 }
 
 function statusVariant(s: unknown): 'default' | 'warning' | 'success' | 'danger' {
@@ -37,6 +38,7 @@ type CaseRow = Record<string, unknown>;
 
 function CaseListView() {
   const navigate = useNavigate();
+  const timeCtx = useTimeContext();
   const [createModal, setCreateModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const { toast } = useToast();
@@ -127,7 +129,7 @@ function CaseListView() {
               },
             },
             { key: 'assignee', header: 'Assignee', render: c => <span className="text-xs font-mono text-text-muted">{fmt(c.assigned_to ?? c.assignee)}</span> },
-            { key: 'created', header: 'Created', render: c => <span className="text-xs text-text-muted">{fmtDate(c.created_at)}</span> },
+            { key: 'created', header: 'Created', render: c => <span className="text-xs text-text-muted">{fmtDate(c.created_at, timeCtx)}</span> },
             {
               key: 'action',
               header: '',
@@ -175,6 +177,7 @@ function CaseListView() {
 function CaseDetailView({ caseId }: { caseId: string }) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
   const [noteText, setNoteText] = useState('');
   const [transitionModal, setTransitionModal] = useState<string | null>(null);
 
@@ -266,8 +269,8 @@ function CaseDetailView({ caseId }: { caseId: string }) {
       {/* Metadata */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Created', value: fmtDate(d.created_at) },
-          { label: 'Updated', value: fmtDate(d.updated_at) },
+          { label: 'Created', value: fmtDate(d.created_at, timeCtx) },
+          { label: 'Updated', value: fmtDate(d.updated_at, timeCtx) },
           { label: 'Assignee', value: fmt(d.assigned_to ?? d.assignee) },
           { label: 'Evidence', value: String(evidence.length) },
         ].map(m => (
@@ -302,7 +305,7 @@ function CaseDetailView({ caseId }: { caseId: string }) {
                   <div key={i} className="border border-border-subtle rounded px-3 py-2 text-xs font-mono flex items-center gap-3">
                     <Badge size="sm">{fmt(er.type ?? er.evidence_type)}</Badge>
                     <span className="text-text-primary flex-1">{fmt(er.description ?? er.summary)}</span>
-                    <span className="text-text-muted">{fmtDate(er.added_at ?? er.created_at)}</span>
+                    <span className="text-text-muted">{fmtDate(er.added_at ?? er.created_at, timeCtx)}</span>
                   </div>
                 );
               })}
@@ -322,7 +325,7 @@ function CaseDetailView({ caseId }: { caseId: string }) {
                   const er = asRec(e);
                   return (
                     <div key={i} className="text-xs font-mono flex items-center gap-3 border border-border-subtle rounded px-2 py-1.5">
-                      <span className="text-text-muted whitespace-nowrap">{fmtDate(er.ts ?? er.timestamp)}</span>
+                      <span className="text-text-muted whitespace-nowrap">{fmtDate(er.ts ?? er.timestamp, timeCtx)}</span>
                       <span className="text-text-secondary">{fmt(er.event ?? er.action ?? er.type)}</span>
                       {Boolean(er.actor) && <span className="text-text-muted ml-auto">{fmt(er.actor)}</span>}
                     </div>
@@ -345,7 +348,7 @@ function CaseDetailView({ caseId }: { caseId: string }) {
                 return (
                   <div key={i} className="border border-border-subtle rounded px-3 py-2 text-xs font-mono">
                     <div className="text-text-primary">{fmt(ar.body ?? ar.note ?? ar.text)}</div>
-                    <div className="text-text-muted mt-1">{fmt(ar.author_id ?? ar.annotated_by ?? ar.author)} · {fmtDate(ar.created_at)}</div>
+                    <div className="text-text-muted mt-1">{fmt(ar.author_id ?? ar.annotated_by ?? ar.author)} · {fmtDate(ar.created_at, timeCtx)}</div>
                   </div>
                 );
               })}

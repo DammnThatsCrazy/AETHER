@@ -5,6 +5,10 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  formatCount,
+  formatInstant,
+  useTimeContext,
+  type TimeContext,
 } from '@aether/ui';
 import type { ImportStatus } from '@aether/shared';
 import { PageWrapper } from '@kyber/components/layout';
@@ -38,12 +42,10 @@ export function ImportStatusBadge({ status }: { readonly status: ImportStatus })
   return <Badge variant={STATUS_VARIANTS[status] ?? 'default'}>{status}</Badge>;
 }
 
-export function formatImportDate(iso: string | null | undefined): string {
+export function formatImportDate(iso: string | null | undefined, ctx: TimeContext): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
+    return formatInstant(iso, ctx);
   } catch {
     return iso;
   }
@@ -55,6 +57,7 @@ export function shortId(id: string): string {
 
 export function ImportsOpsPage() {
   const navigate = useNavigate();
+  const timeCtx = useTimeContext();
   const { sessions, count, loading, error, refresh } = useImportsTimeline();
 
   const columns = [
@@ -84,7 +87,7 @@ export function ImportsOpsPage() {
       key: 'file_count',
       header: 'Files',
       render: (row: ImportSessionRecord) => (
-        <span className="font-mono">{row.file_count.toLocaleString()}</span>
+        <span className="font-mono">{formatCount(row.file_count, timeCtx)}</span>
       ),
     },
     {
@@ -92,7 +95,7 @@ export function ImportsOpsPage() {
       header: 'Rows',
       render: (row: ImportSessionRecord) => (
         <span className="font-mono text-text-secondary">
-          {row.row_count !== null && row.row_count !== undefined ? row.row_count.toLocaleString() : '—'}
+          {row.row_count !== null && row.row_count !== undefined ? formatCount(row.row_count, timeCtx) : '—'}
         </span>
       ),
     },
@@ -100,7 +103,7 @@ export function ImportsOpsPage() {
       key: 'created_at',
       header: 'Created',
       render: (row: ImportSessionRecord) => (
-        <span className="text-xs text-text-muted">{formatImportDate(row.created_at)}</span>
+        <span className="text-xs text-text-muted">{formatImportDate(row.created_at, timeCtx)}</span>
       ),
     },
   ];
@@ -119,7 +122,7 @@ export function ImportsOpsPage() {
       ) : (
         <>
           <div className="text-xs text-text-muted font-mono">
-            {count.toLocaleString()} session{count === 1 ? '' : 's'} across all tenants
+            {formatCount(count, timeCtx)} session{count === 1 ? '' : 's'} across all tenants
           </div>
           <DataTable
             columns={columns}

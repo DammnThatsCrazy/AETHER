@@ -1,4 +1,4 @@
-import { Badge, LoadingState, useQuery } from '@aether/ui';
+import { Badge, LoadingState, useQuery, formatDateTime, useTimeContext, type TimeContext } from '@aether/ui';
 import { api } from '@kyber/lib/api/endpoints';
 
 interface FeederHealth {
@@ -31,10 +31,10 @@ function healthVariant(status: string): 'success' | 'warning' | 'danger' | 'defa
   return 'danger';
 }
 
-function formatTs(ts: string | null | undefined): string {
+function formatTs(ts: string | null | undefined, ctx: TimeContext): string {
   if (!ts) return '—';
   try {
-    return new Date(ts).toLocaleString();
+    return formatDateTime(ts, ctx);
   } catch {
     return ts;
   }
@@ -53,6 +53,7 @@ export function DuneFeederPage() {
     staleTime: 30_000,
   });
 
+  const timeCtx = useTimeContext();
   const h = health.data as FeederHealth | undefined;
   const goldRecords = ((gold.data as any)?.records ?? []) as GoldRecord[];
 
@@ -94,7 +95,7 @@ export function DuneFeederPage() {
         <div className="rounded border border-border-subtle p-4 bg-surface-raised space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-text-muted">Last ingest</span>
-            <span className="text-text-primary">{formatTs(h.last_ingest_at)}</span>
+            <span className="text-text-primary">{formatTs(h.last_ingest_at, timeCtx)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-text-muted">Last source tag</span>
@@ -148,7 +149,7 @@ export function DuneFeederPage() {
                       </span>
                     </td>
                     <td className="py-2 px-3 text-text-muted">{r.tenant_scope ?? 'global'}</td>
-                    <td className="py-2 px-3 text-text-muted">{formatTs(r.materialized_at)}</td>
+                    <td className="py-2 px-3 text-text-muted">{formatTs(r.materialized_at, timeCtx)}</td>
                   </tr>
                 ))}
               </tbody>

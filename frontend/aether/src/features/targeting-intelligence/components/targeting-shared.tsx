@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Button } from '@aether/ui';
+import { Badge, Button, formatCount as formatLocaleCount, formatDecimal, formatInstant, useTimeContext, type LocaleContext, type TimeContext } from '@aether/ui';
 import type { ExportPackageRecord } from '../api';
 
 // ── Required execution-boundary copy ───────────────────────────────────────────
@@ -25,29 +25,30 @@ export function formatRate(rate: number | null | undefined): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-export function formatCount(n: number | null | undefined): string {
+export function formatCount(n: number | null | undefined, locale: LocaleContext): string {
   if (n === null || n === undefined) return '—';
-  return n.toLocaleString();
+  return formatLocaleCount(n, locale);
 }
 
 /** Amounts always carry an explicit currency label and are never merged. */
 export function formatCurrencyAmount(
   amount: number | null | undefined,
   currency: string,
+  locale: LocaleContext,
 ): React.ReactNode {
   if (amount === null || amount === undefined) {
     return <Badge variant="warning" size="sm">unknown</Badge>;
   }
   return (
     <span className="font-mono">
-      {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+      {formatDecimal(amount, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
     </span>
   );
 }
 
-export function formatDateTime(iso: string | null | undefined): string {
+export function formatDateTime(iso: string | null | undefined, timeCtx: TimeContext): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString();
+  return formatInstant(iso, timeCtx);
 }
 
 export function humanize(value: string): string {
@@ -187,6 +188,7 @@ export function EvidenceChainSummary({ chain }: { readonly chain: EvidenceChainR
 // ── Export package detail ──────────────────────────────────────────────────────
 
 export function ExportPackageDetail({ pkg }: { readonly pkg: ExportPackageRecord }) {
+  const timeCtx = useTimeContext();
   const notes = pkg.implementationNotes ?? [];
   const [copied, setCopied] = useState(false);
 
@@ -205,7 +207,7 @@ export function ExportPackageDetail({ pkg }: { readonly pkg: ExportPackageRecord
         <span className="text-sm font-medium text-text-primary font-mono">{pkg.exportId}</span>
         <Badge variant="warning" size="sm">{EXTERNAL_EXECUTION_REQUIRED_COPY}</Badge>
         {pkg.generatedAt && (
-          <span className="text-xs text-text-muted">{formatDateTime(pkg.generatedAt)}</span>
+          <span className="text-xs text-text-muted">{formatDateTime(pkg.generatedAt, timeCtx)}</span>
         )}
         <Button
           variant="ghost"

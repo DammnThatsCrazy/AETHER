@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, formatDecimal, formatDate, useTimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useCampaignIntelligence } from '@kyber/features/measurement';
 import { useState } from 'react';
@@ -11,6 +11,7 @@ export function CampaignIntelligencePage() {
   const [submitted, setSubmitted] = useState('');
   const navigate = useNavigate();
   const { data, loading, error } = useCampaignIntelligence(submitted ? { campaign_id: submitted } : {});
+  const timeCtx = useTimeContext();
 
   if (loading) return <PageWrapper title="Campaign Intelligence"><LoadingState lines={6} /></PageWrapper>;
   if (error) return <PageWrapper title="Campaign Intelligence"><ErrorState title="Unable to load campaign intelligence" message={error} /></PageWrapper>;
@@ -40,15 +41,15 @@ export function CampaignIntelligencePage() {
       <div className="grid gap-4 md:grid-cols-3 mb-4">
         <Card><CardContent>
           <div className="text-xs text-text-muted font-mono">Total spend</div>
-          <div className="mt-1 text-2xl font-semibold">${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="mt-1 text-2xl font-semibold">${formatDecimal(totalSpend, timeCtx, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
         </CardContent></Card>
         <Card><CardContent>
           <div className="text-xs text-text-muted font-mono">Impressions</div>
-          <div className="mt-1 text-2xl font-semibold">{totalImpressions.toLocaleString()}</div>
+          <div className="mt-1 text-2xl font-semibold">{formatCount(totalImpressions, timeCtx)}</div>
         </CardContent></Card>
         <Card><CardContent>
           <div className="text-xs text-text-muted font-mono">Clicks</div>
-          <div className="mt-1 text-2xl font-semibold">{totalClicks.toLocaleString()}</div>
+          <div className="mt-1 text-2xl font-semibold">{formatCount(totalClicks, timeCtx)}</div>
         </CardContent></Card>
       </div>
 
@@ -73,10 +74,10 @@ export function CampaignIntelligencePage() {
             : <DataTable data={spend} keyExtractor={r => String(r.spend_record_id)} columns={[
                 { key: 'platform', header: 'Platform', render: r => String(r.platform ?? '—') },
                 { key: 'campaign', header: 'Campaign', render: r => <span className="font-mono text-xs">{String(r.campaign_id ?? '—').slice(0, 12)}…</span> },
-                { key: 'period', header: 'Period', render: r => `${r.period_start ? new Date(String(r.period_start)).toLocaleDateString() : '—'}` },
+                { key: 'period', header: 'Period', render: r => `${r.period_start ? formatDate(String(r.period_start), timeCtx) : '—'}` },
                 { key: 'spend', header: 'Spend', render: r => `$${Number(r.total_cost ?? 0).toFixed(2)}` },
-                { key: 'impressions', header: 'Impressions', render: r => Number(r.impressions ?? 0).toLocaleString() },
-                { key: 'clicks', header: 'Clicks', render: r => Number(r.clicks ?? 0).toLocaleString() },
+                { key: 'impressions', header: 'Impressions', render: r => formatCount(Number(r.impressions ?? 0), timeCtx) },
+                { key: 'clicks', header: 'Clicks', render: r => formatCount(Number(r.clicks ?? 0), timeCtx) },
                 { key: 'currency', header: 'Currency', render: r => String(r.billing_currency ?? 'USD') },
                 { key: 'actions', header: '', render: r => r.campaign_id
                   ? <button onClick={() => navigate(`/measurement/campaigns/${r.campaign_id}`)} className="text-xs text-accent hover:underline whitespace-nowrap">Campaign 360 →</button>

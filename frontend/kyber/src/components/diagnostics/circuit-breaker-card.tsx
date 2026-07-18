@@ -1,6 +1,5 @@
-import { Card, CardContent, Badge } from '@aether/ui';
+import { Card, CardContent, Badge, useTimeContext, useNow, formatRelative } from '@aether/ui';
 import type { CircuitBreakerState } from '@kyber/types';
-import { formatRelativeTime } from '@kyber/lib/utils';
 
 const STATE_VARIANT: Record<string, 'success' | 'danger' | 'warning'> = {
   closed: 'success',
@@ -13,6 +12,8 @@ interface CircuitBreakerCardProps {
 }
 
 export function CircuitBreakerCard({ breaker }: CircuitBreakerCardProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   return (
     <Card className="p-3">
       <CardContent>
@@ -28,13 +29,13 @@ export function CircuitBreakerCard({ breaker }: CircuitBreakerCardProps) {
           {breaker.lastFailure && (
             <div className="flex justify-between">
               <span className="text-text-muted">Last failure</span>
-              <span className="text-text-secondary">{formatRelativeTime(breaker.lastFailure)}</span>
+              <span className="text-text-secondary">{formatRelative(breaker.lastFailure, timeCtx, now)}</span>
             </div>
           )}
           {breaker.nextRetry && (
             <div className="flex justify-between">
               <span className="text-text-muted">Next retry</span>
-              <span className="text-text-secondary">{formatRelativeTime(breaker.nextRetry)}</span>
+              <span className="text-text-secondary">{formatRelative(breaker.nextRetry, timeCtx, now)}</span>
             </div>
           )}
         </div>

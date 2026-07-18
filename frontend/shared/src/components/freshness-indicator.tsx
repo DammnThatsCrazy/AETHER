@@ -1,3 +1,6 @@
+import { formatTime } from '../time/format';
+import { useTimeContext } from '../time/time-provider';
+import { useNow } from '../time/use-now';
 import { cn } from '../utils/cn';
 
 interface FreshnessIndicatorProps {
@@ -6,8 +9,8 @@ interface FreshnessIndicatorProps {
   className?: string;
 }
 
-function getState(computedAt: string) {
-  const ageMs = Date.now() - new Date(computedAt).getTime();
+function getState(computedAt: string, now: number) {
+  const ageMs = now - new Date(computedAt).getTime();
   const ageMin = ageMs / 60_000;
   if (ageMin < 5) return 'live' as const;
   if (ageMin < 15) return 'recent' as const;
@@ -15,14 +18,17 @@ function getState(computedAt: string) {
 }
 
 export function FreshnessIndicator({ computedAt, onRefresh, className }: FreshnessIndicatorProps) {
+  const context = useTimeContext();
+  const now = useNow(30_000);
+
   if (!computedAt) return null;
 
-  const state = getState(computedAt);
+  const state = getState(computedAt, now);
 
   const dotClass = state === 'live' ? 'bg-success' : state === 'recent' ? 'bg-warning' : 'bg-danger';
   const textClass = state === 'live' ? 'text-success' : state === 'recent' ? 'text-warning' : 'text-danger';
 
-  const formattedTime = new Date(computedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const formattedTime = formatTime(computedAt, context);
 
   return (
     <div className={cn('flex items-center gap-1.5 font-mono text-xs', className)}>

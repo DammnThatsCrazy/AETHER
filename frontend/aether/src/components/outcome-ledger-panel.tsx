@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, formatDecimal, useTimeContext, type LocaleContext } from '@aether/ui';
 import { useOutcomeLedger, useProfileOutcomeLedger } from '@aether-app/features/intelligence';
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -13,8 +13,8 @@ function num(value: unknown): number {
   return typeof value === 'number' ? value : Number(value ?? 0);
 }
 
-function money(value: unknown): string {
-  return `$${num(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+function money(value: unknown, locale: LocaleContext): string {
+  return `$${formatDecimal(num(value), locale, { maximumFractionDigits: 0 })}`;
 }
 
 function pct(value: unknown): string {
@@ -31,6 +31,7 @@ function Stat({ label, value }: { readonly label: string; readonly value: string
 }
 
 export function OutcomeLedgerPanel({ entityId }: { readonly entityId?: string }) {
+  const timeCtx = useTimeContext();
   const tenantLedger = useOutcomeLedger();
   const entityLedger = useProfileOutcomeLedger(entityId ?? '');
   const ledger = entityId ? entityLedger : tenantLedger;
@@ -57,9 +58,9 @@ export function OutcomeLedgerPanel({ entityId }: { readonly entityId?: string })
         {ledger.isLoading ? <p className="text-sm text-text-secondary">Loading outcome ledger…</p> : null}
         {ledger.error ? <p className="text-sm text-danger">Outcome ledger unavailable.</p> : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Observed value" value={money(summary.observed_value)} />
-          <Stat label="Expected value" value={money(summary.expected_value)} />
-          <Stat label="Pending value" value={money(summary.pending_value)} />
+          <Stat label="Observed value" value={money(summary.observed_value, timeCtx)} />
+          <Stat label="Expected value" value={money(summary.expected_value, timeCtx)} />
+          <Stat label="Pending value" value={money(summary.pending_value, timeCtx)} />
           <Stat label="Outcome capture" value={pct(summary.outcome_capture_rate)} />
           <Stat label="Recommendations" value={String(num(summary.recommendations_generated))} />
           <Stat label="Decisions" value={String(num(summary.decisions_recorded))} />
@@ -100,6 +101,7 @@ export function OutcomeLedgerPanel({ entityId }: { readonly entityId?: string })
 }
 
 function LedgerList({ title, items, empty, playbook = false }: { readonly title: string; readonly items: Array<Record<string, unknown>>; readonly empty: string; readonly playbook?: boolean }) {
+  const timeCtx = useTimeContext();
   return (
     <div className="rounded-lg border border-border-subtle p-3">
       <h3 className="text-sm font-medium text-text-primary">{title}</h3>
@@ -108,7 +110,7 @@ function LedgerList({ title, items, empty, playbook = false }: { readonly title:
           {items.map((item) => (
             <div key={String(playbook ? item.playbook_id : item.key)} className="flex items-center justify-between gap-3 text-xs">
               <span className="truncate text-text-secondary">{String(playbook ? item.playbook_name : item.key)}</span>
-              <span className="font-medium text-text-primary">{money(item.observed_value)}</span>
+              <span className="font-medium text-text-primary">{money(item.observed_value, timeCtx)}</span>
             </div>
           ))}
         </div>

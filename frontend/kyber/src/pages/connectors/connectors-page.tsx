@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatInstant, useTimeContext } from '@aether/ui';
+import type { TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 
@@ -23,10 +24,10 @@ function statusColor(status: string): 'success' | 'warning' | 'danger' | 'defaul
   return 'default';
 }
 
-function formatTs(ts: string | null | undefined): string {
+function formatTs(ts: string | null | undefined, timeCtx: TimeContext): string {
   if (!ts) return '—';
   try {
-    return new Date(ts).toLocaleString();
+    return formatInstant(ts, timeCtx);
   } catch {
     return ts;
   }
@@ -44,6 +45,7 @@ interface TypeRow {
 }
 
 export function ConnectorsPage() {
+  const timeCtx = useTimeContext();
   const [data, setData] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,15 +130,15 @@ export function ConnectorsPage() {
                             ? <span className="text-text-muted">—</span>
                             : <Badge variant={statusColor(worstStatus)}>{worstStatus}</Badge>}
                         </td>
-                        <td className="py-2 px-2 text-text-muted">{formatTs(row.last_synced_at)}</td>
+                        <td className="py-2 px-2 text-text-muted">{formatTs(row.last_synced_at, timeCtx)}</td>
                         <td className="py-2 px-2 text-text-muted">
                           {rowAny.last_webhook_at
-                            ? <>{formatTs(rowAny.last_webhook_at as string)} {rowAny.last_webhook_verified === false && <Badge variant="warning">unverified</Badge>}</>
+                            ? <>{formatTs(rowAny.last_webhook_at as string, timeCtx)} {rowAny.last_webhook_verified === false && <Badge variant="warning">unverified</Badge>}</>
                             : '—'}
                         </td>
                         <td className="py-2 px-2 text-text-muted">
                           {rowAny.cursor_last_polled_at
-                            ? <>{formatTs(rowAny.cursor_last_polled_at as string)}<br /><span className="text-text-faint">{String(rowAny.cursor_events_fetched ?? 0)} events</span></>
+                            ? <>{formatTs(rowAny.cursor_last_polled_at as string, timeCtx)}<br /><span className="text-text-faint">{String(rowAny.cursor_events_fetched ?? 0)} events</span></>
                             : '—'}
                         </td>
                       </tr>

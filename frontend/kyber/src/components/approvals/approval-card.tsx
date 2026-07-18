@@ -3,6 +3,7 @@
  * Read-only card displaying a single approval request detail.
  * Owner: Review page
  */
+import { formatDateTime, useTimeContext } from '@aether/ui';
 import type { ApprovalRequest } from '@kyber/lib/schemas/commerce';
 
 interface ApprovalCardProps {
@@ -12,6 +13,7 @@ interface ApprovalCardProps {
 }
 
 export function ApprovalCard({ approval: a, onClick, compact = false }: ApprovalCardProps) {
+  const timeCtx = useTimeContext();
   return (
     <div
       className={`approval-card approval-card--${a.priority} approval-card--${a.status}${compact ? ' approval-card--compact' : ''}`}
@@ -40,8 +42,8 @@ export function ApprovalCard({ approval: a, onClick, compact = false }: Approval
             </div>
           )}
           <div className="approval-card__timestamps">
-            <span>created {new Date(a.created_at).toLocaleString()}</span>
-            {a.decided_at && <span>decided {new Date(a.decided_at).toLocaleString()}</span>}
+            <span>created {formatDateTime(a.created_at, timeCtx)}</span>
+            {a.decided_at && <span>decided {formatDateTime(a.decided_at, timeCtx)}</span>}
           </div>
         </>
       )}

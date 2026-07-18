@@ -1,11 +1,21 @@
 export { cn } from './utils/cn';
 
+// External store primitive (framework-agnostic core + React binding).
+export { createStore, useStore } from './state/index';
+export type { Store } from './state/index';
+
+// The exploration fabric is exposed via the '@aether/ui/exploration' subpath
+// (like '@aether/ui/query'), NOT this barrel: it value-imports the CJS-only
+// '@aether/shared' registries, and keeping it off the main entry means apps
+// pulling '@aether/ui' for components don't drag that chain into their bundle.
+
 // Shared time system — the ONLY sanctioned home for Intl date/time formatting.
 export {
   TimeProvider,
   useTime,
   useTimeContext,
   resolveViewerContext,
+  useNow,
   formatInstant,
   formatDate,
   formatTime,
@@ -26,6 +36,11 @@ export type {
 
 export { TimeWindowSelector } from './components/time-window-selector';
 export type { TimeWindow } from './components/time-window-selector';
+export { TimeLensControl } from './components/time-lens-control';
+
+// Locale-explicit number formatting (same attribution rules as time).
+export { formatCount, formatDecimal, formatCurrency } from './format/number';
+export type { LocaleContext, FormatDecimalOptions } from './format/number';
 export { FreshnessIndicator } from './components/freshness-indicator';
 export { EvidenceDrawer } from './components/evidence-drawer';
 export type { EvidenceRef } from './components/evidence-drawer';
@@ -98,15 +113,8 @@ export type {
 export { NoesisWorkspace } from './components/noesis-workspace';
 export type { NoesisAction, NoesisGraphPayload, NoesisMessageItem, NoesisResponsePayload } from './components/noesis-workspace';
 
-export type { RelationshipLayer } from './types/graph-layers';
-export {
-  RELATIONSHIP_LAYERS,
-  LAYER_COUNT,
-  LAYER_DESCRIPTIONS,
-  EDGE_LAYER_MAP,
-  classifyEdgeType,
-  countEdgesByLayer,
-} from './types/graph-layers';
+// Relationship-layer vocabulary is canonical in @aether/shared (graph-contract).
+// Import it from there directly — this UI package no longer ships a divergent copy.
 
 export { parseProblemDetails, isProblemDetails } from './problem-details';
 export type { ProblemDetails } from './problem-details';

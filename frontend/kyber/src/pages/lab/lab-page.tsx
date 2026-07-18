@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { PageWrapper } from '@kyber/components/layout';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Tabs, TabsList, TabsTrigger, TabsContent, EmptyState, ScrollArea, Select, Input, TerminalSeparator } from '@aether/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Tabs, TabsList, TabsTrigger, TabsContent, EmptyState, ScrollArea, Select, Input, TerminalSeparator, formatTime, useTimeContext } from '@aether/ui';
 import { getRuntimeMode, getEnvironment } from '@kyber/lib/env';
 import { getMockEvents } from '@kyber/fixtures/events';
 import { getMockEntities } from '@kyber/fixtures/entities';
@@ -96,6 +96,7 @@ function ScenarioFixtures() {
 }
 
 function ReplayPanel() {
+  const timeCtx = useTimeContext();
   const [events] = useState(() => getMockEvents());
   const [replayLog, setReplayLog] = useState<LiveEvent[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -150,7 +151,7 @@ function ReplayPanel() {
           <div className="space-y-1">
             {replayLog.map(e => (
               <div key={e.id} className="flex items-center gap-2 text-[11px] font-mono py-1 px-2 hover:bg-surface-raised rounded">
-                <span className="text-text-muted w-20 shrink-0">{new Date(e.timestamp).toLocaleTimeString()}</span>
+                <span className="text-text-muted w-20 shrink-0">{formatTime(e.timestamp, timeCtx)}</span>
                 <Badge variant={e.severity === 'P0' ? 'danger' : e.severity === 'P1' ? 'warning' : 'default'} className="w-8 text-center">{e.severity}</Badge>
                 <Badge>{e.type}</Badge>
                 <span className="text-text-primary truncate">{e.title}</span>

@@ -4,6 +4,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   DataTable, EmptyState, GlyphIcon, LoadingState, Modal,
   ModalBody, ModalFooter, ModalHeader, Skeleton, TerminalSeparator, useToast,
+  formatCount, formatDate, useTimeContext, type TimeContext,
 } from '@aether/ui';
 import { PermissionGate } from '@kyber/features/permissions';
 import {
@@ -21,9 +22,9 @@ function fmt(v: unknown, fallback = '—'): string {
   return String(v);
 }
 
-function fmtDate(iso: unknown): string {
+function fmtDate(iso: unknown, ctx: TimeContext): string {
   if (!iso) return '—';
-  try { return new Date(String(iso)).toLocaleDateString(); } catch { return String(iso); }
+  try { return formatDate(String(iso), ctx); } catch { return String(iso); }
 }
 
 function planVariant(plan: unknown): 'accent' | 'success' | 'warning' | 'default' {
@@ -40,6 +41,7 @@ type TenantRow = Record<string, unknown>;
 
 function TenantListView() {
   const navigate = useNavigate();
+  const timeCtx = useTimeContext();
   const [offset, setOffset] = useState(0);
   const { data, isLoading } = useTenantList({ limit: 25, offset });
   const tenants = (data?.tenants ?? []) as TenantRow[];
@@ -50,7 +52,7 @@ function TenantListView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold font-mono text-text-primary">Tenant Registry</h1>
-          <p className="text-xs text-text-muted mt-0.5">All Aether tenants — {total.toLocaleString()} total</p>
+          <p className="text-xs text-text-muted mt-0.5">All Aether tenants — {formatCount(total, timeCtx)} total</p>
         </div>
         <PermissionGate requires="canCommand">
           <Button variant="secondary" size="sm" onClick={() => navigate('/tenants/new')}>
@@ -95,7 +97,7 @@ function TenantListView() {
               },
             },
             { key: 'email', header: 'Contact', render: t => <span className="text-xs font-mono text-text-muted">{fmt(t.contact_email ?? t.email)}</span> },
-            { key: 'created', header: 'Created', render: t => <span className="text-xs text-text-muted">{fmtDate(t.created_at)}</span> },
+            { key: 'created', header: 'Created', render: t => <span className="text-xs text-text-muted">{fmtDate(t.created_at, timeCtx)}</span> },
             {
               key: 'action',
               header: '',
@@ -127,6 +129,7 @@ function TenantListView() {
 function TenantDetailView({ tenantId }: { tenantId: string }) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
   const [deactivateModal, setDeactivateModal] = useState(false);
   const [provisionModal, setProvisionModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
@@ -207,7 +210,7 @@ function TenantDetailView({ tenantId }: { tenantId: string }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Contact', value: fmt(t.contact_email ?? t.email) },
-          { label: 'Created', value: fmtDate(t.created_at) },
+          { label: 'Created', value: fmtDate(t.created_at, timeCtx) },
           { label: 'Plan', value: fmt(b.plan_name ?? t.plan) },
           { label: 'Monthly events', value: fmt(u.events_this_period ?? u.monthly_events) },
         ].map(m => (
@@ -240,7 +243,7 @@ function TenantDetailView({ tenantId }: { tenantId: string }) {
                   <div>
                     <span className="text-sm font-mono text-text-primary">{fmt(k.name)}</span>
                     <span className="ml-3 text-xs font-mono text-text-muted">{fmt(k.prefix ?? k.key_prefix)}…</span>
-                    {Boolean(k.last_used_at) && <span className="ml-3 text-[10px] text-text-muted">last used {fmtDate(k.last_used_at)}</span>}
+                    {Boolean(k.last_used_at) && <span className="ml-3 text-[10px] text-text-muted">last used {fmtDate(k.last_used_at, timeCtx)}</span>}
                   </div>
                   <PermissionGate requires="canApprove">
                     <Button variant="ghost" size="sm" onClick={() => void handleRevokeKey(String(k.id))}>
@@ -262,7 +265,7 @@ function TenantDetailView({ tenantId }: { tenantId: string }) {
             <div className="grid grid-cols-3 gap-3 mb-4">
               {[
                 { label: 'Status', value: fmt(b.status ?? b.subscription_status) },
-                { label: 'Current period', value: `${fmtDate(b.current_period_start)} → ${fmtDate(b.current_period_end)}` },
+                { label: 'Current period', value: `${fmtDate(b.current_period_start, timeCtx)} → ${fmtDate(b.current_period_end, timeCtx)}` },
                 { label: 'MRR', value: b.mrr != null ? `$${Number(b.mrr).toFixed(2)}` : '—' },
               ].map(m => (
                 <div key={m.label}>
@@ -280,7 +283,7 @@ function TenantDetailView({ tenantId }: { tenantId: string }) {
                     const ir = asRec(inv);
                     return (
                       <div key={String(ir.id ?? i)} className="flex items-center justify-between text-xs font-mono border border-border-subtle rounded px-2 py-1.5">
-                        <span className="text-text-muted">{fmtDate(ir.created_at ?? ir.date)}</span>
+                        <span className="text-text-muted">{fmtDate(ir.created_at ?? ir.date, timeCtx)}</span>
                         <span className="text-text-primary">{ir.amount != null ? `$${Number(ir.amount).toFixed(2)}` : '—'}</span>
                         <Badge variant={String(ir.status ?? '') === 'paid' ? 'success' : 'warning'} size="sm">{fmt(ir.status)}</Badge>
                       </div>

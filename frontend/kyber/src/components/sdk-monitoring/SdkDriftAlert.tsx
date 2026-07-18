@@ -1,3 +1,4 @@
+import { formatDateTime, useTimeContext } from '@aether/ui';
 import type { DriftIncident, DriftSeverity, DriftType } from '@kyber/types/sdk-health';
 
 interface SdkDriftAlertProps {
@@ -27,6 +28,7 @@ function DriftBadge({ type }: { type: DriftType }) {
 }
 
 export function SdkDriftAlert({ incidents, className }: SdkDriftAlertProps) {
+  const timeCtx = useTimeContext();
   if (incidents.length === 0) {
     return (
       <div className={`text-xs text-text-muted py-4 text-center ${className ?? ''}`}>
@@ -45,7 +47,7 @@ export function SdkDriftAlert({ incidents, className }: SdkDriftAlertProps) {
           <div className="flex items-center justify-between gap-2">
             <DriftBadge type={incident.drift_type} />
             <span className="text-[10px] opacity-70">
-              {new Date(incident.detected_at).toLocaleString()}
+              {formatDateTime(incident.detected_at, timeCtx)}
             </span>
           </div>
           <div className="font-mono text-[11px] opacity-90 leading-snug">

@@ -11,6 +11,8 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  formatCount,
+  useTimeContext,
   useToast,
 } from '@aether/ui';
 import {
@@ -62,6 +64,7 @@ export function ImportDetailPage() {
   const { id } = useParams<{ id: string }>();
   const importId = id ?? null;
   const { toast } = useToast();
+  const timeCtx = useTimeContext();
 
   const { detail, loading, error, refresh } = useImportDetail(importId);
   const { commits } = useImportCommits(importId);
@@ -319,7 +322,7 @@ export function ImportDetailPage() {
                         </Badge>
                       </td>
                       <td className="py-2 px-3 font-mono text-text-secondary">{col.nullable ? 'yes' : 'no'}</td>
-                      <td className="py-2 px-3 font-mono text-text-secondary">{col.distinct_count.toLocaleString()}</td>
+                      <td className="py-2 px-3 font-mono text-text-secondary">{formatCount(col.distinct_count, timeCtx)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -435,15 +438,15 @@ export function ImportDetailPage() {
                 <div className="grid grid-cols-3 gap-3 text-xs font-mono">
                   <div>
                     <div className="text-text-muted">Rows total</div>
-                    <div className="text-text-primary mt-0.5">{validation.rows_total.toLocaleString()}</div>
+                    <div className="text-text-primary mt-0.5">{formatCount(validation.rows_total, timeCtx)}</div>
                   </div>
                   <div>
                     <div className="text-text-muted">Rows valid</div>
-                    <div className="text-success mt-0.5">{validation.rows_valid.toLocaleString()}</div>
+                    <div className="text-success mt-0.5">{formatCount(validation.rows_valid, timeCtx)}</div>
                   </div>
                   <div>
                     <div className="text-text-muted">Rows invalid</div>
-                    <div className="text-danger mt-0.5">{validation.rows_invalid.toLocaleString()}</div>
+                    <div className="text-danger mt-0.5">{formatCount(validation.rows_invalid, timeCtx)}</div>
                   </div>
                 </div>
 
@@ -530,7 +533,7 @@ export function ImportDetailPage() {
                       {commitRecord.row_count !== null && commitRecord.row_count !== undefined
                         ? `${commitRecord.row_count} rows · `
                         : ''}
-                      {formatImportDate(commitRecord.created_at)}
+                      {formatImportDate(commitRecord.created_at, timeCtx)}
                     </div>
                   </div>
                   <Button

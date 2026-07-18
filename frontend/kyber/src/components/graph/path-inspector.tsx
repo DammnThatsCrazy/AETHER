@@ -4,6 +4,7 @@ import {
   Card, CardHeader, CardTitle, CardContent,
   Badge, Button, ScrollArea,
   Tabs, TabsList, TabsTrigger, TabsContent,
+  formatDateTime, useTimeContext,
 } from '@aether/ui';
 import type {
   RelationshipPath,
@@ -86,6 +87,7 @@ export function PathInspector({
   onClose,
   className,
 }: PathInspectorProps) {
+  const timeCtx = useTimeContext();
   const [loadingExplanation, setLoadingExplanation] = useState(false);
   const shortId = path.path_id.slice(0, 8);
 
@@ -143,7 +145,7 @@ export function PathInspector({
               <dt className="text-text-secondary">Target</dt>
               <dd className="font-mono truncate" title={path.target_id}>{path.target_id}</dd>
               <dt className="text-text-secondary">Computed</dt>
-              <dd className="font-mono">{new Date(path.computed_at).toLocaleString()}</dd>
+              <dd className="font-mono">{formatDateTime(path.computed_at, timeCtx)}</dd>
             </dl>
           </TabsContent>
 

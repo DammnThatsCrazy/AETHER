@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Card, CardContent, CardHeader, Badge } from '@aether/ui';
+import { Card, CardContent, CardHeader, Badge, formatDecimal, useTimeContext, type TimeContext } from '@aether/ui';
 import { useRecommendationObservability, type KyberWindow } from '@kyber/features/recommendation-observability';
 
 const windows: KyberWindow[] = ['7d', '30d', '90d', 'lifetime'];
@@ -17,8 +17,8 @@ function text(value: unknown, fallback = '—') {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : fallback;
 }
 
-function numberText(value: unknown) {
-  return Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+function numberText(value: unknown, ctx: TimeContext) {
+  return formatDecimal(Number(value ?? 0), ctx, { maximumFractionDigits: 2 });
 }
 
 function pct(value: unknown) {
@@ -27,6 +27,7 @@ function pct(value: unknown) {
 
 export function RecommendationObservabilityPanel() {
   const [window, setWindow] = useState<KyberWindow>('30d');
+  const timeCtx = useTimeContext();
   const data = useRecommendationObservability(window);
   if (!data.enabled) return null;
 
@@ -60,10 +61,10 @@ export function RecommendationObservabilityPanel() {
         {data.isLoading ? <p className="text-sm text-text-secondary">Loading strategic observability…</p> : null}
         {data.error ? <p className="text-sm text-danger">Strategic observability unavailable.</p> : null}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Observed value" value={`$${numberText(overview.observed_value_total)}`} />
+          <Metric label="Observed value" value={`$${numberText(overview.observed_value_total, timeCtx)}`} />
           <Metric label="Outcome capture" value={pct(overview.outcome_capture_rate)} />
           <Metric label="Top family" value={text(overview.top_recommendation_family)} />
-          <Metric label="Expansion / risk" value={`${numberText(overview.tenants_ready_for_expansion)} ready · ${numberText(overview.tenants_at_risk)} at risk`} />
+          <Metric label="Expansion / risk" value={`${numberText(overview.tenants_ready_for_expansion, timeCtx)} ready · ${numberText(overview.tenants_at_risk, timeCtx)} at risk`} />
         </div>
 
         <Section title="Tenant value health">
@@ -71,7 +72,7 @@ export function RecommendationObservabilityPanel() {
             <Row key={text(tenant.tenant_id)} title={text(tenant.tenant_name, text(tenant.tenant_id))} badge={pct(tenant.tenant_health_score)}>
               <span>Decision {pct(tenant.decision_rate)}</span>
               <span>Capture {pct(tenant.outcome_capture_rate)}</span>
-              <span>Observed ${numberText(tenant.observed_value)}</span>
+              <span>Observed ${numberText(tenant.observed_value, timeCtx)}</span>
               <span>Action: {text(tenant.recommended_olympus_action)}</span>
             </Row>
           ))}
@@ -81,20 +82,20 @@ export function RecommendationObservabilityPanel() {
           <Section title="Recommendation family performance">
             {families.length === 0 ? <Empty label="No recommendation family activity yet." /> : families.map((family) => (
               <Row key={text(family.recommendation_family)} title={text(family.recommendation_family).replace(/_/g, ' ')} badge={text(family.recommended_commercialization_status)}>
-                <span>{numberText(family.generated)} generated</span>
+                <span>{numberText(family.generated, timeCtx)} generated</span>
                 <span>Success {pct(family.success_rate)}</span>
                 <span>Capture {pct(family.outcome_capture_rate)}</span>
-                <span>Value ${numberText(family.observed_value)}</span>
+                <span>Value ${numberText(family.observed_value, timeCtx)}</span>
               </Row>
             ))}
           </Section>
 
           <Section title="Playbook performance">
             {playbooks.length === 0 ? <Empty label="No playbook adoption yet." /> : playbooks.map((playbook) => (
-              <Row key={text(playbook.template_id)} title={text(playbook.template_name, text(playbook.category))} badge={numberText(playbook.tenant_adoption_count)}>
-                <span>{numberText(playbook.runs_total)} runs</span>
+              <Row key={text(playbook.template_id)} title={text(playbook.template_name, text(playbook.category))} badge={numberText(playbook.tenant_adoption_count, timeCtx)}>
+                <span>{numberText(playbook.runs_total, timeCtx)} runs</span>
                 <span>Success {pct(playbook.success_rate)}</span>
-                <span>Value ${numberText(playbook.observed_value)}</span>
+                <span>Value ${numberText(playbook.observed_value, timeCtx)}</span>
                 <span>{text(playbook.recommended_packaging)}</span>
               </Row>
             ))}
@@ -117,9 +118,9 @@ export function RecommendationObservabilityPanel() {
           <Section title="Vertical solution signals">
             {solutions.length === 0 ? <Empty label="No solution signals yet." /> : solutions.map((solution) => (
               <Row key={text(solution.solution_key)} title={text(solution.label)} badge={text(solution.commercial_priority)}>
-                <span>{numberText(solution.tenant_count)} tenants</span>
+                <span>{numberText(solution.tenant_count, timeCtx)} tenants</span>
                 <span>Adoption {pct(solution.adoption_rate)}</span>
-                <span>Value ${numberText(solution.observed_value)}</span>
+                <span>Value ${numberText(solution.observed_value, timeCtx)}</span>
                 <span>{text(solution.recommended_next_product_action)}</span>
               </Row>
             ))}
@@ -130,7 +131,7 @@ export function RecommendationObservabilityPanel() {
           {opportunities.length === 0 ? <Empty label="No revenue opportunities yet." /> : opportunities.map((opportunity) => (
             <Row key={text(opportunity.opportunity_id)} title={`${text(opportunity.tenant_id)} · ${text(opportunity.opportunity_type).replace(/_/g, ' ')}`} badge={pct(opportunity.confidence)}>
               <span>{text(opportunity.reason)}</span>
-              <span>Est. ${numberText(opportunity.estimated_value)}</span>
+              <span>Est. ${numberText(opportunity.estimated_value, timeCtx)}</span>
               <span>{text(opportunity.recommended_action)}</span>
             </Row>
           ))}

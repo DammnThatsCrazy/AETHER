@@ -11,6 +11,8 @@ import {
   ErrorState,
   LoadingState,
   useToast,
+  formatCount,
+  useTimeContext,
 } from '@aether/ui';
 import {
   paymentRailProviders,
@@ -89,6 +91,7 @@ interface ProviderHealthCardProps {
 }
 
 function ProviderHealthCard({ provider, health, syncing, syncDisabled, onSync }: ProviderHealthCardProps) {
+  const timeCtx = useTimeContext();
   const status = health?.status ?? 'not_configured';
   const configured = health?.configured ?? false;
 
@@ -101,18 +104,18 @@ function ProviderHealthCard({ provider, health, syncing, syncDisabled, onSync }:
         </div>
         {configured ? (
           <>
-            <HealthStat label="Sessions 24h" value={(health?.sessions_observed_24h ?? 0).toLocaleString()} />
-            <HealthStat label="Completed 24h" value={(health?.sessions_completed_24h ?? 0).toLocaleString()} tone="success" />
-            <HealthStat label="Failed 24h" value={(health?.sessions_failed_24h ?? 0).toLocaleString()} tone="danger" />
+            <HealthStat label="Sessions 24h" value={formatCount(health?.sessions_observed_24h ?? 0, timeCtx)} />
+            <HealthStat label="Completed 24h" value={formatCount(health?.sessions_completed_24h ?? 0, timeCtx)} tone="success" />
+            <HealthStat label="Failed 24h" value={formatCount(health?.sessions_failed_24h ?? 0, timeCtx)} tone="danger" />
             <HealthStat
               label="Webhooks 24h"
-              value={`${(health?.webhook_verified_24h ?? 0).toLocaleString()} ok / ${(health?.webhook_rejected_24h ?? 0).toLocaleString()} rejected`}
+              value={`${formatCount(health?.webhook_verified_24h ?? 0, timeCtx)} ok / ${formatCount(health?.webhook_rejected_24h ?? 0, timeCtx)} rejected`}
               tone={(health?.webhook_rejected_24h ?? 0) > 0 ? 'warning' : 'default'}
             />
-            <HealthStat label="Unresolved" value={(health?.sessions_unresolved ?? 0).toLocaleString()} tone={(health?.sessions_unresolved ?? 0) > 0 ? 'warning' : 'default'} />
-            <HealthStat label="Conflicts" value={(health?.reconciliation_conflicts ?? 0).toLocaleString()} tone={(health?.reconciliation_conflicts ?? 0) > 0 ? 'danger' : 'default'} />
+            <HealthStat label="Unresolved" value={formatCount(health?.sessions_unresolved ?? 0, timeCtx)} tone={(health?.sessions_unresolved ?? 0) > 0 ? 'warning' : 'default'} />
+            <HealthStat label="Conflicts" value={formatCount(health?.reconciliation_conflicts ?? 0, timeCtx)} tone={(health?.reconciliation_conflicts ?? 0) > 0 ? 'danger' : 'default'} />
             <HealthStat label="Matched rate" value={formatMatchedRate(health?.reconciliation_matched_rate)} />
-            <HealthStat label="Last event" value={formatDateTime(health?.last_event_at)} />
+            <HealthStat label="Last event" value={formatDateTime(health?.last_event_at, timeCtx)} />
             <Button
               variant="secondary"
               size="sm"
@@ -156,6 +159,7 @@ interface SessionDetailDrawerProps {
 }
 
 function SessionDetailDrawer({ sessionId, onClose }: SessionDetailDrawerProps) {
+  const timeCtx = useTimeContext();
   const { session, loading, error, refresh } = useFundingSession(sessionId);
   const { records } = useReconciliationRecords();
   const { status: adapterStatus } = useProviderStatus(session?.provider ?? null);
@@ -203,7 +207,7 @@ function SessionDetailDrawer({ sessionId, onClose }: SessionDetailDrawerProps) {
                 <DetailField label="Provider detail" value={session.provider_detail} />
                 <DetailField label="Provider status" value={session.provider_status} />
                 <DetailField label="Status reason" value={session.status_reason} />
-                <DetailField label="Occurred at" value={formatDateTime(session.occurred_at)} mono={false} />
+                <DetailField label="Occurred at" value={formatDateTime(session.occurred_at, timeCtx)} mono={false} />
               </div>
             </CardContent>
           </Card>
@@ -290,9 +294,9 @@ function SessionDetailDrawer({ sessionId, onClose }: SessionDetailDrawerProps) {
                     <DetailField label="Last source" value={reconciliation.last_source} />
                     <DetailField label="SDK event" value={reconciliation.sdk_event_id} />
                     <DetailField label="Provider event" value={reconciliation.provider_event_id} />
-                    <DetailField label="First observed" value={formatDateTime(reconciliation.first_observed_at)} mono={false} />
-                    <DetailField label="Last checked" value={formatDateTime(reconciliation.last_checked_at)} mono={false} />
-                    <DetailField label="Resolved" value={reconciliation.resolved_at ? formatDateTime(reconciliation.resolved_at) : undefined} mono={false} />
+                    <DetailField label="First observed" value={formatDateTime(reconciliation.first_observed_at, timeCtx)} mono={false} />
+                    <DetailField label="Last checked" value={formatDateTime(reconciliation.last_checked_at, timeCtx)} mono={false} />
+                    <DetailField label="Resolved" value={reconciliation.resolved_at ? formatDateTime(reconciliation.resolved_at, timeCtx) : undefined} mono={false} />
                   </div>
                   {discrepancies.length > 0 && (
                     <div>
@@ -323,8 +327,8 @@ function SessionDetailDrawer({ sessionId, onClose }: SessionDetailDrawerProps) {
           </Card>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <DetailField label="Created" value={formatDateTime(session.created_at)} mono={false} />
-            <DetailField label="Updated" value={formatDateTime(session.updated_at)} mono={false} />
+            <DetailField label="Created" value={formatDateTime(session.created_at, timeCtx)} mono={false} />
+            <DetailField label="Updated" value={formatDateTime(session.updated_at, timeCtx)} mono={false} />
           </div>
         </>
       )}
@@ -341,6 +345,7 @@ interface ReconciliationSummaryProps {
 }
 
 function ReconciliationSummary({ loading, error, refresh, counts, total }: ReconciliationSummaryProps) {
+  const timeCtx = useTimeContext();
   return (
     <Card>
       <CardHeader>
@@ -358,7 +363,7 @@ function ReconciliationSummary({ loading, error, refresh, counts, total }: Recon
             {reconciliationStates.map(state => (
               <div key={state} className="flex items-center justify-between rounded border border-border-default px-2 py-1.5">
                 <ReconciliationStateBadge state={state} />
-                <span className="text-xs font-mono text-text-primary">{(counts[state] ?? 0).toLocaleString()}</span>
+                <span className="text-xs font-mono text-text-primary">{formatCount(counts[state] ?? 0, timeCtx)}</span>
               </div>
             ))}
           </div>
@@ -369,6 +374,7 @@ function ReconciliationSummary({ loading, error, refresh, counts, total }: Recon
 }
 
 export function PaymentRailsPage() {
+  const timeCtx = useTimeContext();
   const { toast } = useToast();
   const [provider, setProvider] = useState('');
   const [status, setStatus] = useState('');
@@ -456,7 +462,7 @@ export function PaymentRailsPage() {
       key: 'occurred_at',
       header: 'Occurred',
       render: (row: FundingSessionRecord) => (
-        <span className="text-xs text-text-muted">{formatDateTime(row.occurred_at)}</span>
+        <span className="text-xs text-text-muted">{formatDateTime(row.occurred_at, timeCtx)}</span>
       ),
     },
   ];

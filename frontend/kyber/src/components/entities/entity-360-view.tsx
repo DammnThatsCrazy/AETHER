@@ -31,8 +31,12 @@ import {
   Input,
   TerminalSeparator,
   useToast,
+  formatDateTime,
+  formatRelative,
+  useNow,
+  useTimeContext,
 } from '@aether/ui';
-import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
+import { cn } from '@kyber/lib/utils';
 import { PermissionGate } from '@kyber/features/permissions';
 import { api } from '@kyber/lib/api/endpoints';
 import { EntityScoreCard } from './entity-score-card';
@@ -203,6 +207,8 @@ export function Entity360View({
   needsHelpCard,
   onBack,
 }: Entity360ViewProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [drillStack, setDrillStack] = useState<Profile360DrillItem[]>([]);
@@ -214,7 +220,7 @@ export function Entity360View({
     return neighborhood.nodes.filter((n) => n.id !== entity.id);
   }, [neighborhood, entity.id]);
 
-  const profile360Summary = useMemo(() => getProfile360Summary(entity, timeline, neighborhood), [entity, timeline, neighborhood]);
+  const profile360Summary = useMemo(() => getProfile360Summary(entity, timeline, neighborhood, timeCtx), [entity, timeline, neighborhood, timeCtx]);
   const profile360Relationships = useMemo(() => getRelationships(entity, neighborhood), [entity, neighborhood]);
   const profile360Analytics = useMemo(() => getAnalytics(entity, timeline, neighborhood), [entity, timeline, neighborhood]);
   const pushDrill = (item: Profile360DrillItem) => {
@@ -314,11 +320,11 @@ export function Entity360View({
                   </div>
                   <div>
                     <span className="text-neutral-500">Created:</span>{' '}
-                    <span className="text-neutral-400 text-xs">{formatTimestamp(entity.createdAt)}</span>
+                    <span className="text-neutral-400 text-xs">{formatDateTime(entity.createdAt, timeCtx)}</span>
                   </div>
                   <div>
                     <span className="text-neutral-500">Updated:</span>{' '}
-                    <span className="text-neutral-400 text-xs">{formatRelativeTime(entity.updatedAt)}</span>
+                    <span className="text-neutral-400 text-xs">{formatRelative(entity.updatedAt, timeCtx, now)}</span>
                   </div>
                   <div className="col-span-2">
                     <span className="text-neutral-500">Tags:</span>{' '}
@@ -451,7 +457,7 @@ export function Entity360View({
                             </span>
                           </div>
                           <span className="text-xs text-neutral-500">
-                            {formatRelativeTime(event.timestamp)}
+                            {formatRelative(event.timestamp, timeCtx, now)}
                           </span>
                         </div>
                         <p className="text-sm text-neutral-400">{event.description}</p>
@@ -706,13 +712,13 @@ export function Entity360View({
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-neutral-200">{note.author}</span>
                         <span className="text-xs text-neutral-500">
-                          {formatRelativeTime(note.createdAt)}
+                          {formatRelative(note.createdAt, timeCtx, now)}
                         </span>
                       </div>
                       <p className="text-sm text-neutral-300">{note.content}</p>
                       {note.updatedAt !== note.createdAt && (
                         <span className="text-xs text-neutral-600">
-                          edited {formatRelativeTime(note.updatedAt)}
+                          edited {formatRelative(note.updatedAt, timeCtx, now)}
                         </span>
                       )}
                     </div>
@@ -784,7 +790,7 @@ export function Entity360View({
                             </span>
                           </div>
                           <span className="text-xs text-neutral-500">
-                            {formatRelativeTime(intv.performedAt)}
+                            {formatRelative(intv.performedAt, timeCtx, now)}
                           </span>
                         </div>
                         <div className="flex items-center gap-4 text-xs text-neutral-500">

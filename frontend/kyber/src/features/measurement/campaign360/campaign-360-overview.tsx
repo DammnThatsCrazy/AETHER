@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle, LoadingState, ErrorState, Badge } from '@aether/ui';
+import { Card, CardContent, CardHeader, CardTitle, LoadingState, ErrorState, Badge, formatCount, formatDecimal, useTimeContext, type TimeContext } from '@aether/ui';
 import type { Campaign360OverviewParams } from '../use-campaign-360';
 import { useCampaign360Overview } from '../use-campaign-360';
 
@@ -13,8 +13,8 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function fmtUSD(n: number) {
-  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtUSD(n: number, ctx: TimeContext) {
+  return `$${formatDecimal(n, ctx, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function fmtPct(n: number | null) {
@@ -28,6 +28,7 @@ interface Props {
 
 export function Campaign360Overview({ params }: Props) {
   const { data, loading, error } = useCampaign360Overview(params);
+  const timeCtx = useTimeContext();
 
   if (loading) return <LoadingState lines={6} className="p-4" />;
   if (error) return <ErrorState title="Overview unavailable" message={error} />;
@@ -47,11 +48,11 @@ export function Campaign360Overview({ params }: Props) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-        <Metric label="Spend" value={fmtUSD(Number(d.spend_usd ?? 0))} />
-        <Metric label="Impressions" value={Number(d.impressions ?? 0).toLocaleString()} />
-        <Metric label="Clicks" value={Number(d.clicks ?? 0).toLocaleString()} />
+        <Metric label="Spend" value={fmtUSD(Number(d.spend_usd ?? 0), timeCtx)} />
+        <Metric label="Impressions" value={formatCount(Number(d.impressions ?? 0), timeCtx)} />
+        <Metric label="Clicks" value={formatCount(Number(d.clicks ?? 0), timeCtx)} />
         <Metric label="CTR" value={fmtPct(d.ctr as number | null)} />
-        <Metric label="CPC" value={d.cpc != null ? fmtUSD(Number(d.cpc)) : '—'} />
+        <Metric label="CPC" value={d.cpc != null ? fmtUSD(Number(d.cpc), timeCtx) : '—'} />
       </div>
 
       <div>
@@ -70,7 +71,7 @@ export function Campaign360Overview({ params }: Props) {
                   <div className={`w-2 h-2 rounded-full ${color}`} />
                   <div className="text-xs text-text-muted font-mono">{label}</div>
                 </div>
-                <div className="text-xl font-semibold">{value.toLocaleString()}</div>
+                <div className="text-xl font-semibold">{formatCount(value, timeCtx)}</div>
               </CardContent>
             </Card>
           ))}
@@ -80,8 +81,8 @@ export function Campaign360Overview({ params }: Props) {
       <div>
         <h3 className="text-sm font-medium text-text-secondary mb-2">Attribution economics</h3>
         <div className="grid gap-4 md:grid-cols-3">
-          <Metric label="Gross attributed revenue" value={fmtUSD(Number(d.gross_attributed_revenue ?? 0))} />
-          <Metric label="Net attributed revenue" value={fmtUSD(Number(d.net_attributed_revenue ?? 0))} />
+          <Metric label="Gross attributed revenue" value={fmtUSD(Number(d.gross_attributed_revenue ?? 0), timeCtx)} />
+          <Metric label="Net attributed revenue" value={fmtUSD(Number(d.net_attributed_revenue ?? 0), timeCtx)} />
           <Metric label="ROAS" value={d.roas != null ? `${Number(d.roas).toFixed(2)}x` : '—'} />
         </div>
       </div>
@@ -90,7 +91,7 @@ export function Campaign360Overview({ params }: Props) {
         <h3 className="text-sm font-medium text-text-secondary mb-2">Identity quality</h3>
         <div className="grid gap-4 md:grid-cols-3">
           <Metric label="Resolution rate" value={fmtPct(d.identity_resolution_rate as number | null)} />
-          <Metric label="Touchpoints" value={Number(d.touchpoint_count ?? 0).toLocaleString()} />
+          <Metric label="Touchpoints" value={formatCount(Number(d.touchpoint_count ?? 0), timeCtx)} />
           <Metric label="Fractional conversions" value={Number(d.fractional_attributed_conversions ?? 0).toFixed(2)} />
         </div>
       </div>

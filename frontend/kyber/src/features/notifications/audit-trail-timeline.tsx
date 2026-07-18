@@ -1,4 +1,5 @@
 import type { FC } from 'react';
+import { formatDateTime, useTimeContext, type TimeContext } from '@aether/ui';
 
 export interface AuditEntry {
   readonly state: string;
@@ -12,12 +13,9 @@ interface Props {
   readonly className?: string;
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, ctx: TimeContext): string {
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: 'short',
-      timeStyle: 'medium',
-    });
+    return formatDateTime(iso, ctx);
   } catch {
     return iso;
   }
@@ -36,6 +34,7 @@ const STATE_DOT: Record<string, string> = {
 };
 
 export const AuditTrailTimeline: FC<Props> = ({ trail, className = '' }) => {
+  const timeCtx = useTimeContext();
   if (!trail.length) {
     return (
       <p className={`text-sm text-zinc-500 ${className}`}>No audit entries yet.</p>
@@ -58,7 +57,7 @@ export const AuditTrailTimeline: FC<Props> = ({ trail, className = '' }) => {
               <span className="text-xs font-semibold uppercase tracking-wide text-zinc-300">
                 {entry.state}
               </span>
-              <time className="text-xs text-zinc-500">{formatTime(entry.timestamp)}</time>
+              <time className="text-xs text-zinc-500">{formatTime(entry.timestamp, timeCtx)}</time>
             </div>
             <p className="mt-0.5 text-xs text-zinc-400">by {actor}</p>
             {annotation && (

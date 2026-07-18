@@ -1,6 +1,6 @@
 import { useAuth } from '@kyber/features/auth';
 import { getEnvironment, getRuntimeMode } from '@kyber/lib/env';
-import { EnvironmentBadge, Badge } from '@aether/ui';
+import { EnvironmentBadge, Badge, TimeLensControl } from '@aether/ui';
 import { useNotifications } from '@kyber/features/notifications';
 
 export function TopBar() {
@@ -18,6 +18,7 @@ export function TopBar() {
         </Badge>
       </div>
       <div className="flex items-center gap-4">
+        <TimeLensControl className="hidden md:flex" />
         <button
           className="relative text-text-secondary hover:text-text-primary transition-colors text-sm"
           aria-label={`${unreadCount} unread notifications`}

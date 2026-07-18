@@ -51,7 +51,7 @@ vi.mock('@aether-app/features/graph/use-graph-data', () => ({
       { id: 'node-Y', kind: 'agent', label: 'Ybot', trustScore: 0.7, riskScore: 0.2, metadata: {} },
     ],
     edges: [{ id: 'e1', source: 'node-X', target: 'node-Y', relationType: 'CONNECTS', interactionClass: 'H2A', weight: 0.85, metadata: {} }],
-    clusters: [],
+    clusters: [{ id: 'clu-1', label: 'Cluster clu-1', nodeIds: ['node-X', 'node-Y'], size: 2 }],
     isLoading: false,
     error: null,
     activeLayer: 'all',
@@ -77,9 +77,9 @@ vi.mock('@aether-app/components/graph/graph-canvas', () => ({
 
 import { GraphPage } from '@aether-app/pages/graph/graph-page';
 
-function renderWithRouter() {
+function renderWithRouter(initialEntries: string[] = ['/']) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <GraphPage />
     </MemoryRouter>,
   );
@@ -139,5 +139,19 @@ describe('GraphPage — path API integration', () => {
     expect(screen.getByRole('button', { name: 'Shortest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Strongest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'K-Shortest' })).toBeInTheDocument();
+  });
+
+  it('consumes the ?cluster= deep link and seeds the cluster selection', async () => {
+    renderWithRouter(['/graph?cluster=clu-1']);
+    // The cluster inspector (unique "member entities" copy) opens for the
+    // deep-linked cluster — the incoming context is preserved, not dropped.
+    await waitFor(() => {
+      expect(screen.getByText(/member entities/)).toBeInTheDocument();
+    });
+  });
+
+  it('does not open a cluster inspector without a matching deep link', () => {
+    renderWithRouter(['/graph?cluster=does-not-exist']);
+    expect(screen.queryByText(/member entities/)).not.toBeInTheDocument();
   });
 });

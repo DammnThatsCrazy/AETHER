@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
@@ -355,6 +355,7 @@ const NODE_COLUMNS = [
 export function GraphPage() {
   const [searchParams] = useSearchParams();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
+  const deepLinkedCluster = searchParams.get('cluster');
 
   // Declared before useGraphData so they can be passed as options
   const [replayDate, setReplayDate] = useState<string | null>(null);
@@ -458,6 +459,22 @@ export function GraphPage() {
     setHighlightedCluster(null);
     setInspector({ type: 'node', node, neighbors: getNeighbors(node.id) });
   }, [deepLinkedEntity, nodes, getNeighbors, isLoading, error]);
+
+  // Deep link from cluster-360 (/graph?cluster=<id>) — seed the cluster
+  // selection so the incoming context is preserved, not silently dropped.
+  // Seed once per param value (a later data refresh must not re-hijack the
+  // user's current selection).
+  const seededClusterRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkedCluster || isLoading || error) return;
+    if (seededClusterRef.current === deepLinkedCluster) return;
+    const cluster = clusters.find(c => c.id === deepLinkedCluster);
+    if (!cluster) return;
+    seededClusterRef.current = deepLinkedCluster;
+    setViewMode('graph');
+    setHighlightedCluster([...cluster.nodeIds]);
+    setInspector({ type: 'cluster', cluster });
+  }, [deepLinkedCluster, clusters, isLoading, error]);
 
   const handleSelectEdge = useCallback((edge: GraphEdge | null) => {
     if (!edge) { setInspector(null); return; }
@@ -576,9 +593,9 @@ export function GraphPage() {
       </div>
 
       {/* Truncation warning */}
-      {nodes.length >= 200 && (
+      {nodes.length >= 500 && (
         <div className="text-xs px-3 py-2 rounded bg-warning/10 border border-warning/30 text-warning">
-          Graph shows the first 200 entities. Relationships may be partial. Use filters or zoom to a specific cluster to see complete data.
+          Graph shows the first 500 entities. Relationships may be partial. Use filters or zoom to a specific cluster to see complete data.
         </div>
       )}
 

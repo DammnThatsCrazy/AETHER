@@ -3,6 +3,7 @@
  * Displays the full evidence bundle for an approval (policy decision, requirement).
  * Owner: Review page
  */
+import { formatDateTime, useTimeContext } from '@aether/ui';
 import type { EvidenceBundle } from '@kyber/lib/schemas/commerce';
 
 interface EvidencePanelProps {
@@ -12,6 +13,7 @@ interface EvidencePanelProps {
 }
 
 export function EvidencePanel({ evidence, loading = false, error = null }: EvidencePanelProps) {
+  const timeCtx = useTimeContext();
   if (loading) {
     return <div className="evidence-panel evidence-panel--loading" aria-busy="true">loading evidence…</div>;
   }
@@ -57,7 +59,7 @@ export function EvidencePanel({ evidence, loading = false, error = null }: Evide
             <dt>challenge id</dt><dd>{requirement.challenge_id}</dd>
             <dt>amount</dt><dd>${requirement.amount_usd.toFixed(4)} {requirement.asset_symbol}</dd>
             <dt>chain</dt><dd>{requirement.chain}</dd>
-            <dt>expires</dt><dd>{new Date(requirement.expires_at).toLocaleString()}</dd>
+            <dt>expires</dt><dd>{formatDateTime(requirement.expires_at, timeCtx)}</dd>
           </dl>
         </section>
       )}

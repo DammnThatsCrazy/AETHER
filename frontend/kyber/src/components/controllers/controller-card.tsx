@@ -1,5 +1,5 @@
-import { cn, formatRelativeTime } from '@kyber/lib/utils';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter, Badge, StatusIndicator } from '@aether/ui';
+import { cn } from '@kyber/lib/utils';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, Badge, StatusIndicator, useTimeContext, useNow, formatRelative } from '@aether/ui';
 import type {
   Controller,
   ControllerDisplayMode,
@@ -49,6 +49,8 @@ const recoveryVariant: Record<string, 'default' | 'warning' | 'danger'> = {
 };
 
 export function ControllerCard({ controller, displayMode, className }: ControllerCardProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   const { name, health, queueDepth, activeObjectives, blockedItems, lastActivity, uptime, stagedMutations, recoveryState } = controller;
 
   return (
@@ -96,7 +98,7 @@ export function ControllerCard({ controller, displayMode, className }: Controlle
           </Badge>
         )}
         <span className="text-[10px] text-text-muted font-mono ml-auto" title={`Uptime: ${uptime}`}>
-          {formatRelativeTime(lastActivity)}
+          {formatRelative(lastActivity, timeCtx, now)}
         </span>
       </CardFooter>
     </Card>

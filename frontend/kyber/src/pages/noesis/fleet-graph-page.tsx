@@ -3,6 +3,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   EmptyState, LoadingState, Modal, ModalBody, ModalFooter, ModalHeader,
   Skeleton, TerminalSeparator, useToast,
+  formatCount, formatTime, useTimeContext,
 } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { PermissionGate } from '@kyber/features/permissions';
@@ -45,6 +46,7 @@ function TenantEnvelopeRow({
   onEnterTenant: (tenantId: string, name: string) => void;
 }) {
   const { envelope, isLoading } = useFleetTenantEnvelope(tenant.tenant_id);
+  const timeCtx = useTimeContext();
 
   return (
     <div className="flex items-center justify-between border border-border-subtle rounded px-3 py-2.5 text-xs font-mono gap-3">
@@ -64,12 +66,12 @@ function TenantEnvelopeRow({
           <div className="w-20 text-center">
             <div className="text-[10px] text-text-muted">Graph nodes</div>
             <div className={cn('font-bold', envelope.graph.has_data ? 'text-text-primary' : 'text-text-muted')}>
-              {envelope.graph.node_count.toLocaleString()}
+              {formatCount(envelope.graph.node_count, timeCtx)}
             </div>
           </div>
           <div className="w-20 text-center">
             <div className="text-[10px] text-text-muted">Edge sample</div>
-            <div className="text-text-primary font-bold">{envelope.graph.edge_count_sample.toLocaleString()}</div>
+            <div className="text-text-primary font-bold">{formatCount(envelope.graph.edge_count_sample, timeCtx)}</div>
           </div>
           <div className="w-20 text-center">
             <div className="text-[10px] text-text-muted">Fraud nets</div>
@@ -215,13 +217,14 @@ function OperatorSessionBanner({
   onExit: () => void;
   isExiting: boolean;
 }) {
+  const timeCtx = useTimeContext();
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-danger/10 border border-danger/40 rounded text-xs font-mono">
       <div className="flex items-center gap-3">
         <Badge variant="danger" size="sm">OPERATOR SESSION ACTIVE</Badge>
         <span className="text-text-secondary">Tenant: <span className="text-text-primary font-bold">{session.tenant_id}</span></span>
         <span className="text-text-muted">Purpose: {session.purpose}</span>
-        <span className="text-text-muted">Entered: {new Date(session.entered_at).toLocaleTimeString()}</span>
+        <span className="text-text-muted">Entered: {formatTime(session.entered_at, timeCtx)}</span>
       </div>
       <Button variant="danger" size="sm" onClick={onExit} disabled={isExiting}>
         {isExiting ? '[···]' : 'Exit tenant'}

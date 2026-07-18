@@ -1,6 +1,6 @@
 import type { CHARStatus } from '@kyber/types';
-import { Card, CardContent, Badge, TerminalSeparator } from '@aether/ui';
-import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
+import { Card, CardContent, Badge, TerminalSeparator, useTimeContext, useNow, formatRelative, formatDateTime } from '@aether/ui';
+import { cn } from '@kyber/lib/utils';
 
 interface CHARStatusPanelProps {
   readonly status: CHARStatus;
@@ -14,6 +14,8 @@ const stateVariant: Record<CHARStatus['coordinationState'], 'success' | 'warning
 };
 
 export function CHARStatusPanel({ status, className }: CHARStatusPanelProps) {
+  const timeCtx = useTimeContext();
+  const now = useNow();
   const { overallDirective, activePriorities, escalations, briefSummary, lastBriefAt, coordinationState } = status;
 
   return (
@@ -27,8 +29,8 @@ export function CHARStatusPanel({ status, className }: CHARStatusPanelProps) {
               {coordinationState.toUpperCase()}
             </Badge>
           </div>
-          <span className="text-[10px] text-text-muted font-mono" title={formatTimestamp(lastBriefAt)}>
-            {formatRelativeTime(lastBriefAt)}
+          <span className="text-[10px] text-text-muted font-mono" title={formatDateTime(lastBriefAt, timeCtx)}>
+            {formatRelative(lastBriefAt, timeCtx, now)}
           </span>
         </div>
 

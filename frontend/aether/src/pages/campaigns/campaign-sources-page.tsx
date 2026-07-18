@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Badge, Button, Card, CardContent, CardHeader,
   EmptyState, ErrorState, LoadingState,
+  formatCount, useTimeContext,
 } from '@aether/ui';
 import { useCampaignSources, useSyncCampaignSource } from '@aether-app/features/campaigns/use-campaign-sources';
 
@@ -39,6 +40,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 function SourceCard({ source, onSync }: { source: Source; onSync: (id: string) => void }) {
+  const timeCtx = useTimeContext();
   const connectorId = fmt(source.connector_id ?? source.id);
   const platform = fmt(source.platform);
   const status = fmt(source.status ?? source.sync_status, 'unknown');
@@ -74,7 +76,7 @@ function SourceCard({ source, onSync }: { source: Source; onSync: (id: string) =
           {campaignCount !== undefined && (
             <>
               <dt className="text-text-secondary">Campaigns</dt>
-              <dd className="text-text-primary">{campaignCount.toLocaleString()}</dd>
+              <dd className="text-text-primary">{formatCount(campaignCount, timeCtx)}</dd>
             </>
           )}
           {source.account_label != null && (

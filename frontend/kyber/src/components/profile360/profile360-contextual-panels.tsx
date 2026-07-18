@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, EvidenceDrawer, formatUSD, GlyphIcon, ScrollArea } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, EvidenceDrawer, formatDate, formatUSD, GlyphIcon, ScrollArea, useTimeContext } from '@aether/ui';
 import type { EvidenceRef } from '@aether/ui';
 import { cn } from '@kyber/lib/utils';
 import type { Profile360Section } from '@kyber/types';
@@ -466,6 +466,7 @@ export function Profile360BehavioralPanel({ sections, window: _window }: { reado
 // ── Attribution ───────────────────────────────────────────────────────────────
 
 export function Profile360AttributionPanel({ sections, profileId }: { readonly sections: readonly Profile360Section[]; readonly profileId?: string }) {
+  const timeCtx = useTimeContext();
   const section = sections.find(s => s.id === 'attribution-journey');
   const data = asRec(section?.data);
   const touchpoints = Array.isArray(data.touchpoints) ? data.touchpoints : [];
@@ -527,7 +528,7 @@ export function Profile360AttributionPanel({ sections, profileId }: { readonly s
                   {!!firstCampaign.name && <span className="text-text-secondary">{String(firstCampaign.name)}</span>}
                   {!!firstCampaign.channel && <Badge size="sm">{String(firstCampaign.channel)}</Badge>}
                   {!!firstCampaign.first_touch_at && (
-                    <span className="font-mono text-text-muted">{new Date(String(firstCampaign.first_touch_at)).toLocaleDateString()}</span>
+                    <span className="font-mono text-text-muted">{formatDate(String(firstCampaign.first_touch_at), timeCtx)}</span>
                   )}
                 </div>
               </div>
@@ -570,7 +571,7 @@ export function Profile360AttributionPanel({ sections, profileId }: { readonly s
                         <span className="font-mono text-text-muted">{String(cv.conversion_id ?? '—').slice(0, 8)}…</span>
                         {!!cv.conversion_type && <Badge size="sm">{String(cv.conversion_type)}</Badge>}
                         {cv.gross_value != null && <span className="font-mono text-text-primary">{formatUSD(usdInput(cv.gross_value), { compact: true })}</span>}
-                        {!!cv.occurred_at && <span className="font-mono text-text-muted ml-auto">{new Date(String(cv.occurred_at)).toLocaleDateString()}</span>}
+                        {!!cv.occurred_at && <span className="font-mono text-text-muted ml-auto">{formatDate(String(cv.occurred_at), timeCtx)}</span>}
                       </div>
                     ))}
                   </div>
