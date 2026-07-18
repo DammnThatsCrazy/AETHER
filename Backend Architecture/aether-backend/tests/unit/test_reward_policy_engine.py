@@ -32,6 +32,22 @@ from services.rewards.repositories import (
     RewardDecisionRepository,
     RewardRuleRepository,
 )
+from repositories.repos import reset_in_memory_stores
+
+
+@pytest.fixture(autouse=True)
+def _isolate_in_memory_stores():
+    """Reset shared in-memory tables before each test.
+
+    Reward repositories share one dict per table across instances (see
+    ``_IN_MEMORY_STORES``). Without a reset, campaigns/rules/decisions seeded by
+    earlier tests leak into later ones — e.g. ``no_matching_rule`` tests would
+    match a leftover campaign. Isolating each test makes the gate assertions
+    deterministic.
+    """
+    reset_in_memory_stores()
+    yield
+    reset_in_memory_stores()
 
 
 def _run(coro):
@@ -143,14 +159,22 @@ def _consent(*, purposes=None):
     )
 
 
-async def _evaluate(campaign_repo, rule_repo, decision_repo, *, event_type="conversion", attribution=None, fraud=None, consent=None, identity=None, idempotency_key=None, recommend_only_without_attribution=False):
+_UNSET = object()
+
+
+async def _evaluate(campaign_repo, rule_repo, decision_repo, *, event_type="conversion", attribution=_UNSET, fraud=None, consent=None, identity=None, idempotency_key=None, recommend_only_without_attribution=False):
+    # Distinguish "caller omitted attribution" (use a sensible default) from
+    # "caller explicitly passed None" (no attribution result at all). Using
+    # ``attribution or _attribution()`` conflated the two and defeated tests
+    # that exercise the no-attribution path.
+    resolved_attribution = _attribution() if attribution is _UNSET else attribution
     return await _engine().evaluate(
         tenant_id=TENANT,
         project_id=None,
         event_type=event_type,
         event_channel="direct",
         event_properties={},
-        attribution=attribution or _attribution(),
+        attribution=resolved_attribution,
         fraud=fraud or _fraud(),
         consent=consent,
         identity=identity or _identity(),

@@ -65,11 +65,11 @@ jobs:
 
       - name: Run Slither — human-readable summary
         # --fail-high exits non-zero only for HIGH+ severity findings
-        # --no-optimization-issue suppresses optimizer false positives
+        # --exclude-optimization suppresses optimizer false positives
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
-            --no-optimization-issue \
+            --exclude-optimization \
             --exclude-dependencies \
             --print human-summary \
             || true
@@ -78,7 +78,7 @@ jobs:
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
-            --no-optimization-issue \
+            --exclude-optimization \
             --exclude-dependencies \
             --sarif results.sarif \
             || true
@@ -94,6 +94,6 @@ jobs:
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
-            --no-optimization-issue \
+            --exclude-optimization \
             --exclude-dependencies \
             --fail-high

@@ -74,19 +74,24 @@ async def test_snapshot_idempotency_and_drift_events():
 # ── Scaffold honesty ─────────────────────────────────────────────────────────
 
 def test_no_provider_claims_live_status():
+    """Every first-release provider is credential-gated — none remains scaffolded
+    and none falsely claims provider-live without evidence."""
     for provider_id, adapter in INTEROP_PROVIDERS.items():
         status = adapter.descriptor()["implementation_status"]
-        assert status in ("scaffolded", "credential_gated"), (provider_id, status)
+        assert status == "credential_gated", (provider_id, status)
 
 
-async def test_scaffolds_refuse_scan_and_decode():
+async def test_credential_gated_providers_guard_unwired_scan():
+    """Every non-LayerZero provider is credential-gated: a live scan without a
+    wired RPC client fails closed (NotImplementedError), while decode_log handles
+    an empty/undecodable log gracefully (returns None) rather than feigning the
+    decoder is unimplemented."""
     for provider_id, adapter in INTEROP_PROVIDERS.items():
         if provider_id == "layerzero_v2":
             continue
         with pytest.raises(NotImplementedError):
             await adapter.scan(None)
-        with pytest.raises(NotImplementedError):
-            adapter.decode_log({"topics": []})
+        assert adapter.decode_log({"topics": []}) is None
 
 
 def test_layerzero_is_credential_gated_with_complete_decode():

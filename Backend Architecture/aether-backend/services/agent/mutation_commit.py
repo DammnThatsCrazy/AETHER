@@ -42,12 +42,38 @@ from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.graph.write_validator import GraphWriteValidator
 from shared.logger.logger import get_logger, metrics
 from services.agent.runtime_repository import (
+    APPROVAL_TTL_SECONDS,
     MUTATION_CLASSES,
+    _age_seconds,
     get_agent_runtime_repository,
+    mutation_fingerprint,
+    target_key_for,
     utc_now,
 )
 
 logger = get_logger("aether.service.agent.mutation_commit")
+
+
+def _approval_gate(mutation: dict[str, Any]) -> tuple[bool, str, str]:
+    """Verify the operator approval still authorizes committing THIS content.
+
+    Returns (ok, result_status, detail). A failure here is a *re-approvable*
+    conflict (not a hard failure): the mutation keeps its ``approved`` status so
+    the operator can re-approve, and no graph write happens.
+
+      - approval_expired : the approval is older than APPROVAL_TTL_SECONDS.
+      - needs_reapproval : the target/diff/class changed since it was approved,
+                           so the recorded approval no longer covers it.
+    """
+    approved_at = mutation.get("approved_at")
+    if not approved_at:
+        return False, "needs_reapproval", "no approval timestamp recorded"
+    if _age_seconds(approved_at) > APPROVAL_TTL_SECONDS:
+        return False, "approval_expired", f"approval older than {APPROVAL_TTL_SECONDS}s"
+    recorded = mutation.get("approval_fingerprint")
+    if recorded and recorded != mutation_fingerprint(mutation):
+        return False, "needs_reapproval", "mutation content changed since approval"
+    return True, "approved", ""
 
 _graph: GraphClient | None = None
 
@@ -192,6 +218,12 @@ async def commit_approved_mutations(
     """
     _require_review_enabled()
     repo = get_agent_runtime_repository()
+    # Fail-closed on the emergency stop at the PIPELINE level, not just the
+    # route: a scheduled job, a direct API call, or any non-operator caller that
+    # reaches commit is blocked while the kill switch is engaged.
+    kill_switch = await repo.get_kill_switch(tenant_id)
+    if kill_switch.get("enabled"):
+        raise ConflictError("Agent kill switch is engaged; canonical commit is disabled")
     batch = await repo.review_batches.get(batch_id)
     if not batch or batch.get("tenant_id") != tenant_id:
         raise NotFoundError("Review batch")
@@ -230,6 +262,23 @@ async def commit_approved_mutations(
             results.append(_result(mutation_id, "failed_commit", "invalid mutation_class"))
             continue
 
+        # Approval invariant gate: a stale (expired) or content-changed approval
+        # cannot commit. These are re-approvable conflicts — the mutation keeps
+        # its ``approved`` status, no graph write happens, and the batch will not
+        # be reported clean, so the operator must re-approve to proceed.
+        ok, gate_status, gate_detail = _approval_gate(mutation)
+        if not ok:
+            mutation["conflict"] = {"kind": gate_status, "detail": gate_detail}
+            mutation["updated_at"] = utc_now()
+            await repo.staged_mutations.set(mutation_id, mutation)
+            await repo.append_event(
+                tenant_id, "mutation.commit_blocked", "commit", mutation,
+                mutation.get("objective_id", ""), actor, request_id,
+            )
+            metrics.increment("agent_mutation_commit_blocked", labels={"reason": gate_status})
+            results.append(_result(mutation_id, gate_status, gate_detail))
+            continue
+
         target_kind = (mutation.get("target") or {}).get("kind")
         try:
             if target_kind == "vertex":
@@ -256,6 +305,34 @@ async def commit_approved_mutations(
             )
             results.append(_result(mutation_id, "failed_commit", str(exc)))
             continue
+
+        # Optimistic concurrency: the mutation was staged against a specific
+        # version of its canonical target (base_version / ETag). If the target
+        # has been committed to since, this commit is stale and is rejected —
+        # the operator re-stages/re-approves against the fresh version. A missing
+        # base_version (legacy staged rows) skips the check.
+        tkey = target_key_for(mutation.get("target"))
+        expected_version = mutation.get("base_version")
+        if expected_version is not None:
+            current_version = await repo.canonical_version(tenant_id, tkey)
+            if int(expected_version) != int(current_version):
+                mutation["conflict"] = {
+                    "kind": "stale_version",
+                    "expected_version": int(expected_version),
+                    "current_version": int(current_version),
+                }
+                mutation["updated_at"] = utc_now()
+                await repo.staged_mutations.set(mutation_id, mutation)
+                await repo.append_event(
+                    tenant_id, "mutation.commit_conflict", "commit", mutation,
+                    mutation.get("objective_id", ""), actor, request_id,
+                )
+                metrics.increment("agent_mutation_commit_blocked", labels={"reason": "stale_version"})
+                results.append(_result(
+                    mutation_id, "stale_version",
+                    f"expected={expected_version} current={current_version}",
+                ))
+                continue
 
         if edge is not None:
             validation = validator.validate(edge)
@@ -307,25 +384,34 @@ async def commit_approved_mutations(
             results.append(_result(mutation_id, "failed_commit", type(exc).__name__))
             continue
 
+        # Advance the canonical target version so any other mutation staged
+        # against the prior version is now detectably stale (optimistic
+        # concurrency). Recorded on the mutation for post-commit reconciliation.
+        committed_version = await repo.bump_canonical_version(tenant_id, tkey, mutation_id)
         await _set_mutation_status(
             repo, tenant_id, mutation, "committed", actor, request_id,
             extra={
                 "committed_at": utc_now(),
                 "committed_by": actor,
                 "commit_op": op,
+                "committed_version": committed_version,
+                "target_key": tkey,
                 # Rollback metadata: enough to attempt a best-effort inverse.
                 "rollback": {"supported": True, "inverse": op},
             },
         )
         results.append(_result(mutation_id, "committed"))
 
+    _blocked_statuses = {"approval_expired", "needs_reapproval", "stale_version"}
     counts = {
         "committed": sum(1 for r in results if r["status"] == "committed"),
         "quarantined": sum(1 for r in results if r["status"] == "quarantined"),
         "failed": sum(1 for r in results if r["status"] in {"failed_commit", "missing"}),
         "skipped": sum(1 for r in results if r["status"] == "skipped_not_approved"),
+        # Re-approvable conflicts: expired/changed approval or a stale version.
+        "blocked": sum(1 for r in results if r["status"] in _blocked_statuses),
     }
-    clean = counts["quarantined"] == 0 and counts["failed"] == 0
+    clean = counts["quarantined"] == 0 and counts["failed"] == 0 and counts["blocked"] == 0
     batch_status = "committed" if clean else "quarantined"
     batch["status"] = batch_status
     batch["updated_at"] = utc_now()
@@ -344,6 +430,61 @@ async def commit_approved_mutations(
     return {"batch_id": batch_id, "batch_status": batch_status, "results": results, **counts}
 
 
+def _inverse_of(tenant_id: str, mutation: dict[str, Any]) -> dict[str, Any]:
+    return (mutation.get("rollback") or {}).get("inverse") or mutation.get("commit_op") or {}
+
+
+def _existence_gremlin(tenant_id: str, op: dict[str, Any]) -> str:
+    """Read-only count query used to VERIFY an inverse actually applied and for
+    post-commit reconciliation of a committed receipt against graph state."""
+    if op.get("kind") == "vertex" and op.get("vertex_id"):
+        return f"g.V('{_escape_gremlin(str(op['vertex_id']))}').count()"
+    idem = op.get("idempotency_key") or make_edge_idempotency_key(
+        tenant_id,
+        str(op.get("edge_type", "")),
+        str(op.get("from_vertex_id", "")),
+        str(op.get("to_vertex_id", "")),
+    )
+    return f"g.E().has('idempotency_key', '{_escape_gremlin(str(idem))}').count()"
+
+
+def _count_from_result(result: Any) -> int | None:
+    """Interpret a Gremlin count() result. None means the backend could not
+    confirm (e.g. the in-memory no-op backend returns []), which callers treat
+    as best-effort / unconfirmed rather than a definitive absence."""
+    if not isinstance(result, list) or not result:
+        return None
+    head = result[0]
+    if isinstance(head, bool):
+        return int(head)
+    if isinstance(head, int):
+        return head
+    if isinstance(head, dict):
+        for key in ("count", "value", "0"):
+            if key in head:
+                try:
+                    return int(head[key])
+                except (TypeError, ValueError):
+                    return None
+    try:
+        return int(head)
+    except (TypeError, ValueError):
+        return None
+
+
+async def _graph_presence(client: GraphClient, tenant_id: str, op: dict[str, Any]) -> tuple[bool | None, int | None]:
+    """Return (present, count). ``present`` is None when the backend can't be read."""
+    try:
+        result = await client.query(_existence_gremlin(tenant_id, op))
+    except Exception as exc:  # existence probe must never mask the primary op
+        logger.warning("Graph presence probe failed: tenant=%s error=%s", tenant_id, type(exc).__name__)
+        return None, None
+    count = _count_from_result(result)
+    if count is None:
+        return None, None
+    return count > 0, count
+
+
 async def rollback_mutation(
     tenant_id: str,
     mutation_id: str,
@@ -351,28 +492,32 @@ async def rollback_mutation(
     request_id: str = "",
     graph: GraphClient | None = None,
 ) -> dict[str, Any]:
-    """Mark a committed mutation rolled_back with a best-effort graph inverse.
+    """Roll a committed mutation back, VERIFY the inverse applied, and open a
+    durable repair task when the graph cannot be fully restored.
 
-    The durable rolled_back status + audit trail is the contract; the graph
-    inverse (vertex/edge drop) is best-effort and its outcome is recorded.
+    Flow: attempt the inverse (vertex/edge drop) → read the graph back to
+    confirm the artifact is absent → on success mark ``rolled_back`` with a
+    durable verification receipt; if the inverse errored or the artifact is
+    still present, mark ``rollback_repair_required`` and enqueue a repair task
+    for the operator. Idempotent for already-rolled-back/repair states.
     """
     _require_review_enabled()
     repo = get_agent_runtime_repository()
     mutation = await repo.staged_mutations.get(mutation_id)
     if not mutation or mutation.get("tenant_id") != tenant_id:
         raise NotFoundError("Staged mutation")
-    if mutation.get("status") == "rolled_back":
+    if mutation.get("status") in {"rolled_back", "rollback_repair_required"}:
         return mutation  # idempotent
     if mutation.get("status") != "committed":
         raise ConflictError(f"Cannot roll back mutation in status '{mutation.get('status')}'")
 
     client = graph or _graph_client()
-    inverse = (mutation.get("rollback") or {}).get("inverse") or mutation.get("commit_op") or {}
+    inverse = _inverse_of(tenant_id, mutation)
     inverse_applied = False
     inverse_error = ""
     try:
         if inverse.get("kind") == "vertex" and inverse.get("vertex_id"):
-            await client.query(f"g.V('{_escape_gremlin(inverse['vertex_id'])}').drop()")
+            await client.query(f"g.V('{_escape_gremlin(str(inverse['vertex_id']))}').drop()")
             inverse_applied = True
         elif inverse.get("kind") == "edge":
             idem = inverse.get("idempotency_key") or make_edge_idempotency_key(
@@ -382,7 +527,7 @@ async def rollback_mutation(
                 str(inverse.get("to_vertex_id", "")),
             )
             await client.query(
-                f"g.E().has('idempotency_key', '{_escape_gremlin(idem)}').drop()"
+                f"g.E().has('idempotency_key', '{_escape_gremlin(str(idem))}').drop()"
             )
             inverse_applied = True
     except Exception as exc:
@@ -392,8 +537,36 @@ async def rollback_mutation(
             tenant_id, mutation_id, inverse_error,
         )
 
+    # VERIFY: read the graph back and confirm the artifact is gone.
+    present, remaining = await _graph_presence(client, tenant_id, inverse)
+    verified = present is False               # definitively absent
+    confirmed = present is not None           # the backend could actually be read
+    verification = {
+        "method": "graph_count_probe",
+        "checked_at": utc_now(),
+        "confirmed": confirmed,
+        "remaining": remaining,
+    }
+
+    repair_id = ""
+    if inverse_error or present is True:
+        # The inverse could not fully restore state — open a repair task and mark
+        # the mutation for operator follow-up rather than reporting a clean undo.
+        status = "rollback_repair_required"
+        reason = "inverse_error" if inverse_error else "artifact_still_present"
+        repair = await repo.open_repair_task(
+            tenant_id, mutation, reason,
+            {"inverse": inverse, "inverse_error": inverse_error, "remaining": remaining},
+            actor, request_id,
+        )
+        repair_id = repair["repair_id"]
+        metrics.increment("agent_rollback_verified", labels={"result": "repair_required"})
+    else:
+        status = "rolled_back"
+        metrics.increment("agent_rollback_verified", labels={"result": "verified" if confirmed else "unconfirmed"})
+
     await _set_mutation_status(
-        repo, tenant_id, mutation, "rolled_back", actor, request_id,
+        repo, tenant_id, mutation, status, actor, request_id,
         extra={
             "rolled_back_at": utc_now(),
             "rolled_back_by": actor,
@@ -402,7 +575,93 @@ async def rollback_mutation(
                 "inverse": inverse,
                 "inverse_applied": inverse_applied,
                 "inverse_error": inverse_error,
+                "verified": verified,
+                "verification": verification,
+                "repair_required": status == "rollback_repair_required",
+                "repair_id": repair_id,
             },
         },
+        event_type=f"mutation.{status}",
     )
     return mutation
+
+
+async def reconcile_mutation(
+    tenant_id: str,
+    mutation_id: str,
+    actor: str,
+    request_id: str = "",
+    graph: GraphClient | None = None,
+) -> dict[str, Any]:
+    """Post-commit reconciliation: compare a committed receipt to graph state.
+
+    A committed mutation's target must be present in the graph; a rolled_back
+    mutation's target must be absent. The result is recorded on the mutation as
+    a durable reconciliation receipt and surfaced on the timeline. Drift (a
+    committed receipt with no matching graph artifact, or vice versa) is flagged
+    but not auto-repaired — the operator decides.
+    """
+    _require_review_enabled()
+    repo = get_agent_runtime_repository()
+    mutation = await repo.staged_mutations.get(mutation_id)
+    if not mutation or mutation.get("tenant_id") != tenant_id:
+        raise NotFoundError("Staged mutation")
+    status = mutation.get("status")
+    if status not in {"committed", "rolled_back"}:
+        raise ConflictError(f"Cannot reconcile mutation in status '{status}'")
+
+    client = graph or _graph_client()
+    op = mutation.get("commit_op") or _inverse_of(tenant_id, mutation)
+    present, count = await _graph_presence(client, tenant_id, op)
+    expected_present = status == "committed"
+    if present is None:
+        consistent: bool | None = None      # backend not readable — indeterminate
+    else:
+        consistent = present == expected_present
+    receipt = {
+        "checked_at": utc_now(),
+        "status_at_check": status,
+        "expected_present": expected_present,
+        "observed_present": present,
+        "observed_count": count,
+        "consistent": consistent,
+    }
+    mutation["reconciliation"] = receipt
+    mutation["updated_at"] = utc_now()
+    await repo.staged_mutations.set(mutation_id, mutation)
+    event_type = "mutation.reconciled" if consistent is not False else "mutation.reconcile_drift"
+    await repo.append_event(
+        tenant_id, event_type, "commit",
+        {"mutation_id": mutation_id, **receipt},
+        mutation.get("objective_id", ""), actor, request_id,
+    )
+    metrics.increment(
+        "agent_mutation_reconciled",
+        labels={"consistent": "unknown" if consistent is None else str(consistent).lower()},
+    )
+    return {"mutation_id": mutation_id, **receipt}
+
+
+async def reconcile_batch(
+    tenant_id: str,
+    batch_id: str,
+    actor: str,
+    request_id: str = "",
+    graph: GraphClient | None = None,
+) -> dict[str, Any]:
+    """Reconcile every committed/rolled_back mutation in a batch against the graph."""
+    _require_review_enabled()
+    repo = get_agent_runtime_repository()
+    batch = await repo.review_batches.get(batch_id)
+    if not batch or batch.get("tenant_id") != tenant_id:
+        raise NotFoundError("Review batch")
+    results: list[dict[str, Any]] = []
+    for mutation_id in batch.get("mutation_ids", []):
+        mutation = await repo.staged_mutations.get(mutation_id)
+        if not mutation or mutation.get("tenant_id") != tenant_id:
+            continue
+        if mutation.get("status") not in {"committed", "rolled_back"}:
+            continue
+        results.append(await reconcile_mutation(tenant_id, mutation_id, actor, request_id, graph=graph))
+    drift = sum(1 for r in results if r["consistent"] is False)
+    return {"batch_id": batch_id, "reconciled": len(results), "drift": drift, "results": results}

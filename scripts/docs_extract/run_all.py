@@ -30,6 +30,7 @@ GENERATORS = [
     "extract_capabilities",
     "extract_plans",
     "extract_providers",
+    "extract_adapter_certification",
     "extract_topics",
     "extract_dimensions",
     "extract_doc_manifest",

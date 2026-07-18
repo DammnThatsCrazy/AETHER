@@ -1,4 +1,4 @@
-import { Badge, formatInstant, type TimeContext } from '@aether/ui';
+import { Badge, CapabilityStateBadge, formatInstant, resolveCapabilityState, type TimeContext } from '@aether/ui';
 import type {
   FundingFlowType,
   FundingSessionStatus,
@@ -55,13 +55,6 @@ export function ReconciliationStateBadge({ state }: { readonly state: Reconcilia
 
 export type ProviderHealthStatus = 'healthy' | 'degraded' | 'not_configured' | 'error';
 
-const HEALTH_STATUS_VARIANTS: Record<ProviderHealthStatus, 'success' | 'warning' | 'danger' | 'default'> = {
-  healthy: 'success',
-  degraded: 'warning',
-  not_configured: 'default',
-  error: 'danger',
-};
-
 const HEALTH_STATUS_LABELS: Record<ProviderHealthStatus, string> = {
   healthy: 'healthy',
   degraded: 'degraded',
@@ -69,8 +62,14 @@ const HEALTH_STATUS_LABELS: Record<ProviderHealthStatus, string> = {
   error: 'error',
 };
 
+/**
+ * Provider integration health is a capability credential-lifecycle signal, so it
+ * renders on the canonical matrix (healthy → partner_live, not_configured, …).
+ * The raw server status stays as the label so operators still see the exact term.
+ */
 export function ProviderHealthBadge({ status }: { readonly status: ProviderHealthStatus }) {
-  return <Badge variant={HEALTH_STATUS_VARIANTS[status] ?? 'default'}>{HEALTH_STATUS_LABELS[status] ?? status}</Badge>;
+  const state = resolveCapabilityState(status) ?? 'not_configured';
+  return <CapabilityStateBadge state={state} label={HEALTH_STATUS_LABELS[status] ?? status} reason={`provider health: ${status}`} />;
 }
 
 const FLOW_TYPE_LABELS: Record<FundingFlowType, string> = {

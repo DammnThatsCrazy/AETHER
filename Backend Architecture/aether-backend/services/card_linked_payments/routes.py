@@ -132,27 +132,66 @@ def _write_gate(request: Request) -> str:
 
 @router.post("/ingest/provider-webhook")
 async def ingest_provider_webhook(request: Request):
-    """Issuer/provider card-spend evidence (server-to-server, tenant-authenticated).
+    """SIGNED card-linked partner-feed inbound event (the governed feed contract).
 
-    Body: the provider payload, optionally wrapped with ``region_hint`` and
-    ``consent_snapshot``. All fail-closed guards (PII rejection, basis
-    enforcement, region policy, consent) run inside the ingestion service.
+    The raw body is HMAC-SHA256 verified (constant-time) against the per-tenant
+    partner secret from the BYOK vault, then validated against the versioned
+    partner-feed schema: a strict allowlist with blocked-field rejection, a
+    spend-side-only basis, and atomic-string money. Unsigned/invalid-signature
+    payloads are rejected (fail closed) outside local mode. All downstream
+    fail-closed guards (PII rejection, basis enforcement, region policy,
+    consent) still run inside the ingestion service.
+
+    Signature headers: ``X-Aether-Partner-Signature`` (hex HMAC),
+    ``X-Aether-Partner-Timestamp`` (optional), ``X-Aether-Partner`` (partner id).
+    Body: the partner event, optionally wrapped as ``{"payload": {...}}`` with
+    ``region_hint`` / ``consent_snapshot``.
     """
+    import json as _json
+
     from services.card_linked_payments.ingestion import get_ingestion_service
+    from services.card_linked_payments.partner_feed import (
+        PARTNER_HEADER,
+        SIGNATURE_HEADER,
+        TIMESTAMP_HEADER,
+        PartnerFeedSignatureError,
+        validate_partner_feed_event,
+        verify_partner_feed_signature,
+    )
 
     tenant_id = _write_gate(request)
-    body = await request.json()
+    raw = await request.body()
+    try:
+        body = _json.loads(raw) if raw else {}
+    except ValueError:
+        raise HTTPException(status_code=422, detail="invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+
+    partner = request.headers.get(PARTNER_HEADER)
+    signature = request.headers.get(SIGNATURE_HEADER)
+    timestamp = request.headers.get(TIMESTAMP_HEADER)
+    try:
+        await verify_partner_feed_signature(tenant_id, raw, signature, timestamp, partner)
+    except PartnerFeedSignatureError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+
     payload = body.get("payload", body)
     try:
+        validated = validate_partner_feed_event(payload, tenant_id=tenant_id, partner=partner)
         record, disposition = await get_ingestion_service().ingest_provider_webhook(
             tenant_id,
-            payload,
-            region_hint=body.get("region_hint"),
-            consent_snapshot=body.get("consent_snapshot"),
+            validated,
+            region_hint=body.get("region_hint") or validated.get("region_hint"),
+            consent_snapshot=body.get("consent_snapshot") or validated.get("consent_snapshot"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return APIResponse(data={"flow_id": record.get("id"), "disposition": disposition}).to_dict()
+    return APIResponse(data={
+        "flow_id": record.get("id"),
+        "disposition": disposition,
+        "schema_version": validated.get("schema_version"),
+    }).to_dict()
 
 
 @router.post("/ingest/onchain")
@@ -189,7 +228,9 @@ async def ingest_import(request: Request):
         raise HTTPException(status_code=422, detail="body.rows must be a non-empty list")
     try:
         results = await get_ingestion_service().ingest_tenant_import(
-            tenant_id, rows, region_hint=body.get("region_hint")
+            tenant_id, rows,
+            region_hint=body.get("region_hint"),
+            consent_snapshot=body.get("consent_snapshot"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

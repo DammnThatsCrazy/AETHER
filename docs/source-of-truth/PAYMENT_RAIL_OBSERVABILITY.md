@@ -200,3 +200,16 @@ Frontend: aether payment-rails tests (93-suite green), kyber component tests
   arrive; provider-only sessions report `provider_only` until then.
 - No payment execution, settlement, custody, refund initiation, or
   provider-account provisioning. No generic webhook receiver.
+
+## Certification & readiness (staging-capstone)
+
+The five adapters (Privy, Stripe onramp, Coinbase, MoonPay, Bridge) resolve to
+`CREDENTIAL_WAITING` in the credentialless certification matrix
+(`docs/_generated/adapter-certification-matrix.json`) — code-complete and
+credential-gated, with no live provider validated in staging. To move a provider
+toward live, follow
+`docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md` and
+capture evidence per `PILOT_EVIDENCE_GUIDE.md`. Operator triage lives in
+`docs/runbooks/PAYMENT_RAILS_RUNBOOK.md`; credentialless recovery behaviour
+(duplicate-webhook storm, idempotent worker restart) is pinned by
+`tests/chaos/test_webhook_idempotency.py`.

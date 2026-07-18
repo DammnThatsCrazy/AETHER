@@ -16,6 +16,7 @@ class CardActivityBasis(StrEnum):
     TOPUP = "topup"
     FUNDING = "funding"
     SPEND = "spend"
+    AUTHORIZATION = "authorization"  # pre-settlement hold — never settled spend
     SETTLEMENT = "settlement"
     CLEARING = "clearing"
     REFUND = "refund"
@@ -23,6 +24,25 @@ class CardActivityBasis(StrEnum):
     MIXED = "mixed"
     BENCHMARK_ONLY = "benchmark_only"
     UNKNOWN = "unknown"
+
+
+class EvidenceStrength(StrEnum):
+    """How strongly a card-linked observation is evidenced.
+
+    Ordering (weakest → strongest): ``unconfirmed`` < ``benchmark`` <
+    ``self_reported`` < ``sdk_reported`` < ``onchain_observed`` <
+    ``provider_confirmed``. Only genuine provider/issuer evidence may be labeled
+    ``provider_confirmed``; SDK/self-reported/on-chain observations are never
+    promoted to provider-confirmed spend (see
+    :func:`assert_evidence_not_overclaimed`).
+    """
+
+    PROVIDER_CONFIRMED = "provider_confirmed"
+    ONCHAIN_OBSERVED = "onchain_observed"
+    SDK_REPORTED = "sdk_reported"
+    SELF_REPORTED = "self_reported"       # tenant import / manual seed
+    BENCHMARK = "benchmark"               # PaymentScan market intelligence
+    UNCONFIRMED = "unconfirmed"
 
 
 class CardLinkedSource(StrEnum):
@@ -48,6 +68,10 @@ class RegionPolicyMode(StrEnum):
     UK_RESTRICTED = "UK_RESTRICTED"
     APAC_RESTRICTED = "APAC_RESTRICTED"
     GLOBAL_AGGREGATE_ONLY = "GLOBAL_AGGREGATE_ONLY"
+    # Fail-safe default for a region hint we do not recognise: treat it as the
+    # MOST restrictive mode (strip user-level identifiers) rather than silently
+    # granting unrestricted US_STANDARD behavior to an unknown jurisdiction.
+    UNKNOWN_RESTRICTED = "UNKNOWN_RESTRICTED"
 
 
 BLOCKED_CARD_LINKED_FIELDS = {
@@ -80,6 +104,87 @@ def reject_blocked_fields(payload: dict[str, Any]) -> None:
 
 def redact_blocked_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: ("[REDACTED_BLOCKED]" if key in BLOCKED_CARD_LINKED_FIELDS else value) for key, value in payload.items()}
+
+
+# ── evidence-strength labeling ────────────────────────────────────────────────
+# Only these sources may ever be labeled ``provider_confirmed``. Everything else
+# (SDK telemetry, tenant imports, on-chain observations, PaymentScan benchmarks)
+# is a weaker form of evidence and must NEVER be promoted to provider-confirmed
+# spend without independent provider evidence.
+_PROVIDER_CONFIRMED_SOURCES = frozenset({"provider_webhook", "issuer_api"})
+
+_SOURCE_EVIDENCE_STRENGTH = {
+    "provider_webhook": EvidenceStrength.PROVIDER_CONFIRMED,
+    "issuer_api": EvidenceStrength.PROVIDER_CONFIRMED,
+    "onchain_observer": EvidenceStrength.ONCHAIN_OBSERVED,
+    "sdk": EvidenceStrength.SDK_REPORTED,
+    "tenant_import": EvidenceStrength.SELF_REPORTED,
+    "manual_seed": EvidenceStrength.SELF_REPORTED,
+    "paymentscan": EvidenceStrength.BENCHMARK,
+}
+
+
+class EvidenceOverclaimError(ValueError):
+    """Raised when a non-provider source is labeled provider-confirmed spend."""
+
+
+def classify_evidence_strength(source: str | None,
+                               reconciliation_state: str | None = None,
+                               basis: str | None = None) -> str:
+    """Label an observation's evidence strength from its source/basis.
+
+    Benchmark-only rows are always ``benchmark`` regardless of source. A source
+    we do not recognise is ``unconfirmed`` (fail weak, never provider-confirmed).
+    """
+    if basis == CardActivityBasis.BENCHMARK_ONLY.value or reconciliation_state == "benchmark_only":
+        return EvidenceStrength.BENCHMARK.value
+    return _SOURCE_EVIDENCE_STRENGTH.get(str(source), EvidenceStrength.UNCONFIRMED).value
+
+
+def assert_evidence_not_overclaimed(source: str | None, evidence_strength: str | None) -> None:
+    """Fail closed if a non-provider source claims provider-confirmed evidence.
+
+    SDK/self-reported/on-chain/benchmark observations may never be promoted to
+    ``provider_confirmed`` — that label requires genuine provider/issuer
+    evidence. Used as a defensive guard on every ingest path.
+    """
+    if (evidence_strength == EvidenceStrength.PROVIDER_CONFIRMED.value
+            and str(source) not in _PROVIDER_CONFIRMED_SOURCES):
+        raise EvidenceOverclaimError(
+            f"source {source!r} may not be labeled provider_confirmed evidence "
+            "without independent provider/issuer evidence"
+        )
+
+
+# ── top-up / spend non-conflation guard ───────────────────────────────────────
+# Keys that would represent a single scalar mixing top-up/funding with spend.
+# A rollup/surface must NEVER carry one of these — top-up volume and spend volume
+# are always separate numbers so top-up can never be presented as card spend.
+COMBINED_TOTAL_FORBIDDEN_KEYS = frozenset({
+    "total_volume_usd", "combined_volume_usd", "net_volume_usd",
+    "gross_volume_usd", "total_amount_usd", "total_usd", "volume_usd",
+})
+
+
+class TopupSpendConflationError(ValueError):
+    """Raised when a rollup would sum top-up/funding and spend into one scalar."""
+
+
+def assert_topup_spend_separated(rollup: dict[str, Any]) -> dict[str, Any]:
+    """Hard guard: a card-linked rollup must never expose a combined top-up +
+    spend scalar. Returns the rollup unchanged when clean; raises otherwise.
+
+    This is intentionally structural (a forbidden-key check) rather than a
+    numeric heuristic: the only safe way to keep top-up and spend un-conflated
+    is to never materialize a single number that could mean either.
+    """
+    present = sorted(k for k in rollup if k in COMBINED_TOTAL_FORBIDDEN_KEYS)
+    if present:
+        raise TopupSpendConflationError(
+            "top-up/funding and spend must never be summed into a single scalar; "
+            f"forbidden combined key(s) present: {', '.join(present)}"
+        )
+    return rollup
 
 
 @dataclass(frozen=True)
@@ -116,6 +221,10 @@ class CardLinkedFlowObserved:
     device_id: str | None = None
     region_policy: RegionPolicyMode | None = None
     consent_snapshot: dict[str, bool] | None = None
+    # Evidence-strength label (see EvidenceStrength). Populated by ingestion so
+    # every stored flow records how strongly it is evidenced. Never persisted as
+    # provider_confirmed for a non-provider source.
+    evidence_strength: str | None = None
 
     @classmethod
     def benchmark(cls, *, tenant_id: str, catalog_entity_id: str, observed_at: str | None = None) -> "CardLinkedFlowObserved":

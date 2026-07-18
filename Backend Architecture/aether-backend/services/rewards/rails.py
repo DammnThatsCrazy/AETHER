@@ -25,20 +25,77 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
+import socket
 import time
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from decimal import ROUND_DOWN
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from services.rewards.policy_engine import PolicyDecision
+from services.rewards.policy_engine import PolicyDecision, _amount_to_decimal
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.rewards.rails")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXACT REWARD-AMOUNT CONVERSION
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _resolve_asset_decimals(*sources) -> Optional[int]:
+    """Return explicit asset decimals from the first source that declares them.
+
+    Checks ``asset_decimals`` then ``decimals`` on each supplied dict (rule,
+    reward, campaign …). Returns ``None`` if none declare it — callers must
+    treat that as *ambiguous* and refuse to assume a default (e.g. 18).
+    """
+    for src in sources:
+        if not isinstance(src, dict):
+            continue
+        for key in ("asset_decimals", "decimals"):
+            raw = src.get(key)
+            if raw is None:
+                continue
+            try:
+                decimals = int(raw)
+            except (TypeError, ValueError):
+                raise ValueError(f"{key} must be an integer, got {raw!r}")
+            if decimals < 0:
+                raise ValueError(f"{key} must be non-negative, got {decimals}")
+            return decimals
+    return None
+
+
+def _reward_amount_to_atomic(amount_value, decimals: int) -> int:
+    """Convert a human reward amount to its exact atomic integer.
+
+    Uses ``Decimal`` end-to-end (``scaleb`` == exact multiply by 10**decimals);
+    an amount with more fractional digits than ``decimals`` allows is rejected
+    rather than silently truncated, so no precision is ever lost.
+    """
+    amount = _amount_to_decimal(amount_value)
+    if amount < 0:
+        raise ValueError(f"reward_amount must be non-negative, got {amount_value!r}")
+    atomic = amount.scaleb(decimals)
+    integral = atomic.to_integral_value(rounding=ROUND_DOWN)
+    if atomic != integral:
+        raise ValueError(
+            f"reward_amount {amount_value!r} is not exactly representable with "
+            f"{decimals} decimals (would lose precision)"
+        )
+    return int(integral)
+
+
+def _redact(_secret: Optional[str]) -> str:
+    """Never emit signing material to logs."""
+    return "***redacted***"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -112,6 +169,9 @@ class RecommendOnlyAdapter(RewardRailAdapter):
             "rail": self.rail_name,
             "execution_mode": "recommend_only",
             "status": "ready",
+            # Top-level reward mirror so callers can read the recommended reward
+            # without reaching into the nested payload.
+            "reward": decision.reward,
             "payload": {
                 "type": "reward_recommendation",
                 "campaign_id": decision.campaign_id,
@@ -213,8 +273,13 @@ class TenantWebhookAdapter(RewardRailAdapter):
 
     def validate_config(self, config: dict) -> list[str]:
         errors = []
-        if not config.get("webhook_url"):
+        url = config.get("webhook_url")
+        if not url:
             errors.append("webhook_url is required")
+        else:
+            parsed = urlparse(url) if isinstance(url, str) else None
+            if parsed is None or parsed.scheme not in ("http", "https") or not parsed.hostname:
+                errors.append(f"webhook_url is malformed (expected http(s)://host/...): {url!r}")
         if not config.get("signing_secret") and not config.get("secret_ref"):
             errors.append("signing_secret or secret_ref is required for HMAC signing")
         return errors
@@ -250,26 +315,104 @@ class TenantWebhookAdapter(RewardRailAdapter):
             "payload_hash": hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest(),
         }
 
-    def _sign_payload(self, payload_json: str, secret: str, timestamp: int) -> str:
-        """Produce HMAC-SHA256 signature for the webhook payload."""
+    def _sign_payload(self, secret: str, timestamp, payload_json: str) -> str:
+        """Produce HMAC-SHA256 signature for the webhook payload.
+
+        Signed content is ``"{timestamp}.{payload_json}"`` keyed by ``secret``.
+        """
         signed_content = f"{timestamp}.{payload_json}".encode()
         sig = hmac.new(secret.encode(), signed_content, hashlib.sha256).hexdigest()
         return f"hmac-sha256={sig}"
 
-    async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
-        try:
-            import httpx
-        except ImportError:
-            return DeliveryResult(success=False, status="failed", error="httpx not available")
+    # Byte cap on the amount of tenant response body we read/store.
+    _MAX_RESPONSE_BYTES = 2000
 
+    def _validate_destination(self, url, *, is_local: bool) -> Optional[str]:
+        """SSRF / transport validation. Returns a failure reason, or ``None`` if allowed.
+
+        Never raises. Fail-closed: any unexpected error is treated as a block.
+
+        Reuses ``services.delivery.security.validate_webhook_url`` for the shared
+        DNS-resolving RFC-1918/loopback/link-local/ULA blocklist, then adds
+        HTTPS enforcement plus multicast/reserved/non-global checks (which the
+        shared list does not cover) and a second DNS resolution to blunt DNS
+        rebinding between validation and connect.
+        """
+        if not url or not isinstance(url, str):
+            return "webhook_url missing or not a string"
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return f"invalid webhook_url (expected http(s)://host/...): {url!r}"
+        if not is_local and parsed.scheme != "https":
+            return "webhook_url must use HTTPS outside local mode"
+
+        try:
+            from services.delivery.security import validate_webhook_url
+
+            # allow_private=True in local/test keeps loopback reachable.
+            validate_webhook_url(url, allow_private=is_local)
+        except Exception as exc:  # SSRFBlockedError and any resolution failure → block
+            return f"SSRF-blocked destination: {exc}"
+
+        if is_local:
+            return None
+
+        # Supplementary ranges not covered by the shared blocklist. Re-resolving
+        # here (post initial validation) also narrows the DNS-rebinding window.
+        try:
+            infos = socket.getaddrinfo(parsed.hostname, None)
+        except OSError as exc:
+            return f"DNS resolution failed for {parsed.hostname!r}: {exc}"
+        for info in infos:
+            addr_str = info[4][0]
+            try:
+                addr = ipaddress.ip_address(addr_str)
+            except ValueError:
+                continue
+            if (
+                addr.is_multicast
+                or addr.is_reserved
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_private
+                or addr.is_unspecified
+                or not addr.is_global
+            ):
+                return (
+                    f"webhook_url {url!r} resolves to non-public address "
+                    f"{addr_str!r}; SSRF protection active"
+                )
+        return None
+
+    async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
         config = rail_config.get("config", {})
         webhook_url = rail_config.get("webhook_url") or config.get("webhook_url")
         signing_secret = config.get("signing_secret", "")
         timeout_ms = int(config.get("timeout_ms", 10000))
         payload = action.get("payload", {})
+
+        env = os.getenv("AETHER_ENV", "local").lower()
+        is_local = env in ("local", "test")
+
+        # ── SSRF / transport validation BEFORE any network I/O ────────────
+        reason = self._validate_destination(webhook_url, is_local=is_local)
+        if reason is not None:
+            metrics.increment(
+                "rewards_actions_failed_total",
+                labels={"rail": self.rail_name, "reason": "ssrf_blocked"},
+            )
+            host = urlparse(webhook_url).hostname if isinstance(webhook_url, str) else None
+            logger.warning("tenant_webhook delivery blocked host=%s reason=%s", host, reason)
+            return DeliveryResult(success=False, status="failed", error=reason)
+
+        try:
+            import httpx
+        except ImportError:
+            return DeliveryResult(success=False, status="failed", error="httpx not available")
+
         payload_json = json.dumps(payload, sort_keys=True)
         timestamp = int(time.time())
-        signature = self._sign_payload(payload_json, signing_secret, timestamp)
+        signature = self._sign_payload(signing_secret, timestamp, payload_json)
         idem_key = payload.get("idempotency_key", str(uuid.uuid4()))
 
         headers = {
@@ -279,15 +422,25 @@ class TenantWebhookAdapter(RewardRailAdapter):
             "X-Aether-Idempotency-Key": idem_key,
         }
 
+        host = urlparse(webhook_url).hostname
         start = time.monotonic()
         try:
-            async with httpx.AsyncClient(timeout=timeout_ms / 1000.0) as client:
+            # follow_redirects=False so a 3xx to an internal host is never chased.
+            async with httpx.AsyncClient(
+                timeout=timeout_ms / 1000.0,
+                follow_redirects=False,
+            ) as client:
                 resp = await client.post(webhook_url, content=payload_json, headers=headers)
             latency_ms = (time.monotonic() - start) * 1000
             success = 200 <= resp.status_code < 300
             metrics.increment(
                 "rewards_webhook_delivery_latency_ms",
                 labels={"tenant_id": payload.get("tenant_id", "")},
+            )
+            # Bounded body read — never buffer/store an unbounded tenant response.
+            logger.info(
+                "tenant_webhook delivery host=%s status=%s idem=%s sig=%s",
+                host, resp.status_code, idem_key, _redact(signature),
             )
             if success:
                 metrics.increment("rewards_actions_delivered_total", labels={"rail": self.rail_name})
@@ -301,7 +454,7 @@ class TenantWebhookAdapter(RewardRailAdapter):
                 return DeliveryResult(
                     success=False,
                     status="failed",
-                    error=f"HTTP {resp.status_code}: {resp.text[:200]}",
+                    error=f"HTTP {resp.status_code}: {resp.text[:self._MAX_RESPONSE_BYTES]}",
                     response_code=resp.status_code,
                     latency_ms=latency_ms,
                 )
@@ -357,10 +510,23 @@ class OnchainClaimAdapter(RewardRailAdapter):
             "EVM_CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3"
         )
         wallet_address = (decision.identity or {}).get("wallet_address", "")
-        amount_wei = int(float(rule.get("reward_amount", 0)) * (10 ** 18)) if rule.get("reward_amount") else 0
 
         if not wallet_address:
             raise ValueError("wallet_address required for onchain_claim rail")
+
+        # Exact reward → atomic-unit conversion with EXPLICIT decimals (never 18).
+        raw_amount = rule.get("reward_amount")
+        if raw_amount is None:
+            amount_atomic = 0
+        else:
+            decimals = _resolve_asset_decimals(rule, decision.reward or {}, campaign)
+            if decimals is None:
+                raise ValueError(
+                    "asset decimals must be explicitly specified for onchain_claim "
+                    "reward conversion (set 'asset_decimals' or 'decimals' on the rule, "
+                    "reward, or campaign); refusing to assume 18"
+                )
+            amount_atomic = _reward_amount_to_atomic(raw_amount, decimals)
 
         # Generate proof
         from services.oracle.signer import OracleProofSigner, ProofConfig
@@ -374,19 +540,34 @@ class OnchainClaimAdapter(RewardRailAdapter):
         proof = await signer.generate_proof(
             user=wallet_address,
             action_type=rule.get("name", "reward"),
-            amount_wei=amount_wei,
+            amount_wei=amount_atomic,
         )
 
         metrics.increment("rewards_proofs_generated_total", labels={"tenant_id": tenant_id})
+        proof_data = {
+            "proof_format": "eip191",
+            "wallet_address": wallet_address,
+            "action_type": rule.get("name", "reward"),
+            "amount": str(amount_atomic),
+            "nonce": proof.nonce,
+            "expiry": proof.expiry,
+            "chain_id": proof.chain_id,
+            "contract_address": proof.contract_address,
+            "message_hash": proof.message_hash,
+            "signature": proof.signature,
+            "signer_address": signer.signer_address,
+        }
         return {
             "rail": self.rail_name,
             "execution_mode": "onchain_claim",
             "status": "ready",
-            "proof_data": {
-                "proof_format": "eip191",
-                "wallet_address": wallet_address,
+            "proof_data": proof_data,
+            # Canonical proof view consumed by routes (`payload.get("proof")`) and
+            # returned to the tenant. `user` mirrors the on-chain claim recipient.
+            "proof": {
+                "user": wallet_address,
                 "action_type": rule.get("name", "reward"),
-                "amount": str(amount_wei),
+                "amount_wei": str(amount_atomic),
                 "nonce": proof.nonce,
                 "expiry": proof.expiry,
                 "chain_id": proof.chain_id,
@@ -394,6 +575,7 @@ class OnchainClaimAdapter(RewardRailAdapter):
                 "message_hash": proof.message_hash,
                 "signature": proof.signature,
                 "signer_address": signer.signer_address,
+                "proof_format": "eip191",
             },
             "payload": {
                 "type": "onchain_claim_proof",
@@ -426,8 +608,11 @@ class OnchainClaimAdapter(RewardRailAdapter):
         return key
 
     async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
-        # Proof is returned in the action payload; tenant submits on-chain.
-        return DeliveryResult(success=True, status="ready")
+        # True no-op: the proof is already in the action payload and the tenant
+        # (or user) submits the claim on-chain. Aether never submits the tx, so
+        # "delivery" preserves the action's current status rather than inventing
+        # a new one.
+        return DeliveryResult(success=True, status=action.get("status", "ready"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

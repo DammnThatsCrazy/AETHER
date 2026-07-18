@@ -32,3 +32,12 @@ dev = [
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+# Self-contained test config so the Agent Layer suite does not inherit the
+# repo-root pytest options (which assume the backend layout + xdist). This
+# directory's `queue/` package shadows the stdlib `queue`, so xdist's execnet
+# cannot be loaded here — run the suite with PYTEST_DISABLE_PLUGIN_AUTOLOAD=1:
+#   cd "Agent Layer" && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ""

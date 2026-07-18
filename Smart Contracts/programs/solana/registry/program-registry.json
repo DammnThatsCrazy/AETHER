@@ -1,0 +1,33 @@
+{
+  "schema": "aether.program-registry/v1",
+  "note": "program_id values are PLACEHOLDERS until a real deploy keypair is generated via `anchor keys sync`. Each deploy script rewrites the matching cluster entry. Never commit keypairs; only public ids/pubkeys live here.",
+  "program_name": "aether_rewards",
+  "declared_id_placeholder": "7pbSKNKWPHqUVPmvkBwogxtyyp57P9n7FdDzRxQUCM2o",
+  "deployments": [
+    {
+      "cluster": "localnet",
+      "program_id": "7pbSKNKWPHqUVPmvkBwogxtyyp57P9n7FdDzRxQUCM2o",
+      "chain_id": 104,
+      "upgrade_authority": "PENDING_LOCAL_DEPLOY",
+      "deployed_at": null,
+      "idl_sha256": null
+    },
+    {
+      "cluster": "testnet",
+      "program_id": "PENDING_TESTNET_DEPLOY",
+      "chain_id": 102,
+      "upgrade_authority": "PENDING_TESTNET_DEPLOY",
+      "deployed_at": null,
+      "idl_sha256": null
+    },
+    {
+      "cluster": "mainnet",
+      "program_id": "BLOCKED_UNTIL_EXTERNAL_AUDIT",
+      "chain_id": 101,
+      "upgrade_authority": "BLOCKED_UNTIL_EXTERNAL_AUDIT",
+      "deployed_at": null,
+      "idl_sha256": null,
+      "blocked_reason": "Mainnet real-value deployment is BLOCKED pending recorded external-audit evidence. See audit/10-known-limitations.md and audit/08-deployment-procedure.md."
+    }
+  ]
+}

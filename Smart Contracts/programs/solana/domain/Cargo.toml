@@ -1,0 +1,20 @@
+[package]
+name = "aether-domain"
+version = "0.2.0"
+edition = "2021"
+description = "Canonical, dependency-free domain-separation for Aether reward-claim proofs (message + nonce binding)."
+license = "Apache-2.0"
+repository = "https://github.com/aether/aether"
+publish = false
+
+# Own workspace root so it resolves/tests fully offline and in isolation, even
+# though the Anchor program depends on it by path. (Not a member of the parent
+# Anchor workspace -- see ../Cargo.toml `exclude`.)
+[workspace]
+
+# No external dependencies on purpose: this crate must be auditable in isolation
+# and unit-testable with a plain `cargo test` (no Solana/Anchor toolchain).
+[dependencies]
+
+[lib]
+crate-type = ["lib"]

@@ -23,6 +23,27 @@
 #   docker compose down
 # =============================================================================
 
+# ── Shared anchors ──────────────────────────────────────────────────
+# The runtime workers and the migration job reuse the backend image and a
+# common environment so the local stack mirrors the cloud runtime-role topology
+# (AWS Deployment/aether-aws/terraform/modules/ecs → aws_ecs_service.runtime_role
+# for_each var.runtime_roles). Same code, same roles, no per-profile source edits.
+x-backend-build: &backend-build
+  context: .
+  dockerfile: "Backend Architecture/aether-backend/Dockerfile"
+
+x-runtime-env: &runtime-env
+  AETHER_ENV: ${AETHER_ENV:-local}
+  DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
+  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://localstack:4566}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+  # Workers/migrations tolerate a dev default so the local runtime profile boots
+  # without bootstrap; the API service keeps JWT_SECRET required (fail-closed).
+  JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-not-for-staging}
+  BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:-}
+
 services:
   # ── Infrastructure ────────────────────────────────────────────────
 
@@ -49,7 +70,7 @@ services:
     # Default dev stack uses in-memory cache (AETHER_ENV=local fallback).
     # Also included in integration and staging-ml profiles for extraction-defense
     # rate limiting (db=2) and monitoring state (db=3).
-    profiles: ["legacy", "integration", "staging-ml", "full"]
+    profiles: ["legacy", "integration", "staging-ml", "streaming", "full"]
     ports:
       - "6379:6379"
     volumes:
@@ -84,6 +105,36 @@ services:
       timeout: 5s
       retries: 5
 
+  # Kafka (+ zookeeper) — the prod streaming broker. LocalStack SQS/SNS is the
+  # lightweight default; the streaming/full profiles run real Kafka so the
+  # journey-service consumer path matches staging/prod. Cloud equivalent: the
+  # `msk` Terraform module (AWS Deployment/aether-aws/terraform/modules/msk).
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    profiles: ["streaming", "full"]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    profiles: ["streaming", "full"]
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
   # MLflow tracking server — integration profile only.
   # Artifacts stored in LocalStack S3 (s3://aether-ml-experiments/mlflow).
   # Metadata stored in SQLite at /mlflow/mlflow.db inside the container volume.
@@ -117,7 +168,7 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.1
-    profiles: ["analytics", "full"]
+    profiles: ["analytics", "streaming", "full"]
     ports:
       - "8123:8123"
       - "9000:9000"
@@ -137,7 +188,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file: .env
+    env_file:
+      # Optional: bootstrap.sh generates .env for staging. A fresh checkout has
+      # none, so `docker compose config` still parses (required vars fail-closed).
+      - path: .env
+        required: false
     environment:
       AETHER_ENV: ${AETHER_ENV:-local}
       DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
@@ -159,6 +214,116 @@ services:
       CANARY_SECRET_SEED: ${CANARY_SECRET_SEED:-}
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
+  # ── Migration job (one-shot) ──────────────────────────────────────
+  # Applies alembic migrations to head, then exits. Cloud equivalent: the
+  # RUN_MIGRATIONS=1 one-off ECS task run from the deploy workflow. Run with:
+  #   docker compose --profile migrate up migrate
+  migrate:
+    build: *backend-build
+    profiles: ["migrate", "workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      RUN_MIGRATIONS: "1"
+    # entrypoint.sh runs `alembic upgrade head` when RUN_MIGRATIONS=1, then execs
+    # this no-op so the container exits 0 once migrations are at head.
+    command: ["python", "-c", "print('migrations applied to head')"]
+    restart: "no"
+
+  # ── Runtime-role workers ──────────────────────────────────────────
+  # One process per runtime role (services/runtime/roles.py::WORKER_ROLES),
+  # each booted via `python -m services.runtime.run_role <role>`. These mirror
+  # the dedicated cloud ECS runtime-role services 1:1. Gated behind the
+  # `workers` profile so the default minimal dev stack is unchanged.
+  outbox-relay:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: outbox-relay
+    command: ["python", "-m", "services.runtime.run_role", "outbox-relay"]
+    restart: unless-stopped
+
+  stream-worker:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: stream-worker
+    command: ["python", "-m", "services.runtime.run_role", "stream-worker"]
+    restart: unless-stopped
+
+  identity-worker:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: identity-worker
+    command: ["python", "-m", "services.runtime.run_role", "identity-worker"]
+    restart: unless-stopped
+
+  graph-writer:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: graph-writer
+    command: ["python", "-m", "services.runtime.run_role", "graph-writer"]
+    restart: unless-stopped
+
+  measurement-worker:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: measurement-worker
+    command: ["python", "-m", "services.runtime.run_role", "measurement-worker"]
+    restart: unless-stopped
+
+  materializer:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: materializer
+    command: ["python", "-m", "services.runtime.run_role", "materializer"]
+    restart: unless-stopped
+
+  # `maintenance` owns the scheduled/cron jobs (job_scheduler, retention_sweep,
+  # billing_overage_cron, notification_sla, …) — this is the local home of the
+  # platform's scheduled jobs.
+  maintenance:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: maintenance
+    command: ["python", "-m", "services.runtime.run_role", "maintenance"]
+    restart: unless-stopped
+
   ml-serving:
     # E2: ML predict routes are now served in-process by the backend container
     # (ML_SERVING_INLINE=true). This standalone service is in the legacy profile
@@ -175,7 +340,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file: .env
+    env_file:
+      # Optional: bootstrap.sh generates .env for staging. A fresh checkout has
+      # none, so `docker compose config` still parses (required vars fail-closed).
+      - path: .env
+        required: false
     environment:
       AETHER_ENV: ${AETHER_ENV:-local}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -208,7 +377,11 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_started
-    env_file: .env
+    env_file:
+      # Optional: bootstrap.sh generates .env for staging. A fresh checkout has
+      # none, so `docker compose config` still parses (required vars fail-closed).
+      - path: .env
+        required: false
     environment:
       AETHER_ENV: ${AETHER_ENV:-staging}
       DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
@@ -238,13 +411,40 @@ services:
 
   kyber:
     build:
+      # Build context is the repo root (npm workspaces monorepo); the app lives
+      # at frontend/kyber. Cloud equivalent: the inline `static_frontends.kyber`
+      # S3+CloudFront SPA in AWS Deployment/aether-aws/terraform/main.tf.
       context: .
-      dockerfile: apps/kyber/Dockerfile
-    profiles: ["demo", "full"]
+      dockerfile: frontend/kyber/Dockerfile
+    profiles: ["demo", "frontends", "full"]
     # Host port 8081 avoids collision with ml-serving on 8080.
     # Container still listens on 8080 internally (nginx default).
     ports:
       - "8081:8080"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # aether operator/admin SPA — the second static frontend. Cloud equivalent:
+  # the inline `static_frontends.aether` S3+CloudFront SPA in the Terraform root.
+  # Built from the same monorepo workspace root as kyber.
+  aether-frontend:
+    build:
+      context: .
+      dockerfile: frontend/kyber/Dockerfile
+      args:
+        # Reuses the kyber image recipe; a dedicated frontend/aether/Dockerfile
+        # can replace this once the aether SPA ships its own nginx image.
+        VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000}"
+    profiles: ["frontends", "full"]
+    ports:
+      - "8082:8080"
     depends_on:
       backend:
         condition: service_started

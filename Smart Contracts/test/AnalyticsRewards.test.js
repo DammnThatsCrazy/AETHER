@@ -290,15 +290,37 @@ describe("AnalyticsRewards", function () {
     });
 
     it("should reject claim exceeding budget", async function () {
-      const { rewards, oracle, user1 } = await loadFixture(deployWithCampaignFixture);
+      // The per-claim reward is fixed to campaign.rewardAmount, so budget
+      // exhaustion is reached by draining a small-budget campaign rather than
+      // by requesting an oversized amount. Create a campaign whose budget
+      // covers exactly one claim, drain it, then assert the next claim reverts
+      // with InsufficientCampaignBudget.
+      const { rewards, oracle, manager, user1 } = await loadFixture(deployFixture);
 
-      const amount = ethers.parseEther("2000"); // budget is only 1000
-      const nonce = ethers.randomBytes(32);
+      const campaignId = ethers.keccak256(ethers.toUtf8Bytes("single_claim"));
+      await rewards
+        .connect(manager)
+        .createCampaign(
+          campaignId,
+          "Single Claim",
+          ethers.parseEther("10"), // reward per claim
+          ethers.parseEther("10")  // budget: exactly one claim
+        );
+
+      const amount = ethers.parseEther("10");
       const expiry = Math.floor(Date.now() / 1000) + 3600;
-      const sig = await signClaim(oracle, rewards, user1.address, "page_view", amount, nonce, expiry);
 
+      // First claim drains the budget to zero.
+      const nonce1 = ethers.randomBytes(32);
+      const sig1 = await signClaim(oracle, rewards, user1.address, "single_claim", amount, nonce1, expiry);
+      await rewards.claimReward(user1.address, "single_claim", amount, nonce1, expiry, sig1);
+      expect(await rewards.getCampaignBudgetRemaining(campaignId)).to.equal(0);
+
+      // Second claim has no budget left.
+      const nonce2 = ethers.randomBytes(32);
+      const sig2 = await signClaim(oracle, rewards, user1.address, "single_claim", amount, nonce2, expiry);
       await expect(
-        rewards.claimReward(user1.address, "page_view", amount, nonce, expiry, sig)
+        rewards.claimReward(user1.address, "single_claim", amount, nonce2, expiry, sig2)
       ).to.be.revertedWithCustomError(rewards, "InsufficientCampaignBudget");
     });
 
@@ -404,6 +426,239 @@ describe("AnalyticsRewards", function () {
 
       await rewards.connect(admin).unpause();
       expect(await rewards.paused()).to.be.false;
+    });
+
+    it("should block emergencyWithdraw unless the contract is paused", async function () {
+      const { rewards, admin, manager } = await loadFixture(deployWithCampaignFixture);
+      // Campaign funded the contract with 1000 tokens.
+      await expect(
+        rewards.connect(admin).emergencyWithdraw(admin.address)
+      ).to.be.revertedWithCustomError(rewards, "ExpectedPause");
+
+      await rewards.connect(admin).pause();
+      await expect(rewards.connect(admin).emergencyWithdraw(admin.address)).to.not.be.reverted;
+    });
+
+    it("should restrict emergencyWithdraw to admin", async function () {
+      const { rewards, admin, user1 } = await loadFixture(deployWithCampaignFixture);
+      await rewards.connect(admin).pause();
+      await expect(
+        rewards.connect(user1).emergencyWithdraw(user1.address)
+      ).to.be.revertedWithCustomError(rewards, "AccessControlUnauthorizedAccount");
+    });
+  });
+
+  // ── Signature security: EIP-2 low-s malleability ───────────────────────
+
+  describe("Signature Malleability (EIP-2)", function () {
+    // secp256k1 curve order n.
+    const SECP256K1_N =
+      0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+
+    it("should reject a malleated high-s signature", async function () {
+      const { rewards, oracle, user1 } = await loadFixture(deployWithCampaignFixture);
+
+      const amount = ethers.parseEther("10");
+      const nonce = ethers.randomBytes(32);
+      const expiry = Math.floor(Date.now() / 1000) + 3600;
+
+      // Produce a canonical (low-s) signature, then flip it to the equivalent
+      // high-s / flipped-v form. Both are valid ECDSA signatures for the same
+      // key, but the contract's EIP-2 guard must reject the high-s variant.
+      const sig = await signClaim(oracle, rewards, user1.address, "page_view", amount, nonce, expiry);
+      const { r, s, v } = ethers.Signature.from(sig);
+
+      const sBig = BigInt(s);
+      const malleatedS = SECP256K1_N - sBig; // now in the upper half-order
+      const malleatedV = v === 27 ? 28 : 27;
+
+      const malleatedSig = ethers.concat([
+        r,
+        ethers.zeroPadValue(ethers.toBeHex(malleatedS), 32),
+        ethers.toBeHex(malleatedV, 1),
+      ]);
+
+      await expect(
+        rewards.claimReward(user1.address, "page_view", amount, nonce, expiry, malleatedSig)
+      ).to.be.revertedWithCustomError(rewards, "InvalidSignature");
+    });
+
+    it("should reject a signature with an invalid v value", async function () {
+      const { rewards, oracle, user1 } = await loadFixture(deployWithCampaignFixture);
+
+      const amount = ethers.parseEther("10");
+      const nonce = ethers.randomBytes(32);
+      const expiry = Math.floor(Date.now() / 1000) + 3600;
+
+      const sig = await signClaim(oracle, rewards, user1.address, "page_view", amount, nonce, expiry);
+      const { r, s } = ethers.Signature.from(sig);
+      // v = 1 is not in {27, 28}.
+      const badSig = ethers.concat([r, s, "0x01"]);
+
+      await expect(
+        rewards.claimReward(user1.address, "page_view", amount, nonce, expiry, badSig)
+      ).to.be.revertedWithCustomError(rewards, "InvalidSignature");
+    });
+  });
+
+  // ── Domain separation (chainId + contract address) ─────────────────────
+
+  describe("Domain Separation", function () {
+    it("should reject a signature bound to a different contract address", async function () {
+      const { rewards, oracle, user1 } = await loadFixture(deployWithCampaignFixture);
+
+      const amount = ethers.parseEther("10");
+      const nonce = ethers.randomBytes(32);
+      const expiry = Math.floor(Date.now() / 1000) + 3600;
+      const chainId = (await ethers.provider.getNetwork()).chainId;
+
+      // Sign a payload that embeds a WRONG verifying-contract address. The
+      // on-chain hash uses address(this), so the recovered signer will not be
+      // the oracle and the claim must be rejected.
+      const wrongContract = "0x000000000000000000000000000000000000dEaD";
+      const wrongHash = ethers.solidityPackedKeccak256(
+        ["address", "string", "uint256", "bytes32", "uint256", "uint256", "address"],
+        [user1.address, "page_view", amount, nonce, expiry, chainId, wrongContract]
+      );
+      const sig = await oracle.signMessage(ethers.getBytes(wrongHash));
+
+      await expect(
+        rewards.claimReward(user1.address, "page_view", amount, nonce, expiry, sig)
+      ).to.be.revertedWithCustomError(rewards, "SignerNotOracle");
+    });
+
+    it("should reject a signature bound to a different chainId", async function () {
+      const { rewards, oracle, user1 } = await loadFixture(deployWithCampaignFixture);
+
+      const amount = ethers.parseEther("10");
+      const nonce = ethers.randomBytes(32);
+      const expiry = Math.floor(Date.now() / 1000) + 3600;
+      const contractAddr = await rewards.getAddress();
+
+      // Sign with a bogus chainId; the contract binds block.chainid, so the
+      // recovered signer differs and the claim is rejected.
+      const wrongChainId = 999999n;
+      const wrongHash = ethers.solidityPackedKeccak256(
+        ["address", "string", "uint256", "bytes32", "uint256", "uint256", "address"],
+        [user1.address, "page_view", amount, nonce, expiry, wrongChainId, contractAddr]
+      );
+      const sig = await oracle.signMessage(ethers.getBytes(wrongHash));
+
+      await expect(
+        rewards.claimReward(user1.address, "page_view", amount, nonce, expiry, sig)
+      ).to.be.revertedWithCustomError(rewards, "SignerNotOracle");
+    });
+  });
+
+  // ── Oracle rotation semantics ──────────────────────────────────────────
+
+  describe("Oracle Rotation", function () {
+    it("should reject claims signed by the old oracle after rotation", async function () {
+      const { rewards, admin, oracle, user1, user2 } =
+        await loadFixture(deployWithCampaignFixture);
+
+      const amount = ethers.parseEther("10");
+      const expiry = Math.floor(Date.now() / 1000) + 3600;
+
+      // Rotate oracle -> user2.
+      await rewards.connect(admin).rotateOracle(oracle.address, user2.address);
+
+      // Old oracle can no longer authorize claims.
+      const nonceOld = ethers.randomBytes(32);
+      const sigOld = await signClaim(oracle, rewards, user1.address, "page_view", amount, nonceOld, expiry);
+      await expect(
+        rewards.claimReward(user1.address, "page_view", amount, nonceOld, expiry, sigOld)
+      ).to.be.revertedWithCustomError(rewards, "SignerNotOracle");
+
+      // New oracle's signature is accepted.
+      const nonceNew = ethers.randomBytes(32);
+      const sigNew = await signClaim(user2, rewards, user1.address, "page_view", amount, nonceNew, expiry);
+      await expect(
+        rewards.claimReward(user1.address, "page_view", amount, nonceNew, expiry, sigNew)
+      ).to.emit(rewards, "RewardClaimed");
+    });
+
+    it("should revert rotation with invalid parameters", async function () {
+      const { rewards, admin, oracle, user2 } = await loadFixture(deployFixture);
+
+      // zero new address
+      await expect(
+        rewards.connect(admin).rotateOracle(oracle.address, ethers.ZeroAddress)
+      ).to.be.revertedWithCustomError(rewards, "InvalidOracleRotation");
+
+      // same address
+      await expect(
+        rewards.connect(admin).rotateOracle(oracle.address, oracle.address)
+      ).to.be.revertedWithCustomError(rewards, "InvalidOracleRotation");
+
+      // old address does not currently hold ORACLE_ROLE
+      await expect(
+        rewards.connect(admin).rotateOracle(user2.address, admin.address)
+      ).to.be.revertedWithCustomError(rewards, "SignerNotOracle");
+    });
+
+    it("should restrict rotation to admin", async function () {
+      const { rewards, oracle, user1, user2 } = await loadFixture(deployFixture);
+      await expect(
+        rewards.connect(user1).rotateOracle(oracle.address, user2.address)
+      ).to.be.revertedWithCustomError(rewards, "AccessControlUnauthorizedAccount");
+    });
+
+    it("should block direct grant/revoke of ORACLE_ROLE", async function () {
+      const { rewards, admin, oracle, user2 } = await loadFixture(deployFixture);
+      const ORACLE_ROLE = await rewards.ORACLE_ROLE();
+
+      await expect(
+        rewards.connect(admin).grantRole(ORACLE_ROLE, user2.address)
+      ).to.be.revertedWithCustomError(rewards, "OracleRoleManagedViaRotateOracle");
+
+      await expect(
+        rewards.connect(admin).revokeRole(ORACLE_ROLE, oracle.address)
+      ).to.be.revertedWithCustomError(rewards, "OracleRoleManagedViaRotateOracle");
+    });
+
+    it("should still allow grant/revoke of non-oracle roles", async function () {
+      const { rewards, admin, user2, CAMPAIGN_MANAGER_ROLE } = await loadFixture(deployFixture);
+      await expect(rewards.connect(admin).grantRole(CAMPAIGN_MANAGER_ROLE, user2.address)).to.not.be
+        .reverted;
+      expect(await rewards.hasRole(CAMPAIGN_MANAGER_ROLE, user2.address)).to.be.true;
+      await expect(rewards.connect(admin).revokeRole(CAMPAIGN_MANAGER_ROLE, user2.address)).to.not.be
+        .reverted;
+    });
+  });
+
+  // ── Per-user claim cap ─────────────────────────────────────────────────
+
+  describe("Per-User Claim Cap", function () {
+    it("should enforce maxClaimsPerUser", async function () {
+      const { rewards, oracle, manager, user1 } = await loadFixture(deployFixture);
+
+      const campaignId = ethers.keccak256(ethers.toUtf8Bytes("capped"));
+      await rewards
+        .connect(manager)
+        .createCampaignWithCap(
+          campaignId,
+          "Capped",
+          ethers.parseEther("10"),
+          ethers.parseEther("1000"),
+          2 // max 2 claims per user
+        );
+
+      const amount = ethers.parseEther("10");
+      const expiry = Math.floor(Date.now() / 1000) + 3600;
+
+      for (let i = 0; i < 2; i++) {
+        const nonce = ethers.randomBytes(32);
+        const sig = await signClaim(oracle, rewards, user1.address, "capped", amount, nonce, expiry);
+        await rewards.claimReward(user1.address, "capped", amount, nonce, expiry, sig);
+      }
+
+      // Third claim exceeds the cap.
+      const nonce = ethers.randomBytes(32);
+      const sig = await signClaim(oracle, rewards, user1.address, "capped", amount, nonce, expiry);
+      await expect(
+        rewards.claimReward(user1.address, "capped", amount, nonce, expiry, sig)
+      ).to.be.revertedWithCustomError(rewards, "MaxClaimsExceeded");
     });
   });
 });

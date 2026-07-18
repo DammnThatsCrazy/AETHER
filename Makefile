@@ -345,6 +345,12 @@ exploration-readiness: ## Exploration fabric contract + registry + planner gates
 production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
 	python scripts/production_status.py
 
+credentialless-certification: ## Provider certification matrix + honest CredentialReadiness states (report; exit 0)
+	python scripts/credentialless_certification.py
+
+credentialless-certification-strict: ## Enforce every first-release provider >= CREDENTIAL_WAITING (no SCAFFOLDED); PR7-time gate
+	python scripts/credentialless_certification.py --strict
+
 audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with --check)
 	python scripts/smart_contract_audit_prep.py
 
@@ -443,12 +449,56 @@ integration-faults: ## Run durable outbox/storage crash, replay, and lifecycle f
 	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
 	docker compose -f deploy/integration/docker-compose.durable.yml run --rm api python -m pytest tests/unit/test_outbox_relay.py tests/unit/test_object_backed_bronze.py -q
 
-.PHONY: staging-preflight staging-preflight-dry-run
+.PHONY: staging-preflight staging-preflight-dry-run \
+        staging-preflight-credentialless staging-infra-plan staging-deploy \
+        pilot-smoke pilot-evidence pilot-manifest-validate staging-capability-matrix
 staging-preflight: ## Staging preflight gate: env/Settings, DB migrations + table shape, Redis, HTTP health, contracts (fail-closed)
 	python scripts/staging_preflight.py
 
 staging-preflight-dry-run: ## Staging preflight self-test against committed fixtures (no live services; does not certify an environment)
 	python scripts/staging_preflight.py --dry-run
+
+# ---------------------------------------------------------------------------
+# Credential-waiting staging capstone (credentialless — exits 0 without creds;
+# fails closed on real code/route/scaffold/PII/float/secret/topology problems)
+# ---------------------------------------------------------------------------
+
+staging-preflight-credentialless: ## Full credentialless staging preflight: code/routes/workers/alembic/IaC/compose/mock-replay/scaffold/PII/float/secret/docs (Docker/cloud gated as honest SKIP)
+	python scripts/staging_preflight_credentialless.py
+
+staging-capability-matrix: ## Validate the canonical deploy-profile capability matrix (local compose <-> cloud terraform <-> runtime roles)
+	python scripts/staging_capability_matrix.py
+
+staging-infra-plan: ## Terraform validate/plan (or structural equivalent) — NEVER applies
+	python scripts/staging_infra_plan.py
+
+staging-deploy: ## Documented apply/helm entrypoint (cloud creds required; documented no-op without STAGING_APPLY=1)
+	@echo "AETHER staging deploy — documented entrypoint. This wrapper NEVER applies on its own."
+	@echo ""
+	@echo "Prerequisites (cloud/credential gated — unavailable in a credentialless env):"
+	@echo "  1. terraform >= 1.6 and AWS creds (AWS_ACCESS_KEY_ID/SECRET or AWS_PROFILE)"
+	@echo "  2. make staging-preflight-credentialless   # must pass"
+	@echo "  3. make staging-infra-plan                 # review the plan (no apply)"
+	@echo ""
+	@echo "Apply steps (run manually, opt-in):"
+	@echo "  terraform -chdir='AWS Deployment/aether-aws/terraform' apply -var-file=profiles/staging.tfvars"
+	@echo "  # migrations: run the RUN_MIGRATIONS=1 one-off ECS task (compose: make dev + 'up migrate')"
+	@echo "  # verify:     make staging-preflight BASE_URL=https://api.staging.aether.io"
+	@if [ "$(STAGING_APPLY)" = "1" ]; then \
+	  command -v terraform >/dev/null 2>&1 || { echo ""; echo "ERROR: STAGING_APPLY=1 but terraform is not installed."; exit 1; }; \
+	  echo ""; echo "STAGING_APPLY=1 set — run the apply steps above (this wrapper does not embed apply)."; \
+	else \
+	  echo ""; echo "STAGING_APPLY not set — documented no-op (nothing was applied)."; \
+	fi
+
+pilot-manifest-validate: ## Validate every pilot manifest under config/pilot/examples against the schema + semantics
+	python scripts/validate_pilot_manifest.py
+
+pilot-smoke: ## One-command credentialless smoke across the nine platform capabilities (mock/replay)
+	python scripts/pilot_smoke.py
+
+pilot-evidence: ## Generate the checksummed, tenant-scoped pilot evidence package (credentialless mock)
+	python scripts/pilot_evidence.py --out artifacts/pilot-evidence
 
 load-baselines: ## Record staging load baselines via Locust (requires STAGING_URL and running backend)
 	mkdir -p tests/load/results

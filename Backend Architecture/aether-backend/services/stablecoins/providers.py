@@ -235,3 +235,48 @@ class StablecoinProviderIngestionRunner:
             await self.health.update(health_id, {**existing, **record})
         else:
             await self.health.insert(health_id, record)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Concrete connector wiring — build scheduler-ready, credential-waiting
+# connectors from the canonical connector registry and hand them to
+# ``StablecoinPollingScheduler.poll_provider`` (which then actually fetches).
+# The injectable ``rpc`` client is threaded straight through, so tests drive a
+# mock RPC server with NO live network. Imports are lazy to avoid the import
+# cycle (the connectors import this module).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def build_stablecoin_ingestion_connector(
+    deployment_id: str,
+    *,
+    rpc: Any = None,
+    connector_registry: Any = None,
+    **kwargs: Any,
+):
+    """Build the EVM or Solana ingestion connector for a registered deployment.
+
+    The returned object satisfies the ``StablecoinProviderConnector`` Protocol
+    and can be passed directly to ``StablecoinPollingScheduler.poll_provider``.
+    """
+    if connector_registry is None:
+        from .registry import PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+
+        connector_registry = PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+    return connector_registry.build_ingestion_connector(deployment_id, rpc=rpc, **kwargs)
+
+
+def build_stablecoin_price_connector(
+    deployment_id: str,
+    *,
+    feed_address: str,
+    rpc: Any = None,
+    connector_registry: Any = None,
+    **kwargs: Any,
+):
+    """Build the Chainlink-compatible price-feed connector for a deployment."""
+    if connector_registry is None:
+        from .registry import PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+
+        connector_registry = PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+    return connector_registry.build_price_connector(deployment_id, feed_address=feed_address, rpc=rpc, **kwargs)

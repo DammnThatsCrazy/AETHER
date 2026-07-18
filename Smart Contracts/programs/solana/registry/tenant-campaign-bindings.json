@@ -1,0 +1,27 @@
+{
+  "schema": "aether.tenant-campaign-bindings/v1",
+  "note": "Tenant and campaign ids are 16-byte opaque identifiers assigned by the Aether control plane. They are bound cryptographically into every reward proof (see audit/replay-isolation-proof.md). tenant_id/campaign_id are recorded here as 32-char lowercase hex (16 bytes). A proof is only valid for the exact (chain, program, tenant, campaign, mint, recipient, amount) tuple it was signed for.",
+  "tenants": [
+    {
+      "tenant_key": "example-tenant-a",
+      "tenant_id_hex": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "status": "example",
+      "campaigns": [
+        {
+          "campaign_key": "page-view-rewards-q3",
+          "campaign_id_hex": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+          "asset_key": "native-sol",
+          "status": "example",
+          "reward_schedule": [
+            { "action_type": "page_view", "amount_atomic": "1000000" }
+          ]
+        }
+      ]
+    }
+  ],
+  "binding_rules": {
+    "proof_scope": "chain_id + program_id + tenant_id + campaign_id + mint + recipient + amount + action + nonce + expiry",
+    "isolation_guarantee": "Changing ANY scope field changes the signed message bytes, so an Ed25519 proof cannot be replayed across chains, programs, tenants, campaigns, recipients, assets, or amounts.",
+    "nonce_scope": "Replay records are keyed by SHA-256(NONCE_TAG | program | chain | tenant | campaign | mint | nonce); the same raw nonce in two domains yields two distinct records."
+  }
+}

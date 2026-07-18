@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+
+from shared.temporal.instant import ensure_aware_utc
 from typing import Any, Optional
 
 from config.settings import settings
@@ -47,6 +49,19 @@ _PROVIDER_FLAGS = {
     "moonpay": "moonpay_enabled",
     "bridge": "bridge_enabled",
 }
+
+
+def _age_seconds(iso_value: Optional[str], now: datetime) -> Optional[float]:
+    """Seconds between an ISO timestamp and ``now`` (None when unparseable)."""
+    if not iso_value:
+        return None
+    try:
+        parsed = ensure_aware_utc(
+            datetime.fromisoformat(str(iso_value).replace("Z", "+00:00"))
+        )
+    except (ValueError, TypeError):
+        return None
+    return max(0.0, (now - parsed).total_seconds())
 
 
 def provider_enabled(provider: str) -> bool:
@@ -120,17 +135,70 @@ class PaymentRailsService:
         provider: str,
         *,
         records: Optional[list[dict[str, Any]]] = None,
+        **params: Any,
     ) -> dict[str, Any]:
+        """Pull provider truth for open sessions and persist sync cursor + health.
+
+        The stored per-scope cursor is loaded before the pull and the adapter's
+        returned ``next_cursor`` is persisted after, so the next sweep resumes
+        where this one stopped (cursor recovery). Polled events flow through the
+        same status-ordered upsert as webhooks, so a stale poll can NEVER
+        regress a terminal session. ``records=`` bypasses the network for
+        callers/tests supplying provider-shaped records directly.
+        """
         adapter = require_provider_enabled(provider)
-        events = await adapter.status_sync(tenant_id, records=records)
+        account = await self.repos.accounts.get(tenant_id, adapter.provider_name) or {}
+
+        poll_state: Optional[dict[str, Any]] = None
+        if records is None and adapter.polling_supported:
+            scope = str(params.get("partner_user_ref") or params.get("customer_id") or "default")
+            cursors = dict(account.get("sync_cursors") or {})
+            poll_state = {
+                "cursor": cursors.get(scope), "scope": scope,
+                "health": "ok", "next_cursor": None, "pages": 0,
+            }
+            events = await adapter.status_sync(tenant_id, poll_state=poll_state, **params)
+        else:
+            events = await adapter.status_sync(tenant_id, records=records)
+
         results = [await self._process_event(tenant_id, adapter, event) for event in events]
-        await self.repos.accounts.upsert(tenant_id, adapter.provider_name, {
-            "last_poll_at": utc_now_iso(),
-        })
+
+        # Persist sync cursor + provider poll health on the account record.
+        account_changes: dict[str, Any] = {"last_poll_at": utc_now_iso()}
+        if poll_state is not None:
+            health = poll_state.get("health") or "ok"
+            account_changes["provider_poll_health"] = health
+            account_changes["last_poll_pages"] = poll_state.get("pages", 0)
+            if poll_state.get("next_cursor") is not None:
+                cursors = dict(account.get("sync_cursors") or {})
+                cursors[poll_state["scope"]] = poll_state["next_cursor"]
+                account_changes["sync_cursors"] = cursors
+            metrics.gauge(
+                "payment_rail_provider_poll_health",
+                1.0 if health == "ok" else 0.0,
+                labels={"provider": adapter.provider_name, "health": health},
+            )
+            if health != "ok":
+                metrics.increment(
+                    "payment_rail_provider_poll_degraded_total",
+                    labels={"provider": adapter.provider_name, "health": health},
+                )
+        elif adapter.webhook_only:
+            account_changes["provider_poll_health"] = "webhook_only"
+        await self.repos.accounts.upsert(tenant_id, adapter.provider_name, account_changes)
+
         await self.repos.audit.record(tenant_id, adapter.audit_record(
-            tenant_id, "status_sync", {"event_count": len(events)}
+            tenant_id, "status_sync",
+            {"event_count": len(events),
+             "poll_health": (poll_state or {}).get("health"),
+             "poll_pages": (poll_state or {}).get("pages")},
         ))
-        return {"synced": True, "events": results}
+        return {
+            "synced": True,
+            "events": results,
+            "poll_health": (poll_state or {}).get("health"),
+            "next_cursor": (poll_state or {}).get("next_cursor"),
+        }
 
     # ── Shared event pipeline ─────────────────────────────────────────────
 
@@ -233,7 +301,8 @@ class PaymentRailsService:
     # ── Health ────────────────────────────────────────────────────────────
 
     async def health(self, tenant_id: str) -> list[PaymentRailHealth]:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        now = datetime.now(timezone.utc)
+        cutoff = (now - timedelta(hours=24)).isoformat()
         sessions = await self.repos.sessions.list_for_tenant(tenant_id)
         events = await self.repos.events.list_for_tenant(tenant_id)
         reconciliations = await self.repos.reconciliation.list_for_tenant(tenant_id)
@@ -268,6 +337,25 @@ class PaymentRailsService:
             else:
                 status = "healthy"
 
+            last_event_at = max(
+                (e.get("received_at") or "" for e in events if e.get("provider") == name),
+                default=None,
+            ) or None
+            last_poll_at = (account or {}).get("last_poll_at")
+
+            # Provider freshness SLO: age of the newest observed provider signal.
+            # For a pull provider this is the age of the last successful poll or
+            # event; for a webhook-only provider it is the last verified webhook.
+            if context["configured"]:
+                freshness_source = last_poll_at if adapter.polling_supported else last_event_at
+                freshness = _age_seconds(freshness_source or last_event_at, now)
+                if freshness is not None:
+                    metrics.gauge(
+                        "payment_rail_provider_freshness_seconds", freshness,
+                        labels={"provider": name, "mode":
+                                "poll" if adapter.polling_supported else "webhook_only"},
+                    )
+
             results.append(PaymentRailHealth(
                 tenant_id=tenant_id,
                 provider=name,  # type: ignore[arg-type]
@@ -283,11 +371,8 @@ class PaymentRailsService:
                 ),
                 reconciliation_matched_rate=(matched / len(p_recons)) if p_recons else None,
                 reconciliation_conflicts=conflicts,
-                last_event_at=max(
-                    (e.get("received_at") or "" for e in events if e.get("provider") == name),
-                    default=None,
-                ) or None,
-                last_poll_at=(account or {}).get("last_poll_at"),
+                last_event_at=last_event_at,
+                last_poll_at=last_poll_at,
                 status=status,  # type: ignore[arg-type]
             ))
         return results

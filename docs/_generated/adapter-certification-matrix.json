@@ -1,0 +1,467 @@
+{
+  "generated_from": "Backend Architecture/aether-backend/shared/certification/registry.py",
+  "providers": {
+    "derivatives:drift": {
+      "adapter": "drift",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "fills",
+        "funding",
+        "markets",
+        "position",
+        "reference_data"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "drift",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "derivatives:dydx": {
+      "adapter": "dydx",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "markets",
+        "orders",
+        "position",
+        "realtime_account_stream",
+        "reference_data"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "dydx",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "derivatives:gmx": {
+      "adapter": "gmx",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "fills",
+        "funding",
+        "markets",
+        "position",
+        "reference_data"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "gmx",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "derivatives:hyperliquid": {
+      "adapter": "hyperliquid",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "funding",
+        "margin_snapshot",
+        "markets",
+        "position",
+        "realtime_account_stream",
+        "reference_data"
+      ],
+      "domain": "derivatives",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "provider": "hyperliquid",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "websocket",
+      "unsupported": []
+    },
+    "interop:axelar": {
+      "adapter": "axelar",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "execution_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
+      "domain": "interop",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "axelar",
+      "required_credentials": [],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "interop:chainlink_ccip": {
+      "adapter": "chainlink_ccip",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding",
+        "retry_tracking"
+      ],
+      "domain": "interop",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "chainlink_ccip",
+      "required_credentials": [],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "interop:debridge": {
+      "adapter": "debridge",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "intent_observation",
+        "message_observation",
+        "reorg_recovery",
+        "settlement_observation"
+      ],
+      "domain": "interop",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "debridge",
+      "required_credentials": [],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "interop:hyperlane": {
+      "adapter": "hyperlane",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding",
+        "reorg_recovery"
+      ],
+      "domain": "interop",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "hyperlane",
+      "required_credentials": [],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "interop:ibc": {
+      "adapter": "ibc",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "asset_transfer",
+        "attribute_event_observation",
+        "continuity_recovery",
+        "delivery_observation",
+        "historical_backfill",
+        "message_observation",
+        "settlement_observation"
+      ],
+      "domain": "interop",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "ibc",
+      "required_credentials": [],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "interop:layerzero": {
+      "adapter": "layerzero_v2",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
+      "domain": "interop",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "layerzero",
+      "required_credentials": [],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "interop:wormhole": {
+      "adapter": "wormhole",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
+      "domain": "interop",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "wormhole",
+      "required_credentials": [],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "payments:bridge": {
+      "adapter": "BridgeAdapter",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "bank_deposit",
+        "polling",
+        "refund",
+        "settlement",
+        "webhook"
+      ],
+      "domain": "payments",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "bridge",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "payment_bridge"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": []
+    },
+    "payments:coinbase": {
+      "adapter": "CoinbaseAdapter",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "fiat_onramp",
+        "offramp",
+        "polling",
+        "webhook"
+      ],
+      "domain": "payments",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "coinbase",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "payment_coinbase"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": []
+    },
+    "payments:moonpay": {
+      "adapter": "MoonPayAdapter",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "fiat_onramp",
+        "offramp",
+        "polling",
+        "webhook"
+      ],
+      "domain": "payments",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "moonpay",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "payment_moonpay"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": []
+    },
+    "payments:privy": {
+      "adapter": "PrivyAdapter",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "bank_deposit",
+        "crypto_deposit",
+        "fiat_onramp",
+        "webhook"
+      ],
+      "domain": "payments",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "privy",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "payment_privy"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": []
+    },
+    "payments:stripe_onramp": {
+      "adapter": "StripeOnrampAdapter",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "crypto_onramp",
+        "webhook"
+      ],
+      "domain": "payments",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "stripe_onramp",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "payment_stripe_onramp"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": []
+    },
+    "stablecoin_chain:evm": {
+      "adapter": "StablecoinEVMReceiptVerifier",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "finality_confirmation",
+        "receipt_observation"
+      ],
+      "domain": "stablecoin_chain",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "evm",
+      "required_credentials": [],
+      "required_endpoints": [
+        "json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "stablecoin_chain:svm": {
+      "adapter": "StablecoinSolanaTransactionVerifier",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "finality_confirmation",
+        "transaction_observation"
+      ],
+      "domain": "stablecoin_chain",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "svm",
+      "required_credentials": [],
+      "required_endpoints": [
+        "json_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "none",
+      "unsupported": []
+    }
+  },
+  "summary": {
+    "by_domain": {
+      "derivatives": 4,
+      "interop": 7,
+      "payments": 5,
+      "stablecoin_chain": 2
+    },
+    "by_state": {
+      "credential_waiting": 18
+    },
+    "first_release": 18,
+    "total": 18
+  },
+  "version": "8.12.0"
+}

@@ -1,0 +1,130 @@
+# =============================================================================
+# Aether Pilot Manifest — USDC observation-only (Ethereum + Base), shadow mode.
+#
+# Validated by: python scripts/validate_pilot_manifest.py
+# Schema:       config/pilot/manifest.schema.json
+#
+# This is a READ/COMPUTE-ONLY founding-tenant pilot: it ingests and reconciles
+# USDC activity on Ethereum and Base mainnet, computes derived intelligence in
+# shadow mode (nothing delivered externally), and is bounded by explicit
+# retention, quotas, consent, region policy, and kill switches. Secrets are
+# referenced by NAME only; reward/meter/quota amounts are integer minor units.
+# =============================================================================
+
+schema_version: 1
+manifest_version: "1.0.0"
+tenant_id: "founding-usdc-observer"
+mode: observation
+shadow_mode: true
+
+pilot:
+  start: "2026-08-01T00:00:00Z"
+  end: "2026-11-01T00:00:00Z"
+
+region_policy:
+  primary_region: us-east-1
+  allowed_regions: [us-east-1, us-west-2]
+  data_residency: strict
+
+backfill:
+  enabled: true
+  start: "2026-06-01T00:00:00Z"
+
+retention:
+  raw_days: 90
+  derived_days: 365
+  audit_days: 730
+
+enabled_features:
+  - stablecoin_ingestion
+  - reconciliation
+  - profile360_readonly
+  - measurement_shadow
+
+providers:
+  - domain: stablecoin_chain
+    provider: evm
+    adapter: evm_stablecoin_adapter
+    credential_refs: []
+  - domain: payments
+    provider: coinbase
+    adapter: coinbase_onramp_adapter
+    credential_refs: [PAYMENT_COINBASE_WEBHOOK_SECRET]
+
+chains:
+  - chain: ethereum
+    network: mainnet
+    rpc_ref: ETHEREUM_MAINNET_RPC_REF
+    # Public USDC (FiatTokenProxy) contract on Ethereum mainnet.
+    contract_refs: ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"]
+    venues: [uniswap_v3, curve]
+  - chain: base
+    network: mainnet
+    rpc_ref: BASE_MAINNET_RPC_REF
+    # Public USDC contract on Base mainnet.
+    contract_refs: ["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"]
+    venues: [uniswap_v3, aerodrome]
+
+secret_refs:
+  - ETHEREUM_MAINNET_RPC_REF
+  - BASE_MAINNET_RPC_REF
+  - PAYMENT_COINBASE_WEBHOOK_SECRET
+  - ALERT_PAGERDUTY_ROUTING_KEY_REF
+  - ALERT_SLACK_WEBHOOK_REF
+
+consent:
+  consent_required: true
+  required_purposes:
+    - analytics_measurement
+    - fraud_and_risk
+
+entitlements:
+  - name: stablecoin_ingestion
+    enabled: true
+    limit: 5000000
+  - name: reconciliation
+    enabled: true
+  - name: reward_delivery
+    enabled: false
+
+meters:
+  - name: events_ingested
+    unit: count
+    aggregation: sum
+  - name: reconciliations_run
+    unit: count
+    aggregation: sum
+  - name: rpc_calls
+    unit: count
+    aggregation: sum
+
+quotas:
+  events_ingested: 5000000
+  reconciliations_run: 100000
+  rpc_calls: 10000000
+
+rewards:
+  enabled: false
+  currency: USDC
+  budget_minor_units: 0
+  per_action_minor_units:
+    referral: 0
+
+alert_destinations:
+  - name: pager
+    type: pagerduty
+    target_ref: ALERT_PAGERDUTY_ROUTING_KEY_REF
+  - name: pilot-slack
+    type: slack
+    target_ref: ALERT_SLACK_WEBHOOK_REF
+
+kill_switches:
+  - name: pilot_global_halt
+    scope: pilot
+    default_state: armed
+  - name: stablecoin_chain_evm_halt
+    scope: provider
+    default_state: armed
+  - name: reward_delivery_halt
+    scope: feature
+    default_state: armed

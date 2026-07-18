@@ -15,8 +15,11 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from services.integrations.providers.payment_rails.base import (
+    ConnectionTestResult,
     ParsedProviderEvent,
     PaymentRailAdapter,
+    ProviderPollError,
+    _extract_secret,
 )
 from services.integrations.providers.payment_rails.models import FundingSession
 
@@ -40,6 +43,15 @@ class MoonPayAdapter(PaymentRailAdapter):
     polling_supported = True
     default_rail = "moonpay"
     signature_scheme = "timestamped_hex"
+
+    # Pull path — MoonPay transactions API, time-window paginated by updatedAt.
+    poll_base_url = "https://api.moonpay.com"
+    cert_supported_operations = (
+        "webhook_ingest", "normalize", "reconcile", "status_poll", "backfill",
+    )
+    cert_required_credentials = ("webhook_signing_secret", "server_api_key")
+    cert_required_endpoints = ("/v3/transactions",)
+    cert_pagination_model = "time_window"
 
     STATUS_MAP: dict[str, str] = {
         "waitingpayment": "initiated",
@@ -158,6 +170,116 @@ class MoonPayAdapter(PaymentRailAdapter):
                 source="polling",
             ))
         return events
+
+    # ── Pull path: authenticated request construction + time-window pull ──
+
+    def build_request(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Construct the authenticated MoonPay transactions request.
+
+        Api-Key auth from the tenant BYOK secret; ``startDate`` is the
+        time-window cursor (last observed ``updatedAt``); optional
+        ``externalCustomerId`` scoping. ``tenant_scope`` proves isolation.
+        """
+        secret = _extract_secret(ctx.get("credential"))
+        base = str(ctx.get("base_url") or self.poll_base_url).rstrip("/")
+        params: dict[str, Any] = {"limit": ctx.get("limit", self.poll_page_size)}
+        start_date = ctx.get("cursor") or ctx.get("start_date")
+        if start_date:
+            params["startDate"] = start_date
+        if ctx.get("end_date"):
+            params["endDate"] = ctx["end_date"]
+        if ctx.get("external_customer_id"):
+            params["externalCustomerId"] = ctx["external_customer_id"]
+        headers = {"Accept": "application/json"}
+        if secret:
+            headers["Authorization"] = f"Api-Key {secret}"
+        return {
+            "method": "GET",
+            "url": f"{base}/v3/transactions",
+            "headers": headers,
+            "params": params,
+            "tenant_scope": ctx.get("tenant_id", ""),
+            "timeout": self._http_timeout,
+        }
+
+    async def _fetch_poll_records(
+        self, tenant_id: str, **params: Any
+    ) -> list[dict[str, Any]]:
+        """Bounded, time-window pull of MoonPay transactions.
+
+        The persisted cursor is the newest ``updatedAt`` observed (the next
+        ``startDate`` watermark), so the next sweep only re-reads from that
+        point. Never raises: a classified failure degrades provider health.
+        """
+        poll_state = params.get("poll_state")
+        secret = await self._require_secret(tenant_id)
+        if not secret:
+            self._mark_health(poll_state, "not_configured")
+            return []
+        base = await self._resolve_base_url(tenant_id)
+        limit = int(params.get("limit", self.poll_page_size))
+
+        records: list[dict[str, Any]] = []
+        start_date = (poll_state or {}).get("cursor")
+        watermark = start_date or ""
+        pages = 0
+        async with self._open_http_client() as client:
+            try:
+                while pages < self.poll_max_pages:
+                    request = self.build_request({
+                        "tenant_id": tenant_id, "credential": secret, "base_url": base,
+                        "cursor": start_date, "end_date": params.get("end_date"),
+                        "external_customer_id": params.get("external_customer_id"),
+                        "limit": limit,
+                    })
+                    body = await self._request_json(client, request, poll_state=poll_state)
+                    page = (
+                        list(body) if isinstance(body, list)
+                        else list(body.get("data") or body.get("transactions") or [])
+                        if isinstance(body, dict) else []
+                    )
+                    records.extend(page)
+                    pages += 1
+                    newest = max(
+                        (str(r.get("updatedAt") or r.get("createdAt") or "") for r in page),
+                        default="",
+                    )
+                    if newest > watermark:
+                        watermark = newest
+                    if not page or len(page) < limit or not newest or newest == start_date:
+                        break
+                    start_date = newest
+            except ProviderPollError as exc:
+                self._degraded(poll_state, exc)
+        self._finish_poll(
+            poll_state, next_cursor=(watermark or None), pages=pages, records=records,
+        )
+        return records
+
+    async def _live_connection_test(self, tenant_id: str) -> ConnectionTestResult:
+        """Authenticated health ping: a bounded transactions GET (limit=1)."""
+        secret = await self._require_secret(tenant_id)
+        if not secret:
+            return ConnectionTestResult(
+                provider=self.provider_name, ok=False, status="not_configured",
+                detail="missing credential (configure the key vault)",
+            )
+        base = await self._resolve_base_url(tenant_id)
+        request = self.build_request({
+            "tenant_id": tenant_id, "credential": secret, "base_url": base, "limit": 1,
+        })
+        try:
+            async with self._open_http_client() as client:
+                await self._request_json(client, request)
+        except ProviderPollError as exc:
+            return ConnectionTestResult(
+                provider=self.provider_name, ok=False, status="error",
+                detail=f"health ping failed ({exc.classification})",
+            )
+        return ConnectionTestResult(
+            provider=self.provider_name, ok=True, status="ok",
+            detail="authenticated transactions ping ok",
+        )
 
 
 def _amount(value: Any) -> Optional[str]:

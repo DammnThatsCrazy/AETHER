@@ -345,8 +345,8 @@ class RewardAuditRepository(BaseRepository):
 
     async def append(
         self,
-        tenant_id: str,
-        action: str,
+        record_or_tenant: Any,
+        action: Optional[str] = None,
         target_type: Optional[str] = None,
         target_id: Optional[str] = None,
         actor_type: Optional[str] = None,
@@ -356,21 +356,35 @@ class RewardAuditRepository(BaseRepository):
         reason: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> dict:
+        """Append an immutable audit entry.
+
+        Accepts either a single payload dict (the form used by the route-level
+        ``_audit`` helper and the repository tests) or the positional
+        ``(tenant_id, action, ...)`` keyword form. Supporting both keeps a single
+        source of truth: previously the dict-callers silently failed with a
+        ``TypeError`` swallowed by the caller's ``try/except``, so no audit rows
+        were ever written from the routes.
+        """
+        if isinstance(record_or_tenant, dict):
+            payload = dict(record_or_tenant)
+            tenant_id = payload.get("tenant_id", "")
+        else:
+            tenant_id = record_or_tenant
+            payload = {
+                "action": action,
+                "target_type": target_type,
+                "target_id": target_id,
+                "actor_type": actor_type,
+                "actor_id": actor_id,
+                "before_state": before_state,
+                "after_state": after_state,
+                "reason": reason,
+                "request_id": request_id,
+            }
+
         record_id = _new_id()
-        record = {
-            "id": record_id,
-            "tenant_id": tenant_id,
-            "action": action,
-            "target_type": target_type,
-            "target_id": target_id,
-            "actor_type": actor_type,
-            "actor_id": actor_id,
-            "before_state": before_state,
-            "after_state": after_state,
-            "reason": reason,
-            "request_id": request_id,
-            "created_at": utc_now().isoformat(),
-        }
+        record = {**payload, "id": record_id, "tenant_id": tenant_id}
+        record.setdefault("created_at", utc_now().isoformat())
         return await self.insert(record_id, record)
 
     async def list(self, tenant_id: str, target_type: Optional[str] = None, target_id: Optional[str] = None, limit: int = 100) -> list[dict]:
@@ -380,6 +394,67 @@ class RewardAuditRepository(BaseRepository):
         if target_id:
             filters["target_id"] = target_id
         return await self.find_many(filters=filters, limit=limit)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXTERNAL AUDIT EVIDENCE REPOSITORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+class RewardAuditEvidenceRepository(BaseRepository):
+    """Records of external security-audit evidence for on-chain reward contracts.
+
+    Used by the EVM-mainnet activation gate: a mainnet ``onchain_claim`` reward
+    cannot activate unless a non-revoked evidence entry exists for the
+    (tenant, chain_id, contract_address) being activated.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("reward_external_audit_evidence")
+
+    async def create(self, tenant_id: str, data: dict) -> dict:
+        pool = await self._ensure_pool()
+        _assert_durable_available(pool)
+        record_id = _new_id()
+        record = {
+            **data,
+            "id": record_id,
+            "tenant_id": tenant_id,
+            "status": data.get("status", "recorded"),
+            "contract_address": (data.get("contract_address") or "").lower(),
+            "created_at": utc_now().isoformat(),
+        }
+        return await self.insert(record_id, record)
+
+    async def get(self, evidence_id: str, tenant_id: str) -> dict:
+        record = await self.find_by_id(evidence_id)
+        if record is None:
+            raise NotFoundError("RewardAuditEvidence")
+        if record.get("tenant_id") != tenant_id:
+            raise ForbiddenError("RewardAuditEvidence")
+        return record
+
+    async def list(self, tenant_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit, offset=offset)
+
+    async def find_active(self, tenant_id: str, chain_id: int, contract_address: str) -> Optional[dict]:
+        """Return a non-revoked evidence entry for (tenant, chain, contract), or None."""
+        records = await self.find_many(
+            filters={"tenant_id": tenant_id, "contract_address": (contract_address or "").lower()},
+            limit=100,
+        )
+        for r in records:
+            if int(r.get("chain_id", -1)) == int(chain_id) and r.get("status") != "revoked":
+                return r
+        return None
+
+    async def set_status(self, evidence_id: str, tenant_id: str, status: str) -> dict:
+        await self.get(evidence_id, tenant_id)
+        update: dict = {"status": status}
+        if status == "verified":
+            update["verified_at"] = utc_now().isoformat()
+        if status == "revoked":
+            update["revoked_at"] = utc_now().isoformat()
+        return await self.update(evidence_id, update)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

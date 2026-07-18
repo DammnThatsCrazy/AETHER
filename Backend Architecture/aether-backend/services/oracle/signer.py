@@ -5,16 +5,25 @@ Generates cryptographic proofs for reward eligibility that are verifiable
 on-chain via keccak256 message signing with secp256k1 ECDSA.
 
 Supports two proof formats:
-- EIP-191: raw keccak256(abi.encodePacked(...)) — matches AnalyticsRewards.sol
-- EIP-712: typed structured data with domain separator — for future contract upgrades
+- EIP-191: keccak256(abi.encodePacked(...)) wrapped by the EIP-191 v0x45
+  personal-sign prefix — matches AnalyticsRewards.sol ``_recoverSigner``, which
+  recovers over ``keccak256("\x19Ethereum Signed Message:\n32" || messageHash)``.
+- EIP-712: typed structured data with domain separator — for future contract upgrades.
 
 Uses eth_account for real cryptographic operations:
 - keccak256 hashing (matching Solidity's abi.encodePacked)
-- secp256k1 ECDSA signing via Account.signHash
-- ecrecover-compatible signature verification
+- secp256k1 ECDSA signing via ``Account.unsafe_sign_hash`` (the modern
+  replacement for the removed ``Account.signHash``) over the per-format digest
+  from ``_digest_for_format``: the personal-sign-wrapped hash for EIP-191 (so
+  on-chain ``ecrecover`` over the contract's ``ethSignedHash`` recovers the
+  oracle), and the typed-data digest directly for EIP-712.
+- ecrecover-compatible signature verification via ``Account._recover_hash``
+  (the modern replacement for the removed ``Account.recoverHash``)
 - Real Ethereum address derivation from private key
 
-Requires: eth-account>=0.11.0 (included in backend extras)
+Requires: eth-account>=0.13 (included in backend extras). Note: eth-account
+0.13 removed ``Account.signHash`` / ``Account.recoverHash``; this module uses
+``unsafe_sign_hash`` / ``_recover_hash`` on the per-format digest above.
 """
 
 from __future__ import annotations
@@ -43,6 +52,12 @@ except ImportError:
 
 def _is_local_env() -> bool:
     return os.getenv("AETHER_ENV", "local").lower() == "local"
+
+
+def hmac_compare(a: str, b: str) -> bool:
+    """Constant-time string comparison for digest equality checks."""
+    import hmac as _hmac
+    return _hmac.compare_digest(a, b)
 
 
 # ======================================================================
@@ -190,7 +205,7 @@ class OracleProofSigner:
                 user, action_type, amount_wei, nonce, expiry,
             )
 
-        signature = self._sign(message_hash)
+        signature = self._sign(message_hash, proof_format)
 
         proof = RewardProof(
             user=user,
@@ -216,15 +231,56 @@ class OracleProofSigner:
         return proof
 
     async def verify_proof(self, proof: RewardProof) -> bool:
-        """Verify a proof by recovering the signer from the signature."""
+        """Verify a proof: rebind fields, then recover the signer.
+
+        Two independent checks, both fail-closed:
+
+        1. **Digest rebinding.** The expected digest is *recomputed* from the
+           proof's own fields under THIS signer's config (chain_id,
+           contract_address, EIP-712 domain) and compared to
+           ``proof.message_hash``. This binds the signature to the exact
+           payload and to this chain/contract — a tampered field or a
+           cross-chain / cross-contract replay yields a different digest and is
+           rejected before any signature recovery. Without this step a valid
+           signature by our oracle over *any* hash would pass, defeating the
+           chain/contract binding that the on-chain contract relies on.
+        2. **Signer recovery.** ``ecrecover`` over the (now-verified) digest must
+           return this signer's address.
+        """
         if int(time.time()) > proof.expiry:
             logger.warning(f"Proof expired: user={proof.user} expiry={proof.expiry}")
+            metrics.increment(
+                "oracle_proofs_verified",
+                labels={"valid": "False", "chain_id": str(proof.chain_id)},
+            )
             return False
 
         msg_hash = proof.message_hash.removeprefix("0x")
         sig = proof.signature.removeprefix("0x")
 
-        recovered = self._recover_signer(msg_hash, sig)
+        # ── 1. Rebind: recompute the digest from the proof's declared fields ──
+        try:
+            expected_hash = self._recompute_hash(proof)
+        except Exception as exc:
+            logger.warning(f"Proof digest recompute failed: {exc}")
+            metrics.increment(
+                "oracle_proofs_verified",
+                labels={"valid": "False", "chain_id": str(proof.chain_id)},
+            )
+            return False
+        if not hmac_compare(expected_hash, msg_hash):
+            logger.warning(
+                "Proof digest mismatch (tampered fields or cross-chain/contract "
+                "replay): user=%s chain_id=%s", proof.user, self._config.chain_id,
+            )
+            metrics.increment(
+                "oracle_proofs_verified",
+                labels={"valid": "False", "chain_id": str(proof.chain_id)},
+            )
+            return False
+
+        # ── 2. Recover the signer over the verified digest ────────────────────
+        recovered = self._recover_signer(msg_hash, sig, proof.proof_format)
         valid = recovered.lower() == self._signer_address.lower()
 
         if not valid:
@@ -343,13 +399,62 @@ class OracleProofSigner:
 
         return hashlib.sha256(packed).hexdigest()
 
+    # -- digest rebinding (verification) ---------------------------------
+
+    def _recompute_hash(self, proof: RewardProof) -> str:
+        """Recompute the message digest from a proof's declared fields.
+
+        Uses THIS signer's ``chain_id`` / ``contract_address`` (and EIP-712
+        domain), so the result only matches ``proof.message_hash`` when the
+        proof was issued for this chain/contract with untampered fields.
+        """
+        fmt = ProofFormat(proof.proof_format)
+        if fmt == ProofFormat.EIP712:
+            return self._compute_eip712_hash(
+                user=proof.user,
+                campaign_id_bytes32=_uuid_to_bytes32(proof.campaign_id),
+                rule_id_bytes32=_uuid_to_bytes32(proof.rule_id),
+                decision_id_bytes32=_uuid_to_bytes32(proof.decision_id),
+                action_type=proof.action_type,
+                amount_wei=int(proof.amount_wei),
+                nonce_bytes32=bytes.fromhex(proof.nonce),
+                expiry=int(proof.expiry),
+            )
+        return self._build_message_hash(
+            proof.user, proof.action_type, int(proof.amount_wei), proof.nonce, int(proof.expiry),
+        )
+
     # -- crypto primitives -----------------------------------------------
 
-    def _sign(self, message_hash: str) -> str:
-        """Sign a 32-byte message hash with secp256k1 ECDSA."""
+    _ETH_SIGN_PREFIX = b"\x19Ethereum Signed Message:\n32"
+
+    def _digest_for_format(self, message_hash: str, fmt: ProofFormat) -> bytes:
+        """The exact 32-byte digest ``ecrecover`` runs over, per proof format.
+
+        eip191: the deployed AnalyticsRewards contract recovers over
+          ``keccak256("\\x19Ethereum Signed Message:\\n32" || messageHash)`` — the
+          EIP-191 v0x45 personal-sign wrap (AnalyticsRewards.sol ``_recoverSigner``)
+          — so the oracle MUST sign that wrapped digest, not the bare
+          ``keccak256(abi.encodePacked(...))``.
+        eip712: ``messageHash`` is already the final ``_hashTypedDataV4`` digest
+          and is signed as-is.
+        """
+        raw = bytes.fromhex(message_hash)
+        if fmt == ProofFormat.EIP712:
+            return raw
+        return keccak(self._ETH_SIGN_PREFIX + raw)
+
+    def _sign(self, message_hash: str, proof_format: str = "eip191") -> str:
+        """Sign a claim digest with secp256k1 ECDSA so the on-chain contract
+        verifies it. For eip191 the personal-sign-wrapped digest is signed (see
+        :meth:`_digest_for_format`); for eip712 the typed-data digest is signed
+        directly. ``Account.signHash`` was removed in eth-account 0.13;
+        ``Account.unsafe_sign_hash`` is the modern primitive that signs a
+        pre-computed digest as-is.
+        """
         if self._use_real_crypto:
-            msg_bytes = bytes.fromhex(message_hash)
-            signed = Account.signHash(msg_bytes, self._config.signer_private_key)
+            digest = self._digest_for_format(message_hash, ProofFormat(proof_format))
+            signed = Account.unsafe_sign_hash(digest, self._config.signer_private_key)
             return signed.signature.hex()
 
         import hmac as _hmac
@@ -359,12 +464,16 @@ class OracleProofSigner:
             digestmod=hashlib.sha256,
         ).hexdigest()
 
-    def _recover_signer(self, message_hash: str, signature: str) -> str:
-        """Recover the signer address from a signature (ecrecover)."""
+    def _recover_signer(self, message_hash: str, signature: str, proof_format: str = "eip191") -> str:
+        """Recover the signer address (ecrecover). Mirrors :meth:`_sign`: recovers
+        over the same per-format digest (personal-sign-wrapped for eip191, the
+        typed-data digest for eip712). ``Account._recover_hash`` is the modern
+        replacement for the removed ``Account.recoverHash``.
+        """
         if self._use_real_crypto:
-            msg_bytes = bytes.fromhex(message_hash)
+            digest = self._digest_for_format(message_hash, ProofFormat(proof_format))
             sig_bytes = bytes.fromhex(signature)
-            recovered = Account.recoverHash(msg_bytes, signature=sig_bytes)
+            recovered = Account._recover_hash(digest, signature=sig_bytes)
             return recovered
 
         import hmac as _hmac

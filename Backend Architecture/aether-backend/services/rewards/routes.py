@@ -56,11 +56,13 @@ from services.rewards.policy_engine import (
     IdentityInput,
     RewardPolicyEngine,
 )
+from services.rewards.budget import BudgetReservationService
 from services.rewards.queue import RewardQueue
 from services.rewards.rails import DeliveryResult, RailUnavailableError, get_rail_adapter
 from services.rewards.repositories import (
     ContractRegistryRepository,
     RewardActionRepository,
+    RewardAuditEvidenceRepository,
     RewardAuditRepository,
     RewardCampaignRepository,
     RewardDecisionRepository,
@@ -166,6 +168,31 @@ _legacy_oracle = OracleSigner(_oracle_config)
 _engine = EligibilityEngine()
 _queue = RewardQueue(_legacy_oracle)
 _policy_engine = RewardPolicyEngine()
+# Durable, concurrency-safe campaign budget reservations (reserve→commit→release).
+_budget_service = BudgetReservationService()
+
+
+async def _release_reservation(action: dict, tenant_id: str, reason: str) -> None:
+    """Best-effort release of a budget reservation tied to an action."""
+    res_id = (action or {}).get("reservation_id")
+    if not res_id:
+        return
+    try:
+        await _budget_service.release(res_id, tenant_id=tenant_id)
+        logger.info("budget reservation released res=%s reason=%s", res_id, reason)
+    except Exception as exc:  # never fail the request path on a ledger hiccup
+        logger.warning("budget reservation release failed res=%s: %s", res_id, exc)
+
+
+async def _commit_reservation(res_id: Optional[str], tenant_id: str, reason: str) -> None:
+    """Best-effort commit of a budget reservation (spend is now final)."""
+    if not res_id:
+        return
+    try:
+        await _budget_service.commit(res_id, tenant_id=tenant_id)
+        logger.info("budget reservation committed res=%s reason=%s", res_id, reason)
+    except Exception as exc:
+        logger.warning("budget reservation commit failed res=%s: %s", res_id, exc)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -461,6 +488,7 @@ async def _get_repos() -> dict:
         "audit": RewardAuditRepository(),
         "rail_configs": RewardRailConfigRepository(),
         "contracts": ContractRegistryRepository(),
+        "audit_evidence": RewardAuditEvidenceRepository(),
     }
 
 
@@ -917,6 +945,7 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
         campaign_repo=repos["campaigns"],
         rule_repo=repos["rules"],
         decision_repo=repos["decisions"],
+        budget_service=_budget_service,
     )
 
     # ── Contract registry pre-check (before persisting decision) ─────────
@@ -956,6 +985,24 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 ),
             )
 
+        # ── EVM MAINNET AUDIT GATE ───────────────────────────────────────
+        # Block mainnet on-chain reward activation unless external-audit
+        # evidence is recorded for this contract. Local/testnet unaffected.
+        from services.rewards.onchain_gate import (
+            MainnetAuditRequiredError,
+            assert_mainnet_audit_evidence,
+        )
+        try:
+            await assert_mainnet_audit_evidence(
+                tenant_id=tenant_id,
+                chain_id=_chain_id,
+                contract_address=_contract_address,
+                evidence_repo=repos["audit_evidence"],
+                is_local=is_local,
+            )
+        except MainnetAuditRequiredError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+
     # ── Persist decision ─────────────────────────────────────────────────
     decision_record: Optional[dict] = None
     try:
@@ -981,6 +1028,7 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 "fraud_score": fraud_score,
                 "execution_mode": decision.execution_mode,
                 "rail": decision.rail,
+                "reservation_id": decision.reservation_id,
                 "created_at": _utc_now(),
             },
         )
@@ -1021,14 +1069,33 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 "payload": payload,
                 "status": payload.get("status", "created"),
                 "delivery_attempts": 0,
+                # Carry the budget reservation so reject/cancel release it and
+                # receipt/delivery commit it (reserve→commit→release lifecycle).
+                "reservation_id": decision.reservation_id,
                 "created_at": _utc_now(),
                 "updated_at": _utc_now(),
             }
             action_record = await repos["actions"].create(tenant_id, action_data)
             action_id = action_record["id"]
 
-            # Deliver non-deferred rails immediately
-            if decision.rail not in ("manual_approval", "onchain_claim"):
+            # Delivery routing.
+            if decision.rail == "tenant_webhook":
+                # DURABLE outbox: enqueue and keep the action 'pending'. It is
+                # only marked 'delivered' once the outbox records a
+                # ProviderReceipt — never on the synchronous request path.
+                try:
+                    from services.rewards.delivery_outbox import reward_delivery_outbox
+                    await reward_delivery_outbox.enqueue(action_record, rail_config, tenant_id)
+                    await repos["actions"].transition(action_id, tenant_id, "pending")
+                except Exception as exc:
+                    logger.error(f"tenant_webhook durable enqueue failed: {exc}", exc_info=True)
+                    await repos["actions"].transition(
+                        action_id, tenant_id, "failed",
+                        extra={"last_delivery_error": str(exc)},
+                    )
+                    await _release_reservation(action_record, tenant_id, "webhook_enqueue_failed")
+            elif decision.rail not in ("manual_approval", "onchain_claim"):
+                # Deliver terminal/no-op rails (recommend_only, manual_export) inline.
                 delivery: DeliveryResult = await adapter.deliver(action_record, rail_config)
                 await repos["actions"].transition(
                     action_id, tenant_id, delivery.status,
@@ -1045,6 +1112,12 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             raise
         except Exception as exc:
             logger.error(f"Action payload creation failed: {exc}", exc_info=True)
+            # Action never materialized → release the budget reservation so it
+            # doesn't leak (no action row exists to carry/release it later).
+            if action_id is None and decision.reservation_id:
+                await _release_reservation(
+                    {"reservation_id": decision.reservation_id}, tenant_id, "action_creation_failed"
+                )
 
     # ── Legacy in-memory path (local mode fallback) ───────────────────────
     if is_local and not decision.campaign_id and body.effective_wallet_address:
@@ -1269,6 +1342,8 @@ async def reject_action(request: Request, action_id: str, body: ActionRejectRequ
         raise HTTPException(status_code=409, detail=f"Action is not pending_approval (status={before.get('status')})")
 
     updated = await repos["actions"].transition(action_id, tenant_id, "rejected")
+    # Reward abandoned → release its budget reservation back to the campaign.
+    await _release_reservation(before, tenant_id, "action.rejected")
     await _audit(repos, tenant_id, "action.rejected", "reward_action", action_id,
                  before_state=before, after_state=updated, reason=body.reason)
     metrics.increment("rewards_actions_rejected_total", labels={"tenant_id": tenant_id})
@@ -1323,6 +1398,8 @@ async def cancel_action(request: Request, action_id: str, body: ActionCancelRequ
         raise HTTPException(status_code=409, detail=f"Cannot cancel action in status={before.get('status')}")
 
     updated = await repos["actions"].transition(action_id, tenant_id, "cancelled")
+    # Reward cancelled → release its budget reservation back to the campaign.
+    await _release_reservation(before, tenant_id, "action.cancelled")
     await _audit(repos, tenant_id, "action.cancelled", "reward_action", action_id,
                  before_state=before, after_state=updated, reason=body.reason)
     return updated
@@ -1427,6 +1504,22 @@ async def create_receipt(request: Request, body: ReceiptCreate):
         receipt_data["observed_at"] = receipt_data["observed_at"].isoformat()
 
     receipt = await repos["receipts"].create(tenant_id, receipt_data)
+
+    # A confirmed execution receipt finalizes the spend → commit the budget
+    # reservation tied to the action/decision (reserve→commit lifecycle).
+    if body.status in ("success", "delivered", "confirmed", "executed"):
+        res_id: Optional[str] = None
+        try:
+            if body.action_payload_id:
+                action = await repos["actions"].get(body.action_payload_id, tenant_id)
+                res_id = action.get("reservation_id")
+            elif body.decision_id:
+                decision = await repos["decisions"].get(body.decision_id, tenant_id)
+                res_id = decision.get("reservation_id")
+        except Exception as exc:
+            logger.warning(f"receipt reservation lookup failed (non-fatal): {exc}")
+        await _commit_reservation(res_id, tenant_id, "receipt.recorded")
+
     metrics.increment("rewards_receipts_created_total", labels={"rail": body.rail, "tenant_id": tenant_id})
     return receipt
 
@@ -1652,6 +1745,134 @@ async def verify_contract(request: Request, registry_id: str):
     await _audit(repos, tenant_id, "contract.verified", "contract_registry", registry_id,
                  after_state=updated)
     return updated
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXTERNAL AUDIT EVIDENCE ROUTES
+# Records the external security-audit evidence required to activate EVM mainnet
+# on-chain rewards (see services/rewards/onchain_gate.py).
+# ═══════════════════════════════════════════════════════════════════════════
+
+class AuditEvidenceCreate(BaseModel):
+    chain_id: int
+    contract_address: str
+    auditor: str
+    report_uri: Optional[str] = None
+    report_hash: Optional[str] = None
+    summary: Optional[str] = None
+    status: str = "recorded"
+
+
+@router.post("/audit-evidence", response_model=None)
+@api_response
+async def create_audit_evidence(request: Request, body: AuditEvidenceCreate):
+    """Record external security-audit evidence for an on-chain reward contract.
+
+    A non-revoked entry for (tenant, chain_id, contract_address) is required to
+    activate EVM mainnet on-chain rewards.
+    """
+    _require_permission(request, "rewards:write")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    record = await repos["audit_evidence"].create(tenant_id, {
+        **body.model_dump(),
+        "recorded_at": _utc_now(),
+    })
+    await _audit(repos, tenant_id, "audit_evidence.recorded", "reward_audit_evidence", record.get("id"),
+                 after_state=record)
+    metrics.increment("rewards_audit_evidence_recorded", labels={"tenant_id": tenant_id})
+    return record
+
+
+@router.get("/audit-evidence", response_model=None)
+@api_response
+async def list_audit_evidence(
+    request: Request,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List recorded external-audit evidence for the authenticated tenant."""
+    _require_permission(request, "rewards:read")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    return await repos["audit_evidence"].list(tenant_id, limit=limit, offset=offset)
+
+
+@router.post("/audit-evidence/{evidence_id}/verify", response_model=None)
+@api_response
+async def verify_audit_evidence(request: Request, evidence_id: str):
+    """Operator marks an audit-evidence entry as verified (rewards:admin)."""
+    _require_permission(request, "rewards:admin")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    updated = await repos["audit_evidence"].set_status(evidence_id, tenant_id, "verified")
+    await _audit(repos, tenant_id, "audit_evidence.verified", "reward_audit_evidence", evidence_id,
+                 after_state=updated)
+    return updated
+
+
+@router.post("/audit-evidence/{evidence_id}/revoke", response_model=None)
+@api_response
+async def revoke_audit_evidence(request: Request, evidence_id: str):
+    """Revoke an audit-evidence entry (re-gates mainnet activation for the contract)."""
+    _require_permission(request, "rewards:admin")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    updated = await repos["audit_evidence"].set_status(evidence_id, tenant_id, "revoked")
+    await _audit(repos, tenant_id, "audit_evidence.revoked", "reward_audit_evidence", evidence_id,
+                 after_state=updated)
+    return updated
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DURABLE DELIVERY OUTBOX ROUTES (tenant_webhook)
+# Operator status + replay for the durable, leased reward-delivery outbox.
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/outbox/status", response_model=None)
+@api_response
+async def outbox_status(request: Request):
+    """Return durable reward-delivery job counts by state for the tenant."""
+    _require_permission(request, "rewards:read")
+    tenant_id = _get_tenant_id(request)
+    from services.rewards.delivery_outbox import reward_delivery_outbox
+    return {"tenant_id": tenant_id, "jobs_by_state": await reward_delivery_outbox.status(tenant_id)}
+
+
+@router.post("/outbox/drain", response_model=None)
+@api_response
+async def outbox_drain(request: Request, batch_size: int = Query(10, ge=1, le=100)):
+    """Operator-triggered drain of the durable reward-delivery outbox.
+
+    Leases and dispatches a batch of runnable jobs (retry/backoff/DLQ applied),
+    recording a ProviderReceipt on success. Also used as a manual replay trigger
+    in environments without the background outbox worker running.
+    """
+    _require_permission(request, "rewards:write")
+    from services.rewards.delivery_outbox import reward_delivery_outbox
+    summary = await reward_delivery_outbox.drain(batch_size=batch_size)
+    metrics.increment("rewards_outbox_drain_requests", labels={"tenant_id": _get_tenant_id(request)})
+    return summary
+
+
+@router.post("/actions/{action_id}/redeliver", response_model=None)
+@api_response
+async def redeliver_action(request: Request, action_id: str):
+    """Operator replay: requeue a failed tenant_webhook delivery for the action."""
+    _require_permission(request, "rewards:write")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    action = await repos["actions"].get(action_id, tenant_id)
+    job_id = action.get("delivery_job_id")
+    if not job_id:
+        raise HTTPException(status_code=409, detail="Action has no durable delivery job to replay")
+    from services.rewards.delivery_outbox import reward_delivery_outbox
+    try:
+        job = await reward_delivery_outbox.redeliver(job_id, tenant_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    await repos["actions"].transition(action_id, tenant_id, "pending")
+    return {"action_id": action_id, "job": job}
 
 
 # ═══════════════════════════════════════════════════════════════════════════

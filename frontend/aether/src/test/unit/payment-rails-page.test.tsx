@@ -16,11 +16,17 @@ beforeAll(() => {
   };
 });
 
-/** Badge text can collide with filter <option> text; scope to badge elements. */
+/**
+ * Badge text can collide with filter <option> text; scope to badge elements.
+ * Matches both plain badges (text on the `.ui-badge` node) and the shared
+ * CapabilityStateBadge (label nested inside `.ui-badge` alongside a glyph).
+ */
 function getBadge(text: string): HTMLElement {
-  const match = screen.getAllByText(text).find(el => el.classList.contains('ui-badge'));
+  const match = screen
+    .getAllByText(text)
+    .find(el => el.classList.contains('ui-badge') || el.closest('.ui-badge') !== null);
   expect(match).toBeDefined();
-  return match as HTMLElement;
+  return (match?.closest('.ui-badge') ?? match) as HTMLElement;
 }
 
 const mocks = vi.hoisted(() => ({

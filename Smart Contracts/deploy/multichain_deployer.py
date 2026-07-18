@@ -41,6 +41,15 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
+# EVM deploy-time safety gates (audit gate, default-key rejection, registries).
+# Ensure this file's directory is importable whether run as a script or imported.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from evm_guards import (  # noqa: E402
+    GateError,
+    network_tier,
+    run_evm_predeploy_gates,
+)
+
 # ---------------------------------------------------------------------------
 #  Logging
 # ---------------------------------------------------------------------------
@@ -430,6 +439,18 @@ class EVMDeployer(ChainDeployer):
         private_key = self.kwargs.get("private_key", os.getenv("DEPLOYER_KEY", ""))
 
         hardhat_network = self._get_hardhat_network()
+
+        # ── Fail-closed pre-deploy gates (mirror scripts/deploy.js) ──
+        #   Mainnet audit gate + default-key rejection + oracle registry.
+        #   GateError propagates so deploy_chain records it as a failure and
+        #   the hardhat subprocess never runs. Local networks bypass all gates.
+        logger.info(
+            "Pre-deploy gates for '%s' (%s tier)...",
+            hardhat_network,
+            network_tier(hardhat_network),
+        )
+        run_evm_predeploy_gates(hardhat_network, oracle_address, private_key)
+        logger.info("Pre-deploy gates passed.")
 
         deploy_env = {}
         if private_key:
@@ -1181,6 +1202,11 @@ class MultiChainDeployer:
             self.results[chain] = result
             logger.info("Deployment to %s completed successfully.", chain)
             return result
+        except GateError as e:
+            error_msg = f"GATE[{e.category}]: {e}"
+            self.errors[chain] = error_msg
+            logger.error("Deployment to %s BLOCKED by safety gate: %s", chain, error_msg)
+            return None
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
             self.errors[chain] = error_msg

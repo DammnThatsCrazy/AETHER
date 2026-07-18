@@ -66,6 +66,8 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_sync_provider_pulled_total",
     "payment_rail_sync_transitioned_total",
     "payment_rail_sync_error_total",
+    # Payment Rail provider polling health (services/.../payment_rails/service.py)
+    "payment_rail_provider_poll_degraded_total",
     # Card-linked payment rails (services/card_linked_payments)
     "card_linked_flows_upserted_total",
     "card_linked_audit_total",

@@ -215,26 +215,18 @@ def execute_objective_step_impl(
 def _execute_envelope_step(envelope: dict[str, Any]) -> dict[str, Any]:
     """Execute the controller step described by the envelope.
 
-    DOCUMENTED NO-OP ECHO STEP: the durable objective/plan state for hosted
-    dispatch lives in the backend's AgentRuntimeRepository, not in this
-    process — the in-memory ObjectiveRuntime here has no record of the
-    objective referenced by the envelope, and the controller hierarchy
-    (controller.py) is constructed per-process with its own registries, so
-    there is no cleanly callable "execute one objective step" seam to invoke
-    from a bare envelope today. The release-critical deliverable is the
-    bridge contract itself (dispatch → running → completed/failed with
-    durable state), so this step echoes the envelope payload as its output.
-    When a controller-side step executor becomes callable from an envelope,
-    replace only this function — the task lifecycle around it stays intact.
+    Delegates to the controller-side step executor
+    (agent_controller.runtime.step_executor.execute_step), which resolves the
+    specialist worker assigned to the step from the real worker registry, runs
+    ONLY approved read-only tools, and returns a bounded structured output plus
+    PROPOSED mutations (staged proposals — never committed here) and
+    evidence/lineage. Typed StepExecutionError failures propagate so the task
+    lifecycle reports retry/failed; the run's durable state is transitioned by
+    the backend via the run-status callbacks in execute_objective_step_impl.
     """
-    return {
-        "step": "echo",
-        "controller": envelope.get("controller", ""),
-        "queue": envelope.get("queue", ""),
-        "objective_id": envelope.get("objective_id", ""),
-        "attempt": envelope.get("attempt", 1),
-        "payload": envelope.get("payload") or {},
-    }
+    from agent_controller.runtime.step_executor import execute_step
+
+    return execute_step(envelope)
 
 
 # ---------------------------------------------------------------------------

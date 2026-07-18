@@ -18,7 +18,7 @@ FILTERABLE_FIELDS = (
     "card_program_id", "issuer_id", "payment_network", "basis", "rail",
     "chain", "asset", "campaign_id", "journey_id", "session_id", "device_id",
     "confidence", "source", "region_policy", "actor_kind",
-    "reconciliation_state",
+    "reconciliation_state", "evidence_strength",
 )
 
 
@@ -105,17 +105,47 @@ async def get_card_linked_profile_summary(
     filtered = apply_flow_filters(attributed, filters or {})
     rollup = await entity_economic_activity(tenant_id, entity_id)
     provenance = sorted({str(r.get("source")) for r in filtered})
+
+    def _count(field: str) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for r in filtered:
+            key = str(r.get(field) or "unknown")
+            out[key] = out.get(key, 0) + 1
+        return out
+
+    # Reconciliation conflicts touching this entity's flows.
+    reconciliations = await repos.reconciliation.list_for_tenant(tenant_id)
+    flow_ids = {r.get("id") for r in filtered}
+    related_recon = [r for r in reconciliations if flow_ids & set(r.get("flow_ids") or [])]
+    conflicts = [r for r in related_recon if r.get("state") == "conflict"]
+
     warnings = []
     if any(r.get("basis") == "unknown" for r in filtered):
         warnings.append("Some flows carry basis=unknown — do not interpret them as spend.")
     if rollup["topup_count"] and not rollup["spend_count"]:
         warnings.append("Only top-up/funding evidence exists — top-up volume is not card spend.")
+    if not any(r.get("evidence_strength") == "provider_confirmed" for r in filtered) and rollup["spend_count"]:
+        warnings.append("No provider-confirmed evidence — spend is inferred, not provider-confirmed.")
     return {
         "entity_id": entity_id,
         "summary": rollup,
         "flows": filtered[:200],
         "story": _story(filtered),
         "provenance": provenance,
+        # ── product surfaces (item 4): evidence / basis / source coverage,
+        # reconciliation conflicts, and consent/region governance decisions ──
+        "evidence_breakdown": _count("evidence_strength"),
+        "basis_distribution": _count("basis"),
+        "source_coverage": _count("source"),
+        "reconciliation": {
+            "states": _count("reconciliation_state"),
+            "conflicts": len(conflicts),
+            "records": related_recon,
+        },
+        "governance": {
+            "region_policies": _count("region_policy"),
+            "consent_decisions": _count("consent_decision"),
+        },
         "filters_applied": {k: v for k, v in (filters or {}).items() if v not in (None, "")},
         "available_filters": list(FILTERABLE_FIELDS) + ["volume_min", "volume_max", "since", "until"],
         "warnings": warnings,

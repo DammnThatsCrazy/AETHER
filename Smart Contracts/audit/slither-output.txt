@@ -1,0 +1,46 @@
+# Slither run — 2026-07-18T17:40:37Z
+# slither 0.11.5
+# solc Version: 0.8.20+commit.a1b79de6.Linux.g++
+# command: slither . --solc-remaps '@openzeppelin=node_modules/@openzeppelin' --filter-paths 'node_modules|contracts/test'
+
+'npx hardhat clean' running (wd: /home/user/AETHER/Smart Contracts)
+'npx hardhat clean --global' running (wd: /home/user/AETHER/Smart Contracts)
+'npx hardhat compile --force' running (wd: /home/user/AETHER/Smart Contracts)
+INFO:Detectors:
+Detector: incorrect-equality
+AnalyticsRewards.emergencyWithdraw(address) (contracts/AnalyticsRewards.sol#453-462) uses a dangerous strict equality:
+	- balance == 0 (contracts/AnalyticsRewards.sol#460)
+RewardRegistry.getAction(string) (contracts/RewardRegistry.sol#344-352) uses a dangerous strict equality:
+	- _actions[key].registeredAt == 0 (contracts/RewardRegistry.sol#350)
+RewardRegistry.getCampaign(bytes32) (contracts/RewardRegistry.sol#381-388) uses a dangerous strict equality:
+	- _campaigns[campaignId].registeredAt == 0 (contracts/RewardRegistry.sol#386)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#dangerous-strict-equalities
+INFO:Detectors:
+Detector: timestamp
+AnalyticsRewards.claimReward(address,string,uint256,bytes32,uint256,bytes) (contracts/AnalyticsRewards.sol#196-253) uses timestamp for comparisons
+	Dangerous comparisons:
+	- block.timestamp > expiry (contracts/AnalyticsRewards.sol#208)
+RewardRegistry.isActionRegistered(string) (contracts/RewardRegistry.sol#330-337) uses timestamp for comparisons
+	Dangerous comparisons:
+	- _actions[key].registeredAt != 0 (contracts/RewardRegistry.sol#336)
+RewardRegistry.getAction(string) (contracts/RewardRegistry.sol#344-352) uses timestamp for comparisons
+	Dangerous comparisons:
+	- _actions[key].registeredAt == 0 (contracts/RewardRegistry.sol#350)
+RewardRegistry.getCampaign(bytes32) (contracts/RewardRegistry.sol#381-388) uses timestamp for comparisons
+	Dangerous comparisons:
+	- _campaigns[campaignId].registeredAt == 0 (contracts/RewardRegistry.sol#386)
+RewardRegistry.isCampaignLive(bytes32) (contracts/RewardRegistry.sol#412-423) uses timestamp for comparisons
+	Dangerous comparisons:
+	- block.timestamp < meta.startTime (contracts/RewardRegistry.sol#420)
+	- meta.endTime != 0 && block.timestamp > meta.endTime (contracts/RewardRegistry.sol#421)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp
+INFO:Detectors:
+Detector: assembly
+AnalyticsRewards._recoverSigner(bytes32,bytes) (contracts/AnalyticsRewards.sol#523-554) uses assembly
+	- INLINE ASM (contracts/AnalyticsRewards.sol#540-544)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#assembly-usage
+INFO:Detectors:
+Detector: cyclomatic-complexity
+AnalyticsRewards.claimReward(address,string,uint256,bytes32,uint256,bytes) (contracts/AnalyticsRewards.sol#196-253) has a high cyclomatic complexity (13).
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#cyclomatic-complexity
+INFO:Slither:. analyzed (20 contracts with 101 detectors), 10 result(s) found

@@ -1,0 +1,4 @@
+{
+  "_comment": "Canonical record of deployed Aether contract addresses per Hardhat network. post_deploy_verify.js fails closed outside local networks unless the target address is registered here. deploy.js appends new addresses automatically after a successful non-local deploy; review the diff before committing. PUBLIC addresses only.",
+  "networks": {}
+}

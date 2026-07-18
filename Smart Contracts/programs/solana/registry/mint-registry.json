@@ -1,0 +1,28 @@
+{
+  "schema": "aether.mint-registry/v1",
+  "note": "The program transfers NATIVE SOL (lamports). The asset is identified in the domain-separated proof by the wrapped-SOL mint sentinel. Amounts are ALWAYS integer atomic units (lamports) encoded as decimal strings; never floats.",
+  "assets": [
+    {
+      "asset_key": "native-sol",
+      "mint": "So11111111111111111111111111111111111111112",
+      "mint_kind": "native_sol_sentinel",
+      "decimals": 9,
+      "atomic_unit": "lamport",
+      "one_whole_in_atomic": "1000000000",
+      "enforced_on_chain": true,
+      "enforcement": "claim_reward requires `mint.to_bytes() == aether_domain::NATIVE_SOL_MINT`, else AetherError::UnsupportedAsset",
+      "notes": "Transfers are native lamports moved from the vault PDA. The wSOL mint is used only as the asset identifier bound into the proof (asset-scoping + forward-compat). No SPL token account is touched."
+    }
+  ],
+  "example_reward_schedule": [
+    {
+      "action_type": "page_view",
+      "amount_atomic": "1000000",
+      "amount_human": "0.001 SOL",
+      "asset_key": "native-sol"
+    }
+  ],
+  "roadmap": {
+    "spl_support": "When SPL/token-2022 assets are added, register each real mint here with its decimals and atomic unit, and extend claim_reward to move tokens via CPI. Until then only native-sol is accepted."
+  }
+}

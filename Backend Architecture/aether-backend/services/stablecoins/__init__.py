@@ -80,3 +80,38 @@ from .polling import (
     StablecoinProviderConnector,
     StablecoinProviderPollResult,
 )
+
+from .connector_base import (
+    ConnectorCertificationMixin,
+    StablecoinConnectorCursorRepository,
+    StablecoinConnectorError,
+    StablecoinRpcClient,
+)
+from .evm_connector import StablecoinEVMIngestionConnector
+from .solana_connector import StablecoinSolanaIngestionConnector
+from .price_feed import StablecoinChainlinkPriceConnector, StablecoinPriceObservation
+from .registry import (
+    PLATFORM_STABLECOIN_CONNECTOR_REGISTRY,
+    StablecoinConnectorRegistry,
+    resolve_vm_type,
+)
+from .providers import (
+    build_stablecoin_ingestion_connector,
+    build_stablecoin_price_connector,
+)
+
+__all__ += [
+    "ConnectorCertificationMixin",
+    "StablecoinConnectorCursorRepository",
+    "StablecoinConnectorError",
+    "StablecoinRpcClient",
+    "StablecoinEVMIngestionConnector",
+    "StablecoinSolanaIngestionConnector",
+    "StablecoinChainlinkPriceConnector",
+    "StablecoinPriceObservation",
+    "PLATFORM_STABLECOIN_CONNECTOR_REGISTRY",
+    "StablecoinConnectorRegistry",
+    "resolve_vm_type",
+    "build_stablecoin_ingestion_connector",
+    "build_stablecoin_price_connector",
+]

@@ -146,3 +146,12 @@ build on any violation, and Kyber exposes the same results read-only.
 - Backend semantics: `Backend Architecture/aether-backend/services/card_linked_payments/models.py`.
 - Backend catalog: `Backend Architecture/aether-backend/services/payment_catalog/catalog.py`.
 - Settings: `Backend Architecture/aether-backend/config/settings.py`.
+
+## Certification & readiness (staging-capstone)
+
+Card-linked is the least mature economic plane (scorecard 2/5): every rollout
+flag defaults OFF and no live provider data has flowed through it. Operator
+triage lives in `docs/runbooks/CARD_LINKED_RUNBOOK.md`; the honest limits are in
+`docs/productization/staging-capstone/LIMITATIONS_AND_NON_GOALS.md`. Promotion of
+the underlying payment-rail providers follows
+`docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md`.

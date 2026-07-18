@@ -168,11 +168,22 @@ AREAS: list[Area] = [
         4,
         "Agent-originated mutations go through verify -> stage -> review batch -> human "
         "approval -> commit; direct service mutations are tenant-scoped, idempotent "
-        "upserts with audit trace.",
+        "upserts with audit trace. The review->commit seam is real (PR6): "
+        "commit_approved_mutations enforces the approval invariant + GraphWriteValidator "
+        "+ CIS quarantine, records partial failures per-mutation (loud, never silent), "
+        "preserves graph-write errors as failed_commit, and is idempotent; "
+        "rollback_mutation VERIFIES the inverse and marks rollback_repair_required (with "
+        "a durable repair task) when it cannot fully restore state — never a false clean "
+        "undo. Stale agent runs are swept and replayable. All of this is pinned "
+        "credentiallessly by tests/chaos. Gap: hosted mode still needs durable storage.",
         [
             "Agent Layer/README.md",
+            "Backend Architecture/aether-backend/services/agent/mutation_commit.py",
+            "Backend Architecture/aether-backend/services/agent/runtime_repository.py",
             "Backend Architecture/aether-backend/services/intelligence/graph_mutations.py",
             "Backend Architecture/aether-backend/services/x402/economic_mutations.py",
+            "tests/chaos/test_agent_mutation.py",
+            "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
         ],
     ),
     Area(
@@ -282,6 +293,12 @@ AREAS: list[Area] = [
         "Smart contracts: multi-chain (EVM Solidity + Solana/NEAR/Cosmos Rust), oracle-signed "
         "claims, nonce replay protection, budgets, pausability, Hardhat tests. Pre-audit "
         "hardening complete (rotateOracle, amount enforcement, Slither CI). "
+        "Delivery runs on a durable outbox with SSRF-checked-before-enqueue, leased "
+        "dispatch, and the invariant that an action is never 'delivered' without a "
+        "persisted receipt; timeout->retry->dead-letter->operator-redeliver is pinned "
+        "credentiallessly by tests/chaos. Deploy/emergency (pause, rotateOracle, "
+        "upgrade-authority) documented in the EVM/SVM runbooks pointing at the audit "
+        "packages under Smart Contracts/audit and programs/solana/audit. "
         "NO external certification yet — do not deploy to mainnet until external audit complete.",
         [
             "Smart Contracts/contracts/AnalyticsRewards.sol",
@@ -289,9 +306,14 @@ AREAS: list[Area] = [
             ".github/workflows/smart-contract-analysis.yml",
             "Backend Architecture/aether-backend/services/rewards/policy_engine.py",
             "Backend Architecture/aether-backend/services/rewards/rails.py",
+            "Backend Architecture/aether-backend/services/rewards/delivery_outbox.py",
             "Backend Architecture/aether-backend/services/rewards/repositories.py",
             "Backend Architecture/aether-backend/services/rewards/routes.py",
             "Backend Architecture/aether-backend/alembic/versions/20260613_reward_enablement.py",
+            "tests/chaos/test_reward_delivery.py",
+            "docs/runbooks/REWARD_DELIVERY_RUNBOOK.md",
+            "docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+            "docs/runbooks/SVM_DEPLOY_EMERGENCY_RUNBOOK.md",
             "docs/source-of-truth/REWARD_ENABLEMENT.md",
             "docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
         ],
@@ -342,8 +364,13 @@ AREAS: list[Area] = [
         "8 workflows (consistency, health, SDK validation, e2e, deploy); 731+ core + "
         "152 ML Python tests green; JS coverage thresholds enforced. Python suites "
         "must run separately (conftest module collision is documented). EventType parity "
-        "and canonical meter-name checks added to repo-doctor + Makefile.",
-        [".github/workflows/", "tests/", "pyproject.toml",
+        "and canonical meter-name checks added to repo-doctor + Makefile. A credentialless "
+        "load/chaos/recovery suite (tests/chaos) runs inside `pytest tests/`: provider "
+        "rate-limit/timeout, duplicate-webhook storm, out-of-order, worker/consumer "
+        "restart, Redis/ClickHouse interruption (mocked), graph write failure, RPC "
+        "failure, chain reorg, WebSocket disconnect, cursor drift, reward-delivery "
+        "timeout, agent stale run, partial mutation commit, and rollback failure.",
+        [".github/workflows/", "tests/", "tests/chaos/", "pyproject.toml",
          "scripts/validate_event_schema_parity.py",
          "scripts/validate_meter_names.py"],
     ),
@@ -525,6 +552,38 @@ AREAS: list[Area] = [
         ["tests/load/", "scripts/load_smoke.py", "docs/LOAD-BASELINES.md", "Data Lake Architecture/"],
     ),
     Area(
+        "provider certification plane",
+        4,
+        "Credentialless certification framework that keeps first-release provider "
+        "readiness honest and reviewable with ZERO live calls. A CredentialReadiness "
+        "truth model (8 states, ranked so 'at least CREDENTIAL_WAITING' never admits a "
+        "DEGRADED/DISABLED off-ramp) plus a ReadinessDimensions record whose validators "
+        "REFUSE dishonest combinations — production_ready is never inferred from structure "
+        "(requires live_validated AND security_reviewed, plus externally_audited when "
+        "required). Each adapter publishes an AdapterCertificationDescriptor; "
+        "run_certification executes offline checks (secret redaction, out-of-order, "
+        "duplicate, idempotent replay, honest-status). build_capability_matrix resolves "
+        "every provider's state FROM SOURCE (never assumed) into a deterministic, "
+        "byte-stable matrix. All 18 first-release providers (derivatives x4, interop x7, "
+        "payments x5, stablecoin-chain x2) currently resolve to CREDENTIAL_WAITING — "
+        "code-complete + infra-defined + credential-gated, NOT replay/sandbox/live "
+        "validated. `make credentialless-certification-strict` fails if any first-release "
+        "provider is below CREDENTIAL_WAITING or is SCAFFOLDED. Gap: the plane certifies "
+        "readiness, it does not itself confer production; promotion to REPLAY/SANDBOX/"
+        "PARTNER_LIVE needs the credential + validation evidence in the promotion guide.",
+        [
+            "Backend Architecture/aether-backend/shared/certification/registry.py",
+            "Backend Architecture/aether-backend/shared/certification/readiness.py",
+            "Backend Architecture/aether-backend/shared/certification/descriptor.py",
+            "Backend Architecture/aether-backend/shared/certification/checks.py",
+            "docs/_generated/adapter-certification-matrix.json",
+            "scripts/credentialless_certification.py",
+            "docs/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md",
+            "docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md",
+            "tests/chaos/test_certification_readiness.py",
+        ],
+    ),
+    Area(
         "stablecoin intelligence",
         3,
         "Observation-only domain: canonical asset/deployment registry (seeded from "
@@ -532,12 +591,18 @@ AREAS: list[Area] = [
         "with depeg classification, finality checkpoints with reorg demotion, flow "
         "aggregates, reconciliation. Typed Decimal repos, Alembic-owned tables, "
         "flag-gated routes/projections/graph/Profile360, tested end to end in-memory. "
+        "The evm/svm chain observers now resolve to CREDENTIAL_WAITING in the "
+        "credentialless certification matrix; credentialless reorg/finality-recovery "
+        "behaviour is pinned by tests/chaos. "
         "Not production: live chain finality tracking and price feeds are "
-        "CREDENTIAL_GATED; no staging validation has run.",
+        "credential-gated (CREDENTIAL_WAITING, not live); no staging validation has run.",
         [
             "Backend Architecture/aether-backend/services/stablecoin/",
+            "Backend Architecture/aether-backend/services/stablecoins/rpc_observer.py",
             "packages/shared/stablecoin.ts",
             "tests/unit/stablecoin/",
+            "tests/chaos/test_chain_observers.py",
+            "docs/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
             "docs/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
         ],
     ),
@@ -549,12 +614,18 @@ AREAS: list[Area] = [
         "FSMs with out-of-order tolerance and append-only corrections, bounded "
         "stream sequence tracking with gap detection/recovery, snapshot-vs-projection "
         "reconciliation, Decimal-only P&L. Alembic adoption of the PR1 raw-SQL DDL. "
-        "Not production: zero PROVIDER_LIVE venue adapters (credentials required); "
-        "Kafka streams deferred to local transport; no staging validation.",
+        "All four venue adapters (Hyperliquid, dYdX, GMX, Drift) resolve to "
+        "CREDENTIAL_WAITING in the credentialless matrix; stream gap/disconnect/"
+        "reorder/rate-limit/timeout recovery is pinned by tests/chaos. "
+        "Not production: zero PARTNER_LIVE venue adapters (read-only credentials "
+        "required); Kafka streams deferred to local transport; no staging validation.",
         [
             "Backend Architecture/aether-backend/services/derivatives/",
             "Backend Architecture/aether-backend/repositories/typed_repo.py",
             "tests/unit/derivatives/",
+            "tests/chaos/test_stream_recovery.py",
+            "tests/chaos/test_provider_faults.py",
+            "docs/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
             "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
         ],
     ),
@@ -565,13 +636,17 @@ AREAS: list[Area] = [
         "parity-tested), GUID-keyed correlation joining evidence in any order, "
         "content-hashed security-policy snapshots, checkpointed scanning with "
         "parent-hash reorg rollback. LayerZero V2 reference adapter is "
-        "CREDENTIAL_GATED (fixture-proven decode; live scanning needs RPC "
-        "credentials); the other six providers are honest scaffolds. "
+        "CREDENTIAL_WAITING (fixture-proven decode; live scanning needs RPC "
+        "credentials); all seven first-release providers now resolve to "
+        "CREDENTIAL_WAITING in the credentialless matrix (none SCAFFOLDED). "
+        "Credentialless reorg/cursor-drift/RPC-failure recovery is pinned by tests/chaos. "
         "Not production: no live provider, no staging validation.",
         [
             "Backend Architecture/aether-backend/services/interop/",
             "packages/shared/interoperability.ts",
             "tests/unit/interop/",
+            "tests/chaos/test_chain_observers.py",
+            "docs/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
             "docs/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
         ],
     ),
@@ -591,12 +666,17 @@ AREAS: list[Area] = [
         "(_fetch_poll_records) is a documented per-provider seam returning no records "
         "until a verified provider endpoint + credential exists — observability is "
         "webhook-primary + staleness reconciliation + operator/records-driven sync; "
-        "no live provider has been validated in staging.",
+        "no live provider has been validated in staging. All five adapters (Privy, "
+        "Stripe onramp, Coinbase, MoonPay, Bridge) resolve to CREDENTIAL_WAITING in the "
+        "credentialless matrix; duplicate-webhook-storm dedupe and idempotent worker "
+        "restart are pinned by tests/chaos.",
         [
             "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/",
             "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py",
             "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
+            "docs/runbooks/PAYMENT_RAILS_RUNBOOK.md",
             "tests/payment_rails/test_sync_worker.py",
+            "tests/chaos/test_webhook_idempotency.py",
         ],
     ),
     Area(
@@ -609,10 +689,12 @@ AREAS: list[Area] = [
         "at runtime this cycle (POST ingest routes + SDK-pipeline hook + graph mirror) "
         "after previously having zero runtime callers. Not production: every rollout flag "
         "defaults OFF, PaymentScan stays catalog/benchmark-only without tenant-authorized "
-        "provider evidence, and no live provider data has ever flowed through the plane.",
+        "provider evidence, and no live provider data has ever flowed through the plane. "
+        "Operator triage documented in the card-linked runbook.",
         [
             "Backend Architecture/aether-backend/services/card_linked_payments/",
             "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
+            "docs/runbooks/CARD_LINKED_RUNBOOK.md",
             "tests/unit/card_linked/test_ingestion_wiring.py",
         ],
     ),
@@ -665,11 +747,13 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "release-blocker",
-        "Economic domains have zero live providers: LayerZero scanning, chain finality, "
-        "price feeds, and venue adapters are CREDENTIAL_GATED/SCAFFOLDED",
-        "stablecoin intelligence",
-        "Provision per-chain RPC + Chainlink + venue read-only credentials; validate in "
-        "controlled staging per docs/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
+        "Economic domains have zero PARTNER_LIVE providers: all 18 first-release "
+        "providers resolve to CREDENTIAL_WAITING (code-complete, infra-defined, "
+        "credential-gated), none validated against a live endpoint",
+        "provider certification plane",
+        "Follow docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md: "
+        "supply per-provider credentials/RPC, replay -> sandbox -> partner_live validate, "
+        "capture pilot evidence; `make credentialless-certification-strict` gates the floor",
     ),
     Blocker(
         "pre-production-blocker",
@@ -719,6 +803,14 @@ LIVE_CHECKS: list[LiveCheck] = [
     LiveCheck(
         "Economic domain registry integrity",
         ["python", "-m", "pytest", "tests/unit/test_event_registry_economic_domains.py", "-q", "--tb=short"],
+    ),
+    LiveCheck(
+        "Credentialless certification (first-release providers >= CREDENTIAL_WAITING)",
+        ["python", "scripts/credentialless_certification.py", "--strict"],
+    ),
+    LiveCheck(
+        "Credentialless chaos/recovery suite",
+        ["python", "-m", "pytest", "tests/chaos/", "-q", "--tb=short"],
     ),
 ]
 

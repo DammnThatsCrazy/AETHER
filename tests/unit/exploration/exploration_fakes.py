@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from shared.exploration.models import ExplorationContextV1
-
 
 def context(
     surface: str,
@@ -14,8 +12,20 @@ def context(
     logic: str = "AND",
     anchors: Optional[list[dict]] = None,
     temporal_mode: str = "window",
-) -> ExplorationContextV1:
-    """Build a valid ExplorationContextV1 for a surface with a flat filter group."""
+) -> "ExplorationContextV1":  # noqa: F821 — resolved at call time (see below)
+    """Build a valid ExplorationContextV1 for a surface with a flat filter group.
+
+    ExplorationContextV1 is resolved at call time from ``services.exploration.routes``
+    — the SAME module the tests import to reach ``ValidateRequest`` et al. Binding it
+    at import time instead pins one class object, and when another suite pops/reimports
+    ``shared.exploration.models`` (sys.modules churn), the route request models rebind
+    to a fresh class object while this builder keeps the stale one — pydantic then
+    rejects the instance as a foreign type (order-dependent under ``pytest -n auto``).
+    Sourcing it from the routes module guarantees the class identity always matches
+    whatever ``ValidateRequest``/``QueryRequest``/… expect in the current process state.
+    """
+    from services.exploration.routes import ExplorationContextV1
+
     payload: dict[str, Any] = {
         "scope": {"tenant_id": tenant_id, "surface": surface},
         "temporal": {"mode": temporal_mode, "field": "occurred_at", "timezone": "UTC"},

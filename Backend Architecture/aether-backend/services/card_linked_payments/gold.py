@@ -13,7 +13,10 @@ from typing import Any
 
 from shared.logger.logger import get_logger
 
-from services.card_linked_payments.models import CardActivityBasis
+from services.card_linked_payments.models import (
+    CardActivityBasis,
+    assert_topup_spend_separated,
+)
 from services.card_linked_payments.repositories import get_card_linked_repositories
 
 logger = get_logger("aether.card_linked.gold")
@@ -56,7 +59,7 @@ async def entity_economic_activity(tenant_id: str, entity_id: str) -> dict[str, 
     topups = [r for r in attributed if r.get("basis") in _TOPUP_BASES]
     spends = [r for r in attributed if r.get("basis") in _SPEND_BASES]
     bases = sorted({str(r.get("basis")) for r in attributed})
-    return {
+    return assert_topup_spend_separated({
         "entity_id": entity_id,
         "flow_count": len(attributed),
         "topup_count": len(topups),
@@ -68,12 +71,13 @@ async def entity_economic_activity(tenant_id: str, entity_id: str) -> dict[str, 
         "basis_breakdown": _breakdown(attributed, "basis"),
         "source_breakdown": _breakdown(attributed, "source"),
         "confidence_breakdown": _breakdown(attributed, "confidence"),
+        "evidence_breakdown": _breakdown(attributed, "evidence_strength"),
         "programs_observed": sorted({r.get("card_program_id") for r in attributed if r.get("card_program_id")}),
         "issuers_observed": sorted({r.get("issuer_id") for r in attributed if r.get("issuer_id")}),
         "networks_observed": sorted({str(r.get("payment_network") or "unknown") for r in attributed}),
         "chains_observed": sorted({r.get("chain") for r in attributed if r.get("chain")}),
         "assets_observed": sorted({r.get("asset") for r in attributed if r.get("asset")}),
-    }
+    })
 
 
 def _attribution_basis(flows: list[dict]) -> str:
@@ -102,7 +106,7 @@ async def campaign_card_linked_outcomes(tenant_id: str, campaign_id: str) -> dic
                     for r in subset if any((r.get("canonical_entity_id"), r.get("user_id"), r.get("wallet_address_hash")))})
 
     first_ts = sorted(r.get("occurred_at") or "" for r in rows if r.get("occurred_at"))
-    return {
+    return assert_topup_spend_separated({
         "campaign_id": campaign_id,
         "card_topup_users": _users(topups),
         "card_spend_users": _users(spends),
@@ -117,8 +121,9 @@ async def campaign_card_linked_outcomes(tenant_id: str, campaign_id: str) -> dic
         "confidence_breakdown": _breakdown(rows, "confidence"),
         "basis_breakdown": _breakdown(rows, "basis"),
         "source_breakdown": _breakdown(rows, "source"),
+        "evidence_breakdown": _breakdown(rows, "evidence_strength"),
         "attribution_basis": _attribution_basis(rows),
-    }
+    })
 
 
 async def program_issuer_benchmarks(tenant_id: str) -> dict[str, Any]:

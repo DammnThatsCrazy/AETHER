@@ -14,8 +14,11 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from services.integrations.providers.payment_rails.base import (
+    ConnectionTestResult,
     ParsedProviderEvent,
     PaymentRailAdapter,
+    ProviderPollError,
+    _extract_secret,
 )
 from services.integrations.providers.payment_rails.models import FundingSession
 
@@ -39,6 +42,15 @@ class BridgeAdapter(PaymentRailAdapter):
     polling_supported = True
     default_rail = "bridge"
     signature_scheme = "timestamped_hex"
+
+    # Pull path — Bridge virtual-account activity history, cursor-paginated.
+    poll_base_url = "https://api.bridge.xyz"
+    cert_supported_operations = (
+        "webhook_ingest", "normalize", "reconcile", "status_poll", "backfill",
+    )
+    cert_required_credentials = ("webhook_signing_secret", "api_key")
+    cert_required_endpoints = ("/v0/customers/{customer_id}/virtual_accounts/history",)
+    cert_pagination_model = "cursor"
 
     STATUS_MAP: dict[str, str] = {
         "created": "initiated",
@@ -179,6 +191,110 @@ class BridgeAdapter(PaymentRailAdapter):
                 source="polling",
             ))
         return events
+
+    # ── Pull path: authenticated request construction + cursor pagination ─
+
+    def build_request(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Construct the authenticated Bridge activity-history request.
+
+        Api-Key header auth from the tenant BYOK secret; ``starting_after``
+        cursor pagination; scoped to a customer's virtual-account history when a
+        ``customer_id`` is supplied, else the tenant transfers feed.
+        ``tenant_scope`` proves isolation (never sent to the provider).
+        """
+        secret = _extract_secret(ctx.get("credential"))
+        base = str(ctx.get("base_url") or self.poll_base_url).rstrip("/")
+        customer_id = ctx.get("customer_id")
+        path = (
+            f"/v0/customers/{customer_id}/virtual_accounts/history" if customer_id
+            else "/v0/transfers"
+        )
+        params: dict[str, Any] = {"limit": ctx.get("limit", self.poll_page_size)}
+        cursor = ctx.get("cursor")
+        if cursor:
+            params["starting_after"] = cursor
+        headers = {"Accept": "application/json"}
+        if secret:
+            headers["Api-Key"] = secret
+        return {
+            "method": "GET",
+            "url": f"{base}{path}",
+            "headers": headers,
+            "params": params,
+            "tenant_scope": ctx.get("tenant_id", ""),
+            "timeout": self._http_timeout,
+        }
+
+    async def _fetch_poll_records(
+        self, tenant_id: str, **params: Any
+    ) -> list[dict[str, Any]]:
+        """Bounded, cursor-paginated pull of virtual-account activity history.
+
+        The persisted cursor is the last record id seen (``starting_after`` for
+        the next sweep), so activity is read forward-only without replaying the
+        whole history. Never raises: a classified failure degrades health.
+        """
+        poll_state = params.get("poll_state")
+        secret = await self._require_secret(tenant_id)
+        if not secret:
+            self._mark_health(poll_state, "not_configured")
+            return []
+        base = await self._resolve_base_url(tenant_id)
+        limit = int(params.get("limit", self.poll_page_size))
+        customer_id = params.get("customer_id")
+
+        records: list[dict[str, Any]] = []
+        cursor = (poll_state or {}).get("cursor")
+        last_seen = cursor
+        pages = 0
+        async with self._open_http_client() as client:
+            try:
+                while pages < self.poll_max_pages:
+                    request = self.build_request({
+                        "tenant_id": tenant_id, "credential": secret, "base_url": base,
+                        "cursor": cursor, "customer_id": customer_id, "limit": limit,
+                    })
+                    body = await self._request_json(client, request, poll_state=poll_state)
+                    page = (
+                        list(body.get("data") or [])
+                        if isinstance(body, dict) else (list(body) if isinstance(body, list) else [])
+                    )
+                    records.extend(page)
+                    pages += 1
+                    if page and isinstance(page[-1], dict) and page[-1].get("id"):
+                        last_seen = str(page[-1]["id"])
+                    if not page or len(page) < limit:
+                        break
+                    cursor = last_seen
+            except ProviderPollError as exc:
+                self._degraded(poll_state, exc)
+        self._finish_poll(poll_state, next_cursor=last_seen, pages=pages, records=records)
+        return records
+
+    async def _live_connection_test(self, tenant_id: str) -> ConnectionTestResult:
+        """Authenticated health ping: a bounded activity/transfers GET (limit=1)."""
+        secret = await self._require_secret(tenant_id)
+        if not secret:
+            return ConnectionTestResult(
+                provider=self.provider_name, ok=False, status="not_configured",
+                detail="missing credential (configure the key vault)",
+            )
+        base = await self._resolve_base_url(tenant_id)
+        request = self.build_request({
+            "tenant_id": tenant_id, "credential": secret, "base_url": base, "limit": 1,
+        })
+        try:
+            async with self._open_http_client() as client:
+                await self._request_json(client, request)
+        except ProviderPollError as exc:
+            return ConnectionTestResult(
+                provider=self.provider_name, ok=False, status="error",
+                detail=f"health ping failed ({exc.classification})",
+            )
+        return ConnectionTestResult(
+            provider=self.provider_name, ok=True, status="ok",
+            detail="authenticated activity-history ping ok",
+        )
 
 
 def _amount(value: Any) -> Optional[str]:

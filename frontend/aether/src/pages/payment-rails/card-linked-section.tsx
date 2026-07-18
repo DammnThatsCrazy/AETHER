@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import {
-  Badge, Card, CardContent, CardHeader, CardTitle, DataTable,
+  Badge, CapabilityStatePanel, Card, CardContent, CardHeader, CardTitle, DataTable,
   EmptyState, ErrorState, LoadingState,
 } from '@aether/ui';
 import { paymentscanCardPrograms, cardActivityBases } from '@aether/shared';
@@ -104,10 +104,10 @@ export function CardLinkedActivitySection() {
         {flows.isLoading && !flows.data ? (
           <LoadingState lines={4} />
         ) : notEnabled ? (
-          <EmptyState
+          <CapabilityStatePanel
+            state="disabled"
             title="Card-linked payment rails is not enabled"
             description="Enable AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED to observe card-linked activity."
-            icon="◌"
           />
         ) : flows.error ? (
           <ErrorState title="Failed to load card-linked flows" message={flows.error} onRetry={flows.refetch} />

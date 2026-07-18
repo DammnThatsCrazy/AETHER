@@ -29,6 +29,26 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+# EVM deploy-time safety gates. Every chain this legacy deployer targets is a
+# mainnet, so the audit gate + default-key rejection always apply here.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from evm_guards import (  # noqa: E402
+    GateError,
+    assert_audit_evidence,
+    assert_not_default_key,
+    assert_oracle_registered,
+)
+
+# Map this script's chain keys to Hardhat network names used by the registries
+# and the network-tier classifier (all are mainnet-class).
+_CHAIN_TO_HARDHAT_NETWORK = {
+    "ethereum": "mainnet",
+    "polygon": "polygon",
+    "arbitrum": "arbitrum",
+    "base": "base",
+    "optimism": "optimism",
+}
+
 # ---------------------------------------------------------------------------
 #  Logging
 # ---------------------------------------------------------------------------
@@ -403,6 +423,18 @@ async def _main(argv: list[str] | None = None) -> None:
     private_key = os.getenv("DEPLOYER_KEY", "")
     if not private_key:
         logger.error("No deployer key provided. Set the DEPLOYER_KEY environment variable.")
+        sys.exit(1)
+
+    # ── Fail-closed pre-deploy gates (mirror scripts/deploy.js) ──
+    # All chains here are mainnet-class, so the audit gate always applies.
+    hardhat_network = _CHAIN_TO_HARDHAT_NETWORK.get(args.chain, args.chain)
+    try:
+        assert_audit_evidence(hardhat_network)
+        assert_not_default_key(hardhat_network, private_key)
+        if args.oracle_address:
+            assert_oracle_registered(hardhat_network, args.oracle_address)
+    except GateError as e:
+        logger.error("Deployment BLOCKED by safety gate [%s]: %s", e.category, e)
         sys.exit(1)
 
     deployer = ContractDeployer(chain=args.chain, private_key=private_key)

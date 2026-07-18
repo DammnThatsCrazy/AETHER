@@ -21,15 +21,21 @@ import dataclasses
 from datetime import datetime, timezone
 from typing import Any
 
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 
 from services.card_linked_payments.models import (
     CardActivityBasis,
     amount_bucket,
+    assert_evidence_not_overclaimed,
+    classify_evidence_strength,
     onchain_idempotency_key,
     provider_idempotency_key,
     reject_blocked_fields,
     sdk_idempotency_key,
+)
+from services.card_linked_payments.graph_outbox import (
+    CardLinkedGraphOutboxWorker,
+    CardLinkedGraphProjectionOutbox,
 )
 from services.card_linked_payments.normalizer import (
     normalize_onchain_observation,
@@ -50,8 +56,17 @@ CARD_LINKED_SDK_EVENT_TYPES = frozenset({
 _EU_REGION_HINTS = frozenset({"eu", "eea", "europe"})
 _UK_REGION_HINTS = frozenset({"uk", "gb"})
 _APAC_REGION_HINTS = frozenset({"apac", "sg", "hk", "jp", "au", "kr", "in"})
+# Recognised standard (unrestricted) jurisdictions. These are KNOWN regions, so
+# they keep US_STANDARD behavior — only a *provided but unrecognised* hint falls
+# through to the fail-safe UNKNOWN_RESTRICTED mode.
+_US_REGION_HINTS = frozenset({"us", "usa", "united_states", "na", "ca", "mx"})
 
 _USER_LEVEL_FIELDS = ("canonical_entity_id", "user_id", "session_id", "device_id")
+
+# Region modes that strip user-level identifiers (most-restrictive set).
+_RESTRICTED_REGION_POLICIES = (
+    "EU_RESTRICTED", "UK_RESTRICTED", "APAC_RESTRICTED", "UNKNOWN_RESTRICTED",
+)
 
 
 def _now() -> str:
@@ -59,16 +74,30 @@ def _now() -> str:
 
 
 def resolve_region_policy(region_hint: str | None, settings: Any) -> str:
-    """Map a tenant/entity region hint onto a region policy mode."""
+    """Map a tenant/entity region hint onto a region policy mode.
+
+    Fail-safe: a hint we do not recognise resolves to ``UNKNOWN_RESTRICTED``
+    (most restrictive) instead of silently defaulting to unrestricted
+    ``US_STANDARD``. Known regions are unchanged — an EU/UK/APAC hint whose
+    restricted flag is off, a recognised US/standard hint, or an absent hint
+    all keep the prior ``US_STANDARD`` behavior.
+    """
     hint = (region_hint or "").strip().lower()
     flags = settings.card_linked_payment_rails
-    if hint in _EU_REGION_HINTS and flags.eu_restricted_mode:
-        return "EU_RESTRICTED"
-    if hint in _UK_REGION_HINTS and flags.eu_restricted_mode:
-        return "UK_RESTRICTED"
-    if hint in _APAC_REGION_HINTS and flags.apac_restricted_mode:
-        return "APAC_RESTRICTED"
-    return "US_STANDARD"
+    if hint in _EU_REGION_HINTS:
+        return "EU_RESTRICTED" if flags.eu_restricted_mode else "US_STANDARD"
+    if hint in _UK_REGION_HINTS:
+        return "UK_RESTRICTED" if flags.eu_restricted_mode else "US_STANDARD"
+    if hint in _APAC_REGION_HINTS:
+        return "APAC_RESTRICTED" if flags.apac_restricted_mode else "US_STANDARD"
+    if hint in _US_REGION_HINTS:
+        return "US_STANDARD"
+    if not hint:
+        # No hint supplied — preserve the historical default (consent still
+        # governs user-level attribution independently).
+        return "US_STANDARD"
+    # Provided but unrecognised jurisdiction → fail safe.
+    return "UNKNOWN_RESTRICTED"
 
 
 class CardLinkedIngestionService:
@@ -77,76 +106,58 @@ class CardLinkedIngestionService:
     def __init__(self, settings: Any) -> None:
         self._settings = settings
         self._repos = get_card_linked_repositories()
-        # Catalog vertices already mirrored to the graph this process, keyed
-        # by program slug — projected lazily so flow edges always have their
-        # CardProgram endpoint without bulk-seeding the whole catalog.
-        self._projected_programs: set[str] = set()
+        # Durable graph projection outbox. The flow store stays source of
+        # truth; projection is enqueued durably and drained through the
+        # mutation gateway with retry/dead-letter/reconciliation.
+        self._projection = CardLinkedGraphProjectionOutbox()
 
-    # ── graph projection (best-effort mirror; the flow store is truth) ──
+    # ── graph projection (durable outbox; the flow store is truth) ──
 
-    async def _project_to_graph(self, tenant_id: str, result: tuple[dict, str]) -> None:
-        """Mirror a newly-created flow into the graph (vertex + evidence edges).
+    async def _enqueue_projection(self, tenant_id: str, result: tuple[dict, str]) -> None:
+        """Durably enqueue a newly-created flow's graph projection.
 
-        Same contract as the identity graph_writer: the durable repository is
-        the source of truth and the graph write is best-effort — a graph
-        failure never fails ingestion. Duplicate dispositions are skipped.
+        The best-effort inline write (which swallowed graph failures) is
+        replaced by a durable outbox row. An enqueue failure does NOT fail
+        ingestion — the flow is already the committed source of truth — but it
+        is surfaced honestly (metric + audit) so reconciliation/repair can
+        recover it, rather than being silently swallowed.
         """
         record, disposition = result
         if disposition != "created":
             return
         try:
-            from dependencies.providers import get_graph
-            from services.card_linked_payments.graph_projector import (
-                build_catalog_mutations,
-                build_flow_mutations,
+            await self._projection.enqueue_projection(tenant_id, record)
+        except Exception as exc:
+            metrics.increment(
+                "card_linked_graph_projection_enqueue_failures_total",
+                labels={"source": record.get("source", "unknown")},
             )
-            from services.payment_catalog.catalog import PAYMENTSCAN_CARD_PROGRAMS
+            logger.warning(
+                "card-linked graph projection enqueue failed (recoverable via reconcile): %s",
+                exc,
+            )
+            await self._repos.audit.record(tenant_id, "graph_projection_enqueue_failed", {
+                "flow_id": record.get("id"),
+                "error": str(exc),
+            })
 
-            from shared.graph.mutation_gateway import GraphMutationGateway
-            from shared.graph.mutation_intents import edge_intent, vertex_intent
+    # ── graph projection operator surface ────────────────────────────────
 
-            graph = get_graph()
-            gateway = GraphMutationGateway(graph_client=graph)
-            program_slug = record.get("card_program_id")
-            if program_slug and program_slug not in self._projected_programs:
-                self._projected_programs.add(program_slug)
-                entity = next(
-                    (e for e in PAYMENTSCAN_CARD_PROGRAMS if e.slug == program_slug),
-                    None,
-                )
-                if entity is not None:
-                    cat_vertices, cat_edges = build_catalog_mutations(
-                        tenant_id,
-                        {
-                            "slug": entity.slug,
-                            "display_name": entity.display_name,
-                            "source": entity.source,
-                            "status": entity.status,
-                        },
-                    )
-                    for vertex in cat_vertices:
-                        await gateway.apply(vertex_intent(
-                            vertex, operation="node_versioned",
-                            tenant_id=tenant_id, actor_id="card_linked_ingestion",
-                        ))
-                    for edge in cat_edges:
-                        await gateway.apply(edge_intent(
-                            edge, operation="edge_created",
-                            tenant_id=tenant_id, actor_id="card_linked_ingestion",
-                        ))
-            vertices, edges = build_flow_mutations(record)
-            for vertex in vertices:
-                await gateway.apply(vertex_intent(
-                    vertex, operation="node_versioned",
-                    tenant_id=tenant_id, actor_id="card_linked_ingestion",
-                ))
-            for edge in edges:
-                await gateway.apply(edge_intent(
-                    edge, operation="edge_created",
-                    tenant_id=tenant_id, actor_id="card_linked_ingestion",
-                ))
-        except Exception as exc:  # pragma: no cover — best-effort mirror
-            logger.debug("card-linked graph projection skipped: %s", exc)
+    def graph_outbox_worker(self) -> "CardLinkedGraphOutboxWorker":
+        """A drain worker over the durable projection outbox (supervisor/ops)."""
+        return CardLinkedGraphOutboxWorker(repo=self._projection.repo)
+
+    async def drain_graph_projection(self, tenant_id: str, limit: int = 100) -> dict:
+        """Drain one bounded, tenant-scoped batch of the projection outbox."""
+        return await self.graph_outbox_worker().drain_once(tenant_id=tenant_id, limit=limit)
+
+    async def reconcile_graph_projection(self, tenant_id: str) -> dict:
+        """Drift report between the flow store (truth) and the graph outbox."""
+        return await self._projection.reconcile(tenant_id)
+
+    async def repair_graph_projection(self, tenant_id: str, **kwargs: Any) -> dict:
+        """Operator replay: re-enqueue missing + reset dead-lettered rows."""
+        return await self._projection.repair(tenant_id, **kwargs)
 
     # ── guards ──────────────────────────────────────────────────────────
 
@@ -161,20 +172,35 @@ class CardLinkedIngestionService:
             await self._repos.provider_health.record_event(tenant_id, source, error=True)
             raise
 
-    def _consent_allows(self, consent_snapshot: dict[str, bool] | None,
-                        required: tuple[str, ...]) -> bool:
-        if consent_snapshot is None:
-            # No snapshot supplied — fail closed only when PII blocking is
-            # on AND the record carries user-level attribution (checked by
-            # caller); catalog/benchmark records need no consent.
-            return True
-        return all(consent_snapshot.get(purpose, False) for purpose in required)
+    @staticmethod
+    def _stamp_evidence(record: dict[str, Any]) -> dict[str, Any]:
+        """Label a flow by evidence strength and fail closed on overclaim.
+
+        SDK/self-reported/on-chain/benchmark observations are never promoted to
+        provider-confirmed spend — only genuine provider/issuer evidence may be.
+        """
+        strength = classify_evidence_strength(
+            record.get("source"),
+            record.get("reconciliation_state"),
+            record.get("basis"),
+        )
+        assert_evidence_not_overclaimed(record.get("source"), strength)
+        record["evidence_strength"] = strength
+        return record
+
+    @staticmethod
+    def _granted_purposes(consent_snapshot: dict[str, bool] | None) -> list[str]:
+        """Purposes the snapshot actually grants. A MISSING snapshot grants
+        nothing — so the PolicyDecision fails closed for user-level data."""
+        if not consent_snapshot:
+            return []
+        return sorted(p for p, granted in consent_snapshot.items() if granted)
 
     async def _apply_region_policy(self, tenant_id: str, record: dict[str, Any],
                                    region_hint: str | None) -> dict[str, Any]:
         policy = resolve_region_policy(region_hint, self._settings)
         record["region_policy"] = policy
-        if policy in ("EU_RESTRICTED", "UK_RESTRICTED", "APAC_RESTRICTED"):
+        if policy in _RESTRICTED_REGION_POLICIES:
             stripped = [f for f in _USER_LEVEL_FIELDS if record.get(f)]
             if stripped:
                 for field_name in stripped:
@@ -188,18 +214,68 @@ class CardLinkedIngestionService:
 
     async def _check_consent(self, tenant_id: str, record: dict[str, Any],
                              consent_snapshot: dict[str, bool] | None,
-                             required: tuple[str, ...]) -> bool:
-        """Returns True when the record may carry user-level attribution."""
+                             required: tuple[str, ...],
+                             *, action: str = "collect_event") -> bool:
+        """Fail-closed consent gate for USER-LEVEL attribution.
+
+        Aggregate / catalog / approved wallet-level observations carry no
+        user-level identifiers and require no consent (kept as-is). When the
+        record DOES carry user-level attribution, a canonical
+        :class:`ConsentPolicyDecision` is obtained per required purpose; a
+        MISSING snapshot grants nothing, so the decision is denied and the
+        user-level fields are stripped (fail closed). The decision id(s) and
+        the redaction evidence are persisted on the stored record.
+
+        Returns True when the record may retain user-level attribution.
+        """
         if not any(record.get(f) for f in _USER_LEVEL_FIELDS):
             return True  # aggregate/wallet-level record — no user consent needed
-        if self._consent_allows(consent_snapshot, required):
+
+        from services.policy import consent_policy_engine
+
+        granted = self._granted_purposes(consent_snapshot)
+        subject_ref = record.get("canonical_entity_id") or record.get("user_id")
+        decisions = []
+        for purpose in required:
+            decisions.append(await consent_policy_engine.decide(
+                tenant_id=tenant_id,
+                actor_id="card_linked_ingestion",
+                action=action,
+                resource_type="card_linked_flow",
+                resource_id=record.get("id"),
+                subject_ref=subject_ref,
+                granted_purposes=granted,
+                purpose=purpose,
+                redactable_fields=_USER_LEVEL_FIELDS,
+            ))
+        decision_ids = [d.policy_decision_id for d in decisions]
+        allowed = all(d.allowed for d in decisions)
+
+        # Persist the PolicyDecision evidence on the stored record either way.
+        record["consent_policy_decision_id"] = decision_ids[0] if decision_ids else None
+        record["consent_policy_decision_ids"] = decision_ids
+
+        if allowed:
             record["consent_snapshot"] = consent_snapshot
+            record["consent_decision"] = "allowed"
+            record["consent_redacted_fields"] = []
             return True
+
+        # FAIL CLOSED: no / insufficient consent evidence for user-level data.
+        redacted = [f for f in _USER_LEVEL_FIELDS if record.get(f)]
         for field_name in _USER_LEVEL_FIELDS:
             record[field_name] = None
+        record["consent_snapshot"] = None
+        record["consent_decision"] = "redacted"
+        record["consent_redacted_fields"] = redacted
+        missing = sorted({p for d in decisions for p in d.missing_purposes})
         await self._repos.audit.record(tenant_id, "consent_suppressed", {
             "required": list(required),
+            "missing": missing,
             "flow_id": record.get("id"),
+            "policy_decision_ids": decision_ids,
+            "redacted_fields": redacted,
+            "reason": "missing_consent_snapshot" if not consent_snapshot else "insufficient_consent",
         })
         return False
 
@@ -218,11 +294,12 @@ class CardLinkedIngestionService:
             payload.get("provider_event_id", flow.id),
         )
         record["amount_bucket"] = amount_bucket(record.get("amount_usd"))
+        record = self._stamp_evidence(record)
         record = await self._apply_region_policy(tenant_id, record, region_hint)
         await self._check_consent(tenant_id, record, consent_snapshot, ("commerce",))
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
         await self._repos.provider_health.record_event(tenant_id, "provider_webhook")
-        await self._project_to_graph(tenant_id, result)
+        await self._enqueue_projection(tenant_id, result)
         await self._try_reconcile(tenant_id, result[0])
         return result
 
@@ -239,11 +316,12 @@ class CardLinkedIngestionService:
             payload.get("tx_hash", flow.id), payload.get("log_index", "0"),
         )
         record["amount_bucket"] = amount_bucket(record.get("amount_usd"))
+        record = self._stamp_evidence(record)
         record = await self._apply_region_policy(tenant_id, record, region_hint)
         await self._check_consent(tenant_id, record, consent_snapshot, ("web3",))
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
         await self._repos.provider_health.record_event(tenant_id, "onchain_observer")
-        await self._project_to_graph(tenant_id, result)
+        await self._enqueue_projection(tenant_id, result)
         await self._try_reconcile(tenant_id, result[0])
         return result
 
@@ -316,19 +394,46 @@ class CardLinkedIngestionService:
             "idempotency_key": sdk_idempotency_key(tenant_id, event.get("event_id", ts)),
         }
         required = ("agent", "commerce") if event.get("agent_id") else ("commerce",)
+        record = self._stamp_evidence(record)
         record = await self._apply_region_policy(tenant_id, record, region_hint)
         await self._check_consent(tenant_id, record, consent_snapshot, required)
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
         await self._repos.provider_health.record_event(tenant_id, "sdk")
-        await self._project_to_graph(tenant_id, result)
+        await self._enqueue_projection(tenant_id, result)
         await self._try_reconcile(tenant_id, result[0])
         return result
 
     async def ingest_tenant_import(self, tenant_id: str, rows: list[dict[str, Any]],
                                    *, region_hint: str | None = None,
+                                   consent_snapshot: dict[str, bool] | None = None,
                                    ) -> list[tuple[dict, str]]:
+        """Tenant bulk import.
+
+        Applies the SAME fail-closed consent + PolicyDecision gate as the
+        webhook/onchain/SDK paths: a user-level import row with no consent
+        evidence has its user-level identifiers stripped before persistence.
+        A batch-level ``consent_snapshot`` applies to every row; an individual
+        row may carry its own ``consent_snapshot`` which overrides the batch.
+        """
         results: list[tuple[dict, str]] = []
-        for row in rows:
+        # Route the batch THROUGH the canonical import engine's PII detection +
+        # dry-run validation + review-approval + lineage before persisting.
+        # Best-effort so a bridge hiccup never blocks a governed ingest — the
+        # fail-closed PII/consent/region guards below are the hard gates.
+        try:
+            from services.card_linked_payments.import_bridge import build_import_lineage
+
+            lineage = build_import_lineage(tenant_id, rows)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("card-linked import-engine bridge unavailable: %s", exc)
+            lineage = {"import_id": None, "engine": "services.imports", "bridge_error": str(exc)}
+        if lineage.get("review_required"):
+            await self._repos.audit.record(tenant_id, "import_review_required", {
+                "import_id": lineage.get("import_id"),
+                "reasons": lineage.get("review_reasons"),
+                "pii_columns": lineage.get("pii_columns"),
+            })
+        for index, row in enumerate(rows):
             await self._guard_pii(tenant_id, row, "tenant_import")
             basis_raw = row.get("basis", "unknown")
             basis = CardActivityBasis(basis_raw).value  # raises on unsupported basis
@@ -348,7 +453,11 @@ class CardLinkedIngestionService:
                 "amount_bucket": amount_bucket(row.get("amount_usd")),
                 "campaign_id": row.get("campaign_id"),
                 "journey_id": row.get("journey_id"),
+                "canonical_entity_id": row.get("canonical_entity_id"),
                 "user_id": row.get("user_id"),
+                "session_id": row.get("session_id"),
+                "device_id": row.get("device_id"),
+                "agent_id": row.get("agent_id"),
                 "wallet_address_hash": row.get("wallet_address_hash"),
                 "source": "tenant_import",
                 "confidence": "probable",
@@ -362,9 +471,17 @@ class CardLinkedIngestionService:
                     tenant_id, row.get("id") or f"import:{ts}:{len(results)}",
                 ),
             }
+            record["import_lineage"] = {**lineage, "row_index": index}
+            record = self._stamp_evidence(record)
+            row_consent = row.get("consent_snapshot", consent_snapshot)
+            required = ("agent", "commerce") if row.get("agent_id") else ("commerce",)
             record = await self._apply_region_policy(tenant_id, record, region_hint)
+            await self._check_consent(tenant_id, record, row_consent, required)
             result = await self._repos.flows.insert_idempotent(tenant_id, record)
-            await self._project_to_graph(tenant_id, result)
+            await self._enqueue_projection(tenant_id, result)
+            # Reconcile imported rows against later provider/on-chain evidence
+            # for the same (wallet_hash, program) — reusing the shared matcher.
+            await self._try_reconcile(tenant_id, result[0])
             results.append(result)
         return results
 

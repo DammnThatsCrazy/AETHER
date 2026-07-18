@@ -26,8 +26,15 @@ class StripeOnrampAdapter(PaymentRailAdapter):
     flows = ("crypto_onramp",)
     webhook_supported = True
     polling_supported = False
+    # Stripe Crypto Onramp observability is webhook-only (onramp session events);
+    # a SUPPORTED terminal capability, not an unfinished adapter.
+    webhook_only = True
     default_rail = "stripe"
     signature_scheme = "timestamped_hex"  # Stripe `t=…,v1=…` HMAC scheme
+
+    cert_supported_operations = ("webhook_ingest", "normalize", "reconcile")
+    cert_unsupported_operations = ("status_poll", "backfill", "reconciliation_pull")
+    cert_pagination_model = "none"
 
     STATUS_MAP: dict[str, str] = {
         "initialized": "initiated",
