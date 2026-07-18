@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
@@ -462,10 +462,15 @@ export function GraphPage() {
 
   // Deep link from cluster-360 (/graph?cluster=<id>) — seed the cluster
   // selection so the incoming context is preserved, not silently dropped.
+  // Seed once per param value (a later data refresh must not re-hijack the
+  // user's current selection).
+  const seededClusterRef = useRef<string | null>(null);
   useEffect(() => {
     if (!deepLinkedCluster || isLoading || error) return;
+    if (seededClusterRef.current === deepLinkedCluster) return;
     const cluster = clusters.find(c => c.id === deepLinkedCluster);
     if (!cluster) return;
+    seededClusterRef.current = deepLinkedCluster;
     setViewMode('graph');
     setHighlightedCluster([...cluster.nodeIds]);
     setInspector({ type: 'cluster', cluster });
