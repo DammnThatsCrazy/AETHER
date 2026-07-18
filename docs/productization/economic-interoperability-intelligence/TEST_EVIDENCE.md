@@ -12,16 +12,17 @@ source_files:
   - tests/unit/interop/
   - tests/unit/test_economic_noesis_ooda_wiring.py
 canonical_owner: platform@aether
-last_synced_commit: "94102da"
+last_synced_commit: "3e74244"
 ---
 
 # Test Evidence
 
 ## Gated suites (all green at release commit)
 
-- Root `pytest tests/` — 1954 passed, 0 failed at the post-merge head
-  (both this branch's suites and the #404–#416 suites). The baseline
-  crawler failure was root-caused to a missing sandbox dependency (bs4).
+- Root `pytest tests/` — all green at the release commit, including the
+  credential-waiting adapter suites added across payment rails, card-linked,
+  stablecoin chain connectors, interop (seven providers), and derivatives
+  venues (mock-server integration only; no live network).
 - `npm test` (packages/shared + workspaces) — passing, including
   `stablecoin.test.ts`, `interoperability.test.ts`, and updated
   `events-registry.test.ts` / `consent-model.test.ts` counts.
@@ -35,14 +36,19 @@ last_synced_commit: "94102da"
   conformance; stream gap detect/recover/bounded-buffer (a real recovery
   bug was found and fixed by these tests); reconciliation; Decimal
   38,18 round-trips + no-float model introspection; typed-repo
-  idempotency; route perms/tenant isolation/flag-off 404.
+  idempotency; route perms/tenant isolation/flag-off 404. Real read-only
+  venue adapters (Hyperliquid/dYdX REST+WebSocket, GMX/Drift read path) on
+  the conformance-tested interface: mock-server REST backfill/pagination,
+  WS reconnect + gap recovery, cursor resume, read-only-scope rejection.
 - Stablecoin: observation dedupe/resolution; depeg classification;
   finality reorg rollback (finalized immutable, corrections append);
   projector routing; routes; graph mutation shapes.
 - Interop: TS↔Python lifecycle parity (regex over
-  `INTEROP_LEGAL_TRANSITIONS`); LayerZero fixture decode + GUID vectors
-  (fixtures share encoders with the decoder so they cannot drift);
-  out-of-order correlation; reorg rollback; scaffold honesty; routes.
+  `INTEROP_LEGAL_TRANSITIONS`); all seven providers (LayerZero, Wormhole,
+  Axelar, Chainlink CCIP, Hyperlane, IBC, deBridge) with real event decode +
+  fixtures that share encoders with the decoder so they cannot drift;
+  out-of-order correlation; reorg / parent-hash / cursor-drift rewind;
+  provider honesty (every provider credential-gated, none scaffolded); routes.
 - Cross-cutting: event-registry well-formedness (purposes exist,
   silverProjection tokens map to registered projectors),
   consent-enforcement registry sync, Noesis/OODA/alert wiring (15

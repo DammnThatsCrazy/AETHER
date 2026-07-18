@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/admin_routes.py
   - Backend Architecture/aether-backend/services/derivatives/reconciliation.py
 canonical_owner: platform@aether
-last_synced_commit: "ac6ffc9"
+last_synced_commit: "3e74244"
 ---
 
 # Derivatives Reconciliation Runbook
@@ -19,6 +19,10 @@ Operator surface: `/derivatives/ops` (Kyber) → `/v1/admin/kyber/derivatives/ru
 Requires `DERIVATIVES_OPERATOR`; all actions audited. Aether never
 places, modifies, or cancels orders — remediation is always evidence
 review, never trading.
+
+The fleet and conformance endpoints surface the real read-only venue adapters
+(Hyperliquid, dYdX, GMX, Drift) alongside the simulator via `all_adapters()`, so
+`POST /conformance/{adapter_id}` in step 4 below covers every registered venue.
 
 ## Variance alert (`aether.derivatives.reconciliation.variance`, P2)
 
