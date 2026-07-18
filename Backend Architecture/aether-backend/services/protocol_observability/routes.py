@@ -78,12 +78,20 @@ async def _persist_mutations(mutations: list) -> None:
         return
     try:
         from dependencies.providers import get_graph
+        from shared.graph.mutation_gateway import GraphMutationGateway
+        from shared.graph.mutation_intents import edge_intent, vertex_intent
+
         graph = get_graph()
+        gateway = GraphMutationGateway(graph_client=graph)
         for m in mutations:
             if isinstance(m, Vertex):
-                await graph.add_vertex(m)
+                await gateway.apply(vertex_intent(
+                    m, operation="node_created", actor_id="protocol_observability",
+                ))
             elif isinstance(m, Edge):
-                await graph.add_edge(m)
+                await gateway.apply(edge_intent(
+                    m, operation="edge_created", actor_id="protocol_observability",
+                ))
     except Exception:
         pass
 
