@@ -46,3 +46,18 @@ export {
   useExplorationFilters,
 } from './provider';
 export type { ExplorationProviderProps } from './provider';
+
+// Filter models + components.
+export {
+  operatorLabel,
+  coerceScalar,
+  buildFilterExpression,
+  formatFilterValue,
+  chipsFromContext,
+} from './filter-model';
+export type { FilterChipModel } from './filter-model';
+export { FilterDispositionBadge, dispositionStyle } from './components/disposition-badge';
+export { FilterBuilder } from './components/filter-builder';
+export type { FilterBuilderProps } from './components/filter-builder';
+export { FilterBar } from './components/filter-bar';
+export type { FilterBarProps } from './components/filter-bar';
