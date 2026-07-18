@@ -6,6 +6,5 @@
   "Backend Architecture/aether-backend/services/onchain/action_recorder.py",
   "Backend Architecture/aether-backend/services/protocol_observability/routes.py",
   "Backend Architecture/aether-backend/services/resolution/repository.py",
-  "Backend Architecture/aether-backend/services/web3/classifier.py",
-  "Backend Architecture/aether-backend/services/x402/economic_mutations.py"
+  "Backend Architecture/aether-backend/services/web3/classifier.py"
 ]
