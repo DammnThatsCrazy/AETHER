@@ -174,7 +174,9 @@ class EconomicGraphMutations:
             edge_type=edge_type,
             from_vertex_id=_tkey(decision.tenant_id, decision.decision_id),
             to_vertex_id=decision.decided_by,
-            properties={"reason": decision.reason},
+            # APPROVED_BY / REJECTED_BY are A2H edges — consent_purpose required
+            # in enforce mode. Commerce is the canonical purpose for x402 flows.
+            properties={"reason": decision.reason, "consent_purpose": "commerce"},
         )
         await self._put_edge(edge, decision.tenant_id, subject_id=_tkey(decision.tenant_id, decision.decision_id))
         self._trace("edge", edge_type, edge.properties)

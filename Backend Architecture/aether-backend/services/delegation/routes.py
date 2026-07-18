@@ -117,6 +117,8 @@ async def grant(
                     "delegation_id": delegation_id,
                     "valid_from": record["starts_at"],
                     "valid_to": record.get("ends_at") or "",
+                    # DELEGATES is H2A — consent_purpose required in enforce.
+                    "consent_purpose": "agent",
                 },
             ),
             operation="edge_created",
@@ -126,6 +128,9 @@ async def grant(
             subject_kind="entity",
             subject_id=body.grantor_entity_id,
             causality_class="authorized_delegation",
+            # Key on the unique delegation_id so distinct delegations between the
+            # same grantor/grantee do not collapse onto one idempotency key.
+            source_event_id=delegation_id,
         ))
     except Exception as e:  # pragma: no cover — projection is non-authoritative
         logger.warning(f"Graph projection failed for delegation {delegation_id}: {e}")

@@ -245,7 +245,12 @@ class AgentLifecycleMapper:
                 edge_type=EdgeType.OWNS_AGENT,
                 from_vertex_id=owner_vid,
                 to_vertex_id=agent_vid,
-                properties={"tenant_id": tenant_id, "registered_at": payload.get("timestamp", "")},
+                properties={
+                    "tenant_id": tenant_id,
+                    "registered_at": payload.get("timestamp", ""),
+                    # H2A ownership edge — consent_purpose required in enforce.
+                    "consent_purpose": "agent",
+                },
             ))
             edges.append({"type": EdgeType.OWNS_AGENT, "from": owner_vid, "to": agent_vid})
 
@@ -285,6 +290,8 @@ class AgentLifecycleMapper:
                     "authorization_id": payload.get("authorization_id", ""),
                     "tenant_id": tenant_id,
                     "authorized_at": payload.get("timestamp", ""),
+                    # H2A authorization edge — consent_purpose required in enforce.
+                    "consent_purpose": "agent",
                 },
             ))
             edges.append({"type": EdgeType.AUTHORIZED_AGENT, "from": authorizer_vid, "to": agent_vid})
@@ -706,6 +713,8 @@ class AgentLifecycleMapper:
                     "reason": payload.get("failure_reason", ""),
                     "tenant_id": tenant_id,
                     "escalated_at": payload.get("timestamp", ""),
+                    # A2H escalation edge — consent_purpose required in enforce.
+                    "consent_purpose": "agent",
                 },
             ))
             edges.append({"type": EdgeType.ESCALATED_TO_HUMAN, "from": agent_vid, "to": human_vid})
