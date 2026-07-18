@@ -133,6 +133,135 @@ def _get_mesh_components():
     )
 
 
+# ---------------------------------------------------------------------------
+# Extraction defense mode resolution
+#
+# Protected ML prediction routes ("/v1/ml/predict*") are guarded by either the
+# Extraction Defense Mesh (preferred) or the legacy ExtractionDefenseLayer.
+# Resolving an explicit mode makes the "mesh, else legacy, else fail-closed"
+# policy observable and correct, instead of depending on branch ordering.
+# Historically an ``if``/``elif`` pair tested the same path predicate, so the
+# legacy fallback was dead code and disabling the (default-off) mesh left the
+# route entirely unprotected.
+# ---------------------------------------------------------------------------
+EXTRACTION_MODE_MESH = "mesh_active"
+EXTRACTION_MODE_LEGACY = "legacy_active"
+EXTRACTION_MODE_MESH_WITH_LEGACY_FALLBACK = "mesh_with_legacy_fallback"
+EXTRACTION_MODE_FAIL_CLOSED = "degraded_fail_closed"
+EXTRACTION_MODE_DISABLED = "disabled_by_profile"
+
+_PROTECTED_ML_PREFIX = "/v1/ml/predict"
+
+
+def _mesh_available() -> bool:
+    """True when the Extraction Defense Mesh is enabled and initialized."""
+    if not settings.extraction_mesh.enabled:
+        return False
+    return _get_mesh_components()[0] is not None
+
+
+def _legacy_defense_available() -> bool:
+    """True when the legacy extraction defense layer is enabled and loadable."""
+    return _get_backend_defense_layer() is not None
+
+
+def _extraction_defense_required() -> bool:
+    """True when a protected ML route must fail closed if no defense is available."""
+    return settings.extraction_defense.require_defense
+
+
+def resolve_extraction_defense_mode() -> str:
+    """Resolve the active extraction-defense enforcement mode for protected ML routes.
+
+    Precedence: mesh (with legacy standby) > mesh > legacy > fail-closed (when
+    required) > disabled. The returned value is stored on ``request.state`` and
+    surfaced to operator diagnostics via :func:`get_extraction_defense_status`.
+    """
+    mesh = _mesh_available()
+    legacy = _legacy_defense_available()
+    if mesh and legacy:
+        return EXTRACTION_MODE_MESH_WITH_LEGACY_FALLBACK
+    if mesh:
+        return EXTRACTION_MODE_MESH
+    if legacy:
+        return EXTRACTION_MODE_LEGACY
+    if _extraction_defense_required():
+        return EXTRACTION_MODE_FAIL_CLOSED
+    return EXTRACTION_MODE_DISABLED
+
+
+def get_extraction_defense_status() -> dict:
+    """Operator diagnostics: the resolved gateway extraction-defense posture."""
+    return {
+        "mode": resolve_extraction_defense_mode(),
+        "mesh_enabled": settings.extraction_mesh.enabled,
+        "mesh_available": _mesh_available(),
+        "legacy_enabled": settings.extraction_defense.enabled,
+        "legacy_available": _legacy_defense_available(),
+        "fail_closed_required": _extraction_defense_required(),
+        "protected_prefix": _PROTECTED_ML_PREFIX,
+    }
+
+
+async def _apply_legacy_extraction_defense(
+    request: Request, api_key: str, request_id: str
+) -> Optional[JSONResponse]:
+    """Legacy extraction defense for protected ML routes.
+
+    Returns a block response when the request should be denied, otherwise None
+    (and records the assessed risk on ``request.state``).
+    """
+    defense = _get_backend_defense_layer()
+    if defense is None:
+        return None
+
+    ip_address = request.client.host if request.client else "0.0.0.0"
+    features: dict = {}
+    body: dict = {}
+    batch_size = 1
+    try:
+        body_bytes = await request.body()
+        body = json.loads(body_bytes) if body_bytes else {}
+        features = body.get("features", {})
+        entities = body.get("entities", [])
+        if entities:
+            batch_size = len(entities)
+            features = entities[0] if entities else {}
+    except (json.JSONDecodeError, IndexError, TypeError):
+        pass
+
+    pre_result = defense.pre_request(
+        api_key=api_key,
+        ip_address=ip_address,
+        features=features,
+        model_name=body.get("model_name", ""),
+        batch_size=batch_size,
+    )
+    if pre_result.blocked:
+        status = (
+            429 if "rate limit" in pre_result.block_reason.lower() else 403
+        )
+        metrics.increment("extraction_defense_blocked")
+        headers = {}
+        if pre_result.retry_after_seconds:
+            headers["Retry-After"] = str(pre_result.retry_after_seconds)
+        return problem_response(
+            status,
+            "Request Blocked",
+            pre_result.block_reason,
+            code="EXTRACTION_DEFENSE_BLOCKED",
+            retryable=status == 429,
+            request_id=request_id,
+            headers=headers,
+        )
+    request.state.extraction_risk = (
+        pre_result.risk_assessment.risk_score
+        if pre_result.risk_assessment
+        else 0.0
+    )
+    return None
+
+
 # Paths that skip auth and all rate limiting / gating layers.
 # Sourced from the feature_gate constant so both layers stay consistent,
 # with /v1/metrics included (internal scrape endpoint).
@@ -426,67 +555,55 @@ def register_middleware(app: FastAPI) -> None:
                 except Exception as e:  # pragma: no cover — defensive
                     logger.warning(f"Quota check error: {e}")
 
-            # --- Extraction Defense Mesh (ML prediction routes) ---
-            if request.url.path.startswith("/v1/ml/predict"):
-                mesh_response = await _run_extraction_mesh(
-                    request, api_key, context, request_id
-                )
-                if mesh_response is not None:
-                    return mesh_response
+            # --- Extraction defense for protected ML prediction routes ---
+            # Mesh preferred; legacy fallback when the mesh is unavailable;
+            # fail closed (when required) if neither defense is available.
+            if request.url.path.startswith(_PROTECTED_ML_PREFIX):
+                mode = resolve_extraction_defense_mode()
+                request.state.extraction_defense_mode = mode
 
-            # --- Legacy extraction defense (ML prediction routes only) ---
-            elif request.url.path.startswith("/v1/ml/predict"):
-                defense = _get_backend_defense_layer()
-                if defense is not None:
-                    ip_address = (
-                        request.client.host if request.client else "0.0.0.0"
+                if mode in (
+                    EXTRACTION_MODE_MESH,
+                    EXTRACTION_MODE_MESH_WITH_LEGACY_FALLBACK,
+                ):
+                    mesh_response = await _run_extraction_mesh(
+                        request, api_key, context, request_id
                     )
-                    features: dict = {}
-                    body: dict = {}
-                    batch_size = 1
-                    try:
-                        body_bytes = await request.body()
-                        body = json.loads(body_bytes) if body_bytes else {}
-                        features = body.get("features", {})
-                        entities = body.get("entities", [])
-                        if entities:
-                            batch_size = len(entities)
-                            features = entities[0] if entities else {}
-                    except (json.JSONDecodeError, IndexError, TypeError):
-                        pass
-
-                    pre_result = defense.pre_request(
-                        api_key=api_key,
-                        ip_address=ip_address,
-                        features=features,
-                        model_name=body.get("model_name", ""),
-                        batch_size=batch_size,
+                    if mesh_response is not None:
+                        return mesh_response
+                elif mode == EXTRACTION_MODE_LEGACY:
+                    legacy_response = await _apply_legacy_extraction_defense(
+                        request, api_key, request_id
                     )
-                    if pre_result.blocked:
-                        status = (
-                            429
-                            if "rate limit" in pre_result.block_reason.lower()
-                            else 403
-                        )
-                        metrics.increment("extraction_defense_blocked")
-                        headers = {}
-                        if pre_result.retry_after_seconds:
-                            headers["Retry-After"] = str(
-                                pre_result.retry_after_seconds
-                            )
-                        return problem_response(
-                            status,
-                            "Request Blocked",
-                            pre_result.block_reason,
-                            code="EXTRACTION_DEFENSE_BLOCKED",
-                            retryable=status == 429,
-                            request_id=request_id,
-                            headers=headers,
-                        )
-                    request.state.extraction_risk = (
-                        pre_result.risk_assessment.risk_score
-                        if pre_result.risk_assessment
-                        else 0.0
+                    if legacy_response is not None:
+                        return legacy_response
+                elif mode == EXTRACTION_MODE_FAIL_CLOSED:
+                    metrics.increment(
+                        "extraction_defense_fail_closed",
+                        labels={"path": _PROTECTED_ML_PREFIX},
+                    )
+                    logger.error(
+                        "Extraction defense unavailable for protected ML route "
+                        f"{request.url.path} — failing closed (503)"
+                    )
+                    return problem_response(
+                        503,
+                        "Extraction Defense Unavailable",
+                        "Model protection is required for this route but no "
+                        "extraction defense is currently available.",
+                        code="EXTRACTION_DEFENSE_UNAVAILABLE",
+                        retryable=True,
+                        request_id=request_id,
+                    )
+                else:  # EXTRACTION_MODE_DISABLED
+                    metrics.increment(
+                        "extraction_defense_unprotected",
+                        labels={"path": _PROTECTED_ML_PREFIX},
+                    )
+                    logger.warning(
+                        "Extraction defense inactive for protected ML route "
+                        f"{request.url.path} (mode={mode}); set "
+                        "REQUIRE_EXTRACTION_DEFENSE=true to fail closed"
                     )
 
         # --- Execute request ---

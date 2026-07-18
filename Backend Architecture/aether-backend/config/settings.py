@@ -253,6 +253,11 @@ class ProviderGatewayConfig:
 class ModelExtractionDefenseConfig:
     """Model extraction defense layer — protects ML serving endpoints."""
     enabled: bool = _env_bool("ENABLE_EXTRACTION_DEFENSE", False)
+    # When True, protected ML prediction routes fail closed (HTTP 503) if
+    # neither the Extraction Defense Mesh nor the legacy defense layer is
+    # available. Left False by default (allow-but-warn) for backward
+    # compatibility; production profiles set REQUIRE_EXTRACTION_DEFENSE=true.
+    require_defense: bool = _env_bool("REQUIRE_EXTRACTION_DEFENSE", False)
     enable_output_noise: bool = _env_bool("ENABLE_OUTPUT_NOISE", True)
     enable_watermark: bool = _env_bool("ENABLE_WATERMARK", True)
     enable_query_analysis: bool = _env_bool("ENABLE_QUERY_ANALYSIS", True)
