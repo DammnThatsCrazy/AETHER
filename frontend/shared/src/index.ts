@@ -113,15 +113,8 @@ export type {
 export { NoesisWorkspace } from './components/noesis-workspace';
 export type { NoesisAction, NoesisGraphPayload, NoesisMessageItem, NoesisResponsePayload } from './components/noesis-workspace';
 
-export type { RelationshipLayer } from './types/graph-layers';
-export {
-  RELATIONSHIP_LAYERS,
-  LAYER_COUNT,
-  LAYER_DESCRIPTIONS,
-  EDGE_LAYER_MAP,
-  classifyEdgeType,
-  countEdgesByLayer,
-} from './types/graph-layers';
+// Relationship-layer vocabulary is canonical in @aether/shared (graph-contract).
+// Import it from there directly — this UI package no longer ships a divergent copy.
 
 export { parseProblemDetails, isProblemDetails } from './problem-details';
 export type { ProblemDetails } from './problem-details';
