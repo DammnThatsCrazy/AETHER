@@ -461,12 +461,18 @@ class IdentityRepository:
                 user_id, {**data, "tenant_id": tenant_id}
             )
 
+        from shared.graph.mutation_gateway import GraphMutationGateway
+        from shared.graph.mutation_intents import vertex_intent
+
         vertex = Vertex(
             vertex_type=VertexType.USER,
             vertex_id=user_id,
             properties={"tenant_id": tenant_id, **data},
         )
-        await self.graph.upsert_vertex(vertex)
+        await GraphMutationGateway(graph_client=self.graph).apply(vertex_intent(
+            vertex, operation="node_versioned",
+            tenant_id=tenant_id, actor_id="identity_repository",
+        ))
         await self.cache.delete(CacheKey.profile(tenant_id, user_id))
         return profile
 
@@ -487,13 +493,21 @@ class IdentityRepository:
         await self._profiles.update(primary_id, primary)
         await self._profiles.delete(secondary_id)
 
+        from shared.graph.mutation_gateway import GraphMutationGateway
+        from shared.graph.mutation_intents import edge_intent
+
         edge = Edge(
             edge_type=EdgeType.RESOLVED_AS,
             from_vertex_id=secondary_id,
             to_vertex_id=primary_id,
-            properties={"merged_at": utc_now().isoformat()},
+            properties={"tenant_id": tenant_id, "merged_at": utc_now().isoformat()},
         )
-        await self.graph.add_edge(edge)
+        await GraphMutationGateway(graph_client=self.graph).apply(edge_intent(
+            edge, operation="identity_merged",
+            tenant_id=tenant_id, actor_id="identity_repository",
+            subject_kind="entity", subject_id=secondary_id,
+            reason_code="profile_merge", causality_class="declared_reason",
+        ))
 
         await self.cache.delete(CacheKey.profile(tenant_id, primary_id))
         await self.cache.delete(CacheKey.profile(tenant_id, secondary_id))

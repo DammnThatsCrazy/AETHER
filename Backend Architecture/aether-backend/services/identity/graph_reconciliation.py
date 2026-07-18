@@ -401,9 +401,12 @@ async def repair_identity_edges(
             outcomes.append(outcome)
             continue
         try:
-            if drift["type"] == DRIFT_MISSING_IN_GRAPH:
-                from shared.graph.graph import Edge
+            from shared.graph.graph import Edge
+            from shared.graph.mutation_gateway import GraphMutationGateway
+            from shared.graph.mutation_intents import edge_intent, revocation_intent
 
+            gateway = GraphMutationGateway(graph_client=graph)
+            if drift["type"] == DRIFT_MISSING_IN_GRAPH:
                 row = repo_pairs.get(pair)
                 if row is None:
                     raise RuntimeError("authoritative repo edge disappeared")
@@ -418,26 +421,42 @@ async def repair_identity_edges(
                     and str((edge.properties or {}).get("tenant_id")) == str(tenant_id)
                     for edge in current or []
                 ):
-                    await graph.add_edge(Edge(
-                        edge_type=_SAME_AS,
-                        from_vertex_id=pair[0],
-                        to_vertex_id=pair[1],
-                        properties={
-                            "tenant_id": tenant_id,
-                            "edge_id": row.get("id"),
-                            "confidence": str(row.get("confidence", "")),
-                            "confidence_tier": str(row.get("confidence_tier", "")),
-                            "repair_run_id": run_id,
-                        },
+                    await gateway.apply(edge_intent(
+                        Edge(
+                            edge_type=_SAME_AS,
+                            from_vertex_id=pair[0],
+                            to_vertex_id=pair[1],
+                            properties={
+                                "tenant_id": tenant_id,
+                                "edge_id": row.get("id"),
+                                "confidence": str(row.get("confidence", "")),
+                                "confidence_tier": str(row.get("confidence_tier", "")),
+                                "repair_run_id": run_id,
+                            },
+                        ),
+                        operation="edge_created",
+                        tenant_id=tenant_id,
+                        actor_kind="agent",
+                        actor_id=actor_id or "identity_reconciliation",
+                        subject_kind="entity",
+                        subject_id=pair[0],
+                        reason_code="identity_reconciliation",
+                        causality_class="declared_reason",
                     ))
             else:
-                await graph.revoke_edge(
-                    pair[0],
-                    pair[1],
-                    _SAME_AS,
+                await gateway.apply(revocation_intent(
+                    from_vertex_id=pair[0],
+                    to_vertex_id=pair[1],
+                    edge_type=_SAME_AS,
                     reason=f"identity_reconciliation:{run_id}",
                     tenant_id=tenant_id,
-                )
+                    operation="edge_tombstoned",
+                    actor_kind="agent",
+                    actor_id=actor_id or "identity_reconciliation",
+                    subject_kind="entity",
+                    subject_id=pair[0],
+                    reason_code="identity_reconciliation",
+                ))
             outcome["status"] = "applied"
         except Exception as exc:
             outcome["status"] = "failed"

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS gold_interop_paths (
     metric_version                LowCardinality(String),
     source_lineage                String,
     model_training_eligible       UInt8 DEFAULT 0,      -- cross_chain_observability: never eligible
-    materialized_at               DateTime
+    materialized_at               DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(materialized_at)
 PARTITION BY toYYYYMM(as_of_date)

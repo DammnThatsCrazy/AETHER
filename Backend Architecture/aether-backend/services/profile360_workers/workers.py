@@ -238,17 +238,28 @@ class DelegationProjector:
         if record is None:
             return
         try:
-            await self._graph.add_edge(Edge(
-                edge_type=EdgeType.DELEGATES,
-                from_vertex_id=record["grantor_entity_id"],
-                to_vertex_id=record["grantee_entity_id"],
-                properties={
-                    "tenant_id": record.get("tenant_id", ""),
-                    "delegation_id": delegation_id,
-                    "valid_from": record.get("starts_at", ""),
-                    "valid_to": record.get("ends_at") or "",
-                    "revoked_at": record.get("revoked_at") or "",
-                },
+            from shared.graph.mutation_gateway import GraphMutationGateway
+            from shared.graph.mutation_intents import edge_intent
+
+            await GraphMutationGateway(graph_client=self._graph).apply(edge_intent(
+                Edge(
+                    edge_type=EdgeType.DELEGATES,
+                    from_vertex_id=record["grantor_entity_id"],
+                    to_vertex_id=record["grantee_entity_id"],
+                    properties={
+                        "tenant_id": record.get("tenant_id", ""),
+                        "delegation_id": delegation_id,
+                        "valid_from": record.get("starts_at", ""),
+                        "valid_to": record.get("ends_at") or "",
+                        "revoked_at": record.get("revoked_at") or "",
+                    },
+                ),
+                operation="edge_created",
+                tenant_id=record.get("tenant_id", ""),
+                actor_id="delegation_projector",
+                subject_kind="entity",
+                subject_id=record["grantor_entity_id"],
+                causality_class="authorized_delegation",
             ))
             metrics.increment("profile360_delegation_projected")
         except Exception as e:  # pragma: no cover

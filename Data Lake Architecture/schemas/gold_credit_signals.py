@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS gold_credit_signals (
     -- Number of derogatory items (no details stored)
     derogatory_item_count   Nullable(UInt16),
     debt_to_income_ratio    Nullable(Float32),
-    last_refreshed_at       DateTime
+    last_refreshed_at       DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(last_refreshed_at)
 ORDER BY (tenant_id, entity_id, bureau)

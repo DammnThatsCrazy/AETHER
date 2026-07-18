@@ -11,6 +11,8 @@ from collections import deque
 from typing import Optional
 
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 
 from .models import CapturedX402Transaction, SpendingSummary, X402Node
@@ -84,6 +86,7 @@ class X402EconomicGraph:
 
         edges_created = 0
         last_processed_idx = 0
+        gateway = GraphMutationGateway(graph_client=self._graph)
 
         try:
             for idx, (tx, tenant_id) in enumerate(payments_to_flush):
@@ -93,54 +96,74 @@ class X402EconomicGraph:
                     payee_vid = f"{tenant_id}:{tx.payee_service_id}" if tenant_id else tx.payee_service_id
 
                     # Ensure payer (Agent) vertex exists
-                    await self._graph.upsert_vertex(Vertex(
-                        vertex_type=VertexType.AGENT,
-                        vertex_id=payer_vid,
-                        properties={
-                            "node_role": "x402_payer",
-                            "agent_id": tx.payer_agent_id,
-                            "tenant_id": tenant_id,
-                        },
+                    await gateway.apply(vertex_intent(
+                        Vertex(
+                            vertex_type=VertexType.AGENT,
+                            vertex_id=payer_vid,
+                            properties={
+                                "node_role": "x402_payer",
+                                "agent_id": tx.payer_agent_id,
+                                "tenant_id": tenant_id,
+                            },
+                        ),
+                        operation="node_versioned", tenant_id=tenant_id,
+                        actor_kind="agent", actor_id=tx.payer_agent_id,
                     ))
 
                     # Ensure payee (Service) vertex exists
-                    await self._graph.upsert_vertex(Vertex(
-                        vertex_type=VertexType.SERVICE,
-                        vertex_id=payee_vid,
-                        properties={
-                            "node_role": "x402_payee",
-                            "service_id": tx.payee_service_id,
-                            "tenant_id": tenant_id,
-                        },
+                    await gateway.apply(vertex_intent(
+                        Vertex(
+                            vertex_type=VertexType.SERVICE,
+                            vertex_id=payee_vid,
+                            properties={
+                                "node_role": "x402_payee",
+                                "service_id": tx.payee_service_id,
+                                "tenant_id": tenant_id,
+                            },
+                        ),
+                        operation="node_versioned", tenant_id=tenant_id,
+                        actor_id="x402_economic_graph",
                     ))
 
                     # Create PAYS edge with deterministic ID for idempotency
-                    await self._graph.add_edge(Edge(
-                        edge_type=EdgeType.PAYS,
-                        from_vertex_id=payer_vid,
-                        to_vertex_id=payee_vid,
-                        properties={
-                            "edge_id": f"{tenant_id}:{tx.capture_id}:pays",
-                            "amount": str(tx.amount_usd),
-                            "token": tx.terms.token,
-                            "chain": tx.terms.chain,
-                            "capture_id": tx.capture_id,
-                            "method": "x402",
-                            "tenant_id": tenant_id,
-                        },
+                    await gateway.apply(edge_intent(
+                        Edge(
+                            edge_type=EdgeType.PAYS,
+                            from_vertex_id=payer_vid,
+                            to_vertex_id=payee_vid,
+                            properties={
+                                "edge_id": f"{tenant_id}:{tx.capture_id}:pays",
+                                "amount": str(tx.amount_usd),
+                                "token": tx.terms.token,
+                                "chain": tx.terms.chain,
+                                "capture_id": tx.capture_id,
+                                "method": "x402",
+                                "tenant_id": tenant_id,
+                            },
+                        ),
+                        operation="edge_created", tenant_id=tenant_id,
+                        actor_kind="agent", actor_id=tx.payer_agent_id,
+                        subject_kind="agent", subject_id=payer_vid,
+                        source_event_id=tx.capture_id,
                     ))
 
                     # Create CONSUMES edge (agent -> service) with deterministic ID
-                    await self._graph.add_edge(Edge(
-                        edge_type=EdgeType.CONSUMES,
-                        from_vertex_id=payer_vid,
-                        to_vertex_id=payee_vid,
-                        properties={
-                            "edge_id": f"{tenant_id}:{tx.capture_id}:consumes",
-                            "api_call_url": tx.request_url,
-                            "method": tx.request_method,
-                            "tenant_id": tenant_id,
-                        },
+                    await gateway.apply(edge_intent(
+                        Edge(
+                            edge_type=EdgeType.CONSUMES,
+                            from_vertex_id=payer_vid,
+                            to_vertex_id=payee_vid,
+                            properties={
+                                "edge_id": f"{tenant_id}:{tx.capture_id}:consumes",
+                                "api_call_url": tx.request_url,
+                                "method": tx.request_method,
+                                "tenant_id": tenant_id,
+                            },
+                        ),
+                        operation="edge_created", tenant_id=tenant_id,
+                        actor_kind="agent", actor_id=tx.payer_agent_id,
+                        subject_kind="agent", subject_id=payer_vid,
+                        source_event_id=tx.capture_id,
                     ))
 
                     edges_created += 2

@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS gold_derivatives_exposure (
     metric_version            LowCardinality(String),
     source_lineage            String,
     model_training_eligible   UInt8 DEFAULT 0,    -- financial_activity: never eligible
-    materialized_at           DateTime
+    materialized_at           DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(materialized_at)
 PARTITION BY toYYYYMM(as_of_date)

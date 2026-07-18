@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS gold_stablecoin_flows (
     -- '' when the row aggregates across deployments / chains
     deployment_id                 String DEFAULT '',
     chain_id                      String DEFAULT '',
-    window_start                  DateTime,
-    window_end                    DateTime,
+    window_start                  DateTime64(3, 'UTC'),
+    window_end                    DateTime64(3, 'UTC'),
     direction                     LowCardinality(String),   -- inflow, outflow, net, internal
     -- Fixed-precision decimal strings parsed server-side; never float transit
     gross_transfer_volume         Decimal(38, 18),
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS gold_stablecoin_flows (
     -- Lineage
     source_lineage                String,                   -- JSON: silver fact id range / run id
     model_training_eligible       UInt8 DEFAULT 0,          -- economic_observability: never eligible
-    materialized_at               DateTime
+    materialized_at               DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(materialized_at)
 PARTITION BY toYYYYMM(window_start)

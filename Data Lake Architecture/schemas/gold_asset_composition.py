@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS gold_asset_composition (
     total_portfolio_usd Decimal(18, 6),
     -- Serialized JSON array: [{symbol, contract_address, chain_id, category, value_usd, pct}]
     asset_breakdown     String,
-    computed_at         DateTime
+    computed_at         DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(computed_at)
 PARTITION BY toYYYYMM(computed_at)

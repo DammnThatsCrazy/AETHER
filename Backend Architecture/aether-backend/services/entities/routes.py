@@ -30,6 +30,8 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_graph, get_producer
 from repositories.repos import EntityRepository, IdentityClusterRepository
@@ -98,22 +100,36 @@ async def create_entity(
         "organization": VertexType.ORGANIZATION,
         "agent": VertexType.AGENT,
     }.get(body.entity_type, VertexType.ENTITY)
-    await graph.upsert_vertex(Vertex(
-        vertex_type=vertex_type,
-        vertex_id=entity_id,
-        properties={
-            "tenant_id": tenant.tenant_id,
-            "entity_type": body.entity_type,
-            "display_name": body.display_name,
-        },
+    gateway = GraphMutationGateway(graph_client=graph)
+    await gateway.apply(vertex_intent(
+        Vertex(
+            vertex_type=vertex_type,
+            vertex_id=entity_id,
+            properties={
+                "tenant_id": tenant.tenant_id,
+                "entity_type": body.entity_type,
+                "display_name": body.display_name,
+            },
+        ),
+        operation="node_versioned",
+        tenant_id=tenant.tenant_id,
+        actor_id="entities_api",
     ))
 
     if body.parent_entity_id:
-        await graph.add_edge(Edge(
-            edge_type=EdgeType.MEMBER_OF,
-            from_vertex_id=entity_id,
-            to_vertex_id=body.parent_entity_id,
-            properties={"tenant_id": tenant.tenant_id, "role": "child"},
+        await gateway.apply(edge_intent(
+            Edge(
+                edge_type=EdgeType.MEMBER_OF,
+                from_vertex_id=entity_id,
+                to_vertex_id=body.parent_entity_id,
+                properties={"tenant_id": tenant.tenant_id, "role": "child"},
+            ),
+            operation="edge_created",
+            tenant_id=tenant.tenant_id,
+            actor_kind="human",
+            actor_id="entities_api",
+            subject_kind="entity",
+            subject_id=entity_id,
         ))
 
     await producer.publish(Event(
@@ -265,15 +281,23 @@ async def add_membership(
     if org.get("entity_type") != "organization":
         raise BadRequestError("Target entity must be of type 'organization'")
 
-    await graph.add_edge(Edge(
-        edge_type=EdgeType.MEMBER_OF,
-        from_vertex_id=entity_id,
-        to_vertex_id=body.organization_entity_id,
-        properties={
-            "tenant_id": tenant.tenant_id,
-            "role": body.role,
-            **body.metadata,
-        },
+    await GraphMutationGateway(graph_client=graph).apply(edge_intent(
+        Edge(
+            edge_type=EdgeType.MEMBER_OF,
+            from_vertex_id=entity_id,
+            to_vertex_id=body.organization_entity_id,
+            properties={
+                "tenant_id": tenant.tenant_id,
+                "role": body.role,
+                **body.metadata,
+            },
+        ),
+        operation="edge_created",
+        tenant_id=tenant.tenant_id,
+        actor_kind="human",
+        actor_id="entities_api",
+        subject_kind="entity",
+        subject_id=entity_id,
     ))
     await producer.publish(Event(
         topic=Topic.ENTITY_MEMBERSHIP_ADDED,

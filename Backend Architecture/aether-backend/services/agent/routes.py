@@ -681,11 +681,17 @@ async def register_agent(body: AgentRegistration, request: Request):
 
     tenant_id = request.state.tenant.tenant_id
 
+    from shared.graph.mutation_gateway import GraphMutationGateway
+    from shared.graph.mutation_intents import edge_intent, vertex_intent
+
+    gateway = GraphMutationGateway(graph_client=_graph)
+
     # Create AGENT vertex
     vertex = Vertex(
         vertex_type=VertexType.AGENT,
         vertex_id=body.agent_id,
         properties={
+            "tenant_id": tenant_id,
             "owner_user_id": body.owner_user_id,
             "model_name": body.model_name,
             "model_version": body.model_version,
@@ -693,21 +699,36 @@ async def register_agent(body: AgentRegistration, request: Request):
             "status": body.status,
         },
     )
-    await _graph.add_vertex(vertex)
+    await gateway.apply(vertex_intent(
+        vertex, operation="node_created", tenant_id=tenant_id,
+        actor_kind="human", actor_id=body.owner_user_id,
+    ))
 
     # Create LAUNCHED_BY edge: agent -> user
-    await _graph.add_edge(Edge(
-        edge_type=EdgeType.LAUNCHED_BY,
-        from_vertex_id=body.agent_id,
-        to_vertex_id=body.owner_user_id,
+    await gateway.apply(edge_intent(
+        Edge(
+            edge_type=EdgeType.LAUNCHED_BY,
+            from_vertex_id=body.agent_id,
+            to_vertex_id=body.owner_user_id,
+            properties={"tenant_id": tenant_id},
+        ),
+        operation="edge_created", tenant_id=tenant_id,
+        actor_kind="human", actor_id=body.owner_user_id,
+        subject_kind="agent", subject_id=body.agent_id,
     ))
 
     # Create DELEGATES edge: user -> agent
-    await _graph.add_edge(Edge(
-        edge_type=EdgeType.DELEGATES,
-        from_vertex_id=body.owner_user_id,
-        to_vertex_id=body.agent_id,
-        properties={"permissions": ",".join(body.permissions)},
+    await gateway.apply(edge_intent(
+        Edge(
+            edge_type=EdgeType.DELEGATES,
+            from_vertex_id=body.owner_user_id,
+            to_vertex_id=body.agent_id,
+            properties={"tenant_id": tenant_id, "permissions": ",".join(body.permissions)},
+        ),
+        operation="edge_created", tenant_id=tenant_id,
+        actor_kind="human", actor_id=body.owner_user_id,
+        subject_kind="entity", subject_id=body.owner_user_id,
+        causality_class="authorized_delegation",
     ))
 
     _registered_agents[f"{tenant_id}:{body.agent_id}"] = body
@@ -914,17 +935,27 @@ async def record_a2h_interaction(agent_id: str, body: A2HInteraction, request: R
     now = datetime.now(timezone.utc).isoformat()
 
     # Create A2H edge: Agent → User
-    await _graph.add_edge(Edge(
-        edge_type=edge_type,
-        from_vertex_id=agent_id,
-        to_vertex_id=body.target_user_id,
-        properties={
-            "content_summary": body.content_summary,
-            "task_id": body.task_id or "",
-            "confidence": str(body.confidence),
-            "tenant_id": tenant.tenant_id,
-            **body.properties,
-        },
+    from shared.graph.mutation_gateway import GraphMutationGateway
+    from shared.graph.mutation_intents import edge_intent
+
+    await GraphMutationGateway(graph_client=_graph).apply(edge_intent(
+        Edge(
+            edge_type=edge_type,
+            from_vertex_id=agent_id,
+            to_vertex_id=body.target_user_id,
+            properties={
+                "content_summary": body.content_summary,
+                "task_id": body.task_id or "",
+                "confidence": str(body.confidence),
+                "tenant_id": tenant.tenant_id,
+                **body.properties,
+            },
+        ),
+        operation="edge_created", tenant_id=tenant.tenant_id,
+        actor_kind="agent", actor_id=agent_id,
+        subject_kind="agent", subject_id=agent_id,
+        source_event_id=body.task_id or None,
+        causality_class="declared_reason",
     ))
 
     # Publish A2H event

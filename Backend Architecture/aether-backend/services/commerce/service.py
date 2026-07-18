@@ -9,7 +9,10 @@ import uuid
 from typing import Optional
 
 from shared.events.events import Event, EventProducer, Topic
+from shared.graph.generated_mutation_taxonomy import MUTATION_ACTOR_KINDS
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 
 from .models import AgentHireRecord, FeeEliminationReport, PaymentRecord
@@ -18,6 +21,17 @@ logger = get_logger("aether.service.commerce")
 
 # Card processing fee rate (used for fee elimination calculation)
 CARD_FEE_RATE = 0.029  # 2.9% typical card processing fee
+
+
+def _actor_kind_for_payer(payer_type: str) -> str:
+    """Map a payment ``payer_type`` onto the canonical graph-mutation actor kind.
+
+    ``PaymentRecord.payer_type`` is constrained to ``{human, agent, service}``,
+    all of which are values in the graph-mutation registry
+    (``MUTATION_ACTOR_KINDS``). Deriving the actor from the real payer avoids
+    ledgering/risk-checking a human or service payer as an agent.
+    """
+    return payer_type if payer_type in MUTATION_ACTOR_KINDS else "agent"
 
 
 class CommerceService:
@@ -56,7 +70,11 @@ class CommerceService:
                 "tenant_id": tenant_id,
             },
         )
-        await self._graph.add_vertex(vertex)
+        gateway = GraphMutationGateway(graph_client=self._graph)
+        await gateway.apply(vertex_intent(
+            vertex, operation="node_created",
+            tenant_id=tenant_id, actor_id="commerce",
+        ))
 
         # Create PAYS edge: payer -> payee
         edge = Edge(
@@ -68,9 +86,16 @@ class CommerceService:
                 "amount": str(payment.amount),
                 "currency": payment.currency,
                 "method": payment.method,
+                "tenant_id": tenant_id,
             },
         )
-        await self._graph.add_edge(edge)
+        payer_actor_kind = _actor_kind_for_payer(payment.payer_type)
+        await gateway.apply(edge_intent(
+            edge, operation="edge_created",
+            tenant_id=tenant_id, actor_kind=payer_actor_kind, actor_id=payment.payer_id,
+            subject_kind=payer_actor_kind, subject_id=payment.payer_id,
+            source_event_id=payment.payment_id,
+        ))
 
         # Publish payment event
         await self._producer.publish(Event(
@@ -127,7 +152,12 @@ class CommerceService:
                 "tenant_id": tenant_id,
             },
         )
-        await self._graph.add_edge(edge)
+        await GraphMutationGateway(graph_client=self._graph).apply(edge_intent(
+            edge, operation="edge_created",
+            tenant_id=tenant_id, actor_kind="agent", actor_id=hire.hiring_agent_id,
+            subject_kind="agent", subject_id=hire.hiring_agent_id,
+            source_event_id=hire.hire_id,
+        ))
 
         # Publish event
         await self._producer.publish(Event(

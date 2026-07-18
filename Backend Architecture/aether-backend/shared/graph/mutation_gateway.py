@@ -40,7 +40,11 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
 from shared.common.common import utc_now
-from shared.graph.edge_properties import make_edge_idempotency_key
+from shared.graph.edge_properties import (
+    VALID_ACTOR_KINDS,
+    build_edge_properties,
+    make_edge_idempotency_key,
+)
 from shared.graph.generated_mutation_taxonomy import GRAPH_MUTATION_TYPES
 from shared.graph.graph import Edge, Vertex, _InMemoryGraphBackend, get_graph_client
 from shared.graph.mutation_models import MutationRecord
@@ -50,6 +54,10 @@ from shared.logger.logger import get_logger, metrics
 logger = get_logger("aether.graph.mutation_gateway")
 
 GATEWAY_SCHEMA_VERSION = "1"
+
+# Provenance stamped onto a shadow/enforce-canonicalised edge when the migrating
+# writer did not set its own ``provenance`` property.
+_GATEWAY_PROVENANCE = "graph_mutation_gateway"
 
 _MODES = ("off", "shadow", "enforce")
 
@@ -77,6 +85,16 @@ def _cis_enabled() -> bool:
     import os
 
     return os.getenv("CIS_ENABLED", "false").lower() in ("true", "1")
+
+
+def _as_float(raw: Any) -> Optional[float]:
+    """Parse a possibly-string confidence value; ``None`` when unparseable."""
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -186,6 +204,15 @@ class GraphMutationGateway:
 
         started = time.monotonic()
         self._check_shape(intent)
+
+        # Shadow/enforce only: canonicalise the edge so validation, the ledger
+        # fact payload, and the projection all carry the required property set
+        # derived from the intent metadata. Off mode returned above with
+        # ``intent.edge`` untouched (the byte-identical invariant the digest
+        # parity tests assert); this repoints the intent at a canonical COPY so
+        # the caller's original Edge object is never mutated.
+        if intent.edge is not None:
+            intent.edge = self._canonical_edge(intent)
 
         # 1. Shape/consent validation (delegated — never duplicated here).
         violations = self._validate(intent)
@@ -305,6 +332,71 @@ class GraphMutationGateway:
             )
         if not intent.tenant_id:
             raise ValueError("MutationIntent.tenant_id is required")
+
+    def _canonical_edge(self, intent: MutationIntent) -> Edge:
+        """Return a COPY of ``intent.edge`` carrying the canonical required
+        property set (shadow/enforce only).
+
+        Migrated writers pass an Edge that may carry only ``tenant_id`` on its
+        properties, with actor / confidence / provenance / valid_from travelling
+        on the intent instead. The canonical validator inspects
+        ``edge.properties`` alone, so without this step an intent-carried edge
+        would fail enforce-mode validation for missing required properties.
+
+        Writer-supplied properties always win over gateway-derived defaults, so
+        an edge the writer already canonicalised (e.g. via
+        ``build_edge_properties``) is reproduced verbatim — keeping shadow-mode
+        replay==live parity for those writers unchanged.
+        """
+        edge = intent.edge
+        assert edge is not None
+        existing = dict(edge.properties or {})
+
+        actor_kind = intent.actor_kind or str(existing.get("actor_kind") or "system")
+        # The edge-property vocabulary (VALID_ACTOR_KINDS = human|agent|system)
+        # is narrower than the ledger's MUTATION_ACTOR_KINDS; coerce anything
+        # outside it (e.g. a "service" payer) to a valid edge actor kind so
+        # enforce-mode validation accepts the projected edge. The ledger record
+        # (built from ``intent.actor_kind``) keeps the original value.
+        edge_actor_kind = actor_kind if actor_kind in VALID_ACTOR_KINDS else "system"
+
+        valid_from = (
+            intent.valid_from
+            or str(existing.get("valid_from") or "")
+            or utc_now().isoformat()
+        )
+
+        confidence = intent.confidence
+        if confidence is None:
+            confidence = _as_float(existing.get("confidence"))
+        if confidence is None:
+            confidence = 1.0
+
+        canonical = build_edge_properties(
+            tenant_id=intent.tenant_id or str(existing.get("tenant_id", "")),
+            edge_type=str(edge.edge_type),
+            from_vertex_id=edge.from_vertex_id,
+            to_vertex_id=edge.to_vertex_id,
+            actor_kind=edge_actor_kind,
+            actor_id=str(intent.actor_id or existing.get("actor_id") or ""),
+            provenance=str(existing.get("provenance") or _GATEWAY_PROVENANCE),
+            valid_from=valid_from,
+            confidence=float(confidence),
+            source_event_id=str(
+                intent.source_event_id or existing.get("source_event_id") or ""
+            ),
+            correlation_id=str(
+                intent.correlation_id or existing.get("correlation_id") or ""
+            ),
+        )
+        # Writer-set properties win: canonical fills only the gaps.
+        canonical.update(existing)
+        return Edge(
+            edge_type=edge.edge_type,
+            from_vertex_id=edge.from_vertex_id,
+            to_vertex_id=edge.to_vertex_id,
+            properties=canonical,
+        )
 
     def _validate(self, intent: MutationIntent) -> list[str]:
         """Delegate edge shape/consent validation to the canonical validator."""
