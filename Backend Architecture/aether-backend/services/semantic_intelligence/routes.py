@@ -175,6 +175,15 @@ async def get_entity_sentiment(
     ).to_dict()
 
 
+@router.get("/entities/{entity_id}/sentiment-state")
+async def get_entity_sentiment_state(entity_id: str, request: Request):
+    require_read_access(request)
+    state = await get_semantic_service().entity_sentiment_state(tenant_id(request), entity_id)
+    return APIResponse(
+        data={"sentiment_state": state, "data_freshness": "fresh"}
+    ).to_dict()
+
+
 @router.get("/entities/{entity_id}/timeline")
 async def get_entity_timeline(
     entity_id: str, request: Request, limit: int = Query(50, ge=1, le=500)

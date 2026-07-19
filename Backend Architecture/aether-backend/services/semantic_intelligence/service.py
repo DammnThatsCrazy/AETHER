@@ -225,6 +225,22 @@ class SemanticIntelligenceService:
         )
         return rows[0] if rows else None
 
+    async def recompute_entity_sentiment(self, tenant_id: str, entity_ref: str) -> dict[str, Any]:
+        from .reducers import recompute_entity_sentiment
+
+        return await recompute_entity_sentiment(tenant_id, entity_ref)
+
+    async def entity_sentiment_state(self, tenant_id: str, entity_ref: str) -> dict[str, Any]:
+        """Durable Gold sentiment state, falling back to a live reduction."""
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        rows = await SemanticFactRepository("gold_entity_sentiment_state").list_by_tenant(
+            tenant_id, entity_ref, limit=1
+        )
+        if rows:
+            return rows[0]
+        return await self.recompute_entity_sentiment(tenant_id, entity_ref)
+
     async def list_sentiment(
         self, tenant_id: str, subject: Optional[str] = None, *, limit: int = 50
     ) -> tuple[list[SentimentObservation], bool]:

@@ -122,9 +122,14 @@ class SemanticEventConsumer:
 
             # Refresh durable Gold state (weighted reducer).
             if subject.ref != "unknown_subject" and eligibility is not Eligibility.QUARANTINE:
-                from .reducers import recompute_campaign_impact, recompute_entity_state
+                from .reducers import (
+                    recompute_campaign_impact,
+                    recompute_entity_sentiment,
+                    recompute_entity_state,
+                )
 
                 await recompute_entity_state(tenant_id, subject.ref)
+                await recompute_entity_sentiment(tenant_id, subject.ref)
                 campaign_id = sem_payload.get("campaign_id")
                 if campaign_id:
                     await recompute_campaign_impact(tenant_id, campaign_id)
