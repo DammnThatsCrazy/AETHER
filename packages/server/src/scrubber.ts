@@ -17,20 +17,27 @@ function isSensitiveKey(key: string): boolean {
   return SENSITIVE_PATTERNS.some((p) => normalized.includes(p));
 }
 
-function scrubValue(value: unknown): unknown {
-  if (value === null || value === undefined || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(scrubValue);
-  return scrubObject(value as Record<string, unknown>);
-}
+// Real payloads are shallow; the depth cap keeps a pathological (or adversarial)
+// object from exhausting the call stack. Cycles are handled by the ancestor path.
+const MAX_SCRUB_DEPTH = 32;
 
-function scrubObject(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = isSensitiveKey(k) ? '[REDACTED]' : scrubValue(v);
+function scrubValue(value: unknown, depth: number, path: WeakSet<object>): unknown {
+  if (value === null || value === undefined || typeof value !== 'object') return value;
+  if (depth >= MAX_SCRUB_DEPTH) return '[TRUNCATED]';
+  if (path.has(value as object)) return '[CYCLE]'; // back-reference to an ancestor
+  path.add(value as object);
+  try {
+    if (Array.isArray(value)) return value.map((item) => scrubValue(item, depth + 1, path));
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = isSensitiveKey(k) ? '[REDACTED]' : scrubValue(v, depth + 1, path);
+    }
+    return out;
+  } finally {
+    path.delete(value as object);
   }
-  return out;
 }
 
 export function scrubSensitiveFields(properties: Record<string, unknown>): Record<string, unknown> {
-  return scrubObject(properties);
+  return scrubValue(properties, 0, new WeakSet<object>()) as Record<string, unknown>;
 }
