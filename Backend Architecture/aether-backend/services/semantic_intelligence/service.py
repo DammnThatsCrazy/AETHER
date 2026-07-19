@@ -221,6 +221,23 @@ class SemanticIntelligenceService:
             "status_breakdown": by_status,
         }
 
+    async def enqueue_review(
+        self,
+        tenant_id: str,
+        queue_type: str,
+        *,
+        subject_ref: Optional[str] = None,
+        source_event_id: Optional[str] = None,
+        payload: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        return await self._review_queue.enqueue(
+            tenant_id,
+            queue_type,
+            subject_ref=subject_ref,
+            source_event_id=source_event_id,
+            payload=payload,
+        )
+
     async def review_queue(
         self, tenant_id: str, queue_type: Optional[str] = None
     ) -> dict[str, Any]:

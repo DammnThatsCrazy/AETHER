@@ -254,6 +254,7 @@ def classify_event(
         agent_semantics=[],
         evidence_refs=[evidence],
         classification_confidence=0.85 if not should_abstain else 0.2,
+        subject_resolution_confidence=float(payload.get("subject_resolution_confidence", 1.0)),
         consent_snapshot_id=payload.get("consent_snapshot_id"),
         purposes=payload.get("purposes", ["analytics"]),
         status=ObservationStatus.ABSTAINED if should_abstain else ObservationStatus.CLASSIFIED,

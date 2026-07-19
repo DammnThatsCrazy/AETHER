@@ -16,6 +16,7 @@ from shared.events.events import Event, Topic
 from shared.logger.logger import get_logger
 
 from .eligibility import Eligibility, classify_eligibility
+from .resolution import SemanticActorResolver, SemanticSubjectResolver
 from .service import get_semantic_service
 
 logger = get_logger("aether.semantic.consumer")
@@ -81,6 +82,8 @@ class SemanticEventConsumer:
 
     def __init__(self, producer: Any = None) -> None:
         self._producer = producer
+        self._subject_resolver = SemanticSubjectResolver()
+        self._actor_resolver = SemanticActorResolver()
 
     async def on_validated_event(self, event: Event) -> None:
         payload = event.payload or {}
@@ -93,9 +96,29 @@ class SemanticEventConsumer:
             return
         try:
             sem_payload = _to_semantic_payload(event)
-            await get_semantic_service().classify_and_persist(
-                sem_payload, tenant_id, eligibility=eligibility
-            )
+            service = get_semantic_service()
+
+            # Backend-owned subject/actor resolution over the RAW event payload
+            # (SDKs never assign identity; the resolver, not the mapper, owns it).
+            subject = await self._subject_resolver.resolve(payload, tenant_id)
+            actor = await self._actor_resolver.resolve(payload, tenant_id)
+            sem_payload["primary_subject_ref"] = subject.ref
+            sem_payload["actor_ref"] = actor.ref
+            sem_payload["subject_resolution_confidence"] = subject.confidence
+
+            if subject.needs_review and subject.review_queue:
+                await service.enqueue_review(
+                    tenant_id,
+                    subject.review_queue,
+                    subject_ref=subject.ref,
+                    source_event_id=sem_payload.get("source_event_id"),
+                    payload={"method": subject.method, "event_type": event_type},
+                )
+            # A cross-tenant reference is quarantined, never classified against.
+            if subject.review_queue == "cross_tenant_reference":
+                eligibility = Eligibility.QUARANTINE
+
+            await service.classify_and_persist(sem_payload, tenant_id, eligibility=eligibility)
         except Exception:
             logger.exception("semantic classification failed for event %s", payload.get("event_id"))
             raise  # triggers DLQ in EventConsumer; persistence is idempotent on retry
