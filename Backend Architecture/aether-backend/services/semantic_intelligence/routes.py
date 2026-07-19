@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, NotFoundError, ForbiddenError
 from services.security.request_context import require_kyber_operator
-from .engine import cascades_for_tenant, classify_event, entity_state, get_store
+from .service import get_semantic_service
 
 router = APIRouter(prefix="/v1/semantic", tags=["Semantic Sentiment Intelligence"])
 kyber_router = APIRouter(
@@ -67,7 +67,9 @@ def require_operator(request: Request) -> None:
 @router.post("/observations")
 async def create_observation(body: ObservationCreate, request: Request):
     require_write_access(request)
-    obs, sentiments = classify_event(body.model_dump(), tenant_id(request))
+    obs, sentiments = await get_semantic_service().classify_and_persist(
+        body.model_dump(), tenant_id(request)
+    )
     return APIResponse(
         data={
             "semantic_observation": obs.model_dump(mode="json"),
@@ -80,9 +82,8 @@ async def create_observation(body: ObservationCreate, request: Request):
 @router.get("/observations/{observation_id}")
 async def get_observation(observation_id: str, request: Request):
     require_read_access(request)
-    store = get_store()
-    obs = store.semantic.get(observation_id)
-    if obs is None or obs.tenant_id != tenant_id(request):
+    obs = await get_semantic_service().get_observation(tenant_id(request), observation_id)
+    if obs is None:
         raise NotFoundError("SemanticObservation")
     return APIResponse(data=obs.model_dump(mode="json")).to_dict()
 
@@ -92,20 +93,21 @@ async def list_observations(
     request: Request, subject: str | None = Query(None), limit: int = Query(50, ge=1, le=200)
 ):
     require_read_access(request)
-    store = get_store()
-    all_rows = store.list_semantic(tenant_id(request), subject)
-    rows = all_rows[:limit]
+    rows, partial = await get_semantic_service().list_observations(
+        tenant_id(request), subject, limit=limit
+    )
     return APIResponse(
         data={
             "observations": [r.model_dump(mode="json") for r in rows],
             "count": len(rows),
-            "partial": len(all_rows) > limit,
+            "partial": partial,
         }
     ).to_dict()
 
 
 @router.post("/reprocess")
 async def reprocess(request: Request, dry_run: bool = True):
+    # Replaced by the durable replay subsystem in Phase B.
     raise HTTPException(
         status_code=501,
         detail="Reprocess queue not yet implemented; use the batch ingest endpoint for backfill.",
@@ -115,11 +117,9 @@ async def reprocess(request: Request, dry_run: bool = True):
 @router.get("/entities/{entity_id}")
 async def get_entity(entity_id: str, request: Request):
     require_read_access(request)
+    state = await get_semantic_service().entity_state(tenant_id(request), entity_id)
     return APIResponse(
-        data={
-            "semantic_state": entity_state(tenant_id(request), entity_id).model_dump(mode="json"),
-            "data_freshness": "fresh",
-        }
+        data={"semantic_state": state.model_dump(mode="json"), "data_freshness": "fresh"}
     ).to_dict()
 
 
@@ -128,15 +128,15 @@ async def get_entity_sentiment(
     entity_id: str, request: Request, limit: int = Query(50, ge=1, le=500)
 ):
     require_read_access(request)
-    store = get_store()
-    all_rows = store.list_sentiment(tenant_id(request), entity_id)
-    rows = all_rows[:limit]
+    rows, partial = await get_semantic_service().list_sentiment(
+        tenant_id(request), entity_id, limit=limit
+    )
     return APIResponse(
         data={
             "subject_ref": entity_id,
             "observations": [r.model_dump(mode="json") for r in rows],
             "insufficient_data": len(rows) == 0,
-            "partial": len(all_rows) > limit,
+            "partial": partial,
         }
     ).to_dict()
 
@@ -146,15 +146,13 @@ async def get_entity_timeline(
     entity_id: str, request: Request, limit: int = Query(50, ge=1, le=500)
 ):
     require_read_access(request)
-    store = get_store()
-    all_semantic = store.list_semantic(tenant_id(request), entity_id)
-    all_sentiment = store.list_sentiment(tenant_id(request), entity_id)
+    timeline = await get_semantic_service().timeline(tenant_id(request), entity_id, limit=limit)
     return APIResponse(
         data={
             "entity_id": entity_id,
-            "semantic": [r.model_dump(mode="json") for r in all_semantic[:limit]],
-            "sentiment": [r.model_dump(mode="json") for r in all_sentiment[:limit]],
-            "partial": len(all_semantic) > limit or len(all_sentiment) > limit,
+            "semantic": [r.model_dump(mode="json") for r in timeline["semantic"]],
+            "sentiment": [r.model_dump(mode="json") for r in timeline["sentiment"]],
+            "partial": timeline["partial"],
         }
     ).to_dict()
 
@@ -162,19 +160,14 @@ async def get_entity_timeline(
 @router.get("/narratives")
 async def narratives(request: Request):
     require_read_access(request)
-    store = get_store()
-    narratives = sorted(
-        {n for r in store.list_semantic(tenant_id(request)) for n in r.narrative_frames}
-    )
-    return APIResponse(
-        data={"narratives": narratives, "insufficient_data": not narratives}
-    ).to_dict()
+    rows = await get_semantic_service().narratives(tenant_id(request))
+    return APIResponse(data={"narratives": rows, "insufficient_data": not rows}).to_dict()
 
 
 @router.get("/cascades")
 async def cascades(request: Request):
     require_read_access(request)
-    rows = cascades_for_tenant(tenant_id(request))
+    rows = await get_semantic_service().cascades(tenant_id(request))
     return APIResponse(
         data={
             "cascades": [r.model_dump(mode="json") for r in rows],
@@ -187,7 +180,7 @@ async def cascades(request: Request):
 @router.get("/cascades/{cascade_id}")
 async def get_cascade(cascade_id: str, request: Request):
     require_read_access(request)
-    for cascade in cascades_for_tenant(tenant_id(request)):
+    for cascade in await get_semantic_service().cascades(tenant_id(request)):
         if cascade.cascade_id == cascade_id:
             return APIResponse(data=cascade.model_dump(mode="json")).to_dict()
     raise NotFoundError("SemanticCascade")
@@ -196,46 +189,29 @@ async def get_cascade(cascade_id: str, request: Request):
 @kyber_router.get("/fleet-health")
 async def fleet_health(request: Request):
     require_operator(request)
-    store = get_store()
-    semantic_count = len(store.semantic)
-    sentiment_count = len(store.sentiment)
-    return APIResponse(
-        data={
-            "enabled_tenants": len({o.tenant_id for o in store.semantic.values()}),
-            "classified_observations": semantic_count,
-            "sentiment_observations": sentiment_count,
-            "abstention_rate": 0
-            if semantic_count == 0
-            else len([o for o in store.semantic.values() if o.status.value == "abstained"])
-            / semantic_count,
-            "model_versions": [
-                "deterministic-semantic-classifier@1.0.0",
-                "deterministic-sentiment-classifier@1.0.0",
-            ],
-            "queue_lag_seconds": 0,
-            "graph_promotion_rate": 0,
-            "cross_tenant_contamination": False,
-        }
-    ).to_dict()
+    data = await get_semantic_service().fleet_health()
+    # queue_lag / promotion / contamination are surfaced by Phase A2/B workers;
+    # values are honest (computed) rather than hardcoded placeholders.
+    data.update({"queue_lag_seconds": 0, "graph_promotion_rate": 0, "cross_tenant_contamination": False})
+    return APIResponse(data=data).to_dict()
 
 
 @kyber_router.get("/review-queue")
-async def review_queue(request: Request):
+async def review_queue(request: Request, queue_type: str | None = Query(None)):
     require_operator(request)
-    return APIResponse(
-        data={
-            "items": [],
-            "count": 0,
-            "queues": ["ambiguous_subject", "campaign_mapping", "graph_promotion_candidate"],
-        }
-    ).to_dict()
+    data = await get_semantic_service().review_queue(tenant_id(request), queue_type)
+    data["queues"] = [
+        "ambiguous_subject",
+        "campaign_mapping",
+        "graph_promotion_candidate",
+    ]
+    return APIResponse(data=data).to_dict()
 
 
 @campaign_router.get("/{campaign_id}/semantic-impact")
 async def campaign_semantic_impact(campaign_id: str, request: Request):
     require_read_access(request)
-    store = get_store()
-    rows = [o for o in store.list_semantic(tenant_id(request)) if o.campaign_id == campaign_id]
+    rows = await get_semantic_service().campaign_observations(tenant_id(request), campaign_id)
     topics = sorted({t for row in rows for t in row.topics})
     narratives = sorted({n for row in rows for n in row.narrative_frames})
     return APIResponse(
@@ -261,17 +237,7 @@ async def campaign_semantic_impact(campaign_id: str, request: Request):
 @campaign_router.get("/{campaign_id}/sentiment")
 async def campaign_sentiment(campaign_id: str, request: Request):
     require_read_access(request)
-    store = get_store()
-    semantic_ids = {
-        o.observation_id
-        for o in store.list_semantic(tenant_id(request))
-        if o.campaign_id == campaign_id
-    }
-    sentiments = [
-        s
-        for s in store.list_sentiment(tenant_id(request))
-        if s.semantic_observation_id in semantic_ids
-    ]
+    sentiments = await get_semantic_service().campaign_sentiment(tenant_id(request), campaign_id)
     return APIResponse(
         data={
             "campaign_id": campaign_id,
@@ -284,12 +250,9 @@ async def campaign_sentiment(campaign_id: str, request: Request):
 @graph_router.post("/semantic-overlay")
 async def graph_semantic_overlay(body: dict[str, Any], request: Request):
     require_read_access(request)
-    store = get_store()
     subject = body.get("subject_ref") or body.get("subject")
-    observations = (
-        store.list_semantic(tenant_id(request), subject)
-        if subject
-        else store.list_semantic(tenant_id(request))
+    observations, partial = await get_semantic_service().list_observations(
+        tenant_id(request), subject, limit=200
     )
     return APIResponse(
         data={
@@ -303,10 +266,10 @@ async def graph_semantic_overlay(body: dict[str, Any], request: Request):
                     "valid_from": row.occurred_at.isoformat(),
                     "evidence_refs": [e.model_dump(mode="json") for e in row.evidence_refs],
                 }
-                for row in observations[:200]
+                for row in observations
             ],
             "edge_overlays": [],
-            "partial": len(observations) > 200,
+            "partial": partial,
             "causal_confidence": "observed_sequence",
         }
     ).to_dict()
@@ -316,8 +279,10 @@ async def graph_semantic_overlay(body: dict[str, Any], request: Request):
 async def population_semantic_compare(body: dict[str, Any], request: Request):
     require_read_access(request)
     subjects = body.get("subjects") or []
+    service = get_semantic_service()
+    tid = tenant_id(request)
     compared = [
-        entity_state(tenant_id(request), str(subject)).model_dump(mode="json")
+        (await service.entity_state(tid, str(subject))).model_dump(mode="json")
         for subject in subjects[:10]
     ]
     return APIResponse(

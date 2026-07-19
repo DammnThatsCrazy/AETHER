@@ -628,6 +628,36 @@ class ConsentAuthorityConfig:
 
 
 # ---------------------------------------------------------------------------
+# Semantic Intelligence — durable semantic/sentiment pipeline.
+#
+# All flags default OFF/inert in local so `make ci-check` and unit tests keep
+# the deterministic in-memory store and never spin up the worker or hit a DB.
+#   - durable_store_enabled: inject the Postgres-backed semantic store at
+#     startup (ON in staging/prod). Local keeps the in-memory default.
+#   - worker_enabled: attach the semantic-worker ConsumerSpec on
+#     SDK_EVENTS_VALIDATED (classification runs from validated ingestion).
+#   - replay_enabled / reconciler_enabled / retention_enabled: Phase B workers.
+#   - classifier_provider: "deterministic" (default, tool-less, CI-safe),
+#     "production" / "multilingual" (fail closed without creds), or "disabled".
+#   - subject_confidence_threshold: below this a resolution enters the review
+#     queue instead of asserting a canonical subject.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SemanticIntelligenceConfig:
+    durable_store_enabled: bool = _env_bool("SEMANTIC_DURABLE_STORE_ENABLED", _TRUST_DEFAULT_ON)
+    worker_enabled: bool = _env_bool("SEMANTIC_WORKER_ENABLED", _TRUST_DEFAULT_ON)
+    replay_enabled: bool = _env_bool("SEMANTIC_REPLAY_ENABLED", False)
+    reconciler_enabled: bool = _env_bool("SEMANTIC_RECONCILER_ENABLED", False)
+    retention_enabled: bool = _env_bool("SEMANTIC_RETENTION_ENABLED", False)
+    classifier_provider: str = _env("SEMANTIC_CLASSIFIER_PROVIDER", "deterministic")
+    subject_confidence_threshold: float = float(
+        _env("SEMANTIC_SUBJECT_CONFIDENCE_THRESHOLD", "0.5")
+    )
+
+
+# ---------------------------------------------------------------------------
 # Ingestion V2 (PR 5) — typed Bronze + transactional outbox for /v1/batch.
 #
 # Canary rollout, default OFF. When `enabled` is True (or the request's tenant
@@ -1158,6 +1188,7 @@ class Settings:
     route_registry: RouteRegistryConfig = field(default_factory=RouteRegistryConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
+    semantic: SemanticIntelligenceConfig = field(default_factory=SemanticIntelligenceConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)

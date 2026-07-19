@@ -883,7 +883,7 @@ class NoesisService:
 
         if plan.intent == "semantic_profile_explain":
             target = plan.target or ""
-            state = entity_state(tid, target)
+            state = await entity_state(tid, target)
             answer = state.semantic_summary or "insufficient_data"
             return NoesisResponse(
                 answer=answer,
@@ -896,7 +896,7 @@ class NoesisService:
 
         if plan.intent == "sentiment_explain":
             target = plan.target or ""
-            rows = store.list_sentiment(tid, target)[:plan.limit]
+            rows = (await store.list_sentiment(tid, target))[:plan.limit]
             if not rows:
                 return NoesisResponse(
                     answer=f"No sentiment observations found for '{target}'.",
@@ -919,9 +919,9 @@ class NoesisService:
             )
 
         if plan.intent == "narrative_analysis":
-            semantic_rows = store.list_semantic(tid)
+            semantic_rows = await store.list_semantic(tid)
             narratives = sorted({n for r in semantic_rows for n in r.narrative_frames})
-            cascades = cascades_for_tenant(tid)
+            cascades = await cascades_for_tenant(tid)
             answer = (
                 f"{len(narratives)} active narrative(s) across {len(cascades)} cascade(s)."
                 if narratives

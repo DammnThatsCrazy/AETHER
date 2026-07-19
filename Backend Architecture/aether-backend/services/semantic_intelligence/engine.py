@@ -46,11 +46,18 @@ AGENT_WORDS = {"recommend", "policy", "confidence", "uncertain", "delegate", "to
 
 
 class SemanticSentimentStore:
+    """Deterministic in-memory store — the local/CI default.
+
+    The interface is async so it is drop-in interchangeable with
+    :class:`services.semantic_intelligence.store.DurableSemanticSentimentStore`,
+    which the startup hook injects for non-local deployment profiles.
+    """
+
     def __init__(self) -> None:
         self.semantic: dict[str, SemanticObservation] = {}
         self.sentiment: dict[str, SentimentObservation] = {}
 
-    def put_semantic(self, obs: SemanticObservation) -> SemanticObservation:
+    async def put_semantic(self, obs: SemanticObservation) -> SemanticObservation:
         for existing in self.semantic.values():
             if (
                 existing.tenant_id == obs.tenant_id
@@ -60,7 +67,7 @@ class SemanticSentimentStore:
         self.semantic[obs.observation_id] = obs
         return obs
 
-    def put_sentiment(self, obs: SentimentObservation) -> SentimentObservation:
+    async def put_sentiment(self, obs: SentimentObservation) -> SentimentObservation:
         for existing in self.sentiment.values():
             if (
                 existing.semantic_observation_id == obs.semantic_observation_id
@@ -71,7 +78,7 @@ class SemanticSentimentStore:
         self.sentiment[obs.sentiment_observation_id] = obs
         return obs
 
-    def list_semantic(
+    async def list_semantic(
         self, tenant_id: str, subject: str | None = None
     ) -> list[SemanticObservation]:
         rows = [o for o in self.semantic.values() if o.tenant_id == tenant_id]
@@ -79,13 +86,44 @@ class SemanticSentimentStore:
             rows = [o for o in rows if o.primary_subject_ref == subject]
         return sorted(rows, key=lambda o: o.occurred_at)
 
-    def list_sentiment(
+    async def list_sentiment(
         self, tenant_id: str, subject: str | None = None
     ) -> list[SentimentObservation]:
         rows = [o for o in self.sentiment.values() if o.tenant_id == tenant_id]
         if subject:
             rows = [o for o in rows if o.target_subject_ref == subject]
         return sorted(rows, key=lambda o: o.occurred_at)
+
+    async def supersede(
+        self, tenant_id: str, idempotency_key: str, superseded_by: str
+    ) -> bool:
+        changed = False
+        for obs in self.semantic.values():
+            if (
+                obs.tenant_id == tenant_id
+                and obs.idempotency_key == idempotency_key
+                and obs.status != ObservationStatus.SUPERSEDED
+            ):
+                obs.status = ObservationStatus.SUPERSEDED
+                obs.superseded_by = superseded_by
+                changed = True
+        return changed
+
+    async def aggregate_counts(self, tenant_id: str | None = None) -> dict[str, Any]:
+        def _counts(rows: list[Any]) -> dict[str, Any]:
+            by_status: dict[str, int] = {}
+            for row in rows:
+                key = getattr(row.status, "value", "unknown") if hasattr(row, "status") else "unknown"
+                by_status[key] = by_status.get(key, 0) + 1
+            return {
+                "total": len(rows),
+                "tenants": len({r.tenant_id for r in rows}),
+                "by_status": by_status,
+            }
+
+        sem = [o for o in self.semantic.values() if tenant_id is None or o.tenant_id == tenant_id]
+        sent = [o for o in self.sentiment.values() if tenant_id is None or o.tenant_id == tenant_id]
+        return {"semantic": _counts(sem), "sentiment": {"total": len(sent), "tenants": len({r.tenant_id for r in sent})}}
 
 
 _store = SemanticSentimentStore()
@@ -224,9 +262,8 @@ def classify_event(
     if occurred_at is not None:
         obs_kwargs["occurred_at"] = occurred_at
     obs = SemanticObservation(**obs_kwargs)
-    stored_obs = _store.put_semantic(obs)
 
-    stored_sentiments: list[SentimentObservation] = []
+    sentiments: list[SentimentObservation] = []
     if not should_abstain and subject != "unknown_subject" and (pos or neg):
         total = pos + neg
         valence = (pos - neg) / total
@@ -237,7 +274,7 @@ def classify_event(
         else:
             emotion = EmotionLabel.ANGER
         sent = SentimentObservation(
-            semantic_observation_id=stored_obs.observation_id,
+            semantic_observation_id=obs.observation_id,
             tenant_id=tenant_id,
             actor_ref=actor_ref,
             target_subject_ref=subject,
@@ -251,12 +288,12 @@ def classify_event(
             confidence=0.82,
             consent_snapshot_id=payload.get("consent_snapshot_id"),
         )
-        stored_sentiments = [_store.put_sentiment(sent)]
-    return stored_obs, stored_sentiments
+        sentiments = [sent]
+    return obs, sentiments
 
 
-def entity_state(tenant_id: str, entity_ref: str) -> EntitySemanticState:
-    rows = _store.list_semantic(tenant_id, entity_ref)
+async def entity_state(tenant_id: str, entity_ref: str) -> EntitySemanticState:
+    rows = await get_store().list_semantic(tenant_id, entity_ref)
     active_rows = [r for r in rows if r.status != ObservationStatus.ABSTAINED]
     now = utc_now()
     topics = sorted({t for row in active_rows for t in row.topics})
@@ -296,8 +333,8 @@ def entity_state(tenant_id: str, entity_ref: str) -> EntitySemanticState:
     )
 
 
-def cascades_for_tenant(tenant_id: str) -> list[SemanticCascade]:
-    rows = _store.list_semantic(tenant_id)
+async def cascades_for_tenant(tenant_id: str) -> list[SemanticCascade]:
+    rows = await get_store().list_semantic(tenant_id)
     grouped: dict[tuple[str, str, StanceLabel], list[SemanticObservation]] = defaultdict(list)
     for row in rows:
         for topic in row.topics or ["general"]:
