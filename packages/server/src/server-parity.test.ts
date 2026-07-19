@@ -73,6 +73,19 @@ describe('server SDK — surface stamping', () => {
     await sdk.shutdown();
     expect(bodies[0].batch[0].context.surface).toBe('edge-worker');
   });
+
+  it('stamps a monotonically increasing context.sequence.event', async () => {
+    const { bodies } = captureFetch();
+    const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    sdk.track({ type: 'api_request_observed', properties: { path: '/a' } });
+    sdk.track({ type: 'api_request_observed', properties: { path: '/b' } });
+    await sdk.flush();
+    await sdk.shutdown();
+    const events = bodies.flatMap((b) => b.batch);
+    expect(events).toHaveLength(2);
+    expect(events[0].context.sequence.event).toBe(0);
+    expect(events[1].context.sequence.event).toBe(1);
+  });
 });
 
 describe('server SDK — recursive scrubber (cycle/depth safe)', () => {

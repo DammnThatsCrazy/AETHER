@@ -59,6 +59,9 @@ export class AetherServerSDK {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushing = false;
   private lastBatchHealth: BatchHealth | null = null;
+  /** Monotonic per-process event index, stamped into context.sequence.event so
+   *  the backend can detect gaps/reordering in this emitter's stream. */
+  private eventSequence = 0;
 
   /** Typed helpers for common server observation patterns. */
   readonly observe: ReturnType<typeof makeServerClient>;
@@ -127,6 +130,8 @@ export class AetherServerSDK {
         // Surface identifies the emitting client so the backend can attribute
         // every event to its origin plane. Stamped for all server-SDK events.
         surface: 'server',
+        // Monotonic ordering counter for gap/reorder detection at ingest.
+        sequence: { event: this.eventSequence++ },
         // Temporal provenance: server-side events are stamped by the server
         // clock in the server's zone context — never a fabricated device
         // offset. Caller-supplied context (e.g. relayed device evidence) wins.

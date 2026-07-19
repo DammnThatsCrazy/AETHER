@@ -31,6 +31,9 @@ declare class AetherSDK implements AetherSDKInterface {
     private sdkInstanceId;
     /** Remote-config feature switches from the active manifest (empty = all on). */
     private remoteFeatures;
+    /** Monotonic per-instance event index, stamped into context.sequence.event
+     *  so the backend can detect gaps/reordering in this client's stream. */
+    private eventSequence;
     private currentJourney;
     private journeyResumeListeners;
     private lastJourneyPauseAt;

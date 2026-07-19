@@ -71,6 +71,9 @@ class AetherSDK implements AetherSDKInterface {
   private sdkInstanceId: string | null = null;
   /** Remote-config feature switches from the active manifest (empty = all on). */
   private remoteFeatures: Record<string, boolean> = {};
+  /** Monotonic per-instance event index, stamped into context.sequence.event
+   *  so the backend can detect gaps/reordering in this client's stream. */
+  private eventSequence = 0;
   private currentJourney: CurrentJourney | null = null;
   private journeyResumeListeners: Array<(identity: ResolvedIdentity) => void> = [];
   private lastJourneyPauseAt: number | null = null;
@@ -1012,6 +1015,9 @@ class AetherSDK implements AetherSDKInterface {
         clockSource: 'device',
         consent,
         semantic,
+        // Canonical envelope: this event's origin plane, so the backend can
+        // attribute every event to where it came from.
+        surface: 'web',
         // Active journey snapshot on EVERY event (not just journey_* lifecycle
         // events), so the backend can annotate any event with the journey it
         // occurred within. Undefined when no journey is active.
@@ -1023,6 +1029,8 @@ class AetherSDK implements AetherSDKInterface {
           rtt: (navigator as any).connection.rtt,
           saveData: (navigator as any).connection.saveData,
         } : undefined,
+        // Monotonic ordering counter for gap/reorder detection at ingest.
+        sequence: { event: this.eventSequence++ },
       },
     };
 
