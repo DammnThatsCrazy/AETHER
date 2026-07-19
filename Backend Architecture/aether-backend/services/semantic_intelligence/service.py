@@ -208,6 +208,23 @@ class SemanticIntelligenceService:
     async def entity_state(self, tenant_id: str, entity_ref: str):
         return await entity_state(tenant_id, entity_ref)
 
+    async def recompute_entity_state(self, tenant_id: str, entity_ref: str):
+        """Recompute and durably persist an entity's Gold semantic state."""
+        from .reducers import recompute_entity_state
+
+        return await recompute_entity_state(tenant_id, entity_ref)
+
+    async def gold_entity_state(
+        self, tenant_id: str, entity_ref: str
+    ) -> Optional[dict[str, Any]]:
+        """Read the durable Gold semantic state for an entity (if any)."""
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        rows = await SemanticFactRepository("gold_entity_semantic_state").list_by_tenant(
+            tenant_id, entity_ref, limit=1
+        )
+        return rows[0] if rows else None
+
     async def list_sentiment(
         self, tenant_id: str, subject: Optional[str] = None, *, limit: int = 50
     ) -> tuple[list[SentimentObservation], bool]:

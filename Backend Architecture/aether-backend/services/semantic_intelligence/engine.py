@@ -294,44 +294,15 @@ def classify_event(
 
 
 async def entity_state(tenant_id: str, entity_ref: str) -> EntitySemanticState:
+    """Weighted reduction of an entity's observations into semantic state.
+
+    Delegates to the versioned weighted reducer (multiplicative confidence policy
+    with recency decay, duplication penalty and contradiction handling).
+    """
+    from .reducers import reduce_entity_state
+
     rows = await get_store().list_semantic(tenant_id, entity_ref)
-    active_rows = [r for r in rows if r.status != ObservationStatus.ABSTAINED]
-    now = utc_now()
-    topics = sorted({t for row in active_rows for t in row.topics})
-    stance_counts: dict[StanceLabel, float] = defaultdict(float)
-    intent_counts: dict[IntentLabel, float] = defaultdict(float)
-    for row in active_rows:
-        stance_counts[row.stance] += row.classification_confidence
-        intent_counts[row.intent] += row.classification_confidence
-    total = sum(stance_counts.values()) or 1
-    inferred_entity_type = (
-        active_rows[0].target_type if active_rows and active_rows[0].target_type else SubjectType.OTHER
-    )
-    return EntitySemanticState(
-        tenant_id=tenant_id,
-        entity_ref=entity_ref,
-        entity_type=inferred_entity_type,
-        subject_ref=entity_ref,
-        window_start=(rows[0].occurred_at if rows else now - timedelta(days=1)),
-        window_end=now,
-        active_topics=topics,
-        dominant_narratives=sorted({n for row in active_rows for n in row.narrative_frames}),
-        stance_distribution={k: round(v / total, 4) for k, v in stance_counts.items()},
-        intent_distribution={k: round(v / total, 4) for k, v in intent_counts.items()},
-        semantic_summary=(
-            f"{len(active_rows)} semantic observations for {entity_ref}"
-            if active_rows
-            else "insufficient_data"
-        ),
-        observation_count=len(rows),
-        unique_source_count=len({r.source_event_id for r in rows}),
-        model_mix={"deterministic-semantic-classifier@1.0.0": len(active_rows)},
-        confidence=round(sum(r.classification_confidence for r in active_rows) / len(active_rows), 4)
-        if active_rows
-        else 0,
-        freshness="fresh" if active_rows else "insufficient_data",
-        evidence_refs=[e for r in active_rows[-5:] for e in r.evidence_refs],
-    )
+    return reduce_entity_state(tenant_id, entity_ref, rows)
 
 
 async def cascades_for_tenant(tenant_id: str) -> list[SemanticCascade]:
