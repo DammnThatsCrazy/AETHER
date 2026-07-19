@@ -119,6 +119,12 @@ class SemanticEventConsumer:
                 eligibility = Eligibility.QUARANTINE
 
             await service.classify_and_persist(sem_payload, tenant_id, eligibility=eligibility)
+
+            # Refresh the subject's durable Gold state (weighted reducer).
+            if subject.ref != "unknown_subject" and eligibility is not Eligibility.QUARANTINE:
+                from .reducers import recompute_entity_state
+
+                await recompute_entity_state(tenant_id, subject.ref)
         except Exception:
             logger.exception("semantic classification failed for event %s", payload.get("event_id"))
             raise  # triggers DLQ in EventConsumer; persistence is idempotent on retry
