@@ -127,6 +127,12 @@ declare class AetherSDK implements AetherSDKInterface {
      */
     private canFingerprint;
     private enqueueEvent;
+    /**
+     * Snapshot of the active journey for an event's context. Carries only the
+     * canonical journey identity fields (id/name/type/status) — the backend owns
+     * step reconstruction. Returns undefined when no journey is active.
+     */
+    private journeySnapshot;
     private updateJourney;
     private emitJourneyEvent;
     private setupJourneyLifecycleTracking;

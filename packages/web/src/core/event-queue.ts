@@ -59,12 +59,46 @@ const SENSITIVE_KEYS = new Set([
 ]);
 
 
-function scrubSensitiveFields(props: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(props)) {
-    out[k] = SENSITIVE_KEYS.has(k.toLowerCase()) ? '[REDACTED]' : v;
+/**
+ * Depth cap for the recursive scrubber. Real analytics payloads are shallow; a
+ * cap keeps a pathologically deep (or adversarial) object from exhausting the
+ * call stack. Cycles are handled separately by the ancestor-path guard.
+ */
+const MAX_SCRUB_DEPTH = 32;
+
+/**
+ * Recursively redact sensitive values at EVERY depth. A sensitive key buried in
+ * `properties.wallet.recovery.mnemonic` or inside an array element is redacted
+ * just like a top-level `mnemonic` — top-level-only scrubbing leaked nested
+ * secrets. The scrub is non-mutating (returns fresh objects/arrays); the
+ * ancestor `path` set replaces cycle back-references with a `[CYCLE]` marker and
+ * `depth` truncates pathological nesting, so the scrubbed tree is always finite,
+ * acyclic, and JSON-serializable (a surviving cycle would make the batch send's
+ * `JSON.stringify` throw and silently drop every event in it).
+ */
+function scrubValue(value: unknown, depth: number, path: WeakSet<object>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth >= MAX_SCRUB_DEPTH) return '[TRUNCATED]';
+  if (path.has(value as object)) return '[CYCLE]'; // back-reference to an ancestor
+  path.add(value as object);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => scrubValue(item, depth + 1, path));
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = SENSITIVE_KEYS.has(k.toLowerCase())
+        ? '[REDACTED]'
+        : scrubValue(v, depth + 1, path);
+    }
+    return out;
+  } finally {
+    path.delete(value as object);
   }
-  return out;
+}
+
+function scrubSensitiveFields(props: Record<string, unknown>): Record<string, unknown> {
+  return scrubValue(props, 0, new WeakSet<object>()) as Record<string, unknown>;
 }
 
 export class EventQueue {

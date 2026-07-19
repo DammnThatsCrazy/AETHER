@@ -13,12 +13,24 @@
 //   aether.track({ type: 'api_request_observed', properties: { ... } });
 //   await aether.flush();
 
+import { EVENT_FAMILY } from '@aether/shared';
+import type { EventType } from '@aether/shared';
 import { EventQueue } from './queue';
 import { sendBatch } from './transport';
 import { scrubSensitiveFields } from './scrubber';
 import { SdkHealthTracker } from './health';
 import { makeServerClient } from './client';
 import type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose, BatchHealth } from './types';
+
+/**
+ * A server event's `type` must be a canonical registry event type
+ * (packages/shared/events.ts EVENT_FAMILY). Unknown types are dropped before
+ * transmission — the backend rejects them anyway, and Aether observes only
+ * registry-governed events. Mirrors the web SDK's observe() canonical gate.
+ */
+function isCanonicalEventType(type: string): type is EventType {
+  return Object.prototype.hasOwnProperty.call(EVENT_FAMILY, type);
+}
 
 export { scrubSensitiveFields } from './scrubber';
 export { makeServerClient } from './client';
@@ -98,12 +110,23 @@ export class AetherServerSDK {
 
   /** Queue a single event for batched delivery. */
   track(event: ServerEvent): void {
+    if (!isCanonicalEventType(event.type)) {
+      // Not a canonical registry event type — drop it rather than ship a type
+      // the backend will reject. Aether observes only registry-governed events.
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn(`[aether] track(): '${event.type}' is not a canonical event type — ignored`);
+      }
+      return;
+    }
     const ts = event.timestamp ?? new Date().toISOString();
     const prepared = {
       ...event,
       timestamp: ts,
       properties: event.properties ? scrubSensitiveFields(event.properties) : undefined,
       context: {
+        // Surface identifies the emitting client so the backend can attribute
+        // every event to its origin plane. Stamped for all server-SDK events.
+        surface: 'server',
         // Temporal provenance: server-side events are stamped by the server
         // clock in the server's zone context — never a fabricated device
         // offset. Caller-supplied context (e.g. relayed device evidence) wins.
