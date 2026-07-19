@@ -978,13 +978,17 @@ class AetherSDK implements AetherSDKInterface {
     const session = this.sessionManager.getSession();
     const identity = this.identityManager.getIdentity();
     const consent = this.consentModule?.getState() ?? null;
-    const semantic = this.semanticContext?.collect();
+    // Canonical identity is owned here (SessionManager + the top-level event id);
+    // the semantic collector reuses these rather than minting conflicting ids.
+    const eventId = generateId();
+    const sessionId = session?.id ?? '';
+    const semantic = this.semanticContext?.collect(sessionId, eventId);
 
     const event = {
-      id: generateId(),
+      id: eventId,
       type,
       timestamp: now(),
-      sessionId: session?.id ?? '',
+      sessionId,
       anonymousId: identity.anonymousId,
       userId: identity.userId,
       properties,

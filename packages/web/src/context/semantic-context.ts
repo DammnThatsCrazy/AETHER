@@ -5,7 +5,7 @@
 // =============================================================================
 
 import type { DeviceContext } from '../types';
-import { generateId, now, getDeviceContext } from '../utils';
+import { now, getDeviceContext } from '../utils';
 
 export interface SemanticContext {
   eventId: string;
@@ -27,19 +27,23 @@ export interface SemanticContext {
 
 export class SemanticContextCollector {
   private sdkVersion: string;
-  private sessionId: string;
 
   constructor(sdkVersion: string) {
     this.sdkVersion = sdkVersion;
-    this.sessionId = generateId();
   }
 
-  /** Build Tier 1 semantic context for an event */
-  collect(): SemanticContext {
+  /**
+   * Build Tier 1 semantic context for an event.
+   *
+   * The canonical `sessionId` (owned by SessionManager) and top-level `eventId`
+   * are passed in by the caller — the collector NEVER mints its own, so every
+   * event carries a single agreeing session id and event id.
+   */
+  collect(sessionId: string, eventId: string): SemanticContext {
     const device = typeof window !== 'undefined' ? getDeviceContext() : null;
 
     return {
-      eventId: generateId(),
+      eventId,
       timestamp: now(),
       sdkVersion: this.sdkVersion,
       platform: 'web',
@@ -53,7 +57,7 @@ export class SemanticContextCollector {
       },
       pageUrl: typeof window !== 'undefined' ? window.location.href : '',
       referrer: typeof document !== 'undefined' ? document.referrer : '',
-      sessionId: this.sessionId,
+      sessionId,
     };
   }
 

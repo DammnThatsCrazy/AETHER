@@ -18,10 +18,15 @@ export interface SemanticContext {
 }
 export declare class SemanticContextCollector {
     private sdkVersion;
-    private sessionId;
     constructor(sdkVersion: string);
-    /** Build Tier 1 semantic context for an event */
-    collect(): SemanticContext;
+    /**
+     * Build Tier 1 semantic context for an event.
+     *
+     * The canonical `sessionId` (owned by SessionManager) and top-level `eventId`
+     * are passed in by the caller — the collector NEVER mints its own, so every
+     * event carries a single agreeing session id and event id.
+     */
+    collect(sessionId: string, eventId: string): SemanticContext;
     /** Clean up */
     destroy(): void;
 }
