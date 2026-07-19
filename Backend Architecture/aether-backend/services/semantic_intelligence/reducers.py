@@ -29,6 +29,7 @@ from .repositories.base_fact_repo import SemanticFactRepository
 REDUCER_VERSION = "weighted-reducer.v1"
 
 _GOLD_ENTITY_TABLE = "gold_entity_semantic_state"
+_GOLD_SENTIMENT_TABLE = "gold_entity_sentiment_state"
 _GOLD_CAMPAIGN_TABLE = "gold_campaign_semantic_impact"
 
 # Source reliability by source_type (expressive/first-party high; inferred lower).
@@ -196,6 +197,83 @@ async def _persist_gold(state: EntitySemanticState) -> None:
             "data": data,
         }
     )
+
+
+def reduce_entity_sentiment(
+    tenant_id: str, entity_ref: str, sentiments: list[Any]
+) -> dict[str, Any]:
+    """Weighted (confidence × recency) reduction of sentiment into Gold state."""
+    base: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "entity_ref": entity_ref,
+        "subject_ref": entity_ref,
+        "observation_count": len(sentiments),
+        "reducer_version": REDUCER_VERSION,
+    }
+    if not sentiments:
+        return {**base, "insufficient_data": True, "valence": 0.0, "confidence": 0.0}
+
+    newest_at = max(s.occurred_at for s in sentiments)
+    total_w = 0.0
+    wv = wa = wi = wconf = 0.0
+    emotion_w: dict[str, float] = defaultdict(float)
+    for s in sentiments:
+        w = max(0.0, s.confidence) * _recency_decay(s.occurred_at, newest_at)
+        if w <= 0:
+            continue
+        wv += s.valence * w
+        wa += s.arousal * w
+        wi += s.intensity * w
+        wconf += s.confidence * w
+        for emo, prob in (s.emotion_distribution or {}).items():
+            emotion_w[getattr(emo, "value", str(emo))] += prob * w
+        total_w += w
+    total = total_w or 1.0
+
+    # Sentiment trend: newest-third mean valence vs oldest-third mean valence.
+    ordered = sorted(sentiments, key=lambda s: s.occurred_at)
+    third = max(1, len(ordered) // 3)
+    old_mean = sum(s.valence for s in ordered[:third]) / third
+    new_mean = sum(s.valence for s in ordered[-third:]) / third
+    trend = round(new_mean - old_mean, 4)
+    dominant = max(emotion_w, key=emotion_w.get) if emotion_w else "neutral"
+
+    return {
+        **base,
+        "insufficient_data": False,
+        "valence": round(wv / total, 4),
+        "arousal": round(wa / total, 4),
+        "intensity": round(wi / total, 4),
+        "dominant_emotion": dominant,
+        "emotion_distribution": {k: round(v / total, 4) for k, v in emotion_w.items()},
+        "sentiment_trend": trend,
+        "confidence": round(max(_CONFIDENCE_FLOOR, wconf / total), 4),
+    }
+
+
+async def recompute_entity_sentiment(
+    tenant_id: str, entity_ref: str, *, store: Optional[Any] = None
+) -> dict[str, Any]:
+    """Recompute and durably persist an entity's Gold sentiment state."""
+    from .engine import get_store
+
+    active_store = store or get_store()
+    sentiments = await active_store.list_sentiment(tenant_id, entity_ref)
+    state = reduce_entity_sentiment(tenant_id, entity_ref, sentiments)
+    repo = SemanticFactRepository(_GOLD_SENTIMENT_TABLE, mode="gold")
+    idem = f"gold_sentiment:{tenant_id}:{entity_ref}:{REDUCER_VERSION}"
+    data = {**state, "idempotency_key": idem}
+    await repo.upsert(
+        {
+            "id": f"gess_{uuid4().hex}",
+            "tenant_id": tenant_id,
+            "subject_ref": entity_ref,
+            "occurred_at": utc_now(),
+            "idempotency_key": idem,
+            "data": data,
+        }
+    )
+    return state
 
 
 def reduce_campaign_impact(
