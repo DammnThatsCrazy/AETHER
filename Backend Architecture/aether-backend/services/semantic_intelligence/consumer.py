@@ -123,5 +123,24 @@ class SemanticEventConsumer:
             logger.exception("semantic classification failed for event %s", payload.get("event_id"))
             raise  # triggers DLQ in EventConsumer; persistence is idempotent on retry
 
+    async def on_consent_updated(self, event: Event) -> None:
+        """Consent revocation → restrict the subject's semantic data (fail-safe)."""
+        payload = event.payload or {}
+        tenant_id = event.tenant_id or payload.get("tenant_id", "")
+        user_id = payload.get("user_id")
+        if not tenant_id or not user_id:
+            return
+        # `granted` falsy (False / empty) is a revocation.
+        if payload.get("granted"):
+            return
+        try:
+            from .privacy import SemanticPrivacyHandler
+
+            await SemanticPrivacyHandler().handle_restriction(tenant_id, str(user_id))
+        except Exception:
+            logger.exception("semantic consent restriction failed for %s", user_id)
+            raise
+
     def register(self, consumer: Any) -> None:
         consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, self.on_validated_event)
+        consumer.subscribe(Topic.CONSENT_UPDATED, self.on_consent_updated)
