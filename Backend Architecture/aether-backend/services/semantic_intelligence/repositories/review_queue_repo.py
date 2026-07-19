@@ -134,6 +134,29 @@ class SemanticReviewQueueRepository:
             )
         return result != "UPDATE 0"
 
+    async def purge_by_subject(self, tenant_id: str, subject_ref: str) -> int:
+        """Delete all review items for a subject (DSR erasure)."""
+        pool = await self._pool()
+        if pool is None:
+            victims = [
+                item_id
+                for item_id, row in self._store.items()
+                if row.get("tenant_id") == tenant_id and row.get("subject_ref") == subject_ref
+            ]
+            for item_id in victims:
+                del self._store[item_id]
+            return len(victims)
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"DELETE FROM {_TABLE} WHERE tenant_id = $1 AND subject_ref = $2",
+                tenant_id,
+                subject_ref,
+            )
+        try:
+            return int(result.split()[-1])
+        except (IndexError, ValueError):
+            return 0
+
     async def counts(self, tenant_id: str) -> dict[str, int]:
         pool = await self._pool()
         if pool is None:

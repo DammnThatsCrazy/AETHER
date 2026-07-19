@@ -59,6 +59,20 @@ class SemanticIntelligenceService:
     async def get_replay_job(self, tenant_id: str, job_id: str) -> Optional[dict[str, Any]]:
         return await self._replay_jobs.get(tenant_id, job_id)
 
+    # ── data-subject rights ──────────────────────────────────────────────────
+
+    async def erase_subject(self, tenant_id: str, subject_ref: str) -> dict[str, Any]:
+        """Hard-delete a subject's semantic data; returns a verification result."""
+        from .privacy import SemanticPrivacyHandler
+
+        return await SemanticPrivacyHandler().handle_erasure(tenant_id, subject_ref)
+
+    async def restrict_subject(self, tenant_id: str, subject_ref: str) -> dict[str, Any]:
+        """Consent revocation → mark a subject's observations CONSENT_RESTRICTED."""
+        from .privacy import SemanticPrivacyHandler
+
+        return await SemanticPrivacyHandler().handle_restriction(tenant_id, subject_ref)
+
     async def control_replay_job(
         self, tenant_id: str, job_id: str, action: str
     ) -> Optional[dict[str, Any]]:
