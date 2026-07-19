@@ -568,6 +568,10 @@ export interface EventContext {
   trafficSource?: Record<string, unknown>;
   network?: NetworkContext;
   journey?: Pick<CurrentJourney, 'journeyId' | 'journeyName' | 'journeyType' | 'journeyStatus'>;
+  /** Canonical envelope: origin plane this event was emitted from ('web'). */
+  surface?: string;
+  /** Canonical envelope: monotonic ordering counters for gap/reorder detection. */
+  sequence?: { event?: number; session?: number };
 }
 
 export interface NetworkContext {
