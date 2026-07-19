@@ -1338,6 +1338,105 @@ export interface DataQualityRecord {
   [k: string]: number | undefined;
 }
 
+// ---------------------------------------------------------------------------
+// Canonical envelope context v1 — optional, additive fields every SDK MAY
+// stamp so the backend can attribute, correlate, order, and quality-score any
+// event without bespoke per-surface parsing. All optional → existing SDKs and
+// stored events keep validating unchanged. camelCase mirrors the rest of
+// EventContext; the backend persists context as flexible JSONB.
+// ---------------------------------------------------------------------------
+
+/** Identity of the emitting product/application (distinct from the SDK library). */
+export interface ApplicationContext {
+  /** Human product name, e.g. 'Acme Checkout'. */
+  name?: string;
+  /** Product version (not the Aether SDK version — that is `library.version`). */
+  version?: string;
+  /** Build/commit identifier. */
+  build?: string;
+  /** Deployment environment, e.g. 'production', 'staging'. */
+  environment?: string;
+  /** Bundle id / package name, e.g. 'com.acme.app'. */
+  namespace?: string;
+}
+
+/** Operating system of the emitting device or host. */
+export interface OperatingSystemContext {
+  /** OS name, e.g. 'iOS', 'Android', 'macOS', 'Linux'. */
+  name?: string;
+  version?: string;
+}
+
+/**
+ * Network conditions at event occurrence. Web mirrors the Network Information
+ * API; mobile fills the coarser `connectionType`/`carrier`. All optional.
+ */
+export interface NetworkContext {
+  /** 'slow-2g' | '2g' | '3g' | '4g' (Network Information API effectiveType). */
+  effectiveType?: string;
+  /** Estimated downlink bandwidth in Mbit/s. */
+  downlink?: number;
+  /** Estimated round-trip time in ms. */
+  rtt?: number;
+  /** Data-saver preference is active. */
+  saveData?: boolean;
+  /** Coarse connection class, e.g. 'wifi' | 'cellular' | 'ethernet'. */
+  connectionType?: string;
+  /** Mobile carrier name, when available and consented. */
+  carrier?: string;
+}
+
+/**
+ * Client-declared semantic input the backend MAY enrich. It is a hint, never
+ * authoritative — the backend classifier and consent gate always run first.
+ */
+export interface SemanticInputContext {
+  /** Short free-text the user produced (subject to scrubbing/consent). */
+  text?: string;
+  /** Client BCP-47 language guess for `text`. */
+  language?: string;
+  /** Opaque reference to text captured/stored elsewhere, in lieu of inlining it. */
+  contentRef?: string;
+  /** True when the client already redacted sensitive spans from `text`. */
+  redacted?: boolean;
+}
+
+/** Advisory client semantic hints the backend reducers MAY weight. */
+export interface SemanticHints {
+  intent?: IntentHint;
+  friction?: FrictionRecord;
+  engagement?: EngagementRecord;
+}
+
+/** Sampling decision applied at the client before the event was sent. */
+export interface SamplingContext {
+  /** Whether this event survived client-side sampling. */
+  sampled?: boolean;
+  /** Sampling rate in effect, 0..1. */
+  rate?: number;
+  /** Why this sampling outcome was chosen, e.g. 'default', 'debug_override'. */
+  reason?: string;
+}
+
+/** Distributed-tracing / causation linkage across events and requests. */
+export interface CorrelationContext {
+  /** Groups events belonging to one logical operation. */
+  correlationId?: string;
+  /** The event/operation that caused this one. */
+  causationId?: string;
+  /** W3C trace id, when the emitter participates in a trace. */
+  traceId?: string;
+  spanId?: string;
+}
+
+/** Monotonic ordering counters for gap/reorder detection at ingest. */
+export interface SequenceContext {
+  /** Per-session monotonic event counter. */
+  event?: number;
+  /** Per-install monotonic session counter. */
+  session?: number;
+}
+
 
 // ---------------------------------------------------------------------------
 // Cross-device journey continuity
@@ -1479,6 +1578,33 @@ export interface EventContext {
   fraudDecisionId?: string;
   /** Consent snapshot ID at the time of event. */
   consentSnapshotId?: string;
+
+  // -- canonical envelope context v1 (all optional, additive) ----------------
+  /** Envelope schema version the emitter conforms to, e.g. '1.0'. */
+  schemaVersion?: string;
+  /** Emitting product/application identity (distinct from `library`). */
+  application?: ApplicationContext;
+  /**
+   * Emitting surface / origin plane, e.g. 'web', 'server', 'ios', 'home_feed'.
+   * Lets the backend attribute every event to where it originated.
+   */
+  surface?: string;
+  /** Operating system of the emitting device/host. */
+  operatingSystem?: OperatingSystemContext;
+  /** Network conditions at event occurrence. */
+  network?: NetworkContext;
+  /** Client-declared semantic input (a hint the backend may enrich). */
+  semanticInput?: SemanticInputContext;
+  /** Advisory client semantic hints (intent/friction/engagement). */
+  semanticHints?: SemanticHints;
+  /** Client-side sampling decision for this event. */
+  sampling?: SamplingContext;
+  /** Tracing / causation linkage across events. */
+  correlation?: CorrelationContext;
+  /** Client-declared data-quality signals for this event. */
+  dataQuality?: DataQualityRecord;
+  /** Monotonic ordering counters for gap/reorder detection. */
+  sequence?: SequenceContext;
 }
 
 /** The canonical event envelope every SDK emits. */
