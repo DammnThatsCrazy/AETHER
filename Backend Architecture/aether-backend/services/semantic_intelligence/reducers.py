@@ -13,6 +13,7 @@ import math
 from collections import defaultdict
 from datetime import timedelta
 from typing import Any, Optional
+from uuid import uuid4
 
 from .models import (
     EntitySemanticState,
@@ -28,6 +29,7 @@ from .repositories.base_fact_repo import SemanticFactRepository
 REDUCER_VERSION = "weighted-reducer.v1"
 
 _GOLD_ENTITY_TABLE = "gold_entity_semantic_state"
+_GOLD_CAMPAIGN_TABLE = "gold_campaign_semantic_impact"
 
 # Source reliability by source_type (expressive/first-party high; inferred lower).
 _SOURCE_RELIABILITY: dict[str, float] = {
@@ -194,3 +196,79 @@ async def _persist_gold(state: EntitySemanticState) -> None:
             "data": data,
         }
     )
+
+
+def reduce_campaign_impact(
+    tenant_id: str, campaign_id: str, observations: list[SemanticObservation]
+) -> dict[str, Any]:
+    """Weighted campaign semantic impact. Causal language stays bounded."""
+    active = [o for o in observations if o.status in _ACTIVE]
+    base: dict[str, Any] = {
+        "campaign_id": campaign_id,
+        "observation_count": len(observations),
+        "reducer_version": REDUCER_VERSION,
+        # Exposure/association only — a causal claim needs a separate methodology.
+        "causal_confidence": "observed_sequence",
+        "semantic_mediated_revenue_estimate": None,
+    }
+    if not active:
+        return {**base, "insufficient_data": True, "stance_distribution": {}, "dominant_topics": []}
+
+    newest_at = max(o.occurred_at for o in active)
+    actor_counts: dict[str, int] = defaultdict(int)
+    for o in active:
+        actor_counts[o.actor_ref] += 1
+
+    stance_weight: dict[str, float] = defaultdict(float)
+    intent_weight: dict[str, float] = defaultdict(float)
+    weighted_confidence = 0.0
+    total_weight = 0.0
+    for o in active:
+        w = observation_weight(o, newest_at, actor_counts)
+        if w <= 0:
+            continue
+        stance_weight[o.stance.value] += w
+        intent_weight[o.intent.value] += w
+        weighted_confidence += o.classification_confidence * w
+        total_weight += w
+    total = total_weight or 1.0
+
+    return {
+        **base,
+        "insufficient_data": False,
+        "dominant_topics": sorted({t for o in active for t in o.topics}),
+        "dominant_narratives": sorted({n for o in active for n in o.narrative_frames}),
+        "stance_distribution": {k: round(v / total, 4) for k, v in stance_weight.items()},
+        "intent_distribution": {k: round(v / total, 4) for k, v in intent_weight.items()},
+        "confidence": round(max(_CONFIDENCE_FLOOR, weighted_confidence / total), 4),
+        "unique_actor_count": len(actor_counts),
+        "evidence_refs": [e.model_dump(mode="json") for o in active[:5] for e in o.evidence_refs],
+    }
+
+
+async def recompute_campaign_impact(
+    tenant_id: str, campaign_id: str, *, store: Optional[Any] = None
+) -> dict[str, Any]:
+    """Recompute and durably persist a campaign's semantic impact (Gold)."""
+    from .engine import get_store
+
+    active_store = store or get_store()
+    observations = [
+        o for o in await active_store.list_semantic(tenant_id) if o.campaign_id == campaign_id
+    ]
+    impact = reduce_campaign_impact(tenant_id, campaign_id, observations)
+    repo = SemanticFactRepository(_GOLD_CAMPAIGN_TABLE, mode="gold")
+    idem = f"gold_campaign:{tenant_id}:{campaign_id}:{REDUCER_VERSION}"
+    data = {**impact, "idempotency_key": idem}
+    await repo.upsert(
+        {
+            "id": f"gcsi_{uuid4().hex}",
+            "tenant_id": tenant_id,
+            "subject_ref": campaign_id,
+            "campaign_id": campaign_id,
+            "occurred_at": utc_now(),
+            "idempotency_key": idem,
+            "data": data,
+        }
+    )
+    return impact
