@@ -176,6 +176,23 @@
       ]
     },
     {
+      "name": "Semantic Intelligence \u2014 outbound emissions from the semantic worker.",
+      "topics": [
+        {
+          "member": "SEMANTIC_OBSERVED",
+          "value": "aether.semantic.observed"
+        },
+        {
+          "member": "SEMANTIC_STATE_RECOMPUTED",
+          "value": "aether.semantic.state.recomputed"
+        },
+        {
+          "member": "SEMANTIC_REVIEW_ENQUEUED",
+          "value": "aether.semantic.review.enqueued"
+        }
+      ]
+    },
+    {
       "name": "Intelligence Graph \u2014 Agent Behavioral (L2)",
       "topics": [
         {
@@ -1284,6 +1301,18 @@
     {
       "member": "IP_OBSERVED",
       "value": "aether.identity.ip.observed"
+    },
+    {
+      "member": "SEMANTIC_OBSERVED",
+      "value": "aether.semantic.observed"
+    },
+    {
+      "member": "SEMANTIC_STATE_RECOMPUTED",
+      "value": "aether.semantic.state.recomputed"
+    },
+    {
+      "member": "SEMANTIC_REVIEW_ENQUEUED",
+      "value": "aether.semantic.review.enqueued"
     },
     {
       "member": "AGENT_TASK_STARTED",

@@ -119,6 +119,11 @@ class Topic(str, Enum):
     FINGERPRINT_OBSERVED = "aether.identity.fingerprint.observed"
     IP_OBSERVED = "aether.identity.ip.observed"
 
+    # Semantic Intelligence — outbound emissions from the semantic worker.
+    SEMANTIC_OBSERVED = "aether.semantic.observed"
+    SEMANTIC_STATE_RECOMPUTED = "aether.semantic.state.recomputed"
+    SEMANTIC_REVIEW_ENQUEUED = "aether.semantic.review.enqueued"
+
     # Intelligence Graph — Agent Behavioral (L2)
     AGENT_TASK_STARTED = "aether.agent.task.started"
     AGENT_TASK_COMPLETED = "aether.agent.task.completed"

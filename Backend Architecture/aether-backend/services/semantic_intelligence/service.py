@@ -10,13 +10,18 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from config.settings import settings
+from services.consent.authority import evaluate_consent
+
+from .eligibility import Eligibility
 from .engine import (
     cascades_for_tenant,
     classify_event,
     entity_state,
     get_store,
 )
-from .models import SemanticObservation, SentimentObservation
+from .models import ObservationStatus, SemanticObservation, SentimentObservation, SubjectType
+from .providers import get_classifier_provider
 from .repositories.review_queue_repo import SemanticReviewQueueRepository
 
 _MODEL_VERSIONS = [
@@ -34,18 +39,99 @@ class SemanticIntelligenceService:
     # ── write path ─────────────────────────────────────────────────────────────
 
     async def classify_and_persist(
-        self, payload: dict[str, Any], tenant_id: str
+        self,
+        payload: dict[str, Any],
+        tenant_id: str,
+        *,
+        eligibility: Optional[Eligibility] = None,
     ) -> tuple[SemanticObservation, list[SentimentObservation]]:
         """Classify an event payload and durably persist the results.
 
-        This is the single write path shared by the API route and the worker,
-        guaranteeing byte-identical observations regardless of entry point.
+        The single write path shared by the API route and the worker (byte-
+        identical observations regardless of entry point). Fail-closed on consent;
+        eligibility routes structured vs text vs quarantine/abstain.
         """
-        obs, sentiments = classify_event(payload, tenant_id)
         store = get_store()
+
+        # 1. Consent — fail closed when authoritative enforcement is enabled.
+        blocked = await self._consent_block(payload, tenant_id)
+        if blocked is not None:
+            obs = self._status_observation(
+                payload, tenant_id, ObservationStatus.CONSENT_RESTRICTED, blocked
+            )
+            return await store.put_semantic(obs), []
+
+        # 2. Eligibility routing (worker path supplies it; route path classifies directly).
+        if eligibility is Eligibility.QUARANTINE:
+            obs = self._status_observation(
+                payload, tenant_id, ObservationStatus.QUARANTINED, "quarantined_unregistered"
+            )
+            return await store.put_semantic(obs), []
+        if eligibility is Eligibility.TEXT:
+            provider = get_classifier_provider(settings)
+            if not provider.available():
+                obs = self._status_observation(
+                    payload,
+                    tenant_id,
+                    ObservationStatus.ABSTAINED,
+                    provider.abstention_reason() or "provider_disabled",
+                )
+                return await store.put_semantic(obs), []
+
+        # 3. Classify (deterministic, tool-less) + persist idempotently.
+        obs, sentiments = classify_event(payload, tenant_id)
         stored_obs = await store.put_semantic(obs)
         stored_sentiments = [await store.put_sentiment(s) for s in sentiments]
         return stored_obs, stored_sentiments
+
+    async def _consent_block(self, payload: dict[str, Any], tenant_id: str) -> Optional[str]:
+        """Return a rejection reason if processing is unlawful, else None."""
+        if not settings.consent_authority.authoritative_consent_enforcement_enabled:
+            return None
+        subject_id = payload.get("user_id") or payload.get("actor_ref")
+        anonymous_id = payload.get("anonymous_id")
+        purposes = payload.get("purposes") or ["analytics"]
+        for purpose in purposes:
+            allowed, reason = await evaluate_consent(tenant_id, subject_id, anonymous_id, purpose)
+            if not allowed:
+                return reason or "consent_denied"
+        return None
+
+    def _status_observation(
+        self,
+        payload: dict[str, Any],
+        tenant_id: str,
+        status: ObservationStatus,
+        reason: str,
+    ) -> SemanticObservation:
+        """Build a content-free observation carrying only a terminal status.
+
+        Used for consent-restricted / quarantined / provider-abstained events so
+        the pipeline records that an event was seen without persisting content or
+        an inferred interpretation.
+        """
+        actor_ref = str(payload.get("actor_ref") or payload.get("user_id") or "anonymous")
+        subject = str(
+            payload.get("primary_subject_ref")
+            or payload.get("subject_ref")
+            or payload.get("target_ref")
+            or "unknown_subject"
+        )
+        return SemanticObservation(
+            tenant_id=tenant_id,
+            source_event_id=str(
+                payload.get("source_event_id") or payload.get("event_id") or "event_unknown"
+            ),
+            source_type=str(payload.get("source_type") or payload.get("event_type") or "event"),
+            actor_ref=actor_ref,
+            actor_type=SubjectType.PROFILE,
+            primary_subject_ref=subject,
+            purposes=payload.get("purposes") or ["analytics"],
+            consent_snapshot_id=payload.get("consent_snapshot_id"),
+            classification_confidence=0.0,
+            status=status,
+            abstention_reason=reason,
+        )
 
     # ── read path ──────────────────────────────────────────────────────────────
 
@@ -134,6 +220,23 @@ class SemanticIntelligenceService:
             "model_versions": _MODEL_VERSIONS,
             "status_breakdown": by_status,
         }
+
+    async def enqueue_review(
+        self,
+        tenant_id: str,
+        queue_type: str,
+        *,
+        subject_ref: Optional[str] = None,
+        source_event_id: Optional[str] = None,
+        payload: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        return await self._review_queue.enqueue(
+            tenant_id,
+            queue_type,
+            subject_ref=subject_ref,
+            source_event_id=source_event_id,
+            payload=payload,
+        )
 
     async def review_queue(
         self, tenant_id: str, queue_type: Optional[str] = None
