@@ -16,6 +16,7 @@ import type {
   ConsentState, ConsentPurpose, ConsentBannerConfig, WalletInterface, ConsentInterface,
   CommerceInterface, AgentInterface, X402Interface,
   CurrentJourney, JourneyLifecycleEventType, JourneyPayload,
+  EventContext,
 } from './types';
 import { EventQueue } from './core/event-queue';
 import { SessionManager } from './core/session';
@@ -1011,6 +1012,10 @@ class AetherSDK implements AetherSDKInterface {
         clockSource: 'device',
         consent,
         semantic,
+        // Active journey snapshot on EVERY event (not just journey_* lifecycle
+        // events), so the backend can annotate any event with the journey it
+        // occurred within. Undefined when no journey is active.
+        journey: this.journeySnapshot(),
         trafficSource: this.trafficTracker?.toEventPayload(),
         network: typeof navigator !== 'undefined' && (navigator as any).connection ? {
           effectiveType: (navigator as any).connection.effectiveType,
@@ -1023,6 +1028,22 @@ class AetherSDK implements AetherSDKInterface {
 
     this.eventQueue.enqueue(event as any);
     this.log('debug', `Event: ${type}`, properties);
+  }
+
+  /**
+   * Snapshot of the active journey for an event's context. Carries only the
+   * canonical journey identity fields (id/name/type/status) — the backend owns
+   * step reconstruction. Returns undefined when no journey is active.
+   */
+  private journeySnapshot(): EventContext['journey'] {
+    const j = this.currentJourney;
+    if (!j) return undefined;
+    return {
+      journeyId: j.journeyId,
+      journeyName: j.journeyName,
+      journeyType: j.journeyType,
+      journeyStatus: j.journeyStatus,
+    };
   }
 
 

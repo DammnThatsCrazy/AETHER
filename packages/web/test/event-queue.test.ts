@@ -165,6 +165,72 @@ describe('EventQueue', () => {
       expect((event.properties as Record<string, unknown>)['password']).toBe(originalProps['password']);
       q.destroy();
     });
+
+    // -----------------------------------------------------------------------
+    // Recursive scrubbing — a sensitive key at ANY depth is redacted, not just
+    // top-level keys.
+    // -----------------------------------------------------------------------
+
+    async function captureFlushed(q: EventQueue): Promise<AetherEvent[]> {
+      let capturedBatch: AetherEvent[] = [];
+      globalThis.fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+        const body = JSON.parse((init?.body as string) ?? '{}');
+        capturedBatch = body.batch;
+        return { ok: true, status: 200 } as Response;
+      }) as unknown as typeof fetch;
+      await q.flush();
+      return capturedBatch;
+    }
+
+    it('redacts a sensitive key nested inside a child object', async () => {
+      const q = makeQueue();
+      q.enqueue(makeTrackEvent({
+        wallet: { label: 'primary', recovery: { mnemonic: 'twelve secret words', note: 'keep' } },
+      }));
+      const batch = await captureFlushed(q);
+      const props = batch[0].properties as Record<string, any>;
+      expect(props.wallet.recovery.mnemonic).toBe('[REDACTED]');
+      expect(props.wallet.recovery.note).toBe('keep'); // safe sibling untouched
+      expect(props.wallet.label).toBe('primary');
+      q.destroy();
+    });
+
+    it('redacts sensitive keys inside array elements', async () => {
+      const q = makeQueue();
+      q.enqueue(makeTrackEvent({
+        cards: [
+          { brand: 'visa', card_number: '4111111111111111' },
+          { brand: 'mc', cvv: '123' },
+        ],
+      }));
+      const batch = await captureFlushed(q);
+      const props = batch[0].properties as Record<string, any>;
+      expect(props.cards[0].card_number).toBe('[REDACTED]');
+      expect(props.cards[0].brand).toBe('visa');
+      expect(props.cards[1].cvv).toBe('[REDACTED]');
+      expect(props.cards[1].brand).toBe('mc');
+      q.destroy();
+    });
+
+    it('does not mutate a nested source object', async () => {
+      const q = makeQueue();
+      const original = { auth: { password: 'p@ss' } };
+      q.enqueue(makeTrackEvent({ nested: original }));
+      await captureFlushed(q);
+      expect(original.auth.password).toBe('p@ss'); // source untouched
+      q.destroy();
+    });
+
+    it('tolerates a cyclic payload without infinite recursion', async () => {
+      const q = makeQueue();
+      const cyclic: Record<string, unknown> = { secret: 'x' };
+      cyclic['self'] = cyclic; // cycle
+      q.enqueue(makeTrackEvent({ ring: cyclic }));
+      const batch = await captureFlushed(q);
+      const props = batch[0].properties as Record<string, any>;
+      expect(props.ring.secret).toBe('[REDACTED]');
+      q.destroy();
+    });
   });
 
   // -------------------------------------------------------------------------
