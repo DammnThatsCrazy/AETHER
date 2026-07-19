@@ -170,13 +170,25 @@ def reduce_entity_state(
 
 
 async def recompute_entity_state(
-    tenant_id: str, entity_ref: str, *, store: Optional[Any] = None
+    tenant_id: str,
+    entity_ref: str,
+    *,
+    store: Optional[Any] = None,
+    aggregate_refs: Optional[list[str]] = None,
 ) -> EntitySemanticState:
-    """Recompute an entity's Gold semantic state and persist it (idempotent upsert)."""
+    """Recompute an entity's Gold semantic state and persist it (idempotent upsert).
+
+    ``aggregate_refs`` folds several source refs into ``entity_ref``'s state — used
+    on identity merge to re-aggregate the consumed entity's observations under the
+    survivor without mutating the immutable Silver rows.
+    """
     from .engine import get_store
 
     active_store = store or get_store()
-    observations = await active_store.list_semantic(tenant_id, entity_ref)
+    refs = aggregate_refs or [entity_ref]
+    observations: list[SemanticObservation] = []
+    for ref in refs:
+        observations.extend(await active_store.list_semantic(tenant_id, ref))
     state = reduce_entity_state(tenant_id, entity_ref, observations)
     await _persist_gold(state)
     return state
@@ -252,13 +264,20 @@ def reduce_entity_sentiment(
 
 
 async def recompute_entity_sentiment(
-    tenant_id: str, entity_ref: str, *, store: Optional[Any] = None
+    tenant_id: str,
+    entity_ref: str,
+    *,
+    store: Optional[Any] = None,
+    aggregate_refs: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """Recompute and durably persist an entity's Gold sentiment state."""
     from .engine import get_store
 
     active_store = store or get_store()
-    sentiments = await active_store.list_sentiment(tenant_id, entity_ref)
+    refs = aggregate_refs or [entity_ref]
+    sentiments: list[Any] = []
+    for ref in refs:
+        sentiments.extend(await active_store.list_sentiment(tenant_id, ref))
     state = reduce_entity_sentiment(tenant_id, entity_ref, sentiments)
     repo = SemanticFactRepository(_GOLD_SENTIMENT_TABLE, mode="gold")
     idem = f"gold_sentiment:{tenant_id}:{entity_ref}:{REDUCER_VERSION}"
