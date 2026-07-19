@@ -8,6 +8,7 @@ persistence + the read/aggregation surface, sitting over the pluggable store
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from config.settings import settings
@@ -22,6 +23,7 @@ from .engine import (
 )
 from .models import ObservationStatus, SemanticObservation, SentimentObservation, SubjectType
 from .providers import get_classifier_provider
+from .repositories.replay_repo import SemanticReplayJobRepository
 from .repositories.review_queue_repo import SemanticReviewQueueRepository
 
 _MODEL_VERSIONS = [
@@ -35,6 +37,45 @@ class SemanticIntelligenceService:
 
     def __init__(self, review_queue: Optional[SemanticReviewQueueRepository] = None) -> None:
         self._review_queue = review_queue or SemanticReviewQueueRepository()
+        self._replay_jobs = SemanticReplayJobRepository()
+
+    # ── replay / historical backfill ─────────────────────────────────────────
+
+    async def create_replay_job(
+        self, tenant_id: str, *, dry_run: bool, filters: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create a replay job. Dry-run counts inline; a real run executes async."""
+        from .replay import SemanticReplayRunner
+
+        job = await self._replay_jobs.create(tenant_id, dry_run=dry_run, filters=filters)
+        runner = SemanticReplayRunner(self._replay_jobs)
+        if dry_run:
+            result = await runner.run(tenant_id, job["id"])
+            return {"job_id": job["id"], "dry_run": True, **result}
+        # Real backfill runs in the background so ingestion is never blocked.
+        asyncio.get_event_loop().create_task(runner.run(tenant_id, job["id"]))
+        return {"job_id": job["id"], "dry_run": False, "status": "running"}
+
+    async def get_replay_job(self, tenant_id: str, job_id: str) -> Optional[dict[str, Any]]:
+        return await self._replay_jobs.get(tenant_id, job_id)
+
+    async def control_replay_job(
+        self, tenant_id: str, job_id: str, action: str
+    ) -> Optional[dict[str, Any]]:
+        job = await self._replay_jobs.get(tenant_id, job_id)
+        if job is None:
+            return None
+        status_map = {"pause": "paused", "resume": "running", "cancel": "cancelled"}
+        new_status = status_map.get(action)
+        if new_status is None:
+            return None
+        await self._replay_jobs.update(tenant_id, job_id, status=new_status)
+        if action == "resume":
+            from .replay import SemanticReplayRunner
+
+            runner = SemanticReplayRunner(self._replay_jobs)
+            asyncio.get_event_loop().create_task(runner.run(tenant_id, job_id))
+        return await self._replay_jobs.get(tenant_id, job_id)
 
     # ── write path ─────────────────────────────────────────────────────────────
 
