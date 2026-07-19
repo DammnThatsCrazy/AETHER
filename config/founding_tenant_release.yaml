@@ -31,6 +31,7 @@ release_surface:
     - identity-worker
     - graph-writer
     - measurement-worker
+    - semantic-worker
     - materializer
     - maintenance
   consumers:
@@ -38,6 +39,7 @@ release_surface:
     - identity-signal-emission
     - graph-profile-projection
     - measurement-identity-restatement
+    - semantic-classification
   event_backend: sns_sqs
   object_backend: s3
   database_backend: aurora_postgres

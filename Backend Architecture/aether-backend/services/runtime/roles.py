@@ -27,6 +27,7 @@ WORKER_ROLES: frozenset[str] = frozenset(
         "identity-worker",
         "graph-writer",
         "measurement-worker",
+        "semantic-worker",
         "materializer",
         "maintenance",
     }
@@ -44,6 +45,7 @@ CONSUMER_ROLES: frozenset[str] = frozenset(
         "identity-worker",
         "graph-writer",
         "measurement-worker",
+        "semantic-worker",
     }
 )
 
@@ -56,6 +58,9 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "identity-worker": frozenset(),
     "graph-writer": frozenset(),
     "measurement-worker": frozenset(),
+    # Stream consumer is owned by consumer_specs.py; Phase B adds replay/reconciler
+    # supervised loop specs here.
+    "semantic-worker": frozenset(),
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "bronze_object_compaction"}
     ),

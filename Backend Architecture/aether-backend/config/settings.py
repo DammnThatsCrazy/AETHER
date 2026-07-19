@@ -556,6 +556,7 @@ RUNTIME_ROLES: frozenset[str] = frozenset(
         "identity-worker",
         "graph-writer",
         "measurement-worker",
+        "semantic-worker",
         "materializer",
         "maintenance",
         "all",
@@ -634,8 +635,8 @@ class ConsentAuthorityConfig:
 # the deterministic in-memory store and never spin up the worker or hit a DB.
 #   - durable_store_enabled: inject the Postgres-backed semantic store at
 #     startup (ON in staging/prod). Local keeps the in-memory default.
-#   - worker_enabled: attach the semantic-worker ConsumerSpec on
-#     SDK_EVENTS_VALIDATED (classification runs from validated ingestion).
+#   - the semantic-worker ConsumerSpec on SDK_EVENTS_VALIDATED attaches whenever
+#     that role (or local `all`) runs — deploying the role is the enable switch.
 #   - replay_enabled / reconciler_enabled / retention_enabled: Phase B workers.
 #   - classifier_provider: "deterministic" (default, tool-less, CI-safe),
 #     "production" / "multilingual" (fail closed without creds), or "disabled".
@@ -647,7 +648,6 @@ class ConsentAuthorityConfig:
 @dataclass(frozen=True)
 class SemanticIntelligenceConfig:
     durable_store_enabled: bool = _env_bool("SEMANTIC_DURABLE_STORE_ENABLED", _TRUST_DEFAULT_ON)
-    worker_enabled: bool = _env_bool("SEMANTIC_WORKER_ENABLED", _TRUST_DEFAULT_ON)
     replay_enabled: bool = _env_bool("SEMANTIC_REPLAY_ENABLED", False)
     reconciler_enabled: bool = _env_bool("SEMANTIC_RECONCILER_ENABLED", False)
     retention_enabled: bool = _env_bool("SEMANTIC_RETENTION_ENABLED", False)

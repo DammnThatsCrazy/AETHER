@@ -69,6 +69,12 @@ def _attach_measurement(registry: Any) -> None:
     MeasurementIdentityConsumer(producer=registry.producer).register(registry.consumer)
 
 
+def _attach_semantic(registry: Any) -> None:
+    from services.semantic_intelligence.consumer import SemanticEventConsumer
+
+    SemanticEventConsumer(producer=registry.producer).register(registry.consumer)
+
+
 def _attach_notifications(registry: Any) -> None:
     from services.notification_intelligence.consumer import attach_notification_consumers
 
@@ -112,6 +118,13 @@ CONSUMER_SPECS: tuple[ConsumerSpec, ...] = (
         topics=(Topic.IDENTITY_MERGED, Topic.IDENTITY_SPLIT),
         group_id="aether-measurement",
         handler_factory=_attach_measurement,
+    ),
+    ConsumerSpec(
+        name="semantic-classification",
+        role="semantic-worker",
+        topics=(Topic.SDK_EVENTS_VALIDATED,),
+        group_id="aether-semantic",
+        handler_factory=_attach_semantic,
     ),
 )
 
