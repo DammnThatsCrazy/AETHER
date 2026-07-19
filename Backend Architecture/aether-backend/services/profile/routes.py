@@ -486,6 +486,33 @@ async def get_behavior(user_id: str, request: Request):
     }).to_dict()
 
 
+@router.get("/{user_id}/semantic")
+async def get_semantic(user_id: str, request: Request):
+    """Profile360 semantic dimension — the entity's durable weighted semantic state.
+
+    Surfaces active topics, stance/intent distribution, summary, confidence,
+    freshness, model/taxonomy mix and reducer provenance from the semantic
+    Gold-tier reducer. Returns an empty-but-shaped response (not 404) when no
+    semantic observations exist yet.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    from services.semantic_intelligence.service import get_semantic_service
+
+    state = await get_semantic_service().entity_state(tenant.tenant_id, user_id)
+    payload = state.model_dump(mode="json")
+    computed = state.semantic_summary != "insufficient_data"
+    return APIResponse(
+        data={
+            "user_id": user_id,
+            "semantic": payload,
+            "computed": computed,
+            "provenance": {"sources": ["semantic_gold_state"]},
+        }
+    ).to_dict()
+
+
 @router.get("/{user_id}/predictions")
 async def get_predictions(user_id: str, request: Request):
     """Next-likely-action and risk-flag projections (derived).
