@@ -105,13 +105,47 @@ async def list_observations(
     ).to_dict()
 
 
+class ReprocessRequest(BaseModel):
+    families: list[str] = Field(default_factory=list, description="Event families to replay")
+    from_time: str | None = Field(default=None, description="ISO 8601 lower bound (received_at)")
+    to_time: str | None = Field(default=None, description="ISO 8601 upper bound (received_at)")
+
+
 @router.post("/reprocess")
-async def reprocess(request: Request, dry_run: bool = True):
-    # Replaced by the durable replay subsystem in Phase B.
-    raise HTTPException(
-        status_code=501,
-        detail="Reprocess queue not yet implemented; use the batch ingest endpoint for backfill.",
+async def reprocess(request: Request, body: ReprocessRequest | None = None, dry_run: bool = True):
+    require_write_access(request)
+    filters: dict[str, Any] = {}
+    if body is not None:
+        if body.families:
+            filters["families"] = body.families
+        if body.from_time:
+            filters["from_time"] = body.from_time
+        if body.to_time:
+            filters["to_time"] = body.to_time
+    result = await get_semantic_service().create_replay_job(
+        tenant_id(request), dry_run=dry_run, filters=filters
     )
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/reprocess/{job_id}")
+async def get_reprocess(job_id: str, request: Request):
+    require_read_access(request)
+    job = await get_semantic_service().get_replay_job(tenant_id(request), job_id)
+    if job is None:
+        raise NotFoundError("SemanticReplayJob")
+    return APIResponse(data=job).to_dict()
+
+
+@router.post("/reprocess/{job_id}/{action}")
+async def control_reprocess(job_id: str, action: str, request: Request):
+    require_write_access(request)
+    if action not in ("pause", "resume", "cancel"):
+        raise HTTPException(status_code=400, detail="action must be pause, resume or cancel")
+    job = await get_semantic_service().control_replay_job(tenant_id(request), job_id, action)
+    if job is None:
+        raise NotFoundError("SemanticReplayJob")
+    return APIResponse(data=job).to_dict()
 
 
 @router.get("/entities/{entity_id}")
