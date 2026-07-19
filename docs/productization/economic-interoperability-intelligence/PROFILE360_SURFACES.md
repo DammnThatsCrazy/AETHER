@@ -10,7 +10,7 @@ source_files:
   - packages/shared/profile360-contract.ts
   - Backend Architecture/aether-backend/services/profile/routes.py
 canonical_owner: platform@aether
-last_synced_commit: "337ba2b"
+last_synced_commit: "1547b2e"
 ---
 
 # Profile360 Surfaces
@@ -45,3 +45,15 @@ and a warning when an entity has top-up volume but no observed spend —
 top-up is never presented as card spend. See
 `docs/PROFILE-360-AGGREGATION.md` and
 `docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md`.
+
+## Semantic dimension
+
+`GET /v1/profile/{id}/semantic` (`read` permission; tenant-scoped) surfaces the
+entity's durable weighted semantic state from the semantic Gold reducer — active
+topics, stance/intent distribution, summary, confidence, freshness, model/taxonomy
+mix, and reducer provenance. It returns an empty-but-shaped response
+(`computed: false`, `semantic_summary: "insufficient_data"`) rather than a 404
+when no semantic observations exist yet, and delegates to the
+semantic-intelligence service's weighted reducer (no duplicated aggregation
+logic). Backing data: `gold_entity_semantic_state`. See
+`Backend Architecture/aether-backend/services/semantic_intelligence/reducers.py`.
