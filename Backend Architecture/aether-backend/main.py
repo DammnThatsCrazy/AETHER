@@ -401,6 +401,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 ) from e
             logger.warning(f"{label} wiring skipped: {e}")
 
+    # Inject the durable semantic store for non-local deployment profiles. Local
+    # and CI keep the deterministic in-memory store (durable_store_enabled is OFF
+    # in local), so this is a no-op there and unit tests see no behaviour change.
+    if settings.semantic.durable_store_enabled:
+        def _wire_semantic_store() -> None:
+            from services.semantic_intelligence.engine import set_store
+            from services.semantic_intelligence.store import DurableSemanticSentimentStore
+
+            set_store(DurableSemanticSentimentStore())
+
+        _attach_step("semantic durable store", _wire_semantic_store)
+
     # Canonical consumer registry: dedicated roles attach only owned pipelines;
     # local ``all`` retains the complete single-process topology.
     if _start_consumers:

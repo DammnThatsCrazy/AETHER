@@ -273,6 +273,8 @@ class SemanticObservation(BaseModel):
     data_quality: dict[str, Any] = Field(default_factory=dict)
     stable_hash: str | None = None
     idempotency_key: str | None = None
+    supersedes: str | None = None
+    superseded_by: str | None = None
     status: ObservationStatus = ObservationStatus.CLASSIFIED
     abstention_reason: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
