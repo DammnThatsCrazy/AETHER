@@ -16,6 +16,20 @@ export * from './commerce';
 export * from './agent';
 export * from './x402-lifecycle';
 export * from './events'; // includes reward enablement event types (A6)
+// Canonical envelope context v1 — declared explicitly as public SDK surface so
+// every SDK/consumer discovers the additive envelope shape from the barrel
+// (these are also covered by the star export above; the explicit list documents
+// intent and keeps the public envelope contract greppable).
+export type {
+  ApplicationContext,
+  OperatingSystemContext,
+  NetworkContext,
+  SemanticInputContext,
+  SemanticHints,
+  SamplingContext,
+  CorrelationContext,
+  SequenceContext,
+} from './events';
 export * from './agentic-observability'; // agentic observability contracts
 export * from './capabilities';
 export * from './economic';

@@ -45,6 +45,34 @@ the monorepo. It sends the same canonical `{ batch, sentAt, consents }` envelope
 with the write key in the `Authorization` header, with retry/backoff and safe
 shutdown flush.
 
+## Canonical envelope context (v1)
+
+Every event carries a `context` object (`EventContext` in
+`packages/shared/events.ts`). Beyond the core fields (library, page, device,
+campaign, consent, provenance, journey, temporal provenance), SDKs MAY stamp the
+optional **canonical envelope context v1** fields so the backend can attribute,
+correlate, order, and quality-score any event without per-surface parsing. All
+fields are optional and additive — existing SDKs and stored events keep
+validating unchanged.
+
+| Field | Shape | Purpose |
+|---|---|---|
+| `schemaVersion` | `string` | Envelope schema version the emitter conforms to. |
+| `application` | `ApplicationContext` | Emitting product identity (name/version/build/environment/namespace) — distinct from the Aether `library`. |
+| `surface` | `string` | Origin plane, e.g. `web`, `server`, `ios`, `home_feed`. |
+| `operatingSystem` | `OperatingSystemContext` | OS name/version of the emitting device/host. |
+| `network` | `NetworkContext` | Connection conditions at occurrence (effectiveType/downlink/rtt/saveData; mobile fills connectionType/carrier). |
+| `semanticInput` | `SemanticInputContext` | Client-declared semantic input — a hint the backend MAY enrich; never authoritative (consent + classifier run first). |
+| `semanticHints` | `SemanticHints` | Advisory `intent`/`friction`/`engagement` signals the backend reducers MAY weight. |
+| `sampling` | `SamplingContext` | Client-side sampling decision (sampled/rate/reason). |
+| `correlation` | `CorrelationContext` | Tracing/causation linkage (correlationId/causationId/traceId/spanId). |
+| `dataQuality` | `DataQualityRecord` | Client-declared completeness/freshness/sourceTrust signals. |
+| `sequence` | `SequenceContext` | Monotonic per-session event and per-install session counters for gap/reorder detection. |
+
+The envelope types are exported from the `@aether/shared` barrel. Because every
+field is optional, the backend treats them as hints layered on top of its own
+server-authoritative enrichment, consent, and classification.
+
 ## Config contract
 
 SDKs fetch a signed manifest from `/v1/config/sdk/manifest` (min SDK version,
