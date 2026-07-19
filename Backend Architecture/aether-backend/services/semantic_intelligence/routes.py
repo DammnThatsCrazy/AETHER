@@ -245,27 +245,9 @@ async def review_queue(request: Request, queue_type: str | None = Query(None)):
 @campaign_router.get("/{campaign_id}/semantic-impact")
 async def campaign_semantic_impact(campaign_id: str, request: Request):
     require_read_access(request)
-    rows = await get_semantic_service().campaign_observations(tenant_id(request), campaign_id)
-    topics = sorted({t for row in rows for t in row.topics})
-    narratives = sorted({n for row in rows for n in row.narrative_frames})
-    return APIResponse(
-        data={
-            "campaign_id": campaign_id,
-            "observation_count": len(rows),
-            "dominant_topics": topics,
-            "dominant_narratives": narratives,
-            "stance_distribution": {
-                stance: len([r for r in rows if r.stance.value == stance])
-                for stance in sorted({r.stance.value for r in rows})
-            },
-            "semantic_mediated_revenue_estimate": None,
-            "causal_confidence": "observed_sequence",
-            "insufficient_data": len(rows) == 0,
-            "evidence_refs": [
-                e.model_dump(mode="json") for row in rows[:5] for e in row.evidence_refs
-            ],
-        }
-    ).to_dict()
+    # Durable weighted Gold impact (falls back to a live reduction if not yet built).
+    impact = await get_semantic_service().campaign_impact(tenant_id(request), campaign_id)
+    return APIResponse(data=impact).to_dict()
 
 
 @campaign_router.get("/{campaign_id}/sentiment")

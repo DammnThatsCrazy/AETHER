@@ -256,6 +256,25 @@ class SemanticIntelligenceService:
         rows = await get_store().list_semantic(tenant_id)
         return [o for o in rows if o.campaign_id == campaign_id]
 
+    async def recompute_campaign_impact(
+        self, tenant_id: str, campaign_id: str
+    ) -> dict[str, Any]:
+        from .reducers import recompute_campaign_impact
+
+        return await recompute_campaign_impact(tenant_id, campaign_id)
+
+    async def campaign_impact(self, tenant_id: str, campaign_id: str) -> dict[str, Any]:
+        """Durable campaign semantic impact (Gold), falling back to a live reduction."""
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        gold = await SemanticFactRepository("gold_campaign_semantic_impact").list_by_tenant(
+            tenant_id, campaign_id, limit=1
+        )
+        if gold:
+            return gold[0]
+        # No durable projection yet — compute on the fly (idempotent to persist later).
+        return await self.recompute_campaign_impact(tenant_id, campaign_id)
+
     async def campaign_sentiment(
         self, tenant_id: str, campaign_id: str
     ) -> list[SentimentObservation]:
