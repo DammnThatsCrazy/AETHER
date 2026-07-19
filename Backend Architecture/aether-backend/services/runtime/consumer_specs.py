@@ -75,6 +75,12 @@ def _attach_semantic(registry: Any) -> None:
     SemanticEventConsumer(producer=registry.producer).register(registry.consumer)
 
 
+def _attach_semantic_identity(registry: Any) -> None:
+    from services.semantic_intelligence.identity_consumer import SemanticIdentityConsumer
+
+    SemanticIdentityConsumer().register(registry.consumer)
+
+
 def _attach_notifications(registry: Any) -> None:
     from services.notification_intelligence.consumer import attach_notification_consumers
 
@@ -125,6 +131,13 @@ CONSUMER_SPECS: tuple[ConsumerSpec, ...] = (
         topics=(Topic.SDK_EVENTS_VALIDATED, Topic.CONSENT_UPDATED),
         group_id="aether-semantic",
         handler_factory=_attach_semantic,
+    ),
+    ConsumerSpec(
+        name="semantic-identity-restatement",
+        role="semantic-worker",
+        topics=(Topic.IDENTITY_MERGED, Topic.IDENTITY_SPLIT),
+        group_id="aether-semantic-identity",
+        handler_factory=_attach_semantic_identity,
     ),
 )
 
