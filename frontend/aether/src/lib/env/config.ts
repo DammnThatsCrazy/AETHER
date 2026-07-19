@@ -17,6 +17,10 @@ const envSchema = z.object({
   VITE_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   VITE_ENTERPRISE_EMAIL_VERIFIED: z.string().default('false'),
   VITE_ENTERPRISE_EMAIL: z.string().default('sales@aether.dev'),
+  // Build identity (injected by vite define at build; 'dev' locally).
+  VITE_APP_VERSION: z.string().default('dev'),
+  VITE_GIT_SHA: z.string().default('dev'),
+  VITE_RELEASE_PROFILE: z.string().default(''),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

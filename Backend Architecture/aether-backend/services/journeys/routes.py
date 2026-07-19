@@ -7,7 +7,17 @@ from fastapi import APIRouter, Request
 from shared.common.common import APIResponse, BadRequestError
 from .stitching import journey_stitcher, serialize_journey
 
+# DEPRECATED — not mounted. This in-memory stitcher router previously shadowed
+# the persisted /v1/journeys authority (services/measurement/routes/journeys.py)
+# because it was registered first with an always-empty in-process store. It is
+# intentionally excluded from application mounting in main.py; route all
+# /v1/journeys traffic through the persisted measurement authority. Do not
+# re-mount without removing the colliding GET /{journey_id} and /summary paths.
+# JourneyStitchingService remains in use as the journey compiler's confidence
+# scorer.
 router = APIRouter(prefix="/v1/journeys", tags=["Journeys"])
+# admin_router IS mounted (main.py, as journey_health_router): operator-only,
+# non-colliding fleet journey-health diagnostics under /v1/admin/journey-health.
 admin_router = APIRouter(prefix="/v1/admin/journey-health", tags=["Journey Health"])
 
 

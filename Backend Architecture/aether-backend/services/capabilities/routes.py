@@ -10,9 +10,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from config.settings import get_settings
+from services.capabilities.release_surface import resolve_release_surface
+from services.capabilities.schema import (
+    CapabilitiesResponse,
+    EnforcementState,
+    OperatorCapabilitiesResponse,
+    ReleaseCapabilities,
+)
+from services.security.request_context import require_kyber_operator
 from shared.decorators import api_response
 from shared.logger.logger import get_logger
 from shared.privacy.consent_enforcement import CONSENT_PURPOSES
@@ -20,6 +28,47 @@ from shared.privacy.consent_enforcement import CONSENT_PURPOSES
 logger = get_logger("aether.service.capabilities")
 
 router = APIRouter(prefix="/v1/capabilities", tags=["capabilities"])
+# Kyber operator capability read — release posture + enforcement, no tenant data.
+kyber_router = APIRouter(
+    prefix="/v1/kyber/capabilities",
+    tags=["Kyber Capabilities"],
+    dependencies=[Depends(require_kyber_operator)],
+)
+
+
+def _resolve_release(settings) -> ReleaseCapabilities:
+    """Build the non-secret release-capabilities block from settings + config."""
+    surface = resolve_release_surface(settings.runtime.deployment_profile)
+    rr = settings.route_registry
+    return ReleaseCapabilities(
+        deployment_profile=surface["deployment_profile"],
+        environment=getattr(settings.env, "value", str(settings.env)),
+        release_class=surface["release_class"],
+        enforcement=EnforcementState(
+            policy_enforcement=rr.policy_enforcement_enabled,
+            route_registry_enforced=rr.route_registry_enforced,
+            kyber_operator_gate=rr.kyber_operator_gate_enforced,
+        ),
+        enabled_route_prefixes=surface["enabled_route_prefixes"],
+        excluded_domains=surface["excluded_domains"],
+    )
+
+
+def _feature_flags(settings) -> dict[str, bool]:
+    """Non-secret, per-domain feature-flag view used by the frontends to gate nav."""
+    sug = settings.suggestions
+    return {
+        "suggestions_enabled": sug.enabled,
+        "suggestions_execution_enabled": sug.execution_enabled,
+        "connectors_enabled": settings.connectors.enabled,
+        "data_quality_enabled": settings.data_quality.enabled,
+        "stablecoin_intelligence_enabled": settings.stablecoin.api_enabled,
+        "stablecoin_profile360_enabled": settings.stablecoin.profile360_enabled,
+        "derivatives_intelligence_enabled": settings.derivatives.api_enabled,
+        "derivatives_profile360_enabled": settings.derivatives.profile360_enabled,
+        "interoperability_intelligence_enabled": settings.interop.api_enabled,
+        "interoperability_profile360_enabled": settings.interop.profile360_enabled,
+    }
 
 # Profile360 sub-resources that Aether can surface per tenant.
 # A sub-resource is available when at least one provider in its category
@@ -152,27 +201,42 @@ async def get_capabilities(request: Request):
     else:
         granted_purposes = list(CONSENT_PURPOSES)
 
-    # ── Feature flags ──────────────────────────────────────────────────
-    sug = settings.suggestions
-    feature_flags = {
-        "suggestions_enabled": sug.enabled,
-        "suggestions_execution_enabled": sug.execution_enabled,
-        "connectors_enabled": settings.connectors.enabled,
-        "data_quality_enabled": settings.data_quality.enabled,
-        "stablecoin_intelligence_enabled": settings.stablecoin.api_enabled,
-        "stablecoin_profile360_enabled": settings.stablecoin.profile360_enabled,
-        "derivatives_intelligence_enabled": settings.derivatives.api_enabled,
-        "derivatives_profile360_enabled": settings.derivatives.profile360_enabled,
-        "interoperability_intelligence_enabled": settings.interop.api_enabled,
-        "interoperability_profile360_enabled": settings.interop.profile360_enabled,
-    }
+    # ── Feature flags + release surface (typed contract) ───────────────
+    response = CapabilitiesResponse(
+        tenant_id=tenant_id,
+        release=_resolve_release(settings),
+        profile_sub_resources=available_sub_resources,
+        providers=providers,
+        consent_purposes_granted=granted_purposes,
+        consent_purposes_all=sorted(CONSENT_PURPOSES),
+        feature_flags=_feature_flags(settings),
+        evaluated_at=datetime.now(timezone.utc).isoformat(),
+    )
+    return response.model_dump()
 
-    return {
-        "tenant_id": tenant_id,
-        "profile_sub_resources": available_sub_resources,
-        "providers": providers,
-        "consent_purposes_granted": granted_purposes,
-        "consent_purposes_all": sorted(CONSENT_PURPOSES),
-        "feature_flags": feature_flags,
-        "evaluated_at": datetime.now(timezone.utc).isoformat(),
-    }
+
+@kyber_router.get("")
+@api_response
+async def get_operator_capabilities(request: Request):
+    """Kyber operator capability read: release posture + enforcement + flags.
+
+    No tenant-scoped data — this reflects what the deployment profile supports,
+    for operator-console navigation and diagnostics. Gated by the Kyber
+    operator dependency on the router.
+    """
+    settings = get_settings()
+    extraction_mode = None
+    try:  # lazy import — avoid a module-load cycle with the middleware
+        from middleware.middleware import resolve_extraction_defense_mode
+
+        extraction_mode = resolve_extraction_defense_mode()
+    except Exception:  # pragma: no cover - diagnostics are best-effort
+        extraction_mode = None
+
+    response = OperatorCapabilitiesResponse(
+        release=_resolve_release(settings),
+        feature_flags=_feature_flags(settings),
+        extraction_defense_mode=extraction_mode,
+        evaluated_at=datetime.now(timezone.utc).isoformat(),
+    )
+    return response.model_dump()

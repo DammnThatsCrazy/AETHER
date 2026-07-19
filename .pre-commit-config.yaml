@@ -71,6 +71,15 @@ repos:
         always_run: true
         stages: [push]
 
+      # Pre-push: fail-closed secret scan (high-confidence patterns in tracked files).
+      - id: aether-secret-scan-push
+        name: Aether secret scan (pre-push, fail-closed)
+        entry: python scripts/security/secret_scan.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [push]
+
       # Re-derive docs/_generated/*.json - blocks commits that change a
       # canonical source without also committing the regenerated JSON.
       # The hook regenerates, then fails only on UNSTAGED drift — i.e.

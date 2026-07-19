@@ -96,3 +96,6 @@ ML%20Models/
 .claude/worktrees/
 # Claude Code session-specific tool permissions (environment-specific, not shared)
 .claude/settings.local.json
+
+# Generated SBOM artifacts (supply-chain gate output)
+reports/sbom/
