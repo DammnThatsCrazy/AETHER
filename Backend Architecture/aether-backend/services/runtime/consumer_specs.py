@@ -122,7 +122,7 @@ CONSUMER_SPECS: tuple[ConsumerSpec, ...] = (
     ConsumerSpec(
         name="semantic-classification",
         role="semantic-worker",
-        topics=(Topic.SDK_EVENTS_VALIDATED,),
+        topics=(Topic.SDK_EVENTS_VALIDATED, Topic.CONSENT_UPDATED),
         group_id="aether-semantic",
         handler_factory=_attach_semantic,
     ),

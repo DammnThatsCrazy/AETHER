@@ -42,10 +42,12 @@ class SemanticPrivacyHandler:
         deleted: dict[str, int] = {}
         errors: list[str] = []
         for table in _SILVER_SUBJECT_TABLES + _GOLD_SUBJECT_TABLES:
+            repo = SemanticFactRepository(table)
             try:
-                deleted[table] = await SemanticFactRepository(table).delete_by_subject(
-                    tenant_id, subject_ref
-                )
+                count = await repo.delete_by_subject(tenant_id, subject_ref)
+                # A DSR subject is also an actor: erase observations they authored.
+                count += await repo.delete_by_actor(tenant_id, subject_ref)
+                deleted[table] = count
             except Exception as exc:  # pragma: no cover — defensive
                 errors.append(f"{table}:{exc}")
                 logger.exception("semantic erasure failed for %s", table)
@@ -70,10 +72,11 @@ class SemanticPrivacyHandler:
         restricted: dict[str, int] = {}
         errors: list[str] = []
         for table in _SILVER_SUBJECT_TABLES:
+            repo = SemanticFactRepository(table)
             try:
-                restricted[table] = await SemanticFactRepository(table).tombstone_by_subject(
-                    tenant_id, subject_ref
-                )
+                count = await repo.tombstone_by_subject(tenant_id, subject_ref)
+                count += await repo.tombstone_by_actor(tenant_id, subject_ref)
+                restricted[table] = count
             except Exception as exc:  # pragma: no cover — defensive
                 errors.append(f"{table}:{exc}")
         return {

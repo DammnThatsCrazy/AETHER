@@ -168,6 +168,50 @@ class SemanticFactRepository:
             )
         return _rowcount(result)
 
+    async def delete_by_actor(self, tenant_id: str, actor_ref: str) -> int:
+        """Erasure: hard-delete rows a subject authored/acted on (data->>'actor_ref')."""
+        pool = await self._pool()
+        if pool is None:
+            victims = [
+                rid
+                for rid, row in self._store.items()
+                if row.get("tenant_id") == tenant_id and _row_actor(row) == actor_ref
+            ]
+            for rid in victims:
+                del self._store[rid]
+            return len(victims)
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"DELETE FROM {self.table_name} "
+                "WHERE tenant_id = $1 AND data->>'actor_ref' = $2",
+                tenant_id,
+                actor_ref,
+            )
+        return _rowcount(result)
+
+    async def tombstone_by_actor(self, tenant_id: str, actor_ref: str) -> int:
+        """Consent-restriction: mark rows a subject acted on consent_restricted."""
+        pool = await self._pool()
+        if pool is None:
+            count = 0
+            for row in self._store.values():
+                if row.get("tenant_id") == tenant_id and _row_actor(row) == actor_ref:
+                    row.setdefault("data", {})["status"] = "consent_restricted"
+                    count += 1
+            return count
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"""
+                UPDATE {self.table_name}
+                SET data = jsonb_set(data, '{{status}}', to_jsonb('consent_restricted'::text)),
+                    updated_at = NOW()
+                WHERE tenant_id = $1 AND data->>'actor_ref' = $2
+                """,
+                tenant_id,
+                actor_ref,
+            )
+        return _rowcount(result)
+
     async def _set_status_by_subject(self, tenant_id: str, subject_ref: str, status: str) -> int:
         pool = await self._pool()
         if pool is None:
@@ -306,6 +350,11 @@ def _row_subject(row: dict[str, Any]) -> Optional[str]:
         or data.get("target_subject_ref")
         or data.get("subject_ref")
     )
+
+
+def _row_actor(row: dict[str, Any]) -> Optional[str]:
+    data = row.get("data") or {}
+    return data.get("actor_ref")
 
 
 def _parse_ts(value: Any) -> Optional[datetime]:
