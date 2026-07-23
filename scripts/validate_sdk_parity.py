@@ -117,6 +117,50 @@ def main() -> int:
              "batch health metrics [§2.8]")
 
 
+    # Canonical envelope emission — every SDK stamps its origin plane (surface),
+    # a monotonic per-session/process ordering counter (context.sequence.event),
+    # and (TS SDKs) the contract schemaVersion; web/server also stamp the active
+    # journey snapshot on every event. Backend acceptance is pinned by
+    # tests/unit/test_ingestion_envelope_context.py.
+    _require("web", web,
+             ["surface: 'web'", "schemaVersion: CONTRACT_SCHEMA_VERSION",
+              "sequence: { event: this.eventSequence++ }", "journeySnapshot()"],
+             "canonical envelope emission")
+    _require("server", server,
+             ["surface: 'server'", "schemaVersion: CONTRACT_SCHEMA_VERSION",
+              "sequence: { event: this.eventSequence++ }"],
+             "canonical envelope emission")
+    _require("ios", ios, ["SequenceInfo", "eventSequence", "JourneyInfo"],
+             "canonical envelope emission")
+    _require("android", android, ['put("sequence"', "eventSequence", 'put("journey"'],
+             "canonical envelope emission")
+
+    # 408/425 must be retryable on the native send paths — a server timeout is
+    # transient, and dropping the batch is silent data loss.
+    _require("ios", ios, ["statusCode == 408"], "408 retryable send path")
+    _require("android", android, ["responseCode == 408"], "408 retryable send path")
+
+    # Sensitive-field scrubbing must recurse into nested payloads on every SDK
+    # (top-level-only scrubbing leaks nested secrets).
+    _require("web", web, ["'[CYCLE]'"], "recursive sensitive-field scrub")
+    _require("server", server, ["'[CYCLE]'"], "recursive sensitive-field scrub")
+    _require("ios", ios, ["scrubNestedValue", "maxScrubDepth"], "recursive sensitive-field scrub")
+    _require("android", android, ["scrubNestedValue", "SCRUB_MAX_DEPTH"],
+             "recursive sensitive-field scrub")
+
+    # iOS fingerprint must be consent+ATT gated, and the App Store privacy
+    # manifest must ship with the package.
+    _require("ios", ios, ["gatedFingerprint"], "consent/ATT-gated fingerprint")
+    xcprivacy = PKG / "ios" / "Sources" / "AetherSDK" / "PrivacyInfo.xcprivacy"
+    if not xcprivacy.exists():
+        fail("ios: missing PrivacyInfo.xcprivacy privacy manifest")
+    pkg_swift = PKG / "ios" / "Package.swift"
+    if pkg_swift.exists() and "PrivacyInfo.xcprivacy" not in pkg_swift.read_text(encoding="utf-8"):
+        fail("ios: Package.swift does not bundle PrivacyInfo.xcprivacy as a resource")
+
+    # RN semantic collector must consume canonical ids, never mint its own.
+    _require("react-native", rn, ["collect(sessionId"], "canonical-id semantic collector")
+
     # Native durable queues must survive restart and exhausted transient retries.
     _require(
         "ios",
