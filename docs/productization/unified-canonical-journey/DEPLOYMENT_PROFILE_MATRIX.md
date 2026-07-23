@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py
   - Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
-last_synced_commit: "6306ea81"
+last_synced_commit: "5a8df09"
 ---
 
 # Deployment Profile Matrix — Unified Canonical Journey
@@ -21,7 +21,9 @@ last_synced_commit: "6306ea81"
 
 The canonical journey feature requires the `20260627_canonical_activity`
 migration. AI/referral source evidence and replay-safe attribution additionally
-require `20260725_ai_referral_attribution`.
+require `20260725_ai_referral_attribution`. Canonical-envelope surface
+attribution (the `canonical_activity.surface` column + partial index) requires
+`20260733_canonical_activity_surface`.
 
 ```bash
 cd "Backend Architecture/aether-backend"

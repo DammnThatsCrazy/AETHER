@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/contracts.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
   - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
-last_synced_commit: "6306ea81"
+last_synced_commit: "5a8df09"
 ---
 
 # Data and Identity Contract
@@ -18,6 +18,11 @@ last_synced_commit: "6306ea81"
 ## canonical_activity Table
 
 The `canonical_activity` table is the single source of truth for all cross-rail activity facts.
+Each activity also carries canonical-envelope attribution: `surface` (the emitting
+origin plane — `web`, `server`, `ios`, … — from `context.surface`, added by
+`20260733_canonical_activity_surface`) and `sequence_key` (a zero-padded ordering
+key derived from `context.sequence.event`, giving deterministic intra-timestamp
+ordering; NULL when the emitting SDK sent no sequence).
 Every silver projector writes to its silver table; the base projector (`project_and_emit`) then
 adapts and upserts into `canonical_activity` via `adapt_from_silver`.
 
