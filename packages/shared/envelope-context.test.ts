@@ -57,7 +57,7 @@ describe('canonical envelope context v1', () => {
 
     const ctx: EventContext = {
       library: { name: '@aether/ios', version: '8.12.0' },
-      schemaVersion: '1.0',
+      schemaVersion: '1.0.0',
       application,
       surface: 'ios',
       operatingSystem,
@@ -71,7 +71,7 @@ describe('canonical envelope context v1', () => {
     };
 
     expect(ctx.surface).toBe('ios');
-    expect(ctx.schemaVersion).toBe('1.0');
+    expect(ctx.schemaVersion).toBe('1.0.0');
     expect(ctx.network?.effectiveType).toBe('4g');
     expect(ctx.semanticHints?.intent?.predictedGoal).toBe('purchase');
     expect(ctx.semanticHints?.friction?.retryCount).toBe(2);

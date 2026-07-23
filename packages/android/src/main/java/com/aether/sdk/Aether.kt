@@ -142,6 +142,9 @@ object Aether : DefaultLifecycleObserver {
     private var traits: MutableMap<String, Any?> = mutableMapOf()
     private var screenCount = 0
     private var eventCount = 0
+    // Monotonic per-session ordering index stamped as context.sequence.event
+    // (web SDK wire parity); resets whenever sessionId rotates.
+    private var eventSequence = 0
     private var isInitialized = false
     private var serverConfig: JSONObject = JSONObject()
     private var consentState: MutableList<String> = mutableListOf()
@@ -403,6 +406,7 @@ object Aether : DefaultLifecycleObserver {
         this.walletAddress = prefs?.getString("walletAddress", null)
         this.consentState = (prefs?.getStringSet("consentState", emptySet()) ?: emptySet()).toMutableList()
         this.sessionId = UUID.randomUUID().toString()
+        this.eventSequence = 0
 
         // Lifecycle tracking
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
@@ -601,6 +605,7 @@ object Aether : DefaultLifecycleObserver {
         consentState.clear()
         anonymousId = UUID.randomUUID().toString()
         sessionId = UUID.randomUUID().toString()
+        eventSequence = 0
         prefs?.edit()
             ?.remove("userId")
             ?.remove("walletAddress")
@@ -847,6 +852,13 @@ object Aether : DefaultLifecycleObserver {
     /** Purposes that always require explicit opt-in and are never granted by grantAll(). */
     val explicitOptInPurposes: List<String> = listOf("credit", "location")
 
+    /**
+     * Extended opt-in purposes used by the event gating map beyond the canonical
+     * set; stamped into per-event context.consent for web ConsentState parity.
+     */
+    private val extendedConsentPurposes: List<String> =
+        listOf("financial_activity", "economic_observability", "cross_chain_observability")
+
     fun grantConsent(categories: List<String>) {
         consentState.addAll(categories)
         consentState = consentState.distinct().toMutableList()
@@ -1020,6 +1032,7 @@ object Aether : DefaultLifecycleObserver {
         val now = SystemClock.elapsedRealtime()
         if (lastActivityMs == 0L || (now - lastActivityMs) > SESSION_TIMEOUT_MS) {
             sessionId = UUID.randomUUID().toString()
+            eventSequence = 0
         }
         foregroundStartMs = now
         lastActivityMs = now
@@ -1077,6 +1090,7 @@ object Aether : DefaultLifecycleObserver {
         while (eventQueue.size >= MAX_QUEUE_SIZE) { eventQueue.poll() }
         eventQueue.add(event)
         eventCount++
+        eventSequence++
         persistQueue()
 
         if (eventQueue.size >= (config?.batchSize ?: 10)) {
@@ -1149,7 +1163,8 @@ object Aether : DefaultLifecycleObserver {
                         log("Batch retained after $maxRetries retries (rate limited)")
                     }
                 }
-                responseCode >= 500 -> {
+                // 408 / 425 are transient like 5xx — the request can be safely re-sent.
+                responseCode == 408 || responseCode == 425 || responseCode >= 500 -> {
                     if (retryCount < maxRetries) {
                         healthAgent?.recordRetry()
                         val backoff = minOf(1000L * (1L shl retryCount), 30000L)
@@ -1158,7 +1173,7 @@ object Aether : DefaultLifecycleObserver {
                     } else {
                         healthAgent?.recordBatchAttempt(false, latencyMs)
                         requeueBatch(batch)
-                        log("Batch retained after $maxRetries retries (server error $responseCode)")
+                        log("Batch retained after $maxRetries retries (retryable error $responseCode)")
                     }
                 }
                 responseCode >= 400 -> {
@@ -1259,17 +1274,29 @@ object Aether : DefaultLifecycleObserver {
             put("name", "aether-android")
             put("version", VERSION)
         })
-        put("fingerprint", JSONObject().apply {
-            put("id", fingerprintId)
-        })
+        // fingerprint omitted in GDPR mode until analytics consent is granted
+        if (config?.privacy?.gdprMode != true || "analytics" in consentState) {
+            put("fingerprint", JSONObject().apply {
+                put("id", fingerprintId)
+            })
+        }
         campaignContext?.let { put("campaign", it) }
+        // Active journey snapshot on every event (web SDK context.journey parity);
+        // journeyName doubles as journeyType, exactly as startJourney stamps them.
+        currentJourneyId?.let { journeyId ->
+            put("journey", JSONObject().apply {
+                put("journeyId", journeyId)
+                currentJourneyName?.let { put("journeyName", it); put("journeyType", it) }
+            })
+        }
         put("consent", JSONObject().apply {
             val granted = consentState.toSet()
-            put("analytics", "analytics" in granted)
-            put("marketing", "marketing" in granted)
-            put("web3", "web3" in granted)
-            put("agent", "agent" in granted)
-            put("commerce", "commerce" in granted)
+            canonicalConsentPurposes.forEach { put(it, it in granted) }
+            extendedConsentPurposes.forEach { put(it, it in granted) }
+        })
+        // Monotonic ordering counter for gap/reorder detection at ingest.
+        put("sequence", JSONObject().apply {
+            put("event", eventSequence)
         })
     }
 

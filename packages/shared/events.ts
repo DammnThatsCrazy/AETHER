@@ -1580,7 +1580,7 @@ export interface EventContext {
   consentSnapshotId?: string;
 
   // -- canonical envelope context v1 (all optional, additive) ----------------
-  /** Envelope schema version the emitter conforms to, e.g. '1.0'. */
+  /** Envelope schema version the emitter conforms to, e.g. '1.0.0'. */
   schemaVersion?: string;
   /** Emitting product/application identity (distinct from `library`). */
   application?: ApplicationContext;

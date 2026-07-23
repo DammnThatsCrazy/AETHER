@@ -59,6 +59,17 @@ export interface AetherServerConfig {
   endpoint?: string;
   /** Consent state for server-side events. */
   consent?: Partial<ServerConsentState>;
+  /**
+   * Canonical envelope: emitting product identity stamped as
+   * context.application on every event (distinct from the SDK library).
+   */
+  application?: {
+    name?: string;
+    version?: string;
+    build?: string;
+    environment?: string;
+    namespace?: string;
+  };
   /** Max events in memory before flushing. Default 100. */
   flushAt?: number;
   /** Flush interval in ms. Default 5000. */
