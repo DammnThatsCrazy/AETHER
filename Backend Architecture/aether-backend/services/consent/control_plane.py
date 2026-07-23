@@ -6,6 +6,7 @@ persist raw connector payloads in these records.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -15,6 +16,7 @@ from repositories.repos import BaseRepository
 
 ProcessingProfileStatus = Literal["draft", "active", "suspended", "revoked"]
 ManifestStatus = Literal["draft", "approved", "suspended", "revoked"]
+DetectionStatus = Literal["manifest_required", "manifested", "ignored"]
 ConsentReceiptState = Literal["granted", "denied", "revoked", "expired"]
 
 
@@ -74,6 +76,21 @@ class IntegrationPolicyManifest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class DetectedIntegration(BaseModel):
+    tenant_id: str
+    connector_type: str
+    provider: str
+    capability: str
+    status: DetectionStatus = "manifest_required"
+    policy_manifest_version: str
+    source: str = "connector_config"
+    source_ref: Optional[str] = None
+    detected_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class TenantProcessingProfileRepository(BaseRepository):
     """Canonical tenant policy store introduced by the PR-0 seed."""
 
@@ -125,6 +142,48 @@ class IntegrationPolicyManifestRepository(BaseRepository):
             manifest.model_dump(),
         )
 
+    async def list_for_tenant(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+
+class DetectedIntegrationRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("detected_integrations")
+
+    @staticmethod
+    def record_id(
+        tenant_id: str,
+        connector_type: str,
+        capability: str,
+    ) -> str:
+        return f"{tenant_id}:{connector_type}:{capability}"
+
+    async def upsert_detection(
+        self,
+        detection: DetectedIntegration,
+    ) -> dict[str, Any]:
+        return await self.insert(
+            self.record_id(
+                detection.tenant_id,
+                detection.connector_type,
+                detection.capability,
+            ),
+            detection.model_dump(),
+        )
+
+    async def list_for_tenant(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
 
 class ConnectorPolicyDecisionRepository(BaseRepository):
     def __init__(self) -> None:
@@ -169,5 +228,6 @@ class ConsentReceiptHistoryRepository(BaseRepository):
 
 tenant_processing_profiles = TenantProcessingProfileRepository()
 integration_policy_manifests = IntegrationPolicyManifestRepository()
+detected_integrations = DetectedIntegrationRepository()
 connector_policy_decisions = ConnectorPolicyDecisionRepository()
 consent_receipt_history = ConsentReceiptHistoryRepository()

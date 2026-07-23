@@ -5,11 +5,10 @@
 * ``admin_router`` (``/v1/admin/kyber/connectors``) — operator-gated,
   aggregate-only connector health.
 
-Production external webhook delivery (unauthenticated, HMAC-verified) targets a
-public ``/v1/integrations/webhooks/{connector}`` endpoint; enabling that path is
-a credential-gated activation step documented in WEBHOOK-INGESTION.md (it needs
-a PUBLIC_PATHS entry + per-tenant routing). This module ships the authenticated
-ingest path so the flow is testable and tenant-safe today.
+Production external webhook delivery (unauthenticated, signature-verified)
+targets a public ``/v1/integrations/webhooks/{connector}`` endpoint. Provider
+adapters use their native scheme when declared; generic webhooks use Aether's
+timestamped HMAC scheme.
 """
 from __future__ import annotations
 
@@ -28,7 +27,7 @@ logger = get_logger("aether.service.connectors.routes")
 
 router = APIRouter(prefix="/v1/integrations/connectors", tags=["Integrations — Connectors"])
 admin_router = APIRouter(prefix="/v1/admin/kyber/connectors", tags=["Admin — Kyber Connectors"])
-# Public webhook router — no API key auth, HMAC-verified inside each handler.
+# Public webhook router — no API key auth, signature-verified in the handler.
 # Mounted under PUBLIC_PATH_PREFIXES in feature_gate.py.
 webhook_public_router = APIRouter(prefix="/v1/integrations/webhooks", tags=["Integrations — Webhooks"])
 
@@ -59,10 +58,89 @@ class ConnectorConfigure(BaseModel):
     credential: Optional[str] = None  # raw credential stored inline to vault; sets secret_ref
 
 
+class IntegrationManifestApproval(BaseModel):
+    approved_purposes: list[str]
+    processing_basis: str
+    allowed_fields: list[str]
+    provider_admin_installed: bool = False
+
+
 @router.get("")
 async def list_connectors(request: Request):
     tenant_id = _tenant_id(request)
     return APIResponse(data={"items": await connector_service.list_for_tenant(tenant_id)}).to_dict()
+
+
+@router.post("/discovery/scan")
+async def scan_configured_integrations(request: Request):
+    tenant_id = _tenant_id(request, "write")
+    from services.integrations.discovery import discover_configured_integrations
+
+    configured = await connector_service.repo.find_many(
+        filters={"tenant_id": tenant_id},
+        limit=1000,
+    )
+    items = await discover_configured_integrations(tenant_id, configured)
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/discovery/detections")
+async def get_detected_integrations(request: Request):
+    tenant_id = _tenant_id(request)
+    from services.integrations.discovery import list_detections
+
+    items = await list_detections(tenant_id)
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/manifests")
+async def get_integration_manifests(request: Request):
+    tenant_id = _tenant_id(request)
+    from services.integrations.discovery import list_manifests
+
+    items = await list_manifests(tenant_id)
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+@router.post("/manifests/{connector_type}/draft")
+async def draft_integration_manifest(
+    connector_type: str,
+    request: Request,
+):
+    tenant_id = _tenant_id(request, "admin")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    from services.integrations.discovery import create_draft_manifest
+
+    stored = await create_draft_manifest(
+        tenant_id,
+        connector_type,
+        actor_id=_actor(request),
+    )
+    return APIResponse(data=stored).to_dict()
+
+
+@router.put("/manifests/{connector_type}")
+async def approve_integration_manifest(
+    connector_type: str,
+    body: IntegrationManifestApproval,
+    request: Request,
+):
+    tenant_id = _tenant_id(request, "admin")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    from services.integrations.discovery import approve_manifest
+
+    stored = await approve_manifest(
+        tenant_id,
+        connector_type,
+        approved_purposes=body.approved_purposes,
+        processing_basis=body.processing_basis,
+        allowed_fields=body.allowed_fields,
+        provider_admin_installed=body.provider_admin_installed,
+        actor_id=_actor(request),
+    )
+    return APIResponse(data=stored).to_dict()
 
 
 @router.get("/{connector_type}")
@@ -119,7 +197,8 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
     ts = request.headers.get("X-Aether-Timestamp")
     # Secret resolved from the vault when enabled; None in local/mocked mode.
     result = await connector_service.ingest_webhook(
-        connector_type, tenant_id, raw_body=raw, signature=sig, timestamp=ts, secret=None,
+        connector_type, tenant_id, raw_body=raw, signature=sig, timestamp=ts,
+        secret=None, headers=dict(request.headers),
     )
     return APIResponse(data=result).to_dict()
 
@@ -127,38 +206,14 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
 # ── Public provider webhook ingestion ─────────────────────────────────────────
 # This route is UNAUTHENTICATED by API key.  It is listed in PUBLIC_PATH_PREFIXES
 # so the middleware skips token auth.  Security is enforced inside the handler via
-# HMAC-SHA256 signature verification.
+# provider-native or Aether HMAC signature verification.
 #
 # Tenant routing: the tenant is resolved by looking up the connector config whose
-# stored webhook secret produces a valid HMAC for the incoming payload.  The
+# stored webhook secret produces a valid signature for the incoming payload. The
 # caller provides X-Aether-Tenant-ID so we can scope the secret lookup efficiently.
-# If X-Aether-Tenant-ID is missing or the HMAC fails, the request is rejected.
+# If X-Aether-Tenant-ID is missing or verification fails, the request is rejected.
 #
-# Replay prevention: a 5-minute timestamp window is enforced; requests older than
-# 300 s are rejected.
-
-import hashlib as _hashlib
-import hmac as _hmac
-import time as _time
-import json as _json
-
-_WEBHOOK_TIMESTAMP_TOLERANCE_S = 300  # 5 minutes
-
-
-def _verify_hmac(secret: str, body: bytes, timestamp: str, signature: str) -> bool:
-    """Verify HMAC-SHA256 webhook signature with timestamp replay protection."""
-    try:
-        ts = int(timestamp)
-    except (ValueError, TypeError):
-        return False
-    age = abs(int(_time.time()) - ts)
-    if age > _WEBHOOK_TIMESTAMP_TOLERANCE_S:
-        return False
-    signing_payload = f"{timestamp}.".encode() + body
-    expected = _hmac.new(secret.encode(), signing_payload, _hashlib.sha256).hexdigest()
-    sig_hex = signature.removeprefix("v1=")
-    return _hmac.compare_digest(expected, sig_hex)
-
+# Generic Aether HMAC delivery also enforces a five-minute replay window.
 
 @webhook_public_router.post("/{connector_type}")
 async def public_webhook_ingest(connector_type: str, request: Request):
@@ -166,17 +221,18 @@ async def public_webhook_ingest(connector_type: str, request: Request):
     Public provider webhook ingestion.
 
     - No API key required.
-    - HMAC-SHA256 verified using the tenant's stored connector secret.
+    - Provider-native or Aether HMAC signature verification.
     - Tenant resolved from X-Aether-Tenant-ID header.
-    - Replay prevention: 5-minute timestamp window.
+    - Generic HMAC replay prevention: 5-minute timestamp window.
     - Idempotent: duplicate webhook event IDs are detected and skipped.
 
     Headers:
       X-Aether-Tenant-ID: <tenant_id>       (required — set by webhook registration)
-      X-Aether-Signature: <hmac_sha256_hex>  (required)
-      X-Aether-Timestamp: <unix_epoch_int>   (required)
+      X-Aether-Signature: <hmac_sha256_hex>  (generic webhook only)
+      X-Aether-Timestamp: <unix_epoch_int>   (generic webhook only)
+      Provider-native signature headers     (declared adapter schemes)
     """
-    from shared.common.common import BadRequestError, UnauthorizedError, ForbiddenError
+    from shared.common.common import BadRequestError, ForbiddenError
     from shared.logger.logger import metrics as _metrics
 
     connector = get_connector(connector_type)
@@ -189,7 +245,10 @@ async def public_webhook_ingest(connector_type: str, request: Request):
 
     signature = request.headers.get("X-Aether-Signature", "").strip()
     timestamp = request.headers.get("X-Aether-Timestamp", "").strip()
-    if not signature or not timestamp:
+    uses_native_signature = callable(
+        getattr(connector, "verify_webhook_signature", None)
+    )
+    if not uses_native_signature and (not signature or not timestamp):
         _metrics.increment("connector_webhook_rejected_total", labels={
             "connector": connector_type, "reason": "missing_signature",
         })
@@ -217,7 +276,18 @@ async def public_webhook_ingest(connector_type: str, request: Request):
 
     raw_body = await request.body()
 
-    if not _verify_hmac(secret, raw_body, timestamp, signature):
+    from services.integrations.webhook_policy import (
+        verify_provider_webhook_signature,
+    )
+
+    if not verify_provider_webhook_signature(
+        connector,
+        raw_body=raw_body,
+        headers=dict(request.headers),
+        secret=secret,
+        signature=signature,
+        timestamp=timestamp,
+    ):
         _metrics.increment("connector_webhook_rejected_total", labels={
             "connector": connector_type, "reason": "invalid_signature",
         })
@@ -226,7 +296,8 @@ async def public_webhook_ingest(connector_type: str, request: Request):
     # Signature verified — ingest the webhook
     result = await connector_service.ingest_webhook(
         connector_type, tenant_id,
-        raw_body=raw_body, signature=signature, timestamp=timestamp, secret=secret,
+        raw_body=raw_body, signature=signature, timestamp=timestamp,
+        secret=secret, headers=dict(request.headers),
     )
     _metrics.increment("connector_webhook_received_total", labels={"connector": connector_type})
 

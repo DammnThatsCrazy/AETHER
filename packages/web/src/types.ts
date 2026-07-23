@@ -9,6 +9,11 @@
 // also be made in packages/shared and bump CONTRACT_SCHEMA_VERSION.
 // =============================================================================
 
+import type {
+  CanonicalConsentReceipt,
+  CanonicalConsentReceiptInput,
+} from '@aether/shared';
+
 /**
  * Identity resolved from a prior device/session via wallet address lookup.
  * Returned by POST /sdk/identity/resolve when a known wallet is recognized.
@@ -1528,4 +1533,9 @@ export interface ConsentInterface {
   showBanner(config?: ConsentBannerConfig): void;
   hideBanner(): void;
   onUpdate(callback: ConsentCallback): () => void;
+  /**
+   * Persist an authoritative, deterministic consent receipt. The tenant ID
+   * must match the tenant resolved by the configured API key.
+   */
+  recordReceipt(input: CanonicalConsentReceiptInput): Promise<CanonicalConsentReceipt>;
 }

@@ -65,6 +65,35 @@ data class PrivacyConfig(
     val anonymizeIP: Boolean = true
 )
 
+data class CanonicalConsentReceiptInput(
+    val tenantId: String,
+    val subjectId: String? = null,
+    val anonymousId: String? = null,
+    val purposes: List<String>,
+    val state: String,
+    val source: String,
+    val policyVersion: String,
+    val provider: String? = null,
+    val jurisdictionContext: String? = null,
+    val mode: String? = null,
+    val lawfulBasis: String? = null,
+    val grantedAt: String? = null,
+    val deniedAt: String? = null,
+    val revokedAt: String? = null,
+    val expiresAt: String? = null,
+    val gpcObserved: Boolean? = null,
+    val dntObserved: Boolean? = null,
+    val providerConsentId: String? = null,
+    val metadata: Map<String, Any?> = emptyMap(),
+)
+
+data class CanonicalConsentReceipt(
+    val receiptId: String,
+    val integrityHash: String,
+    val idempotencyKey: String,
+    val input: CanonicalConsentReceiptInput,
+)
+
 // =============================================================================
 // IDENTITY
 // =============================================================================
@@ -875,6 +904,50 @@ object Aether : DefaultLifecycleObserver {
 
     fun getConsentState(): List<String> = consentState.toList()
 
+    /**
+     * Build and persist an authoritative consent receipt. The tenant ID must
+     * match the tenant resolved from the configured API key.
+     */
+    fun buildCanonicalConsentReceipt(input: CanonicalConsentReceiptInput): CanonicalConsentReceipt {
+        require(input.tenantId.isNotBlank()) { "tenantId is required" }
+        require(!input.subjectId.isNullOrBlank() || !input.anonymousId.isNullOrBlank()) {
+            "subjectId or anonymousId is required"
+        }
+        require(input.purposes.isNotEmpty()) { "at least one purpose is required" }
+        val normalized = input.copy(purposes = input.purposes.distinct().sorted())
+        val digest = sha256Canonical(canonicalConsentReceiptPreimage(normalized))
+        return CanonicalConsentReceipt(
+            receiptId = "ccr_${digest.take(32)}",
+            integrityHash = "sha256:$digest",
+            idempotencyKey = "consent-receipt:$digest",
+            input = normalized,
+        )
+    }
+
+    suspend fun recordConsentReceipt(input: CanonicalConsentReceiptInput): CanonicalConsentReceipt {
+        val cfg = config ?: throw IllegalStateException("Aether SDK is not initialized")
+        val receipt = buildCanonicalConsentReceipt(input)
+        withContext(Dispatchers.IO) {
+            val connection = URL("${cfg.endpoint.trimEnd('/')}/v1/consent/records")
+                .openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use {
+                    it.write(consentReceiptRequestJson(receipt).toString().toByteArray(Charsets.UTF_8))
+                }
+                if (connection.responseCode !in 200..299) {
+                    throw IllegalStateException("Consent receipt request failed (${connection.responseCode})")
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+        return receipt
+    }
+
     // =========================================================================
     // ECOMMERCE TRACKING
     // =========================================================================
@@ -1340,6 +1413,99 @@ object Aether : DefaultLifecycleObserver {
             .digest(input.lowercase().trim().toByteArray())
         return bytes.joinToString("") { "%02x".format(it) }
     }
+
+    private val canonicalConsentReceiptHashFields = listOf(
+        "tenant_id", "subject_id", "anonymous_id", "purposes", "state", "source",
+        "provider", "policy_version", "jurisdiction_context", "mode", "lawful_basis",
+        "granted_at", "denied_at", "revoked_at", "expires_at", "gpc_observed",
+        "dnt_observed", "provider_consent_id", "metadata",
+    )
+
+    private fun sha256Canonical(input: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    private fun canonicalConsentReceiptValues(input: CanonicalConsentReceiptInput): Map<String, Any?> = mapOf(
+        "tenant_id" to input.tenantId,
+        "subject_id" to input.subjectId,
+        "anonymous_id" to input.anonymousId,
+        "purposes" to input.purposes,
+        "state" to input.state,
+        "source" to input.source,
+        "provider" to input.provider,
+        "policy_version" to input.policyVersion,
+        "jurisdiction_context" to input.jurisdictionContext,
+        "mode" to input.mode,
+        "lawful_basis" to input.lawfulBasis,
+        "granted_at" to input.grantedAt,
+        "denied_at" to input.deniedAt,
+        "revoked_at" to input.revokedAt,
+        "expires_at" to input.expiresAt,
+        "gpc_observed" to input.gpcObserved,
+        "dnt_observed" to input.dntObserved,
+        "provider_consent_id" to input.providerConsentId,
+        "metadata" to input.metadata,
+    )
+
+    private fun canonicalConsentReceiptPreimage(input: CanonicalConsentReceiptInput): String {
+        val values = canonicalConsentReceiptValues(input)
+        return buildString {
+            append("aether-consent-receipt/v1\n")
+            canonicalConsentReceiptHashFields.forEach { field ->
+                val value = canonicalConsentHashValue(values[field])
+                append(field).append('=').append(value.toByteArray(Charsets.UTF_8).size)
+                    .append(':').append(value).append('\n')
+            }
+        }
+    }
+
+    private fun canonicalConsentHashValue(value: Any?): String = when (value) {
+        null -> ""
+        is Boolean -> value.toString()
+        is Collection<*> -> value.map { it?.toString() ?: "null" }
+            .distinct().sorted().joinToString("\u001f")
+        is Map<*, *> -> if (value.isEmpty()) "" else canonicalJson(value)
+        else -> value.toString()
+    }
+
+    private fun canonicalJson(value: Any?): String = when (value) {
+        null -> "null"
+        is String -> JSONObject.quote(value)
+        is Number, is Boolean -> value.toString()
+        is Collection<*> -> value.joinToString(prefix = "[", postfix = "]") { canonicalJson(it) }
+        is Map<*, *> -> value.entries.sortedBy { it.key.toString() }.joinToString(
+            prefix = "{", postfix = "}",
+        ) { (key, item) -> "${JSONObject.quote(key.toString())}:${canonicalJson(item)}" }
+        else -> JSONObject.quote(value.toString())
+    }
+
+    private fun canonicalConsentReceiptJson(receipt: CanonicalConsentReceipt): JSONObject {
+        val json = JSONObject()
+        canonicalConsentReceiptValues(receipt.input).forEach { (key, value) ->
+            json.put(key, if (value == null) JSONObject.NULL else JSONObject.wrap(value))
+        }
+        json.put("receipt_id", receipt.receiptId)
+        json.put("integrity_hash", receipt.integrityHash)
+        json.put("idempotency_key", receipt.idempotencyKey)
+        return json
+    }
+
+    private fun consentReceiptRequestJson(receipt: CanonicalConsentReceipt): JSONObject =
+        JSONObject().apply {
+            put("user_id", receipt.input.subjectId)
+            put("subject_id", receipt.input.subjectId)
+            put("anonymous_id", receipt.input.anonymousId)
+            put("purposes", JSONArray(receipt.input.purposes))
+            put("granted", receipt.input.state == "granted")
+            put("source", receipt.input.source)
+            put("mode", receipt.input.mode)
+            put("jurisdiction", receipt.input.jurisdictionContext)
+            put("gpc_observed", receipt.input.gpcObserved)
+            put("dnt_observed", receipt.input.dntObserved)
+            put("idempotency_key", receipt.idempotencyKey)
+            put("canonical_receipt", canonicalConsentReceiptJson(receipt))
+        }
 
     private suspend fun resolveIdentity(walletAddress: String?, userId: String?, email: String?) = withContext(Dispatchers.IO) {
         val cfg = config ?: return@withContext

@@ -8,6 +8,12 @@ export default defineConfig({
         find: /^@aether\/web$/,
         replacement: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       },
+      {
+        find: /^@aether\/shared\/consent-receipt$/,
+        replacement: fileURLToPath(
+          new URL('../shared/consent-receipt.ts', import.meta.url),
+        ),
+      },
     ],
   },
   test: {
