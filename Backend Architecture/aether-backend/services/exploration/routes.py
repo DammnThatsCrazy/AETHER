@@ -18,7 +18,7 @@ import uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from config.settings import settings
 from dependencies.providers import get_cache, get_graph
@@ -69,40 +69,41 @@ def _count_dispositions(applicability: dict[str, Any]) -> None:
 
 # ── Request models ────────────────────────────────────────────────────────────
 
-class ValidateRequest(BaseModel):
+class _ContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     context: ExplorationContextV1
 
+    @field_validator("context", mode="before")
+    @classmethod
+    def _coerce_context(cls, value: Any) -> Any:
+        if isinstance(value, ExplorationContextV1):
+            return value
+        if isinstance(value, BaseModel) and value.__class__.__name__ == "ExplorationContextV1":
+            return value.model_dump(mode="python")
+        return value
 
-class QueryRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
-    context: ExplorationContextV1
+class ValidateRequest(_ContextRequest):
+    pass
+
+
+class QueryRequest(_ContextRequest):
     limit: int = Field(default=100, ge=1, le=500)
     cursor: Optional[str] = None
 
 
-class FacetRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    context: ExplorationContextV1
+class FacetRequest(_ContextRequest):
     fields: list[str] = Field(default_factory=list)
     limit: int = Field(default=500, ge=1, le=500)
 
 
-class ViewUpsertRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class ViewUpsertRequest(_ContextRequest):
     view_id: Optional[str] = None
     name: str
-    context: ExplorationContextV1
 
 
-class LinkResolveRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    context: ExplorationContextV1
+class LinkResolveRequest(_ContextRequest):
     to: str
     focus: Optional[ExplorationAnchor] = None
 
