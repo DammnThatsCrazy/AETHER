@@ -378,10 +378,45 @@ class ConnectorService:
         config = ConnectorConfig(**cfg) if cfg else None
         if config is None or not config.enabled:
             return {"accepted": False, "reason": "connector disabled", "events_ingested": 0}
+
+        async def _quarantine(
+            reason_code: str,
+            *,
+            policy_decision_id: Optional[str] = None,
+        ) -> None:
+            try:
+                from services.integrations.webhook_quarantine import (
+                    webhook_quarantine,
+                )
+
+                await webhook_quarantine.quarantine(
+                    tenant_id=tenant_id,
+                    connector_type=connector_type,
+                    raw_body=raw_body,
+                    reason_code=reason_code,
+                    inbox_id=_inbox_id,
+                    policy_decision_id=policy_decision_id,
+                )
+            except Exception as exc:  # pragma: no cover - denial remains closed
+                logger.warning(
+                    "connector webhook quarantine write failed "
+                    f"tenant={tenant_id} type={connector_type}: {exc}"
+                )
+
         verified = False
         if secret:
-            from services.security.integration_security import verify_signature
-            if not (signature and timestamp and verify_signature(secret, raw_body, timestamp, signature)):
+            from services.integrations.webhook_policy import (
+                verify_provider_webhook_signature,
+            )
+
+            if not verify_provider_webhook_signature(
+                connector,
+                raw_body=raw_body,
+                headers=headers or {},
+                secret=secret,
+                signature=signature,
+                timestamp=timestamp,
+            ):
                 # D9: update health to error state on failed signature verification
                 config.sync_status = "failed"  # type: ignore[assignment]
                 config.error_count += 1
@@ -391,6 +426,7 @@ class ConnectorService:
                 await self.repo.insert(_key(tenant_id, connector_type), config.model_dump())
                 await _audit(tenant_id, "system", "system", "connector_webhook_ingested",
                              connector_type, "blocked", {"reason": "invalid signature"})
+                await _quarantine("invalid_signature")
                 return {"accepted": False, "reason": "invalid signature", "events_ingested": 0}
             verified = True
         import json
@@ -404,8 +440,59 @@ class ConnectorService:
             config.last_error_message = "webhook payload parse error"
             config.updated_at = now_iso()
             await self.repo.insert(_key(tenant_id, connector_type), config.model_dump())
+            await _quarantine("invalid_payload")
             return {"accepted": False, "reason": "invalid payload", "events_ingested": 0}
-        events = connector.parse_webhook(payload if isinstance(payload, dict) else {"items": payload})
+
+        payload_dict = payload if isinstance(payload, dict) else {"items": payload}
+        subject_field = str(config.config.get("subject_id_field") or "")
+        anonymous_field = str(config.config.get("anonymous_id_field") or "")
+        from services.integrations.webhook_policy import (
+            evaluate_consent_control_plane,
+        )
+
+        policy_outcome = await evaluate_consent_control_plane(
+            tenant_id=tenant_id,
+            connector_type=connector_type,
+            connector_config=config.config,
+            payload_fields=list(payload_dict),
+            subject_id=(
+                str(payload_dict[subject_field])
+                if subject_field and payload_dict.get(subject_field) is not None
+                else None
+            ),
+            anonymous_id=(
+                str(payload_dict[anonymous_field])
+                if anonymous_field and payload_dict.get(anonymous_field) is not None
+                else None
+            ),
+        )
+        if not policy_outcome.allowed:
+            reason = policy_outcome.reason_code or "consent_policy_denied"
+            await _quarantine(
+                reason,
+                policy_decision_id=policy_outcome.policy_decision_id,
+            )
+            await _audit(
+                tenant_id,
+                "system",
+                "system",
+                "connector_webhook_ingested",
+                connector_type,
+                "blocked",
+                {
+                    "reason": reason,
+                    "policy_decision_id": policy_outcome.policy_decision_id,
+                    "quarantined": True,
+                },
+            )
+            return {
+                "accepted": False,
+                "reason": reason,
+                "events_ingested": 0,
+                "quarantined": True,
+                "policy_decision_id": policy_outcome.policy_decision_id,
+            }
+        events = connector.parse_webhook(payload_dict)
         # Route canonical communication events and campaign catalog records
         # into the durable Bronze → bus → Silver pipeline (ADR-C1/C3).
         ingest_counts: dict[str, int] = {}
