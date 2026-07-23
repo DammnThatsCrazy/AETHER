@@ -184,6 +184,19 @@ async def get_entity_sentiment_state(entity_id: str, request: Request):
     ).to_dict()
 
 
+@router.get("/entities/{entity_id}/episodes")
+async def get_entity_episodes(entity_id: str, request: Request):
+    require_read_access(request)
+    episodes = await get_semantic_service().episodes(tenant_id(request), entity_id)
+    return APIResponse(
+        data={
+            "entity_id": entity_id,
+            "episodes": episodes,
+            "insufficient_data": len(episodes) == 0,
+        }
+    ).to_dict()
+
+
 @router.get("/entities/{entity_id}/timeline")
 async def get_entity_timeline(
     entity_id: str, request: Request, limit: int = Query(50, ge=1, le=500)
@@ -203,8 +216,24 @@ async def get_entity_timeline(
 @router.get("/narratives")
 async def narratives(request: Request):
     require_read_access(request)
-    rows = await get_semantic_service().narratives(tenant_id(request))
-    return APIResponse(data={"narratives": rows, "insufficient_data": not rows}).to_dict()
+    service = get_semantic_service()
+    tid = tenant_id(request)
+    rows = await service.narratives(tid)
+    # `narratives` (flat frame list) is kept for backward compat; `states` are
+    # the durable per-narrative Gold aggregates served alongside it.
+    states = await service.narrative_states(tid)
+    return APIResponse(
+        data={"narratives": rows, "states": states, "insufficient_data": not rows}
+    ).to_dict()
+
+
+@router.get("/relationships/{source_ref}/{target_ref}")
+async def get_relationship_state(source_ref: str, target_ref: str, request: Request):
+    require_read_access(request)
+    data = await get_semantic_service().relationship_state(
+        tenant_id(request), source_ref, target_ref
+    )
+    return APIResponse(data=data).to_dict()
 
 
 @router.get("/cascades")

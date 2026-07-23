@@ -212,7 +212,11 @@ class SemanticIntelligenceService:
         """Recompute and durably persist an entity's Gold semantic state."""
         from .reducers import recompute_entity_state
 
-        return await recompute_entity_state(tenant_id, entity_ref)
+        state = await recompute_entity_state(tenant_id, entity_ref)
+        # Entity-level changes shift the tenant's cascades; refresh their Gold
+        # projection in the same recompute pass (service-level wiring only).
+        await self.recompute_cascades(tenant_id)
+        return state
 
     async def gold_entity_state(
         self, tenant_id: str, entity_ref: str
@@ -263,8 +267,87 @@ class SemanticIntelligenceService:
         rows = await get_store().list_semantic(tenant_id)
         return sorted({n for r in rows for n in r.narrative_frames})
 
+    async def recompute_narrative_states(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Recompute and durably persist the tenant's per-narrative Gold state."""
+        from .reducers import recompute_narrative_states
+
+        return await recompute_narrative_states(tenant_id)
+
+    async def narrative_states(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Durable per-narrative Gold aggregates, recomputing on a Gold miss."""
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        repo = SemanticFactRepository("gold_narrative_state")
+        rows = await repo.list_by_tenant(tenant_id)
+        if rows:
+            return rows
+        # No durable projection yet — build it, then serve the persisted rows.
+        await self.recompute_narrative_states(tenant_id)
+        return await repo.list_by_tenant(tenant_id)
+
     async def cascades(self, tenant_id: str):
         return await cascades_for_tenant(tenant_id)
+
+    async def recompute_cascades(self, tenant_id: str):
+        """Persist the tenant's live cascade projections to Gold (idempotent)."""
+        from .reducers import recompute_cascades
+
+        return await recompute_cascades(tenant_id)
+
+    async def recompute_relationship_state(
+        self, tenant_id: str, source_ref: str, target_ref: str
+    ) -> dict[str, Any]:
+        """Recompute and durably persist a directed pair's Gold relationship state."""
+        from .reducers import recompute_relationship_sentiment, recompute_relationship_state
+
+        state = await recompute_relationship_state(tenant_id, source_ref, target_ref)
+        sentiment = await recompute_relationship_sentiment(tenant_id, source_ref, target_ref)
+        return {"relationship_state": state, "sentiment_state": sentiment}
+
+    async def relationship_state(
+        self, tenant_id: str, source_ref: str, target_ref: str
+    ) -> dict[str, Any]:
+        """Durable Gold relationship state (semantic + sentiment), recomputing on miss."""
+        from .reducers import relationship_ref
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        rel = relationship_ref(source_ref, target_ref)
+        sem_repo = SemanticFactRepository("gold_relationship_semantic_state")
+        sent_repo = SemanticFactRepository("gold_relationship_sentiment_state")
+        sem_rows = await sem_repo.list_by_tenant(tenant_id, rel, limit=1)
+        if not sem_rows:
+            # No durable projection yet — recompute persists only observed pairs,
+            # so an unobserved pair stays row-less (insufficient_data below).
+            await self.recompute_relationship_state(tenant_id, source_ref, target_ref)
+            sem_rows = await sem_repo.list_by_tenant(tenant_id, rel, limit=1)
+        sent_rows = await sent_repo.list_by_tenant(tenant_id, rel, limit=1)
+        return {
+            "relationship_ref": rel,
+            "source_ref": source_ref,
+            "target_ref": target_ref,
+            "relationship_state": sem_rows[0] if sem_rows else None,
+            "sentiment_state": sent_rows[0] if sent_rows else None,
+            "insufficient_data": not sem_rows,
+        }
+
+    async def recompute_episodes(self, tenant_id: str, subject_ref: str):
+        """Recompute and durably persist a subject's Gold episodes."""
+        from .reducers import recompute_episodes
+
+        return await recompute_episodes(tenant_id, subject_ref)
+
+    async def episodes(self, tenant_id: str, subject_ref: str) -> list[dict[str, Any]]:
+        """Durable Gold episodes for a subject, recomputing on a Gold miss."""
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        repo = SemanticFactRepository("gold_semantic_episodes")
+        rows = await repo.list_by_tenant(tenant_id, subject_ref, limit=200)
+        if rows:
+            return rows
+        # No durable projection yet — build it, then serve the persisted rows
+        # (a subject without observations persists nothing and stays empty).
+        await self.recompute_episodes(tenant_id, subject_ref)
+        return await repo.list_by_tenant(tenant_id, subject_ref, limit=200)
 
     async def campaign_observations(
         self, tenant_id: str, campaign_id: str
