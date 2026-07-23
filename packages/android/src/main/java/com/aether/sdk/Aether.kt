@@ -198,6 +198,10 @@ object Aether : DefaultLifecycleObserver {
         "journey_resumed" to "analytics", "journey_continued" to "analytics",
         "journey_completed" to "analytics", "journey_abandoned" to "analytics",
         "journey_checkpoint" to "analytics", "identify" to "analytics",
+        // Acquisition attribution — SDKs observe evidence; the backend classifies
+        "navigation_intent" to "analytics", "navigation_arrival" to "analytics",
+        "deep_link_opened" to "analytics", "app_install_attributed" to "analytics",
+        "deferred_attribution_resolved" to "analytics",
         "experiment" to "marketing", "conversion" to "marketing",
         "consent" to "analytics",
         "payment_initiated" to "commerce", "payment_completed" to "commerce",
