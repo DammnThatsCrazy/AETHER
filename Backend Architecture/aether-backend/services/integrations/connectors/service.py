@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from config.settings import settings
 from repositories.repos import BaseRepository
+from shared.common.common import ForbiddenError
 from shared.logger.logger import get_logger
 
 from services.integrations.connectors.base import (
@@ -42,6 +44,14 @@ def _key(tenant_id: str, connector_type: str) -> str:
 def _strip_secrets(config: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in (config or {}).items()
             if not any(s in k.lower() for s in _SECRET_KEYS)}
+
+
+def _integration_policy_gate_enabled() -> bool:
+    rollout = settings.integration_consent
+    return bool(
+        rollout.control_plane_v2_enabled
+        and rollout.connector_policy_gate_enabled
+    )
 
 
 async def _meter(tenant_id: str, event_type: str, source_id: str | None, source_type: str) -> None:
@@ -142,6 +152,36 @@ class ConnectorService:
         if config is not None:
             record.config = _strip_secrets(config)  # never persist secrets
         if enabled is not None:
+            if enabled and _integration_policy_gate_enabled():
+                from services.integrations.consent_policy import (
+                    evaluate_connector_processing,
+                )
+
+                decision = await evaluate_connector_processing(
+                    tenant_id,
+                    connector_type,
+                    source_kind="configuration",
+                    processing_basis=record.config.get("processing_basis"),
+                    action="enable",
+                )
+                if not decision.allowed:
+                    await _audit(
+                        tenant_id,
+                        actor_id,
+                        "tenant_user",
+                        "connector_config_changed",
+                        connector_type,
+                        "blocked",
+                        {
+                            "enabled": True,
+                            "reason": decision.reasonCode,
+                            "policy_decision_id": decision.decisionId,
+                        },
+                    )
+                    raise ForbiddenError(
+                        "Connector enablement denied by integration consent "
+                        f"policy: {decision.reasonCode}"
+                    )
             record.enabled = enabled
         if credential:
             record.secret_ref = await self._store_credential(tenant_id, connector_type, credential)
@@ -179,6 +219,36 @@ class ConnectorService:
             tenant_id=tenant_id, connector_type=connector_type)  # type: ignore[arg-type]
         if not config.enabled:
             return SyncResult(connector_type=connector_type, status="disabled", detail="connector disabled")  # type: ignore[arg-type]
+
+        if _integration_policy_gate_enabled():
+            from services.integrations.consent_policy import (
+                evaluate_connector_processing,
+            )
+
+            decision = await evaluate_connector_processing(
+                tenant_id,
+                connector_type,
+                source_kind="pull",
+                processing_basis=config.config.get("processing_basis"),
+                action="sync",
+            )
+            if not decision.allowed:
+                await _audit(
+                    tenant_id,
+                    actor_id,
+                    "system",
+                    "connector_sync",
+                    connector_type,
+                    "blocked",
+                    {
+                        "reason": decision.reasonCode,
+                        "policy_decision_id": decision.decisionId,
+                    },
+                )
+                raise ForbiddenError(
+                    "Connector sync denied by integration consent policy: "
+                    f"{decision.reasonCode}"
+                )
 
         # ACTION_NOTIFIER connectors must never write to the lake.
         # Sync is blocked — use the action delivery path instead.

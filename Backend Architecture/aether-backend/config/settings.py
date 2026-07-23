@@ -658,6 +658,38 @@ class SemanticIntelligenceConfig:
 
 
 # ---------------------------------------------------------------------------
+# Integration consent governance — additive, default-off rollout controls.
+#
+# These names are generated into the public integration-consent contract. The
+# runtime settings mirror that contract exactly so code never infers rollout
+# state from generated constants. The connector policy gate is only consulted
+# when both it and the V2 control plane are enabled; flag-off behavior remains
+# the existing connector behavior.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class IntegrationConsentConfig:
+    control_plane_v2_enabled: bool = _env_bool(
+        "AETHER_CONSENT_CONTROL_PLANE_V2", False
+    )
+    connector_policy_gate_enabled: bool = _env_bool(
+        "AETHER_CONNECTOR_POLICY_GATE", False
+    )
+    integration_discovery_enabled: bool = _env_bool(
+        "AETHER_INTEGRATION_DISCOVERY", False
+    )
+    preference_center_v1_enabled: bool = _env_bool(
+        "AETHER_PREFERENCE_CENTER_V1", False
+    )
+    checkout_hardening_v1_enabled: bool = _env_bool(
+        "AETHER_CHECKOUT_HARDENING_V1", False
+    )
+    consent_lifecycle_enforcement_enabled: bool = _env_bool(
+        "AETHER_CONSENT_LIFECYCLE_ENFORCEMENT", False
+    )
+
+
+# ---------------------------------------------------------------------------
 # Ingestion V2 (PR 5) — typed Bronze + transactional outbox for /v1/batch.
 #
 # Canary rollout, default OFF. When `enabled` is True (or the request's tenant
@@ -1189,6 +1221,7 @@ class Settings:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
     semantic: SemanticIntelligenceConfig = field(default_factory=SemanticIntelligenceConfig)
+    integration_consent: IntegrationConsentConfig = field(default_factory=IntegrationConsentConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)

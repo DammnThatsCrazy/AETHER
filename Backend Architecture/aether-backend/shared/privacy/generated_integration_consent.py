@@ -1,5 +1,6 @@
 # DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json
 # Run: python scripts/generate_contracts.py
+from __future__ import annotations
 from dataclasses import dataclass
 
 @dataclass(frozen=True)

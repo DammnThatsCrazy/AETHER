@@ -660,6 +660,7 @@ def gen_integration_consent_py(reg: dict) -> str:
     return (
         "# DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json\n"
         "# Run: python scripts/generate_contracts.py\n"
+        "from __future__ import annotations\n"
         "from dataclasses import dataclass\n\n"
         "@dataclass(frozen=True)\n"
         "class ProcessingDecision:\n"

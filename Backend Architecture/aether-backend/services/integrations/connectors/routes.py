@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.logger.logger import get_logger
 
-from services.integrations.connectors.registry import get_connector
+from services.integrations.connectors.registry import descriptor_for, get_connector
 from services.integrations.connectors.service import connector_service
 
 logger = get_logger("aether.service.connectors.routes")
@@ -71,7 +71,7 @@ async def get_connector_config(connector_type: str, request: Request):
     if get_connector(connector_type) is None:
         raise NotFoundError("connector")
     cfg = await connector_service.get(tenant_id, connector_type)
-    descriptor = get_connector(connector_type).descriptor().model_dump()  # type: ignore[union-attr]
+    descriptor = descriptor_for(connector_type)
     return APIResponse(data={"descriptor": descriptor, "config": cfg}).to_dict()
 
 
