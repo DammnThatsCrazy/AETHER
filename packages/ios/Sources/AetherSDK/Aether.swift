@@ -322,6 +322,13 @@ public struct EventContext: Codable {
     public var network: String?
     public var thermalState: String?
     public var consent: [String: Bool]?
+    // Active journey snapshot stamped on EVERY event (not just journey_*
+    // lifecycle events), matching the web SDK's context.journey, so the
+    // backend can annotate any event with the journey it occurred within.
+    public var journey: JourneyInfo?
+    // Monotonic per-session ordering counter for gap/reorder detection at
+    // ingest, matching the web SDK's context.sequence.event wire shape.
+    public var sequence: SequenceInfo?
     // Temporal provenance captured at event occurrence (not SDK init) —
     // top-level on the wire context, matching the ingestion contract
     // (packages/shared/events.ts::EventContext).
@@ -354,6 +361,17 @@ public struct EventContext: Codable {
 
     public struct FingerprintInfo: Codable {
         public let id: String
+    }
+
+    public struct JourneyInfo: Codable {
+        public let journeyId: String
+        public var journeyName: String?
+        public var journeyType: String?
+        public var journeyStatus: String?
+    }
+
+    public struct SequenceInfo: Codable {
+        public let event: Int
     }
 }
 
@@ -457,6 +475,8 @@ public final class Aether: NSObject {
     private var sessionId: String = UUID().uuidString
     private var currentJourneyId: String? = nil
     private var currentJourneyName: String? = nil
+    private var currentJourneyType: String? = nil
+    private var currentJourneyStatus: String? = nil
     private var anonymousId: String = ""
     private var userId: String?
     private var walletAddress: String?
@@ -467,6 +487,10 @@ public final class Aether: NSObject {
     private var appStartDate: Date = Date()
     private var screenCount: Int = 0
     private var eventCount: Int = 0
+    /// Monotonic per-session event index stamped into context.sequence.event
+    /// (reset on every session rotation) so the backend can detect
+    /// gaps/reordering in this client's stream.
+    private var eventSequence: Int = 0
     private var isInitialized = false
     private var serverConfig: [String: Any] = [:]
     private var consentState: [String] = []
@@ -698,6 +722,7 @@ public final class Aether: NSObject {
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
     private static let maxQueueSize = 500
     private static let sessionTimeoutSeconds: TimeInterval = 30 * 60
+    private static let maxScrubDepth = 32
     private var lastActivityDate: Date?
 
     private override init() {
@@ -720,6 +745,7 @@ public final class Aether: NSObject {
         self.userId = defaults.string(forKey: "userId")
         self.sessionId = UUID().uuidString
         self.sessionStart = Date()
+        self.eventSequence = 0
 
         // Setup flush timer
         flushTimer = Timer.scheduledTimer(withTimeInterval: config.flushInterval, repeats: true) { [weak self] _ in
@@ -822,44 +848,57 @@ public final class Aether: NSObject {
     public func startJourney(_ nameOrType: String, properties: [String: AnyCodable] = [:]) {
         currentJourneyId = properties["journeyId"]?.value as? String ?? UUID().uuidString
         currentJourneyName = nameOrType
+        currentJourneyType = nameOrType
+        currentJourneyStatus = "started"
         var props = properties; props["journeyId"] = AnyCodable(currentJourneyId ?? ""); props["journeyName"] = AnyCodable(nameOrType); props["journeyType"] = AnyCodable(nameOrType); props["journeyStatus"] = AnyCodable("started")
         enqueueEvent(type: .journey_started, properties: props)
     }
 
     public func pauseJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
         guard let journeyId = currentJourneyId else { return }
+        currentJourneyStatus = "paused"
         var props = properties; props["journeyId"] = AnyCodable(journeyId); props["pauseReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("paused")
         enqueueEvent(type: .journey_paused, properties: props)
     }
 
     public func resumeJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
         if currentJourneyId == nil { currentJourneyId = properties["journeyId"]?.value as? String ?? UUID().uuidString }
+        currentJourneyStatus = "resumed"
         var props = properties; props["journeyId"] = AnyCodable(currentJourneyId ?? ""); props["resumeReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("resumed")
         enqueueEvent(type: .journey_resumed, properties: props)
     }
 
     public func continueJourney(_ stepIdOrName: String, properties: [String: AnyCodable] = [:]) {
         guard let journeyId = currentJourneyId else { return }
+        currentJourneyStatus = "continued"
         var props = properties; props["journeyId"] = AnyCodable(journeyId); props["stepId"] = AnyCodable(stepIdOrName); props["stepName"] = AnyCodable(stepIdOrName); props["journeyStatus"] = AnyCodable("continued")
         enqueueEvent(type: .journey_continued, properties: props)
     }
 
     public func completeJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
         guard let journeyId = currentJourneyId else { return }
+        currentJourneyStatus = "completed"
         var props = properties; props["journeyId"] = AnyCodable(journeyId); props["completionReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("completed")
-        enqueueEvent(type: .journey_completed, properties: props); currentJourneyId = nil
+        enqueueEvent(type: .journey_completed, properties: props); clearCurrentJourney()
     }
 
     public func abandonJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
         guard let journeyId = currentJourneyId else { return }
+        currentJourneyStatus = "abandoned"
         var props = properties; props["journeyId"] = AnyCodable(journeyId); props["abandonmentReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("abandoned")
-        enqueueEvent(type: .journey_abandoned, properties: props); currentJourneyId = nil
+        enqueueEvent(type: .journey_abandoned, properties: props); clearCurrentJourney()
     }
 
     public func checkpointJourney(_ stepIdOrName: String, properties: [String: AnyCodable] = [:]) {
         guard let journeyId = currentJourneyId else { return }
+        currentJourneyStatus = "checkpoint"
         var props = properties; props["journeyId"] = AnyCodable(journeyId); props["stepId"] = AnyCodable(stepIdOrName); props["stepName"] = AnyCodable(stepIdOrName); props["journeyStatus"] = AnyCodable("checkpoint")
         enqueueEvent(type: .journey_checkpoint, properties: props)
+    }
+
+    private func clearCurrentJourney() {
+        currentJourneyId = nil; currentJourneyName = nil
+        currentJourneyType = nil; currentJourneyStatus = nil
     }
 
     public func getCurrentJourney() -> [String: AnyCodable]? {
@@ -927,6 +966,7 @@ public final class Aether: NSObject {
         consentState = []
         anonymousId = UUID().uuidString
         sessionId = UUID().uuidString
+        eventSequence = 0
         defaults.removeObject(forKey: "userId")
         defaults.removeObject(forKey: "walletAddress")
         defaults.removeObject(forKey: "consentState")
@@ -1488,7 +1528,10 @@ public final class Aether: NSObject {
                     self.requeueBatch(batch)
                     self.log("Batch retained after \(maxRetries) retries (rate limited)")
                 }
-            } else if statusCode >= 500 {
+            } else if statusCode >= 500 || statusCode == 408 || statusCode == 425 {
+                // 408 (Request Timeout) and 425 (Too Early) are transient like
+                // 5xx, so they share the same exponential backoff instead of
+                // being dropped as terminal client errors.
                 if retryCount < maxRetries {
                     let delay = min(pow(2.0, Double(retryCount)), 30.0)
                     DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
@@ -1496,7 +1539,7 @@ public final class Aether: NSObject {
                     }
                 } else {
                     self.requeueBatch(batch)
-                    self.log("Batch retained after \(maxRetries) retries (server error \(statusCode))")
+                    self.log("Batch retained after \(maxRetries) retries (retryable error \(statusCode))")
                 }
             } else if statusCode >= 400 {
                 self.persistQueue()
@@ -1566,6 +1609,11 @@ public final class Aether: NSObject {
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
         #endif
 
+        // Monotonic per-session ordering counter (reset on session rotation)
+        // for gap/reorder detection at ingest.
+        let sequenceNumber = eventSequence
+        eventSequence += 1
+
         return EventContext(
             library: .init(name: "aether-ios", version: "8.12.0"),
             device: .init(
@@ -1575,16 +1623,24 @@ public final class Aether: NSObject {
                 timezone: TimeZone.current.identifier
             ),
             campaign: self.campaignInfo,
-            fingerprint: .init(id: self.fingerprintId),
+            fingerprint: gatedFingerprint(),
             network: currentNetworkType,
             thermalState: thermalStateString(),
             consent: [
                 "analytics": granted.contains("analytics"),
                 "marketing": granted.contains("marketing"),
+                "personalization": granted.contains("personalization"),
                 "web3": granted.contains("web3"),
                 "agent": granted.contains("agent"),
                 "commerce": granted.contains("commerce"),
+                "financial_activity": granted.contains("financial_activity"),
+                "credit": granted.contains("credit"),
+                "location": granted.contains("location"),
+                "economic_observability": granted.contains("economic_observability"),
+                "cross_chain_observability": granted.contains("cross_chain_observability"),
             ],
+            journey: journeySnapshot(),
+            sequence: .init(event: sequenceNumber),
             // Temporal provenance at the event's occurrence instant (offset is
             // zone-at-instant, so DST transitions are captured correctly).
             timezone: TimeZone.current.identifier,
@@ -1592,6 +1648,38 @@ public final class Aether: NSObject {
             timeZoneSource: "device",
             clockSource: "device"
         )
+    }
+
+    /// Snapshot of the active journey stamped on every event's context.
+    /// Carries only the canonical journey identity fields (id/name/type/status)
+    /// — the backend owns step reconstruction. Nil when no journey is active.
+    private func journeySnapshot() -> EventContext.JourneyInfo? {
+        guard let journeyId = currentJourneyId else { return nil }
+        return .init(
+            journeyId: journeyId,
+            journeyName: currentJourneyName,
+            journeyType: currentJourneyType,
+            journeyStatus: currentJourneyStatus
+        )
+    }
+
+    /// Fingerprint stamping gate: the device-fingerprint hash is only stamped
+    /// on the wire context when (a) analytics consent is granted in GDPR mode
+    /// (mirroring the fingerprint_signals gating in resolveIdentity) and
+    /// (b) the user authorized tracking via App Tracking Transparency when
+    /// respectATT is enabled. On platforms without the ATT framework the ATT
+    /// gate does not apply.
+    private func gatedFingerprint() -> EventContext.FingerprintInfo? {
+        let gdprActive = config?.privacy.gdprMode ?? false
+        if gdprActive && !consentState.contains("analytics") { return nil }
+        #if canImport(AppTrackingTransparency)
+        if config?.privacy.respectATT == true {
+            if #available(iOS 14.5, macOS 12.0, *) {
+                guard ATTrackingManager.trackingAuthorizationStatus == .authorized else { return nil }
+            }
+        }
+        #endif
+        return .init(id: fingerprintId)
     }
 
     private func emitSessionStart() {
@@ -1706,6 +1794,7 @@ public final class Aether: NSObject {
             if elapsed > Aether.sessionTimeoutSeconds {
                 self.sessionId = UUID().uuidString
                 self.sessionStart = now
+                self.eventSequence = 0
             }
             self.lastActivityDate = now
             self.track("app_foreground")
@@ -1804,8 +1893,37 @@ public final class Aether: NSObject {
 
     func scrubSensitiveFields(_ props: [String: AnyCodable]) -> [String: AnyCodable] {
         Dictionary(uniqueKeysWithValues: props.map { key, value in
-            (key, Self.sensitiveKeys.contains(key.lowercased()) ? AnyCodable("[REDACTED]") : value)
+            (key, Self.sensitiveKeys.contains(key.lowercased())
+                ? AnyCodable("[REDACTED]")
+                : AnyCodable(scrubNestedValue(value.value, depth: 1)))
         })
+    }
+
+    /// Depth-capped recursive scrub so sensitive keys are redacted inside
+    /// nested dictionaries and arrays at every depth, not only at the top
+    /// level. Non-mutating: always returns a new collection.
+    private func scrubNestedValue(_ value: Any, depth: Int) -> Any {
+        guard depth < Aether.maxScrubDepth else { return value }
+        switch value {
+        case let nested as [String: AnyCodable]:
+            return Dictionary(uniqueKeysWithValues: nested.map { key, inner in
+                (key, Self.sensitiveKeys.contains(key.lowercased())
+                    ? AnyCodable("[REDACTED]")
+                    : AnyCodable(scrubNestedValue(inner.value, depth: depth + 1)))
+            })
+        case let nested as [String: Any]:
+            return Dictionary(uniqueKeysWithValues: nested.map { key, inner in
+                (key, Self.sensitiveKeys.contains(key.lowercased())
+                    ? "[REDACTED]" as Any
+                    : scrubNestedValue(inner, depth: depth + 1))
+            })
+        case let nested as [AnyCodable]:
+            return nested.map { AnyCodable(scrubNestedValue($0.value, depth: depth + 1)) }
+        case let nested as [Any]:
+            return nested.map { scrubNestedValue($0, depth: depth + 1) }
+        default:
+            return value
+        }
     }
 
     func normalizeWalletAddress(_ address: String, vm: String = "evm") -> String {

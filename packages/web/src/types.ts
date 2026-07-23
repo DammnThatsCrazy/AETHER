@@ -34,6 +34,17 @@ export interface AetherConfig {
   environment?: 'production' | 'staging' | 'development';
   /** Host application version, reported in SDK fleet heartbeats */
   appVersion?: string;
+  /**
+   * Canonical envelope: emitting product identity stamped as context.application
+   * on every event (distinct from the SDK library identity).
+   */
+  application?: {
+    name?: string;
+    version?: string;
+    build?: string;
+    environment?: string;
+    namespace?: string;
+  };
   /** Enable debug logging */
   debug?: boolean;
   /** Data collection endpoint override */
@@ -577,6 +588,18 @@ export interface EventContext {
   surface?: string;
   /** Canonical envelope: monotonic ordering counters for gap/reorder detection. */
   sequence?: { event?: number; session?: number };
+  /** Canonical envelope: schema version the emitter conforms to. */
+  schemaVersion?: string;
+  /** Canonical envelope: OS identity of the emitting device. */
+  operatingSystem?: { name?: string; version?: string };
+  /** Canonical envelope: emitting product identity (from AetherConfig.application). */
+  application?: {
+    name?: string;
+    version?: string;
+    build?: string;
+    environment?: string;
+    namespace?: string;
+  };
 }
 
 export interface NetworkContext {

@@ -580,6 +580,7 @@ class CanonicalActivity(BaseModel):
     source: Optional[str] = None
     medium: Optional[str] = None
     platform: Optional[str] = None
+    surface: Optional[str] = None
     source_class: Optional[str] = None
     referral_mediation_type: Optional[str] = None
     ai_provider: Optional[str] = None

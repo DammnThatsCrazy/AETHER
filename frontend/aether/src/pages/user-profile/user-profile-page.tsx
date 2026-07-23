@@ -12,7 +12,7 @@ import {
   useUserProfile, useUserSessions, useUserDevices, useUserPlatforms,
   useUserJourneys, useUserWallets, useUserFinancials, useUserRewards,
   useUserIdentifiers, useUserIntelligence, useUserBehavioral,
-  useUserWhyExplain, useUserGraph, useUserCluster,
+  useUserWhyExplain, useUserGraph, useUserCluster, useUserSemantic,
   useUserSocialIntelligence, useUserRecommendations,
   useUserTier, useUserAssetComposition, useUserPnl, useUserTradingProfile,
   useUserFunnel, useUserTimeToConvert, useUserJourneyEconomics, useUserDevicePerformance,
@@ -210,6 +210,80 @@ function CommunicationsTab({ userId }: { userId: string }) {
   );
 }
 
+// ── Semantic sentiment section (Profile360 semantic dimension) ────────────────
+
+function stanceVariant(stance: string): 'success' | 'warning' | 'danger' | 'default' {
+  if (stance.endsWith('supportive')) return 'success';
+  if (stance.endsWith('opposed')) return 'danger';
+  if (stance === 'mixed' || stance === 'uncertain') return 'warning';
+  return 'default';
+}
+
+export function SemanticSentimentSection({ userId }: { userId: string }) {
+  const { data, isLoading, error } = useUserSemantic(userId);
+  const sem = data?.semantic;
+  const computed = !!data?.computed && !!sem && sem.semantic_summary !== 'insufficient_data';
+  const stances = computed
+    ? Object.entries(sem.stance_distribution).sort(([, a], [, b]) => b - a)
+    : [];
+
+  return (
+    <Section title="Semantic sentiment" loading={isLoading} error={error}>
+      {!computed ? (
+        <EmptyState
+          title="No semantic signal yet"
+          description="Not enough semantic observations have been ingested to compute a durable semantic state for this profile."
+        />
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Badge variant={sem.confidence >= 0.7 ? 'success' : sem.confidence >= 0.4 ? 'warning' : 'danger'} size="sm">
+              {`Confidence ${Math.round(sem.confidence * 100)}%`}
+            </Badge>
+            <span className="text-xs text-text-muted">
+              {sem.observation_count} observations · {sem.unique_source_count} sources
+            </span>
+            <FreshnessIndicator computedAt={sem.computed_at} className="ml-auto" />
+          </div>
+
+          <p className="text-sm text-text-primary">{sem.semantic_summary}</p>
+
+          {sem.active_topics.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-xs text-text-secondary">Active topics:</span>
+              {sem.active_topics.map(topic => (
+                <Badge key={topic} variant="default" size="sm">{topic}</Badge>
+              ))}
+            </div>
+          )}
+
+          {stances.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Stance distribution</h4>
+              <div className="space-y-1.5">
+                {stances.map(([stance, weight]) => {
+                  const pct = Math.round(weight * 100);
+                  return (
+                    <div key={stance} className="flex items-center gap-3">
+                      <span className="w-40 flex-shrink-0">
+                        <Badge variant={stanceVariant(stance)} size="sm">{stance.replace(/_/g, ' ')}</Badge>
+                      </span>
+                      <div className="flex-1 bg-surface-raised rounded-full h-2">
+                        <div className="bg-accent h-2 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs text-text-secondary w-10 text-right">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 // ── Overview tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ userId }: { userId: string }) {
@@ -235,6 +309,9 @@ function OverviewTab({ userId }: { userId: string }) {
           {scoreBadge(i.anomaly_score as number, 'Anomaly', true)}
         </div>
       </Section>
+
+      {/* Semantic sentiment (Profile360 semantic dimension) */}
+      <SemanticSentimentSection userId={userId} />
 
       {/* Summary stats */}
       <Section title="Activity summary" loading={sl} error={se}>

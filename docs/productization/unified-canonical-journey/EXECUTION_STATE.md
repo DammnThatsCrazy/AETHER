@@ -13,7 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/silver_adapters.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
   - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
-last_synced_commit: "6306ea81"
+last_synced_commit: "5a8df09"
 ---
 
 # Unified Web2/Web3 Canonical Journey — Execution State
@@ -40,7 +40,7 @@ last_synced_commit: "6306ea81"
 - **`journey_steps`** table: first-class individually queryable ordered steps
 - **JourneyCompiler v2.0**: consumes all activity families, deterministic sort, cross-rail transition taxonomy, typed profile/cluster/anonymous lineage, and atomic version+step publication
 - **Acquisition evidence**: source class, AI/referral mediation, verification, confidence, classifier version, and eligibility flow from canonical activity into eligible journey steps; excluded source noise remains auditable and counted
-- **Silver adapters**: 11 adapter functions covering all silver tables → canonical_activity
+- **Silver adapters**: 11 adapter functions covering all silver tables → canonical_activity; the shared `_base` path now also carries canonical-envelope `surface` and the zero-padded `sequence_key` ordering key (populating the previously write-less column the compiler's ORDER BY already used)
 - **API**: `/v1/journeys/{id}/steps`, `/v1/journeys/{id}/transitions`, `/v1/journeys/{id}/explain`, `/v1/journeys/{id}/rebuild`
 - **Profile360**: `GET /v1/profile/{user_id}/unified-journey`
 - **Aether UI**: `JourneyExplorerPage`, `JourneyTimeline`, `JourneyStepCard`, `JourneyFilterBar`, `JourneyTransitionBadge`

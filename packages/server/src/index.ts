@@ -13,7 +13,9 @@
 //   aether.track({ type: 'api_request_observed', properties: { ... } });
 //   await aether.flush();
 
-import { EVENT_FAMILY } from '@aether/shared';
+import os from 'node:os';
+
+import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@aether/shared';
 import type { EventType } from '@aether/shared';
 import { EventQueue } from './queue';
 import { sendBatch } from './transport';
@@ -52,7 +54,10 @@ const ALL_PURPOSES: readonly ConsentPurpose[] = [
 const DEFAULT_ENDPOINT = 'https://ingest.aether.so/v1/batch';
 
 export class AetherServerSDK {
-  private readonly config: Required<AetherServerConfig>;
+  // application stays optional-valued: Required<> would strip its undefined,
+  // but an unconfigured host has no product identity to fabricate.
+  private readonly config: Required<Omit<AetherServerConfig, 'application'>> &
+    Pick<AetherServerConfig, 'application'>;
   private consent: ServerConsentState;
   private readonly queue: EventQueue;
   private readonly health: SdkHealthTracker;
@@ -71,6 +76,7 @@ export class AetherServerSDK {
       writeKey: config.writeKey,
       endpoint: config.endpoint ?? DEFAULT_ENDPOINT,
       consent: config.consent ?? {},
+      application: config.application,
       flushAt: config.flushAt ?? 100,
       flushInterval: config.flushInterval ?? 5000,
       maxQueueSize: config.maxQueueSize ?? 1000,
@@ -130,6 +136,13 @@ export class AetherServerSDK {
         // Surface identifies the emitting client so the backend can attribute
         // every event to its origin plane. Stamped for all server-SDK events.
         surface: 'server',
+        // Envelope schema version this emitter conforms to (single source:
+        // CONTRACT_SCHEMA_VERSION in @aether/shared).
+        schemaVersion: CONTRACT_SCHEMA_VERSION,
+        // Host OS identity in the canonical envelope shape.
+        operatingSystem: { name: os.type(), version: os.release() },
+        // Emitting product identity, when the host service declares it in config.
+        application: this.config.application,
         // Monotonic ordering counter for gap/reorder detection at ingest.
         sequence: { event: this.eventSequence++ },
         // Temporal provenance: server-side events are stamped by the server

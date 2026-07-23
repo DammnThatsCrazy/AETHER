@@ -101,11 +101,30 @@ class BaseProjector:
             "anonymous_id": event.get("anonymousId"),
             "org_id": ctx.get("orgId"),
             "occurred_at": event.get("timestamp"),
+            "surface": ctx.get("surface"),
+            "sequence_key": self._sequence_key(ctx),
             "consent_snapshot_id": ctx.get("consentSnapshotId"),
             "privacy_class": self._privacy_class(event),
             "idempotency_key": event.get("messageId"),
             "payload": event.get("properties") or {},
         }
+
+    @staticmethod
+    def _sequence_key(ctx: dict[str, Any]) -> str | None:
+        """Canonical sequence key from ``context.sequence.event`` (envelope v1).
+
+        canonical_activity.sequence_key is TEXT and consumed lexicographically
+        in ORDER BY clauses, so the per-session monotonic event counter is
+        zero-padded to 12 digits — lexicographic order equals numeric order.
+        Absent or non-integral counters yield None (column stays NULL).
+        """
+        sequence = ctx.get("sequence")
+        if not isinstance(sequence, dict):
+            return None
+        number = sequence.get("event")
+        if isinstance(number, bool) or not isinstance(number, int) or number < 0:
+            return None
+        return f"{number:012d}"
 
     @staticmethod
     def _privacy_class(event: dict[str, Any]) -> str:

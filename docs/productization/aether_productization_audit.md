@@ -112,6 +112,36 @@ What the July 2026 staging-capstone pass changed (PRs 1–6):
   EVM/SVM deploy-emergency, agent-runtime-mutation-review). The EVM/SVM runbooks
   reference the existing audit packages rather than duplicating them.
 
+What the 2026-07-23 semantic operational-hardening pass changed (PR8):
+
+- Added a **semantic intelligence** scorecard area at an honest **2/5
+  (partial/pilot)**. The pipeline is real — fail-closed provider abstraction
+  (production mode without credentials abstains via `DisabledProvider`, never a
+  keyword fallback), durable Silver/Gold fact store with in-memory fallback,
+  idempotent shared write path, eligibility routing, consent fail-closed,
+  dry-run replay, review queue, DSR erase/restrict — but no production model
+  provider has been validated, the durable store has not run against real
+  Postgres in staging, and no live traffic has flowed. Pilot-grade, not
+  production.
+- Registered the semantic pipeline on the reliability surface: a
+  `semantic_intelligence` service definition, an
+  `event_to_semantic_classification` pipeline, the existing
+  `docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md` runbook as
+  `rb_semantic_classification_degraded`, and 3 SLOs (abstention rate ≤0.25,
+  classify latency p95 ≤1s, review-queue depth ≤50) keyed to the Prometheus
+  series emitted by `services/semantic_intelligence`
+  (`aether_semantic_observations_{classified,abstained,quarantined}_total`,
+  `aether_semantic_classify_latency_ms`, `aether_semantic_review_queue_open`,
+  `aether_semantic_replay_jobs_active`).
+- Added an `aether_semantic_health` Prometheus alert group and a
+  `semantic-pipeline` Grafana dashboard, both pinned to the contracted metric
+  names by `tests/unit/test_semantic_observability_assets.py` so alerts and
+  panels can never drift onto series nothing emits.
+- Extended `tests/chaos/` with `test_semantic_pipeline.py`: model-unavailable →
+  fail-closed abstention (never fabricates), replay dry-run writes zero
+  semantic facts, and durable-store restart round-trip with idempotent
+  re-delivery.
+
 ## 2. Classified Findings
 
 Classification legend: `release-blocker` | `pre-production-blocker` |
@@ -179,10 +209,16 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | derivatives intelligence | 3 |
 | interoperability intelligence | 3 |
 | payment rail observability | 3 |
+| semantic intelligence | 2 |
 | card-linked payment rails | 2 |
 
-**Overall: ~3.83/5 — pre-production** (canonical live figure from
+**Overall: ~3.77/5 — pre-production** (canonical live figure from
 `make production-status`; this table is a dated excerpt of the full scorecard).
+The 2026-07-23 pass added **semantic intelligence at 2/5 (partial/pilot)** —
+a real fail-closed pipeline with reliability/SLO/alerting surfaces registered,
+held at 2 because no production model provider, staging durable-store run, or
+live traffic exists — which moved the overall average down from ~3.83
+(honest denominator growth, not a regression in any existing area).
 Profile 360 and customer frontend are now 5/5. Security / compliance advanced to
 4/5 with VM dependency-audit and secret-scan controls CI-gated. Customer
 frontend reached 5/5 with Playwright E2E suite (5 scenarios, CI-gated via

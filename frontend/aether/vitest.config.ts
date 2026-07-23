@@ -7,6 +7,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@aether-app': path.resolve(__dirname, 'src'),
+      // Resolve the workspace web SDK from source in tests: its dist/ entry is
+      // gitignored and not built in the frontend CI job, so package-entry
+      // resolution fails there (same aliasing the SDK's own vitest config uses).
+      '@aether/web': path.resolve(__dirname, '../../packages/web/src/index.ts'),
     },
   },
   test: {

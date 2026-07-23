@@ -63,6 +63,22 @@ for rel in sdk_files:
     if rel.startswith('docs/SDK') and re.search(r'SDKs (?:batch|POST|send)[^\n]+/v1/ingest/events', body):
         fail(f'{rel} presents /v1/ingest/events as an SDK ingestion target')
 
+# Contract schema-version drift: the web SDK bundles standalone and carries a
+# CONTRACT_SCHEMA_VERSION literal that must match packages/shared/schema-version.ts
+# (the server SDK imports the shared constant directly, so only web is checked).
+schema_version_match = re.search(
+    r"CONTRACT_SCHEMA_VERSION = '([^']+)'", text('packages/shared/schema-version.ts')
+)
+if not schema_version_match:
+    fail('packages/shared/schema-version.ts missing CONTRACT_SCHEMA_VERSION')
+else:
+    contract_schema_version = schema_version_match.group(1)
+    if f"CONTRACT_SCHEMA_VERSION = '{contract_schema_version}'" not in text('packages/web/src/index.ts'):
+        fail(
+            f'packages/web/src/index.ts CONTRACT_SCHEMA_VERSION literal drifted from '
+            f'shared schema-version.ts ({contract_schema_version})'
+        )
+
 # Canonical event registry and consent map sync (by name)
 events_ts = text('packages/shared/events.ts')
 registry = set(re.findall(r"\| '([^']+)'", events_ts.split('export type EventFamily')[0]))

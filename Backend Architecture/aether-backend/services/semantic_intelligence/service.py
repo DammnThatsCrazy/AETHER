@@ -9,10 +9,13 @@ persistence + the read/aggregation surface, sitting over the pluggable store
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, Optional
+from uuid import uuid4
 
 from config.settings import settings
 from services.consent.authority import evaluate_consent
+from shared.logger.logger import get_logger, metrics
 
 from .eligibility import Eligibility
 from .engine import (
@@ -21,15 +24,49 @@ from .engine import (
     entity_state,
     get_store,
 )
-from .models import ObservationStatus, SemanticObservation, SentimentObservation, SubjectType
-from .providers import get_classifier_provider
+from .models import ObservationStatus, SemanticObservation, SentimentObservation, SubjectType, utc_now
+from .providers import SemanticClassifierProvider, get_classifier_provider, get_shadow_provider
 from .repositories.replay_repo import SemanticReplayJobRepository
 from .repositories.review_queue_repo import SemanticReviewQueueRepository
+
+logger = get_logger("aether.semantic.service")
 
 _MODEL_VERSIONS = [
     "deterministic-semantic-classifier@1.0.0",
     "deterministic-sentiment-classifier@1.0.0",
 ]
+
+# In-process count of active replay runs backing the
+# aether_semantic_replay_jobs_active gauge (per-process, like every Prometheus
+# gauge this collector exports).
+_active_replay_jobs = 0
+
+
+def _replay_jobs_active_delta(delta: int) -> None:
+    global _active_replay_jobs
+    _active_replay_jobs = max(0, _active_replay_jobs + delta)
+    metrics.gauge("aether_semantic_replay_jobs_active", float(_active_replay_jobs))
+
+
+def _record_review_queue_gauge(counts: dict[str, int]) -> None:
+    for queue_type, open_count in counts.items():
+        metrics.gauge(
+            "aether_semantic_review_queue_open",
+            float(open_count),
+            labels={"queue_type": queue_type},
+        )
+
+
+def _valence_sign(sentiments: list[SentimentObservation]) -> Optional[str]:
+    """Sign of the first sentiment valence ('positive'/'negative'/'zero'), None when absent."""
+    if not sentiments:
+        return None
+    valence = sentiments[0].valence
+    if valence > 0:
+        return "positive"
+    if valence < 0:
+        return "negative"
+    return "zero"
 
 
 class SemanticIntelligenceService:
@@ -50,11 +87,19 @@ class SemanticIntelligenceService:
         job = await self._replay_jobs.create(tenant_id, dry_run=dry_run, filters=filters)
         runner = SemanticReplayRunner(self._replay_jobs)
         if dry_run:
-            result = await runner.run(tenant_id, job["id"])
+            result = await self._run_replay(runner, tenant_id, job["id"])
             return {"job_id": job["id"], "dry_run": True, **result}
         # Real backfill runs in the background so ingestion is never blocked.
-        asyncio.get_event_loop().create_task(runner.run(tenant_id, job["id"]))
+        asyncio.get_event_loop().create_task(self._run_replay(runner, tenant_id, job["id"]))
         return {"job_id": job["id"], "dry_run": False, "status": "running"}
+
+    async def _run_replay(self, runner: Any, tenant_id: str, job_id: str) -> dict[str, Any]:
+        """Execute one replay run holding the replay-jobs-active gauge up."""
+        _replay_jobs_active_delta(+1)
+        try:
+            return await runner.run(tenant_id, job_id)
+        finally:
+            _replay_jobs_active_delta(-1)
 
     async def get_replay_job(self, tenant_id: str, job_id: str) -> Optional[dict[str, Any]]:
         return await self._replay_jobs.get(tenant_id, job_id)
@@ -88,7 +133,7 @@ class SemanticIntelligenceService:
             from .replay import SemanticReplayRunner
 
             runner = SemanticReplayRunner(self._replay_jobs)
-            asyncio.get_event_loop().create_task(runner.run(tenant_id, job_id))
+            asyncio.get_event_loop().create_task(self._run_replay(runner, tenant_id, job_id))
         return await self._replay_jobs.get(tenant_id, job_id)
 
     # ── write path ─────────────────────────────────────────────────────────────
@@ -121,23 +166,140 @@ class SemanticIntelligenceService:
             obs = self._status_observation(
                 payload, tenant_id, ObservationStatus.QUARANTINED, "quarantined_unregistered"
             )
+            metrics.increment(
+                "aether_semantic_observations_quarantined_total",
+                labels={"tenant_id": tenant_id, "reason": "quarantined_unregistered"},
+            )
             return await store.put_semantic(obs), []
+        provider: Optional[SemanticClassifierProvider] = None
         if eligibility is Eligibility.TEXT:
-            provider = get_classifier_provider(settings)
+            provider = get_classifier_provider(settings, tenant_id)
             if not provider.available():
+                reason = provider.abstention_reason() or "provider_disabled"
                 obs = self._status_observation(
-                    payload,
-                    tenant_id,
-                    ObservationStatus.ABSTAINED,
-                    provider.abstention_reason() or "provider_disabled",
+                    payload, tenant_id, ObservationStatus.ABSTAINED, reason
+                )
+                metrics.increment(
+                    "aether_semantic_observations_abstained_total",
+                    labels={"tenant_id": tenant_id, "reason": reason},
                 )
                 return await store.put_semantic(obs), []
 
-        # 3. Classify (deterministic, tool-less) + persist idempotently.
-        obs, sentiments = classify_event(payload, tenant_id)
+        # 3. Classify (deterministic, tool-less) + persist idempotently. The resolved
+        #    text provider stamps model provenance; structured/route calls keep the
+        #    deterministic defaults.
+        started = time.perf_counter()
+        obs, sentiments = classify_event(payload, tenant_id, provider=provider)
+        metrics.timing(
+            "aether_semantic_classify_latency_ms", (time.perf_counter() - started) * 1000.0
+        )
+        if obs.status is ObservationStatus.CLASSIFIED:
+            metrics.increment(
+                "aether_semantic_observations_classified_total",
+                labels={"tenant_id": tenant_id},
+            )
+        elif obs.status is ObservationStatus.ABSTAINED:
+            metrics.increment(
+                "aether_semantic_observations_abstained_total",
+                labels={"tenant_id": tenant_id, "reason": obs.abstention_reason or "unspecified"},
+            )
         stored_obs = await store.put_semantic(obs)
         stored_sentiments = [await store.put_sentiment(s) for s in sentiments]
+        await self._shadow_compare(payload, tenant_id, stored_obs, stored_sentiments)
         return stored_obs, stored_sentiments
+
+    async def _shadow_compare(
+        self,
+        payload: dict[str, Any],
+        tenant_id: str,
+        primary_obs: SemanticObservation,
+        primary_sentiments: list[SentimentObservation],
+    ) -> None:
+        """Shadow-mode candidate comparison — never affects the primary write.
+
+        When ``settings.semantic.shadow_provider`` is set, the candidate
+        provider's classification ALSO runs in-process and stance/intent/valence
+        disagreements are recorded to the ``semantic_shadow_divergences`` JSONB
+        fact table (one row per primary-observation identity + candidate model).
+        The shadow output is never persisted as an observation and any shadow
+        failure is logged and swallowed — the primary is already durably stored.
+
+        Honest limit: with only the deterministic and fail-closed disabled
+        providers available locally, a real model cannot diverge here; the
+        divergence path is exercised in tests via a stub candidate provider.
+        """
+        shadow = get_shadow_provider(settings)
+        if shadow is None:
+            return
+        try:
+            if shadow.available():
+                candidate_obs, candidate_sentiments = classify_event(
+                    payload, tenant_id, provider=shadow
+                )
+                candidate = {
+                    "stance": candidate_obs.stance.value,
+                    "intent": candidate_obs.intent.value,
+                    "valence_sign": _valence_sign(candidate_sentiments),
+                    "status": candidate_obs.status.value,
+                    "abstention_reason": candidate_obs.abstention_reason,
+                }
+            else:
+                # Fail-closed candidate (e.g. production mode, no creds): the
+                # shadow abstains — compared as full disagreement, never keywords.
+                candidate = {
+                    "stance": None,
+                    "intent": None,
+                    "valence_sign": None,
+                    "status": ObservationStatus.ABSTAINED.value,
+                    "abstention_reason": shadow.abstention_reason() or "provider_disabled",
+                }
+            primary = {
+                "stance": primary_obs.stance.value,
+                "intent": primary_obs.intent.value,
+                "valence_sign": _valence_sign(primary_sentiments),
+                "status": primary_obs.status.value,
+            }
+            agreement = {
+                "stance": primary["stance"] == candidate["stance"],
+                "intent": primary["intent"] == candidate["intent"],
+                "valence": primary["valence_sign"] == candidate["valence_sign"],
+            }
+            if all(agreement.values()):
+                return
+            from .repositories.base_fact_repo import SemanticFactRepository
+
+            divergence_id = f"ssd_{uuid4().hex}"
+            occurred_at = primary_obs.occurred_at.isoformat()
+            await SemanticFactRepository("semantic_shadow_divergences").upsert(
+                {
+                    "id": divergence_id,
+                    "tenant_id": tenant_id,
+                    "source_event_id": primary_obs.source_event_id,
+                    "subject_ref": primary_obs.primary_subject_ref,
+                    "occurred_at": occurred_at,
+                    "data": {
+                        "id": divergence_id,
+                        "idempotency_key": (
+                            f"shadow:{primary_obs.idempotency_key}:{shadow.name}"
+                        ),
+                        "tenant_id": tenant_id,
+                        "source_event_id": primary_obs.source_event_id,
+                        "subject_ref": primary_obs.primary_subject_ref,
+                        "primary_observation_id": primary_obs.observation_id,
+                        "primary_model": f"{primary_obs.model_id}@{primary_obs.model_version}",
+                        "shadow_model": shadow.name,
+                        "primary": primary,
+                        "candidate": candidate,
+                        "agreement": agreement,
+                        "occurred_at": occurred_at,
+                        "created_at": utc_now().isoformat(),
+                    },
+                }
+            )
+        except Exception:
+            logger.exception(
+                "semantic shadow comparison failed for event %s", primary_obs.source_event_id
+            )
 
     async def _consent_block(self, payload: dict[str, Any], tenant_id: str) -> Optional[str]:
         """Return a rejection reason if processing is unlawful, else None."""
@@ -212,7 +374,11 @@ class SemanticIntelligenceService:
         """Recompute and durably persist an entity's Gold semantic state."""
         from .reducers import recompute_entity_state
 
-        return await recompute_entity_state(tenant_id, entity_ref)
+        state = await recompute_entity_state(tenant_id, entity_ref)
+        # Entity-level changes shift the tenant's cascades; refresh their Gold
+        # projection in the same recompute pass (service-level wiring only).
+        await self.recompute_cascades(tenant_id)
+        return state
 
     async def gold_entity_state(
         self, tenant_id: str, entity_ref: str
@@ -263,8 +429,87 @@ class SemanticIntelligenceService:
         rows = await get_store().list_semantic(tenant_id)
         return sorted({n for r in rows for n in r.narrative_frames})
 
+    async def recompute_narrative_states(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Recompute and durably persist the tenant's per-narrative Gold state."""
+        from .reducers import recompute_narrative_states
+
+        return await recompute_narrative_states(tenant_id)
+
+    async def narrative_states(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Durable per-narrative Gold aggregates, recomputing on a Gold miss."""
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        repo = SemanticFactRepository("gold_narrative_state")
+        rows = await repo.list_by_tenant(tenant_id)
+        if rows:
+            return rows
+        # No durable projection yet — build it, then serve the persisted rows.
+        await self.recompute_narrative_states(tenant_id)
+        return await repo.list_by_tenant(tenant_id)
+
     async def cascades(self, tenant_id: str):
         return await cascades_for_tenant(tenant_id)
+
+    async def recompute_cascades(self, tenant_id: str):
+        """Persist the tenant's live cascade projections to Gold (idempotent)."""
+        from .reducers import recompute_cascades
+
+        return await recompute_cascades(tenant_id)
+
+    async def recompute_relationship_state(
+        self, tenant_id: str, source_ref: str, target_ref: str
+    ) -> dict[str, Any]:
+        """Recompute and durably persist a directed pair's Gold relationship state."""
+        from .reducers import recompute_relationship_sentiment, recompute_relationship_state
+
+        state = await recompute_relationship_state(tenant_id, source_ref, target_ref)
+        sentiment = await recompute_relationship_sentiment(tenant_id, source_ref, target_ref)
+        return {"relationship_state": state, "sentiment_state": sentiment}
+
+    async def relationship_state(
+        self, tenant_id: str, source_ref: str, target_ref: str
+    ) -> dict[str, Any]:
+        """Durable Gold relationship state (semantic + sentiment), recomputing on miss."""
+        from .reducers import relationship_ref
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        rel = relationship_ref(source_ref, target_ref)
+        sem_repo = SemanticFactRepository("gold_relationship_semantic_state")
+        sent_repo = SemanticFactRepository("gold_relationship_sentiment_state")
+        sem_rows = await sem_repo.list_by_tenant(tenant_id, rel, limit=1)
+        if not sem_rows:
+            # No durable projection yet — recompute persists only observed pairs,
+            # so an unobserved pair stays row-less (insufficient_data below).
+            await self.recompute_relationship_state(tenant_id, source_ref, target_ref)
+            sem_rows = await sem_repo.list_by_tenant(tenant_id, rel, limit=1)
+        sent_rows = await sent_repo.list_by_tenant(tenant_id, rel, limit=1)
+        return {
+            "relationship_ref": rel,
+            "source_ref": source_ref,
+            "target_ref": target_ref,
+            "relationship_state": sem_rows[0] if sem_rows else None,
+            "sentiment_state": sent_rows[0] if sent_rows else None,
+            "insufficient_data": not sem_rows,
+        }
+
+    async def recompute_episodes(self, tenant_id: str, subject_ref: str):
+        """Recompute and durably persist a subject's Gold episodes."""
+        from .reducers import recompute_episodes
+
+        return await recompute_episodes(tenant_id, subject_ref)
+
+    async def episodes(self, tenant_id: str, subject_ref: str) -> list[dict[str, Any]]:
+        """Durable Gold episodes for a subject, recomputing on a Gold miss."""
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        repo = SemanticFactRepository("gold_semantic_episodes")
+        rows = await repo.list_by_tenant(tenant_id, subject_ref, limit=200)
+        if rows:
+            return rows
+        # No durable projection yet — build it, then serve the persisted rows
+        # (a subject without observations persists nothing and stays empty).
+        await self.recompute_episodes(tenant_id, subject_ref)
+        return await repo.list_by_tenant(tenant_id, subject_ref, limit=200)
 
     async def campaign_observations(
         self, tenant_id: str, campaign_id: str
@@ -337,19 +582,22 @@ class SemanticIntelligenceService:
         source_event_id: Optional[str] = None,
         payload: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        return await self._review_queue.enqueue(
+        item = await self._review_queue.enqueue(
             tenant_id,
             queue_type,
             subject_ref=subject_ref,
             source_event_id=source_event_id,
             payload=payload,
         )
+        _record_review_queue_gauge(await self._review_queue.counts(tenant_id))
+        return item
 
     async def review_queue(
         self, tenant_id: str, queue_type: Optional[str] = None
     ) -> dict[str, Any]:
         items = await self._review_queue.list_open(tenant_id, queue_type)
         counts = await self._review_queue.counts(tenant_id)
+        _record_review_queue_gauge(counts)
         return {
             "items": items,
             "count": len(items),

@@ -46,6 +46,9 @@ import {
 } from '@aether/shared/consent-receipt';
 
 const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
+// Mirrors CONTRACT_SCHEMA_VERSION in packages/shared/schema-version.ts (web
+// bundles standalone; literal kept in sync by scripts/validate_sdk_release_alignment.py).
+const CONTRACT_SCHEMA_VERSION = '1.0.0';
 const DEFAULT_ENDPOINT = 'https://api.aether.io';
 
 class AetherSDK implements AetherSDKInterface {
@@ -1021,6 +1024,7 @@ class AetherSDK implements AetherSDKInterface {
     const eventId = generateId();
     const sessionId = session?.id ?? '';
     const semantic = this.semanticContext?.collect(sessionId, eventId);
+    const device = typeof window !== 'undefined' ? getDeviceContext() : undefined;
 
     const event = {
       id: eventId,
@@ -1033,7 +1037,7 @@ class AetherSDK implements AetherSDKInterface {
       context: {
         library: { name: '@aether/web', version: SDK_VERSION },
         page: typeof window !== 'undefined' ? getPageContext() : undefined,
-        device: typeof window !== 'undefined' ? getDeviceContext() : undefined,
+        device,
         campaign: typeof window !== 'undefined' ? getCampaignContext() : undefined,
         // Fingerprint is personalization-gated: only stamp when the user has
         // granted personalization consent (device fingerprinting purpose).
@@ -1052,6 +1056,13 @@ class AetherSDK implements AetherSDKInterface {
         // Canonical envelope: this event's origin plane, so the backend can
         // attribute every event to where it came from.
         surface: 'web',
+        // Envelope schema version the emitter conforms to (contract v1).
+        schemaVersion: CONTRACT_SCHEMA_VERSION,
+        // OS identity in the canonical envelope shape (device.os/osVersion
+        // remain for backward compatibility).
+        operatingSystem: device ? { name: device.os, version: device.osVersion } : undefined,
+        // Emitting product identity, when the host app declares it in config.
+        application: this.config?.application,
         // Active journey snapshot on EVERY event (not just journey_* lifecycle
         // events), so the backend can annotate any event with the journey it
         // occurred within. Undefined when no journey is active.

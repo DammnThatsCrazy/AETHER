@@ -67,7 +67,44 @@ real test-manifest inventory, is embedded in the release evidence bundle by
 iOS and Android persist bounded, versioned queue envelopes with atomic file
 replacement. They restore the queue after process restart and quarantine corrupt
 state instead of crashing or silently accepting it. Flush removes a batch
-atomically; exhausted `429` and `5xx` deliveries are requeued, while terminal
-client errors are dropped. The queue remains capped to prevent unbounded device
-storage. The parity validator checks the durability and transient-retry contract
-on both native implementations.
+atomically; exhausted `429`, `408`/`425`, and `5xx` deliveries are requeued,
+while terminal client errors are dropped. The queue remains capped to prevent
+unbounded device storage. The parity validator checks the durability and
+transient-retry contract — including that `408 Request Timeout` and
+`425 Too Early` are retryable, not silent data loss — on both native
+implementations.
+
+## Canonical envelope emission
+
+Every SDK stamps the canonical envelope context v1 fields it has a genuine
+source for (`packages/shared/events.ts`; backend acceptance pinned by
+`tests/unit/test_ingestion_envelope_context.py`):
+
+| SDK | Emits |
+|---|---|
+| web | `surface: 'web'`, `schemaVersion` (synced literal), `operatingSystem`, `application` (config), `sequence.event`, journey snapshot on every event |
+| server | `surface: 'server'`, `schemaVersion` (shared import), `operatingSystem` (host OS), `application` (config), `sequence.event` |
+| iOS | `sequence.event` (per-session, reset on rotation), journey block on every event, 11-purpose consent map |
+| Android | `sequence.event` (per-session, reset on rotation), journey block on every event, 11-purpose consent map |
+
+`sequence.event` is a monotonic per-session (native) / per-instance (TS)
+counter for backend gap/reorder detection.
+
+## Privacy parity
+
+- **Recursive scrubbing** — sensitive-field redaction recurses into nested
+  objects/maps and arrays on web, server, iOS, and Android (depth-capped,
+  non-mutating). Top-level-only scrubbing leaks nested secrets and fails the
+  gate.
+- **Gated fingerprinting** — iOS stamps a device fingerprint only under
+  analytics consent (gdprMode) AND — when `respectATT` is enabled — an
+  `.authorized` App Tracking Transparency status (`gatedFingerprint`). Android
+  gates stamping on analytics consent under gdprMode. Web gates on
+  personalization consent.
+- **App Store privacy manifest** — the iOS package ships
+  `PrivacyInfo.xcprivacy` (tracking, accessed-API reasons, collected data
+  types), bundled via `Package.swift` resources; presence is validated by the
+  gate.
+- **Canonical-id semantic collection** — the web and React Native semantic
+  collectors consume canonical session/event ids passed by the caller and never
+  mint their own.

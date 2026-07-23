@@ -292,6 +292,10 @@ class SemanticObservation(BaseModel):
             raise ValueError(
                 "campaign_id must be a canonical campaign id (camp_*) or a UUID"
             )
+        # model_version participates in the identity hash INTENTIONALLY: an
+        # observation produced by a new provider version (engine.classify_event
+        # stamps the resolved provider's 'id@version') is a NEW observation
+        # identity, so reprocessing under a new model is never deduped away.
         base = "|".join(
             [
                 self.tenant_id,

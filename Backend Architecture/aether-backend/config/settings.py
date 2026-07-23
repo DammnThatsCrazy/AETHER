@@ -640,6 +640,11 @@ class ConsentAuthorityConfig:
 #   - replay_enabled / reconciler_enabled / retention_enabled: Phase B workers.
 #   - classifier_provider: "deterministic" (default, tool-less, CI-safe),
 #     "production" / "multilingual" (fail closed without creds), or "disabled".
+#   - shadow_provider: candidate provider mode run IN SHADOW alongside the
+#     primary ('' = off). Divergences are recorded to
+#     semantic_shadow_divergences; the shadow never affects the primary write.
+#   - canary_tenants: tenants routed to the candidate (production) classifier,
+#     fail-closed without creds (mirrors IngestionV2Config.canary_tenants).
 #   - subject_confidence_threshold: below this a resolution enters the review
 #     queue instead of asserting a canonical subject.
 # ---------------------------------------------------------------------------
@@ -652,6 +657,10 @@ class SemanticIntelligenceConfig:
     reconciler_enabled: bool = _env_bool("SEMANTIC_RECONCILER_ENABLED", False)
     retention_enabled: bool = _env_bool("SEMANTIC_RETENTION_ENABLED", False)
     classifier_provider: str = _env("SEMANTIC_CLASSIFIER_PROVIDER", "deterministic")
+    shadow_provider: str = _env("SEMANTIC_SHADOW_PROVIDER", "")
+    canary_tenants: list[str] = field(
+        default_factory=lambda: _env_list("SEMANTIC_CANARY_TENANTS", "")
+    )
     subject_confidence_threshold: float = float(
         _env("SEMANTIC_SUBJECT_CONFIDENCE_THRESHOLD", "0.5")
     )

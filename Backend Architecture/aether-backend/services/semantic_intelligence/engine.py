@@ -28,6 +28,7 @@ from .models import (
     SubjectType,
     utc_now,
 )
+from .providers import SemanticClassifierProvider
 
 POSITIVE = {"love", "great", "excellent", "happy", "trust", "recommend", "approve", "support"}
 NEGATIVE = {
@@ -144,8 +145,20 @@ SUPPORTED_LANGUAGES: frozenset[str] = frozenset({
 })
 
 
+def _provider_identity(provider: SemanticClassifierProvider) -> tuple[str, str]:
+    """Split a provider name ('id@version') into (model_id, model_version).
+
+    A name without '@' keeps the full name as model_id with version '0' so the
+    provenance stays distinguishable from the deterministic defaults.
+    """
+    model_id, sep, model_version = provider.name.partition("@")
+    return (model_id, model_version) if sep else (provider.name, "0")
+
+
 def classify_event(
-    payload: dict[str, Any], tenant_id: str
+    payload: dict[str, Any],
+    tenant_id: str,
+    provider: SemanticClassifierProvider | None = None,
 ) -> tuple[SemanticObservation, list[SentimentObservation]]:
     text = str(payload.get("content") or payload.get("text") or "")[:5000]
     text_stripped = text.strip()
@@ -262,6 +275,18 @@ def classify_event(
     )
     if occurred_at is not None:
         obs_kwargs["occurred_at"] = occurred_at
+    sentiment_kwargs: dict[str, Any] = {}
+    if provider is not None:
+        # Provenance from the RESOLVED provider ('id@version'), not the static
+        # model defaults — a production backend's output must never be stamped
+        # as the deterministic classifier. model_version participates in
+        # stable_hash / idempotency_key (models.SemanticObservation.finalize):
+        # INTENDED — a new provider version yields a new observation identity,
+        # so reclassification under a new model is never deduplicated away.
+        model_id, model_version = _provider_identity(provider)
+        obs_kwargs["model_id"] = model_id
+        obs_kwargs["model_version"] = model_version
+        sentiment_kwargs = {"model_id": model_id, "model_version": model_version}
     obs = SemanticObservation(**obs_kwargs)
 
     sentiments: list[SentimentObservation] = []
@@ -288,6 +313,7 @@ def classify_event(
             uncertainty=0.15,
             confidence=0.82,
             consent_snapshot_id=payload.get("consent_snapshot_id"),
+            **sentiment_kwargs,
         )
         sentiments = [sent]
     return obs, sentiments

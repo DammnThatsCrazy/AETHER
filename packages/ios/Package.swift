@@ -17,7 +17,10 @@ let package = Package(
     targets: [
         .target(
             name: "AetherSDK",
-            path: "Sources/AetherSDK"
+            path: "Sources/AetherSDK",
+            resources: [
+                .copy("PrivacyInfo.xcprivacy")
+            ]
         ),
         .testTarget(
             name: "AetherSDKTests",

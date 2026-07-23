@@ -2544,6 +2544,26 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Shadow-mode divergence facts (20260734_semantic_shadow_divergences):
+  # subject-linked model-comparison evidence, so consent revocation must
+  # invalidate it and DSR erasure is a hard delete.
+  - resource_type: semantic_shadow_divergences
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
   # Semantic-sentiment Silver/Gold fact tables (20260702_semantic_sentiment).
   # Subject-linked semantic evidence and aggregates: consent revocation must
   # invalidate them and erasure is a hard delete (see Phase B DSR propagation).

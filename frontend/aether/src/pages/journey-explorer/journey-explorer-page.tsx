@@ -2,16 +2,17 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Card, CardContent, CardHeader, CardTitle,
-  Badge, LoadingState, ErrorState, EmptyState,
+  Badge, LoadingState, ErrorState, EmptyState, EvidenceDrawer,
   formatDateTime, useTimeContext,
 } from '@aether/ui';
 import {
   useUnifiedJourney,
   useJourneyRisk,
+  useJourneySemantic,
   JourneyTimeline,
   JourneyFilterBar,
 } from '@aether-app/features/journey';
-import type { ActivityFamily } from '@aether-app/features/journey';
+import type { ActivityFamily, SemanticNodeOverlay } from '@aether-app/features/journey';
 
 const RISK_TIER_VARIANT: Record<string, 'danger' | 'warning' | 'default'> = {
   critical: 'danger',
@@ -26,6 +27,106 @@ const QUALITY_BADGE: Record<string, { variant: 'success' | 'warning' | 'danger' 
   empty: { variant: 'default', label: 'Empty' },
   not_provisioned: { variant: 'default', label: 'Not provisioned' },
 };
+
+const STANCE_VARIANT = (stance: string): 'success' | 'warning' | 'danger' | 'default' => {
+  if (stance.endsWith('supportive')) return 'success';
+  if (stance.endsWith('opposed')) return 'danger';
+  if (stance === 'mixed' || stance === 'uncertain') return 'warning';
+  return 'default';
+};
+
+function SemanticOverlayRow({ overlay, rowKey }: { overlay: SemanticNodeOverlay; rowKey: string }) {
+  const timeCtx = useTimeContext();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+
+  return (
+    <li className="border border-border rounded px-3 py-2 space-y-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <code className="font-mono text-xs text-text">{overlay.entity_ref}</code>
+        <Badge variant={STANCE_VARIANT(overlay.stance)}>{overlay.stance.replace(/_/g, ' ')}</Badge>
+        <span className="text-xs text-text-muted">
+          confidence {Math.round(overlay.confidence * 100)}%
+        </span>
+        <span className="text-xs text-text-muted ml-auto">
+          {formatDateTime(overlay.valid_from, timeCtx)}
+        </span>
+        {overlay.evidence_refs.length > 0 && (
+          <button
+            onClick={() => setEvidenceOpen(v => !v)}
+            className="text-xs font-mono text-accent hover:underline"
+            aria-label={`Show evidence for ${rowKey}`}
+          >
+            {evidenceOpen ? '[−] hide' : `[>] evidence (${overlay.evidence_refs.length})`}
+          </button>
+        )}
+      </div>
+      {overlay.topics.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-xs text-text-muted">Topics:</span>
+          {overlay.topics.map(topic => (
+            <Badge key={topic} variant="default">{topic}</Badge>
+          ))}
+        </div>
+      )}
+      <EvidenceDrawer
+        signalName={`${overlay.stance.replace(/_/g, ' ')} — ${overlay.entity_ref}`}
+        evidence={overlay.evidence_refs.map(ref => ({
+          event_id: ref.evidence_id,
+          description: `${ref.source_type} · ${ref.source_ref}`,
+          timestamp: ref.observed_at,
+        }))}
+        open={evidenceOpen}
+        onClose={() => setEvidenceOpen(false)}
+      />
+    </li>
+  );
+}
+
+export function SemanticOverlayPanel({ profileId }: { profileId: string }) {
+  const { data, isLoading, error } = useJourneySemantic(profileId);
+  const overlays = data?.node_overlays ?? [];
+
+  return (
+    <Card role="tabpanel" aria-label="Semantic overlay">
+      <CardHeader>
+        <CardTitle>Semantic Overlay</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && !data ? (
+          <LoadingState lines={4} />
+        ) : error ? (
+          <ErrorState title="Unable to load semantic overlay" message={error} />
+        ) : overlays.length === 0 ? (
+          <EmptyState
+            title="No semantic observations"
+            description="No semantic observations have been recorded for this profile yet. Stance and topic annotations appear once expressive content is ingested."
+          />
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-text-muted">
+              Entity-level stance and topic annotations for this profile. Per-step
+              journey annotation is not yet available.
+            </p>
+            {data?.partial && (
+              <div role="status" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                Showing the most recent observations only — older observations were truncated.
+              </div>
+            )}
+            <ul className="space-y-2" aria-label="Semantic node overlays">
+              {overlays.map((overlay, i) => (
+                <SemanticOverlayRow
+                  key={`${overlay.entity_ref}-${overlay.valid_from}-${i}`}
+                  overlay={overlay}
+                  rowKey={`${overlay.entity_ref}-${i}`}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function RailSummary({ meta }: { meta: NonNullable<ReturnType<typeof useUnifiedJourney>['meta']> }) {
   return (
@@ -49,7 +150,7 @@ export function JourneyExplorerPage() {
   const id = profileId ?? '';
   const timeCtx = useTimeContext();
 
-  const [activeTab, setActiveTab] = useState<'timeline' | 'risk'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'risk' | 'semantic'>('timeline');
   const [family, setFamily] = useState<ActivityFamily | undefined>(undefined);
   const [after, setAfter] = useState('');
   const [before, setBefore] = useState('');
@@ -91,7 +192,7 @@ export function JourneyExplorerPage() {
       {meta && <RailSummary meta={meta} />}
 
       <div className="flex gap-1 border-b border-border" role="tablist" aria-label="Journey views">
-        {(['timeline', 'risk'] as const).map(tab => (
+        {(['timeline', 'risk', 'semantic'] as const).map(tab => (
           <button
             key={tab}
             role="tab"
@@ -100,7 +201,7 @@ export function JourneyExplorerPage() {
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors focus-visible:outline-2 focus-visible:outline-accent
               ${activeTab === tab ? 'border-b-2 border-accent text-accent' : 'text-text-muted hover:text-text'}`}
           >
-            {tab === 'risk' ? 'Risk' : 'Timeline'}
+            {tab === 'risk' ? 'Risk' : tab === 'semantic' ? 'Semantic' : 'Timeline'}
           </button>
         ))}
       </div>
@@ -162,6 +263,8 @@ export function JourneyExplorerPage() {
           </Card>
         </>
       )}
+
+      {activeTab === 'semantic' && <SemanticOverlayPanel profileId={id} />}
 
       {activeTab === 'risk' && (
         <Card role="tabpanel" aria-label="Journey risk summary">

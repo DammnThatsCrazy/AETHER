@@ -80,7 +80,8 @@ def test_end_to_end_semantic_sentiment_and_tenant_isolation():
     assert state.json()["data"]["semantic_state"]["observation_count"] >= 1
 
 
-def test_kyber_requires_operator_scope():
+def _kyber_app(tenant=None) -> TestClient:
+    """Bare test app; when a tenant is given, inject it like the auth middleware."""
     app = FastAPI()
 
     @app.exception_handler(AetherError)
@@ -89,12 +90,51 @@ def test_kyber_requires_operator_scope():
 
         return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
 
+    if tenant is not None:
+
+        @app.middleware("http")
+        async def _inject_tenant(request, call_next):
+            request.state.tenant = tenant
+            return await call_next(request)
+
     app.include_router(router)
     app.include_router(kyber_router)
-    client = TestClient(app)
-    denied = client.get("/v1/kyber/semantic/fleet-health", headers={"x-tenant-id": "tenant_a"})
+    return TestClient(app)
+
+
+def test_kyber_requires_operator_scope():
+    """require_kyber_operator fails closed: 401 unauthenticated, 403 for a
+    tenant admin (never an operator), 200 only with the operator permission."""
+    from types import SimpleNamespace
+
+    from config.settings import settings
+
+    unauthenticated = _kyber_app().get(
+        "/v1/kyber/semantic/fleet-health", headers={"x-tenant-id": "tenant_a"}
+    )
+    assert unauthenticated.status_code == 401
+
+    tenant_admin = SimpleNamespace(
+        tenant_id="tenant_a",
+        user_id="user_a",
+        permissions=["admin"],
+        is_admin=True,
+        is_suspended=False,
+        has_permission=lambda permission: True,
+    )
+    denied = _kyber_app(tenant_admin).get("/v1/kyber/semantic/fleet-health")
     assert denied.status_code == 403
-    allowed = client.get("/v1/kyber/semantic/fleet-health", headers={"x-kyber-operator": "true"})
+
+    operator_perm = settings.security_governance.kyber_operator_permission
+    operator = SimpleNamespace(
+        tenant_id="olympus_op",
+        user_id="op_1",
+        permissions=[operator_perm, "admin"],
+        is_admin=True,
+        is_suspended=False,
+        has_permission=lambda permission: True,
+    )
+    allowed = _kyber_app(operator).get("/v1/kyber/semantic/fleet-health")
     assert allowed.status_code == 200
     assert allowed.json()["data"]["cross_tenant_contamination"] is False
 

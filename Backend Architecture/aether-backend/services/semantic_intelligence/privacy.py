@@ -26,6 +26,7 @@ _SILVER_SUBJECT_TABLES = (
     "silver_semantic_entity_mentions",
     "silver_semantic_subject_links",
     "silver_semantic_claims",
+    "semantic_shadow_divergences",
 )
 _GOLD_SUBJECT_TABLES = (
     "gold_entity_semantic_state",

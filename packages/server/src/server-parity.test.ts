@@ -86,6 +86,40 @@ describe('server SDK — surface stamping', () => {
     expect(events[0].context.sequence.event).toBe(0);
     expect(events[1].context.sequence.event).toBe(1);
   });
+
+  it('stamps schemaVersion from the shared contract and a real host OS identity', async () => {
+    const { bodies } = captureFetch();
+    const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    sdk.track({ type: 'api_request_observed' });
+    await sdk.flush();
+    await sdk.shutdown();
+    const ctx = bodies[0].batch[0].context;
+    expect(ctx.schemaVersion).toBe('1.0.0');
+    expect(typeof ctx.operatingSystem.name).toBe('string');
+    expect(ctx.operatingSystem.name.length).toBeGreaterThan(0);
+    expect(typeof ctx.operatingSystem.version).toBe('string');
+  });
+
+  it('stamps application identity from config, omits it when not configured', async () => {
+    const { bodies } = captureFetch();
+    const withApp = new AetherServerSDK({
+      writeKey: 'sk', endpoint: 'https://api.test/v1/batch',
+      application: { name: 'billing-svc', version: '3.2.1', environment: 'production' },
+    });
+    withApp.track({ type: 'api_request_observed' });
+    await withApp.flush();
+    await withApp.shutdown();
+    expect(bodies[0].batch[0].context.application).toEqual({
+      name: 'billing-svc', version: '3.2.1', environment: 'production',
+    });
+
+    const without = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    without.track({ type: 'api_request_observed' });
+    await without.flush();
+    await without.shutdown();
+    const bare = bodies[1].batch[0].context;
+    expect(bare.application).toBeUndefined();
+  });
 });
 
 describe('server SDK — recursive scrubber (cycle/depth safe)', () => {

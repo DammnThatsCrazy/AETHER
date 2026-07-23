@@ -52,7 +52,7 @@ def clean():
 @pytest.mark.asyncio
 async def test_service_health_create_and_update():
     services = await service_registry.list()
-    assert len(services) == 18
+    assert len(services) == 19
     assert all(s["status"] == "unknown" for s in services)
 
     await service_registry.heartbeat("ingestion", latency_ms=42.0, error_rate=0.01)
@@ -80,7 +80,7 @@ async def test_service_incident_linkage():
 @pytest.mark.asyncio
 async def test_pipeline_health_aggregation():
     pipelines = await pipeline_service.list()
-    assert len(pipelines) == 12
+    assert len(pipelines) == 13
     updated = await pipeline_service.report("sdk_to_event_store", {
         "status": "degraded", "throughput_per_minute": 120.0, "error_rate": 0.07,
         "retry_count": 5, "dead_letter_count": 2, "affected_tenant_count": 3,
@@ -106,10 +106,11 @@ async def test_queue_health_records():
 @pytest.mark.asyncio
 async def test_runbook_definitions():
     runbooks = await runbook_service.list()
-    assert len(runbooks) == 13
+    assert len(runbooks) == 14
     keys = {r["runbook_id"] for r in runbooks}
     assert "rb_sdk_ingestion_degraded" in keys
     assert "rb_security_audit_event_failure" in keys
+    assert "rb_semantic_classification_degraded" in keys
     created = await runbook_service.create({"title": "Custom", "incident_type": "custom"})
     assert created["runbook_id"].startswith("rb_")
     patched = await runbook_service.update(created["runbook_id"], {"severity_hint": "sev1"})
@@ -131,12 +132,20 @@ def test_slo_status_calculation():
     # unknown when no current value
     status, budget = compute_slo_status(0.999, None, "availability_ratio")
     assert status == "unknown" and budget is None
+    # abstention rate is a ceiling (lower is better), not an availability floor
+    status, budget = compute_slo_status(0.25, 0.05, "abstention_rate")
+    assert status == "meeting"
+    status, budget = compute_slo_status(0.25, 0.40, "abstention_rate")
+    assert status == "breached"
+    # review-queue depth is a backlog ceiling (lower is better)
+    status, budget = compute_slo_status(50.0, 80.0, "review_queue_depth")
+    assert status == "breached"
 
 
 @pytest.mark.asyncio
 async def test_slo_list_and_update():
     slos = await slo_service.list()
-    assert len(slos) == 9
+    assert len(slos) == 12
     await slo_service.set_current_value("slo_sdk_ingestion_latency", 120.0)
     slos = await slo_service.list()
     target = next(s for s in slos if s["slo_id"] == "slo_sdk_ingestion_latency")
@@ -257,7 +266,7 @@ async def test_kyber_admin_route_permissions():
     # admin allowed
     resp = unwrap(await rl.reliability_overview(req("tenant-a")))
     assert "overall_status" in resp
-    assert resp["service_health_summary"]["total"] == 18
+    assert resp["service_health_summary"]["total"] == 19
 
 
 @pytest.mark.asyncio

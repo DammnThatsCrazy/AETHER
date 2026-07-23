@@ -52,6 +52,7 @@ from services.ingestion.bronze_bulk import (
     OutboxEvent,
     ingest_many,
 )
+from services.ingestion.sequence_integrity import analyze_batch_sequences
 from services.ingestion.validation import (
     EventValidationResult,
     RequestPrivacySignals,
@@ -176,10 +177,24 @@ class EventContext(BaseModel):
     sampling: Optional[dict[str, Any]] = None
     sequence: Optional[dict[str, Any]] = None
 
-    # Distributed tracing
+    # Canonical envelope context v1 (packages/shared/events.ts). All optional +
+    # additive; the SDKs stamp `surface` (and, progressively, the rest) on every
+    # event. `extra="forbid"` above means these MUST be declared or real SDK
+    # batches 422 at ingest. Backend persists them in the opaque context JSONB;
+    # first-class promotion (e.g. surface attribution) happens downstream.
+    schemaVersion: Optional[str] = None
+    surface: Optional[str] = None
+    application: Optional[dict[str, Any]] = None
+    operatingSystem: Optional[dict[str, Any]] = None
+    semanticInput: Optional[dict[str, Any]] = None
+    semanticHints: Optional[dict[str, Any]] = None
+    dataQuality: Optional[dict[str, Any]] = None
+
+    # Distributed tracing (flat legacy keys + nested canonical `correlation`)
     correlationId: Optional[str] = None
     causationId: Optional[str] = None
     traceId: Optional[str] = None
+    correlation: Optional[dict[str, Any]] = None
 
     # External Agent Telemetry Plane V1 — AgentDeploymentContext
     # (packages/shared/agent-deployment.ts). Validated flag-gated in
@@ -452,6 +467,7 @@ async def ingest_batch(
 
     metrics.increment("ingestion_event_duplicate_total", value=n_duplicates)
     metrics.increment("ingestion_event_rejected_total", value=n_rejected)
+    _emit_sequence_integrity_meters(body.batch, tenant.tenant_id)
 
     logger.info(
         "Batch %s processed: accepted=%d duplicates=%d rejected=%d tenant=%s",
@@ -601,6 +617,7 @@ async def _ingest_batch_v2(
     )
     metrics.increment("ingestion_event_duplicate_total", value=n_duplicates)
     metrics.increment("ingestion_event_rejected_total", value=n_rejected)
+    _emit_sequence_integrity_meters(body.batch, tenant.tenant_id)
 
     logger.info(
         "Batch %s processed (v2): accepted=%d duplicates=%d rejected=%d tenant=%s",
@@ -760,6 +777,31 @@ def _apply_temporal_enforcement(
             reason="temporal_warning:" + ",".join(decision.reason_codes),
         )
     return result
+
+
+def _emit_sequence_integrity_meters(batch: list[BaseEvent], tenant_id: str) -> None:
+    """Meter in-batch sequence gaps/duplicates (stateless, metrics only).
+
+    Runs once per accepted batch over every event the client sent — rejected
+    or duplicate events still carried ``context.sequence.event``, and the
+    counter is a property of the client's stream, so excluding them would
+    manufacture false gaps. Findings never change event dispositions.
+    """
+    findings = analyze_batch_sequences([
+        {"sessionId": e.sessionId, "context": {"sequence": e.context.sequence}}
+        for e in batch
+    ])
+    for finding in findings:
+        if finding.kind == "gap":
+            metrics.increment(
+                "ingestion_sequence_gap_total",
+                labels={"tenant_id": tenant_id},
+            )
+        else:
+            metrics.increment(
+                "ingestion_sequence_duplicate_total",
+                labels={"tenant_id": tenant_id},
+            )
 
 
 def _make_idempotency_key(tenant_id: str, event_id: str, schema_version: str) -> str:

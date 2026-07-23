@@ -680,6 +680,40 @@ AREAS: list[Area] = [
         ],
     ),
     Area(
+        "semantic intelligence",
+        2,
+        "Semantic/sentiment classification pipeline: deterministic tool-less classifier "
+        "(CI/replay default) behind a pluggable provider that FAILS CLOSED — production/"
+        "multilingual modes without credentials resolve to DisabledProvider and abstain, "
+        "never a keyword fallback masquerading as the model. Durable Silver/Gold fact "
+        "store with in-memory fallback, idempotent classify_and_persist shared by route "
+        "and worker, eligibility routing (skip/structured/text/quarantine/abstain), "
+        "consent fail-closed, dry-run replay over Bronze with pause/resume/cancel, "
+        "review queue, and DSR erase/restrict. Reliability surface registered this "
+        "cycle: semantic_intelligence service + event_to_semantic_classification "
+        "pipeline + rb_semantic_classification_degraded runbook + 3 SLOs (abstention "
+        "rate <=0.25, classify p95 <=1s, review queue <=50), with an "
+        "aether_semantic_health alert group and a semantic-pipeline Grafana dashboard "
+        "pinned to the emitted metric names by tests/unit/test_semantic_observability_assets.py. "
+        "Not production: no production model provider validated (deterministic only), "
+        "durable store unexercised against real Postgres in staging, replay validated "
+        "in-memory only, no live traffic; graph promotion of semantic edges stays gated.",
+        [
+            "Backend Architecture/aether-backend/services/semantic_intelligence/",
+            "Backend Architecture/aether-backend/services/semantic_intelligence/providers.py",
+            "Backend Architecture/aether-backend/services/semantic_intelligence/replay.py",
+            "Backend Architecture/aether-backend/alembic/versions/20260702_semantic_sentiment.py",
+            "Backend Architecture/aether-backend/alembic/versions/20260732_semantic_replay.py",
+            "Backend Architecture/aether-backend/services/reliability/definitions.py",
+            "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
+            "tests/integration/semantic/",
+            "tests/chaos/test_semantic_pipeline.py",
+            "tests/unit/test_semantic_observability_assets.py",
+            "deploy/observability/prometheus/alert_rules.yml",
+            "deploy/observability/grafana/dashboards/semantic-pipeline.json",
+        ],
+    ),
+    Area(
         "card-linked payment rails",
         2,
         "Card-linked observation plane: a seeded program catalog, an ingestion service "

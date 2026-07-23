@@ -65,4 +65,23 @@ describe('canonical envelope fields on web events (jsdom)', () => {
     // Strictly increasing in emission order.
     expect(seqs[1]).toBeGreaterThan(seqs[0]);
   });
+
+  it('stamps schemaVersion and operatingSystem from real device context', async () => {
+    aether.init({ ...BASE_CONFIG });
+    aether.consent.grant(['analytics']);
+    aether.track('probe');
+    await flush();
+    const ctx = sent.find((e) => e.type === 'track').context;
+    expect(ctx.schemaVersion).toBe('1.0.0');
+    expect(typeof ctx.operatingSystem?.name).toBe('string');
+  });
+
+  it('stamps application identity from config; omitted when not configured', async () => {
+    aether.init({ ...BASE_CONFIG, application: { name: 'Acme Store', version: '4.0.0' } });
+    aether.consent.grant(['analytics']);
+    aether.track('probe');
+    await flush();
+    const ctx = sent.find((e) => e.type === 'track').context;
+    expect(ctx.application).toEqual({ name: 'Acme Store', version: '4.0.0' });
+  });
 });
