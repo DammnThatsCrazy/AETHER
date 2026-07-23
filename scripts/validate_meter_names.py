@@ -79,6 +79,19 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",
+    # Semantic Intelligence classify pipeline (services/semantic_intelligence/
+    # service.py) — contracted 1:1 with the aether_semantic_health alert group,
+    # the semantic-pipeline dashboard, and
+    # tests/unit/test_semantic_observability_assets.py. Counters use
+    # metrics.increment(); the latency histogram and the two gauges below are
+    # emitted via metrics.timing()/metrics.gauge() on the same collector and
+    # are registered here so the full contract lives in one place.
+    "aether_semantic_observations_classified_total",
+    "aether_semantic_observations_abstained_total",
+    "aether_semantic_observations_quarantined_total",
+    "aether_semantic_classify_latency_ms",
+    "aether_semantic_review_queue_open",
+    "aether_semantic_replay_jobs_active",
     # Comparison Intelligence (services/intelligence/comparison — WP3.5)
     "comparison_runs_total",
     "comparison_findings_total",

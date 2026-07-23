@@ -1,0 +1,742 @@
+{
+  "description": "Golden evaluation set for the deterministic semantic classifier (services/semantic_intelligence/engine.py classify_event). Every expectation was measured against the real engine before commit.",
+  "engine": "deterministic-semantic-classifier@1.0.0",
+  "measured_at": "2026-07-23",
+  "cases": [
+    {
+      "id": "supportive_01",
+      "text": "I support this product",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_02",
+      "text": "I approve of the new pricing plan",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "approve",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_03",
+      "text": "You have my full support on this",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_04",
+      "text": "I support the proposal and will vote for it",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "vote",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_05",
+      "text": "We approve this vendor and plan to renew",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "renew",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_06",
+      "text": "I support this team and recommend them",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "recommend",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_07",
+      "text": "Great product, I support it",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_08",
+      "text": "I approve the budget increase",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "approve",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_09",
+      "text": "Count me in, I support the initiative",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_10",
+      "text": "Approve my request please, this tool is excellent",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "approve",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_11",
+      "text": "I support the migration but it is expensive",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "unknown",
+        "valence_sign": "zero"
+      }
+    },
+    {
+      "id": "supportive_12",
+      "text": "I approve although the rollout was broken",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "approve",
+        "valence_sign": "zero"
+      }
+    },
+    {
+      "id": "supportive_13",
+      "text": "Happy to support the launch",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "supportive_14",
+      "text": "We trust this vendor and approve the contract",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "supportive",
+        "intent": "approve",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "opposed_01",
+      "text": "I oppose this change",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "unknown",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_02",
+      "text": "We reject the proposal",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "reject",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_03",
+      "text": "I strongly oppose the new terms",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "unknown",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_04",
+      "text": "Reject this vendor, their service is terrible",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "reject",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_05",
+      "text": "I oppose the merger and will cancel my plan",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "cancel",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_06",
+      "text": "We reject the settlement and plan to escalate",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "escalate",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_07",
+      "text": "I oppose this because it is broken and expensive",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "unknown",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_08",
+      "text": "The board voted to reject the offer",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "reject",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_09",
+      "text": "I oppose the price hike",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "unknown",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_10",
+      "text": "Reject the patch, it made things worse",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "reject",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_11",
+      "text": "I oppose and I am angry about the hidden fees",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "unknown",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_12",
+      "text": "We reject this approach even though the demo was great",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "reject",
+        "valence_sign": "zero"
+      }
+    },
+    {
+      "id": "opposed_13",
+      "text": "I oppose the plan but I love the team",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "unknown",
+        "valence_sign": "zero"
+      }
+    },
+    {
+      "id": "opposed_14",
+      "text": "They reject every request we make",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "reject",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "opposed_15_mixed",
+      "text": "I used to support this but now I oppose it",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "opposed",
+        "intent": "unknown",
+        "valence_sign": "zero"
+      }
+    },
+    {
+      "id": "neutral_01",
+      "text": "I want to purchase the premium plan",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "purchase",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_02",
+      "text": "How do I cancel my account?",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "cancel",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "neutral_03",
+      "text": "Thinking about whether to churn this quarter",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "churn",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "neutral_04",
+      "text": "I will subscribe to the newsletter",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "subscribe",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_05",
+      "text": "Can you compare the basic and pro tiers?",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "compare",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_06",
+      "text": "I need to investigate the billing discrepancy",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "investigate",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_07",
+      "text": "We should evaluate the alternatives first",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "evaluate",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_08",
+      "text": "I plan to renew the license next month",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "renew",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_09",
+      "text": "I want to return the item",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "return",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_10",
+      "text": "I will refer my colleagues to you",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "refer",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_11",
+      "text": "I recommend the standard tier",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "recommend",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "neutral_12",
+      "text": "I have to complain about the delivery",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "complain",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_13",
+      "text": "Please escalate this ticket",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "escalate",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_14",
+      "text": "We will vote on the proposal tomorrow",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "vote",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_15",
+      "text": "I want to stake my tokens",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "stake",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_16",
+      "text": "How do I swap tokens on this platform?",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "swap",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_17",
+      "text": "I need to transfer funds to my other wallet",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "transfer",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_18",
+      "text": "Just here to monitor the situation",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "monitor",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_19",
+      "text": "I want to learn how the api works",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "learn",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_20",
+      "text": "The dashboard is broken again",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "neutral_21",
+      "text": "This is a great product",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "neutral_22",
+      "text": "I love the new design",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "neutral_23",
+      "text": "I hate the checkout flow",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": "negative"
+      }
+    },
+    {
+      "id": "neutral_24",
+      "text": "The service is excellent and the team is happy",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": "positive"
+      }
+    },
+    {
+      "id": "neutral_25",
+      "text": "Pricing is expensive but the quality is great",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": "zero"
+      }
+    },
+    {
+      "id": "neutral_26",
+      "text": "What time does the webinar start?",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_27",
+      "text": "The invoice arrived yesterday",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "neutral_28",
+      "text": "Our contract renewal is due in march",
+      "language": "en",
+      "expected": {
+        "abstain": false,
+        "stance": "neutral",
+        "intent": "unknown",
+        "valence_sign": null
+      }
+    },
+    {
+      "id": "abstain_empty_01",
+      "text": "",
+      "language": "en",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "insufficient_content"
+      }
+    },
+    {
+      "id": "abstain_empty_02",
+      "text": "   ",
+      "language": "en",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "insufficient_content"
+      }
+    },
+    {
+      "id": "abstain_empty_03",
+      "text": "\n\t",
+      "language": "en",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "insufficient_content"
+      }
+    },
+    {
+      "id": "abstain_lang_ja",
+      "text": "素晴らしい製品",
+      "language": "ja",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:ja"
+      }
+    },
+    {
+      "id": "abstain_lang_zh",
+      "text": "这个产品很好",
+      "language": "zh",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:zh"
+      }
+    },
+    {
+      "id": "abstain_lang_ru",
+      "text": "отличный продукт",
+      "language": "ru",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:ru"
+      }
+    },
+    {
+      "id": "abstain_lang_ko",
+      "text": "좋은 제품",
+      "language": "ko",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:ko"
+      }
+    },
+    {
+      "id": "abstain_lang_ar",
+      "text": "منتج رائع",
+      "language": "ar",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:ar"
+      }
+    },
+    {
+      "id": "abstain_lang_xx",
+      "text": "gibberish text",
+      "language": "xx",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:xx"
+      }
+    },
+    {
+      "id": "abstain_lang_tr",
+      "text": "harika ürün",
+      "language": "tr",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:tr"
+      }
+    },
+    {
+      "id": "abstain_lang_hi",
+      "text": "बहुत अच्छा",
+      "language": "hi",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "unsupported_language:hi"
+      }
+    },
+    {
+      "id": "abstain_empty_and_lang",
+      "text": "",
+      "language": "ja",
+      "expected": {
+        "abstain": true,
+        "abstention_reason": "insufficient_content"
+      }
+    }
+  ]
+}

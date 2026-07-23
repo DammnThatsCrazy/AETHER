@@ -67,9 +67,39 @@ class ProductionModelProvider(SemanticClassifierProvider):
         return bool(self._endpoint and self._api_key)
 
 
-def get_classifier_provider(settings) -> SemanticClassifierProvider:
-    """Resolve the configured provider, failing closed without credentials."""
-    mode = (getattr(getattr(settings, "semantic", None), "classifier_provider", "") or "").lower()
+def get_classifier_provider(
+    settings, tenant_id: str | None = None
+) -> SemanticClassifierProvider:
+    """Resolve the configured provider, failing closed without credentials.
+
+    Canary routing: a tenant listed in ``semantic.canary_tenants`` resolves the
+    candidate (production) provider instead of the primary — with exactly the
+    same fail-closed behavior, so a credential-less canary abstains via
+    :class:`DisabledProvider` rather than degrading to keywords. Every other
+    tenant (and any call without a tenant) keeps the primary provider.
+    """
+    semantic = getattr(settings, "semantic", None)
+    if tenant_id is not None and tenant_id in (getattr(semantic, "canary_tenants", None) or []):
+        return _resolve_mode("production")
+    return _resolve_mode((getattr(semantic, "classifier_provider", "") or "").lower())
+
+
+def get_shadow_provider(settings) -> SemanticClassifierProvider | None:
+    """Resolve the shadow-mode candidate provider, or None when shadow is off.
+
+    ``semantic.shadow_provider`` names a provider mode ('' = off). The candidate
+    resolves through the same fail-closed ladder as the primary; a candidate
+    without credentials resolves to :class:`DisabledProvider` (it abstains in
+    the comparison — it never fabricates a shadow classification).
+    """
+    mode = (getattr(getattr(settings, "semantic", None), "shadow_provider", "") or "").lower()
+    if not mode:
+        return None
+    return _resolve_mode(mode)
+
+
+def _resolve_mode(mode: str) -> SemanticClassifierProvider:
+    """Shared fail-closed mode ladder for primary, canary and shadow resolution."""
     if mode in ("", "deterministic"):
         return DeterministicClassifierProvider()
     if mode == "disabled":
