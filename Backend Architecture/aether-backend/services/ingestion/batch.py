@@ -176,10 +176,24 @@ class EventContext(BaseModel):
     sampling: Optional[dict[str, Any]] = None
     sequence: Optional[dict[str, Any]] = None
 
-    # Distributed tracing
+    # Canonical envelope context v1 (packages/shared/events.ts). All optional +
+    # additive; the SDKs stamp `surface` (and, progressively, the rest) on every
+    # event. `extra="forbid"` above means these MUST be declared or real SDK
+    # batches 422 at ingest. Backend persists them in the opaque context JSONB;
+    # first-class promotion (e.g. surface attribution) happens downstream.
+    schemaVersion: Optional[str] = None
+    surface: Optional[str] = None
+    application: Optional[dict[str, Any]] = None
+    operatingSystem: Optional[dict[str, Any]] = None
+    semanticInput: Optional[dict[str, Any]] = None
+    semanticHints: Optional[dict[str, Any]] = None
+    dataQuality: Optional[dict[str, Any]] = None
+
+    # Distributed tracing (flat legacy keys + nested canonical `correlation`)
     correlationId: Optional[str] = None
     causationId: Optional[str] = None
     traceId: Optional[str] = None
+    correlation: Optional[dict[str, Any]] = None
 
     # External Agent Telemetry Plane V1 — AgentDeploymentContext
     # (packages/shared/agent-deployment.ts). Validated flag-gated in
