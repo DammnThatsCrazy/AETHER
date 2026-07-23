@@ -4,6 +4,26 @@ import CryptoKit
 
 final class AetherSDKTests: XCTestCase {
 
+    func testCanonicalConsentReceiptGoldenVector() throws {
+        let receipt = try Aether.shared.buildCanonicalConsentReceipt(
+            CanonicalConsentReceiptInput(
+                tenantId: "tenant-1",
+                subjectId: "subject-1",
+                purposes: ["marketing", "analytics"],
+                state: "granted",
+                source: "sdk-test",
+                policyVersion: "2026-07-18",
+                grantedAt: "2026-07-18T12:00:00.000Z"
+            )
+        )
+        XCTAssertEqual(
+            receipt.integrityHash,
+            "sha256:96352c9c6e59371ad054846329720b2eb1285c71bb39406ffae5b1583e1e54c0"
+        )
+        XCTAssertEqual(receipt.receiptId, "ccr_96352c9c6e59371ad054846329720b2e")
+        XCTAssertEqual(receipt.input.purposes, ["analytics", "marketing"])
+    }
+
     // MARK: - AnyCodable
 
     func testAnyCodableString() throws {

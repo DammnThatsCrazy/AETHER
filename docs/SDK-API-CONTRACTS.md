@@ -45,6 +45,25 @@ the monorepo. It sends the same canonical `{ batch, sentAt, consents }` envelope
 with the write key in the `Authorization` header, with retry/backoff and safe
 shutdown flush.
 
+## Canonical consent receipt API
+
+The shared, Web, React Native, iOS, and Android SDK surfaces can build the same
+deterministic `CanonicalConsentReceipt` accepted by
+`POST /v1/consent/records`. Web and React Native expose
+`consent.recordReceipt(input)`; the native SDKs expose
+`buildCanonicalConsentReceipt` for local construction and
+`recordConsentReceipt` for authenticated persistence.
+
+Receipt inputs include the authenticated `tenant_id`/`tenantId`, at least one
+subject or anonymous identifier, one or more canonical purposes, state, source,
+and policy version. The API sends the legacy compatibility fields alongside the
+additive `canonical_receipt` envelope. Purpose order and duplicates are
+normalized before hashing, optional fields remain empty in the preimage, UTF-8
+byte length is used, and metadata keys are recursively sorted. The resulting
+`sha256:` integrity hash deterministically derives the `ccr_` receipt ID and
+`consent-receipt:` idempotency key. The backend recomputes all three and rejects
+tenant mismatches or mutated evidence.
+
 ## Canonical envelope context (v1)
 
 Every event carries a `context` object (`EventContext` in

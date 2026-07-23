@@ -12,9 +12,14 @@ import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
 import { RNFeedback } from './modules/Feedback';
 import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
+import {
+  buildCanonicalConsentReceipt,
+  type CanonicalConsentReceiptInput,
+} from '@aether/shared/consent-receipt';
 
 export const { AetherNative } = NativeModules;
 export const emitter = AetherNative ? new NativeEventEmitter(AetherNative) : null;
+let activeConfig: AetherRNConfig | null = null;
 
 // =============================================================================
 // TYPES
@@ -87,6 +92,7 @@ const Aether = {
       console.warn('[Aether RN] Native module not linked. Run `npx pod-install` (iOS) or rebuild (Android).');
       return;
     }
+    activeConfig = config;
     AetherNative.initialize(config);
   },
 
@@ -350,6 +356,36 @@ const Aether = {
     onUpdate(callback: (state: ConsentState) => void): () => void {
       const sub = emitter?.addListener('AetherConsentChanged', callback);
       return () => sub?.remove();
+    },
+    async recordReceipt(input: CanonicalConsentReceiptInput) {
+      if (!activeConfig) throw new Error('Aether SDK is not initialized');
+      const receipt = await buildCanonicalConsentReceipt(input);
+      const endpoint = activeConfig.endpoint ?? 'https://api.aether.io';
+      const response = await fetch(`${endpoint}/v1/consent/records`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${activeConfig.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: receipt.subject_id,
+          subject_id: receipt.subject_id,
+          anonymous_id: receipt.anonymous_id,
+          purposes: receipt.purposes,
+          granted: receipt.state === 'granted',
+          source: receipt.source,
+          mode: receipt.mode,
+          jurisdiction: receipt.jurisdiction_context,
+          gpc_observed: receipt.gpc_observed,
+          dnt_observed: receipt.dnt_observed,
+          idempotency_key: receipt.idempotency_key,
+          canonical_receipt: receipt,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Consent receipt request failed (${response.status})`);
+      }
+      return receipt;
     },
   },
 

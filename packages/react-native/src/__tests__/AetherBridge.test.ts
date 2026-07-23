@@ -160,6 +160,35 @@ describe('Aether RN bridge — wallet methods', () => {
   });
 });
 
+describe('Aether RN bridge — canonical consent receipts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    Aether.init({ apiKey: 'test-key', endpoint: 'https://example.test' });
+  });
+
+  it('posts a deterministic canonical envelope with legacy compatibility fields', async () => {
+    const receipt = await Aether.consent.recordReceipt({
+      tenant_id: 'tenant-1',
+      subject_id: 'subject-1',
+      purposes: ['marketing', 'analytics'],
+      state: 'granted',
+      source: 'sdk-test',
+      policy_version: '2026-07-18',
+      granted_at: '2026-07-18T12:00:00.000Z',
+    });
+
+    expect(receipt.receipt_id).toBe('ccr_96352c9c6e59371ad054846329720b2e');
+    expect(fetch).toHaveBeenCalledWith(
+      'https://example.test/v1/consent/records',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+    expect(body.idempotency_key).toBe(receipt.idempotency_key);
+    expect(body.canonical_receipt).toEqual(receipt);
+  });
+});
+
 describe('Aether RN bridge — commerce Apple/Google Pay', () => {
   beforeEach(() => {
     vi.clearAllMocks();

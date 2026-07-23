@@ -40,6 +40,10 @@ import type { SDKManifest as RemoteSDKManifest } from './health/sdk-health-agent
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
 import { isCanonicalEventType } from './core/generated-consent-map';
+import {
+  buildCanonicalConsentReceipt,
+  type CanonicalConsentReceiptInput,
+} from '@aether/shared';
 
 const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 const DEFAULT_ENDPOINT = 'https://api.aether.io';
@@ -574,6 +578,36 @@ class AetherSDK implements AetherSDKInterface {
     hideBanner: () => { this.consentModule?.hideBanner(); },
     onUpdate: (callback: ConsentCallback): (() => void) => {
       return this.consentModule?.onUpdate(callback) ?? (() => {});
+    },
+    recordReceipt: async (input: CanonicalConsentReceiptInput) => {
+      if (!this.config) throw new Error('Aether SDK is not initialized');
+      const receipt = await buildCanonicalConsentReceipt(input);
+      const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
+      const response = await fetch(`${endpoint}/v1/consent/records`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: receipt.subject_id,
+          subject_id: receipt.subject_id,
+          anonymous_id: receipt.anonymous_id,
+          purposes: receipt.purposes,
+          granted: receipt.state === 'granted',
+          source: receipt.source,
+          mode: receipt.mode,
+          jurisdiction: receipt.jurisdiction_context,
+          gpc_observed: receipt.gpc_observed,
+          dnt_observed: receipt.dnt_observed,
+          idempotency_key: receipt.idempotency_key,
+          canonical_receipt: receipt,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Consent receipt request failed (${response.status})`);
+      }
+      return receipt;
     },
   };
 

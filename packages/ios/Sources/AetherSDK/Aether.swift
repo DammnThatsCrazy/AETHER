@@ -72,6 +72,73 @@ public struct PrivacyConfig {
     public init() {}
 }
 
+public struct CanonicalConsentReceiptInput {
+    public let tenantId: String
+    public var subjectId: String?
+    public var anonymousId: String?
+    public var purposes: [String]
+    public let state: String
+    public let source: String
+    public let policyVersion: String
+    public var provider: String?
+    public var jurisdictionContext: String?
+    public var mode: String?
+    public var lawfulBasis: String?
+    public var grantedAt: String?
+    public var deniedAt: String?
+    public var revokedAt: String?
+    public var expiresAt: String?
+    public var gpcObserved: Bool?
+    public var dntObserved: Bool?
+    public var providerConsentId: String?
+    public var metadata: [String: AnyCodable]
+
+    public init(
+        tenantId: String,
+        subjectId: String? = nil,
+        anonymousId: String? = nil,
+        purposes: [String],
+        state: String,
+        source: String,
+        policyVersion: String,
+        provider: String? = nil,
+        jurisdictionContext: String? = nil,
+        mode: String? = nil,
+        lawfulBasis: String? = nil,
+        grantedAt: String? = nil,
+        deniedAt: String? = nil,
+        revokedAt: String? = nil,
+        expiresAt: String? = nil,
+        gpcObserved: Bool? = nil,
+        dntObserved: Bool? = nil,
+        providerConsentId: String? = nil,
+        metadata: [String: AnyCodable] = [:]
+    ) {
+        self.tenantId = tenantId; self.subjectId = subjectId
+        self.anonymousId = anonymousId; self.purposes = purposes
+        self.state = state; self.source = source; self.policyVersion = policyVersion
+        self.provider = provider; self.jurisdictionContext = jurisdictionContext
+        self.mode = mode; self.lawfulBasis = lawfulBasis; self.grantedAt = grantedAt
+        self.deniedAt = deniedAt; self.revokedAt = revokedAt; self.expiresAt = expiresAt
+        self.gpcObserved = gpcObserved; self.dntObserved = dntObserved
+        self.providerConsentId = providerConsentId; self.metadata = metadata
+    }
+}
+
+public struct CanonicalConsentReceipt {
+    public let receiptId: String
+    public let integrityHash: String
+    public let idempotencyKey: String
+    public let input: CanonicalConsentReceiptInput
+}
+
+public enum ConsentReceiptError: Error {
+    case invalidInput(String)
+    case notInitialized
+    case invalidEndpoint
+    case requestFailed(Int)
+}
+
 // MARK: - Event Types
 
 public enum AetherEventType: String, Codable, CaseIterable {
@@ -1142,6 +1209,61 @@ public final class Aether: NSObject {
 
     public func getConsentState() -> [String] { return consentState }
 
+    public func buildCanonicalConsentReceipt(
+        _ input: CanonicalConsentReceiptInput
+    ) throws -> CanonicalConsentReceipt {
+        guard !input.tenantId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ConsentReceiptError.invalidInput("tenantId is required")
+        }
+        guard !(input.subjectId ?? "").isEmpty || !(input.anonymousId ?? "").isEmpty else {
+            throw ConsentReceiptError.invalidInput("subjectId or anonymousId is required")
+        }
+        guard !input.purposes.isEmpty else {
+            throw ConsentReceiptError.invalidInput("at least one purpose is required")
+        }
+        var normalized = input
+        normalized.purposes = Array(Set(input.purposes)).sorted()
+        let preimage = canonicalConsentReceiptPreimage(normalized)
+        let digest = SHA256.hash(data: Data(preimage.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        return CanonicalConsentReceipt(
+            receiptId: "ccr_\(digest.prefix(32))",
+            integrityHash: "sha256:\(digest)",
+            idempotencyKey: "consent-receipt:\(digest)",
+            input: normalized
+        )
+    }
+
+    public func recordConsentReceipt(
+        _ input: CanonicalConsentReceiptInput,
+        completion: @escaping (Result<CanonicalConsentReceipt, Error>) -> Void
+    ) {
+        guard let config = config else {
+            completion(.failure(ConsentReceiptError.notInitialized)); return
+        }
+        do {
+            let receipt = try buildCanonicalConsentReceipt(input)
+            guard let url = URL(string: "\(config.endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/v1/consent/records") else {
+                completion(.failure(ConsentReceiptError.invalidEndpoint)); return
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: consentReceiptRequest(receipt))
+            URLSession.shared.dataTask(with: request) { _, response, error in
+                if let error = error { completion(.failure(error)); return }
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200...299).contains(status) else {
+                    completion(.failure(ConsentReceiptError.requestFailed(status))); return
+                }
+                completion(.success(receipt))
+            }.resume()
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
     // MARK: - Ecommerce
 
     public func trackProductView(_ product: [String: AnyCodable]) {
@@ -1699,6 +1821,103 @@ public final class Aether: NSObject {
         #else
         return false
         #endif
+    }
+
+    private var canonicalConsentReceiptHashFields: [String] {
+        [
+            "tenant_id", "subject_id", "anonymous_id", "purposes", "state", "source",
+            "provider", "policy_version", "jurisdiction_context", "mode", "lawful_basis",
+            "granted_at", "denied_at", "revoked_at", "expires_at", "gpc_observed",
+            "dnt_observed", "provider_consent_id", "metadata",
+        ]
+    }
+
+    private func canonicalConsentReceiptValues(
+        _ input: CanonicalConsentReceiptInput
+    ) -> [String: Any?] {
+        [
+            "tenant_id": input.tenantId, "subject_id": input.subjectId,
+            "anonymous_id": input.anonymousId, "purposes": input.purposes,
+            "state": input.state, "source": input.source, "provider": input.provider,
+            "policy_version": input.policyVersion,
+            "jurisdiction_context": input.jurisdictionContext, "mode": input.mode,
+            "lawful_basis": input.lawfulBasis, "granted_at": input.grantedAt,
+            "denied_at": input.deniedAt, "revoked_at": input.revokedAt,
+            "expires_at": input.expiresAt, "gpc_observed": input.gpcObserved,
+            "dnt_observed": input.dntObserved, "provider_consent_id": input.providerConsentId,
+            "metadata": input.metadata.mapValues(\.value),
+        ]
+    }
+
+    private func canonicalConsentReceiptPreimage(
+        _ input: CanonicalConsentReceiptInput
+    ) -> String {
+        let values = canonicalConsentReceiptValues(input)
+        return canonicalConsentReceiptHashFields.reduce(into: "aether-consent-receipt/v1\n") {
+            result, field in
+            let value = canonicalConsentHashValue(values[field] ?? nil)
+            result += "\(field)=\(value.lengthOfBytes(using: .utf8)):\(value)\n"
+        }
+    }
+
+    private func canonicalConsentHashValue(_ value: Any?) -> String {
+        guard let value = value else { return "" }
+        if let bool = value as? Bool { return bool ? "true" : "false" }
+        if let array = value as? [String] {
+            return Array(Set(array)).sorted().joined(separator: "\u{001f}")
+        }
+        if let dictionary = value as? [String: Any] {
+            return dictionary.isEmpty ? "" : canonicalJSON(dictionary)
+        }
+        return String(describing: value)
+    }
+
+    private func canonicalJSON(_ value: Any) -> String {
+        if value is NSNull { return "null" }
+        if let string = value as? String {
+            let data = try! JSONSerialization.data(withJSONObject: [string])
+            return String(data: data, encoding: .utf8)!.dropFirst().dropLast().description
+        }
+        if let bool = value as? Bool { return bool ? "true" : "false" }
+        if let number = value as? NSNumber { return number.stringValue }
+        if let array = value as? [Any] {
+            return "[\(array.map(canonicalJSON).joined(separator: ","))]"
+        }
+        if let dictionary = value as? [String: Any] {
+            let members = dictionary.keys.sorted().map {
+                "\(canonicalJSON($0)):\(canonicalJSON(dictionary[$0]!))"
+            }
+            return "{\(members.joined(separator: ","))}"
+        }
+        return canonicalJSON(String(describing: value))
+    }
+
+    private func canonicalConsentReceiptDictionary(
+        _ receipt: CanonicalConsentReceipt
+    ) -> [String: Any] {
+        var values = canonicalConsentReceiptValues(receipt.input).mapValues { $0 ?? NSNull() }
+        values["receipt_id"] = receipt.receiptId
+        values["integrity_hash"] = receipt.integrityHash
+        values["idempotency_key"] = receipt.idempotencyKey
+        return values
+    }
+
+    private func consentReceiptRequest(_ receipt: CanonicalConsentReceipt) -> [String: Any] {
+        let input = receipt.input
+        return [
+            "user_id": input.subjectId ?? NSNull(),
+            "subject_id": input.subjectId ?? NSNull(),
+            "anonymous_id": input.anonymousId ?? NSNull(),
+            "purposes": input.purposes,
+            "granted": input.state == "granted",
+            "source": input.source,
+            "mode": input.mode ?? NSNull(),
+            "jurisdiction": input.jurisdictionContext ?? NSNull(),
+            "gpc_observed": input.gpcObserved ?? NSNull(),
+            "dnt_observed": input.dntObserved ?? NSNull(),
+            "idempotency_key": receipt.idempotencyKey,
+            "canonical_receipt": canonicalConsentReceiptDictionary(receipt),
+        ]
     }
 }
 
