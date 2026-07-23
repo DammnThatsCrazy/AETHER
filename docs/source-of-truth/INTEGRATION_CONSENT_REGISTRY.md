@@ -9,6 +9,8 @@ source_files:
   - Backend Architecture/aether-backend/services/consent/integration_governance.py
   - Backend Architecture/aether-backend/services/consent/routes.py
   - Backend Architecture/aether-backend/services/integrations/connectors/service.py
+  - Backend Architecture/aether-backend/services/integrations/connectors/routes.py
+  - Backend Architecture/aether-backend/services/integrations/discovery.py
   - Backend Architecture/aether-backend/services/integrations/webhook_policy.py
   - Backend Architecture/aether-backend/services/integrations/webhook_quarantine.py
 ---
@@ -43,6 +45,10 @@ The feature flags defined by this registry are default-off and support a control
 - `AETHER_CONSENT_LIFECYCLE_ENFORCEMENT`
 
 Discovery or automatic recommendation may propose policy defaults, but it must not create affirmative consent receipts or automatically enable explicit-opt-in purposes. Unknown schemas, providers, fields, or purposes must fail closed or remain quarantine-only.
+
+When both `AETHER_CONSENT_CONTROL_PLANE_V2` and `AETHER_INTEGRATION_DISCOVERY` are enabled, tenant connector configuration metadata can be scanned through `POST /v1/integrations/connectors/discovery/scan`. Discovery persists registry-versioned, tenant-scoped records in `detected_integrations`; it copies only connector type, provider, supported capability, enabled state, secret-presence state, and a non-secret configuration reference. It never reads or copies vault references or credentials. `GET /v1/integrations/connectors/discovery/detections` returns only the authenticated tenant's detections.
+
+Tenant admins can create a deliberately non-authoritative draft through `POST /v1/integrations/connectors/manifests/{connector_type}/draft`. Drafts retain registry recommendations as metadata but set `tenant_admin_approved=false`, `provider_admin_installed=false`, and `approved_purposes=[]`; they do not enable a connector or create a consent receipt. Approval through `PUT /v1/integrations/connectors/manifests/{connector_type}` requires an admin permission and explicit required purposes, a registry-supported processing basis, an allowlist of fields, and any provider-admin installation required by the registry. Approved manifests remain tenant policy, not proof of subject consent. `GET /v1/integrations/connectors/manifests` is tenant-scoped.
 
 Runtime enforcement uses the same registry. When both `AETHER_CONSENT_CONTROL_PLANE_V2` and `AETHER_CONNECTOR_POLICY_GATE` are enabled, connector enablement and sync call the integration governance authority before changing tenant connector state or pulling provider data. Decisions are persisted as generated `ProcessingDecision` records in `connector_policy_decisions`, including the physical `tenant_id` column used by repository tenancy filters. Missing tenant processing profiles, unapproved manifests, unsupported processing bases, undeclared purposes, unknown payload fields, or missing subject receipts deny and require quarantine.
 

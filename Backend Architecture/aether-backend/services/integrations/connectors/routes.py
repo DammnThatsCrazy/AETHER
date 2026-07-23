@@ -58,10 +58,89 @@ class ConnectorConfigure(BaseModel):
     credential: Optional[str] = None  # raw credential stored inline to vault; sets secret_ref
 
 
+class IntegrationManifestApproval(BaseModel):
+    approved_purposes: list[str]
+    processing_basis: str
+    allowed_fields: list[str]
+    provider_admin_installed: bool = False
+
+
 @router.get("")
 async def list_connectors(request: Request):
     tenant_id = _tenant_id(request)
     return APIResponse(data={"items": await connector_service.list_for_tenant(tenant_id)}).to_dict()
+
+
+@router.post("/discovery/scan")
+async def scan_configured_integrations(request: Request):
+    tenant_id = _tenant_id(request, "write")
+    from services.integrations.discovery import discover_configured_integrations
+
+    configured = await connector_service.repo.find_many(
+        filters={"tenant_id": tenant_id},
+        limit=1000,
+    )
+    items = await discover_configured_integrations(tenant_id, configured)
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/discovery/detections")
+async def get_detected_integrations(request: Request):
+    tenant_id = _tenant_id(request)
+    from services.integrations.discovery import list_detections
+
+    items = await list_detections(tenant_id)
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/manifests")
+async def get_integration_manifests(request: Request):
+    tenant_id = _tenant_id(request)
+    from services.integrations.discovery import list_manifests
+
+    items = await list_manifests(tenant_id)
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+@router.post("/manifests/{connector_type}/draft")
+async def draft_integration_manifest(
+    connector_type: str,
+    request: Request,
+):
+    tenant_id = _tenant_id(request, "admin")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    from services.integrations.discovery import create_draft_manifest
+
+    stored = await create_draft_manifest(
+        tenant_id,
+        connector_type,
+        actor_id=_actor(request),
+    )
+    return APIResponse(data=stored).to_dict()
+
+
+@router.put("/manifests/{connector_type}")
+async def approve_integration_manifest(
+    connector_type: str,
+    body: IntegrationManifestApproval,
+    request: Request,
+):
+    tenant_id = _tenant_id(request, "admin")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    from services.integrations.discovery import approve_manifest
+
+    stored = await approve_manifest(
+        tenant_id,
+        connector_type,
+        approved_purposes=body.approved_purposes,
+        processing_basis=body.processing_basis,
+        allowed_fields=body.allowed_fields,
+        provider_admin_installed=body.provider_admin_installed,
+        actor_id=_actor(request),
+    )
+    return APIResponse(data=stored).to_dict()
 
 
 @router.get("/{connector_type}")
