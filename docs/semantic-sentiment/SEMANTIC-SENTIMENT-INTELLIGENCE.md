@@ -33,6 +33,33 @@ Runtime flow:
 
 This slice is intentionally provider-agnostic and deterministic for local CI. Hosted model providers can be added behind the same contract without changing API response shape.
 
+## Classifier governance
+
+The classifier runs behind a pluggable provider contract with fail-closed
+resolution (a production/multilingual mode without credentials resolves to a
+disabled provider that abstains — never a silent keyword fallback):
+
+- **Provenance** — every observation's `model_id`/`model_version` is stamped
+  from the *resolved* provider's identity and participates in the stable hash,
+  so a new provider version yields a new observation identity rather than
+  silently overwriting history.
+- **Shadow mode** — `semantic.shadow_provider` runs a candidate provider
+  in-process after the primary observation is durably stored; disagreements
+  (stance/intent/valence-sign) persist to `semantic_shadow_divergences`. Shadow
+  output never affects the primary.
+- **Canary routing** — `semantic.canary_tenants` routes listed tenants through
+  the production provider ladder (still fail-closed without credentials);
+  everyone else keeps the primary provider.
+- **Evaluation** — a measured golden set
+  (`tests/evaluation/test_semantic_classifier_eval.py`) pins accuracy,
+  per-stance recall, and abstention correctness against the deterministic
+  provider.
+- **Observability** — the pipeline emits six contracted Prometheus series
+  (`aether_semantic_*`: classified/abstained/quarantined counters, classify
+  latency, review-queue depth, active replay jobs) that back the
+  `aether_semantic_health` alert group and the semantic-pipeline dashboard; a
+  repo test forbids uncontracted series in the namespace.
+
 ## Canonical guarantees
 
 - Semantic context is separate from sentiment.
@@ -53,8 +80,11 @@ Tenant APIs:
 - `POST /v1/semantic/reprocess`
 - `GET /v1/semantic/entities/{entity_id}`
 - `GET /v1/semantic/entities/{entity_id}/sentiment`
+- `GET /v1/semantic/entities/{entity_id}/sentiment-state`
 - `GET /v1/semantic/entities/{entity_id}/timeline`
-- `GET /v1/semantic/narratives`
+- `GET /v1/semantic/entities/{entity_id}/episodes`
+- `GET /v1/semantic/relationships/{source_ref}/{target_ref}`
+- `GET /v1/semantic/narratives` (flat frames plus durable per-frame Gold states)
 - `GET /v1/semantic/cascades`
 
 Kyber APIs:
@@ -91,4 +121,11 @@ This iteration adds the next release slice beyond observation APIs:
 
 ## Non-goals in this slice
 
-This slice still does not perform hosted ML inference, graph promotion, vector writes, frontend page rendering, or autonomous campaign execution. Those remain behind explicit release gates and feature flags. The current implementation is intentionally deterministic and evidence-first so downstream model providers can be added without contract drift.
+This slice still does not perform hosted ML inference, durable graph promotion,
+vector writes, or autonomous campaign execution. Those remain behind explicit
+release gates and feature flags. (Frontend rendering of the semantic surfaces
+now exists: the Aether Profile360 semantic section and journey semantic overlay,
+and the Kyber semantic operator view — all read-only consumers of the APIs
+above.) The current implementation is intentionally deterministic and
+evidence-first so downstream model providers can be added without contract
+drift.
