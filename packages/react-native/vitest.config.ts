@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Vitest config for the React Native SDK.
@@ -10,6 +11,16 @@ import { defineConfig } from 'vitest/config';
  * native runtime.
  */
 export default defineConfig({
+  resolve: {
+    alias: [
+      {
+        find: /^@aether\/shared\/consent-receipt$/,
+        replacement: fileURLToPath(
+          new URL('../shared/consent-receipt.ts', import.meta.url),
+        ),
+      },
+    ],
+  },
   test: {
     environment: 'node',
     globals: false,
