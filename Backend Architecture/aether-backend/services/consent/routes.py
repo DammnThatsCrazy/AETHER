@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import uuid
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Request
