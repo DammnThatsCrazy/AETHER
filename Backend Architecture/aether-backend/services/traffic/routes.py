@@ -8,6 +8,7 @@ Routes:
     POST /v1/referral-links                 Create a controlled verified link
     GET  /v1/referral-links                 List tenant-scoped link metadata
     POST /v1/referral-links/{id}/revoke     Revoke a controlled verified link
+    GET  /v1/r/{token}                      Verified source-link redirect (public)
     POST /v1/track/traffic-source    Report a detected traffic source from SDK
     POST /v1/track/events            Track events with traffic source attribution
     GET  /v1/analytics/sources       Get aggregated traffic source analytics
@@ -19,15 +20,19 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from shared.auth.auth import Role, TenantContext
 from shared.decorators import require_api_key, require_api_key_raw
+from shared.logger.logger import metrics
 from .classifier import SourceClassifier
 from .referral_links import VerifiedReferralLinkRepository
 
@@ -139,6 +144,18 @@ class VerifiedReferralLinkCreate(BaseModel):
         default="agent_mediated_referral", min_length=1, max_length=64
     )
     expires_at: Optional[datetime] = None
+    # Canonical placement vocabulary — validated against the generated
+    # traffic-source registry at repository create time.
+    source: Optional[str] = Field(default=None, max_length=128)
+    medium: Optional[str] = Field(default=None, max_length=128)
+    channel_family: Optional[str] = Field(default=None, max_length=64)
+    economic_class: Optional[str] = Field(default=None, max_length=64)
+    source_class: Optional[str] = Field(default=None, max_length=64)
+    destination_url: Optional[str] = Field(default=None, max_length=2048)
+    valid_from: Optional[datetime] = None
+    environment: Optional[str] = Field(default=None, max_length=64)
+    max_uses: Optional[int] = Field(default=None, ge=1)
+    metadata: Optional[dict[str, str]] = None
 
 
 class VerifiedReferralLinkRevoke(BaseModel):
@@ -247,6 +264,62 @@ class TrafficStore:
 _store = TrafficStore()
 
 
+def _deployment_environment() -> str:
+    """Environment this API instance serves; links may bind to one environment."""
+
+    return (os.environ.get("AETHER_ENVIRONMENT") or "production").strip().lower()
+
+
+async def _audit_referral_link_event(
+    *,
+    actor_id: str,
+    action: str,
+    tenant_id: Optional[str],
+    resource_id: Optional[str],
+    outcome: str,
+    metadata: Optional[dict[str, Any]] = None,
+) -> None:
+    """Best-effort tamper-evident audit trail; never blocks the request path."""
+
+    try:
+        from services.security.audit_ledger import AuditLedger
+
+        await AuditLedger().record(
+            actor_id=actor_id,
+            actor_type="system" if actor_id == "public_redirect" else "tenant_user",
+            event_type="verified_source_link",
+            resource_type="verified_referral_link",
+            action=action,
+            outcome=outcome,  # type: ignore[arg-type]
+            tenant_id=tenant_id,
+            resource_id=resource_id,
+            metadata=metadata,
+        )
+    except Exception as exc:  # pragma: no cover — audit must not block traffic
+        logger.warning("verified_source_link_audit_failed action=%s: %s", action, exc)
+
+
+def _append_handoff_param(destination_url: str, handoff_token: str) -> str:
+    """Append aether_ref=<handoff> to the link-owned destination URL only."""
+
+    parsed = urlsplit(destination_url)
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.lower() != "aether_ref"
+    ]
+    query.append(("aether_ref", handoff_token))
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query, doseq=True),
+            parsed.fragment,
+        )
+    )
+
+
 # =============================================================================
 # ROUTES
 # =============================================================================
@@ -274,10 +347,32 @@ async def create_verified_referral_link(
             referral_mediation_type=body.referral_mediation_type,
             expires_at=body.expires_at,
             created_by=tenant.user_id,
+            source=body.source,
+            medium=body.medium,
+            channel_family=body.channel_family,
+            economic_class=body.economic_class,
+            source_class=body.source_class,
+            destination_url=body.destination_url,
+            valid_from=body.valid_from,
+            environment=body.environment,
+            max_uses=body.max_uses,
+            metadata=body.metadata,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    await _audit_referral_link_event(
+        actor_id=str(tenant.user_id or tenant.tenant_id),
+        action="create",
+        tenant_id=tenant.tenant_id,
+        resource_id=str(link["verified_referral_link_id"]),
+        outcome="success",
+        metadata={
+            "placement_id": link.get("placement_id"),
+            "source_class": link.get("source_class"),
+            "environment": link.get("environment"),
+        },
+    )
     return {
         "link": link,
         "referral_token": token,
@@ -326,7 +421,76 @@ async def revoke_verified_referral_link(
     )
     if link is None:
         raise HTTPException(status_code=404, detail="Verified referral link not found")
+    await _audit_referral_link_event(
+        actor_id=str(tenant.user_id or tenant.tenant_id),
+        action="revoke",
+        tenant_id=tenant.tenant_id,
+        resource_id=str(link["verified_referral_link_id"]),
+        outcome="success",
+        metadata={"reason": body.reason},
+    )
     return {"link": link}
+
+
+@router.get("/r/{token}", include_in_schema=False)
+async def redirect_verified_source_link(token: str, request: Request) -> RedirectResponse:
+    """Public verified source-link redirect with server-observed proof.
+
+    - Constant-time token-hash lookup; expiry/revocation/valid-from/
+      environment/max-use enforcement all collapse into a uniform 404 so the
+      endpoint never becomes a token-state oracle.
+    - The visitor is ONLY ever redirected to the link's stored
+      ``destination_url`` — request-supplied destinations are impossible.
+    - Machine/scanner/link-preview user agents are recorded flagged
+      ``is_machine`` and redirected WITHOUT a human handoff token.
+    - Human requests mint a one-time ~15-minute handoff token (sha256-hashed
+      at rest) appended as ``aether_ref`` for SDK pickup on the destination.
+    """
+
+    user_agent = request.headers.get("user-agent", "")
+    try:
+        result = await _verified_referral_links.resolve_redirect(
+            token,
+            environment=_deployment_environment(),
+            user_agent=user_agent,
+        )
+    except Exception as exc:
+        logger.warning("verified_source_link_redirect_error: %s", exc)
+        metrics.increment(
+            "verified_source_link_redirect_total", labels={"status": "error"}
+        )
+        raise HTTPException(status_code=404, detail="Not found") from exc
+
+    if result is None:
+        # Uniform not-found: unknown, expired, revoked, wrong-environment,
+        # not-yet-valid, and exhausted tokens are indistinguishable.
+        metrics.increment(
+            "verified_source_link_redirect_total", labels={"status": "rejected"}
+        )
+        raise HTTPException(status_code=404, detail="Not found")
+
+    status = "machine" if result["is_machine"] else "verified"
+    metrics.increment(
+        "verified_source_link_redirect_total", labels={"status": status}
+    )
+    await _audit_referral_link_event(
+        actor_id="public_redirect",
+        action="verify",
+        tenant_id=result["tenant_id"],
+        resource_id=str(result["link"]["verified_referral_link_id"]),
+        outcome="success",
+        metadata={
+            "use_id": result["use_id"],
+            "ua_class": result["ua_class"],
+            "is_machine": result["is_machine"],
+        },
+    )
+
+    destination = result["destination_url"]
+    if result["handoff_token"]:
+        destination = _append_handoff_param(destination, result["handoff_token"])
+    return RedirectResponse(url=destination, status_code=302)
+
 
 @router.post("/track/traffic-source")
 async def report_traffic_source(
