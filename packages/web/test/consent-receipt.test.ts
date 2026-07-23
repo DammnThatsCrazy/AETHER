@@ -10,10 +10,11 @@ describe('canonical consent receipt API', () => {
       new Response(JSON.stringify({ data: {} }), { status: 200 }),
     );
     const sdk = new AetherSDK();
-    sdk.init({
-      apiKey: 'test-key',
-      endpoint: 'https://example.test',
-      modules: {},
+    Object.assign(sdk, {
+      config: {
+        apiKey: 'test-key',
+        endpoint: 'https://example.test',
+      },
     });
 
     const receipt = await sdk.consent.recordReceipt({

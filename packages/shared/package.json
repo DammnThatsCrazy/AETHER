@@ -10,6 +10,12 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./consent-receipt": {
+      "types": "./dist/consent-receipt.d.ts",
+      "import": "./dist/esm/consent-receipt.js",
+      "require": "./dist/consent-receipt.js",
+      "default": "./dist/esm/consent-receipt.js"
+    },
     "./*": {
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
@@ -23,7 +29,7 @@
     "!*.spec.ts"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.esm.json",
     "prepublishOnly": "npm run build",
     "test": "vitest run"
   },

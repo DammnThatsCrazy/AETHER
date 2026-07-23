@@ -43,7 +43,7 @@ import { isCanonicalEventType } from './core/generated-consent-map';
 import {
   buildCanonicalConsentReceipt,
   type CanonicalConsentReceiptInput,
-} from '@aether/shared';
+} from '@aether/shared/consent-receipt';
 
 const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 const DEFAULT_ENDPOINT = 'https://api.aether.io';
