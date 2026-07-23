@@ -367,6 +367,8 @@ def _base(row: dict[str, Any], *, silver_table: str) -> dict[str, Any]:
         "consent_snapshot_id": row.get("consent_snapshot_id"),
         "occurred_at": row.get("occurred_at"),
         "server_received_at": row.get("received_at") or datetime.now(timezone.utc).isoformat(),
+        "surface": row.get("surface"),
+        "sequence_key": row.get("sequence_key"),
         "privacy_class": row.get("privacy_class", "behavioral"),
         "schema_version": 1,
         "activity_status": "observed",

@@ -40,6 +40,10 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_temporal_state_total",
     "ingestion_temporal_reason_total",
     "ingestion_temporal_blocked_total",
+    # Sequence integrity (sequence_integrity.py hook in batch.py; stateless
+    # in-batch gap/duplicate detection over context.sequence.event — metrics only)
+    "ingestion_sequence_gap_total",
+    "ingestion_sequence_duplicate_total",
     # Server-derived context enrichment (context_enricher.py hook in batch.py)
     "ingestion_context_enrichment_total",
     # Ingestion V2 — typed Bronze + transactional outbox (PR 5, bronze_bulk.py)

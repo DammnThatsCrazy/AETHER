@@ -52,6 +52,7 @@ from services.ingestion.bronze_bulk import (
     OutboxEvent,
     ingest_many,
 )
+from services.ingestion.sequence_integrity import analyze_batch_sequences
 from services.ingestion.validation import (
     EventValidationResult,
     RequestPrivacySignals,
@@ -466,6 +467,7 @@ async def ingest_batch(
 
     metrics.increment("ingestion_event_duplicate_total", value=n_duplicates)
     metrics.increment("ingestion_event_rejected_total", value=n_rejected)
+    _emit_sequence_integrity_meters(body.batch, tenant.tenant_id)
 
     logger.info(
         "Batch %s processed: accepted=%d duplicates=%d rejected=%d tenant=%s",
@@ -615,6 +617,7 @@ async def _ingest_batch_v2(
     )
     metrics.increment("ingestion_event_duplicate_total", value=n_duplicates)
     metrics.increment("ingestion_event_rejected_total", value=n_rejected)
+    _emit_sequence_integrity_meters(body.batch, tenant.tenant_id)
 
     logger.info(
         "Batch %s processed (v2): accepted=%d duplicates=%d rejected=%d tenant=%s",
@@ -774,6 +777,31 @@ def _apply_temporal_enforcement(
             reason="temporal_warning:" + ",".join(decision.reason_codes),
         )
     return result
+
+
+def _emit_sequence_integrity_meters(batch: list[BaseEvent], tenant_id: str) -> None:
+    """Meter in-batch sequence gaps/duplicates (stateless, metrics only).
+
+    Runs once per accepted batch over every event the client sent — rejected
+    or duplicate events still carried ``context.sequence.event``, and the
+    counter is a property of the client's stream, so excluding them would
+    manufacture false gaps. Findings never change event dispositions.
+    """
+    findings = analyze_batch_sequences([
+        {"sessionId": e.sessionId, "context": {"sequence": e.context.sequence}}
+        for e in batch
+    ])
+    for finding in findings:
+        if finding.kind == "gap":
+            metrics.increment(
+                "ingestion_sequence_gap_total",
+                labels={"tenant_id": tenant_id},
+            )
+        else:
+            metrics.increment(
+                "ingestion_sequence_duplicate_total",
+                labels={"tenant_id": tenant_id},
+            )
 
 
 def _make_idempotency_key(tenant_id: str, event_id: str, schema_version: str) -> str:
