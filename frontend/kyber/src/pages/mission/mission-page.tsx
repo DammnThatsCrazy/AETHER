@@ -114,7 +114,7 @@ export function MissionPage() {
       actions={
         <div className="flex items-center gap-2">
           <EnvironmentBadge environment={environment} />
-          <Badge variant={mode === 'mocked' ? 'warning' : 'info'}>
+          <Badge variant={false ? 'warning' : 'info'}>
             {mode.toUpperCase()}
           </Badge>
         </div>

@@ -341,7 +341,7 @@ export function LabPage() {
       subtitle="Data inspection, replay, and simulation tools"
       actions={
         <div className="flex items-center gap-2">
-          <Badge variant={mode === 'mocked' ? 'warning' : 'info'}>{mode.toUpperCase()}</Badge>
+          <Badge variant={false ? 'warning' : 'info'}>{mode.toUpperCase()}</Badge>
           <Badge>{environment}</Badge>
         </div>
       }

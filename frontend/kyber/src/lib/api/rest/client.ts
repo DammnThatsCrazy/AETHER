@@ -46,7 +46,7 @@ function generateCorrelationId(): string {
 function resolveApiBaseUrl(): string {
   if (getRuntimeMode() !== 'live') return '';
   const configured = (env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '');
-  if (env.VITE_KYBER_ENV === 'local-live') return configured;
+  if (env.VITE_KYBER_ENV === 'local') return configured;
   if (!configured) return '';
   if (/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(configured)) return '';
   try {

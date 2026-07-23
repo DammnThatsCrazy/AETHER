@@ -2,8 +2,8 @@
  * Auth0 provider wrapper for Aether customer app.
  *
  * When Auth0 credentials are absent (VITE_AUTH0_DOMAIN / VITE_AUTH0_CLIENT_ID unset),
- * this is a no-op passthrough for all non-production environments (local-mocked,
- * local-live, staging). Production fails closed with a startup error.
+ * this is a no-op passthrough for all non-production environments (local development,
+ * local, staging). Production fails closed with a startup error.
  * The existing AuthProvider in features/auth handles authentication in those envs.
  *
  * In all other environments, this wraps the app in Auth0Provider from
@@ -21,7 +21,7 @@ export function AetherAuth0Provider({ children }: AetherAuth0ProviderProps) {
   const domain = env.VITE_AUTH0_DOMAIN;
   const clientId = env.VITE_AUTH0_CLIENT_ID;
 
-  // In local-mocked mode with no Auth0 config, skip the provider entirely.
+  // In local development mode with no Auth0 config, skip the provider entirely.
   // The existing AuthProvider in features/auth handles mock authentication.
   if (!domain || !clientId) {
     if (isProduction()) {
@@ -32,7 +32,7 @@ export function AetherAuth0Provider({ children }: AetherAuth0ProviderProps) {
         `Current VITE_AETHER_ENV=${env.VITE_AETHER_ENV}`,
       );
     }
-    // local-mocked, local-live, staging: skip Auth0 wrapper — the existing
+    // local development, local, staging: skip Auth0 wrapper — the existing
     // AuthProvider in features/auth handles authentication for these envs.
     return <>{children}</>;
   }

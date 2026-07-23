@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { Providers } from './providers';
 import { AppRouter } from './router';
 import { log } from '@aether-app/lib/logging';
-import { getEnvironment, getRuntimeMode, getStartupValidationSummary, isLocalMocked } from '@aether-app/lib/env';
+import { getEnvironment, getRuntimeMode, getStartupValidationSummary } from '@aether-app/lib/env';
+import { cleanupLegacyMockWorker } from '@aether-app/lib/browser/legacy-mock-cleanup';
 import '@aether-app/styles/index.css';
 
 log.info(`[AETHER] Starting — env=${getEnvironment()} mode=${getRuntimeMode()}`);
@@ -14,11 +15,7 @@ if (!validation.ok) {
 }
 
 async function bootstrap() {
-  if (isLocalMocked()) {
-    const { worker } = await import('../mocks/browser');
-    await worker.start({ onUnhandledRequest: 'bypass' });
-    log.info('[AETHER] MSW mock service worker started');
-  }
+  await cleanupLegacyMockWorker();
 
   const root = document.getElementById('root');
   if (!root) throw new Error('Root element not found');

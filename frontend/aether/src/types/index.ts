@@ -40,7 +40,7 @@ export type {
   TimelineResponse, LakeResponse,
 } from '@aether/shared';
 
-export type AetherEnvironment = 'local-mocked' | 'local-live' | 'staging' | 'production';
+export type AetherEnvironment = 'local' | 'staging' | 'production' | 'test';
 
 export interface AetherUser {
   readonly id: string;

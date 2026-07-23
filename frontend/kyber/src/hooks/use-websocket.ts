@@ -15,7 +15,7 @@ export function useWebSocket({ path, onMessage, enabled = true }: UseWebSocketOp
   onMessageRef.current = onMessage;
 
   useEffect(() => {
-    if (!enabled || getRuntimeMode() === 'mocked') return;
+    if (!enabled || false) return;
 
     const client = new WebSocketClient({
       path,

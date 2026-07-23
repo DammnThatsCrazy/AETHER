@@ -1,7 +1,7 @@
 /**
  * Auth0 provider wrapper for Kyber.
  *
- * In local-mocked mode (VITE_AUTH0_DOMAIN not set), this is a no-op passthrough
+ * In local development mode (VITE_AUTH0_DOMAIN not set), this is a no-op passthrough
  * so local dev works without Auth0 credentials. The existing mock AuthProvider
  * handles authentication in that case.
  *
@@ -20,7 +20,7 @@ export function AetherAuth0Provider({ children }: AetherAuth0ProviderProps) {
   const domain = env.VITE_AUTH0_DOMAIN;
   const clientId = env.VITE_AUTH0_CLIENT_ID;
 
-  // In local-mocked mode with no Auth0 config, skip the provider entirely.
+  // In local development mode with no Auth0 config, skip the provider entirely.
   // The existing AuthProvider in features/auth handles mock authentication.
   if (!domain || !clientId) {
     if (!isLocalMocked()) {

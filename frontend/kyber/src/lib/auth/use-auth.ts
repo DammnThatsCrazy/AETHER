@@ -2,7 +2,7 @@
  * Auth hook for Kyber — wraps @auth0/auth0-react's useAuth0 with typed
  * helpers and a consistent interface.
  *
- * In local-mocked mode (Auth0 not configured), falls back to the existing
+ * In local development mode (Auth0 not configured), falls back to the existing
  * mock auth context via features/auth so the interface is always the same.
  */
 import { useAuth0, type User } from '@auth0/auth0-react';
@@ -51,7 +51,7 @@ const USE_MOCK = isLocalMocked() && !env.VITE_AUTH0_DOMAIN;
  * useAuth — unified auth hook for Kyber.
  *
  * Returns the same interface regardless of whether Auth0 is configured.
- * In local-mocked mode (no VITE_AUTH0_DOMAIN), returns the mock auth state.
+ * In local development mode (no VITE_AUTH0_DOMAIN), returns the mock auth state.
  * In all other modes, returns the real Auth0 state.
  *
  * Both underlying hooks are always called (hooks must not be conditional),

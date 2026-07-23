@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { Providers } from './providers';
 import { AppRouter } from './router';
 import { log } from '@kyber/lib/logging';
-import { getEnvironment, getRuntimeMode, getStartupValidationSummary, isLocalMocked } from '@kyber/lib/env';
+import { getEnvironment, getRuntimeMode, getStartupValidationSummary } from '@kyber/lib/env';
+import { cleanupLegacyMockWorker } from '@kyber/lib/browser/legacy-mock-cleanup';
 import '@kyber/styles/index.css';
 
 log.info(`[KYBER] Starting — env=${getEnvironment()} mode=${getRuntimeMode()}`);
@@ -14,21 +15,7 @@ if (!validation.ok) {
 }
 
 async function bootstrap() {
-  if (isLocalMocked()) {
-    try {
-      const { worker } = await import('../mocks/browser');
-      // Timeout guards against service worker registration hanging in headless/CI environments.
-      await Promise.race([
-        worker.start({ onUnhandledRequest: 'bypass' }),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('MSW startup timeout')), 5000),
-        ),
-      ]);
-      log.info('[KYBER] MSW mock service worker started');
-    } catch (e) {
-      log.warn('[KYBER] MSW startup skipped (rendering without mocks):', e);
-    }
-  }
+  await cleanupLegacyMockWorker();
 
   const root = document.getElementById('root');
   if (!root) throw new Error('Root element not found');
