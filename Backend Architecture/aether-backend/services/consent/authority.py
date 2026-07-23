@@ -24,14 +24,21 @@ isolation (AETHER_ENV=local, no DATABASE_URL → in-memory repositories).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from config.settings import settings as _settings
 from repositories.repos import BaseRepository
-from shared.common.common import utc_now
+from services.consent.control_plane import (
+    CanonicalConsentReceiptInput,
+    TenantProcessingProfile,
+    TenantProcessingProfileRepository,
+    consent_receipt_history,
+)
+from shared.common.common import BadRequestError, utc_now
 from shared.logger.logger import get_logger
 
 # Reuse the canonical, registry-derived purpose set (never re-derive it here).
@@ -167,24 +174,30 @@ class ConsentReceiptRepository(BaseRepository):
         purpose: str,
         state: str,
         *,
+        record_id: Optional[str] = None,
         subject_id: Optional[str] = None,
         anonymous_id: Optional[str] = None,
         policy_version: Optional[str] = None,
         source: str = "sdk",
+        provider: Optional[str] = None,
         jurisdiction: Optional[str] = None,
         mode: Optional[str] = None,
         lawful_basis: Optional[str] = None,
         granted_at: Optional[str] = None,
+        denied_at: Optional[str] = None,
         revoked_at: Optional[str] = None,
         expires_at: Optional[str] = None,
         gpc_observed: Optional[bool] = None,
         dnt_observed: Optional[bool] = None,
+        provider_consent_id: Optional[str] = None,
         integrity_hash: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        legal_hold: bool = False,
         metadata: Optional[dict] = None,
     ) -> dict:
         """Persist a server consent receipt (the authoritative record)."""
         now = utc_now().isoformat()
-        return await self.insert(receipt_id, {
+        return await self.insert(record_id or receipt_id, {
             "receipt_id": receipt_id,
             "tenant_id": tenant_id,
             "subject_id": subject_id,
@@ -193,27 +206,44 @@ class ConsentReceiptRepository(BaseRepository):
             "state": state,
             "policy_version": policy_version,
             "source": source,
+            "provider": provider,
             "jurisdiction": jurisdiction,
             "mode": mode,
             "lawful_basis": lawful_basis,
             "granted_at": granted_at or (now if state in _GRANTED_STATES else None),
+            "denied_at": denied_at or (now if state == "denied" else None),
             "revoked_at": revoked_at,
             "expires_at": expires_at,
             "gpc_observed": gpc_observed,
             "dnt_observed": dnt_observed,
+            "provider_consent_id": provider_consent_id,
             "integrity_hash": integrity_hash,
+            "idempotency_key": idempotency_key,
+            "legal_hold": bool(legal_hold),
             "metadata": metadata or {},
         })
 
 
-class TenantComplianceProfileRepository(BaseRepository):
-    """Per-tenant compliance posture (table ``tenant_compliance_profiles``)."""
+class TenantComplianceProfileRepository(TenantProcessingProfileRepository):
+    """Compatibility facade over the canonical tenant processing profile.
+
+    New writes go only to ``tenant_processing_profiles``. Reads fall back to the
+    pre-PR-0 ``tenant_compliance_profiles`` store so existing deployments can
+    roll forward without creating a third policy store.
+    """
 
     def __init__(self) -> None:
-        super().__init__("tenant_compliance_profiles")
+        super().__init__()
+        self._legacy = BaseRepository("tenant_compliance_profiles")
 
     async def for_tenant(self, tenant_id: str) -> Optional[dict]:
-        rows = await self.find_many(filters={"tenant_id": tenant_id}, limit=1)
+        current = await super().for_tenant(tenant_id)
+        if current is not None:
+            return current
+        rows = await self._legacy.find_many(
+            filters={"tenant_id": tenant_id},
+            limit=1,
+        )
         return rows[0] if rows else None
 
     async def upsert(
@@ -228,28 +258,134 @@ class TenantComplianceProfileRepository(BaseRepository):
         policy_state: str = "active",
         metadata: Optional[dict] = None,
     ) -> dict:
-        record = {
-            "profile_id": tenant_id,
-            "tenant_id": tenant_id,
-            "profile_version": profile_version,
-            "commercial_stage": commercial_stage,
-            "risk_tier": risk_tier,
-            "prohibited_data_classes": [
-                str(c).strip().lower() for c in (prohibited_data_classes or [])
+        normalized_status = (
+            policy_state
+            if policy_state in {"draft", "active", "suspended", "revoked"}
+            else "draft"
+        )
+        profile = TenantProcessingProfile(
+            tenant_id=tenant_id,
+            profile_version=profile_version,
+            status=normalized_status,  # type: ignore[arg-type]
+            policy_version=profile_version,
+            tenant_admin_approved=normalized_status == "active",
+            prohibited_data_classes=[
+                str(c).strip().lower()
+                for c in (prohibited_data_classes or [])
             ],
-            "fingerprinting_allowed": bool(fingerprinting_allowed),
-            "policy_state": policy_state,
-            "metadata": metadata or {},
-        }
-        existing = await self.find_by_id(tenant_id)
-        if existing:
-            return await self.update(tenant_id, record)
+            fingerprinting_allowed=bool(fingerprinting_allowed),
+            commercial_stage=commercial_stage,
+            risk_tier=risk_tier,
+            metadata=metadata or {},
+        )
+        record = profile.model_dump()
+        # Keep the legacy key in the JSON contract while old evaluators migrate.
+        record["profile_id"] = tenant_id
+        record["policy_state"] = policy_state
         return await self.insert(tenant_id, record)
 
 
 # Module-level singletons (mirrors the repo's singleton pattern).
 _receipt_repo = ConsentReceiptRepository()
 _profile_repo = TenantComplianceProfileRepository()
+
+
+def _deterministic_id(prefix: str, *parts: str) -> str:
+    material = "\0".join(parts).encode("utf-8")
+    return f"{prefix}_{hashlib.sha256(material).hexdigest()}"
+
+
+async def record_consent_receipt_envelope(
+    receipt: CanonicalConsentReceiptInput,
+) -> list[dict[str, Any]]:
+    """Persist one authoritative row per purpose plus append-only history.
+
+    ``CanonicalConsentReceipt`` is a multi-purpose transport envelope while the
+    existing authority evaluates one purpose at a time. Deterministic internal
+    IDs preserve request idempotency without weakening that established lookup
+    shape. The external ``receipt_id`` remains identical on every row.
+    """
+
+    rows: list[dict[str, Any]] = []
+    for purpose in sorted(set(receipt.purposes)):
+        per_purpose_idempotency_key = f"{receipt.idempotency_key}:{purpose}"
+        record_id = _deterministic_id(
+            "consent_receipt",
+            receipt.tenant_id,
+            per_purpose_idempotency_key,
+            purpose,
+        )
+        existing = await _receipt_repo.find_by_id(record_id)
+        if (
+            existing is not None
+            and existing.get("integrity_hash") != receipt.integrity_hash
+        ):
+            raise BadRequestError(
+                "idempotency_key was already used for different consent evidence"
+            )
+        row = await _receipt_repo.record(
+            receipt.receipt_id,
+            receipt.tenant_id,
+            purpose,
+            receipt.state,
+            record_id=record_id,
+            subject_id=receipt.subject_id,
+            anonymous_id=receipt.anonymous_id,
+            policy_version=receipt.policy_version,
+            source=receipt.source,
+            provider=receipt.provider,
+            jurisdiction=receipt.jurisdiction_context,
+            mode=receipt.mode,
+            lawful_basis=receipt.lawful_basis,
+            granted_at=receipt.granted_at,
+            denied_at=receipt.denied_at,
+            revoked_at=receipt.revoked_at,
+            expires_at=receipt.expires_at,
+            gpc_observed=receipt.gpc_observed,
+            dnt_observed=receipt.dnt_observed,
+            provider_consent_id=receipt.provider_consent_id,
+            integrity_hash=receipt.integrity_hash,
+            idempotency_key=per_purpose_idempotency_key,
+            legal_hold=bool(receipt.metadata.get("legal_hold", False)),
+            metadata={
+                **receipt.metadata,
+                "canonical_idempotency_key": receipt.idempotency_key,
+                "canonical_purposes": sorted(set(receipt.purposes)),
+            },
+        )
+        history_id = _deterministic_id(
+            "consent_receipt_history",
+            receipt.tenant_id,
+            receipt.receipt_id,
+            purpose,
+            receipt.state,
+            receipt.integrity_hash,
+        )
+        await consent_receipt_history.append(
+            history_id,
+            {
+                **row,
+                "history_id": history_id,
+                "authoritative_record_id": record_id,
+            },
+        )
+        rows.append(row)
+    return rows
+
+
+async def get_latest_consent_receipt(
+    tenant_id: str,
+    purpose: str,
+    *,
+    subject_id: Optional[str] = None,
+    anonymous_id: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    return await _receipt_repo.latest_for(
+        tenant_id,
+        purpose,
+        subject_id=subject_id,
+        anonymous_id=anonymous_id,
+    )
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -402,7 +538,10 @@ async def evaluate_data_policy(
         # No profile configured → no data-class prohibitions to enforce.
         return True, None
 
-    if (profile.get("policy_state") or "").strip().lower() == "denied":
+    profile_state = (
+        profile.get("policy_state") or profile.get("status") or ""
+    ).strip().lower()
+    if profile_state in {"denied", "suspended", "revoked"}:
         return False, TENANT_POLICY_DENIED
 
     prohibited = {
