@@ -8,6 +8,7 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { semanticContext } from './context/SemanticContext';
+import type { SemanticContextEnvelope } from './context/SemanticContext';
 import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
 import { RNFeedback } from './modules/Feedback';
@@ -127,6 +128,28 @@ const Aether = {
     AetherNative?.screenView(screenName, properties ?? {});
   },
 
+  /**
+   * Build the JS-side Tier 1 semantic envelope (device, viewport, temporal
+   * provenance, JS screen trail) around ids the caller already holds.
+   *
+   * RN events ship through the NATIVE pipeline: native `track()`/`observe()`
+   * accept only `(type, properties)`, stamp the canonical sessionId/eventId
+   * natively, and build their own event context — and the native module
+   * exposes no session getter to JS. The envelope therefore cannot be
+   * attached in-band without inventing a native method or smuggling context
+   * into user properties (no such reserved key exists in the native SDKs).
+   * Instead it is exposed here for consumers that hold the canonical ids —
+   * the host app or the native layer — e.g. side-channel transports that
+   * want the JS screen trail alongside a natively-identified event.
+   *
+   * The collector never mints ids (parity with the web SDK's
+   * SemanticContextCollector.collect(sessionId, eventId)), so the returned
+   * envelope always agrees with the ids passed in.
+   */
+  collectSemanticContext(sessionId: string, eventId: string): SemanticContextEnvelope {
+    return semanticContext.collect(sessionId, eventId);
+  },
+
   conversion(event: string, value?: number, properties?: Record<string, unknown>): void {
     AetherNative?.conversion(event, value ?? 0, properties ?? {});
   },
@@ -173,6 +196,10 @@ const Aether = {
 
   reset(): void {
     AetherNative?.reset();
+    // Native reset() re-mints the native session id. Clear the JS screen
+    // trail at the same boundary so the next semantic envelope never carries
+    // a trail from the previous session.
+    semanticContext.resetSession();
   },
 
   flush(): void {

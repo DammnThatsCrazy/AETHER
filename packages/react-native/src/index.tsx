@@ -23,6 +23,10 @@ export type {
   IdentityData,
   AetherContextValue,
 } from './bridge';
+// Tier 1 semantic envelope shape returned by Aether.collectSemanticContext().
+// The canonical sessionId/eventId inside it are native-owned and passed in by
+// the caller — the JS collector never mints its own ids.
+export type { SemanticContextEnvelope } from './context/SemanticContext';
 
 import React, { useState, useEffect, ReactNode } from 'react';
 import Aether, { AetherContext, emitter, AetherRNConfig } from './bridge';

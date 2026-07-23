@@ -24,22 +24,27 @@ export interface SemanticContextEnvelope {
   screenPath: string[];
 }
 
-let sessionStartedAt = Date.now();
-let screenPath: string[] = [];
-let sessionId = generateId();
-
-function generateId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
 export class RNSemanticContextCollector {
-  collect(): SemanticContextEnvelope {
+  /** JS-recorded screen trail (via Aether.screenView). Instance state — no module-level globals. */
+  private screenPath: string[] = [];
+
+  /**
+   * Build the Tier 1 semantic envelope for an event.
+   *
+   * The canonical `sessionId` and top-level `eventId` are OWNED BY THE NATIVE
+   * SDK, which stamps them on every natively-emitted event. They are passed in
+   * by the caller — the collector NEVER mints its own ids (same contract as the
+   * web SemanticContextCollector after PR #475), so the envelope can never
+   * carry a session id that diverges from the native pipeline's.
+   *
+   * Caller contract: the native bridge exposes no session getter to JS, so the
+   * ids must come from whoever holds the canonical values — the host app or the
+   * native layer consuming `Aether.collectSemanticContext(sessionId, eventId)`.
+   */
+  collect(sessionId: string, eventId: string): SemanticContextEnvelope {
     const { width, height } = Dimensions.get('window');
     return {
-      eventId: generateId(),
+      eventId,
       timestamp: new Date().toISOString(),
       sdk: { name: 'aether-react-native', version: '8.12.0' },
       platform: Platform.OS,
@@ -57,23 +62,26 @@ export class RNSemanticContextCollector {
       timeZoneSource: 'device',
       clockSource: 'device',
       sessionId,
-      screenPath: [...screenPath],
+      screenPath: [...this.screenPath],
     };
   }
 
   recordScreen(screenName: string): void {
-    screenPath.push(screenName);
-    if (screenPath.length > 50) screenPath = screenPath.slice(-50);
+    this.screenPath.push(screenName);
+    if (this.screenPath.length > 50) this.screenPath = this.screenPath.slice(-50);
   }
 
+  /**
+   * Clear the JS screen trail at a session boundary. The session id itself is
+   * native-owned (native reset()/init re-mint it), so there is nothing to
+   * re-mint here — this only prevents the trail from leaking across sessions.
+   */
   resetSession(): void {
-    sessionId = generateId();
-    sessionStartedAt = Date.now();
-    screenPath = [];
+    this.screenPath = [];
   }
 
   destroy(): void {
-    screenPath = [];
+    this.screenPath = [];
   }
 }
 
