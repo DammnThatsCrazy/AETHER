@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (389 types, contract v8.12.0)
+# Aether Event Registry (394 types, contract v8.12.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -19,6 +19,11 @@
 | `journey_completed` | `journey` | analytics | behavioral | Journey reached completion |
 | `journey_abandoned` | `journey` | analytics | behavioral | Journey abandoned without completion |
 | `journey_checkpoint` | `journey` | analytics | behavioral | Journey milestone checkpoint |
+| `navigation_intent` | `journey` | analytics | behavioral | Permitted click expected to navigate; carries navigation ID and sanitized destination for intent/arrival correlation |
+| `navigation_arrival` | `journey` | analytics | behavioral | Page or SPA route arrival correlated to a prior navigation_intent by navigation ID |
+| `deep_link_opened` | `journey` | analytics | behavioral | Native deep link opened; carries canonical acquisition evidence (destination domain, aether_ref, UTM, click IDs) |
+| `app_install_attributed` | `journey` | analytics | behavioral | First app launch attributed via platform install evidence (Play Install Referrer or verified handoff) |
+| `deferred_attribution_resolved` | `journey` | analytics | behavioral | Pending pre-install source handoff deterministically reconciled after first launch |
 | `identify` | `identity` | analytics | identity | Identity hydration from aether.hydrateIdentity() |
 | `consent` | `consent` | — | governance | Consent state change — always allowed regardless of consent state |
 | `conversion` | `commerce` | marketing | behavioral | Conversion event for marketing attribution |

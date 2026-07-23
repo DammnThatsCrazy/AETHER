@@ -126,6 +126,36 @@
       "section_comment": "journey"
     },
     {
+      "name": "navigation_intent",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
+      "name": "navigation_arrival",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
+      "name": "deep_link_opened",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
+      "name": "app_install_attributed",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
+      "name": "deferred_attribution_resolved",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
       "name": "identify",
       "family": "identity",
       "consent_purpose": "analytics",
