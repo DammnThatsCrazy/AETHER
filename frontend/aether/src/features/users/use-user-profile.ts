@@ -106,6 +106,16 @@ export function useUserIntelligence(userId: string) {
   });
 }
 
+/** Profile360 semantic dimension — durable topics, stance, summary, freshness. */
+export function useUserSemantic(userId: string) {
+  return useQuery({
+    key: key(userId, 'semantic'),
+    fetcher: () => api.profile.semantic(userId),
+    staleTime: STALE,
+    enabled: !!userId,
+  });
+}
+
 export function useUserRelationships(userId: string) {
   return useQuery({
     key: key(userId, 'relationships'),

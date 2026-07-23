@@ -68,6 +68,79 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
   return s ? `?${s}` : '';
 };
 
+// ─── Semantic intelligence shapes ────────────────────────────────────────────
+// Mirrors services/semantic_intelligence/models.py (EvidenceRef,
+// EntitySemanticState) and the /v1/graph/semantic-overlay route payload.
+
+const semanticEvidenceRefSchema = z.object({
+  evidence_id: z.string(),
+  source_type: z.string(),
+  source_ref: z.string(),
+  observed_at: z.string(),
+  confidence: z.number(),
+}).passthrough();
+
+/** Durable Gold-tier weighted semantic state for an entity. */
+const entitySemanticStateSchema = z.object({
+  state_id: z.string(),
+  tenant_id: z.string(),
+  entity_ref: z.string(),
+  entity_type: z.string(),
+  subject_ref: z.string(),
+  window_start: z.string(),
+  window_end: z.string(),
+  active_topics: z.array(z.string()),
+  dominant_narratives: z.array(z.string()),
+  stance_distribution: z.record(z.string(), z.number()),
+  intent_distribution: z.record(z.string(), z.number()),
+  /** "insufficient_data" when no semantic observations exist yet. */
+  semantic_summary: z.string(),
+  semantic_baseline: z.record(z.string(), z.unknown()),
+  semantic_delta: z.record(z.string(), z.unknown()),
+  persistence: z.string(),
+  volatility: z.number(),
+  observation_count: z.number(),
+  unique_source_count: z.number(),
+  model_mix: z.record(z.string(), z.number()),
+  confidence: z.number(),
+  freshness: z.string(),
+  evidence_refs: z.array(semanticEvidenceRefSchema),
+  version: z.number(),
+  computed_at: z.string(),
+}).passthrough();
+
+/** GET /v1/profile/{user_id}/semantic — empty-but-shaped when not computed. */
+const profileSemanticSchema = z.object({
+  user_id: z.string(),
+  semantic: entitySemanticStateSchema,
+  computed: z.boolean(),
+  provenance: z.object({ sources: z.array(z.string()) }).passthrough().optional(),
+}).passthrough();
+
+const semanticNodeOverlaySchema = z.object({
+  entity_ref: z.string(),
+  stance: z.string(),
+  topics: z.array(z.string()),
+  confidence: z.number(),
+  valid_from: z.string(),
+  evidence_refs: z.array(semanticEvidenceRefSchema),
+}).passthrough();
+
+/** POST /v1/graph/semantic-overlay response payload. */
+const semanticOverlaySchema = z.object({
+  overlay_type: z.string(),
+  node_overlays: z.array(semanticNodeOverlaySchema),
+  edge_overlays: z.array(z.unknown()),
+  partial: z.boolean(),
+  causal_confidence: z.string(),
+}).passthrough();
+
+export type SemanticEvidenceRef = z.infer<typeof semanticEvidenceRefSchema>;
+export type EntitySemanticState = z.infer<typeof entitySemanticStateSchema>;
+export type ProfileSemanticResponse = z.infer<typeof profileSemanticSchema>;
+export type SemanticNodeOverlay = z.infer<typeof semanticNodeOverlaySchema>;
+export type SemanticOverlayResponse = z.infer<typeof semanticOverlaySchema>;
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
@@ -217,6 +290,16 @@ export const api = {
     intelligence: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/intelligence`, wrap(unknownSchema)).then(r => r.data as IntelligenceProfile),
 
+    /**
+     * Profile360 semantic dimension — durable weighted semantic state:
+     * active topics, stance/intent distribution, summary, confidence and
+     * freshness from the semantic Gold-tier reducer. Empty-but-shaped
+     * (computed=false, semantic_summary="insufficient_data") when no
+     * semantic observations exist yet.
+     */
+    semantic: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/semantic`, wrap(profileSemanticSchema)).then(r => r.data),
+
     recommendations: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/recommendations`, wrap(unknownSchema)).then(r => r.data),
 
@@ -336,6 +419,14 @@ export const api = {
     /** Validate whether a delegated action is in scope for a grantee. */
     validateDelegation: (params: { grantee_entity_id: string; action: string; resource: string; amount?: number }) =>
       restClient.post('/v1/delegations/validate', wrap(unknownSchema), params).then(r => r.data),
+
+    /**
+     * Semantic sentiment overlay for graph / journey views — per-node stance,
+     * topics, confidence and evidence refs for a subject's semantic
+     * observations. Entity-level only (per-step annotation is not exposed).
+     */
+    semanticOverlay: (body: { subject_ref: string }) =>
+      restClient.post('/v1/graph/semantic-overlay', wrap(semanticOverlaySchema), body).then(r => r.data),
 
     /** Cross-domain fusion profile — unified view across Web2, Web3, and institutional data. */
     fusionProfile: (entityId: string) =>

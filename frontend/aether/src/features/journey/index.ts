@@ -7,3 +7,5 @@ export { JourneyFilterBar } from './journey-filter-bar';
 export { JourneyTransitionBadge } from './journey-transition-badge';
 export { useJourneyRisk } from './use-journey-risk';
 export type { JourneyRiskSummary } from './use-journey-risk';
+export { useJourneySemantic } from './use-journey-semantic';
+export type { SemanticNodeOverlay, SemanticOverlayResponse } from './use-journey-semantic';
