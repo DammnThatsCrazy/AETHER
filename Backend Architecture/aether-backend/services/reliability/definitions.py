@@ -35,6 +35,7 @@ SERVICE_DEFINITIONS: list[dict[str, str]] = [
     {"service_key": "kyber_admin", "label": "Kyber Admin"},
     {"service_key": "aether_frontend", "label": "Aether Frontend"},
     {"service_key": "kyber_frontend", "label": "Kyber Frontend"},
+    {"service_key": "semantic_intelligence", "label": "Semantic Intelligence"},
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ PIPELINE_DEFINITIONS: list[dict[str, str]] = [
     {"pipeline_key": "outcome_to_ledger", "label": "Outcome → outcome ledger", "source": "outcomes", "destination": "outcomes"},
     {"pipeline_key": "usage_to_billing", "label": "Usage event → billing metering", "source": "ingestion", "destination": "billing_metering"},
     {"pipeline_key": "audit_to_ledger", "label": "Audit event → audit ledger", "source": "security_audit", "destination": "audit_exports"},
+    {"pipeline_key": "event_to_semantic_classification", "label": "Validated event → semantic classification", "source": "ingestion", "destination": "semantic_intelligence"},
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -212,6 +214,16 @@ RUNBOOK_DEFINITIONS: list[OperationalRunbook] = [
         True,
         "We are aware of slowness in the Aether app and are working to restore full performance.",
     ),
+    # Registers the existing authored runbook:
+    # docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md
+    _runbook(
+        "rb_semantic_classification_degraded", "Semantic Classification Degraded", "semantic_intelligence", "sev3",
+        ["semantic abstention rate elevated", "semantic review queue growth", "semantic classify latency p95 elevated"],
+        ["Check /v1/kyber/semantic/fleet-health (model versions, abstention rate)", "Inspect event_to_semantic_classification pipeline freshness", "Follow docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md"],
+        ["Keep classification abstaining (fail closed) — never fabricate sentiment", "Throttle deep analysis before core ingestion", "Reprocess bounded tenant/time windows via dry-run replay after recovery"],
+        ["on-call SRE", "semantic intelligence owner"],
+        False,
+    ),
 ]
 
 
@@ -242,8 +254,17 @@ SLO_DEFINITIONS: list[ServiceLevelObjective] = [
     _slo("slo_audit_export_generation", "audit_exports", "export_generation_seconds_p95", 300.0, "7d"),
     _slo("slo_billing_metering_freshness", "billing_metering", "metering_freshness_seconds", 3600.0, "24h"),
     _slo("slo_kyber_dashboard_freshness", "kyber_frontend", "dashboard_freshness_seconds", 120.0, "1h"),
+    # Semantic pipeline SLOs — sourced from the Prometheus series emitted by
+    # services/semantic_intelligence:
+    #   abstention_rate        ← aether_semantic_observations_abstained_total /
+    #                            (…_classified_total + …_abstained_total)
+    #   classify_latency_ms_p95← aether_semantic_classify_latency_ms histogram
+    #   review_queue_depth     ← aether_semantic_review_queue_open gauge
+    _slo("slo_semantic_abstention_rate", "semantic_intelligence", "abstention_rate", 0.25, "24h"),
+    _slo("slo_semantic_classify_latency", "semantic_intelligence", "classify_latency_ms_p95", 1000.0, "24h"),
+    _slo("slo_semantic_review_queue_depth", "semantic_intelligence", "review_queue_depth", 50.0, "24h"),
 ]
 
-# Metrics where a LOWER value is better (latency/freshness/age). Availability and
-# ratio metrics are "higher is better".
-LOWER_IS_BETTER_SUFFIXES = ("latency_ms_p95", "_seconds", "_seconds_p95", "latency_ms", "_age")
+# Metrics where a LOWER value is better (latency/freshness/age/abstention/backlog).
+# Availability and ratio metrics are "higher is better".
+LOWER_IS_BETTER_SUFFIXES = ("latency_ms_p95", "_seconds", "_seconds_p95", "latency_ms", "_age", "_rate", "_depth")

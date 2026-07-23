@@ -558,3 +558,69 @@ groups:
         annotations:
           summary: "Campaign touchpoint mapping rate below 70% for tenant {{ $labels.tenant_id }}"
           description: "Only {{ $value | humanizePercentage }} of touchpoint facts resolve to a canonical campaign UUID. Attribution accuracy is degraded."
+
+  # ============================================================
+  # Semantic Pipeline Health
+  # Metrics emitted by services/semantic_intelligence only —
+  # tests/unit/test_semantic_observability_assets.py pins this
+  # group to the contracted series names.
+  # Targets: abstention ratio ≤ 25%, classify p95 ≤ 1000 ms,
+  #          review queue ≤ 50 open items
+  # ============================================================
+  - name: aether_semantic_health
+    rules:
+      - alert: SemanticAbstentionRatioHigh
+        expr: >
+          rate(aether_semantic_observations_abstained_total[15m])
+          / (
+            rate(aether_semantic_observations_classified_total[15m])
+            + rate(aether_semantic_observations_abstained_total[15m])
+          ) > 0.25
+        for: 15m
+        labels:
+          severity: warning
+          slo: "semantic_abstention_rate_25pct"
+        annotations:
+          summary: "Semantic abstention ratio >25% for tenant {{ $labels.tenant_id }}"
+          description: "{{ $value | humanizePercentage }} of semantic observations are abstaining. Abstention is fail-closed (correct) behaviour — a sustained surge means the model provider is disabled/credential-less or unsupported input is flooding in. See docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md."
+
+      - alert: SemanticClassifyLatencyHigh
+        expr: >
+          histogram_quantile(0.95,
+            rate(aether_semantic_classify_latency_ms_bucket[10m])
+          ) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          slo: "semantic_classify_latency_p95_1000ms"
+        annotations:
+          summary: "Semantic classify p95 latency >1000ms"
+          description: "Classification p95 is {{ $value }}ms. SLO ceiling is 1000ms. Throttle deep analysis before core ingestion; check model provider health."
+
+      - alert: SemanticQuarantineSustained
+        expr: rate(aether_semantic_observations_quarantined_total[15m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Semantic quarantine sustained for tenant {{ $labels.tenant_id }} (reason {{ $labels.reason }})"
+          description: "Unregistered event types have been quarantined continuously for 15+ minutes. Check the canonical event registry and SDK versions — quarantined events are never classified."
+
+      - alert: SemanticReviewQueueStalled
+        expr: aether_semantic_review_queue_open > 50
+        for: 60m
+        labels:
+          severity: warning
+          slo: "semantic_review_queue_depth_50"
+        annotations:
+          summary: "Semantic review queue ({{ $labels.queue_type }}) >50 open items"
+          description: "{{ $value }} open review items require operator attention. Low-confidence subject resolutions cannot assert canonical subjects until reviewed."
+
+      - alert: SemanticReplayJobsStuck
+        expr: aether_semantic_replay_jobs_active > 0
+        for: 2h
+        labels:
+          severity: info
+        annotations:
+          summary: "Semantic replay jobs active for 2+ hours"
+          description: "{{ $value }} replay job(s) have been active continuously for 2+ hours. Check job progress and pause/cancel controls — replay reads only Bronze and must never contend with live ingestion."
