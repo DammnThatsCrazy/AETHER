@@ -39,6 +39,7 @@ const RewardsHealthPage = lazy(() => import('@kyber/pages/rewards').then(m => ({
 const RewardsDrilldownPage = lazy(() => import('@kyber/pages/rewards').then(m => ({ default: m.RewardsDrilldownPage })));
 const SuggestionsPage = lazy(() => import('@kyber/pages/suggestions').then(m => ({ default: m.SuggestionsPage })));
 const ReviewQueuePage = lazy(() => import('@kyber/pages/suggestions').then(m => ({ default: m.ReviewQueuePage })));
+const SemanticReviewQueuePage = lazy(() => import('@kyber/pages/semantic').then(m => ({ default: m.SemanticReviewQueuePage })));
 const MLAdminPage = lazy(() => import('@kyber/pages/ml').then(m => ({ default: m.MLAdminPage })));
 const FraudNetworksPage = lazy(() => import('@kyber/pages/fraud/fraud-networks-page').then(m => ({ default: m.FraudNetworksPage })));
 const FraudNetworkDetailPage = lazy(() => import('@kyber/pages/fraud/fraud-network-detail-page').then(m => ({ default: m.FraudNetworkDetailPage })));
@@ -128,6 +129,7 @@ export function AppRouter() {
                 <Route path="/rewards/:tenantId" element={<PageSuspense><RewardsDrilldownPage /></PageSuspense>} />
                 <Route path="/intelligence/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />
                 <Route path="/intelligence/suggestions/review" element={<PageSuspense><ReviewQueuePage /></PageSuspense>} />
+                <Route path="/intelligence/semantic-review" element={<PageSuspense><SemanticReviewQueuePage /></PageSuspense>} />
                 <Route path="/ml" element={<PageSuspense><MLAdminPage /></PageSuspense>} />
                 <Route path="/fraud-networks" element={<PageSuspense><FraudNetworksPage /></PageSuspense>} />
                 <Route path="/fraud-networks/flow-trace" element={<PageSuspense><FlowTracePage /></PageSuspense>} />

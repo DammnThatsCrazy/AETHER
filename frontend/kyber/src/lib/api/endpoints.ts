@@ -150,6 +150,48 @@ const profileSchema = z.object({
   identifiers: z.array(z.unknown()).optional(),
 }).passthrough();
 
+/** /v1/kyber/semantic/fleet-health — operator-scoped semantic fleet scorecard.
+ *  Counts, abstention_rate, model_versions and status_breakdown are computed
+ *  from the store. queue_lag_seconds / graph_promotion_rate /
+ *  cross_tenant_contamination are HARDCODED backend placeholders (semantic
+ *  routes overwrite them with 0/0/false) — parsed here so the payload
+ *  round-trips, but the UI must never present them as live metrics. */
+const semanticFleetHealthSchema = z.object({
+  enabled_tenants: z.number(),
+  classified_observations: z.number(),
+  sentiment_observations: z.number().optional(),
+  abstention_rate: z.number(),
+  quarantined_observations: z.number(),
+  consent_restricted_observations: z.number(),
+  model_versions: z.array(z.string()),
+  status_breakdown: z.record(z.number()),
+  queue_lag_seconds: z.number().optional(),
+  graph_promotion_rate: z.number().optional(),
+  cross_tenant_contamination: z.boolean().optional(),
+}).passthrough();
+
+/** /v1/kyber/semantic/review-queue — one open review item (semantic_review_queue row). */
+const semanticReviewQueueItemSchema = z.object({
+  id: z.string(),
+  tenant_id: z.string(),
+  queue_type: z.string(),
+  subject_ref: z.string().nullable().optional(),
+  source_event_id: z.string().nullable().optional(),
+  status: z.string(),
+  payload: z.record(z.unknown()).optional(),
+  created_at: z.string(),
+}).passthrough();
+
+/** /v1/kyber/semantic/review-queue — read-only display: no resolve/approve
+ *  endpoint is exposed for this queue. `queues` is the canonical Kyber
+ *  taxonomy appended by the route. */
+const semanticReviewQueueSchema = z.object({
+  items: z.array(semanticReviewQueueItemSchema),
+  count: z.number(),
+  counts_by_queue: z.record(z.number()),
+  queues: z.array(z.string()),
+}).passthrough();
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
@@ -1725,6 +1767,13 @@ export const api = {
         restClient.post(`/v1/suggestions/${suggestionId}/reject`, wrap(unknownSchema), body).then(r => r.data),
       suppressSuggestion: (suggestionId: string, body: { reason: string; suppress_duration_hours?: number }) =>
         restClient.post(`/v1/suggestions/${suggestionId}/suppress`, wrap(unknownSchema), body).then(r => r.data),
+
+      // ── Semantic intelligence fleet operations (operator view) ─────────
+      // require_operator backend-side; read-only — no disposition endpoints exist.
+      semanticFleetHealth: () =>
+        restClient.get('/v1/kyber/semantic/fleet-health', wrap(semanticFleetHealthSchema)).then(r => r.data),
+      semanticReviewQueue: (queueType?: string) =>
+        restClient.get(`/v1/kyber/semantic/review-queue${buildQS({ queue_type: queueType })}`, wrap(semanticReviewQueueSchema)).then(r => r.data),
 
       // ── Delivery operations (cross-tenant, operator-only) ─────────────────
       // Uses /v1/admin/delivery/jobs — no tenantId required, operator auth
