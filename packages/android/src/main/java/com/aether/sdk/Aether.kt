@@ -1463,7 +1463,8 @@ object Aether : DefaultLifecycleObserver {
     private fun canonicalConsentHashValue(value: Any?): String = when (value) {
         null -> ""
         is Boolean -> value.toString()
-        is Collection<*> -> value.map(String::valueOf).distinct().sorted().joinToString("\u001f")
+        is Collection<*> -> value.map { it?.toString() ?: "null" }
+            .distinct().sorted().joinToString("\u001f")
         is Map<*, *> -> if (value.isEmpty()) "" else canonicalJson(value)
         else -> value.toString()
     }
