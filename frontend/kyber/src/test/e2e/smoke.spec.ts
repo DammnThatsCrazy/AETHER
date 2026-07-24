@@ -28,5 +28,5 @@ test.describe('KYBER Smoke Tests', () => {
       await expect(page.getByRole('button', { name: 'Sign in with SSO' })).toBeVisible();
       await expect(page.getByRole('navigation', { name: 'Main navigation' })).not.toBeVisible();
     });
-  });
+  }
 });
