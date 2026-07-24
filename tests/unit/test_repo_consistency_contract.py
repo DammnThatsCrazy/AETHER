@@ -40,6 +40,8 @@ def test_package_json_exists() -> None:
         ("repo:doctor", "make repo-doctor"),
         ("repo:fix", "make repo-doctor-fix"),
         ("docs:fix", "make docs-fix"),
+        ("validate:frontend-data-truth", "make frontend-data-truth"),
+        ("validate:frontend-data-truth:bundles", "make frontend-data-truth-bundles"),
     ],
 )
 def test_npm_scripts_delegate_to_make(script: str, target: str) -> None:
@@ -62,7 +64,16 @@ def test_test_docs_does_not_bypass_repo_doctor() -> None:
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     "target",
-    ["repo-doctor", "repo-doctor-fix", "docs-check", "docs-fix", "ci-check", "release-gate"],
+    [
+        "repo-doctor",
+        "repo-doctor-fix",
+        "docs-check",
+        "docs-fix",
+        "ci-check",
+        "release-gate",
+        "frontend-data-truth",
+        "frontend-data-truth-bundles",
+    ],
 )
 def test_makefile_defines_canonical_targets(target: str) -> None:
     makefile = _read("Makefile")
@@ -75,6 +86,20 @@ def test_ci_check_routes_through_repo_doctor() -> None:
     makefile = _read("Makefile")
     m = re.search(r"(?m)^ci-check:.*\n\t(.+)$", makefile)
     assert m and "repo_doctor.py --ci" in m.group(1)
+
+
+def test_repo_doctor_enforces_frontend_data_truth_source_and_bundles() -> None:
+    doctor = _read("scripts/repo_doctor.py")
+    assert '["python", "scripts/validate_frontend_data_truth.py"]' in doctor
+    assert (
+        '["python", "scripts/validate_frontend_data_truth.py", "--build-bundles"]'
+        in doctor
+    )
+
+
+def test_repo_consistency_workflow_names_frontend_data_truth_guardrail() -> None:
+    workflow = _read(".github/workflows/repo-consistency.yml")
+    assert "npm run validate:frontend-data-truth" in workflow
 
 
 # --------------------------------------------------------------------------- #

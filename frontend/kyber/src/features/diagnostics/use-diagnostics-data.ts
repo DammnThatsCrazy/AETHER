@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SystemHealth, DependencyHealth, CircuitBreakerState, ErrorFingerprint, Severity, HealthStatus } from '@kyber/types';
-import { isLocalMocked } from '@kyber/lib/env';
-import { getMockSystemHealth } from '@kyber/fixtures/health';
 import { api } from '@kyber/lib/api/endpoints';
 
 interface HealthApiResponse {
@@ -99,13 +97,8 @@ export function useDiagnosticsData() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      setHealth(getMockSystemHealth());
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
+    setError(null);
     Promise.all([
       api.diagnostics.health(),
       api.diagnostics.errors(),
@@ -124,22 +117,13 @@ export function useDiagnosticsData() {
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load health');
+        setHealth(null);
         setIsLoading(false);
       });
   }, []);
 
   const suppressError = useCallback((fingerprint: string) => {
     if (!health) return;
-
-    if (isLocalMocked()) {
-      setHealth({
-        ...health,
-        errorFingerprints: health.errorFingerprints.map(ef =>
-          ef.fingerprint === fingerprint ? { ...ef, suppressed: true } : ef
-        ),
-      });
-      return;
-    }
 
     api.diagnostics.suppressError(fingerprint)
       .then(() => {

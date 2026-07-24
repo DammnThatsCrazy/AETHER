@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   generateBriefing: vi.fn(),
   opsAlerts: vi.fn(),
   killSwitch: vi.fn(),
+  status: vi.fn(),
+  audit: vi.fn(),
 }));
 
 vi.mock('@kyber/lib/featureFlags', () => ({
@@ -30,6 +32,15 @@ vi.mock('@kyber/lib/api', () => ({
       generateBriefing: mocks.generateBriefing,
       opsAlerts: mocks.opsAlerts,
       killSwitch: mocks.killSwitch,
+    },
+  },
+}));
+
+vi.mock('@kyber/lib/api/endpoints', () => ({
+  api: {
+    agent: {
+      status: mocks.status,
+      audit: mocks.audit,
     },
   },
 }));
@@ -153,6 +164,15 @@ beforeEach(() => {
   mocks.generateBriefing.mockResolvedValue({ generated: true });
   mocks.opsAlerts.mockResolvedValue(ALERTS_FIXTURE);
   mocks.killSwitch.mockResolvedValue({ kill_switch: true, action: 'engage' });
+  mocks.status.mockResolvedValue({
+    active_workers: 1,
+    queued_tasks: 0,
+    completed_tasks: 0,
+    failed_tasks: 0,
+    kill_switch: false,
+    workers: [{ worker_type: 'nous', status: 'active', current_task: null }],
+  });
+  mocks.audit.mockResolvedValue({ records: [], total: 0 });
 });
 
 describe('Command Center ops panels (enableAgentCommandCenter on)', () => {

@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { LiveEvent, EventFilter } from '@kyber/types';
-import { isLocalMocked } from '@kyber/lib/env';
-import { getMockEvents } from '@kyber/fixtures/events';
 import { useWebSocket } from '@kyber/hooks';
 import { api } from '@kyber/lib/api/endpoints';
 
@@ -9,53 +7,31 @@ export function useLiveEvents() {
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [filter, setFilter] = useState<EventFilter>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isPausedRef = useRef(isPaused);
   isPausedRef.current = isPaused;
 
-  // In mocked mode, load fixtures and simulate stream
+  // Load the initial authoritative event page from the API.
   useEffect(() => {
-    if (!isLocalMocked()) return;
-    const mockEvents = getMockEvents();
-    setEvents(mockEvents.slice(0, 10));
-
-    let idx = 10;
-    const interval = setInterval(() => {
-      if (isPausedRef.current) return;
-      const nextEvent = mockEvents[idx % mockEvents.length];
-      if (nextEvent) {
-        const refreshed: LiveEvent = {
-          ...nextEvent,
-          id: `${nextEvent.id}-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-        };
-        setEvents(prev => [refreshed, ...prev].slice(0, 200));
-      }
-      idx++;
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // In live mode, seed initial events from the API
-  useEffect(() => {
-    if (isLocalMocked()) return;
-
+    setIsLoading(true);
+    setError(null);
     api.analytics.queryEvents({ limit: 50 })
       .then((resp) => {
         const eventsData = resp as { data: unknown[]; pagination?: { total: number; limit: number; has_more: boolean } };
         const seeded = (eventsData.data ?? []).filter(
           (e): e is LiveEvent => typeof e === 'object' && e !== null && 'id' in e,
         );
-        if (seeded.length > 0) {
-          setEvents(seeded.slice(0, 200));
-        }
+        setEvents(seeded.slice(0, 200));
+        setIsLoading(false);
       })
-      .catch(() => {
-        // Seed failure is non-fatal; WebSocket will populate events
+      .catch((err) => {
+        setEvents([]);
+        setError(err instanceof Error ? err.message : 'Failed to load live events');
+        setIsLoading(false);
       });
   }, []);
 
-  // In live mode, use WebSocket
   const handleMessage = useCallback((data: unknown) => {
     if (isPausedRef.current) return;
     const event = data as LiveEvent;
@@ -67,7 +43,7 @@ export function useLiveEvents() {
   const { status: wsStatus } = useWebSocket({
     path: '/ws/v1/analytics/events',
     onMessage: handleMessage,
-    enabled: !isLocalMocked(),
+    enabled: true,
   });
 
   const filteredEvents = events.filter(e => {
@@ -90,6 +66,8 @@ export function useLiveEvents() {
     filter,
     setFilter,
     wsStatus,
+    isLoading,
+    error,
     totalCount: events.length,
   };
 }

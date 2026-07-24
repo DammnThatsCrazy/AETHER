@@ -1,4 +1,4 @@
-export type Environment = 'local-mocked' | 'local-live' | 'staging' | 'production';
+export type Environment = 'local' | 'staging' | 'production' | 'test';
 export type RuntimeMode = 'mocked' | 'live';
 
 export type Severity = 'P0' | 'P1' | 'P2' | 'P3' | 'info';

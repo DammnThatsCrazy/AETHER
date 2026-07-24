@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 const envSchema = z.object({
-  VITE_KYBER_ENV: z.enum(['local-mocked', 'local-live', 'staging', 'production']).default('local-mocked'),
-  VITE_API_BASE_URL: z.string().url().default('http://localhost:8000'),
+  VITE_KYBER_ENV: z.enum(['local', 'staging', 'production', 'test']),
+  VITE_API_BASE_URL: z.string().url(),
   VITE_AETHER_API_KEY: z.string().default(''),
-  VITE_AETHER_ENDPOINT: z.string().url().default('http://localhost:8000'),
+  VITE_AETHER_ENDPOINT: z.string().url(),
   VITE_WS_BASE_URL: z.string().default('ws://localhost:8000'),
   VITE_GRAPHQL_URL: z.string().url().default('http://localhost:8000/v1/analytics/graphql'),
   VITE_OIDC_AUTHORITY: z.string().url().optional(),
@@ -25,6 +25,13 @@ const envSchema = z.object({
   VITE_RELEASE_PROFILE: z.string().default(''),
 });
 
+export class EnvironmentStartupError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EnvironmentStartupError';
+  }
+}
+
 export type EnvConfig = z.infer<typeof envSchema>;
 
 function loadEnv(): EnvConfig {
@@ -32,12 +39,14 @@ function loadEnv(): EnvConfig {
   for (const key of Object.keys(envSchema.shape)) {
     raw[key] = import.meta.env[key] as string | undefined;
   }
+  if (raw.VITE_KYBER_ENV === 'local-live') {
+    console.warn('[KYBER] VITE_KYBER_ENV=local-live is deprecated; use local. This compatibility path is live-only and cannot enable mocks.');
+    raw.VITE_KYBER_ENV = 'local';
+  }
   const result = envSchema.safeParse(raw);
   if (!result.success) {
     const issues = result.error.issues.map(i => `  ${i.path.join('.')}: ${i.message}`).join('\n');
-    console.error(`[KYBER] Environment validation failed:\n${issues}`);
-    // Fall back to defaults in local mode
-    return envSchema.parse({});
+    throw new EnvironmentStartupError(`[KYBER] Environment validation failed:\n${issues}`);
   }
   return result.data;
 }
@@ -49,29 +58,17 @@ export function getEnvironment() {
 }
 
 export function getRuntimeMode() {
-  const e = getEnvironment();
-  return e === 'local-mocked' ? 'mocked' as const : 'live' as const;
+  return 'live' as const;
 }
 
 export function isProduction() {
   return env.VITE_KYBER_ENV === 'production';
 }
 
-export function isLocalMocked() {
-  return env.VITE_KYBER_ENV === 'local-mocked';
-}
-
 /**
- * Whether `VITE_KYBER_ENV` was explicitly set. A missing var defaults to
- * `local-mocked` (see schema), which silently serves MSW mocks — the mock-mode
- * banner escalates its warning when this returns false so mocks never ship
- * looking live.
+ * Whether `VITE_KYBER_ENV` was explicitly set. Missing values fail startup.
  */
 export function isEnvExplicit() {
   const raw = import.meta.env.VITE_KYBER_ENV as string | undefined;
   return raw != null && raw !== '';
-}
-
-export function isMockAuthAllowed() {
-  return env.VITE_KYBER_ENV === 'local-mocked' || env.VITE_KYBER_ENV === 'local-live';
 }

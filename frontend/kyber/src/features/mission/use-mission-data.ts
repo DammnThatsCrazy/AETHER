@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { isLocalMocked } from '@kyber/lib/env';
-import { getMockMissionData } from '@kyber/fixtures/mission';
 import { api } from '@kyber/lib/api/endpoints';
 import type { ThroughputMetrics, KeyChange, RecommendedAction, HealthStatus, Severity, NeedsHelpCard, Intervention } from '@kyber/types';
 
@@ -71,8 +69,6 @@ function mapToMissionData(
   agentStatus: AgentStatusResponse,
   insights: InsightsResponse,
 ): MissionData {
-  const now = new Date().toISOString();
-
   const mapKeyChanges = (
     raw?: { id: string; description: string; severity: string; timestamp: string; controller: string; entity_id?: string; entity_type?: string }[],
   ): KeyChange[] =>
@@ -87,7 +83,7 @@ function mapToMissionData(
     }));
 
   const overallStatus = health.status === 'ok' || health.status === 'healthy' ? 'healthy' : health.status === 'degraded' ? 'degraded' : 'unhealthy';
-  const globalHealth: HealthStatus = { status: overallStatus as HealthStatus['status'], lastChecked: now };
+  const globalHealth: HealthStatus = { status: overallStatus as HealthStatus['status'], lastChecked: '' };
 
   const workers = agentStatus.workers ?? [];
   const activeWorkers = workers.filter(w => w.status === 'active' || w.status === 'running').length;
@@ -128,24 +124,24 @@ function mapToMissionData(
     })),
     globalHealth,
     customerHealth: {
-      status: globalHealth,
+      status: { status: 'unknown', lastChecked: '' },
       total: summary.unique_users_last_24h ?? 0,
-      healthy: summary.unique_users_last_24h ?? 0,
+      healthy: 0,
       degraded: 0,
       unhealthy: 0,
     },
     agentHealth: {
-      status: { status: agentHealthStatus, lastChecked: now },
+      status: { status: agentHealthStatus, lastChecked: '' },
       total: workers.length,
       active: activeWorkers,
       stuck: stuckWorkers,
       idle: idleWorkers,
     },
     graphHealth: {
-      status: globalHealth,
+      status: { status: 'unknown', lastChecked: '' },
       nodeCount: 0,
       edgeCount: 0,
-      lastMutation: now,
+      lastMutation: '',
     },
     commandBrief: insights.command_brief ?? '',
     pendingApprovals: insights.pending_approvals ?? 0,
@@ -165,13 +161,8 @@ export function useMissionData() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      setData(getMockMissionData());
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
+    setError(null);
     Promise.all([
       api.analytics.dashboardSummary(),
       api.diagnostics.health(),
@@ -192,6 +183,7 @@ export function useMissionData() {
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load mission data');
+        setData(null);
         setIsLoading(false);
       });
   }, []);

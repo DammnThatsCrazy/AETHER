@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import type { Controller, ControllerObjective, ControllerSchedule, CHARStatus, ControllerDisplayMode } from '@kyber/types';
-import { isLocalMocked } from '@kyber/lib/env';
-import { getMockControllers, MOCK_OBJECTIVES, MOCK_SCHEDULES, MOCK_CHAR_STATUS } from '@kyber/fixtures/controllers';
 import { api } from '@kyber/lib/api/endpoints';
 
 interface AgentStatusResponse {
@@ -44,12 +42,12 @@ function mapToControllers(status: AgentStatusResponse): Controller[] {
     name: w.worker_type as Controller['name'],
     health: {
       status: (w.status === 'active' || w.status === 'running' ? 'healthy' : 'degraded') as 'healthy' | 'degraded',
-      lastChecked: new Date().toISOString(),
+      lastChecked: '',
     },
     queueDepth: 0,
     activeObjectives: w.current_task ? 1 : 0,
     blockedItems: 0,
-    lastActivity: new Date().toISOString(),
+    lastActivity: '',
     uptime: 'unknown',
     stagedMutations: 0,
     recoveryState: 'idle' as const,
@@ -57,7 +55,6 @@ function mapToControllers(status: AgentStatusResponse): Controller[] {
 }
 
 function mapToObjectives(audit: AuditResponse): ControllerObjective[] {
-  const now = new Date().toISOString();
   return audit.records
     .filter((r): r is AuditRecord & { task_id: string } => !!r.task_id)
     .slice(0, 20)
@@ -68,8 +65,8 @@ function mapToObjectives(audit: AuditResponse): ControllerObjective[] {
       description: (r.payload?.description as string) ?? '',
       status: (r.status === 'completed' ? 'completed' : r.status === 'failed' ? 'blocked' : r.status === 'running' ? 'active' : 'deferred') as ControllerObjective['status'],
       priority: r.priority ? Number(r.priority) : 0,
-      createdAt: r.created_at ?? now,
-      updatedAt: r.completed_at ?? r.started_at ?? r.created_at ?? now,
+      createdAt: r.created_at ?? '',
+      updatedAt: r.completed_at ?? r.started_at ?? r.created_at ?? '',
       blockedReason: r.status === 'failed' ? (r.result as string) ?? 'Unknown failure' : undefined,
     }));
 }
@@ -88,7 +85,7 @@ function mapToCHARStatus(status: AgentStatusResponse): CHARStatus {
       .map(w => `${w.worker_type}: ${w.current_task}`) ?? [],
     escalations: failedCount > 0 ? [`${failedCount} failed task(s) require attention`] : [],
     briefSummary: `${workerCount} active worker(s), ${queuedCount} queued task(s)`,
-    lastBriefAt: new Date().toISOString(),
+    lastBriefAt: '',
     coordinationState,
   };
 }
@@ -103,15 +100,6 @@ export function useCommandData() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      setControllers(getMockControllers());
-      setObjectives(MOCK_OBJECTIVES);
-      setSchedules(MOCK_SCHEDULES);
-      setCharStatus(MOCK_CHAR_STATUS);
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 

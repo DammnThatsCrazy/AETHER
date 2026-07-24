@@ -1,5 +1,5 @@
 /**
- * KYBER fixtures for Agentic Commerce — used in mock mode and Lab replay.
+ * KYBER test fixtures for Agentic Commerce.
  * Deterministic data that matches the backend wire format.
  */
 import type {

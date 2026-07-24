@@ -1,3 +1,4 @@
+import { getEnvironment } from '@kyber/lib/env';
 import { useState, useMemo, useCallback } from 'react';
 import {
   Card, CardHeader, CardTitle, CardContent, CardFooter,
@@ -328,7 +329,7 @@ export function ReviewPage() {
       email: user?.email ?? 'unknown@aether.internal',
       role: user?.role ?? 'kyber_observer',
       timestamp: now,
-      environment: 'local-mocked',
+      environment: getEnvironment(),
       reason: actionReason,
       correlationId: `corr-${actionType}-${Date.now()}`,
     };

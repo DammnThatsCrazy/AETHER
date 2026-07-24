@@ -3585,6 +3585,20 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/audits/FRONTEND-DATA-TRUTH-INVENTORY.md",
+      "title": "Frontend Data Truth Inventory",
+      "slug": "audits/frontend-data-truth-inventory",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0"
+    },
+    {
       "path": "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
       "title": "ADR: Campaign Identity — Canonical UUID Strategy",
       "slug": "campaign/adr-campaign-identity",

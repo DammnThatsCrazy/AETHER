@@ -362,7 +362,7 @@ export function BillingPage() {
         <EnterpriseContactModal
           open
           onClose={() => setEnterpriseOpen(false)}
-          prefill={{ name: profile?.name ?? '', email: profile?.email ?? '' }}
+          prefill={{ name: profile?.name ?? '', email: profile?.contact_email ?? '' }}
         />
       )}
     </div>

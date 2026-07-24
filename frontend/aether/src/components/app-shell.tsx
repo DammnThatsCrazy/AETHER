@@ -5,7 +5,6 @@ import {
   Badge,
   Button,
   GlyphIcon,
-  MockModeBanner,
   TimeLensControl,
   useTheme,
   useBuildInfo,
@@ -16,7 +15,6 @@ import {
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth } from '@aether-app/features/auth';
 import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
-import { getRuntimeMode, isEnvExplicit } from '@aether-app/lib/env';
 
 interface NavItemProps {
   to: string;
@@ -171,13 +169,6 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Main content */}
       <main className={cn('flex-1 overflow-y-auto', reAuthBanner && 'mt-10')}>
-        {/* Honesty guard: never let in-browser mock data read as live. */}
-        <MockModeBanner
-          mode={getRuntimeMode()}
-          envVarName="VITE_AETHER_ENV"
-          envExplicit={isEnvExplicit()}
-          className="sticky top-0 z-40"
-        />
         {children}
       </main>
     </div>

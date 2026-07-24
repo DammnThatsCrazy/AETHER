@@ -216,6 +216,10 @@ def write_automation() -> None:
         "- `make repo-doctor` — full consistency check, no mutations.",
         "- `make repo-doctor-fix` — regenerate generated docs + sync, then validate.",
         "- `make docs-fix` — regenerate and sync docs only.",
+        "- `make frontend-data-truth` — enforce Aether/Kyber production-source "
+        "mock and fixture boundaries.",
+        "- `make frontend-data-truth-bundles` — create explicit production builds "
+        "and scan emitted bundles for prohibited synthetic literals.",
         "- `make ci-check` — **canonical PR completion gate**; fails if generators produce a diff.",
         "- `make release-gate` — `ci-check` + strict production status + ops readiness (release claims only).",
         "",
@@ -241,6 +245,9 @@ def write_automation() -> None:
         "- Final gate: `make ci-check`. Weaker commands (`npm run test:docs`, "
         "partial pytest runs, docs-only checks, `make repo-doctor` alone) are not "
         "sufficient proof of PR completion.",
+        "- The canonical gate runs both frontend data-truth checks. "
+        "`npm run validate:frontend-data-truth` is also a named read-only workflow "
+        "step so source violations are directly visible in pull requests.",
         "",
         "## Workflow enforcement",
         "",

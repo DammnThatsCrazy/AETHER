@@ -1,17 +1,17 @@
 import { Badge } from './badge';
 
-type Environment = 'local-mocked' | 'local-live' | 'staging' | 'production';
+type Environment = 'local' | 'staging' | 'production' | 'test';
 
 const envVariant: Record<Environment, 'success' | 'info' | 'warning' | 'danger'> = {
-  'local-mocked': 'success',
-  'local-live': 'info',
+  local: 'info',
+  test: 'success',
   staging: 'warning',
   production: 'danger',
 };
 
 const envLabel: Record<Environment, string> = {
-  'local-mocked': 'LOCAL MOCK',
-  'local-live': 'LOCAL LIVE',
+  local: 'LOCAL',
+  test: 'TEST',
   staging: 'STAGING',
   production: 'PRODUCTION',
 };

@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import type { Entity, EntityType } from '@kyber/types';
-import { isLocalMocked } from '@kyber/lib/env';
-import { getMockEntities, getMockEntity } from '@kyber/fixtures/entities';
 import { api } from '@kyber/lib/api/endpoints';
 
 interface ProfileResponse {
@@ -91,15 +89,6 @@ export function useEntityData(type?: EntityType, id?: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      setEntities(getMockEntities(type));
-      if (id) {
-        setSelectedEntity(getMockEntity(id) ?? null);
-      }
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
@@ -123,9 +112,9 @@ export function useEntityData(type?: EntityType, id?: string) {
         if (id) {
           const [profile, timeline, behavioral, cluster] = await Promise.all([
             api.profile.full(id),
-            api.profile.timeline(id).catch(() => ({ user_id: id, events: [], count: 0 })),
-            api.behavioral.entity(id).catch(() => ({})),
-            api.intelligence.entityCluster(id).catch(() => null),
+            api.profile.timeline(id),
+            api.behavioral.entity(id),
+            api.intelligence.entityCluster(id),
           ]);
 
           const profileResp = profile as ProfileResponse;

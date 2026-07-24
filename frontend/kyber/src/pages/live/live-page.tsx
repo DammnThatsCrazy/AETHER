@@ -15,7 +15,7 @@ import {
 } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
-import { getEnvironment, getRuntimeMode } from '@kyber/lib/env';
+import { getEnvironment } from '@kyber/lib/env';
 import { useDebounce } from '@kyber/hooks';
 import { useLiveEvents } from '@kyber/features/live';
 import type { LiveEvent, LiveEventType, Severity } from '@kyber/types';
@@ -208,7 +208,6 @@ function EventRow({
 
 export function LivePage() {
   const environment = getEnvironment();
-  const mode = getRuntimeMode();
 
   const {
     events: filteredEvents,
@@ -220,6 +219,8 @@ export function LivePage() {
     setFilter,
     wsStatus,
     totalCount,
+    isLoading,
+    error,
   } = useLiveEvents();
 
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
@@ -282,6 +283,22 @@ export function LivePage() {
   const handleToggleExpand = useCallback((eventId: string) => {
     setExpandedEventId(prev => prev === eventId ? null : eventId);
   }, []);
+
+  if (isLoading) {
+    return (
+      <PageWrapper title="Live" subtitle="Loading real-time event stream">
+        <div className="text-xs text-text-muted font-mono animate-pulse">Loading events...</div>
+      </PageWrapper>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageWrapper title="Live" subtitle="Real-time event stream unavailable">
+        <EmptyState title="Events unavailable" description={error} />
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper

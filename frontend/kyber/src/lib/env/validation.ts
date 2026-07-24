@@ -56,14 +56,14 @@ export function validateEnvironment(): ValidationResult[] {
 
   results.push({
     variable: 'VITE_API_BASE_URL',
-    required: environment !== 'local-mocked',
+    required: true,
     present: !!env.VITE_API_BASE_URL,
     valid: true,
   });
 
   results.push({
     variable: 'VITE_WS_BASE_URL',
-    required: environment !== 'local-mocked',
+    required: true,
     present: !!env.VITE_WS_BASE_URL,
     valid: true,
   });

@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@kyber/lib/api/endpoints';
-import { isLocalMocked } from '@kyber/lib/env';
 import { useWebSocket } from '@kyber/hooks/use-websocket';
-import { getMockEntity } from '@kyber/fixtures/entities';
-import { getMockEntityNeighborhood } from '@kyber/fixtures/graph';
-import { getMockTimeline } from '@kyber/fixtures/entities';
 import type { Entity, EntityType, GraphEdge, GraphNode, Profile360EntityType, Profile360LiveMessage, Profile360Payload, Profile360Reference, Profile360Section } from '@kyber/types';
 import { profile360Actions, profile360Store, toTimelineEvent, useProfile360Store } from './profile360-store';
 
@@ -14,15 +10,17 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalizeEntity(raw: unknown, id: string, type: Profile360EntityType): Entity {
   const data = asRecord(raw);
-  const now = new Date().toISOString();
   return {
     id: String(data.id ?? data.user_id ?? data.entity_id ?? id),
     type: (data.type ?? type) as EntityType,
     name: String(data.name ?? data.label ?? data.displayLabel ?? id),
     displayLabel: String(data.displayLabel ?? data.label ?? data.name ?? id),
-    createdAt: String(data.createdAt ?? data.created_at ?? now),
-    updatedAt: String(data.updatedAt ?? data.updated_at ?? now),
-    health: { status: String(asRecord(data.health).status ?? 'unknown') as Entity['health']['status'], lastChecked: now },
+    createdAt: String(data.createdAt ?? data.created_at ?? ''),
+    updatedAt: String(data.updatedAt ?? data.updated_at ?? ''),
+    health: {
+      status: String(asRecord(data.health).status ?? 'unknown') as Entity['health']['status'],
+      lastChecked: String(asRecord(data.health).lastChecked ?? asRecord(data.health).last_checked ?? ''),
+    },
     trustScore: Number(data.trustScore ?? data.trust_score ?? asRecord(data.intelligence).trust_score ?? 0),
     riskScore: Number(data.riskScore ?? data.risk_score ?? asRecord(data.risk).score ?? 0),
     anomalyScore: Number(data.anomalyScore ?? data.anomaly_score ?? 0),
@@ -498,43 +496,30 @@ function buildSections(entity: Entity, raw: Record<string, unknown>): Profile360
 }
 
 async function fetchProfile360(type: Profile360EntityType, id: string, window = '30d'): Promise<Profile360Payload> {
-  if (isLocalMocked()) {
-    const mock = getMockEntity(id) ?? getMockEntity('cust-acme-001')!;
-    const neighborhood = getMockEntityNeighborhood(mock.id);
-    const mockRaw = { ...mock.metadata, cluster_data: {}, clusters_data: {}, agents_data: {}, consent_data: {}, quality_data: {}, recommendations_data: {}, outcomes_data: {}, intelligence_data: {}, provenance_data: {} };
-    return {
-      entity: { ...mock, type: type === 'human' ? 'human' : mock.type },
-      sections: buildSections(mock, mockRaw),
-      timeline: [...(getMockTimeline(mock.id)?.events ?? [])],
-      graph: { nodes: [...neighborhood.nodes], edges: [...neighborhood.edges] },
-      raw: mockRaw,
-    };
-  }
-
   const [
     profile, timelineResponse, graphResponse, behavioral,
     sessions, devices, journeys, wallets, attributionJourney, signals,
     cluster, clusters, agents, consent, quality, recommendations, outcomes, intelligence, provenance,
   ] = await Promise.all([
     api.profile360.full(type, id).catch(() => api.profile.full(id)),
-    api.profile360.timeline(type, id, { limit: 250 }).catch(() => api.profile.timeline(id, { limit: 250 })).catch(() => ({ events: [] })),
-    api.profile360.graph(type, id, { limit: 750 }).catch(() => api.profile.graph(id)).catch(() => ({ nodes: [], edges: [] })),
-    api.behavioral.entity(id).catch(() => ({})),
-    api.profile.sessions(id, 30).catch(() => ({})),
-    api.profile.devices(id).catch(() => ({})),
-    api.profile.journeys(id).catch(() => ({})),
-    api.profile.wallets(id).catch(() => ({})),
-    api.profile.attribution(id, window).catch(() => api.attribution.journey(id)).catch(() => ({})),
-    api.behavioral.signals(id).catch(() => ({ signals: [] })),
-    api.profile.cluster(id).catch(() => ({})),
-    api.profile.clusters(id).catch(() => ({ items: [] })),
-    api.profile.agents(id).catch(() => ({ items: [] })),
-    api.profile.consent(id).catch(() => ({ consent_status: 'unknown' })),
-    api.profile.quality(id).catch(() => ({})),
-    api.profile.recommendations(id).catch(() => ({ items: [] })),
-    api.profile.outcomes(id).catch(() => ({ items: [] })),
-    api.intelligence.entityCluster(id).catch(() => ({})),
-    api.profile.provenance(id).catch(() => ({})),
+    api.profile360.timeline(type, id, { limit: 250 }).catch(() => api.profile.timeline(id, { limit: 250 })),
+    api.profile360.graph(type, id, { limit: 750 }).catch(() => api.profile.graph(id)),
+    api.behavioral.entity(id),
+    api.profile.sessions(id, 30),
+    api.profile.devices(id),
+    api.profile.journeys(id),
+    api.profile.wallets(id),
+    api.profile.attribution(id, window).catch(() => api.attribution.journey(id)),
+    api.behavioral.signals(id),
+    api.profile.cluster(id),
+    api.profile.clusters(id),
+    api.profile.agents(id),
+    api.profile.consent(id),
+    api.profile.quality(id),
+    api.profile.recommendations(id),
+    api.profile.outcomes(id),
+    api.intelligence.entityCluster(id),
+    api.profile.provenance(id),
   ]);
 
   const extraDimensions = {

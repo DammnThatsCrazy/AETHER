@@ -1,13 +1,6 @@
 import { createContext, useContext, useCallback, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import type { AuthState, AetherUser, AuthTokens } from '@aether-app/types';
-import { isMockAuthAllowed, isLocalMocked } from '@aether-app/lib/env';
 import type { HumanSessionGrant } from './grant';
-
-const MOCK_USER: AetherUser = {
-  id: 'mock-user-1',
-  email: 'dev@aether.local',
-  displayName: 'Dev User',
-};
 
 /** Legacy reusable API-key credential (trust-plane flag off on the backend). */
 export const SESSION_KEY = 'aether_session_key';
@@ -23,17 +16,16 @@ const SESSION_FALLBACK_TTL_S = 12 * 60 * 60;
 interface AuthContextValue extends AuthState {
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  apiKeyLogin: (apiKey: string, email?: string, displayName?: string) => void;
+  apiKeyLogin: (apiKey: string) => Promise<void>;
   /** Authenticate with a trust-plane session grant (never a reusable key). */
-  sessionLogin: (session: HumanSessionGrant, email?: string, displayName?: string) => void;
+  sessionLogin: (session: HumanSessionGrant) => Promise<void>;
 }
 
 type AuthAction =
   | { type: 'AUTH_START' }
   | { type: 'AUTH_SUCCESS'; user: AetherUser; tokens: AuthTokens }
   | { type: 'AUTH_FAILURE'; error: string | null }
-  | { type: 'AUTH_LOGOUT' }
-  | { type: 'MOCK_LOGIN'; user: AetherUser };
+  | { type: 'AUTH_LOGOUT' };
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
@@ -45,8 +37,6 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       return { isAuthenticated: false, user: null, isLoading: false, error: action.error };
     case 'AUTH_LOGOUT':
       return { isAuthenticated: false, user: null, isLoading: false, error: null };
-    case 'MOCK_LOGIN':
-      return { isAuthenticated: true, user: action.user, isLoading: false, error: null };
   }
 }
 
@@ -105,8 +95,10 @@ function sessionExpiryEpochS(iso: string | null | undefined): number {
 function restoreStoredCredential(): AuthTokens | null {
   const sessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
   if (sessionToken) {
-    const expiresAt = sessionExpiryEpochS(sessionStorage.getItem(SESSION_EXPIRY_KEY));
-    if (expiresAt > Date.now() / 1000) {
+    const storedExpiry = sessionStorage.getItem(SESSION_EXPIRY_KEY);
+    const parsedExpiry = storedExpiry ? Date.parse(storedExpiry) / 1000 : Number.NaN;
+    if (Number.isFinite(parsedExpiry) && parsedExpiry > Date.now() / 1000) {
+      const expiresAt = parsedExpiry;
       return { accessToken: sessionToken, idToken: '', refreshToken: undefined, expiresAt };
     }
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
@@ -117,6 +109,20 @@ function restoreStoredCredential(): AuthTokens | null {
     return { accessToken: storedKey, idToken: '', refreshToken: undefined, expiresAt: Date.now() / 1000 + 86400 };
   }
   return null;
+}
+
+interface BackendProfile {
+  readonly tenant_id: string;
+  readonly name: string;
+  readonly contact_email: string;
+}
+
+function profileUser(profile: BackendProfile): AetherUser {
+  return {
+    id: profile.tenant_id,
+    email: profile.contact_email,
+    displayName: profile.name || profile.contact_email || profile.tenant_id,
+  };
 }
 
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
@@ -163,32 +169,44 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     }
   }
 
-  useEffect(() => {
-    if (isLocalMocked()) {
-      // Restore a real credential (session token or API key) if present
-      const restored = restoreStoredCredential();
-      if (restored) currentTokens = restored;
-      dispatch({ type: 'MOCK_LOGIN', user: MOCK_USER });
-      return;
+  async function verifyCredential(tokens: AuthTokens): Promise<void> {
+    currentTokens = tokens;
+    try {
+      const { api } = await import('@aether-app/lib/api/endpoints');
+      const profile = await api.me.profile();
+      if (!profile.tenant_id) throw new Error('Authenticated profile omitted tenant identity');
+      dispatch({ type: 'AUTH_SUCCESS', user: profileUser(profile), tokens });
+    } catch (err) {
+      currentTokens = null;
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      sessionStorage.removeItem(SESSION_EXPIRY_KEY);
+      dispatch({
+        type: 'AUTH_FAILURE',
+        error: err instanceof Error ? err.message : 'Stored credential validation failed',
+      });
+      throw err;
     }
+  }
 
+  useEffect(() => {
     // Restore a persisted credential — trust-plane session token first,
-    // then the legacy API key.
+    // then the legacy API key. An opaque credential is not authentication
+    // evidence by itself: validate it against the backend before granting
+    // access or constructing an identity.
     const restored = restoreStoredCredential();
     if (restored) {
-      currentTokens = restored;
-      dispatch({ type: 'AUTH_SUCCESS', user: MOCK_USER, tokens: currentTokens });
-      return;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    if (code) {
-      handleOIDCCallback(code).catch(err => {
-        dispatch({ type: 'AUTH_FAILURE', error: String(err) });
-      });
+      void verifyCredential(restored).catch(() => undefined);
     } else {
-      checkSession();
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code) {
+        handleOIDCCallback(code).catch(err => {
+          dispatch({ type: 'AUTH_FAILURE', error: String(err) });
+        });
+      } else {
+        checkSession();
+      }
     }
 
     return () => {
@@ -237,11 +255,6 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }
 
   const login = useCallback(async () => {
-    if (isMockAuthAllowed()) {
-      dispatch({ type: 'MOCK_LOGIN', user: MOCK_USER });
-      return;
-    }
-
     dispatch({ type: 'AUTH_START' });
 
     const { env } = await import('@aether-app/lib/env');
@@ -270,28 +283,32 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     window.location.href = authUrl.toString();
   }, []);
 
-  const apiKeyLogin = useCallback((apiKey: string, email = '', displayName = '') => {
+  const apiKeyLogin = useCallback(async (apiKey: string) => {
     sessionStorage.setItem(SESSION_KEY, apiKey);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_EXPIRY_KEY);
-    currentTokens = { accessToken: apiKey, idToken: '', refreshToken: undefined, expiresAt: Date.now() / 1000 + 86400 };
-    const user: AetherUser = email
-      ? { id: apiKey, email, displayName: displayName || email }
-      : MOCK_USER;
-    dispatch({ type: 'AUTH_SUCCESS', user, tokens: currentTokens });
+    const tokens = {
+      accessToken: apiKey,
+      idToken: '',
+      refreshToken: undefined,
+      expiresAt: Date.now() / 1000 + 86400,
+    };
+    await verifyCredential(tokens);
   }, []);
 
-  const sessionLogin = useCallback((session: HumanSessionGrant, email = '', displayName = '') => {
+  const sessionLogin = useCallback(async (session: HumanSessionGrant) => {
     const expiresAt = sessionExpiryEpochS(session.absolute_expires_at);
     sessionStorage.setItem(SESSION_TOKEN_KEY, session.token);
     sessionStorage.setItem(SESSION_EXPIRY_KEY, new Date(expiresAt * 1000).toISOString());
     // A trust-plane session supersedes any legacy key credential.
     sessionStorage.removeItem(SESSION_KEY);
-    currentTokens = { accessToken: session.token, idToken: '', refreshToken: undefined, expiresAt };
-    const user: AetherUser = email
-      ? { id: session.session_id, email, displayName: displayName || email }
-      : MOCK_USER;
-    dispatch({ type: 'AUTH_SUCCESS', user, tokens: currentTokens });
+    const tokens = {
+      accessToken: session.token,
+      idToken: '',
+      refreshToken: undefined,
+      expiresAt,
+    };
+    await verifyCredential(tokens);
   }, []);
 
   const logout = useCallback(async () => {
@@ -302,11 +319,9 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
     dispatch({ type: 'AUTH_LOGOUT' });
 
-    if (!isMockAuthAllowed()) {
-      const { env } = await import('@aether-app/lib/env');
-      if (env.VITE_OIDC_AUTHORITY) {
-        window.location.href = `${env.VITE_OIDC_AUTHORITY}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
-      }
+    const { env } = await import('@aether-app/lib/env');
+    if (env.VITE_OIDC_AUTHORITY) {
+      window.location.href = `${env.VITE_OIDC_AUTHORITY}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
     }
   }, []);
 

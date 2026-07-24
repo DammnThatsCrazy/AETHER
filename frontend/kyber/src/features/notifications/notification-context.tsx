@@ -1,7 +1,6 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from 'react';
 import type { KyberNotification, NotificationState, Severity, NotificationChannel } from '@kyber/types';
-import { isLocalMocked } from '@kyber/lib/env';
-import { MOCK_NOTIFICATIONS } from '@kyber/fixtures/notifications';
+import { api } from '@kyber/lib/api/endpoints';
 
 interface NotificationContextValue extends NotificationState {
   addNotification: (notification: KyberNotification) => void;
@@ -91,29 +90,20 @@ function routeToExternalChannels(notification: KyberNotification): void {
   }
 
   if (channels.includes('slack')) {
-    // Deliver via backend notification service
-    fetch('/v1/notifications/alerts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: notification.title,
-        condition: `severity:${notification.severity}`,
-        channels: ['slack'],
-        recipients: [],
-      }),
+    void api.notifications.createAlert({
+      name: notification.title,
+      condition: `severity:${notification.severity}`,
+      channels: ['slack'],
+      recipients: [],
     }).catch(() => { /* Slack relay failure is non-blocking */ });
   }
 
   if (channels.includes('email')) {
-    fetch('/v1/notifications/alerts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: notification.title,
-        condition: `severity:${notification.severity}`,
-        channels: ['email'],
-        recipients: [],
-      }),
+    void api.notifications.createAlert({
+      name: notification.title,
+      condition: `severity:${notification.severity}`,
+      channels: ['email'],
+      recipients: [],
     }).catch(() => { /* Email relay failure is non-blocking */ });
   }
 }
@@ -132,38 +122,32 @@ export function NotificationProvider({ children }: { readonly children: ReactNod
     isConnected: false,
   });
 
-  // Load notifications — mock in local, real alerts in live mode
+  // Load notifications from the backend. An unavailable backend remains
+  // disconnected and never falls back to browser-manufactured alerts.
   useEffect(() => {
-    if (isLocalMocked()) {
-      dispatch({ type: 'BULK_ADD', notifications: MOCK_NOTIFICATIONS });
-      dispatch({ type: 'SET_CONNECTED', connected: true });
-      return;
-    }
-
-    // Live mode: fetch real alerts from backend
-    fetch('/v1/notifications/alerts')
-      .then(r => r.json())
-      .then((response: { data?: unknown[] }) => {
-        const alerts = Array.isArray(response.data) ? response.data : [];
-        const mapped: KyberNotification[] = alerts.map((raw: unknown, idx: number) => {
+    api.notifications.listAlerts()
+      .then((alerts) => {
+        const mapped: KyberNotification[] = alerts
+          .filter((alert): alert is typeof alert & { id: string } => typeof alert.id === 'string')
+          .map((raw) => {
           const a = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
           return {
-            id: String(a['id'] ?? `alert-${idx}`),
+            id: String(a['id']),
             title: String(a['name'] ?? 'Alert'),
             body: String(a['condition'] ?? ''),
             severity: String(a['severity'] ?? 'info') as Severity,
             class: 'alert' as const,
             channels: ['in-app' as const],
-            timestamp: String(a['created_at'] ?? new Date().toISOString()),
+            timestamp: typeof a['created_at'] === 'string' ? a['created_at'] : '',
             read: false,
             dismissed: false,
             deepLink: '/diagnostics',
             what: String(a['name'] ?? 'Alert triggered'),
             why: String(a['condition'] ?? 'Condition met'),
             impact: 'See diagnostics for details',
-            dedupeKey: `backend-alert-${a['id'] ?? idx}`,
+            dedupeKey: `backend-alert-${a['id']}`,
           };
-        });
+          });
         if (mapped.length > 0) {
           dispatch({ type: 'BULK_ADD', notifications: mapped });
         }

@@ -29,9 +29,15 @@ export function CHARStatusPanel({ status, className }: CHARStatusPanelProps) {
               {coordinationState.toUpperCase()}
             </Badge>
           </div>
-          <span className="text-[10px] text-text-muted font-mono" title={formatDateTime(lastBriefAt, timeCtx)}>
-            {formatRelative(lastBriefAt, timeCtx, now)}
-          </span>
+          {lastBriefAt ? (
+            <span className="text-[10px] text-text-muted font-mono" title={formatDateTime(lastBriefAt, timeCtx)}>
+              {formatRelative(lastBriefAt, timeCtx, now)}
+            </span>
+          ) : (
+            <span className="text-[10px] text-text-muted font-mono" title="No backend brief timestamp">
+              unavailable
+            </span>
+          )}
         </div>
 
         {/* Overall directive */}

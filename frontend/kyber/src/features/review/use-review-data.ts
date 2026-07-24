@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ReviewBatch, ReviewItem, ReviewStatus, AuditEntry, ActionAttribution, ActionClass, Severity } from '@kyber/types';
-import { isLocalMocked } from '@kyber/lib/env';
-import { getMockReviewBatches, getMockAuditTrail } from '@kyber/fixtures/review';
 import { api } from '@kyber/lib/api/endpoints';
 
 interface AuditRecord {
@@ -31,18 +29,19 @@ function mapSeverity(priority?: string): Severity {
 }
 
 function mapAuditToBatches(audit: AuditResponse): ReviewBatch[] {
-  const now = new Date().toISOString();
   // Group audit records into review batches by worker_type
   const batchMap = new Map<string, ReviewItem[]>();
+  const batchCreatedAt = new Map<string, string>();
 
   for (const record of audit.records) {
+    if (!record.task_id) continue;
     const batchKey = record.worker_type ?? 'default';
     if (!batchMap.has(batchKey)) {
       batchMap.set(batchKey, []);
     }
 
     const item: ReviewItem = {
-      id: record.task_id ?? `item-${Date.now()}-${Math.random()}`,
+      id: record.task_id,
       batchId: `batch-${batchKey}`,
       title: (record.payload?.title as string) ?? record.action ?? 'Review Item',
       description: (record.payload?.description as string) ?? '',
@@ -59,6 +58,9 @@ function mapAuditToBatches(audit: AuditResponse): ReviewBatch[] {
     };
 
     batchMap.get(batchKey)!.push(item);
+    if (record.created_at && !batchCreatedAt.has(batchKey)) {
+      batchCreatedAt.set(batchKey, record.created_at);
+    }
   }
 
   return Array.from(batchMap.entries()).map(([key, items], idx) => ({
@@ -66,7 +68,7 @@ function mapAuditToBatches(audit: AuditResponse): ReviewBatch[] {
     title: `${key} Review Batch`,
     description: `Review batch for ${key} controller with ${items.length} item(s)`,
     controller: key,
-    createdAt: items[0]?.id ? now : now,
+    createdAt: batchCreatedAt.get(key) ?? '',
     items,
     status: (items.every(i => i.status !== 'pending') ? 'approved' : 'pending') as ReviewStatus,
     submittedBy: key,
@@ -90,7 +92,7 @@ function mapAuditToTrail(audit: AuditResponse): AuditEntry[] {
   return audit.records
     .filter((r): r is AuditRecord & { task_id: string } => !!r.task_id && r.status !== 'pending')
     .map(r => {
-      const ts = r.completed_at ?? r.created_at ?? new Date().toISOString();
+      const ts = r.completed_at ?? r.created_at ?? '';
       return {
         id: `audit-${r.task_id}`,
         action: r.action ?? r.status ?? 'unknown',
@@ -113,13 +115,6 @@ export function useReviewData() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      setBatches([...getMockReviewBatches()]);
-      setAuditTrail([...getMockAuditTrail()]);
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
@@ -141,33 +136,6 @@ export function useReviewData() {
   const selectedBatch = batches.find(b => b.id === selectedBatchId) ?? null;
 
   const resolveItem = useCallback((itemId: string, status: ReviewStatus, reason: string, attribution: ActionAttribution): Promise<void> => {
-    if (isLocalMocked()) {
-      // Local mock: just update state
-      setBatches(prev => prev.map(batch => ({
-        ...batch,
-        items: batch.items.map(item =>
-          item.id === itemId ? { ...item, status, resolution: { status, resolvedBy: attribution, reason } } : item
-        ),
-      })));
-
-      const newEntry: AuditEntry = {
-        id: `audit-${Date.now()}`,
-        action: status,
-        timestamp: new Date().toISOString(),
-        actor: attribution,
-        itemId,
-        batchId: selectedBatchId ?? '',
-        previousStatus: 'pending',
-        newStatus: status,
-        reason,
-      };
-      setAuditTrail(prev => [newEntry, ...prev]);
-      return Promise.resolve();
-    }
-
-    // Live mode: submit decision to backend, then update local state.
-    // Failures reject to the caller so the confirmation modal can surface the
-    // API error message without replacing the whole page.
     return api.agent.submitTask('review', 'high', {
       item_id: itemId,
       decision: status,
@@ -175,26 +143,11 @@ export function useReviewData() {
       actor: attribution,
       batch_id: selectedBatchId ?? '',
     })
-      .then(() => {
-        setBatches(prev => prev.map(batch => ({
-          ...batch,
-          items: batch.items.map(item =>
-            item.id === itemId ? { ...item, status, resolution: { status, resolvedBy: attribution, reason } } : item
-          ),
-        })));
-
-        const newEntry: AuditEntry = {
-          id: `audit-${Date.now()}`,
-          action: status,
-          timestamp: new Date().toISOString(),
-          actor: attribution,
-          itemId,
-          batchId: selectedBatchId ?? '',
-          previousStatus: 'pending',
-          newStatus: status,
-          reason,
-        };
-        setAuditTrail(prev => [newEntry, ...prev]);
+      .then(() => api.agent.audit())
+      .then((resp) => {
+        const audit = resp as AuditResponse;
+        setBatches(mapAuditToBatches(audit));
+        setAuditTrail(mapAuditToTrail(audit));
       });
   }, [selectedBatchId]);
 
