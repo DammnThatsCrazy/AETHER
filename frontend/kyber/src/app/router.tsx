@@ -50,6 +50,7 @@ const JourneyExplorerPage = lazy(() => import('@kyber/pages/measurement/journey-
 const ConversionExplorerPage = lazy(() => import('@kyber/pages/measurement/conversion-explorer-page').then(m => ({ default: m.ConversionExplorerPage })));
 const CampaignIntelligencePage = lazy(() => import('@kyber/pages/measurement/campaign-intelligence-page').then(m => ({ default: m.CampaignIntelligencePage })));
 const KyberMeasurementOpsPage = lazy(() => import('@kyber/pages/measurement/kyber-measurement-ops-page').then(m => ({ default: m.KyberMeasurementOpsPage })));
+const KyberTrafficIntelligenceOpsPage = lazy(() => import('@kyber/pages/measurement/kyber-traffic-intelligence-ops-page').then(m => ({ default: m.KyberTrafficIntelligenceOpsPage })));
 const KyberStablecoinsOpsPage = lazy(() => import('@kyber/pages/stablecoins/kyber-stablecoins-ops-page').then(m => ({ default: m.KyberStablecoinsOpsPage })));
 const KyberDerivativesOpsPage = lazy(() => import('@kyber/pages/derivatives/kyber-derivatives-ops-page').then(m => ({ default: m.KyberDerivativesOpsPage })));
 const KyberInteropOpsPage = lazy(() => import('@kyber/pages/interop/kyber-interop-ops-page').then(m => ({ default: m.KyberInteropOpsPage })));
@@ -142,6 +143,7 @@ export function AppRouter() {
                 <Route path="/measurement/campaigns" element={<PageSuspense><CampaignIntelligencePage /></PageSuspense>} />
                 <Route path="/measurement/campaigns/:campaignId" element={<PageSuspense><Campaign360Page /></PageSuspense>} />
                 <Route path="/measurement/ops" element={<PageSuspense><KyberMeasurementOpsPage /></PageSuspense>} />
+                <Route path="/measurement/traffic-intelligence" element={<PageSuspense><KyberTrafficIntelligenceOpsPage /></PageSuspense>} />
                 <Route path="/stablecoins/ops" element={<PageSuspense><KyberStablecoinsOpsPage /></PageSuspense>} />
                 <Route path="/derivatives/ops" element={<PageSuspense><KyberDerivativesOpsPage /></PageSuspense>} />
                 <Route path="/interoperability/ops" element={<PageSuspense><KyberInteropOpsPage /></PageSuspense>} />

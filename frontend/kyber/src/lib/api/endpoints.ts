@@ -192,6 +192,50 @@ const semanticReviewQueueSchema = z.object({
   queues: z.array(z.string()),
 }).passthrough();
 
+/** /v1/kyber/measurement/source-classification/operations — traffic-intelligence
+ *  operations scorecard (spec §15.3). All fields optional + passthrough so the
+ *  backend can grow the payload without breaking Kyber; counts default to 0 and
+ *  rates to 0..1 floats in the UI. Source-class / proof-level breakdowns are
+ *  open records keyed by the canonical registry vocabulary. */
+const sourceClassificationOperationsSchema = z.object({
+  tenant_id: z.string().optional(),
+  window: z.object({ start: z.string().optional(), end: z.string().optional() }).passthrough().optional(),
+  totals: z.object({
+    touchpoints: z.number().optional(),
+    attribution_eligible: z.number().optional(),
+    machine_excluded: z.number().optional(),
+  }).passthrough().optional(),
+  classification_by_source_class: z.record(z.number()).optional(),
+  classification_by_proof_level: z.record(z.number()).optional(),
+  direct_unknown_rate: z.number().optional(),
+  evidence_conflict_count: z.number().optional(),
+  invalid_source_link_count: z.number().optional(),
+  source_link_replay_count: z.number().optional(),
+  handoff_correlation: z.object({
+    success: z.number().optional(),
+    expired: z.number().optional(),
+    failed: z.number().optional(),
+  }).passthrough().optional(),
+  install_referrer_retrieval: z.record(z.number()).optional(),
+  universal_link_processing_count: z.number().optional(),
+  deferred_attribution: z.object({
+    resolved: z.number().optional(),
+    unmatched: z.number().optional(),
+    expired: z.number().optional(),
+  }).passthrough().optional(),
+  adattributionkit_ingestion_count: z.number().optional(),
+  sdk_deep_link_parse_failures: z.number().optional(),
+  reclassification_jobs: z.object({
+    running: z.number().optional(),
+    failed: z.number().optional(),
+    completed: z.number().optional(),
+  }).passthrough().optional(),
+  utm_inconsistency_rate: z.number().optional(),
+  classification_drift: z.object({
+    legacy_vs_canonical_divergence_rate: z.number().optional(),
+  }).passthrough().optional(),
+}).passthrough();
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
@@ -2181,6 +2225,12 @@ export const api = {
       restClient.post(`/v1/kyber/measurement/tenants/${tenantId}/recompute-all`, wrap(unknownSchema), {}).then(r => r.data),
     sourceClassificationHealth: () =>
       restClient.get('/v1/kyber/measurement/source-classification/health', wrap(unknownSchema)).then(r => r.data),
+    /** Traffic-intelligence operations scorecard (spec §15.3) — tenant/platform/sdk/time filtered. */
+    sourceClassificationOperations: (params?: { tenant?: string; platform?: string; sdk?: string; start?: string; end?: string }) =>
+      restClient.get(
+        `/v1/kyber/measurement/source-classification/operations${buildQS({ ...params })}`,
+        wrap(sourceClassificationOperationsSchema),
+      ).then(r => r.data),
     reclassifySources: (params: { start_date: string; end_date: string; dry_run: boolean; limit: number; request_id?: string }) =>
       restClient.post('/v1/kyber/measurement/source-classification/reclassify', wrap(unknownSchema), params).then(r => r.data),
 

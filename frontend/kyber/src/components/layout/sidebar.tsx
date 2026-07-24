@@ -39,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/intelligence-quality', label: 'Intel Quality', glyph: '◉' },
   { path: '/intelligence/suggestions', label: 'Suggestions', glyph: '◈', requirement: { flag: 'suggestions_enabled' } },
   { path: '/intelligence/semantic-review', label: 'Semantic Ops', glyph: '≈' },
+  { path: '/measurement/traffic-intelligence', label: 'Traffic Intel', glyph: '⇛' },
   { path: '/connectors', label: 'Connectors', glyph: '⇄', requirement: { flag: 'connectors_enabled' } },
   { path: '/agent-telemetry', label: 'Agent Telemetry', glyph: '⌁', envFlag: 'enableExternalAgentTelemetry' },
   { path: '/payment-rails', label: 'Payment Rails', glyph: '¤', requirement: { domain: 'payments' }, envFlag: 'enablePaymentRails' },
