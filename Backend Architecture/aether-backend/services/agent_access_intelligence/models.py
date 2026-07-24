@@ -84,6 +84,14 @@ class Capability(BaseModel):
     protocol_version: Optional[str] = None
     latest_risk_level: Optional[str] = None
     discovery_state: DiscoveryState = DiscoveryState.OBSERVED
+    # Observed-origin identity (PR 2, Phase B2 / monoprompt §9.3). `publisher_ref` groups
+    # capabilities by the origin they *claim*; it is not evidence that the origin is who it
+    # says it is, and there is deliberately no `verified` state anywhere — see identity.py.
+    # `artifact_digest` exists so a *change* in a capability's identity is detectable even
+    # though its provenance is unverifiable; §9.5 drift compares exactly that.
+    publisher_ref: Optional[str] = None
+    publisher_label: Optional[str] = None
+    artifact_digest: Optional[str] = None
     first_seen_at: Optional[str] = None
     last_seen_at: Optional[str] = None
     observation_count: int = 0

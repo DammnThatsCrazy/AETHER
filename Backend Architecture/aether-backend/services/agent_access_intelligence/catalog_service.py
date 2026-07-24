@@ -21,6 +21,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from shared.common.common import NotFoundError
 from shared.logger.logger import get_logger
 
+from .identity import artifact_digest_for, publisher_label_for, publisher_ref_for
 from .models import (
     Capability,
     CapabilityInstallation,
@@ -235,16 +236,33 @@ class CapabilityCatalogService:
             dedup_ids = clamp_dedup_ids([sid] + [s for s in prior_dedup if s != sid])
             samples = clamp_event_ids([sid] + [s for s in prior_samples if s != sid])
 
+        # Identity fields are computed from the MERGED values (new observation falling back
+        # to the stored row), not from the incoming fact alone: a later observation that
+        # omits `protocol_version` must not change the artifact digest and report drift that
+        # nothing actually drifted.
+        merged = {
+            "capability_kind": _prefer_kind((existing or {}).get("capability_kind"), kind),
+            "provider": f.get("provider") or (existing or {}).get("provider"),
+            "server_name": f.get("server_name") or (existing or {}).get("server_name"),
+            "server_url": f.get("server_url") or (existing or {}).get("server_url"),
+            "tool_name": f.get("tool_name") or (existing or {}).get("tool_name"),
+            "protocol_version": f.get("protocol_version")
+            or (existing or {}).get("protocol_version"),
+        }
+
         record = Capability(
             capability_id=cap_id,
             tenant_id=tenant_id,
-            capability_kind=_prefer_kind((existing or {}).get("capability_kind"), kind),
-            provider=f.get("provider") or (existing or {}).get("provider"),
-            server_name=f.get("server_name") or (existing or {}).get("server_name"),
-            server_url=f.get("server_url") or (existing or {}).get("server_url"),
-            tool_name=f.get("tool_name") or (existing or {}).get("tool_name"),
-            protocol_version=f.get("protocol_version") or (existing or {}).get("protocol_version"),
+            capability_kind=merged["capability_kind"],
+            provider=merged["provider"],
+            server_name=merged["server_name"],
+            server_url=merged["server_url"],
+            tool_name=merged["tool_name"],
+            protocol_version=merged["protocol_version"],
             latest_risk_level=f.get("risk_level") or (existing or {}).get("latest_risk_level"),
+            publisher_ref=publisher_ref_for(merged["server_url"], merged["provider"]),
+            publisher_label=publisher_label_for(merged["server_url"], merged["provider"]),
+            artifact_digest=artifact_digest_for(merged),
             first_seen_at=(existing or {}).get("first_seen_at") or f.get("occurred_at"),
             last_seen_at=_max_ts((existing or {}).get("last_seen_at"), f.get("occurred_at")),
             observation_count=prior_count if is_replay else prior_count + 1,
