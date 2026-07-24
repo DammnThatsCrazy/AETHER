@@ -6,61 +6,27 @@ test.describe('KYBER Smoke Tests', () => {
     await expect(page).toHaveURL(/\/mission/);
   });
 
-  test('shows KYBER branding in sidebar', async ({ page }) => {
+  test('shows the unauthenticated sign-in surface', async ({ page }) => {
     await page.goto('/mission');
-    await expect(
-      page.getByRole('navigation', { name: 'Main navigation' }).getByText('KYBER', { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText('KYBER', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in with SSO' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Main navigation' })).not.toBeVisible();
   });
 
-  test('mission page loads with health summary', async ({ page }) => {
-    await page.goto('/mission');
-    await expect(page.locator('text=Mission')).toBeVisible();
-  });
-
-  test('live page loads', async ({ page }) => {
-    await page.goto('/live');
-    await expect(page.getByRole('link', { name: '◉ Live' })).toBeVisible();
-  });
-
-  test('Noesis page loads', async ({ page }) => {
-    await page.goto('/noesis');
-    await expect(page.locator('text=Noesis')).toBeVisible();
-  });
-
-  test('entities page loads', async ({ page }) => {
-    await page.goto('/entities');
-    await expect(page.locator('text=Entities')).toBeVisible();
-  });
-
-  test('command page loads', async ({ page }) => {
-    await page.goto('/command');
-    // Scope to the page's H1 heading: 'text=Command' would otherwise also
-    // match the 'engineering command' role badge rendered in the top-bar
-    // on every authenticated page and trip Playwright's strict mode.
-    await expect(page.getByRole('heading', { name: 'Command', level: 1 })).toBeVisible();
-  });
-
-  test('diagnostics page loads', async ({ page }) => {
-    await page.goto('/diagnostics');
-    await expect(page.locator('text=Diagnostics')).toBeVisible();
-  });
-
-  test('review page loads', async ({ page }) => {
-    await page.goto('/review');
-    await expect(page.locator('text=Review')).toBeVisible();
-  });
-
-  test('lab page loads', async ({ page }) => {
-    await page.goto('/lab');
-    await expect(page.locator('text=Lab')).toBeVisible();
-  });
-
-  test('sidebar navigation works', async ({ page }) => {
-    await page.goto('/mission');
-    await page.click('text=Live');
-    await expect(page).toHaveURL(/\/live/);
-    await page.click('text=Noesis');
-    await expect(page).toHaveURL(/\/noesis/);
+  for (const route of [
+    '/mission',
+    '/live',
+    '/noesis',
+    '/entities',
+    '/command',
+    '/diagnostics',
+    '/review',
+    '/lab',
+  ]) {
+    test(`${route} requires a backend-authenticated session`, async ({ page }) => {
+      await page.goto(route);
+      await expect(page.getByRole('button', { name: 'Sign in with SSO' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Main navigation' })).not.toBeVisible();
+    });
   });
 });
