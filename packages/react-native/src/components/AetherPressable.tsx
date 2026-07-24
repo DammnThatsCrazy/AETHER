@@ -2,7 +2,7 @@
 // Aether SDK — AetherPressable
 //
 // Drop-in replacement for React Native's Pressable that emits one canonical
-// `interaction_observed` event per press with a stable, developer-assigned
+// `ui_interaction_observed` event per press with a stable, developer-assigned
 // control identity (`aetherId`). No text/label capture by default.
 // =============================================================================
 

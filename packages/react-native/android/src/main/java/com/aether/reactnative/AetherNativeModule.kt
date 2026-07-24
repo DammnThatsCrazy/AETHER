@@ -178,6 +178,18 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         Aether.handleDeepLink(url)
     }
 
+    /** Host app decoded the QR code; SDK attributes the decoded URL. */
+    @ReactMethod
+    fun handleQrScanResult(url: String) {
+        Aether.handleQrScanResult(url)
+    }
+
+    /** Host app read the NFC tag; SDK attributes the decoded URI. */
+    @ReactMethod
+    fun handleNfcUri(uri: String) {
+        Aether.handleNfcUri(uri)
+    }
+
     /**
      * Deferred-attribution handoff resolution. On Android installs resolve via
      * the Google Play Install Referrer automatically, so there is no deferred

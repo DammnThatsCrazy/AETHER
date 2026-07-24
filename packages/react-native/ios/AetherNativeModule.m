@@ -17,6 +17,8 @@ RCT_EXTERN_METHOD(handleDeepLink:(NSString *)url)
 // names are the cross-platform native contract shared with Android
 // (AetherNativeModule.kt) — do not rename.
 RCT_EXTERN_METHOD(handleURL:(NSString *)url)
+RCT_EXTERN_METHOD(handleQrScanResult:(NSString *)url)
+RCT_EXTERN_METHOD(handleNfcUri:(NSString *)uri)
 RCT_EXTERN_METHOD(getFirstTouchAttribution:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(getLatestTouchAttribution:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(resolveDeferredHandoff:(NSString *)identifier resolve:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)

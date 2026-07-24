@@ -290,6 +290,27 @@ const Aether = {
     },
 
     /**
+     * Attribute a QR code the host app has ALREADY decoded. The SDK never
+     * touches the camera — the host app owns the scan and passes the decoded
+     * URL string. Routed natively through the same canonical acquisition
+     * evidence parser as deep links (entry method `qr_code`), then emitted as
+     * `qr_code_scanned`.
+     */
+    handleQrScanResult(url: string): void {
+      AetherNative?.handleQrScanResult?.(url);
+    },
+
+    /**
+     * Attribute an NFC tag URI the host app has ALREADY read. The SDK never
+     * drives the NFC radio — the host app owns the tag read and passes the
+     * decoded URI string. Routed natively through the canonical evidence
+     * parser (entry method `nfc`), then emitted as `nfc_tag_read`.
+     */
+    handleNfcUri(uri: string): void {
+      AetherNative?.handleNfcUri?.(uri);
+    },
+
+    /**
      * Resolve a deterministic deferred-attribution handoff by explicit
      * identifier. Resolves with the stored first-touch evidence on a server
      * match; null when unmatched or expired (no event, no stored evidence —

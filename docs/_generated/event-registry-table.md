@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (394 types, contract v8.12.0)
+# Aether Event Registry (398 types, contract v8.12.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -24,6 +24,9 @@
 | `deep_link_opened` | `journey` | analytics | behavioral | Native deep link opened; carries canonical acquisition evidence (destination domain, aether_ref, UTM, click IDs) |
 | `app_install_attributed` | `journey` | analytics | behavioral | First app launch attributed via platform install evidence (Play Install Referrer or verified handoff) |
 | `deferred_attribution_resolved` | `journey` | analytics | behavioral | Pending pre-install source handoff deterministically reconciled after first launch |
+| `qr_code_scanned` | `journey` | analytics | behavioral | Host app decoded a QR code; the decoded URL is parsed through the canonical acquisition-evidence parser (entry method qr_code) |
+| `nfc_tag_read` | `journey` | analytics | behavioral | Host app read an NFC tag URI; the URI is parsed through the canonical acquisition-evidence parser (entry method nfc) |
+| `app_clip_invoked` | `journey` | analytics | behavioral | iOS App Clip invocation URL observed and parsed through the canonical acquisition-evidence parser; first-touch persisted for full-app handoff |
 | `identify` | `identity` | analytics | identity | Identity hydration from aether.hydrateIdentity() |
 | `consent` | `consent` | — | governance | Consent state change — always allowed regardless of consent state |
 | `conversion` | `commerce` | marketing | behavioral | Conversion event for marketing attribution |
@@ -202,6 +205,7 @@
 | `surface_entered` | `interaction` | analytics | behavioral | Actor entered a surface (route, screen, view, modal, API surface) |
 | `surface_exited` | `interaction` | analytics | behavioral | Actor exited a surface; closes the surface interval |
 | `interaction_observed` | `interaction` | analytics | behavioral | Canonical interaction on a control (typed via the interaction vocabulary) |
+| `ui_interaction_observed` | `interaction` | analytics | behavioral | Native UI control interaction observed by the SDK (metadata-only: stable control id, type, action, screen; no control text unless explicitly enabled) |
 | `feature_started` | `interaction` | analytics | behavioral | Feature usage began (distinct from exposure) |
 | `feature_completed` | `interaction` | analytics | behavioral | Feature usage reached its defined completion |
 | `feature_abandoned` | `interaction` | analytics | behavioral | Feature usage abandoned before completion |
