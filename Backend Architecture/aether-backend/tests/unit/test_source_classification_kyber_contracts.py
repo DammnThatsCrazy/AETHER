@@ -75,9 +75,13 @@ async def test_health_endpoint_returns_tenant_scoped_classifier_target(
         source_classification_health=AsyncMock(
             return_value={
                 "summary": {"total": 2, "classified": 2},
-                "versions": [{"name": "2.0", "count": 2}],
+                "versions": [{"name": SOURCE_CLASSIFIER_VERSION, "count": 2}],
                 "providers": [{"name": "openai", "count": 2}],
                 "mediation": [],
+                "source_classes": [{"name": "organic_search", "count": 2}],
+                "economic_classes": [{"name": "unpaid", "count": 2}],
+                "channel_families": [{"name": "search", "count": 2}],
+                "proof_levels": [{"name": "domain_verified", "count": 2}],
             }
         )
     )
@@ -89,6 +93,11 @@ async def test_health_endpoint_returns_tenant_scoped_classifier_target(
     assert response["data"]["target_classifier_version"] == SOURCE_CLASSIFIER_VERSION
     assert response["data"]["status"] == "healthy"
     assert response["data"]["summary"]["total"] == 2
+    # Canonical dimension breakdowns are part of the Kyber health contract.
+    assert response["data"]["source_classes"] == [{"name": "organic_search", "count": 2}]
+    assert response["data"]["economic_classes"] == [{"name": "unpaid", "count": 2}]
+    assert response["data"]["channel_families"] == [{"name": "search", "count": 2}]
+    assert response["data"]["proof_levels"] == [{"name": "domain_verified", "count": 2}]
 
 
 @pytest.mark.asyncio

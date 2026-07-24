@@ -1063,11 +1063,61 @@ def _aggregate_referral_performance(
     )
 
 
+def _normalize_source_class_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Serialize source_class outward in the canonical vocabulary (read path).
+
+    Storage keeps historical values until an explicit reclassification repair;
+    rows that only differ by a legacy alias are merged so callers never see
+    both 'direct' and 'direct_unknown' for the same evidence.
+    """
+    from services.traffic.generated_registry import canonical_source_class
+
+    merged: dict[tuple[Any, ...], dict[str, Any]] = {}
+    numeric_fields = (
+        "attributed_conversions",
+        "attributed_gross_revenue",
+        "attributed_net_revenue",
+        "attributed_contribution_value",
+    )
+    count_fields = ("credit_count", "conversion_count")
+    for row in rows:
+        normalized = dict(row)
+        if normalized.get("source_class"):
+            normalized["source_class"] = canonical_source_class(
+                str(normalized["source_class"])
+            )
+        key = tuple(normalized.get(dimension) for dimension in _ROLLUP_DIMENSIONS)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = normalized
+            continue
+        for field in count_fields:
+            if field in existing or field in normalized:
+                existing[field] = int(existing.get(field) or 0) + int(
+                    normalized.get(field) or 0
+                )
+        for field in numeric_fields:
+            existing[field] = (
+                (_to_decimal(existing.get(field) or "0") or Decimal("0"))
+                + (_to_decimal(normalized.get(field) or "0") or Decimal("0"))
+            )
+    result = list(merged.values())
+    result.sort(
+        key=lambda row: (
+            _to_decimal(row.get("attributed_net_revenue") or "0") or Decimal("0"),
+            int(row.get("credit_count") or 0),
+        ),
+        reverse=True,
+    )
+    return result
+
+
 def _referral_performance_response(
     tenant_id: str,
     filters: dict[str, Any],
     rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    rows = _normalize_source_class_rows(rows)
     return {
         "tenant_id": tenant_id,
         "filters": filters,

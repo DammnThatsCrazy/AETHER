@@ -115,13 +115,17 @@
         "core",
         "ecommerce",
         "exposure",
+        "journey",
         "outcome"
       ],
       "eventTypes": [
         "ad_click",
         "ad_exposed",
+        "app_install_attributed",
         "checkout_started",
         "click",
+        "deep_link_opened",
+        "deferred_attribution_resolved",
         "email_clicked",
         "email_delivered",
         "email_opened",
@@ -146,8 +150,11 @@
       "ownedActivityEventTypes": [
         "ad_click",
         "ad_exposed",
+        "app_install_attributed",
         "checkout_started",
         "click",
+        "deep_link_opened",
+        "deferred_attribution_resolved",
         "impression",
         "landing",
         "notification_presented",
@@ -748,14 +755,6 @@
         "surface_interval_facts"
       ],
       "reason": "The interaction family currently has NO projector; its silverProjection targets land with the PR 2 interaction plane."
-    },
-    {
-      "family": "journey",
-      "status": "pending",
-      "targetTables": [
-        "journey_step_facts"
-      ],
-      "reason": "Registry declares silverProjection=journey_step_facts; no dispatcher projector exists yet (journey materialization runs outside the Silver dispatcher)."
     },
     {
       "family": "location",
