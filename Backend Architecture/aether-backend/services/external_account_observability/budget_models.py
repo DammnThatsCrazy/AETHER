@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Any, Optional
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
+
+from services.agentic_observability.models import decimal_str_from_provider
 
 
 def _utc_now() -> str:
@@ -18,13 +20,19 @@ def _new_id() -> str:
 class AgentBudgetObservedRecord(BaseModel):
     budget_obs_id: str = Field(default_factory=_new_id)
     account_obs_id: Optional[str] = None
-    total_budget: Optional[float] = None
-    used_budget: Optional[float] = None
-    available_budget: Optional[float] = None
+    # Decimal-safe money (str/int/Decimal in → decimal string; float rejected).
+    total_budget: Optional[str] = None
+    used_budget: Optional[str] = None
+    available_budget: Optional[str] = None
     currency: str = "USD"
     as_of: Optional[str] = None
     tenant_id: str
     observed_at: str = Field(default_factory=_utc_now)
+
+    @field_validator("total_budget", "used_budget", "available_budget", mode="before")
+    @classmethod
+    def _decimal_money(cls, v: Any, info: ValidationInfo) -> Any:
+        return decimal_str_from_provider(v, info.field_name)
 
 
 class AgentPermissionObservedRecord(BaseModel):
