@@ -156,6 +156,24 @@
       "section_comment": "journey"
     },
     {
+      "name": "qr_code_scanned",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
+      "name": "nfc_tag_read",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
+      "name": "app_clip_invoked",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "journey"
+    },
+    {
       "name": "identify",
       "family": "identity",
       "consent_purpose": "analytics",
@@ -1255,6 +1273,12 @@
     },
     {
       "name": "interaction_observed",
+      "family": "interaction",
+      "consent_purpose": "analytics",
+      "section_comment": "interaction"
+    },
+    {
+      "name": "ui_interaction_observed",
       "family": "interaction",
       "consent_purpose": "analytics",
       "section_comment": "interaction"
