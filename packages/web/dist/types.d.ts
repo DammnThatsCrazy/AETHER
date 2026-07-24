@@ -85,6 +85,12 @@ export interface BatchHealth {
  */
 export interface ModuleConfig {
     autoDiscovery?: boolean;
+    /**
+     * Emit canonical navigation_intent/navigation_arrival correlation events on
+     * permitted navigation clicks (requires autoDiscovery). Default: true.
+     * Proves internal button→page navigation only — never off-site acquisition.
+     */
+    navigationCorrelation?: boolean;
     ecommerce?: boolean;
     formAnalytics?: boolean;
     featureFlags?: boolean;
@@ -129,6 +135,14 @@ export interface PrivacyConfig {
     cookieConsent?: 'none' | 'notice' | 'opt-in' | 'opt-out';
     /** Custom PII field patterns to mask */
     piiPatterns?: RegExp[];
+    /**
+     * Strip fragments and sensitive query params (aether_ref, aether_cid,
+     * click IDs, token params) from every transmitted URL. Default: true.
+     * aether_ref always flows through the typed referralToken field only.
+     */
+    sanitizeUrls?: boolean;
+    /** Additional query parameter names to strip from transmitted URLs. */
+    sensitiveQueryParams?: string[];
 }
 export interface AdvancedConfig {
     /** Session heartbeat interval in ms (default: 30000) */
@@ -512,6 +526,11 @@ export interface CampaignContext {
     utmId?: string;
     clickId?: string;
     referrerDomain?: string;
+    /**
+     * Kept for envelope shape compatibility only. Classification is
+     * backend-owned; the web SDK always emits 'unknown' (no client-side
+     * referrer-domain heuristics).
+     */
     referrerType?: 'direct' | 'organic' | 'paid' | 'social' | 'email' | 'referral' | 'unknown';
     /** Provider campaign ID (e.g. Google, Meta). Never treated as canonical Aether UUID. */
     externalCampaignId?: string;

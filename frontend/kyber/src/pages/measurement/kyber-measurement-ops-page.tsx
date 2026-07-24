@@ -1,5 +1,5 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, useTimeContext, type TimeContext } from '@aether/ui';
-import { SOURCE_CLASS_DEFAULTS, canonicalSourceClass, type SourceClass } from '@aether/shared';
+import { SOURCE_CLASS_DEFAULTS, canonicalSourceClass, type SourceClass } from '@aether/shared/traffic-source';
 import { PageWrapper } from '@kyber/components/layout';
 import { useMeasurementOps } from '@kyber/features/measurement';
 import { api } from '@kyber/lib/api';

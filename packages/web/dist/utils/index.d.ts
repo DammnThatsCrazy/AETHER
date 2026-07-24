@@ -9,7 +9,20 @@ export declare function sha256(input: string): Promise<string>;
 export declare function anonymizeIP(ip: string): string;
 /** Detect device context from browser environment */
 export declare function getDeviceContext(): DeviceContext;
-/** Get current page context */
+/** Configure URL sanitization from AetherConfig (privacy-safe default: on). */
+export declare function configureUrlSanitization(options?: {
+    enabled?: boolean;
+    additionalParams?: string[];
+}): void;
+/** Strip a query string (leading '?' optional) of sensitive parameters. */
+export declare function sanitizeSearch(search: string): string;
+/**
+ * Strip fragments and sensitive query params (aether_ref, aether_cid, click
+ * IDs, token params) from a URL before it is transmitted anywhere.
+ * Relative URLs are resolved against the current page origin when available.
+ */
+export declare function sanitizeUrl(url: string | undefined | null): string;
+/** Get current page context (URLs sanitized before transmission) */
 export declare function getPageContext(): PageContext;
 /** Extract campaign/UTM parameters from URL */
 export declare function getCampaignContext(): CampaignContext;
