@@ -1927,6 +1927,64 @@ policies:
     requires_consent_invalidation: true
     requires_permission_hash: false
 
+  # One-time redirect handoff tokens minted by GET /v1/r/{token}; hashed at rest,
+  # short TTL, correlated to a user landing — treated as user acquisition evidence.
+  - resource_type: source_link_handoffs
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
+  # Deterministic pre-install handoff records reconciled on first launch; the
+  # identifier is hashed at rest and the record is consumed once.
+  - resource_type: deferred_attribution_handoffs
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
+  # Apple AdAttributionKit / SKAdNetwork postbacks: campaign-level platform
+  # aggregate evidence, deliberately separate from user-level deterministic
+  # evidence (no per-subject identity → no consent invalidation hook).
+  - resource_type: apple_attribution_postbacks
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   # ---------------------------------------------------------------------------
   # Operational / platform state — standard retention, plain row storage,
   # no externalization.
