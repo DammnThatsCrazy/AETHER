@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('KYBER Smoke Tests', () => {
-  test('app boots and redirects to mission', async ({ page }) => {
+  test('app boots into the unauthenticated boundary', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveURL(/\/mission/);
+    await expect(page.getByRole('button', { name: 'Sign in with SSO' })).toBeVisible();
   });
 
   test('shows the unauthenticated sign-in surface', async ({ page }) => {
