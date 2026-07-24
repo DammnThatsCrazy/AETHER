@@ -148,6 +148,46 @@ class AetherNativeModule: RCTEventEmitter {
         }
     }
 
+    // MARK: - Acquisition Attribution (canonical, schema v3)
+
+    /// Route any incoming link (custom scheme or https Universal Link) through
+    /// the native canonical evidence parser. http(s) URLs are recorded as
+    /// ios_universal_link, everything else as ios_custom_url.
+    @objc
+    func handleURL(_ url: String) {
+        if let incomingURL = URL(string: url) {
+            Aether.shared.handleURL(incomingURL)
+        }
+    }
+
+    /// First-touch acquisition evidence as a JSON string, or null when no
+    /// unexpired first touch is stored.
+    @objc
+    func getFirstTouchAttribution(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        resolve(Aether.shared.getFirstTouchAttributionJSON() ?? NSNull())
+    }
+
+    /// Latest-touch acquisition evidence as a JSON string, or null when no
+    /// unexpired latest touch is stored.
+    @objc
+    func getLatestTouchAttribution(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        resolve(Aether.shared.getLatestTouchAttributionJSON() ?? NSNull())
+    }
+
+    /// Resolve a deterministic deferred-attribution handoff. Resolves with the
+    /// stored first-touch evidence JSON on a server match, or null when the
+    /// handoff is unmatched/expired (the install stays Direct / Unknown).
+    @objc
+    func resolveDeferredHandoff(_ identifier: String, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        Aether.shared.resolveDeferredHandoff(identifier: identifier) { resolved in
+            guard resolved else {
+                resolve(NSNull())
+                return
+            }
+            resolve(Aether.shared.getFirstTouchAttributionJSON() ?? NSNull())
+        }
+    }
+
     @objc
     func trackPushOpened(_ data: NSDictionary) {
         Aether.shared.trackPushOpened(userInfo: data as! [AnyHashable: Any])

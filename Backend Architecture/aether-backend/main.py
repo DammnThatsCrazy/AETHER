@@ -224,8 +224,10 @@ from services.traffic.repair import register_source_classification_repair_handle
 from services.export.routes import router as exports_router
 from services.admin.routes import router as admin_router
 from services.traffic.routes import router as traffic_router
+from services.traffic.deferred_attribution import router as deferred_attribution_router
 from services.fraud.routes import router as fraud_router
 from services.attribution.routes import router as attribution_router
+from services.attribution.apple_postbacks import router as apple_postbacks_router
 from services.rewards.routes import router as rewards_router
 from services.oracle.routes import router as oracle_router
 from services.analytics_automation.routes import router as automation_router
@@ -578,6 +580,8 @@ def create_app() -> FastAPI:
     app.include_router(traffic_router)
     app.include_router(fraud_router)
     app.include_router(attribution_router)
+    app.include_router(deferred_attribution_router)  # /v1/attribution/deferred — deterministic iOS handoffs
+    app.include_router(apple_postbacks_router)       # /v1/attribution/apple-postbacks — campaign-level platform evidence
     app.include_router(rewards_router)
     app.include_router(oracle_router)
     app.include_router(automation_router)

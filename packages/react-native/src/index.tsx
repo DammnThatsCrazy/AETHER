@@ -22,7 +22,16 @@ export type {
   Identity,
   IdentityData,
   AetherContextValue,
+  AcquisitionEvidence,
 } from './bridge';
+// Tracked interaction wrapper: stable-id press analytics without text capture.
+export { AetherPressable } from './components/AetherPressable';
+export type { AetherPressableProps } from './components/AetherPressable';
+export {
+  useTrackedPress,
+  createTrackedPressHandler,
+  emitTrackedPress,
+} from './components/tracked-press';
 // Tier 1 semantic envelope shape returned by Aether.collectSemanticContext().
 // The canonical sessionId/eventId inside it are native-owned and passed in by
 // the caller — the JS collector never mints its own ids.

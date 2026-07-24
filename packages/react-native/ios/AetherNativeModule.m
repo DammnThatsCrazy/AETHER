@@ -12,6 +12,14 @@ RCT_EXTERN_METHOD(getIdentity:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromi
 RCT_EXTERN_METHOD(reset)
 RCT_EXTERN_METHOD(flush)
 RCT_EXTERN_METHOD(handleDeepLink:(NSString *)url)
+
+// Acquisition attribution (canonical AcquisitionEvidence schema v3). Method
+// names are the cross-platform native contract shared with Android
+// (AetherNativeModule.kt) — do not rename.
+RCT_EXTERN_METHOD(handleURL:(NSString *)url)
+RCT_EXTERN_METHOD(getFirstTouchAttribution:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(getLatestTouchAttribution:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(resolveDeferredHandoff:(NSString *)identifier resolve:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(trackPushOpened:(NSDictionary *)data)
 RCT_EXTERN_METHOD(walletConnect:(NSString *)address options:(NSDictionary *)options)
 RCT_EXTERN_METHOD(walletDisconnect)

@@ -13,10 +13,34 @@ import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
 import { RNFeedback } from './modules/Feedback';
 import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
+import type { AcquisitionEvidence } from '@aether/shared/acquisition-evidence';
 import {
   buildCanonicalConsentReceipt,
   type CanonicalConsentReceiptInput,
 } from '@aether/shared/consent-receipt';
+
+export type { AcquisitionEvidence };
+
+/**
+ * Native attribution methods resolve with a JSON string (or null) so both
+ * platforms can serialize the shared AcquisitionEvidence shape without a
+ * per-field bridge marshalling contract. Objects are passed through as-is
+ * for forward compatibility. Anything unparseable is null, never a throw.
+ */
+function parseNativeEvidence(raw: unknown): AcquisitionEvidence | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'object') return raw as AcquisitionEvidence;
+  if (typeof raw === 'string') {
+    if (raw.length === 0) return null;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? (parsed as AcquisitionEvidence) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 export const { AetherNative } = NativeModules;
 export const emitter = AetherNative ? new NativeEventEmitter(AetherNative) : null;
@@ -222,6 +246,62 @@ const Aether = {
 
   handleDeepLink(url: string): void {
     AetherNative?.handleDeepLink(url);
+  },
+
+  /**
+   * Acquisition attribution (canonical traffic-source model).
+   *
+   * The SDK observes evidence; the backend classifier owns the resulting
+   * source classification. Unmatched installs stay "Direct / Unknown" —
+   * deferred attribution is deterministic only (explicit server handoff
+   * identifier), never a probabilistic fingerprint match.
+   *
+   * Native method names (getFirstTouchAttribution / getLatestTouchAttribution
+   * / handleURL / resolveDeferredHandoff) are the cross-platform contract
+   * implemented by both AetherNativeModule.swift and AetherNativeModule.kt.
+   */
+  attribution: {
+    /** Persisted first-touch evidence, or null when absent/expired. */
+    async getFirstTouch(): Promise<AcquisitionEvidence | null> {
+      try {
+        return parseNativeEvidence(await AetherNative?.getFirstTouchAttribution?.());
+      } catch {
+        return null;
+      }
+    },
+
+    /** Latest-touch evidence, or null when absent/expired. */
+    async getLatestTouch(): Promise<AcquisitionEvidence | null> {
+      try {
+        return parseNativeEvidence(await AetherNative?.getLatestTouchAttribution?.());
+      } catch {
+        return null;
+      }
+    },
+
+    /**
+     * Route an incoming link (Linking URL, custom scheme, or https app/universal
+     * link) through the native canonical evidence parser. Deduped natively, so
+     * wiring both cold-start (Linking.getInitialURL) and warm-start
+     * (Linking 'url' listener) is safe.
+     */
+    handleURL(url: string): void {
+      AetherNative?.handleURL?.(url);
+    },
+
+    /**
+     * Resolve a deterministic deferred-attribution handoff by explicit
+     * identifier. Resolves with the stored first-touch evidence on a server
+     * match; null when unmatched or expired (no event, no stored evidence —
+     * the install stays Direct / Unknown).
+     */
+    async resolveDeferredHandoff(identifier: string): Promise<AcquisitionEvidence | null> {
+      try {
+        return parseNativeEvidence(await AetherNative?.resolveDeferredHandoff?.(identifier));
+      } catch {
+        return null;
+      }
+    },
   },
 
   trackPushOpened(data: Record<string, string>): void {
