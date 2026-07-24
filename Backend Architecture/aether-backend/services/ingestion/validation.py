@@ -58,6 +58,7 @@ _SENSITIVE_KEY_PATTERNS = tuple(
         r"\bcvv\b", r"\bcvc\b", r"cvv2", r"payment[_\s]?token",
         r"auth[_\s]?code", r"api[_\s]?key", r"access[_\s]?token",
         r"refresh[_\s]?token", r"bearer[_\s]?token", r"ssh[_\s]?key",
+        r"\bauthorization\b", r"\bbearer\b", r"\bcookie\b", r"session[_\s]?token",
         r"id[_\s]?token", r"social[_\s]?security", r"\bssn\b",
         r"\bein\b", r"\btin\b", r"bank[_\s]?account",
         r"routing[_\s]?number", r"iban", r"totp[_\s]?secret",
