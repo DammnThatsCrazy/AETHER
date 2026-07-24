@@ -48,7 +48,9 @@
     "repo:doctor": "make repo-doctor",
     "repo:fix": "make repo-doctor-fix",
     "docs:fix": "make docs-fix",
-    "validate:ts-public-exports": "python scripts/validate_ts_public_exports.py"
+    "validate:ts-public-exports": "python scripts/validate_ts_public_exports.py",
+    "validate:frontend-data-truth": "make frontend-data-truth",
+    "validate:frontend-data-truth:bundles": "make frontend-data-truth-bundles"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.0.0",

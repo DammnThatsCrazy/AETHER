@@ -13,6 +13,7 @@ import {
   TabsTrigger,
   TabsContent,
   TerminalSeparator,
+  EmptyState,
 } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { EntityListTable } from '@kyber/components/entities';
@@ -68,7 +69,7 @@ export function EntitiesPage() {
   );
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(routeId ?? null);
 
-  const { entities, isLoading } = useEntityData(activeType);
+  const { entities, isLoading, error } = useEntityData(activeType);
 
   const handleSelectEntity = useCallback(
     (entity: Entity) => {
@@ -102,6 +103,22 @@ export function EntitiesPage() {
     );
   }
 
+  if (isLoading) {
+    return (
+      <PageWrapper title="Entities">
+        <div className="text-xs text-neutral-500 font-mono animate-pulse">Loading entities...</div>
+      </PageWrapper>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageWrapper title="Entities">
+        <EmptyState title="Entities unavailable" description={error} />
+      </PageWrapper>
+    );
+  }
+
   // Entity type counts – only the active type is known from the hook
   const typeCounts = useMemo(() => {
     const counts: Partial<Record<EntityType, number>> = {};
@@ -120,10 +137,6 @@ export function EntitiesPage() {
         </div>
 
         <TerminalSeparator />
-
-        {isLoading && (
-          <div className="text-xs text-neutral-500 font-mono animate-pulse">Loading entities...</div>
-        )}
 
         {/* Entity Type Selector */}
         <Tabs defaultValue={activeType} onValueChange={handleTypeChange}>

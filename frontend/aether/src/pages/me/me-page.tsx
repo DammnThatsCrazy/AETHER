@@ -154,7 +154,7 @@ export function MePage() {
         </CardHeader>
         <CardContent className="space-y-1">
           <p className="text-sm font-medium text-text-primary">{profile.name}</p>
-          <p className="text-xs text-text-muted font-mono">{profile.email}</p>
+          <p className="text-xs text-text-muted font-mono">{profile.contact_email}</p>
           <Badge variant={planBadgeVariant(planId)} size="sm">{profile.plan.display_name}</Badge>
         </CardContent>
       </Card>

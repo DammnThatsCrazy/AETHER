@@ -8,9 +8,6 @@ test.describe('KYBER Smoke Tests', () => {
 
   test('shows KYBER branding in sidebar', async ({ page }) => {
     await page.goto('/mission');
-    // Scope to the sidebar nav: the mock-mode honesty banner renders
-    // "VITE_KYBER_ENV is not set…" when the env var is unset (CI default),
-    // which a bare text=KYBER would also match and trip strict mode.
     await expect(
       page.getByRole('navigation', { name: 'Main navigation' }).getByText('KYBER', { exact: true }),
     ).toBeVisible();
@@ -23,8 +20,6 @@ test.describe('KYBER Smoke Tests', () => {
 
   test('live page loads', async ({ page }) => {
     await page.goto('/live');
-    // Target the sidebar nav link: the mock-mode banner's "not live" / "look
-    // live" copy would otherwise make a bare text=Live match multiple elements.
     await expect(page.getByRole('link', { name: '◉ Live' })).toBeVisible();
   });
 

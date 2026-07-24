@@ -22,7 +22,7 @@ import {
 } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { cn, formatRelativeTime, formatCompactNumber, formatPercentage } from '@kyber/lib/utils';
-import { getEnvironment, getRuntimeMode } from '@kyber/lib/env';
+import { getEnvironment } from '@kyber/lib/env';
 import { useMissionData } from '@kyber/features/mission';
 import { useDiagnosticsData } from '@kyber/features/diagnostics';
 import { RecommendationObservabilityPanel } from '@kyber/components/recommendation-observability-panel';
@@ -70,7 +70,6 @@ function KeyChangeItem({ change }: { readonly change: KeyChange }) {
 
 export function MissionPage() {
   const environment = getEnvironment();
-  const mode = getRuntimeMode();
   const { data, isLoading, error } = useMissionData();
   const { health: systemHealth, isLoading: healthLoading, error: healthError } = useDiagnosticsData();
   const [keyChangeTab, setKeyChangeTab] = useState<'1h' | '24h' | '7d'>('1h');
@@ -114,9 +113,7 @@ export function MissionPage() {
       actions={
         <div className="flex items-center gap-2">
           <EnvironmentBadge environment={environment} />
-          <Badge variant={false ? 'warning' : 'info'}>
-            {mode.toUpperCase()}
-          </Badge>
+          <Badge variant="info">LIVE</Badge>
         </div>
       }
     >

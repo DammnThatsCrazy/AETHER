@@ -444,6 +444,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     if not args.docs_only:
+        run(
+            ["python", "scripts/validate_frontend_data_truth.py"],
+            name="Frontend data-truth source guardrail (Aether/Kyber)",
+            results=results,
+            stop_on_failure=stop,
+            remediation=(
+                "remove runtime mock/fixture imports, mock-mode branches, synthetic "
+                "identifiers, and public browser workers; keep fixtures only in the "
+                "validator's narrow test-only paths"
+            ),
+        )
+
         if (ROOT / "package-lock.json").exists():
             run(["npm", "ci", "--ignore-scripts"], name="npm ci (lockfile integrity)", results=results, stop_on_failure=stop, remediation="update package-lock.json with npm install")
         else:
@@ -461,6 +473,17 @@ def main(argv: Sequence[str] | None = None) -> None:
                 stop_on_failure=stop,
                 remediation="fix TypeScript compilation errors in packages/shared",
             )
+
+        run(
+            ["python", "scripts/validate_frontend_data_truth.py", "--build-bundles"],
+            name="Frontend data-truth production bundle build and scan (Aether/Kyber)",
+            results=results,
+            stop_on_failure=stop,
+            remediation=(
+                "fix Aether/Kyber production builds and remove emitted legacy worker, "
+                "mock-token, demo-tenant, and synthetic-record literals"
+            ),
+        )
 
         scripts = _load_package_scripts()
         for script_name, label, remediation in [

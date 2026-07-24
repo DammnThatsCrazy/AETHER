@@ -37,9 +37,9 @@ export function LoginPage() {
       // Trust-plane posture returns a durable session; legacy returns api_key.
       const grant = resolveAuthGrant(await api.auth.login(email.trim(), password));
       if (grant.kind === 'session') {
-        sessionLogin(grant.session, email.trim());
+        await sessionLogin(grant.session);
       } else {
-        apiKeyLogin(grant.apiKey, email.trim());
+        await apiKeyLogin(grant.apiKey);
       }
       void navigate(redirectTo, { replace: true });
     } catch {

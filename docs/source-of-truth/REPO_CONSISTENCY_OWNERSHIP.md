@@ -38,7 +38,8 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | durable jobs platform changed | `JOBS_PLATFORM.md` review/restamp, generated docs, jobs tests |
 | tenant import engine changed | imports contract twin, `IMPORT_FAILURES.md`, generated docs, import tests |
 | measurement integrity plane changed | metric registry contract (TS/Py/doc mirrors), `MEASUREMENT_RESTATEMENT.md`, measurement tests |
-| workflow/check command changed | Makefile, docs, repo_doctor tests |
+| workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
+| Aether/Kyber production data source changed | `scripts/validate_frontend_data_truth.py` source guardrail and explicit production-bundle scan |
 
 ## Single-owner generated docs rule
 
@@ -55,3 +56,10 @@ Before opening or updating a PR:
 5. Do not bypass TypeScript/package export failures.
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
 7. PR is not complete until `make ci-check` exits 0.
+
+The full repo-doctor path runs `python scripts/validate_frontend_data_truth.py`
+before frontend builds, then runs the validator with `--build-bundles` to build
+Aether and Kyber using explicit production configuration and inspect emitted
+artifacts. The test-only allowlist is limited to dedicated test directories and
+`*.test.*`, `*.spec.*`, and `*.stories.*` files; production `src/mocks` and
+`src/fixtures` directories are always violations.

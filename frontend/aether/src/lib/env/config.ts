@@ -59,10 +59,6 @@ export function getRuntimeMode() {
   return 'live' as const;
 }
 
-export function isLocalMocked() {
-  return false;
-}
-
 /**
  * Whether `VITE_AETHER_ENV` was explicitly set. Missing values fail startup.
  */
@@ -73,8 +69,4 @@ export function isEnvExplicit() {
 
 export function isProduction() {
   return env.VITE_AETHER_ENV === 'production';
-}
-
-export function isMockAuthAllowed() {
-  return env.VITE_AETHER_ENV === 'local' || env.VITE_AETHER_ENV === 'test';
 }

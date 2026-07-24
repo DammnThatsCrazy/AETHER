@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { WebSocketClient, type WebSocketStatus } from '@kyber/lib/api';
-import { getRuntimeMode } from '@kyber/lib/env';
 
 interface UseWebSocketOptions {
   readonly path: string;

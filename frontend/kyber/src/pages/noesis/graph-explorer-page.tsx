@@ -153,7 +153,7 @@ export function NoesisGraphExplorerPage() {
 
   // ---- Source data (hook manages layer, overlay, visibility, and selection state) ----
   const {
-    nodes, edges, clusters, isLoading,
+    nodes, edges, clusters, isLoading, error,
     activeLayer, setActiveLayer,
     activeOverlay, setActiveOverlay,
     visibleTypes, setVisibleTypes,
@@ -375,6 +375,14 @@ export function NoesisGraphExplorerPage() {
     return (
       <PageWrapper title="Noesis Graph Explorer" subtitle="Loading graph data...">
         <div className="flex items-center justify-center py-24 text-text-muted">Loading...</div>
+      </PageWrapper>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageWrapper title="Noesis Graph Explorer" subtitle="Graph data unavailable">
+        <EmptyState title="Graph unavailable" description={error} />
       </PageWrapper>
     );
   }

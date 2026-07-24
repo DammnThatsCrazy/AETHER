@@ -1,3 +1,18 @@
+---
+title: Frontend Data Truth Inventory
+slug: audits/frontend-data-truth-inventory
+section: architecture
+visibility: I
+audience: [dev-senior, architect, ops]
+status: experimental
+since_version: "8.12.0"
+source_files:
+  - frontend/aether/
+  - frontend/kyber/
+  - frontend/demo/
+  - scripts/validate_frontend_data_truth.py
+---
+
 # Frontend Data Truth Inventory
 
 This audit classifies runtime mock-mode, fixture, and synthetic-data findings across Aether, Kyber, and Demo. The machine-readable inventory is `docs/_generated/frontend-data-truth-inventory.json`.

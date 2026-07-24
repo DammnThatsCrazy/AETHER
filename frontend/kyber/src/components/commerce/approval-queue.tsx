@@ -8,8 +8,7 @@
  *   - viewing queue: approvals:read  (kyber: canViewAll)
  *   - deciding: commerce:approve     (kyber: canApprove)
  * Action emits: aether.commerce.approval.{approved|rejected|escalated}
- * Mocked mode: fixtureApprovalQueue
- * Live mode: GET /v1/approvals
+ * Data source: GET /v1/approvals
  */
 import { useState } from 'react';
 import { useApprovals } from '@kyber/features/approvals';
@@ -28,7 +27,7 @@ export function ApprovalQueue({
   currentUserId,
   onRowClick,
 }: ApprovalQueueProps) {
-  const { approvals, loading, error, mode, decide, revoke } = useApprovals(statusFilter);
+  const { approvals, loading, error, decide, revoke } = useApprovals(statusFilter);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
 
@@ -42,6 +41,8 @@ export function ApprovalQueue({
     try {
       await decide(approval.approval_id, action, currentUserId, decisionReason);
       setDecisionReason('');
+    } catch {
+      // The hook exposes the backend error through its error state.
     } finally {
       setBusyId(null);
     }
@@ -59,17 +60,14 @@ export function ApprovalQueue({
   }
   if (approvals.length === 0) {
     return (
-      <div className="approval-queue approval-queue--empty">
-        no approvals in queue ({mode} mode)
-      </div>
+      <div className="approval-queue approval-queue--empty">no approvals in queue</div>
     );
   }
 
   return (
-    <div className="approval-queue" data-mode={mode} data-count={approvals.length}>
+    <div className="approval-queue" data-count={approvals.length}>
       <div className="approval-queue__header">
         <span>APPROVAL QUEUE</span>
-        <span className="approval-queue__mode">{mode.toUpperCase()}</span>
         <span className="approval-queue__count">{approvals.length} items</span>
       </div>
       {canApprove && (
@@ -145,6 +143,8 @@ export function ApprovalQueue({
                     try {
                       await revoke(a.approval_id, currentUserId, decisionReason);
                       setDecisionReason('');
+                    } catch {
+                      // The hook exposes the backend error through its error state.
                     } finally {
                       setBusyId(null);
                     }

@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { Button, ErrorState } from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
-import { isLocalMocked } from '@aether-app/lib/env';
 import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
 
@@ -18,21 +17,17 @@ export function CallbackPage() {
   const urlErrorDesc = searchParams.get('error_description');
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      void navigate('/settings', { replace: true });
-      return;
-    }
     if (urlError) return;
     if (!isLoading && isAuthenticated) {
       getAccessTokenSilently()
         .then(jwt => api.auth.ssoCallback(jwt))
-        .then(response => {
+        .then(async response => {
           // Trust-plane posture returns a durable session; legacy returns api_key.
           const grant = resolveAuthGrant(response);
           if (grant.kind === 'session') {
-            sessionLogin(grant.session);
+            await sessionLogin(grant.session);
           } else {
-            apiKeyLogin(grant.apiKey);
+            await apiKeyLogin(grant.apiKey);
           }
           void navigate('/settings', { replace: true });
         })

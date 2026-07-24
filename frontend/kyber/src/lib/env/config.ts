@@ -65,18 +65,10 @@ export function isProduction() {
   return env.VITE_KYBER_ENV === 'production';
 }
 
-export function isLocalMocked() {
-  return false;
-}
-
 /**
  * Whether `VITE_KYBER_ENV` was explicitly set. Missing values fail startup.
  */
 export function isEnvExplicit() {
   const raw = import.meta.env.VITE_KYBER_ENV as string | undefined;
   return raw != null && raw !== '';
-}
-
-export function isMockAuthAllowed() {
-  return env.VITE_KYBER_ENV === 'local' || env.VITE_KYBER_ENV === 'test';
 }

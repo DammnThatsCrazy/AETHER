@@ -24,7 +24,7 @@ import {
   fixturePolicyDecision,
   fixtureResources,
   fixtureSettlement,
-} from '@kyber/fixtures/commerce';
+} from '../fixtures/commerce';
 
 describe('approvalPrioritySchema', () => {
   it('accepts all 4 priorities', () => {

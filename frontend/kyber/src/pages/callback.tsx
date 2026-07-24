@@ -8,18 +8,12 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
-import { isLocalMocked } from '@kyber/lib/env';
 
 export function CallbackPage() {
   const { isLoading, isAuthenticated, error } = useAuth0();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      // Local-mocked mode: Auth0 is not wired — go home immediately.
-      void navigate('/', { replace: true });
-      return;
-    }
     if (!isLoading && isAuthenticated) {
       void navigate('/', { replace: true });
     }

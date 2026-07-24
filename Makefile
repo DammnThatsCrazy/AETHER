@@ -21,6 +21,7 @@
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
+        frontend-data-truth frontend-data-truth-bundles \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
         validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
@@ -274,6 +275,12 @@ ci-check: ## CI-safe full validation; fails if generators produce a diff
 
 docs-fix: ## Regenerate and sync docs only
 	python scripts/repo_doctor.py --fix --docs-only
+
+frontend-data-truth: ## Enforce Aether/Kyber runtime source data-truth boundaries
+	python scripts/validate_frontend_data_truth.py
+
+frontend-data-truth-bundles: ## Build and scan Aether/Kyber production bundles for synthetic literals
+	python scripts/validate_frontend_data_truth.py --build-bundles
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi
