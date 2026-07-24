@@ -4292,6 +4292,34 @@
       "canonical_owner": "graph@aether"
     },
     {
+      "path": "docs/privacy/traffic-intelligence-data-retention.md",
+      "title": "Traffic Intelligence Data Retention",
+      "slug": "privacy/traffic-intelligence-data-retention",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "compliance",
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "canonical_owner": "privacy@aether"
+    },
+    {
+      "path": "docs/privacy/traffic-intelligence-privacy-review.md",
+      "title": "Traffic Intelligence Privacy Review",
+      "slug": "privacy/traffic-intelligence-privacy-review",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "compliance",
+        "security",
+        "architect"
+      ],
+      "status": "stable",
+      "canonical_owner": "privacy@aether"
+    },
+    {
       "path": "docs/productization/aether_productization_audit.md",
       "title": "AETHER Productization Audit",
       "slug": "operations/productization-audit",
@@ -5466,6 +5494,20 @@
       ],
       "status": "stable",
       "since_version": "8.10.0",
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/security/traffic-intelligence-threat-model.md",
+      "title": "Traffic Intelligence Threat Model",
+      "slug": "security/traffic-intelligence-threat-model",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
       "canonical_owner": "security@aether"
     },
     {
