@@ -61,6 +61,12 @@ backend = [
     "PyJWT>=2.8.0",
     "graphql-core>=3.2.0",
     "eth-account>=0.11.0",
+    # eth-hash (pulled transitively by eth-account -> eth-utils) needs a keccak
+    # backend. Without one the interop providers (services/interop/providers/*)
+    # fail to import, which (a) flips the generated adapter-certification-matrix
+    # to "scaffolded" -> repo-consistency drift, and (b) errors the interop tests
+    # at collection -> python-tests. Declaring the backend keeps CI reproducible.
+    "pycryptodome>=3.20.0",
     "boto3>=1.34.0",
     "anthropic>=0.25",
     "croniter>=2",   # jobs platform cron schedules (services/jobs/scheduler.py)

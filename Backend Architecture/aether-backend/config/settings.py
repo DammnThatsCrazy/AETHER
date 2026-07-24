@@ -966,6 +966,24 @@ class AgenticObservabilityConfig:
 
 
 @dataclass(frozen=True)
+class AgenticObservabilityIngestionConfig:
+    """Routes agentic observations through the canonical durable ingestion spine
+    (typed Bronze + event_outbox → relay → SilverDispatcher → projectors) instead
+    of the legacy per-service repo + synchronous graph write.
+
+    Default OFF. When ``canonical_spine_enabled`` is True (or the request's tenant
+    is listed in ``canary_tenant_ids``), agentic routes delegate to
+    ``services.agentic_observability.pipeline.ingest_observation`` and graph
+    projection happens asynchronously via the relay. Every other tenant keeps the
+    existing synchronous path unchanged.
+    """
+    canonical_spine_enabled: bool = _env_bool("AGENTIC_OBS_CANONICAL_SPINE_ENABLED", False)
+    canary_tenant_ids: tuple[str, ...] = field(
+        default_factory=lambda: tuple(_env_list("AGENTIC_OBS_CANONICAL_SPINE_CANARY_TENANTS"))
+    )
+
+
+@dataclass(frozen=True)
 class StablecoinIntelligenceConfig:
     """Safe rollout flags for Stablecoin Intelligence.
 
@@ -1296,6 +1314,11 @@ class Settings:
 
     # Agentic Intelligence observability rollout flags
     agentic_observability: AgenticObservabilityConfig = field(default_factory=AgenticObservabilityConfig)
+
+    # Agentic observation ingestion through the canonical durable spine (default OFF)
+    agentic_observability_ingestion: AgenticObservabilityIngestionConfig = field(
+        default_factory=AgenticObservabilityIngestionConfig
+    )
 
     # Stablecoin Intelligence rollout flags
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)

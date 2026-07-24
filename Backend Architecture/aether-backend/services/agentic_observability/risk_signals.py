@@ -1,6 +1,8 @@
 """Risk signal evaluation for agentic observability."""
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 from services.agentic_observability.models import AgenticObservationRecord, ObservationRisk, RiskLevel
 
 
@@ -37,8 +39,13 @@ def evaluate_risk(record: AgenticObservationRecord, recent_invocation_count: int
         policy_flags.append("rate_limit_review")
         risk_level = max_risk(risk_level, RiskLevel.HIGH)
 
-    if record.economics and record.economics.amount:
-        if record.economics.amount > 10000:
+    if record.economics and record.economics.amount is not None:
+        # amount is a decimal-safe string (or Decimal); parse before comparing.
+        try:
+            amount_value = Decimal(str(record.economics.amount))
+        except (InvalidOperation, ValueError, TypeError):
+            amount_value = None
+        if amount_value is not None and amount_value > Decimal("10000"):
             reason_codes.append("large_economic_amount_observed")
             risk_level = max_risk(risk_level, RiskLevel.MEDIUM)
 

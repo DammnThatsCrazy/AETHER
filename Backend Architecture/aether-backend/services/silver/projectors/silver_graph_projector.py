@@ -15,15 +15,25 @@ import os
 from typing import Any
 
 from services.silver.projectors.base import ProjectionResult
-from shared.graph.edge_properties import build_edge_properties
-from shared.graph.graph import Edge, EdgeType
+from shared.graph.edge_properties import build_edge_properties, make_edge_idempotency_key
+from shared.graph.graph import Edge, EdgeType, Vertex, VertexType
 from shared.graph.mutation_gateway import get_mutation_gateway
-from shared.graph.mutation_intents import edge_intent
+from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.silver.graph_projector")
 
 _EMIT_ENABLED = os.getenv("AETHER_SILVER_GRAPH_EMIT", "true").lower() != "false"
+
+# Observed agent-execution event names that justify a BOUNDED graph vertex.
+# Everything else (generic activity, risk signals, trades, …) stays a Silver
+# fact only — high-cardinality per-event nodes never enter the graph.
+_MCP_EVENTS = frozenset({"agent_mcp_connection_observed"})
+_TOOL_EVENTS = frozenset({
+    "agent_tool_invocation_observed",
+    "agent_tool_observed",
+    "agent_tool_called",
+})
 
 
 async def _emit(edge: Edge, *, subject_id: str = "") -> None:
@@ -41,6 +51,57 @@ async def _emit(edge: Edge, *, subject_id: str = "") -> None:
             subject_kind="entity" if subject_id else None,
             subject_id=subject_id or None,
         )
+    )
+
+
+async def _emit_vertex(vertex: Vertex, *, tenant_id: str) -> None:
+    """Route a Silver-sourced vertex through the canonical mutation gateway."""
+    await get_mutation_gateway().apply(
+        vertex_intent(
+            vertex,
+            operation="node_created",
+            tenant_id=tenant_id,
+            actor_id="silver_projector",
+        )
+    )
+
+
+def _bounded_edge(
+    edge_type: str,
+    from_id: str,
+    to_id: str,
+    tenant_id: str,
+    source_event_id: str,
+    valid_from: str,
+) -> Edge:
+    """Silver edge whose idempotency key EXCLUDES the source event.
+
+    ``source_event_id`` still travels on the edge (silver-sourced writes require
+    it for traceability), but the idempotency key is over ``(agent, target)``
+    only — so repeated observations of the same (agent, server) or (agent, tool)
+    converge on exactly ONE edge instead of one edge per event.
+    """
+    props = build_edge_properties(
+        tenant_id=tenant_id,
+        edge_type=edge_type,
+        from_vertex_id=from_id,
+        to_vertex_id=to_id,
+        actor_kind="system",
+        actor_id="silver_projector",
+        provenance="silver_projector",
+        provenance_class="silver",
+        valid_from=valid_from,
+        source_event_id=source_event_id,
+        confidence=0.9,
+    )
+    props["idempotency_key"] = make_edge_idempotency_key(
+        tenant_id, edge_type, from_id, to_id
+    )
+    return Edge(
+        edge_type=edge_type,
+        from_vertex_id=from_id,
+        to_vertex_id=to_id,
+        properties=props,
     )
 
 
@@ -188,9 +249,81 @@ class SilverGraphProjector:
             await projector.project_fact(row)
 
     async def _emit_agent_execution(self, result: ProjectionResult, event: dict[str, Any]) -> None:
-        # agent_task events already drive existing EXECUTED_AS/PRODUCED edges
-        # via the dedicated graph_mutations.py handler — no additional emission needed.
-        pass
+        """Bounded graph emission for observed agent-execution facts.
+
+        - MCP connection events → one ``MCPConnection`` vertex per (tenant,
+          server) and one ``AGENT_CONNECTED_VIA_MCP`` edge per (agent, server).
+        - Tool invocation events → one ``AgentToolObserved`` vertex per (tenant,
+          tool) carrying the REAL tool name, and one ``AGENT_USED_TOOL_OBS`` edge
+          per (agent, tool).
+        - Everything else (generic activity, risk signals, trades, …) stays a
+          Silver fact only — no per-event vertex enters the graph (high-cardinality
+          stays in Silver, not the graph).
+
+        All emissions are idempotent over their bounded key and never raise
+        (maybe_emit already isolates failures from the Silver write).
+        """
+        for row in result.rows:
+            agent_id = row.get("agent_id")
+            source_event_id = str(row.get("source_event_id") or "")
+            if not agent_id or not source_event_id:
+                continue
+            tenant_id = str(row.get("tenant_id") or "default")
+            agent_id = str(agent_id)
+            occurred_at = _as_iso(row.get("occurred_at"))
+            event_name = row.get("event_name") or event.get("type") or ""
+
+            if event_name in _MCP_EVENTS:
+                server_name = row.get("server_name")
+                if not server_name:
+                    continue
+                vertex_id = f"mcp:{tenant_id}:{server_name}"
+                await _emit_vertex(
+                    Vertex(
+                        vertex_type=VertexType.MCP_CONNECTION,
+                        vertex_id=vertex_id,
+                        properties={
+                            "tenant_id": tenant_id,
+                            "tenantId": tenant_id,
+                            "server_name": str(server_name),
+                            "server_url": row.get("server_url"),
+                        },
+                    ),
+                    tenant_id=tenant_id,
+                )
+                await _emit(
+                    _bounded_edge(
+                        EdgeType.AGENT_CONNECTED_VIA_MCP, agent_id, vertex_id,
+                        tenant_id, source_event_id, occurred_at,
+                    ),
+                    subject_id=agent_id,
+                )
+
+            elif event_name in _TOOL_EVENTS:
+                tool_name = row.get("tool_name")
+                if not tool_name:
+                    continue
+                vertex_id = f"tool:{tenant_id}:{tool_name}"
+                await _emit_vertex(
+                    Vertex(
+                        vertex_type=VertexType.AGENT_TOOL_OBS,
+                        vertex_id=vertex_id,
+                        properties={
+                            "tool_name": str(tool_name),  # REAL tool name, not object_type
+                            "tenant_id": tenant_id,
+                            "tenantId": tenant_id,
+                        },
+                    ),
+                    tenant_id=tenant_id,
+                )
+                await _emit(
+                    _bounded_edge(
+                        EdgeType.AGENT_USED_TOOL_OBS, agent_id, vertex_id,
+                        tenant_id, source_event_id, occurred_at,
+                    ),
+                    subject_id=agent_id,
+                )
+            # else: generic activity / risk-signal → Silver fact only.
 
     async def _emit_touchpoint_source(self, result: ProjectionResult, event: dict[str, Any]) -> None:
         """Project canonical source/attribution relationships (spec §13.6).

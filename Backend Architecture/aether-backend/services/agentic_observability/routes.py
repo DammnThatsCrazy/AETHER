@@ -12,13 +12,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from config.settings import settings
 from repositories.agentic_observability_repos import (
     AgentActivityRepository, AgentConnectionRepository,
     AgentToolRepository, AgentRiskSignalRepository,
     ExternalAccountRepository,
 )
-from services.agentic_observability.event_normalizer import normalize
+from services.agentic_observability.event_normalizer import normalize, resolve_provider
 from services.agentic_observability.graph_mutations import build_mutations, build_account_mutations
+from services.agentic_observability.pipeline import ingest_observation
 from services.agentic_observability.models import (
     AgenticObservationRecord, MCPConnectionObserved,
     AgentToolInvocationObserved, AgentRiskSignalRecord,
@@ -48,6 +50,62 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _use_canonical_spine(tenant_id: str) -> bool:
+    """Route this observation through the canonical durable spine?
+
+    Default OFF: only when the flag is enabled globally or the tenant is a
+    declared canary. Every other tenant keeps the synchronous legacy path.
+    """
+    cfg = settings.agentic_observability_ingestion
+    return cfg.canonical_spine_enabled or tenant_id in cfg.canary_tenant_ids
+
+
+def _prune_none(props: dict) -> dict:
+    return {k: v for k, v in props.items() if v is not None}
+
+
+async def _delegate_to_spine(
+    *,
+    tenant_id: str,
+    event_name: str,
+    provider_id: str,
+    properties: dict,
+    agent_id: str | None = None,
+    actor_id: str | None = None,
+    provider_event_id: str | None = None,
+    integration_id: str | None = None,
+    environment_id: str | None = None,
+    observed_at: str | None = None,
+) -> ObservationResponse:
+    """Delegate to the canonical spine and report an HONEST queued projection.
+
+    Graph projection happens asynchronously via the relay, so the delegated
+    response reports mutations as ``queued`` (== outbox rows written) with zero
+    synchronously built/persisted — the truthful state for an async pipeline.
+    """
+    ingest = await ingest_observation(
+        tenant_id=tenant_id,
+        event_name=event_name,
+        provider_id=provider_id,
+        integration_id=integration_id,
+        environment_id=environment_id,
+        provider_event_id=provider_event_id,
+        actor_id=actor_id,
+        agent_id=agent_id,
+        observed_at=observed_at,
+        properties=_prune_none(properties),
+    )
+    return ObservationResponse(
+        observation_id=ingest.event_id,
+        received_at=_utc_now(),
+        graph_mutations_queued=ingest.outbox_written,
+        tenant_id=tenant_id,
+        graph_mutations_built=0,
+        graph_mutations_persisted=0,
+        graph_projection_status="queued",
+    )
+
+
 @router.post("/v1/observability/agent/events", response_model=ObservationResponse, status_code=201)
 async def observe_agent_event(req: AgentEventRequest, request: Request) -> ObservationResponse:
     """Observe a generic agent activity event."""
@@ -56,6 +114,10 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
     validate_payload_tenant(req, tenant_id)
     validate_event_name(req.event_name)
     _check_no_execution(req)
+
+    # Normalize + evaluate risk on BOTH paths so derived signals
+    # (autonomous_agent_without_known_id, unknown_mcp_server, large amount, …)
+    # are computed for canary tenants too, not only the legacy path.
     raw = req.model_dump()
     record = normalize(raw, req.source.provider.value, tenant_id, req.event_name)
     computed_risk = evaluate_risk(record)
@@ -78,15 +140,46 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
     elif computed_risk.risk_level and computed_risk.risk_level.value != "low":
         record.risk = computed_risk
 
-    repo = AgentActivityRepository()
-    await repo.insert(record.observation_id, record.model_dump(mode="json"))
+    # Legacy compat store (Kyber "activities" count) — written on BOTH paths.
+    await AgentActivityRepository().insert(record.observation_id, record.model_dump(mode="json"))
+
+    if _use_canonical_spine(tenant_id):
+        provider_id = resolve_provider(raw)
+        agent_id = (req.agent.agent_id if req.agent and req.agent.agent_id else None) or req.actor.actor_id
+        props: dict = {
+            "agentId": agent_id,
+            "objectType": req.object.object_type,
+            "objectId": req.object.object_id,
+            "status": req.action.status.value if req.action else None,
+            "outcome": req.action.outcome if req.action else None,
+            "provider": provider_id,
+        }
+        if record.risk:  # merged (client + derived) risk, not only client-supplied
+            props["riskLevel"] = record.risk.risk_level.value if record.risk.risk_level else None
+            props["reasonCodes"] = record.risk.reason_codes or None
+            props["policyFlags"] = record.risk.policy_flags or None
+        if req.economics:
+            props["amount"] = req.economics.amount  # decimal string
+            props["currency"] = req.economics.currency
+            props["asset"] = req.economics.asset
+            props["direction"] = req.economics.direction
+        return await _delegate_to_spine(
+            tenant_id=tenant_id,
+            event_name=req.event_name,
+            provider_id=provider_id,
+            properties=props,
+            agent_id=agent_id,
+            actor_id=req.actor.actor_id,
+            provider_event_id=(req.source.provider_event_id if req.source else None),
+            integration_id=(req.source.integration_id if req.source else None),
+            observed_at=req.observed_at,
+        )
 
     mutations = build_mutations(record)
     projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=record.observation_id)
-    received_at = _utc_now()
     return ObservationResponse(
         observation_id=record.observation_id,
-        received_at=received_at,
+        received_at=_utc_now(),
         graph_mutations_queued=projection.graph_mutations_persisted,
         tenant_id=tenant_id,
         graph_mutations_built=projection.graph_mutations_built,
@@ -130,13 +223,35 @@ async def observe_agent_tool(req: AgentToolRequest, request: Request) -> Observa
     tenant_id = _tenant_id(request)
     validate_payload_tenant(req, tenant_id)
     _check_no_execution(req)
+
     obs_id = str(uuid.uuid4())
     record = req.model_dump(mode="json")
     record["observation_id"] = obs_id
     record["tenant_id"] = tenant_id
     record["received_at"] = _utc_now()
-    repo = AgentToolRepository()
-    await repo.insert(obs_id, record)
+    # Legacy compat store (Kyber "tools" count) — written on BOTH paths.
+    await AgentToolRepository().insert(obs_id, record)
+
+    if _use_canonical_spine(tenant_id):
+        provider_id = resolve_provider(req.model_dump())
+        return await _delegate_to_spine(
+            tenant_id=tenant_id,
+            event_name="agent_tool_invocation_observed",
+            provider_id=provider_id,
+            properties={
+                "agentId": req.agent_id,
+                "toolName": req.tool_name,
+                "status": req.status,
+                "durationMs": req.duration_ms,
+                "provider": provider_id,
+                "objectType": "tool",
+                "objectId": req.tool_name,
+            },
+            agent_id=req.agent_id,
+            provider_event_id=obs_id,
+            observed_at=req.observed_at,
+        )
+
     return ObservationResponse(
         observation_id=obs_id,
         received_at=record["received_at"],
@@ -152,13 +267,36 @@ async def observe_mcp_connection(req: AgentMCPRequest, request: Request) -> Obse
     tenant_id = _tenant_id(request)
     validate_payload_tenant(req, tenant_id)
     _check_no_execution(req)
+
     obs_id = str(uuid.uuid4())
     record = req.model_dump(mode="json")
     record["observation_id"] = obs_id
     record["tenant_id"] = tenant_id
     record["received_at"] = _utc_now()
-    repo = AgentConnectionRepository()
-    await repo.insert(obs_id, record)
+    # Legacy compat store (Kyber "mcp_connections" count) — written on BOTH paths.
+    await AgentConnectionRepository().insert(obs_id, record)
+
+    if _use_canonical_spine(tenant_id):
+        provider_id = resolve_provider(req.model_dump())
+        first_tool = req.tools[0] if req.tools else None
+        return await _delegate_to_spine(
+            tenant_id=tenant_id,
+            event_name="agent_mcp_connection_observed",
+            provider_id=provider_id,
+            properties={
+                "agentId": req.agent_id,
+                "serverName": req.server_name,
+                "serverUrl": req.server_url,
+                "toolName": first_tool,
+                "provider": provider_id,
+                "objectType": "mcp_connection",
+                "objectId": req.server_name,
+            },
+            agent_id=req.agent_id,
+            provider_event_id=obs_id,
+            observed_at=req.connected_at,
+        )
+
     return ObservationResponse(
         observation_id=obs_id,
         received_at=record["received_at"],
@@ -174,6 +312,7 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
     tenant_id = _tenant_id(request)
     validate_payload_tenant(req, tenant_id)
     _check_no_execution(req)
+
     signal = AgentRiskSignalRecord(
         agent_id=req.agent_id,
         risk_level=req.risk_level,
@@ -181,12 +320,30 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
         policy_flags=req.policy_flags,
         tenant_id=tenant_id,
     )
-    repo = AgentRiskSignalRepository()
-    await repo.insert(signal.signal_id, signal.model_dump(mode="json"))
-    received_at = _utc_now()
+    # Legacy compat store (Kyber "risk_signals" count) — written on BOTH paths.
+    await AgentRiskSignalRepository().insert(signal.signal_id, signal.model_dump(mode="json"))
+
+    if _use_canonical_spine(tenant_id):
+        provider_id = resolve_provider(req.model_dump())
+        return await _delegate_to_spine(
+            tenant_id=tenant_id,
+            event_name="agent_risk_signal_observed",
+            provider_id=provider_id,
+            properties={
+                "agentId": req.agent_id,
+                "riskLevel": req.risk_level.value if req.risk_level else None,
+                "reasonCodes": req.reason_codes or None,
+                "policyFlags": req.policy_flags or None,
+                "provider": provider_id,
+                "objectType": "risk_signal",
+            },
+            agent_id=req.agent_id,
+            provider_event_id=signal.signal_id,
+        )
+
     return ObservationResponse(
         observation_id=signal.signal_id,
-        received_at=received_at,
+        received_at=_utc_now(),
         graph_mutations_queued=0,
         tenant_id=tenant_id,
     )
