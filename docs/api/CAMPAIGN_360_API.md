@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
-last_synced_commit: "6306ea81"
+last_synced_commit: "33f4303"
 ---
 
 # Campaign 360 API Reference
@@ -187,6 +187,12 @@ Paginated touchpoint list for the campaign.
       "cluster_id": "string | null",
       "anonymous_id": "string | null",
       "source_class": "string | null",
+      "traffic_origin": "string | null",
+      "economic_class": "string | null",
+      "channel_family": "string | null",
+      "entry_method": "string | null",
+      "proof_level": "string | null",
+      "evidence_conflicts": ["string"],
       "referral_mediation_type": "string | null",
       "ai_provider": "string | null",
       "ai_product": "string | null",

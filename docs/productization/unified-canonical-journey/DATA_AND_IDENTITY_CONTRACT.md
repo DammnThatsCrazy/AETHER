@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/contracts.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
   - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
-last_synced_commit: "5a8df09"
+last_synced_commit: "33f4303"
 ---
 
 # Data and Identity Contract
@@ -52,6 +52,12 @@ Every row carries the identity chain available at write time:
   `ai_provider`, `ai_product`, `journey_role`, `verification_level`,
   `evidence_confidence`, `source_classifier_version`, and
   `source_classification_id`
+- Canonical traffic dimensions (classifier v3.0, independent of campaign
+  identity): `traffic_origin`, `economic_class`, `channel_family`,
+  `entry_method`, `proof_level`, and `evidence_conflicts`. The customer-facing
+  fallback is `direct_unknown` ("Direct / Unknown") — never an unsupported
+  typed-URL assertion. Source classification is preserved even when campaign
+  resolution is `not_applicable` or fails.
 - Eligibility/provenance: `attribution_eligible`, normalized referrer domain,
   and optional `verified_referral_link_id`
 
