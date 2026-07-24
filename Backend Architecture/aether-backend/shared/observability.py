@@ -158,8 +158,17 @@ def record_geoip_lookup(hit: bool, fallback: bool = False) -> None:
 def metrics_summary() -> dict:
     """Generate a metrics summary for dashboards."""
     operations = list(_latency_buckets.keys())
-    return {
+    summary: dict = {
         "latency_percentiles": {
             op: get_percentiles(op) for op in operations
         },
     }
+    # Traffic-intelligence counter family (spec §16). Lazy import keeps the
+    # shared layer free of a services-layer import at module load.
+    try:
+        from services.traffic.metrics import traffic_metrics_summary
+
+        summary["counters"] = traffic_metrics_summary()
+    except Exception:  # pragma: no cover — dashboard must never fail hard
+        pass
+    return summary

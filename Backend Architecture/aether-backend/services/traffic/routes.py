@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -33,6 +34,7 @@ from pydantic import BaseModel, Field
 from shared.auth.auth import Role, TenantContext
 from shared.decorators import require_api_key, require_api_key_raw
 from shared.logger.logger import metrics
+from . import metrics as traffic_metrics
 from .classifier import SourceClassifier
 from .referral_links import VerifiedReferralLinkRepository
 
@@ -448,6 +450,7 @@ async def redirect_verified_source_link(token: str, request: Request) -> Redirec
     """
 
     user_agent = request.headers.get("user-agent", "")
+    _redirect_started = time.monotonic()
     try:
         result = await _verified_referral_links.resolve_redirect(
             token,
@@ -459,6 +462,9 @@ async def redirect_verified_source_link(token: str, request: Request) -> Redirec
         metrics.increment(
             "verified_source_link_redirect_total", labels={"status": "error"}
         )
+        traffic_metrics.record_redirect_latency(
+            (time.monotonic() - _redirect_started) * 1000
+        )
         raise HTTPException(status_code=404, detail="Not found") from exc
 
     if result is None:
@@ -466,6 +472,11 @@ async def redirect_verified_source_link(token: str, request: Request) -> Redirec
         # not-yet-valid, and exhausted tokens are indistinguishable.
         metrics.increment(
             "verified_source_link_redirect_total", labels={"status": "rejected"}
+        )
+        # An unresolvable token is also an invalid source-link signal (spec §16).
+        traffic_metrics.record_invalid_source_link()
+        traffic_metrics.record_redirect_latency(
+            (time.monotonic() - _redirect_started) * 1000
         )
         raise HTTPException(status_code=404, detail="Not found")
 
@@ -486,6 +497,9 @@ async def redirect_verified_source_link(token: str, request: Request) -> Redirec
         },
     )
 
+    traffic_metrics.record_redirect_latency(
+        (time.monotonic() - _redirect_started) * 1000
+    )
     destination = result["destination_url"]
     if result["handoff_token"]:
         destination = _append_handoff_param(destination, result["handoff_token"])

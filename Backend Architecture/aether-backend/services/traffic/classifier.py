@@ -47,6 +47,29 @@ from services.traffic.generated_registry import (
 
 SOURCE_CLASSIFIER_VERSION = "3.0"
 
+# Shadow-mode ONLY: canonical source_class -> the coarser bucket the legacy
+# (pre-v3) vocabulary used, derived by reverse-mapping the registry LEGACY
+# aliases. Used solely by the observational shadow-compare seam
+# (services/traffic/shadow.py) to measure legacy-vs-canonical drift. This map
+# is never consulted by v3 classification — it does not change any customer
+# result. Classes absent here were already legacy-representable 1:1.
+_LEGACY_SHADOW_MAP: dict[str, str] = {
+    "direct_unknown": "direct",
+    "paid_search": "paid",
+    "paid_social": "paid",
+    "display": "paid",
+}
+
+
+def legacy_shadow_source_class(source_class: str) -> str:
+    """Shadow-only entrypoint: legacy bucket for a canonical source_class.
+
+    Pure projection with no side effects; provided so the shadow-compare path
+    has a single canonical mapping to reverse a v3 classification without
+    touching classifier logic.
+    """
+    return _LEGACY_SHADOW_MAP.get(source_class, source_class)
+
 # Weakest -> strongest.  Used to cap claim-provided proof levels.
 _PROOF_RANK: dict[str, int] = {
     "none": 0,
