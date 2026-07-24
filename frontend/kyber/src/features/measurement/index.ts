@@ -4,3 +4,5 @@ export { useJourneyExplorer, useJourneySteps, useJourneyTransitions, useJourneyE
 export { useConversionExplorer } from './use-conversion-explorer';
 export { useCampaignIntelligence } from './use-campaign-intelligence';
 export { useMeasurementOps } from './use-measurement-ops';
+export { useSourceClassificationOps } from './use-source-classification-ops';
+export type { TrafficIntelligenceFilters, UseSourceClassificationOpsResult } from './use-source-classification-ops';
