@@ -19,7 +19,7 @@ import {
   useUserProtocolMetrics, useUserGovernanceActivity,
   useUserQuality, useUserDataFreshness, useUserWeb2Profile,
 } from '@aether-app/features/users/use-user-profile';
-import { useUnifiedJourney } from '@aether-app/features/journey';
+import { useUnifiedJourney, TouchpointEvidenceInspector } from '@aether-app/features/journey';
 import { api } from '@aether-app/lib/api/endpoints';
 import {
   sourceClassLabel,
@@ -816,16 +816,26 @@ function SignalRowWithEvidence({ sig, severityVariant }: {
 
 function AttributionTab({ userId }: { userId: string }) {
   const { steps, loading, error } = useUnifiedJourney({ profileId: userId, limit: 100 });
+  const [selected, setSelected] = useState<Record<string, unknown> | null>(null);
 
   type Row = Record<string, unknown>;
   const touchpoints = steps as unknown as Row[];
 
+  // Steps arrive ordered by step_position (ascending). First-touch is the
+  // earliest observed touch, latest-touch the most recent — used by the
+  // evidence inspector to place a touchpoint in the journey.
+  const firstTouchId = touchpoints.length > 0 ? String(touchpoints[0]?.step_id ?? '') : '';
+  const latestTouchId = touchpoints.length > 0 ? String(touchpoints[touchpoints.length - 1]?.step_id ?? '') : '';
+  const selectedId = selected ? String(selected.step_id ?? '') : '';
+
   return (
     <Section title="Attribution journey (where conversions came from)" loading={loading} error={error}>
+      <p className="text-xs text-text-muted mb-2">Select a touchpoint to inspect its full classification evidence.</p>
       <DataTable<Row>
         keyExtractor={tp => String(tp.step_id ?? 'touchpoint')}
         data={touchpoints as Row[]}
         emptyMessage="No touchpoints recorded"
+        onRowClick={tp => setSelected(tp)}
         columns={[
           { key: 'channel', header: 'Channel', render: tp => <Badge variant="default" size="sm">{fmt(tp.channel)}</Badge> },
           { key: 'source', header: 'Source', render: tp => <span className="text-text-secondary">{fmt(tp.source)}</span> },
@@ -857,7 +867,24 @@ function AttributionTab({ userId }: { userId: string }) {
           { key: 'event', header: 'Event type', render: tp => fmt(tp.activity_type) },
           { key: 'revenue', header: 'Net revenue', render: tp => formatUSD(tp.attributed_net_revenue as string | number | null | undefined, { fallback: '—' }) },
           { key: 'when', header: 'When', render: tp => relTime(tp.occurred_at as string) },
+          { key: 'evidence', header: 'Evidence', render: tp => (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setSelected(tp); }}
+              className="text-xs font-mono text-accent hover:underline"
+              aria-label="Inspect touchpoint evidence"
+            >
+              [&gt;] inspect
+            </button>
+          ) },
         ]}
+      />
+      <TouchpointEvidenceInspector
+        touchpoint={selected}
+        open={selected !== null}
+        onClose={() => setSelected(null)}
+        isFirstTouch={selectedId !== '' && selectedId === firstTouchId}
+        isLatestTouch={selectedId !== '' && selectedId === latestTouchId}
       />
     </Section>
   );
