@@ -5453,6 +5453,36 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/sdk/interaction-tracking.md",
+      "title": "Native UI Interaction Tracking",
+      "slug": "sdk/interaction-tracking",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 7,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/sdk/qr-nfc-appclip.md",
+      "title": "QR, NFC & App Clip Attribution",
+      "slug": "sdk/qr-nfc-appclip",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",
       "title": "Universal Intelligence Graph Security Model",
       "slug": "security/universal-graph-security-model",
