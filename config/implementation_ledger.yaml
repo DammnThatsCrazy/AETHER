@@ -660,14 +660,31 @@ items:
     customer_impact: A provider-neutral framework for onboarding agent-access sources without bespoke per-provider ingestion.
     current_behavior: Not implemented. Provider handling is bespoke; no neutral framework or net-new provider-neutral event types.
     required_behavior: A provider-neutral framework plus the deferred net-new provider-neutral *_observed event types registered in the event registry.
-    affected_paths: [Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py, packages/shared/contracts/event-registry.json]
-    tests_required: [provider framework conformance tests (planned)]
-    evidence_required: [provider framework conformance output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_evidence.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_routes.py"
+      - "Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py"
+      - "Backend Architecture/aether-backend/alembic/versions/20260808_provider_evidence.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_provider_evidence.py"
+      - "Backend Architecture/aether-backend/tests/unit/test_agentic_provider_framework.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: ingestion
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-1-CANONICAL-INGESTION]
-    exception: null
+    exception: >
+      Implemented as WIRING, not a rewrite. provider_framework.py already existed
+      (386 lines, tested) but was imported only by its test — dead in production.
+      GET /v1/capability-providers/adapters now exposes provider_registry and
+      /permission-findings runs the real compute_permission_findings. Three defects
+      found in the framework once it became reachable were fixed: ISO instants were
+      compared lexicographically so an expired grant never reported expired_grant;
+      agentless records matched each other via None == None and fabricated
+      revoked_grant_used findings; and the action list is now bounded and disclosed.
+      No net-new provider-neutral event types were registered: nothing emits them, and
+      adding contract surface nothing produces is the dead-code failure this lane fixed.
+      Non-terminal; no completion evidence claimed.
     last_verified_commit: null
 
   - id: AAI-3-PROVIDER-EVIDENCE
@@ -678,14 +695,24 @@ items:
     customer_impact: Captures provider-side evidence/attestations backing each observed agent-access source.
     current_behavior: Not implemented. No provider-evidence capture layer.
     required_behavior: An evidence-capture layer producing attestations linked to provider observations and the capability catalog.
-    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
-    tests_required: [provider evidence capture tests (planned)]
-    evidence_required: [provider evidence capture output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_evidence.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_routes.py"
+      - "config/storage_policies.yaml"
+      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_provider_evidence.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: security
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
-    exception: null
+    exception: >
+      Implemented: provider_evidence table + capture/list/get and permission
+      findings. Evidence is provider-ATTESTED, never platform-verified — this package
+      cannot authenticate a third-party publisher and no `verified` state exists
+      anywhere in it. Storage policy, DSR hard-delete step and store adapter are wired.
+      Non-terminal; no completion evidence claimed.
     last_verified_commit: null
 
   - id: AAI-3-RECONCILIATION
@@ -696,14 +723,29 @@ items:
     customer_impact: Detects missing/orphaned/mismatched access between observed events and provider source of truth.
     current_behavior: Not implemented. No reconciliation across observed access and provider sources.
     required_behavior: A reconciler comparing observed capability state against provider-reported state with missing/orphan/mismatch findings.
-    affected_paths: [Backend Architecture/aether-backend/services/agentic_observability/reconciliation.py]
-    tests_required: [reconciliation tests (planned)]
-    evidence_required: [reconciliation output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/reconciliation_service.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/reconciliation_routes.py"
+      - "Backend Architecture/aether-backend/services/agentic_observability/reconciliation.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_capability_reconciliation.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: data
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
-    exception: null
+    exception: >
+      Implemented: GET /v1/capability-reconciliation reporting missing/orphan/
+      mismatch between observed capabilities and provider-attested evidence, plus
+      pipeline-health and lineage surfaces that previously had no live caller. Orphans
+      are counted rather than alerted unless the provider actually reports evidence for
+      that tenant — an undeclared capability is the normal state here. Zero evidence
+      yields null counts with missing_inputs, never zero. Two defects fixed in the
+      underlying agentic reconciliation: pipeline_health reported health=healthy for
+      every tenant because the medallion tables it reads lost their writers when PR 1
+      delegated to the canonical spine (now `unknown` with a stated basis), and
+      reconcile() appended a phantom empty-id gap for any row lacking an observation id.
+      Non-terminal; no completion evidence claimed.
     last_verified_commit: null
 
   - id: AAI-3-REFERENCE-PACKS
@@ -714,14 +756,26 @@ items:
     customer_impact: Curated reference packs shorten onboarding for common providers.
     current_behavior: Not implemented. No reference packs.
     required_behavior: Curated, versioned reference packs built on the provider framework.
-    affected_paths: [config/agent_access_reference_packs/ (planned)]
-    tests_required: [reference pack validation tests (planned)]
-    evidence_required: [reference pack validation output (planned)]
+    affected_paths:
+      - "config/agent_access_reference_packs"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/reference_packs.py"
+      - "scripts/validate_reference_packs.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_reference_packs.py"
+    evidence_required: ["python scripts/validate_reference_packs.py -> 3 pack(s) validated (1 example, 2 reference)"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: product
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
-    exception: null
+    exception: >
+      Implemented: schema-versioned packs + loader + CI-gated validator
+      (make validate-reference-packs, wired into repo_doctor). Two grounded packs
+      (x_reference from XReferenceAdapter, mcp_generic from this repo's own MCP
+      vocabulary) plus one clearly-labelled example template. No third-party vendor
+      packs were shipped: nothing in this repo establishes their scope vocabularies,
+      and an invented baseline is exactly the input that silences a real
+      unexpected_new_scope finding. Grounded packs assert no baselines
+      (baseline_status: none_asserted), which is fail-loud. Non-terminal.
     last_verified_commit: null
 
   # ---- PR 4 — Graph, profiles, surfaces, ops, GA hardening -----------------
@@ -733,14 +787,25 @@ items:
     customer_impact: A queryable graph of agents, capabilities, resources, and access relationships.
     current_behavior: Not implemented as a dedicated access graph; graph edges are projected generically by SilverGraphProjector.
     required_behavior: A dedicated agent-access graph projection and query surface built on canonical projections.
-    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
-    tests_required: [access graph projection tests (planned)]
-    evidence_required: [access graph projection output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/access_graph.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/access_graph_routes.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_access_graph.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: graph
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-1-CANONICAL-INGESTION]
-    exception: null
+    exception: >
+      Implemented: GET /v1/capability-graph/{neighborhood,summary} as a read-only
+      table-to-table derivation over capability_catalog, capability_installations and
+      the capability authorizations in delegations. Deliberately NOT a Silver projector
+      — an access graph is a table-to-table derivation and forcing a dispatcher
+      projector in would touch four CI-guarded ownership artifacts for no benefit
+      (same reasoning as the Phase A catalog). Depth hard-capped at 2 and disclosed;
+      any truncation yields null counts with missing_inputs; `authorized` is tri-state
+      and never defaults to false. Non-terminal; no completion evidence claimed.
     last_verified_commit: null
 
   - id: AAI-4-PROFILES-JOURNEYS
@@ -751,14 +816,24 @@ items:
     customer_impact: Per-agent profiles and access journeys built on the access graph.
     current_behavior: Not implemented. No agent-access profiles/journeys surface.
     required_behavior: Profile and journey compilation over the agent-access graph.
-    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
-    tests_required: [profile/journey compilation tests (planned)]
-    evidence_required: [profile/journey compilation output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/profiles.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/profile_routes.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_agent_profiles.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: product
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-4-GRAPH]
-    exception: null
+    exception: >
+      Implemented: GET /v1/capability-profiles list/detail/journey. A journey is
+      explicitly an OBSERVATION ORDER, not a causal history — we know when we first saw
+      something, not when it first happened — and each milestone carries whether its
+      timestamp is agent-scoped or tenant-scoped, because a capability_catalog row is
+      keyed without an agent and its first_seen_at may predate the agent entirely.
+      No composite risk score is invented; observed risk levels are rolled up as counts.
+      Non-terminal; no completion evidence claimed.
     last_verified_commit: null
 
   - id: AAI-4-AETHER-UI
@@ -769,14 +844,25 @@ items:
     customer_impact: Tenant-facing UI to explore agent access, capabilities, drift, and blast radius.
     current_behavior: Not implemented. No Aether UI surfaces for agent access intelligence.
     required_behavior: Aether tenant UI surfaces consuming the profiles/journeys and graph APIs.
-    affected_paths: [frontend/aether/ (planned)]
-    tests_required: [Aether UI surface tests (planned)]
-    evidence_required: [Aether UI surface build/output (planned)]
+    affected_paths:
+      - "frontend/aether/src/features/agent-access"
+      - "frontend/aether/src/pages/agent-access"
+      - "frontend/aether/src/app/router.tsx"
+    tests_required:
+      - "frontend/aether/src/test/unit/agent-access-page.test.tsx"
+    evidence_required: ["aether vitest -> 174 passed (38 files); tsc --noEmit exit 0"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: frontend
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-4-PROFILES-JOURNEYS]
-    exception: null
+    exception: >
+      Implemented: tenant Agent Access page at /agent-access (inventory,
+      findings, authorizations, per-agent drill-down) built on the existing feature/hook
+      conventions and @aether/ui components — no new dependency and no local currency
+      formatter, so the value-display guardrail stays clean. A null count renders as
+      Unknown with its reason and never as 0, a truncated result is labelled partial,
+      and tri-state `authorized` is never styled as a denial; each is pinned by a test.
+      Reachable via route but not yet linked in the app-shell nav. Non-terminal.
     last_verified_commit: null
 
   - id: AAI-4-KYBER-OPS
@@ -787,14 +873,28 @@ items:
     customer_impact: Operator surfaces to review agent access, authority drift, and blast radius across tenants.
     current_behavior: Not implemented. Kyber agentic-observability admin views exist but not the access-intelligence operator surfaces.
     required_behavior: Kyber operator surfaces (operator-gated) for authority, drift, and blast-radius review.
-    affected_paths: [Backend Architecture/aether-backend/services/agentic_observability/routes.py, frontend/kyber/ (planned)]
-    tests_required: [Kyber operator surface tests (planned)]
-    evidence_required: [Kyber operator surface output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/kyber_ops_routes.py"
+      - "frontend/kyber/src/features/agent-access"
+      - "frontend/kyber/src/pages/agent-access"
+      - "frontend/kyber/src/app/router.tsx"
+    tests_required:
+      - "tests/unit/capability_catalog/test_kyber_ops_routes.py"
+      - "frontend/kyber/src/test/component/agent-access-page.test.tsx"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 358 passed; kyber vitest -> 246 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: ops
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-2-AUTHORITY-POLICY]
-    exception: null
+    exception: >
+      Implemented: /v1/kyber/capability-ops {authority,drift,blast-radius},
+      operator-gated at the router via require_kyber_operator, every cross-tenant query
+      filtered by an explicit tenant_id, plus the Kyber page at /agent-access. No
+      registry entry is needed — any path containing /kyber auto-classifies as
+      operator+audit+high — and a test asserts that classification rather than assuming
+      it. A per-tenant read that truncated makes the cross-tenant aggregate null with
+      missing_inputs rather than a partial sum presented as a total. Reachable via
+      route but not yet linked in the Kyber sidebar. Non-terminal.
     last_verified_commit: null
 
   - id: AAI-4-NOESIS-ALERTS-EXPORTS
@@ -805,14 +905,27 @@ items:
     customer_impact: Alerting on drift/blast-radius findings and export of access-intelligence datasets.
     current_behavior: Not implemented. No Noesis alerts/exports wired for agent access intelligence.
     required_behavior: Noesis alert rules and export jobs over drift and blast-radius findings.
-    affected_paths: [Backend Architecture/aether-backend/services/noesis/ (planned)]
-    tests_required: [Noesis alert/export tests (planned)]
-    evidence_required: [Noesis alert/export output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/alerts.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/alert_routes.py"
+      - "Backend Architecture/aether-backend/services/noesis/adapters/agentic_intelligence_adapter.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_capability_alerts.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
     owner: product
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-2-SHADOW-DRIFT, AAI-2-BLAST-RADIUS]
-    exception: null
+    exception: >
+      Implemented: GET /v1/capability-alerts/{evaluate,export}. The Noesis
+      agentic intelligence adapter was imported only by tests — dead in production — and
+      is now a required rule input on every evaluation, asserted against its literal
+      output so a stub cannot satisfy the test. Alert rules are explicit and declarative:
+      the rule, its threshold and the observed value all appear in the response, because
+      a hidden constant would read as platform policy and this repo deliberately defines
+      no blocking risk threshold. Export registers with the existing durable export
+      service rather than building a second pipeline, and discloses truncation.
+      Notification delivery is deliberately NOT wired to the default rules. Non-terminal.
     last_verified_commit: null
 
   - id: AAI-4-GA-HARDENING

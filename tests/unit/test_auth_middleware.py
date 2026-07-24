@@ -40,11 +40,29 @@ _BACKEND_PREFIXES = ("config", "services", "shared", "middleware", "dependencies
 
 
 @contextmanager
-def backend_module_path():
+def backend_module_path(fresh: tuple[str, ...] = ()):
     """Temporarily put the backend root on sys.path and clean up afterwards."""
     original_path = list(sys.path)
-    original_mods = set(sys.modules.keys())
     sys.path.insert(0, str(BACKEND_ROOT))
+
+    # `fresh` names modules that must be re-imported from source inside this context.
+    #
+    # The exit cleanup below only guarantees a fresh import for the NEXT user of this
+    # helper; it does nothing about a backend module that some earlier, unrelated test in
+    # the same xdist worker already imported. In that case `importlib.import_module`
+    # returns the CACHED module — built under whatever env that test had — and the
+    # `monkeypatch.setenv` the caller just performed has no effect. The test then asserts
+    # against a module configured for a different environment, and passes or fails purely
+    # on which tests happened to share its worker.
+    #
+    # Eviction is opt-in and per-module rather than a blanket sweep of `_BACKEND_PREFIXES`:
+    # this helper is also used re-entrantly (a fixture holds it open while a test opens it
+    # again), and evicting everything on entry invalidates the outer context's modules
+    # mid-test.
+    for name in fresh or ():
+        sys.modules.pop(name, None)
+
+    original_mods = set(sys.modules.keys())
     try:
         yield
     finally:
@@ -332,7 +350,9 @@ class TestMissingAuthorization:
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-unit-tests")
 
-        with backend_module_path():
+        # `middleware.middleware` reads env at import time, so it must come from source
+        # here rather than from whatever an earlier test in this worker cached.
+        with backend_module_path(fresh=("middleware.middleware",)):
             common_mod = importlib.import_module("shared.common.common")
             auth_mod = importlib.import_module("shared.auth.auth")
             mw_mod = importlib.import_module("middleware.middleware")

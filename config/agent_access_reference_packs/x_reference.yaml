@@ -1,0 +1,101 @@
+# =============================================================================
+# Aether — Agent Access Reference Pack: x_reference (AAI-3)
+#
+# A reference pack is a curated, versioned description of ONE agent-access
+# provider, expressed entirely in the vocabulary that
+# services/agentic_observability/provider_framework.py already defines. It is
+# read-only configuration: nothing here authorizes, mutates, or calls anything.
+#
+# This pack describes the provider implemented by
+# `XReferenceAdapter` in provider_framework.py. Every value below is copied
+# from that adapter — provider_id, name, supported_operations, the account /
+# object types it emits, and the webhook signature headers it checks. Nothing
+# about the X product itself is asserted here.
+#
+# WHAT BREAKS IF THIS FILE IS WRONG
+#   `approved_scope_baselines` is passed verbatim as the
+#   `approved_scope_baselines` argument of
+#   provider_framework.compute_permission_findings(). That function looks up
+#   `approved_scope_baselines[grant.grant_id]` and reports every scope NOT in
+#   the baseline as an `unexpected_new_scope` finding. So:
+#     - a WRONG (too broad) baseline silences real scope-escalation findings —
+#       a false all-clear;
+#     - a MISSING baseline is fail-loud: the lookup defaults to [] and every
+#       observed scope is surfaced for review.
+#   Because the failure modes are asymmetric, this pack ships NO baselines it
+#   cannot ground (see baseline_status below), and the loader
+#   (services/agent_access_intelligence/reference_packs.py) raises rather than
+#   skipping a malformed pack — a silently dropped pack would degrade to the
+#   empty-baseline case for its provider.
+#
+# Validated by scripts/validate_reference_packs.py (read-only, no mutation).
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/agent_access_reference_packs/x_reference.yaml
+pack_id: x_reference
+pack_version: 1.0.0
+pack_status: reference
+
+provider_id: x_reference
+display_name: X (Twitter) Reference Adapter
+description: >-
+  Read-only observation adapter for X platform activity. Mirrors the
+  ProviderMetadata returned by XReferenceAdapter.metadata.
+
+# Every claim in this pack is traceable to these files. Required for
+# pack_status: reference — a reference pack that cannot name its grounding is
+# a fabrication and the validator rejects it.
+grounded_in:
+  - "Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py::XReferenceAdapter"
+  - "Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py::compute_permission_findings"
+
+# Verbatim from ProviderMetadata(read_only=True, webhook_supported=True, ...).
+read_only: true
+webhook_supported: true
+supported_operations:
+  - account_lookup
+  - auth_verification
+  - action_observation
+
+# Defaults for services/agent_access_intelligence/models.py::CapabilityKind.
+# This adapter carries no MCP server context, so an observed capability is a
+# provider action unless the observation names an object type.
+capability_kind_defaults:
+  default: provider_action
+  by_object_type:
+    post: resource
+
+# Which observation fields carry the server / tool identity. This provider is
+# NOT an MCP server: XReferenceAdapter emits no server_name, server_url or
+# tool_name, so both lists are deliberately empty rather than guessed.
+naming_hints:
+  server_name_fields: []
+  tool_name_fields: []
+
+# Field names this adapter actually reads (normalize_account / normalize_object
+# / consume_webhook). Useful for wiring an observation source; not a claim
+# about X's public API.
+observation_hints:
+  account_type: x_user
+  account_external_id_fields:
+    - external_user_id
+    - username
+  display_name_fields:
+    - name
+    - username
+  object_type_default: post
+  object_external_id_fields:
+    - external_id
+  webhook_signature_headers:
+    - x-twitter-signature
+    - x-signature
+
+# `none_asserted` = this pack intentionally ships zero approved scopes.
+# AETHER has no verified record of X's OAuth scope vocabulary anywhere in this
+# repository, and an invented scope list that looked authoritative would be a
+# false all-clear (see WHAT BREAKS above). Baselines are tenant-authored, keyed
+# by AuthorizationGrantRecord.grant_id, and merged in by the caller. Until then
+# every observed scope is reported for review, which is the safe direction.
+baseline_status: none_asserted
+approved_scope_baselines: {}

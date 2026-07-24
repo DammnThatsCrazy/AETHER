@@ -269,11 +269,44 @@ def compute_permission_findings(
 ) -> list[PermissionFinding]:
     findings: list[PermissionFinding] = []
     from shared.common.common import utc_now
+    from shared.temporal.instant import try_parse_instant
 
-    now_str = utc_now().isoformat()
+    now = utc_now()
+
+    def _instant(value: Optional[str]):
+        """Parse an ISO instant, or None when it is absent/unparseable.
+
+        Comparing these as STRINGS is silently wrong, not an error: `utc_now().isoformat()`
+        renders `+00:00`, so a stored `...Z` value sorts AFTER the identical moment written
+        `...+00:00`. An already-expired grant then never reports `expired_grant`, and an
+        action taken after a revocation never reports `revoked_grant_used` — the two
+        highest-severity findings this function exists to produce, silently absent.
+        """
+        if not value:
+            return None
+        parsed, _reason = try_parse_instant(str(value))
+        return parsed
+
+    # An agentless record must never match another agentless record: `None == None` is
+    # True, so two unrelated rows that simply lack an agent id were treated as the same
+    # principal and fabricated `revoked_grant_used` findings against whichever grant came
+    # first. Attribution requires an identified agent on BOTH sides.
+    attributable_actions = [a for a in actions if a.agent_id]
+    unattributed_action_count = len(actions) - len(attributable_actions)
+    if unattributed_action_count:
+        findings.append(PermissionFinding(
+            finding_type="unattributed_actions_excluded",
+            severity="low",
+            description=(
+                f"{unattributed_action_count} observed action(s) carry no agent id and were "
+                "excluded from grant attribution rather than matched to an agentless grant"
+            ),
+        ))
 
     for grant in grants:
-        if grant.expires_at and grant.expires_at < now_str and grant.is_active:
+        expires_at = _instant(grant.expires_at)
+        revoked_at = _instant(grant.revoked_at)
+        if expires_at and expires_at < now and grant.is_active:
             findings.append(PermissionFinding(
                 finding_type="expired_grant",
                 severity="medium",
@@ -283,11 +316,12 @@ def compute_permission_findings(
                 scopes=grant.scopes,
             ))
 
-        if grant.revoked_at:
-            for action in actions:
+        if revoked_at and grant.agent_id:
+            for action in attributable_actions:
+                observed_at = _instant(action.observed_at)
                 if (action.agent_id == grant.agent_id
-                        and action.observed_at
-                        and action.observed_at > grant.revoked_at):
+                        and observed_at
+                        and observed_at > revoked_at):
                     findings.append(PermissionFinding(
                         finding_type="revoked_grant_used",
                         severity="high",
@@ -309,9 +343,10 @@ def compute_permission_findings(
             ))
 
         used_scopes: set[str] = set()
-        for action in actions:
-            if action.agent_id == grant.agent_id:
-                used_scopes.update(action.scopes_used)
+        if grant.agent_id:
+            for action in attributable_actions:
+                if action.agent_id == grant.agent_id:
+                    used_scopes.update(action.scopes_used)
         write_scopes = [s for s in grant.scopes if "write" in s or "post" in s or "delete" in s]
         unused_writes = [s for s in write_scopes if s not in used_scopes]
         if unused_writes:
