@@ -669,7 +669,7 @@ items:
       - "tests/unit/capability_catalog/test_provider_evidence.py"
       - "Backend Architecture/aether-backend/tests/unit/test_agentic_provider_framework.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: ingestion
     status: implementation_in_progress
     blocked_by: [AAI-1-CANONICAL-INGESTION]
@@ -703,7 +703,7 @@ items:
     tests_required:
       - "tests/unit/capability_catalog/test_provider_evidence.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: security
     status: implementation_in_progress
     blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
@@ -730,7 +730,7 @@ items:
     tests_required:
       - "tests/unit/capability_catalog/test_capability_reconciliation.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: data
     status: implementation_in_progress
     blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
@@ -763,7 +763,7 @@ items:
     tests_required:
       - "tests/unit/capability_catalog/test_reference_packs.py"
     evidence_required: ["python scripts/validate_reference_packs.py -> 3 pack(s) validated (1 example, 2 reference)"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: product
     status: implementation_in_progress
     blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
@@ -793,7 +793,7 @@ items:
     tests_required:
       - "tests/unit/capability_catalog/test_access_graph.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: graph
     status: implementation_in_progress
     blocked_by: [AAI-1-CANONICAL-INGESTION]
@@ -822,7 +822,7 @@ items:
     tests_required:
       - "tests/unit/capability_catalog/test_agent_profiles.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: product
     status: implementation_in_progress
     blocked_by: [AAI-4-GRAPH]
@@ -851,7 +851,7 @@ items:
     tests_required:
       - "frontend/aether/src/test/unit/agent-access-page.test.tsx"
     evidence_required: ["aether vitest -> 174 passed (38 files); tsc --noEmit exit 0"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: frontend
     status: implementation_in_progress
     blocked_by: [AAI-4-PROFILES-JOURNEYS]
@@ -882,7 +882,7 @@ items:
       - "tests/unit/capability_catalog/test_kyber_ops_routes.py"
       - "frontend/kyber/src/test/component/agent-access-page.test.tsx"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 358 passed; kyber vitest -> 246 passed"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: ops
     status: implementation_in_progress
     blocked_by: [AAI-2-AUTHORITY-POLICY]
@@ -912,7 +912,7 @@ items:
     tests_required:
       - "tests/unit/capability_catalog/test_capability_alerts.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: product
     status: implementation_in_progress
     blocked_by: [AAI-2-SHADOW-DRIFT, AAI-2-BLAST-RADIUS]
@@ -936,12 +936,28 @@ items:
     customer_impact: Final GA hardening — performance, quotas, docs, and evidence bundle for the access-intelligence surfaces.
     current_behavior: Not implemented. GA hardening not started.
     required_behavior: Performance/quota hardening, complete docs, and an evidence bundle across the AAI surfaces.
-    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
-    tests_required: [GA hardening suites (planned)]
-    evidence_required: [AAI evidence bundle (planned)]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    affected_paths:
+      - "scripts/release/collect_evidence.py"
+      - "scripts/validate_reference_packs.py"
+      - "Makefile"
+      - "scripts/repo_doctor.py"
+      - "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md"
+    tests_required:
+      - "tests/unit/capability_catalog/test_reference_packs.py"
+    evidence_required: ["make ci-check -> 42 gates passed, 0 failed; collect_evidence.py includes agent_access_reference_packs"]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: platform
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-4-AETHER-UI, AAI-4-KYBER-OPS, AAI-4-NOESIS-ALERTS-EXPORTS, AAI-3-RECONCILIATION]
-    exception: null
+    exception: >
+      Implemented: the reference-pack validator is wired into repo_doctor (so it runs
+      in ci-check) and into the release evidence bundle, and the PR 3/PR 4 source-of-truth
+      doc records the surfaces, the decisions that were refused, the defects found once
+      dead code became reachable, and the known gaps. Performance hardening is bounded
+      reads with disclosure rather than a new quota mechanism: an undisclosed bound is the
+      actual failure mode and a quota would not fix it. Two real performance defects were
+      removed (a ~400-round-trip authorization loop on a read-gated GET, and an unbounded
+      O(grants x actions) permission scan). Not claimed: load/soak testing, per-tenant rate
+      limits on the new surfaces, and the six known gaps listed in the doc. Non-terminal;
+      no completion evidence claimed.
     last_verified_commit: null
