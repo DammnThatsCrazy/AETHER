@@ -9,3 +9,5 @@ export { useJourneyRisk } from './use-journey-risk';
 export type { JourneyRiskSummary } from './use-journey-risk';
 export { useJourneySemantic } from './use-journey-semantic';
 export type { SemanticNodeOverlay, SemanticOverlayResponse } from './use-journey-semantic';
+export { TouchpointEvidenceInspector } from './touchpoint-evidence-inspector';
+export type { TouchpointEvidenceInspectorProps } from './touchpoint-evidence-inspector';

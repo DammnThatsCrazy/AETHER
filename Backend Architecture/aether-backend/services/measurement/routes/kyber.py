@@ -101,6 +101,48 @@ async def source_classification_health(request: Request):
     }).to_dict()
 
 
+@router.get("/source-classification/operations")
+async def source_classification_operations(
+    request: Request,
+    start: Optional[str] = Query(None, description="Inclusive ISO-8601 window start"),
+    end: Optional[str] = Query(None, description="Inclusive ISO-8601 window end"),
+    platform: Optional[str] = Query(None, description="Filter by touchpoint platform"),
+    sdk: Optional[str] = Query(None, description="Filter by native SDK family (ios|android)"),
+):
+    """Operator source-classification operations scorecard (spec §15.3).
+
+    Returns a stable JSON contract rendered by the frontend. An unknown or
+    empty tenant returns a well-formed zeroed structure, never an error.
+    """
+    tenant = _require_kyber_tenant(request)
+    start_dt = _parse_operations_datetime(start, field="start")
+    end_dt = _parse_operations_datetime(end, field="end")
+    if start_dt and end_dt and end_dt < start_dt:
+        raise BadRequestError("end must be on or after start")
+
+    ops = await _touchpoint_repo.source_classification_operations(
+        tenant.tenant_id,
+        start=start_dt,
+        end=end_dt,
+        platform=platform,
+        sdk=sdk,
+    )
+    return APIResponse(data={
+        "tenant_id": tenant.tenant_id,
+        "window": {"start": start, "end": end},
+        **ops,
+    }).to_dict()
+
+
+def _parse_operations_datetime(value: Optional[str], *, field: str):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BadRequestError(f"Invalid {field} timestamp: {exc}")
+
+
 @router.post("/source-classification/reclassify")
 async def reclassify_sources(
     request: Request,

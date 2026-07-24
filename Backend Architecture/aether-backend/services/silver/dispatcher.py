@@ -55,6 +55,8 @@ from .projectors.silver_graph_projector import SilverGraphProjector
 from services.comms.projector import CommsProjector, COMMS_TABLE
 from services.comms.contracts import COMMUNICATION_EVENT_TYPES
 from services.traffic.referral_links import VerifiedReferralLinkRepository
+from services.traffic import metrics as traffic_metrics
+from services.traffic.shadow import shadow_compare_rows, is_shadow_enabled_for
 
 logger = get_logger("silver.dispatcher")
 
@@ -285,13 +287,25 @@ async def _resolve_verified_referral(event: dict[str, Any]) -> None:
                 "verified_referral_resolution_total",
                 labels={"status": "replay_rejected"},
             )
+            # Spec §16: a consumed handoff replay is both a source-link replay
+            # signal and a failed handoff correlation.
+            traffic_metrics.record_source_link_replay()
+            traffic_metrics.record_handoff_correlation("failed")
             await _record_handoff_replay_audit(str(tenant_id), source_event_id)
+        elif handoff_status == "expired":
+            traffic_metrics.record_handoff_correlation("expired")
+            metrics.increment(
+                "verified_referral_resolution_total", labels={"status": "rejected"}
+            )
         else:
             metrics.increment(
                 "verified_referral_resolution_total", labels={"status": "rejected"}
             )
         return
     event["_verified_referral"] = claim
+    if handoff_status is not None:
+        # Claim resolved via the one-time redirect handoff — successful correlation.
+        traffic_metrics.record_handoff_correlation("success")
     metrics.increment(
         "verified_referral_resolution_total", labels={"status": "verified"}
     )
@@ -425,6 +439,46 @@ def _strip_hints(rows: list[dict[str, Any]]) -> None:
             row.pop(k, None)
 
 
+def _emit_classification_metrics(rows: list[dict[str, Any]]) -> None:
+    """Emit spec §16 classification counters from resolved touchpoint rows.
+
+    Purely observational — reads the source_class/proof_level/conflict fields the
+    classifier already assigned; never mutates the rows.
+    """
+    for row in rows:
+        source_class = row.get("source_class")
+        if not source_class:
+            continue
+        traffic_metrics.record_classification(
+            str(source_class), str(row.get("proof_level") or "none")
+        )
+        if source_class == "direct_unknown":
+            traffic_metrics.record_direct_unknown()
+        conflicts = row.get("evidence_conflicts") or ()
+        try:
+            conflict_count = len(conflicts)
+        except TypeError:
+            conflict_count = 0
+        if conflict_count:
+            traffic_metrics.record_evidence_conflict(conflict_count)
+        if row.get("attribution_eligible") is False and row.get("actor_type") == "machine":
+            traffic_metrics.record_machine_excluded()
+
+
+async def _shadow_compare_touchpoints(
+    tenant_id: str, rows: list[dict[str, Any]]
+) -> None:
+    """When shadow mode is on for the tenant, record legacy-vs-canonical drift.
+
+    Shadow-mode is observational: it copies the rows before comparison so the
+    customer-visible touchpoint rows and their attribution are never touched.
+    """
+    if not rows or not is_shadow_enabled_for(tenant_id):
+        return
+    snapshot = [dict(row) for row in rows]
+    await shadow_compare_rows(tenant_id, snapshot)
+
+
 def _propagate_comms_context(event: dict[str, Any], result: ProjectionResult) -> None:
     """Share the comms classification with downstream projectors for this event.
 
@@ -496,6 +550,14 @@ class SilverDispatcher:
                         if result.table == _TOUCHPOINT_TABLE:
                             _apply_verified_referral_to_rows(result.rows, event)
                         await _resolve_campaign_rows(result.rows, table=result.table)
+                    if result.rows and result.table == _TOUCHPOINT_TABLE:
+                        _emit_classification_metrics(result.rows)
+                        tenant_id = str(
+                            (event.get("context") or {}).get("tenantId")
+                            or event.get("tenantId")
+                            or "default"
+                        )
+                        await _shadow_compare_touchpoints(tenant_id, result.rows)
                     _strip_hints(result.rows or [])
                     _propagate_comms_context(event, result)
                     if is_comm_event and isinstance(projector, CommsProjector) and result.rows:

@@ -40,6 +40,7 @@ sensitive_domains:
   - referral-links
   - tenant
   - tenants
+  - traffic
   - oracle
 
 # Domains classified high risk.
@@ -150,5 +151,6 @@ known_prefixes:
   - /v1/tenant
   - /v1/tenants
   - /v1/track
+  - /v1/traffic
   - /v1/value-review
   - /v1/web3

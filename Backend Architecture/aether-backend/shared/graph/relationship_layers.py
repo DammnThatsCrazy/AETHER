@@ -391,6 +391,17 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.ATTRIBUTED_TO_CAMPAIGN: RelationshipLayer.H2H,  # Conversion → Campaign
     EdgeType.TOUCHPOINT_IN:          RelationshipLayer.H2H,  # Touchpoint → Journey
 
+    # ── Traffic intelligence — source/attribution edges (spec §13.6) ──────
+    # Source/Placement/SourceLink/PlatformEvidence are non-human attribution
+    # nodes, so these entity→node edges are intentionally EXCLUDED from the
+    # four operational interaction layers. REFERRED_ENTITY is a genuine
+    # agent/AI → human referral (A2H).
+    EdgeType.ARRIVED_THROUGH_SOURCE:          RelationshipLayer.EXCLUDED,  # Entity/Session → Source
+    EdgeType.USED_PLACEMENT:                  RelationshipLayer.EXCLUDED,  # Session → Placement
+    EdgeType.ORIGINATED_FROM_LINK:            RelationshipLayer.EXCLUDED,  # Journey → SourceLink
+    EdgeType.ATTRIBUTED_TO_PLATFORM_EVIDENCE: RelationshipLayer.EXCLUDED,  # Install → PlatformEvidence
+    EdgeType.REFERRED_ENTITY:                 RelationshipLayer.A2H,       # Agent/AI → Entity
+
     # ── Phase 2: Journey step edges ──────────────────────────────────────
     EdgeType.NEXT_IN_JOURNEY:        RelationshipLayer.H2H,  # Touchpoint → Touchpoint (sequence)
     EdgeType.ABANDONED_AT:           RelationshipLayer.H2H,  # Entity → Touchpoint (drop-off)

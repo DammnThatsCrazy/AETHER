@@ -41,7 +41,112 @@ def test_kyber_router_registers_health_and_reclassification_contracts() -> None:
         "/v1/kyber/measurement/source-classification/reclassify",
         "POST",
     ) in route_methods
+    assert (
+        "/v1/kyber/measurement/source-classification/operations",
+        "GET",
+    ) in route_methods
     assert kyber.router.dependencies, "Kyber router must retain operator auth dependency"
+
+
+# Stable operator-operations contract (a frontend agent renders these keys).
+_OPERATIONS_KEYS = {
+    "tenant_id",
+    "window",
+    "totals",
+    "classification_by_source_class",
+    "classification_by_proof_level",
+    "direct_unknown_rate",
+    "evidence_conflict_count",
+    "invalid_source_link_count",
+    "source_link_replay_count",
+    "handoff_correlation",
+    "install_referrer_retrieval",
+    "universal_link_processing_count",
+    "deferred_attribution",
+    "adattributionkit_ingestion_count",
+    "sdk_deep_link_parse_failures",
+    "reclassification_jobs",
+    "utm_inconsistency_rate",
+    "classification_drift",
+}
+
+
+@pytest.mark.asyncio
+async def test_operations_endpoint_returns_zeroed_structure_for_empty_tenant() -> None:
+    from services.measurement.repositories import touchpoint_repo as tr
+
+    tr._local_store.clear()
+    response = await kyber.source_classification_operations(
+        _request("empty-tenant"), start=None, end=None, platform=None, sdk=None
+    )
+    data = response["data"]
+    assert set(data.keys()) == _OPERATIONS_KEYS
+    assert data["tenant_id"] == "empty-tenant"
+    assert data["totals"] == {
+        "touchpoints": 0,
+        "attribution_eligible": 0,
+        "machine_excluded": 0,
+    }
+    assert data["direct_unknown_rate"] == 0.0
+    assert data["handoff_correlation"] == {"success": 0, "expired": 0, "failed": 0}
+    assert data["deferred_attribution"] == {"resolved": 0, "unmatched": 0, "expired": 0}
+    assert data["reclassification_jobs"] == {"running": 0, "failed": 0, "completed": 0}
+    assert data["classification_drift"]["legacy_vs_canonical_divergence_rate"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_operations_endpoint_aggregates_populated_tenant() -> None:
+    from services.measurement.repositories import touchpoint_repo as tr
+
+    tr._local_store.clear()
+    tr._local_store["k1"] = {
+        "tenant_id": "tenant-a", "privacy_class": "active",
+        "source_class": "direct_unknown", "proof_level": "none",
+        "attribution_eligible": True, "occurred_at": "2026-07-10T00:00:00+00:00",
+        "entry_method": "ios_universal_link",
+    }
+    tr._local_store["k2"] = {
+        "tenant_id": "tenant-a", "privacy_class": "active",
+        "source_class": "paid_search", "proof_level": "declared",
+        "attribution_eligible": False, "actor_type": "machine",
+        "occurred_at": "2026-07-11T00:00:00+00:00",
+        "evidence_conflicts": ["utm_vs_clickid"], "verified_referral_link_id": "v1",
+    }
+    try:
+        response = await kyber.source_classification_operations(
+            _request("tenant-a"), start=None, end=None, platform=None, sdk=None
+        )
+    finally:
+        tr._local_store.clear()
+
+    data = response["data"]
+    assert set(data.keys()) == _OPERATIONS_KEYS
+    assert data["totals"] == {
+        "touchpoints": 2,
+        "attribution_eligible": 1,
+        "machine_excluded": 1,
+    }
+    assert data["classification_by_source_class"] == {"direct_unknown": 1, "paid_search": 1}
+    assert data["classification_by_proof_level"] == {"none": 1, "declared": 1}
+    assert data["direct_unknown_rate"] == 0.5
+    assert data["evidence_conflict_count"] == 1
+    assert data["universal_link_processing_count"] == 1
+    assert data["handoff_correlation"]["success"] == 1
+    assert data["utm_inconsistency_rate"] == 0.5
+
+
+@pytest.mark.asyncio
+async def test_operations_endpoint_rejects_inverted_window() -> None:
+    from shared.common.common import BadRequestError
+
+    with pytest.raises(BadRequestError):
+        await kyber.source_classification_operations(
+            _request("tenant-a"),
+            start="2026-07-31T00:00:00Z",
+            end="2026-07-01T00:00:00Z",
+            platform=None,
+            sdk=None,
+        )
 
 
 def test_main_mounts_kyber_router_and_registers_repair_handler_at_startup() -> None:

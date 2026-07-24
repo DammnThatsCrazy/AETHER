@@ -13,17 +13,34 @@ import { useCallback } from 'react';
 import Aether from '../bridge';
 
 /**
- * Emit one canonical `interaction_observed` event for a pressed control.
- * `aetherId` is the stable, developer-assigned control identity — it must not
- * be derived from rendered text.
+ * Emit one canonical `ui_interaction_observed` event for a pressed control,
+ * using the same payload shape as the native SDKs (controlId / controlType /
+ * action). `aetherId` is the stable, developer-assigned control identity — it
+ * must not be derived from rendered text.
  */
+
+/**
+ * Canonical `ui_interaction_observed` payload shape shared with the native
+ * SDKs. Metadata-only by design — never carries rendered control text.
+ */
+export interface TrackedInteractionPayload {
+  /** Stable, developer-assigned control identity (never derived from text). */
+  controlId: string;
+  /** Coarse control kind, e.g. 'pressable'. */
+  controlType: string;
+  /** Interaction verb, e.g. 'press'. */
+  action: string;
+  [key: string]: unknown;
+}
+
 export function emitTrackedPress(
   aetherId: string,
   properties?: Record<string, unknown>,
 ): void {
-  Aether.observe('interaction_observed', {
+  Aether.observe('ui_interaction_observed', {
     controlId: aetherId,
-    interactionType: 'press',
+    controlType: 'pressable',
+    action: 'press',
     ...properties,
   });
 }

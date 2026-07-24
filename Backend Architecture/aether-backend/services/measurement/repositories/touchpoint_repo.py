@@ -790,6 +790,191 @@ class TouchpointRepository:
                 **dimension_rows,
             }
 
+    async def source_classification_operations(
+        self,
+        tenant_id: str,
+        *,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+        platform: Optional[str] = None,
+        sdk: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Operator source-classification operations aggregation (spec §15.3).
+
+        Reads the durable, tenant-scoped silver + adjacent tables
+        (silver_campaign_touchpoint_facts, deferred_attribution_handoffs,
+        apple_attribution_postbacks, jobs) plus the shadow divergence table and
+        returns the numeric body of the Kyber ``/operations`` contract. An
+        unknown / empty tenant yields a well-formed zeroed structure — never an
+        error. ``sdk`` filters entry_method by native family prefix
+        ('ios' -> ios_*, 'android' -> android_*).
+        """
+        pool = await self._pool()
+        if pool is None:
+            return await self._operations_from_local(
+                tenant_id, start=start, end=end, platform=platform, sdk=sdk
+            )
+        return await self._operations_from_pool(
+            pool, tenant_id, start=start, end=end, platform=platform, sdk=sdk
+        )
+
+    async def _operations_from_pool(
+        self, pool, tenant_id, *, start, end, platform, sdk
+    ) -> dict[str, Any]:
+        conds = ["tenant_id = $1", "privacy_class != 'deleted'"]
+        args: list[Any] = [tenant_id]
+        if start is not None:
+            args.append(start)
+            conds.append(f"occurred_at >= ${len(args)}")
+        if end is not None:
+            args.append(end)
+            conds.append(f"occurred_at <= ${len(args)}")
+        if platform:
+            args.append(platform)
+            conds.append(f"platform = ${len(args)}")
+        sdk_prefix = _sdk_entry_prefix(sdk)
+        if sdk_prefix:
+            args.append(f"{sdk_prefix}%")
+            conds.append(f"entry_method LIKE ${len(args)}")
+        where = " AND ".join(conds)
+        async with pool.acquire() as conn:
+            summary = await conn.fetchrow(
+                f"""
+                SELECT
+                  COUNT(*)::bigint AS touchpoints,
+                  COUNT(*) FILTER (WHERE attribution_eligible)::bigint AS attribution_eligible,
+                  COUNT(*) FILTER (WHERE attribution_eligible = FALSE
+                        AND actor_type = 'machine')::bigint AS machine_excluded,
+                  COUNT(*) FILTER (WHERE source_class = 'direct_unknown')::bigint AS direct_unknown,
+                  COUNT(*) FILTER (WHERE evidence_conflicts IS NOT NULL
+                        AND jsonb_typeof(evidence_conflicts) = 'array'
+                        AND jsonb_array_length(evidence_conflicts) > 0)::bigint AS evidence_conflicts,
+                  COUNT(*) FILTER (WHERE entry_method = 'ios_universal_link')::bigint AS universal_link,
+                  COUNT(*) FILTER (WHERE entry_method = 'android_install_referrer')::bigint AS install_referrer,
+                  COUNT(*) FILTER (WHERE verified_referral_link_id IS NOT NULL)::bigint AS handoff_success
+                FROM silver_campaign_touchpoint_facts WHERE {where}
+                """,
+                *args,
+            )
+            by_class = await conn.fetch(
+                f"""SELECT source_class AS name, COUNT(*)::bigint AS count
+                    FROM silver_campaign_touchpoint_facts WHERE {where}
+                    AND source_class IS NOT NULL GROUP BY 1""",
+                *args,
+            )
+            by_proof = await conn.fetch(
+                f"""SELECT proof_level AS name, COUNT(*)::bigint AS count
+                    FROM silver_campaign_touchpoint_facts WHERE {where}
+                    AND proof_level IS NOT NULL GROUP BY 1""",
+                *args,
+            )
+            deferred = await conn.fetchrow(
+                """
+                SELECT
+                  COUNT(*) FILTER (WHERE consumed_at IS NOT NULL)::bigint AS resolved,
+                  COUNT(*) FILTER (WHERE consumed_at IS NULL AND expires_at < now())::bigint AS expired,
+                  COUNT(*) FILTER (WHERE consumed_at IS NULL AND expires_at >= now())::bigint AS unmatched
+                FROM deferred_attribution_handoffs WHERE tenant_id = $1
+                """,
+                tenant_id,
+            )
+            apple = await conn.fetchrow(
+                "SELECT COUNT(*)::bigint AS c FROM apple_attribution_postbacks WHERE tenant_id = $1",
+                tenant_id,
+            )
+            jobs = await conn.fetch(
+                "SELECT status, COUNT(*)::bigint AS count FROM jobs "
+                "WHERE tenant_id = $1 AND job_type = $2 GROUP BY status",
+                tenant_id, _RECLASSIFICATION_JOB_TYPE,
+            )
+        class_counts = {str(r["name"]): int(r["count"]) for r in by_class}
+        proof_counts = {str(r["name"]): int(r["count"]) for r in by_proof}
+        job_status = {str(r["status"]): int(r["count"]) for r in jobs}
+        drift = await _shadow_divergence_rate(tenant_id)
+        return _assemble_operations(
+            touchpoints=int(summary["touchpoints"] or 0),
+            attribution_eligible=int(summary["attribution_eligible"] or 0),
+            machine_excluded=int(summary["machine_excluded"] or 0),
+            direct_unknown=int(summary["direct_unknown"] or 0),
+            evidence_conflict=int(summary["evidence_conflicts"] or 0),
+            universal_link=int(summary["universal_link"] or 0),
+            install_referrer=int(summary["install_referrer"] or 0),
+            handoff_success=int(summary["handoff_success"] or 0),
+            class_counts=class_counts,
+            proof_counts=proof_counts,
+            deferred={
+                "resolved": int(deferred["resolved"] or 0),
+                "unmatched": int(deferred["unmatched"] or 0),
+                "expired": int(deferred["expired"] or 0),
+            },
+            adattributionkit=int(apple["c"] or 0),
+            job_status=job_status,
+            drift_rate=drift,
+        )
+
+    async def _operations_from_local(
+        self, tenant_id, *, start, end, platform, sdk
+    ) -> dict[str, Any]:
+        sdk_prefix = _sdk_entry_prefix(sdk)
+        rows = []
+        for r in _local_store.values():
+            if r.get("tenant_id") != tenant_id or r.get("privacy_class") == "deleted":
+                continue
+            occurred = _iso(r.get("occurred_at"))
+            if start is not None and (occurred is None or occurred < start.isoformat()):
+                continue
+            if end is not None and (occurred is None or occurred > end.isoformat()):
+                continue
+            if platform and r.get("platform") != platform:
+                continue
+            if sdk_prefix and not str(r.get("entry_method") or "").startswith(sdk_prefix):
+                continue
+            rows.append(r)
+        touchpoints = len(rows)
+        class_counts: dict[str, int] = {}
+        proof_counts: dict[str, int] = {}
+        attribution_eligible = machine_excluded = direct_unknown = 0
+        evidence_conflict = universal_link = install_referrer = handoff_success = 0
+        for r in rows:
+            sc = r.get("source_class")
+            if sc:
+                class_counts[str(sc)] = class_counts.get(str(sc), 0) + 1
+            pl = r.get("proof_level")
+            if pl:
+                proof_counts[str(pl)] = proof_counts.get(str(pl), 0) + 1
+            if r.get("attribution_eligible") is not False:
+                attribution_eligible += 1
+            elif r.get("actor_type") == "machine":
+                machine_excluded += 1
+            if sc == "direct_unknown":
+                direct_unknown += 1
+            conflicts = r.get("evidence_conflicts") or []
+            if isinstance(conflicts, (list, tuple)) and len(conflicts) > 0:
+                evidence_conflict += 1
+            if r.get("entry_method") == "ios_universal_link":
+                universal_link += 1
+            if r.get("entry_method") == "android_install_referrer":
+                install_referrer += 1
+            if r.get("verified_referral_link_id"):
+                handoff_success += 1
+        drift = await _shadow_divergence_rate(tenant_id)
+        return _assemble_operations(
+            touchpoints=touchpoints,
+            attribution_eligible=attribution_eligible,
+            machine_excluded=machine_excluded,
+            direct_unknown=direct_unknown,
+            evidence_conflict=evidence_conflict,
+            universal_link=universal_link,
+            install_referrer=install_referrer,
+            handoff_success=handoff_success,
+            class_counts=class_counts,
+            proof_counts=proof_counts,
+            deferred={"resolved": 0, "unmatched": 0, "expired": 0},
+            adattributionkit=0,
+            job_status={},
+            drift_rate=drift,
+        )
+
     async def tombstone_for_profile(self, tenant_id: str, profile_id: str) -> int:
         """Privacy erasure: mark all touchpoints for a profile as deleted.
 
@@ -1009,6 +1194,105 @@ async def _insert_revision(conn: Any, revision: dict[str, Any]) -> None:
         bool(revision.get("is_current", True)),
         _parse_ts(revision.get("classified_at")),
     )
+
+
+_RECLASSIFICATION_JOB_TYPE = "measurement.source_classification_repair"
+
+
+def _sdk_entry_prefix(sdk: Optional[str]) -> str:
+    """Map an sdk filter to the entry_method family prefix it constrains."""
+    if not sdk:
+        return ""
+    token = sdk.strip().lower()
+    if token in ("ios", "apple"):
+        return "ios"
+    if token == "android":
+        return "android"
+    return ""
+
+
+def _iso(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+async def _shadow_divergence_rate(tenant_id: str) -> float:
+    """Legacy-vs-canonical divergence rate for the classification_drift field."""
+    try:
+        from services.traffic.shadow import ShadowDivergenceRepository
+
+        result = await ShadowDivergenceRepository().divergence_rate(tenant_id)
+        return float(result.get("rate") or 0.0)
+    except Exception:  # pragma: no cover — drift is advisory, never blocks the route
+        return 0.0
+
+
+def _assemble_operations(
+    *,
+    touchpoints: int,
+    attribution_eligible: int,
+    machine_excluded: int,
+    direct_unknown: int,
+    evidence_conflict: int,
+    universal_link: int,
+    install_referrer: int,
+    handoff_success: int,
+    class_counts: dict[str, int],
+    proof_counts: dict[str, int],
+    deferred: dict[str, int],
+    adattributionkit: int,
+    job_status: dict[str, int],
+    drift_rate: float,
+) -> dict[str, Any]:
+    """Assemble the numeric body of the Kyber /operations contract.
+
+    Fields without a durable, tenant-scoped source (invalid_source_link,
+    source_link_replay, install-referrer error states, sdk parse failures,
+    handoff expired/failed) are returned as honest zeros rather than leaking
+    process-global metric counters that cannot be tenant-scoped.
+    """
+    direct_unknown_rate = (direct_unknown / touchpoints) if touchpoints else 0.0
+    utm_inconsistency_rate = (evidence_conflict / touchpoints) if touchpoints else 0.0
+    completed = job_status.get("succeeded", 0) + job_status.get("partially_succeeded", 0)
+    return {
+        "totals": {
+            "touchpoints": touchpoints,
+            "attribution_eligible": attribution_eligible,
+            "machine_excluded": machine_excluded,
+        },
+        "classification_by_source_class": class_counts,
+        "classification_by_proof_level": proof_counts,
+        "direct_unknown_rate": round(direct_unknown_rate, 6),
+        "evidence_conflict_count": evidence_conflict,
+        "invalid_source_link_count": 0,
+        "source_link_replay_count": 0,
+        "handoff_correlation": {
+            "success": handoff_success,
+            "expired": 0,
+            "failed": 0,
+        },
+        "install_referrer_retrieval": {"retrieved": install_referrer},
+        "universal_link_processing_count": universal_link,
+        "deferred_attribution": {
+            "resolved": deferred.get("resolved", 0),
+            "unmatched": deferred.get("unmatched", 0),
+            "expired": deferred.get("expired", 0),
+        },
+        "adattributionkit_ingestion_count": adattributionkit,
+        "sdk_deep_link_parse_failures": 0,
+        "reclassification_jobs": {
+            "running": job_status.get("running", 0) + job_status.get("queued", 0),
+            "failed": job_status.get("failed", 0),
+            "completed": completed,
+        },
+        "utm_inconsistency_rate": round(utm_inconsistency_rate, 6),
+        "classification_drift": {
+            "legacy_vs_canonical_divergence_rate": round(drift_rate, 6),
+        },
+    }
 
 
 def _health_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:

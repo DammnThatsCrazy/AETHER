@@ -413,6 +413,13 @@ class SourceClassificationRepairService:
                 "source_classification_repair_completed",
                 labels={"status": final_status, "dry_run": str(dry_run).lower()},
             )
+            # Spec §16 reclassification throughput/failure counters.
+            from services.traffic import metrics as traffic_metrics
+            traffic_metrics.record_reclassification_throughput(
+                int(counters.get("reclassified") or 0)
+            )
+            if errors:
+                traffic_metrics.record_reclassification_failure(len(errors))
             return {
                 "run_id": run_id,
                 "status": final_status,
@@ -428,6 +435,8 @@ class SourceClassificationRepairService:
                 run_id, status="failed", phase=phase,
                 counters=counters, errors=errors, completed=True,
             )
+            from services.traffic import metrics as traffic_metrics
+            traffic_metrics.record_reclassification_failure()
             raise
 
     def _classify_row(self, row: dict[str, Any]) -> ClassifiedSource:

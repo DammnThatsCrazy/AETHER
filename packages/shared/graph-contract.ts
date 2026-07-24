@@ -90,6 +90,8 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   AGENT_PRODUCED_RISK_SIGNAL: 'A2H',
   EXTERNAL_ACCOUNT_EMITTED_NOTIFICATION: 'A2H',
   INTERACTION_FLAGGED_REPLAY_RISK: 'A2H',
+  // Traffic-intelligence: AI/agent system referred a human entity.
+  REFERRED_ENTITY: 'A2H',
 
   // A2A edges
   PAYS: 'A2A',
