@@ -160,6 +160,22 @@ class AetherNativeModule: RCTEventEmitter {
         }
     }
 
+    /// Host app decoded the QR code; SDK attributes the decoded URL.
+    @objc
+    func handleQrScanResult(_ url: String) {
+        if let decoded = URL(string: url) {
+            Aether.shared.handleQrScanResult(decoded)
+        }
+    }
+
+    /// Host app read the NFC tag; SDK attributes the decoded URI.
+    @objc
+    func handleNfcUri(_ uri: String) {
+        if let decoded = URL(string: uri) {
+            Aether.shared.handleNfcUri(decoded)
+        }
+    }
+
     /// First-touch acquisition evidence as a JSON string, or null when no
     /// unexpired first touch is stored.
     @objc

@@ -1176,10 +1176,59 @@ public final class Aether: NSObject {
         processIncomingURL(url, entryMethod: entryMethod)
     }
 
+    /// Attribute a QR code the host app has ALREADY decoded. The SDK does not
+    /// access the camera or decode images — the host app owns the scan and
+    /// hands the SDK the decoded URL. Routed through the SAME canonical
+    /// evidence parser as deep links (entry method `qr_code`): the URL is
+    /// sanitized, `aether_ref`/UTM/click IDs are parsed, destinationDomain is
+    /// set, and first/latest-touch evidence is persisted. Emits
+    /// `qr_code_scanned`.
+    public func handleQrScanResult(_ url: URL) {
+        processIncomingURL(url, entryMethod: "qr_code", eventType: .qr_code_scanned)
+    }
+
+    /// Attribute an NFC tag URI the host app has ALREADY read (e.g. via
+    /// CoreNFC). The SDK does not drive the NFC radio. Routed through the
+    /// canonical evidence parser (entry method `nfc`) with the same
+    /// sanitization and first/latest-touch persistence as deep links. Emits
+    /// `nfc_tag_read`.
+    public func handleNfcUri(_ url: URL) {
+        processIncomingURL(url, entryMethod: "nfc", eventType: .nfc_tag_read)
+    }
+
+    /// Handle an App Clip invocation delivered as an `NSUserActivity`
+    /// (`NSUserActivityTypeBrowsingWeb`, entry method `ios_universal_link`).
+    /// First-touch evidence is persisted so a subsequent full-app install
+    /// inherits the acquisition source via the existing deferred-handoff /
+    /// first-touch path. Emits `app_clip_invoked`. Returns `true` when a web
+    /// URL was consumed.
+    @discardableResult
+    public func handleAppClipInvocation(_ userActivity: NSUserActivity) -> Bool {
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+              let url = userActivity.webpageURL else {
+            return false
+        }
+        processIncomingURL(url, entryMethod: "ios_universal_link", eventType: .app_clip_invoked)
+        return true
+    }
+
+    /// Handle an App Clip invocation URL directly (when the host obtained the
+    /// invocation URL outside an `NSUserActivity`). Recorded with entry method
+    /// `manual_sdk_evidence`; first-touch is persisted for full-app handoff.
+    /// Emits `app_clip_invoked`.
+    public func handleAppClipInvocation(url: URL) {
+        processIncomingURL(url, entryMethod: "manual_sdk_evidence", eventType: .app_clip_invoked)
+    }
+
     /// Single processing funnel for every incoming deep/universal link:
     /// URL+timestamp dedup → canonical evidence parse → campaign context →
     /// first/latest-touch persistence → `deep_link_opened` emission.
-    private func processIncomingURL(_ url: URL, entryMethod: String, at date: Date = Date()) {
+    private func processIncomingURL(
+        _ url: URL,
+        entryMethod: String,
+        eventType: AetherEventType = .deep_link_opened,
+        at date: Date = Date()
+    ) {
         guard isInitialized, config?.modules.deepLinkAttribution != false else { return }
 
         // Dedup: cold-start and warm-start delegate paths often deliver the
@@ -1234,7 +1283,7 @@ public final class Aether: NSObject {
         if !parsed.clickIds.isEmpty {
             properties["clickIds"] = AnyCodable(parsed.clickIds.mapValues { AnyCodable($0) })
         }
-        enqueueEvent(type: .deep_link_opened, properties: properties)
+        enqueueEvent(type: eventType, properties: properties)
     }
 
     /// Parsed representation of one incoming link observation.

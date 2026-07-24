@@ -798,6 +798,31 @@ object Aether : DefaultLifecycleObserver {
     }
 
     /**
+     * Attribute a QR code the host app has ALREADY decoded. This SDK does not
+     * access the camera or perform image decoding — the host app owns the scan
+     * and hands the SDK the decoded URL string. The payload is routed through
+     * the SAME canonical acquisition-evidence parser as deep links
+     * (entry method "qr_code"): aether_ref / UTM / click IDs are parsed, the
+     * URL is sanitized, destinationDomain is set, and first/latest-touch
+     * evidence is persisted. Emits qr_code_scanned.
+     */
+    fun handleQrScanResult(url: String) {
+        processDeepLink(url, "qr_code", externalReferrer = null, eventType = "qr_code_scanned")
+    }
+
+    /**
+     * Attribute an NFC tag URI the host app has ALREADY read. This SDK does not
+     * drive the NFC radio — the host app owns the tag read (e.g. via
+     * NfcAdapter / NdefMessage) and hands the SDK the decoded URI string. The
+     * URI is routed through the canonical evidence parser (entry method "nfc")
+     * with the same sanitization and first/latest-touch persistence as deep
+     * links. Emits nfc_tag_read.
+     */
+    fun handleNfcUri(uri: String) {
+        processDeepLink(uri, "nfc", externalReferrer = null, eventType = "nfc_tag_read")
+    }
+
+    /**
      * Forward `onNewIntent` deliveries (singleTop / singleTask activities) so
      * automatic attribution also covers warm-start deep links.
      */
@@ -813,7 +838,12 @@ object Aether : DefaultLifecycleObserver {
     fun getLatestTouchAttribution(): JSONObject? =
         loadStoredEvidence(PREF_ACQ_LATEST_TOUCH)?.let { JSONObject(it.toString()) }
 
-    private fun processDeepLink(url: String, entryMethod: String, externalReferrer: String?) {
+    private fun processDeepLink(
+        url: String,
+        entryMethod: String,
+        externalReferrer: String?,
+        eventType: String = "deep_link_opened",
+    ) {
         val evidence = parseAcquisitionEvidenceFromUrl(url, entryMethod, dateFormat.format(Date()))
         if (evidence == null) {
             log("Failed to parse deep link")
@@ -859,7 +889,7 @@ object Aether : DefaultLifecycleObserver {
         for ((evidenceKey, propKey) in UTM_EVIDENCE_TO_PARAM) {
             evidence.optString(evidenceKey).takeIf { it.isNotEmpty() }?.let { props[propKey] = it }
         }
-        track("deep_link_opened", props)
+        track(eventType, props)
     }
 
     private val UTM_EVIDENCE_TO_PARAM = listOf(
