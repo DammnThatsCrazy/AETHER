@@ -18,6 +18,21 @@ import Aether from '../bridge';
  * action). `aetherId` is the stable, developer-assigned control identity — it
  * must not be derived from rendered text.
  */
+
+/**
+ * Canonical `ui_interaction_observed` payload shape shared with the native
+ * SDKs. Metadata-only by design — never carries rendered control text.
+ */
+export interface TrackedInteractionPayload {
+  /** Stable, developer-assigned control identity (never derived from text). */
+  controlId: string;
+  /** Coarse control kind, e.g. 'pressable'. */
+  controlType: string;
+  /** Interaction verb, e.g. 'press'. */
+  action: string;
+  [key: string]: unknown;
+}
+
 export function emitTrackedPress(
   aetherId: string,
   properties?: Record<string, unknown>,
