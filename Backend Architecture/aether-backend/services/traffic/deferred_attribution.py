@@ -35,6 +35,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from shared.temporal import ensure_aware_utc
+
 from repositories.repos import get_pool
 from shared.auth.auth import Role, TenantContext
 from shared.decorators import require_api_key
@@ -85,8 +87,10 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        # Canonical persisted timestamps are UTC; interpret a naive value as UTC
+        # via datetime.combine so no timezone-attaching mutation is needed.
+        value = datetime.combine(value.date(), value.time(), tzinfo=timezone.utc)
+    return ensure_aware_utc(value)
 
 
 def _identifier_hash(identifier: str) -> str:
