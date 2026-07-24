@@ -9,15 +9,45 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, Literal, Optional
 import uuid
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def decimal_str_from_provider(value: Any, field_name: str) -> Optional[str]:
+    """Parse a provider money value without accepting binary floating point.
+
+    Mirrors ``services.derivatives.models.decimal_from_provider``: accepts
+    ``str`` / ``int`` / ``Decimal`` and REJECTS ``float`` (binary floats lose
+    precision on money). Returns the canonical decimal STRING (or ``None``) so
+    the value round-trips through JSON without ever becoming a binary float.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):  # bool is an int subclass — never a money value
+        raise ValueError(f"{field_name} must not be a boolean")
+    if isinstance(value, float):
+        raise ValueError(f"{field_name} must not be a binary float; send a decimal string")
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, int):
+        return str(Decimal(value))
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{field_name} is empty")
+        try:
+            return str(Decimal(stripped))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"{field_name} is not a valid decimal: {stripped!r}") from exc
+    raise ValueError(f"{field_name} has unsupported type {type(value).__name__}")
 
 
 def _new_id() -> str:
@@ -146,13 +176,20 @@ class ObservationAction(BaseModel):
 
 
 class ObservationEconomics(BaseModel):
-    amount: Optional[float] = None
+    # Decimal-safe money: accepts str/int/Decimal, rejects binary float, and is
+    # stored/serialized as a canonical decimal STRING (never a binary float).
+    amount: Optional[str] = None
     currency: Optional[str] = None
     asset: Optional[str] = None
     network: Optional[str] = None
     rail: Optional[str] = None
     direction: Optional[str] = None
     is_execution_by_aether: Literal[False] = False
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _coerce_amount(cls, value: Any) -> Optional[str]:
+        return decimal_str_from_provider(value, "economics.amount")
 
     @model_validator(mode="after")
     def _enforce_no_execution(self) -> "ObservationEconomics":
