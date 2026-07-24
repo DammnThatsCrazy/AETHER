@@ -12,7 +12,14 @@ Classifier precedence (highest first):
 3. paid click identifiers
 4. declared UTM evidence
 5. a normalized referrer domain
-6. direct entry
+6. direct / unknown entry
+
+v3 truth model: the classifier reports the strongest evidence it actually
+observed.  The no-evidence fallback is ``direct_unknown`` ("Direct / Unknown"),
+never a typed-URL claim.  Every classification carries the canonical dimension
+set (source_class, traffic_origin, economic_class, channel_family,
+entry_method, proof_level) from the shared traffic-source registry, and every
+suppressed-but-conflicting signal is preserved in ``evidence_conflicts``.
 
 Raw referrer URLs are never returned.  Only a normalized hostname, an origin-
 only URL, and (when present) a one-way path hash are emitted for persistence.
@@ -25,8 +32,43 @@ from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+from services.traffic.generated_registry import (
+    CLICK_ID_CLASSES,
+    ENTRY_METHODS,
+    ENTRY_METHOD_PROOF_CEILINGS,
+    MEDIUM_TOKENS,
+    PROOF_LEVELS,
+    SOURCE_CLASS_DEFAULTS,
+    UTM_SEARCH_SOURCE_ALIASES,
+    UTM_SOCIAL_SOURCE_ALIASES,
+    canonical_source_class,
+)
 
-SOURCE_CLASSIFIER_VERSION = "2.0"
+
+SOURCE_CLASSIFIER_VERSION = "3.0"
+
+# Weakest -> strongest.  Used to cap claim-provided proof levels.
+_PROOF_RANK: dict[str, int] = {
+    "none": 0,
+    "inferred": 1,
+    "declared": 2,
+    "domain_verified": 3,
+    "server_observed": 4,
+    "platform_verified": 5,
+    "cryptographic": 6,
+}
+
+# channel_family -> default traffic origin when a branch does not override it.
+_FAMILY_TRAFFIC_ORIGIN: dict[str, str] = {
+    "direct": "unknown",
+    "internal": "internal",
+    "app_store": "app_store",
+    "unknown": "unknown",
+}
+
+_ORGANIC_MEDIUM_TOKENS: frozenset[str] = frozenset(
+    MEDIUM_TOKENS["organic"] | MEDIUM_TOKENS["organicSocial"]
+)
 
 
 @dataclass(frozen=True)
@@ -57,6 +99,12 @@ class ClassifiedSource:
     attribution_eligible: bool = True
     verified_referral_link_id: Optional[str] = None
     evidence: tuple[str, ...] = ()
+    traffic_origin: str = "unknown"
+    economic_class: str = "unknown"
+    channel_family: str = "unknown"
+    entry_method: str = "unknown"
+    proof_level: str = "none"
+    evidence_conflicts: tuple[str, ...] = ()
 
     def evidence_payload(self) -> dict[str, Any]:
         """JSON-safe evidence summary suitable for the Silver fact ledger."""
@@ -66,14 +114,25 @@ class ClassifiedSource:
             "verification_level": self.verification_level,
             "normalized_referrer_domain": self.normalized_referrer_domain or None,
             "referrer_path_hash": self.referrer_path_hash,
+            "traffic_origin": self.traffic_origin,
+            "economic_class": self.economic_class,
+            "channel_family": self.channel_family,
+            "entry_method": self.entry_method,
+            "proof_level": self.proof_level,
+            "conflicts": list(self.evidence_conflicts),
         }
 
 
 class SourceClassifier:
     """Classify raw landing evidence without resolving campaign identity."""
 
+    # click_id key -> (source, medium, display channel).  Classification-grade
+    # source_class comes from the registry's CLICK_ID_CLASSES; this table only
+    # supplies the display medium/channel and legacy camelCase key support.
     CLICK_ID_MAP: dict[str, tuple[str, str, str]] = {
         "gclid": ("google", "cpc", "Paid Search"),
+        "gbraid": ("google", "cpc", "Paid Search"),
+        "wbraid": ("google", "cpc", "Paid Search"),
         "msclkid": ("bing", "cpc", "Paid Search"),
         "fbclid": ("facebook", "cpc", "Paid Social"),
         "ttclid": ("tiktok", "cpc", "Paid Social"),
@@ -87,6 +146,12 @@ class SourceClassifier:
         "epik": ("pinterest", "cpc", "Paid Social"),
         "irclickid": ("impact", "affiliate", "Affiliate"),
         "aff_id": ("unknown", "affiliate", "Affiliate"),
+    }
+
+    # Legacy camelCase click-id keys normalized to their registry identifiers.
+    CLICK_ID_KEY_ALIASES: dict[str, str] = {
+        "liEFatId": "li_fat_id",
+        "rdtCid": "rdt_cid",
     }
 
     SOCIAL_DOMAINS: dict[str, str] = {
@@ -237,10 +302,12 @@ class SourceClassifier:
         user_agent: str = "",
         verified_referral: Optional[dict[str, Any]] = None,
         explicit_actor_type: Optional[str] = None,
+        declared_entry_method: Optional[str] = None,
     ) -> ClassifiedSource:
         """Classify raw source evidence without assigning a campaign."""
         del utm_campaign, landing_page  # campaign and destination are separate concerns
         click_ids = click_ids or {}
+        entry_hint = self._entry_method_hint(declared_entry_method)
         domain, safe_referrer, path_hash = self.normalize_referrer(
             referrer=referrer, referrer_domain=referrer_domain,
         )
@@ -252,21 +319,15 @@ class SourceClassifier:
         if verified_referral:
             return self._classify_verified_referral(
                 verified_referral, domain, safe_referrer, path_hash,
+                utm_source=utm_source,
             )
 
         for click_id, value in click_ids.items():
-            if value and click_id in self.CLICK_ID_MAP:
-                source, medium, channel = self.CLICK_ID_MAP[click_id]
-                mediation = "affiliate_referral" if medium == "affiliate" else "ordinary_referral"
-                return self._result(
-                    source, medium, channel, 1.0,
-                    source_class="affiliate" if medium == "affiliate" else "paid",
-                    mediation=mediation,
-                    actor_type=explicit_actor_type or "human",
-                    journey_role="campaign",
-                    verification="verified_click_id",
-                    domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
-                    evidence=(f"click_id:{click_id}",),
+            canonical_key = self.CLICK_ID_KEY_ALIASES.get(click_id, click_id)
+            if value and canonical_key in CLICK_ID_CLASSES:
+                return self._classify_click_id(
+                    click_id, canonical_key, utm_medium,
+                    explicit_actor_type, domain, safe_referrer, path_hash,
                 )
 
         if utm_source:
@@ -281,13 +342,26 @@ class SourceClassifier:
                 safe_referrer=safe_referrer,
                 path_hash=path_hash,
                 explicit_actor_type=explicit_actor_type,
+                entry_hint=entry_hint,
             )
 
+        evidence: tuple[str, ...] = ("no_external_source_evidence",)
+        entry_method = "unknown"
+        proof_level = "none"
+        if entry_hint:
+            # A platform-declared entry method (deep link, push, QR, …) is real
+            # evidence about HOW the app was entered, but on its own it cannot
+            # support a typed-URL/source claim — the class stays direct_unknown.
+            entry_method = entry_hint
+            proof_level = self._cap_proof("declared", entry_hint)
+            evidence = evidence + (f"declared_entry_method:{entry_hint}",)
         return self._result(
-            "(direct)", "(none)", "Direct", 0.5,
-            source_class="direct", mediation="direct_entry",
+            "(direct)", "(none)", SOURCE_CLASS_DEFAULTS["direct_unknown"]["label"], 0.5,
+            source_class="direct_unknown", mediation="direct_entry",
             actor_type=explicit_actor_type or "human", journey_role="entry",
-            verification="none", evidence=("no_external_source_evidence",),
+            verification="none",
+            entry_method=entry_method, proof_level=proof_level,
+            evidence=evidence,
         )
 
     def _classify_user_agent(
@@ -312,6 +386,9 @@ class SourceClassifier:
                     journey_role="excluded", verification="user_agent_signature",
                     domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
                     attribution_eligible=False,
+                    traffic_origin="external",
+                    entry_method="web_referrer" if domain else "unknown",
+                    proof_level="server_observed",
                     evidence=(f"user_agent:{signature}",),
                 )
 
@@ -319,10 +396,12 @@ class SourceClassifier:
             if signature in ua:
                 return self._result(
                     provider, "agent_referral", "Agent Referral", 0.92,
-                    source_class="ai_referral", mediation="agent_mediated_referral",
+                    source_class="agent_referral", mediation="agent_mediated_referral",
                     ai_provider=provider, ai_product=product, actor_type="agent",
                     journey_role="handoff", verification="user_agent_signature",
                     domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+                    entry_method="web_referrer" if domain else "unknown",
+                    proof_level="server_observed",
                     evidence=(f"user_agent:{signature}",),
                 )
         return None
@@ -333,6 +412,8 @@ class SourceClassifier:
         domain: str,
         safe_referrer: str,
         path_hash: Optional[str],
+        *,
+        utm_source: Optional[str] = None,
     ) -> ClassifiedSource:
         mediation = str(
             claim.get("referral_mediation_type")
@@ -347,6 +428,21 @@ class SourceClassifier:
         )
         source = self._clean_token(claim.get("source")) or provider or product or "verified_referral"
         medium, channel, source_class = self._medium_channel_for_mediation(mediation)
+
+        entry_method = self._entry_method_hint(claim.get("entry_method")) or "verified_source_link"
+        claim_proof = str(claim.get("proof_level") or "").strip().lower()
+        if claim_proof in PROOF_LEVELS and claim_proof != "none":
+            proof_level = self._cap_proof(claim_proof, "verified_source_link")
+        else:
+            proof_level = "server_observed"
+
+        conflicts: tuple[str, ...] = ()
+        declared_source = self._clean_token(utm_source)
+        if declared_source and declared_source not in {source, provider or "", product or ""}:
+            # The server-verified link wins, but a disagreeing self-declared UTM
+            # source is preserved as an explicit conflict — never dropped.
+            conflicts = (f"verified_link_overrides_utm_declaration:{declared_source}",)
+
         return self._result(
             source, medium, channel, 1.0,
             source_class=source_class, mediation=mediation,
@@ -357,7 +453,46 @@ class SourceClassifier:
             verified_referral_link_id=str(
                 claim.get("referral_link_id") or claim.get("verified_referral_link_id") or ""
             ) or None,
+            entry_method=entry_method, proof_level=proof_level,
+            conflicts=conflicts,
             evidence=("verified_referral_link",),
+        )
+
+    def _classify_click_id(
+        self,
+        click_id: str,
+        canonical_key: str,
+        utm_medium: Optional[str],
+        explicit_actor_type: Optional[str],
+        domain: str,
+        safe_referrer: str,
+        path_hash: Optional[str],
+    ) -> ClassifiedSource:
+        click_class = CLICK_ID_CLASSES[canonical_key]
+        source_class = click_class["sourceClass"]
+        source = click_class["source"]
+        medium, channel = self._click_display(canonical_key, source_class)
+        mediation = (
+            "affiliate_referral" if source_class == "affiliate" else "ordinary_referral"
+        )
+        conflicts: tuple[str, ...] = ()
+        medium_token = self._clean_token(utm_medium)
+        if medium_token and medium_token in _ORGANIC_MEDIUM_TOKENS:
+            # Paid click evidence outranks a self-declared organic label; the
+            # suppressed declaration is recorded, never silently dropped.
+            conflicts = (f"paid_click_id_overrides_organic_utm:{canonical_key}",)
+        return self._result(
+            source, medium, channel, 1.0,
+            source_class=source_class,
+            mediation=mediation,
+            actor_type=explicit_actor_type or "human",
+            journey_role="campaign",
+            verification="verified_click_id",
+            domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+            entry_method="paid_click_id",
+            proof_level=self._cap_proof("declared", "paid_click_id"),
+            conflicts=conflicts,
+            evidence=(f"click_id:{click_id}",),
         )
 
     def _classify_utm(
@@ -371,40 +506,108 @@ class SourceClassifier:
     ) -> ClassifiedSource:
         source_token = self._clean_token(utm_source)
         medium = self._clean_token(utm_medium) or "referral"
+        evidence = ("utm_source", "utm_medium" if utm_medium else "utm_source_only")
         ai_identity = self._ai_identity_for_source(source_token)
         if ai_identity:
             provider, product = ai_identity
             actor = self._normalize_actor(explicit_actor_type or "human")
+            is_agent = medium in {"agent", "agent_referral"} or actor == "agent"
             mediation = (
-                "agent_mediated_referral"
-                if medium in {"agent", "agent_referral"} or actor == "agent"
-                else "ai_mediated_human_referral"
+                "agent_mediated_referral" if is_agent else "ai_mediated_human_referral"
             )
             return self._result(
                 provider, "agent_referral" if actor == "agent" else "ai_referral",
                 "Agent Referral" if actor == "agent" else "AI Referral", 0.95,
-                source_class="ai_referral", mediation=mediation,
+                source_class="agent_referral" if is_agent else "ai_referral",
+                mediation=mediation,
                 ai_provider=provider, ai_product=product, actor_type=actor,
                 journey_role="handoff" if actor == "agent" else "discovery",
                 verification="declared_campaign_evidence",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
-                evidence=("utm_source", "utm_medium" if utm_medium else "utm_source_only"),
+                entry_method="utm_declaration",
+                proof_level=self._cap_proof("declared", "utm_declaration"),
+                evidence=evidence,
             )
 
-        mediation = "ordinary_referral"
-        source_class = "campaign"
-        if medium == "affiliate":
-            mediation, source_class = "affiliate_referral", "affiliate"
-        elif medium == "partner":
-            mediation, source_class = "partner_referral", "partner"
+        rule = self._utm_source_medium_rule(source_token, medium)
+        if rule is not None:
+            source_class, source, economic_override = rule
+            mediation = "ordinary_referral"
+            if source_class == "affiliate":
+                mediation = "affiliate_referral"
+            elif source_class == "partner":
+                mediation = "partner_referral"
+            return self._result(
+                source, medium,
+                SOURCE_CLASS_DEFAULTS[source_class]["label"], 0.95,
+                source_class=source_class, mediation=mediation,
+                actor_type=self._normalize_actor(explicit_actor_type or "human"),
+                journey_role="campaign", verification="declared_campaign_evidence",
+                domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+                entry_method="utm_declaration",
+                proof_level=self._cap_proof("declared", "utm_declaration"),
+                economic_class=economic_override,
+                evidence=evidence + (f"utm_rule:{source_class}",),
+            )
+
+        # Unmatched but explicitly declared campaign evidence: keep the
+        # declaration (source_class external_referral, channel from the
+        # medium map) rather than inventing an organic/paid claim.
         return self._result(
             source_token, medium, self._channel_from_medium(medium), 0.95,
-            source_class=source_class, mediation=mediation,
+            source_class="external_referral", mediation="ordinary_referral",
             actor_type=self._normalize_actor(explicit_actor_type or "human"),
             journey_role="campaign", verification="declared_campaign_evidence",
             domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
-            evidence=("utm_source", "utm_medium" if utm_medium else "utm_source_only"),
+            entry_method="utm_declaration",
+            proof_level=self._cap_proof("declared", "utm_declaration"),
+            evidence=evidence + ("utm_rule:unmatched_declaration",),
         )
+
+    @staticmethod
+    def _utm_source_medium_rule(
+        source_token: str, medium: str
+    ) -> Optional[tuple[str, str, Optional[str]]]:
+        """Co-evaluate declared source and medium against the shared registry.
+
+        Returns ``(source_class, canonical_source, economic_class_override)``
+        or None when no registry rule matches.
+        """
+        search_source = UTM_SEARCH_SOURCE_ALIASES.get(source_token)
+        social_source = UTM_SOCIAL_SOURCE_ALIASES.get(source_token)
+        tokens = MEDIUM_TOKENS
+
+        if search_source:
+            if medium in tokens["organic"]:
+                return "organic_search", search_source, None
+            if medium in tokens["paidSearch"] or medium in tokens["genericPaid"]:
+                return "paid_search", search_source, None
+        if social_source:
+            if medium in tokens["organicSocial"] or medium in tokens["organic"]:
+                return "organic_social", social_source, None
+            if (
+                medium in tokens["paidSocial"]
+                or medium in tokens["genericPaid"]
+                or medium in tokens["paidSearch"]
+            ):
+                # Paid-search-style tokens (cpc/ppc) on a social platform are
+                # paid social spend, not paid search.
+                return "paid_social", social_source, None
+        if medium in tokens["email"]:
+            return "email", source_token, None
+        if medium in tokens["affiliate"]:
+            return "affiliate", source_token, None
+        if medium in tokens["partner"]:
+            return "partner", source_token, None
+        if medium in tokens["push"]:
+            return "push", source_token, None
+        if medium in tokens["sms"]:
+            return "sms", source_token, None
+        if medium in tokens["organic"] and not search_source and not social_source:
+            # An organic claim from an unrecognized platform is preserved as a
+            # declaration but never rendered as organic search.
+            return "unknown", source_token, "unpaid"
+        return None
 
     def _classify_referrer_domain(
         self,
@@ -413,9 +616,12 @@ class SourceClassifier:
         safe_referrer: str = "",
         path_hash: Optional[str] = None,
         explicit_actor_type: Optional[str] = None,
+        entry_hint: Optional[str] = None,
     ) -> ClassifiedSource:
         domain = self._normalize_domain(domain)
         safe_referrer = safe_referrer or (f"https://{domain}/" if domain else "")
+        entry_method = entry_hint or "web_referrer"
+        proof_level = self._cap_proof("domain_verified", entry_method)
 
         ai_identity = self._ai_identity_for_domain(domain)
         if ai_identity:
@@ -427,6 +633,7 @@ class SourceClassifier:
                 actor_type=self._normalize_actor(explicit_actor_type or "human"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+                entry_method=entry_method, proof_level=proof_level,
                 evidence=("known_ai_referrer_domain",),
             )
 
@@ -437,6 +644,7 @@ class SourceClassifier:
                 actor_type=self._normalize_actor(explicit_actor_type or "human"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+                entry_method=entry_method, proof_level=proof_level,
                 evidence=("known_email_referrer_domain",),
             )
 
@@ -448,6 +656,7 @@ class SourceClassifier:
                 actor_type=self._normalize_actor(explicit_actor_type or "human"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+                entry_method=entry_method, proof_level=proof_level,
                 evidence=("known_search_referrer_domain",),
             )
 
@@ -459,6 +668,7 @@ class SourceClassifier:
                 actor_type=self._normalize_actor(explicit_actor_type or "human"),
                 journey_role="discovery", verification="verified_domain",
                 domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+                entry_method=entry_method, proof_level=proof_level,
                 evidence=("known_social_referrer_domain",),
             )
 
@@ -468,6 +678,7 @@ class SourceClassifier:
             actor_type=self._normalize_actor(explicit_actor_type or "human"),
             journey_role="discovery", verification="inferred",
             domain=domain, safe_referrer=safe_referrer, path_hash=path_hash,
+            entry_method=entry_method, proof_level=proof_level,
             evidence=("external_referrer_domain",),
         )
 
@@ -491,13 +702,28 @@ class SourceClassifier:
         attribution_eligible: bool = True,
         verified_referral_link_id: Optional[str] = None,
         evidence: tuple[str, ...] = (),
+        traffic_origin: Optional[str] = None,
+        economic_class: Optional[str] = None,
+        channel_family: Optional[str] = None,
+        entry_method: str = "unknown",
+        proof_level: str = "none",
+        conflicts: tuple[str, ...] = (),
     ) -> ClassifiedSource:
+        canonical_class = canonical_source_class(source_class)
+        defaults = SOURCE_CLASS_DEFAULTS.get(
+            canonical_class, SOURCE_CLASS_DEFAULTS["unknown"]
+        )
+        resolved_family = channel_family or defaults["channelFamily"]
+        resolved_economic = economic_class or defaults["economicClass"]
+        resolved_origin = traffic_origin or _FAMILY_TRAFFIC_ORIGIN.get(
+            resolved_family, "external"
+        )
         return ClassifiedSource(
             source=source,
             medium=medium,
             channel=channel,
             confidence=max(0.0, min(1.0, float(confidence))),
-            source_class=source_class,
+            source_class=canonical_class,
             referral_mediation_type=mediation,
             ai_provider=ai_provider,
             ai_product=ai_product,
@@ -510,7 +736,42 @@ class SourceClassifier:
             attribution_eligible=attribution_eligible,
             verified_referral_link_id=verified_referral_link_id,
             evidence=evidence,
+            traffic_origin=resolved_origin,
+            economic_class=resolved_economic,
+            channel_family=resolved_family,
+            entry_method=entry_method if entry_method in ENTRY_METHODS else "unknown",
+            proof_level=proof_level if proof_level in PROOF_LEVELS else "none",
+            evidence_conflicts=conflicts,
         )
+
+    @staticmethod
+    def _click_display(canonical_key: str, source_class: str) -> tuple[str, str]:
+        """Display (medium, channel) for a canonical click-id key."""
+        mapped = SourceClassifier.CLICK_ID_MAP.get(canonical_key)
+        if mapped is not None:
+            return mapped[1], mapped[2]
+        by_class = {
+            "paid_search": ("cpc", "Paid Search"),
+            "paid_social": ("cpc", "Paid Social"),
+            "display": ("display", "Display"),
+            "affiliate": ("affiliate", "Affiliate"),
+        }
+        return by_class.get(source_class, ("cpc", "Paid Search"))
+
+    @staticmethod
+    def _entry_method_hint(value: Any) -> Optional[str]:
+        token = str(value or "").strip().lower()
+        return token if token in ENTRY_METHODS else None
+
+    @staticmethod
+    def _cap_proof(proof_level: str, entry_method: str) -> str:
+        """Cap a proof level at what the entry method can justify on its own."""
+        ceiling = ENTRY_METHOD_PROOF_CEILINGS.get(entry_method)
+        if ceiling is None:
+            return proof_level
+        if _PROOF_RANK.get(proof_level, 0) > _PROOF_RANK.get(ceiling, 0):
+            return ceiling
+        return proof_level
 
     def _ai_identity_for_domain(self, domain: str) -> Optional[tuple[str, str]]:
         return self._match_domain_table(domain, self.AI_DOMAINS)
@@ -548,7 +809,7 @@ class SourceClassifier:
         if mediation == "partner_referral":
             return "partner", "Partner", "partner"
         if mediation in {"agent_mediated_referral", "owned_agent_referral"}:
-            return "agent_referral", "Agent Referral", "ai_referral"
+            return "agent_referral", "Agent Referral", "agent_referral"
         if mediation == "ai_mediated_human_referral":
             return "ai_referral", "AI Referral", "ai_referral"
         return "referral", "Referral", "external_referral"

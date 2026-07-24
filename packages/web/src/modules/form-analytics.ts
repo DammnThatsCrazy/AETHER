@@ -64,44 +64,58 @@ export class FormAnalyticsModule {
     this.observers.push(observer);
   }
 
+  /**
+   * Build the metadata-only payload for a field interaction.
+   *
+   * PRIVACY INVARIANT: typed form values, selections, and defaults are NEVER
+   * read — only structural metadata (name/type/action) leaves the page. The
+   * final scrub is defense-in-depth so no future edit can accidentally ship
+   * a value-shaped key.
+   */
+  private fieldPayload(
+    input: HTMLInputElement,
+    action: 'focus' | 'blur' | 'change',
+    formId: string,
+  ): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      fieldName: input.name || input.id || 'unknown',
+      fieldType: input.type || input.tagName.toLowerCase(),
+      action,
+      timestamp: Date.now(),
+      formId,
+    };
+    for (const key of ['value', 'checked', 'defaultValue', 'files', 'selectionStart', 'selectionEnd']) {
+      delete payload[key];
+    }
+    return payload;
+  }
+
   private attachListeners(form: HTMLFormElement, formId: string): void {
     const focusHandler = (e: Event) => {
       const target = e.target as HTMLElement;
       if (!this.isField(target)) return;
-      const input = target as HTMLInputElement;
-      this.callbacks.onTrack('form_field', {
-        fieldName: input.name || input.id || 'unknown',
-        fieldType: input.type || input.tagName.toLowerCase(),
-        action: 'focus',
-        timestamp: Date.now(),
-        formId,
-      });
+      this.callbacks.onTrack(
+        'form_field',
+        this.fieldPayload(target as HTMLInputElement, 'focus', formId),
+      );
     };
 
     const blurHandler = (e: Event) => {
       const target = e.target as HTMLElement;
       if (!this.isField(target)) return;
-      const input = target as HTMLInputElement;
-      this.callbacks.onTrack('form_field', {
-        fieldName: input.name || input.id || 'unknown',
-        fieldType: input.type || input.tagName.toLowerCase(),
-        action: 'blur',
-        timestamp: Date.now(),
-        formId,
-      });
+      this.callbacks.onTrack(
+        'form_field',
+        this.fieldPayload(target as HTMLInputElement, 'blur', formId),
+      );
     };
 
     const inputHandler = (e: Event) => {
       const target = e.target as HTMLElement;
       if (!this.isField(target)) return;
-      const input = target as HTMLInputElement;
-      this.callbacks.onTrack('form_field', {
-        fieldName: input.name || input.id || 'unknown',
-        fieldType: input.type || input.tagName.toLowerCase(),
-        action: 'change',
-        timestamp: Date.now(),
-        formId,
-      });
+      this.callbacks.onTrack(
+        'form_field',
+        this.fieldPayload(target as HTMLInputElement, 'change', formId),
+      );
     };
 
     form.addEventListener('focusin', focusHandler, { passive: true });

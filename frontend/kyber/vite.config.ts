@@ -36,6 +36,13 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    commonjsOptions: {
+      // @aether/shared ships CJS-only. Extend the default node_modules include
+      // to also cover the workspace package so Rollup resolves named exports
+      // (e.g. the canonical traffic-source vocabulary) instead of failing the
+      // build. Mirrors frontend/aether/vite.config.ts.
+      include: [/node_modules/, /packages\/shared/],
+    },
     rollupOptions: {
       output: {
         manualChunks: {

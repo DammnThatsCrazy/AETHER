@@ -147,6 +147,47 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         Aether.handleDeepLink(url)
     }
 
+    // -------------------------------------------------------------------------
+    // Install & deep-link attribution (cross-platform parity: these four method
+    // names must match the iOS module and the TypeScript wrapper exactly).
+    // -------------------------------------------------------------------------
+
+    /** Resolves the first-touch acquisition evidence as a JSON string, or null. */
+    @ReactMethod
+    fun getFirstTouchAttribution(promise: Promise) {
+        try {
+            promise.resolve(Aether.getFirstTouchAttribution()?.toString())
+        } catch (e: Exception) {
+            promise.reject("aether_attribution_error", e)
+        }
+    }
+
+    /** Resolves the latest-touch acquisition evidence as a JSON string, or null. */
+    @ReactMethod
+    fun getLatestTouchAttribution(promise: Promise) {
+        try {
+            promise.resolve(Aether.getLatestTouchAttribution()?.toString())
+        } catch (e: Exception) {
+            promise.reject("aether_attribution_error", e)
+        }
+    }
+
+    /** Cross-platform deep-link entry point (alias of handleDeepLink for parity). */
+    @ReactMethod
+    fun handleURL(url: String) {
+        Aether.handleDeepLink(url)
+    }
+
+    /**
+     * Deferred-attribution handoff resolution. On Android installs resolve via
+     * the Google Play Install Referrer automatically, so there is no deferred
+     * handoff to look up — this always resolves null by design.
+     */
+    @ReactMethod
+    fun resolveDeferredHandoff(identifier: String, promise: Promise) {
+        promise.resolve(null)
+    }
+
     @ReactMethod
     fun trackPushOpened(data: ReadableMap) {
         Aether.trackPushOpened(data.toHashMap().mapValues { it.value?.toString() ?: "" })

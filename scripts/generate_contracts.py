@@ -41,6 +41,7 @@ EVENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "event-registry.js
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 METRIC_REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "metric-registry.json"
 INTEGRATION_CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "integration-consent-registry.json"
+TRAFFIC_SOURCE_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "traffic-source-registry.json"
 
 CONSENT_TS = ROOT / "packages" / "shared" / "consent.ts"
 EVENTS_TS = ROOT / "packages" / "shared" / "events.ts"
@@ -68,6 +69,11 @@ INTEGRATION_CONSENT_KT = (
     ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "GeneratedIntegrationConsent.kt"
 )
 INTEGRATION_CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "integration-consent-registry-table.md"
+TRAFFIC_SOURCE_TS = ROOT / "packages" / "shared" / "traffic-source.ts"
+TRAFFIC_SOURCE_PY = (
+    ROOT / "Backend Architecture" / "aether-backend" / "services" / "traffic" / "generated_registry.py"
+)
+TRAFFIC_SOURCE_TABLE_MD = ROOT / "docs" / "_generated" / "traffic-source-registry-table.md"
 
 # Markers used in events.ts to delimit the generated section
 GENERATED_START = "// @generated-start"
@@ -83,12 +89,13 @@ GENERATED_PY_HEADER = """\
 # Registry loading and validation
 # ---------------------------------------------------------------------------
 
-def load_registries() -> tuple[dict, dict, dict, dict]:
+def load_registries() -> tuple[dict, dict, dict, dict, dict]:
     event_reg = json.loads(EVENT_REGISTRY.read_text())
     consent_reg = json.loads(CONSENT_REGISTRY.read_text())
     metric_reg = json.loads(METRIC_REGISTRY_JSON.read_text())
     integration_reg = json.loads(INTEGRATION_CONSENT_REGISTRY.read_text())
-    return event_reg, consent_reg, metric_reg, integration_reg
+    traffic_reg = json.loads(TRAFFIC_SOURCE_REGISTRY.read_text())
+    return event_reg, consent_reg, metric_reg, integration_reg, traffic_reg
 
 
 def validate_metrics(metric_reg: dict) -> None:
@@ -252,6 +259,332 @@ def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> No
 
 def _ts_literal(value) -> str:
     return json.dumps(value, indent=2)
+
+
+def validate_traffic_source(traffic_reg: dict) -> None:
+    """Validate the canonical traffic-source registry.
+
+    Every cross-reference inside the registry must point at a declared
+    dimension value so no generator output can carry an invalid enum.
+    """
+    dims = traffic_reg["dimensions"]
+    required_dims = (
+        "traffic_origin", "economic_class", "channel_family",
+        "source_class", "entry_method", "proof_level",
+    )
+    for dim in required_dims:
+        values = dims.get(dim)
+        if not values:
+            print(f"ERROR: traffic-source registry missing dimension {dim!r}", file=sys.stderr)
+            sys.exit(1)
+        if len(values) != len(set(values)):
+            print(f"ERROR: traffic-source dimension {dim!r} has duplicates", file=sys.stderr)
+            sys.exit(1)
+
+    source_classes = set(dims["source_class"])
+    channel_families = set(dims["channel_family"])
+    economic_classes = set(dims["economic_class"])
+    entry_methods = set(dims["entry_method"])
+    proof_levels = set(dims["proof_level"])
+
+    defaults = {k: v for k, v in traffic_reg["sourceClassDefaults"].items() if not k.startswith("_")}
+    if set(defaults) != source_classes:
+        print(
+            f"ERROR: sourceClassDefaults drift — missing={sorted(source_classes - set(defaults))} "
+            f"extra={sorted(set(defaults) - source_classes)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for sc, d in defaults.items():
+        if d["channelFamily"] not in channel_families:
+            print(f"ERROR: sourceClassDefaults[{sc!r}] unknown channelFamily {d['channelFamily']!r}", file=sys.stderr)
+            sys.exit(1)
+        if d["economicClass"] not in economic_classes:
+            print(f"ERROR: sourceClassDefaults[{sc!r}] unknown economicClass {d['economicClass']!r}", file=sys.stderr)
+            sys.exit(1)
+        if not d.get("label"):
+            print(f"ERROR: sourceClassDefaults[{sc!r}] missing label", file=sys.stderr)
+            sys.exit(1)
+
+    for legacy, canonical in traffic_reg["legacySourceClassAliases"].items():
+        if legacy.startswith("_"):
+            continue
+        if canonical not in source_classes:
+            print(f"ERROR: legacy alias {legacy!r} maps to unknown source_class {canonical!r}", file=sys.stderr)
+            sys.exit(1)
+    for channel, canonical in traffic_reg["legacyPaidChannelMap"].items():
+        if channel.startswith("_"):
+            continue
+        if canonical not in source_classes:
+            print(f"ERROR: legacyPaidChannelMap {channel!r} maps to unknown source_class {canonical!r}", file=sys.stderr)
+            sys.exit(1)
+
+    for click_id, meta in traffic_reg["clickIdClasses"].items():
+        if click_id.startswith("_"):
+            continue
+        if meta["sourceClass"] not in source_classes:
+            print(f"ERROR: clickIdClasses[{click_id!r}] unknown sourceClass {meta['sourceClass']!r}", file=sys.stderr)
+            sys.exit(1)
+
+    ceilings = {k: v for k, v in traffic_reg["entryMethodProofCeilings"].items() if not k.startswith("_")}
+    if set(ceilings) != entry_methods:
+        print(
+            f"ERROR: entryMethodProofCeilings drift — missing={sorted(entry_methods - set(ceilings))} "
+            f"extra={sorted(set(ceilings) - entry_methods)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for method, level in ceilings.items():
+        if level not in proof_levels:
+            print(f"ERROR: entryMethodProofCeilings[{method!r}] unknown proof_level {level!r}", file=sys.stderr)
+            sys.exit(1)
+
+
+def _strip_comments(value):
+    """Recursively drop '_comment' keys so generated artifacts stay data-only."""
+    if isinstance(value, dict):
+        return {k: _strip_comments(v) for k, v in value.items() if k != "_comment"}
+    if isinstance(value, list):
+        return [_strip_comments(v) for v in value]
+    return value
+
+
+def gen_traffic_source_ts(traffic_reg: dict) -> str:
+    reg = _strip_comments(traffic_reg)
+    dims = reg["dimensions"]
+    version = reg["contractVersion"]
+
+    def union(name: str) -> str:
+        return "\n".join(f"  | '{v}'" for v in dims[name])
+
+    def const_array(name: str) -> str:
+        return "\n".join(f"  '{v}'," for v in dims[name])
+
+    defaults_entries = "\n".join(
+        f"  {json.dumps(sc)}: {{ channelFamily: {json.dumps(d['channelFamily'])}, "
+        f"economicClass: {json.dumps(d['economicClass'])}, label: {json.dumps(d['label'])} }},"
+        for sc, d in reg["sourceClassDefaults"].items()
+    )
+
+    return (
+        "// =============================================================================\n"
+        f"// Aether SDK — Canonical Traffic-Source Contract (v{version})\n"
+        "// DO NOT EDIT — generated from packages/shared/contracts/traffic-source-registry.json\n"
+        "// Run: python scripts/generate_contracts.py\n"
+        "//\n"
+        "// SDKs observe acquisition evidence; the backend classifies. These types exist\n"
+        "// so SDKs and product surfaces can name backend classifications without ever\n"
+        "// computing them locally. Classification and campaign identity are separate\n"
+        "// dimensions: none of these values implies a campaign.\n"
+        "// =============================================================================\n"
+        "\n"
+        f"export const TRAFFIC_SOURCE_CONTRACT_VERSION = '{version}';\n"
+        "\n"
+        "/** Where the visit physically came from, independent of who paid for it. */\n"
+        "export type TrafficOrigin =\n"
+        f"{union('traffic_origin')};\n"
+        "\n"
+        "/** Whether money is known to be behind the touch. */\n"
+        "export type EconomicClass =\n"
+        f"{union('economic_class')};\n"
+        "\n"
+        "/** Coarse channel grouping used for reporting rollups. */\n"
+        "export type ChannelFamily =\n"
+        f"{union('channel_family')};\n"
+        "\n"
+        "/** Canonical source classification. 'direct_unknown' is the honest fallback —\n"
+        " * it never claims the user typed a URL. */\n"
+        "export type SourceClass =\n"
+        f"{union('source_class')};\n"
+        "\n"
+        "/** How the entry evidence was physically observed. */\n"
+        "export type EntryMethod =\n"
+        f"{union('entry_method')};\n"
+        "\n"
+        "/** Strength of the evidence behind the classification. */\n"
+        "export type ProofLevel =\n"
+        f"{union('proof_level')};\n"
+        "\n"
+        "export const TRAFFIC_ORIGINS: readonly TrafficOrigin[] = [\n"
+        f"{const_array('traffic_origin')}\n"
+        "] as const;\n"
+        "\n"
+        "export const ECONOMIC_CLASSES: readonly EconomicClass[] = [\n"
+        f"{const_array('economic_class')}\n"
+        "] as const;\n"
+        "\n"
+        "export const CHANNEL_FAMILIES: readonly ChannelFamily[] = [\n"
+        f"{const_array('channel_family')}\n"
+        "] as const;\n"
+        "\n"
+        "export const SOURCE_CLASSES: readonly SourceClass[] = [\n"
+        f"{const_array('source_class')}\n"
+        "] as const;\n"
+        "\n"
+        "export const ENTRY_METHODS: readonly EntryMethod[] = [\n"
+        f"{const_array('entry_method')}\n"
+        "] as const;\n"
+        "\n"
+        "export const PROOF_LEVELS: readonly ProofLevel[] = [\n"
+        f"{const_array('proof_level')}\n"
+        "] as const;\n"
+        "\n"
+        "export interface SourceClassDefaults {\n"
+        "  channelFamily: ChannelFamily;\n"
+        "  economicClass: EconomicClass;\n"
+        "  /** Customer-facing label. 'direct_unknown' renders as 'Direct / Unknown',\n"
+        "   * never as a typed-URL claim. */\n"
+        "  label: string;\n"
+        "}\n"
+        "\n"
+        "export const SOURCE_CLASS_DEFAULTS: Readonly<Record<SourceClass, SourceClassDefaults>> = {\n"
+        f"{defaults_entries}\n"
+        "};\n"
+        "\n"
+        "/** Historical source_class values normalized at API boundaries. */\n"
+        "export const LEGACY_SOURCE_CLASS_ALIASES: Readonly<Record<string, SourceClass>> =\n"
+        f"  {json.dumps(reg['legacySourceClassAliases'])};\n"
+        "\n"
+        "/** Normalize a possibly-legacy source_class value to the canonical vocabulary. */\n"
+        "export function canonicalSourceClass(value: string): SourceClass | string {\n"
+        "  return LEGACY_SOURCE_CLASS_ALIASES[value] ?? value;\n"
+        "}\n"
+    )
+
+
+def gen_traffic_source_py(traffic_reg: dict) -> str:
+    reg = _strip_comments(traffic_reg)
+    dims = reg["dimensions"]
+    version = reg["contractVersion"]
+
+    def frozenset_lines(name: str) -> str:
+        return ",\n".join(f'    "{v}"' for v in sorted(dims[name]))
+
+    def dict_block(mapping: dict) -> str:
+        return "\n".join(
+            f"    {json.dumps(k)}: {json.dumps(v)}," for k, v in sorted(mapping.items())
+        )
+
+    return (
+        "# DO NOT EDIT — generated from packages/shared/contracts/traffic-source-registry.json\n"
+        "# Run: python scripts/generate_contracts.py\n"
+        f"# Contract version: {version}\n"
+        '"""Canonical traffic-source vocabulary shared by classifier, projections and APIs."""\n'
+        "\n"
+        f'TRAFFIC_SOURCE_CONTRACT_VERSION = "{version}"\n'
+        "\n"
+        "TRAFFIC_ORIGINS: frozenset[str] = frozenset({\n"
+        f"{frozenset_lines('traffic_origin')},\n"
+        "})\n"
+        "\n"
+        "ECONOMIC_CLASSES: frozenset[str] = frozenset({\n"
+        f"{frozenset_lines('economic_class')},\n"
+        "})\n"
+        "\n"
+        "CHANNEL_FAMILIES: frozenset[str] = frozenset({\n"
+        f"{frozenset_lines('channel_family')},\n"
+        "})\n"
+        "\n"
+        "SOURCE_CLASSES: frozenset[str] = frozenset({\n"
+        f"{frozenset_lines('source_class')},\n"
+        "})\n"
+        "\n"
+        "ENTRY_METHODS: frozenset[str] = frozenset({\n"
+        f"{frozenset_lines('entry_method')},\n"
+        "})\n"
+        "\n"
+        "PROOF_LEVELS: frozenset[str] = frozenset({\n"
+        f"{frozenset_lines('proof_level')},\n"
+        "})\n"
+        "\n"
+        "# source_class -> {channelFamily, economicClass, label}. Labels are the\n"
+        "# customer-facing vocabulary: direct_unknown renders as 'Direct / Unknown',\n"
+        "# never as an unsupported typed-URL claim.\n"
+        "SOURCE_CLASS_DEFAULTS: dict[str, dict[str, str]] = {\n"
+        f"{dict_block(reg['sourceClassDefaults'])}\n"
+        "}\n"
+        "\n"
+        "# Historical values normalized to the canonical vocabulary at API boundaries.\n"
+        "LEGACY_SOURCE_CLASS_ALIASES: dict[str, str] = {\n"
+        f"{dict_block(reg['legacySourceClassAliases'])}\n"
+        "}\n"
+        "\n"
+        "# v2 display channel -> canonical source_class for legacy 'paid' rows.\n"
+        "LEGACY_PAID_CHANNEL_MAP: dict[str, str] = {\n"
+        f"{dict_block(reg['legacyPaidChannelMap'])}\n"
+        "}\n"
+        "\n"
+        "# Lowercased utm_source tokens -> canonical search platform.\n"
+        "UTM_SEARCH_SOURCE_ALIASES: dict[str, str] = {\n"
+        f"{dict_block(reg['utmSourceAliases']['search'])}\n"
+        "}\n"
+        "\n"
+        "# Lowercased utm_source tokens -> canonical social platform.\n"
+        "UTM_SOCIAL_SOURCE_ALIASES: dict[str, str] = {\n"
+        f"{dict_block(reg['utmSourceAliases']['social'])}\n"
+        "}\n"
+        "\n"
+        "# Lowercased utm_medium token sets, evaluated together with utm_source.\n"
+        "MEDIUM_TOKENS: dict[str, frozenset[str]] = {\n"
+        + "\n".join(
+            f"    {json.dumps(k)}: frozenset({sorted(v)!r}),"
+            for k, v in sorted(reg["mediumTokens"].items())
+        )
+        + "\n"
+        "}\n"
+        "\n"
+        "# Advertising click identifiers -> {source, sourceClass}. Paid click evidence\n"
+        "# outranks conflicting self-declared organic UTM labels; conflicts are recorded.\n"
+        "CLICK_ID_CLASSES: dict[str, dict[str, str]] = {\n"
+        f"{dict_block(reg['clickIdClasses'])}\n"
+        "}\n"
+        "\n"
+        "# Maximum proof_level each entry_method can justify on its own.\n"
+        "ENTRY_METHOD_PROOF_CEILINGS: dict[str, str] = {\n"
+        f"{dict_block(reg['entryMethodProofCeilings'])}\n"
+        "}\n"
+        "\n"
+        "\n"
+        "def canonical_source_class(value: str) -> str:\n"
+        '    """Normalize a possibly-legacy source_class to the canonical vocabulary."""\n'
+        "    return LEGACY_SOURCE_CLASS_ALIASES.get(value, value)\n"
+    )
+
+
+def gen_traffic_source_table_md(traffic_reg: dict) -> str:
+    reg = _strip_comments(traffic_reg)
+    dims = reg["dimensions"]
+    version = reg["contractVersion"]
+
+    dim_rows = "\n".join(
+        f"| `{name}` | {len(values)} | {', '.join('`' + v + '`' for v in values)} |"
+        for name, values in dims.items()
+    )
+    class_rows = "\n".join(
+        f"| `{sc}` | `{d['channelFamily']}` | `{d['economicClass']}` | {d['label']} |"
+        for sc, d in reg["sourceClassDefaults"].items()
+    )
+    return (
+        "<!-- DO NOT EDIT — generated from packages/shared/contracts/traffic-source-registry.json -->\n"
+        "<!-- Run: python scripts/generate_contracts.py -->\n"
+        "\n"
+        f"# Aether Canonical Traffic-Source Registry (contract v{version})\n"
+        "\n"
+        "Classification and campaign identity are independent dimensions. The\n"
+        "customer-facing fallback is **Direct / Unknown** — never a typed-URL claim.\n"
+        "\n"
+        "## Dimensions\n"
+        "\n"
+        "| Dimension | Values | Vocabulary |\n"
+        "|---|---|---|\n"
+        f"{dim_rows}\n"
+        "\n"
+        "## Source classes\n"
+        "\n"
+        "| Source class | Channel family | Economic class | Label |\n"
+        "|---|---|---|---|\n"
+        f"{class_rows}\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1043,10 +1376,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    event_reg, consent_reg, metric_reg, integration_reg = load_registries()
+    event_reg, consent_reg, metric_reg, integration_reg, traffic_reg = load_registries()
     validate(event_reg, consent_reg)
     validate_metrics(metric_reg)
     validate_integration_consent(integration_reg, consent_reg)
+    validate_traffic_source(traffic_reg)
 
     diffs: list[str] = []
 
@@ -1069,6 +1403,9 @@ def main() -> int:
         args.check,
         diffs,
     )
+    _apply(TRAFFIC_SOURCE_TS, gen_traffic_source_ts(traffic_reg), args.check, diffs)
+    _apply(TRAFFIC_SOURCE_PY, gen_traffic_source_py(traffic_reg), args.check, diffs)
+    _apply(TRAFFIC_SOURCE_TABLE_MD, gen_traffic_source_table_md(traffic_reg), args.check, diffs)
 
     if diffs:
         print("DRIFT: generated files differ from committed versions:", file=sys.stderr)

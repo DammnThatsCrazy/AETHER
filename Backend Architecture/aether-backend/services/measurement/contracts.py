@@ -157,6 +157,12 @@ class CanonicalTouchpoint(BaseModel):
     medium: Optional[str] = None
     platform: Optional[str] = None
     source_class: Optional[str] = None
+    traffic_origin: Optional[str] = None
+    economic_class: Optional[str] = None
+    channel_family: Optional[str] = None
+    entry_method: Optional[str] = None
+    proof_level: Optional[str] = None
+    evidence_conflicts: list[str] = Field(default_factory=list)
     referral_mediation_type: Optional[str] = None
     ai_provider: Optional[str] = None
     ai_product: Optional[str] = None
@@ -582,6 +588,12 @@ class CanonicalActivity(BaseModel):
     platform: Optional[str] = None
     surface: Optional[str] = None
     source_class: Optional[str] = None
+    traffic_origin: Optional[str] = None
+    economic_class: Optional[str] = None
+    channel_family: Optional[str] = None
+    entry_method: Optional[str] = None
+    proof_level: Optional[str] = None
+    evidence_conflicts: list[str] = Field(default_factory=list)
     referral_mediation_type: Optional[str] = None
     ai_provider: Optional[str] = None
     ai_product: Optional[str] = None
@@ -675,6 +687,12 @@ class JourneyStep(BaseModel):
     channel: Optional[str] = None
     source: Optional[str] = None
     source_class: Optional[str] = None
+    traffic_origin: Optional[str] = None
+    economic_class: Optional[str] = None
+    channel_family: Optional[str] = None
+    entry_method: Optional[str] = None
+    proof_level: Optional[str] = None
+    evidence_conflicts: list[str] = Field(default_factory=list)
     referral_mediation_type: Optional[str] = None
     ai_provider: Optional[str] = None
     ai_product: Optional[str] = None

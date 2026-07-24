@@ -5438,6 +5438,21 @@
       "canonical_owner": "platform-intelligence@aether"
     },
     {
+      "path": "docs/sdk/android-attribution.md",
+      "title": "Android Install & Deep-Link Attribution",
+      "slug": "sdk/android-attribution",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",
       "title": "Universal Intelligence Graph Security Model",
       "slug": "security/universal-graph-security-model",

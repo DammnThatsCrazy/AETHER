@@ -53,6 +53,10 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
 # Each entry is a prefix string — any path starting with it is public.
 # These routes MUST authenticate themselves (e.g. HMAC signature verification).
 PUBLIC_PATH_PREFIXES: frozenset[str] = frozenset({
+    # Verified source-link redirect: reached unauthenticated from bios/QR/emails.
+    # The handler validates the signed token, records the use, and mints a
+    # one-time handoff before redirecting to the link's own stored destination.
+    "/v1/r/",
     # Provider webhooks: unauthenticated by API key; HMAC-verified inside the handler.
     "/v1/integrations/webhooks/",
     # Notification-service-mounted inbound provider callbacks (Linear, Jira, generic webhook).

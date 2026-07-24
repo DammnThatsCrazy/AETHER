@@ -11,7 +11,7 @@ Projectors in EXACT dispatcher order (ADR-C3). Activity ownership is ADR-C4: one
 |---|---|---|---|---|---|---|
 | 1 | `CommsProjector` | `silver_comms_facts` | comms_owner | `comms` | 19 | 19 |
 | 2 | `IdentityEvidenceProjector` | `silver_identity_evidence_facts` | fact_emitter | `identity_lc` | 15 | 15 |
-| 3 | `TouchpointProjector` | `silver_campaign_touchpoint_facts` | touchpoint_owner | `comms`, `core`, `ecommerce`, `exposure`, `outcome` | 24 | 18 |
+| 3 | `TouchpointProjector` | `silver_campaign_touchpoint_facts` | touchpoint_owner | `comms`, `core`, `ecommerce`, `exposure`, `journey`, `outcome` | 27 | 21 |
 | 4 | `ExposureProjector` | `silver_exposure_facts` | fact_emitter | `exposure` | 8 | 4 |
 | 5 | `OutcomeProjector` | `silver_outcome_facts` | fact_emitter | `outcome` | 9 | 8 |
 | 6 | `RevenueProjector` | `silver_revenue_facts` | fact_emitter | `commerce`, `ecommerce` | 17 | 17 |
@@ -55,7 +55,6 @@ These projectors also emit canonical activity for the listed event types but con
 | `credit` | pending | `credit_signal_facts` | Registry declares silverProjection=credit_signal_facts; no dispatcher projector exists yet. |
 | `identity` | pending | `identity_evidence_facts` | The bare identify call is not routed; identity evidence is currently projected from identity_lc lifecycle events only. |
 | `interaction` | pending_pr2 | `feature_transition_facts`, `product_interaction_facts`, `surface_interval_facts` | The interaction family currently has NO projector; its silverProjection targets land with the PR 2 interaction plane. |
-| `journey` | pending | `journey_step_facts` | Registry declares silverProjection=journey_step_facts; no dispatcher projector exists yet (journey materialization runs outside the Silver dispatcher). |
 | `location` | pending | `location_observation_facts` | Registry declares silverProjection=location_observation_facts; no dispatcher projector exists yet. |
 | `x402` | pending | `x402_flow_facts` | X402FlowProjector handles legacy *_observed event types that are not in the event registry; the registry's x402 family types are not yet routed by the dispatcher. |
 

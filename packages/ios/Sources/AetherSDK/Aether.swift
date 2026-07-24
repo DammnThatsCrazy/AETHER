@@ -144,6 +144,8 @@ public enum ConsentReceiptError: Error {
 public enum AetherEventType: String, Codable, CaseIterable {
     case track, page, screen, heartbeat, error, performance, experiment
     case journey_started, journey_paused, journey_resumed, journey_continued, journey_completed, journey_abandoned, journey_checkpoint
+    // Acquisition attribution — SDKs observe evidence; the backend classifies
+    case navigation_intent, navigation_arrival, deep_link_opened, app_install_attributed, deferred_attribution_resolved
     case identify, consent
     case conversion, payment_initiated, payment_completed, payment_failed, approval_requested, approval_resolved, entitlement_granted, entitlement_revoked, access_granted, access_denied
     case wallet, transaction, contract_action
@@ -318,6 +320,12 @@ public struct EventContext: Codable {
     public let library: LibraryInfo
     public var device: DeviceInfo?
     public var campaign: CampaignInfo?
+    // Active acquisition evidence (shared AcquisitionEvidence schema v3,
+    // packages/shared/acquisition-evidence.ts). Stamped on every outgoing
+    // event while unexpired evidence exists, mirroring campaign attachment.
+    // The SDK only OBSERVES evidence — the backend classifier owns the
+    // resulting source classification.
+    public var acquisitionEvidence: [String: AnyCodable]?
     public var fingerprint: FingerprintInfo?
     public var network: String?
     public var thermalState: String?
@@ -496,6 +504,15 @@ public final class Aether: NSObject {
     private var consentState: [String] = []
     private var fingerprintId: String = ""
     private var campaignInfo: EventContext.CampaignInfo?
+    /// In-memory mirrors of the persisted first/latest acquisition touches.
+    /// Loaded from UserDefaults at initialize(); kept in sync on every write
+    /// so buildContext() never has to decode JSON per event.
+    private var firstTouchEvidence: [String: AnyCodable]?
+    private var latestTouchEvidence: [String: AnyCodable]?
+    /// URL+timestamp dedup for incoming deep/universal links: cold-start and
+    /// warm-start delivery paths (AppDelegate + SceneDelegate) frequently hand
+    /// the SDK the same URL twice within the same launch.
+    private var processedIncomingURLs: [String: Date] = [:]
     private var healthAgent: AetherHealthAgent?
     private let networkMonitor = NWPathMonitor()
     private var currentNetworkType: String = "unknown"
@@ -509,6 +526,10 @@ public final class Aether: NSObject {
     private static let eventConsentPurpose: [AetherEventType: String] = [
         .track: "analytics", .page: "analytics", .screen: "analytics", .heartbeat: "analytics", .error: "analytics", .performance: "analytics",
         .journey_started: "analytics", .journey_paused: "analytics", .journey_resumed: "analytics", .journey_continued: "analytics", .journey_completed: "analytics", .journey_abandoned: "analytics", .journey_checkpoint: "analytics", .identify: "analytics",
+        // Acquisition attribution — SDKs observe evidence; the backend classifies
+        .navigation_intent: "analytics", .navigation_arrival: "analytics",
+        .deep_link_opened: "analytics", .app_install_attributed: "analytics",
+        .deferred_attribution_resolved: "analytics",
         .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
         .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce",
         // x402 — legacy + lifecycle
@@ -723,6 +744,21 @@ public final class Aether: NSObject {
     private static let maxQueueSize = 500
     private static let sessionTimeoutSeconds: TimeInterval = 30 * 60
     private static let maxScrubDepth = 32
+    // Acquisition-evidence persistence (shared AcquisitionEvidence schema v3).
+    // Keys are versioned so a future schema bump can migrate or discard
+    // deliberately instead of silently misreading old payloads.
+    private static let acquisitionEvidenceSchemaVersion = 3
+    private static let firstTouchDefaultsKey = "acquisitionEvidence.firstTouch.v1"
+    private static let latestTouchDefaultsKey = "acquisitionEvidence.latestTouch.v1"
+    /// Default evidence lifetime: 30 days from observation, after which stored
+    /// touches stop attaching to outgoing events and first touch may be re-set.
+    private static let acquisitionEvidenceTTL: TimeInterval = 30 * 24 * 60 * 60
+    /// Window inside which the identical incoming URL is treated as a
+    /// duplicate delivery (cold-start + warm-start double dispatch).
+    private static let incomingURLDedupWindow: TimeInterval = 10
+    /// destinationPathHash length: SHA-256 hex truncated to 24 chars, matching
+    /// the one-way path-privacy hash documented on the shared contract.
+    private static let destinationPathHashLength = 24
     private var lastActivityDate: Date?
 
     private override init() {
@@ -743,6 +779,8 @@ public final class Aether: NSObject {
         self.walletAddress = defaults.string(forKey: "walletAddress")
         self.consentState = defaults.stringArray(forKey: "consentState") ?? []
         self.userId = defaults.string(forKey: "userId")
+        self.firstTouchEvidence = loadPersistedEvidence(forKey: Aether.firstTouchDefaultsKey)
+        self.latestTouchEvidence = loadPersistedEvidence(forKey: Aether.latestTouchDefaultsKey)
         self.sessionId = UUID().uuidString
         self.sessionStart = Date()
         self.eventSequence = 0
@@ -967,9 +1005,16 @@ public final class Aether: NSObject {
         anonymousId = UUID().uuidString
         sessionId = UUID().uuidString
         eventSequence = 0
+        // Acquisition attribution is identity-scoped state: logout/reset
+        // clears campaign context and both persisted acquisition touches.
+        campaignInfo = nil
+        firstTouchEvidence = nil
+        latestTouchEvidence = nil
         defaults.removeObject(forKey: "userId")
         defaults.removeObject(forKey: "walletAddress")
         defaults.removeObject(forKey: "consentState")
+        defaults.removeObject(forKey: Aether.firstTouchDefaultsKey)
+        defaults.removeObject(forKey: Aether.latestTouchDefaultsKey)
         defaults.set(anonymousId, forKey: "anonymousId")
         log("SDK reset")
     }
@@ -1061,35 +1106,399 @@ public final class Aether: NSObject {
         if let url = persistedQueueURL { try? FileManager.default.removeItem(at: url) }
     }
 
-    // MARK: - Deep Link Attribution
+    // MARK: - Deep Link / Universal Link Attribution
+    //
+    // Integration (UIKit AppDelegate):
+    //
+    //     func application(_ app: UIApplication, open url: URL,
+    //                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+    //         Aether.shared.handleDeepLink(url)          // custom scheme (myapp://…)
+    //         return true
+    //     }
+    //     func application(_ application: UIApplication,
+    //                      continue userActivity: NSUserActivity,
+    //                      restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+    //         return Aether.shared.handleUniversalLink(userActivity)
+    //     }
+    //
+    // Integration (SceneDelegate — covers BOTH cold start and warm start):
+    //
+    //     func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+    //                options connectionOptions: UIScene.ConnectionOptions) {
+    //         // Cold start
+    //         connectionOptions.userActivities.forEach { Aether.shared.handleUniversalLink($0) }
+    //         connectionOptions.urlContexts.forEach { Aether.shared.handleDeepLink($0.url) }
+    //     }
+    //     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    //         Aether.shared.handleUniversalLink(userActivity)   // warm start
+    //     }
+    //     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    //         URLContexts.forEach { Aether.shared.handleDeepLink($0.url) }
+    //     }
+    //
+    // Both cold- and warm-start paths funnel into processIncomingURL, which
+    // dedupes identical URL deliveries inside a short window, so wiring every
+    // delegate callback is safe (no double deep_link_opened events).
 
+    /// Handle a custom-scheme deep link (`myapp://…`). Entry method is
+    /// recorded as the canonical `ios_custom_url`.
     public func handleDeepLink(_ url: URL) {
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        var attribution: [String: AnyCodable] = ["url": AnyCodable(url.absoluteString)]
-        var clickIds: [String: String] = [:]
+        processIncomingURL(url, entryMethod: "ios_custom_url")
+    }
 
-        for item in components?.queryItems ?? [] {
-            if item.name.hasPrefix("utm_") {
-                attribution[item.name] = AnyCodable(item.value ?? "")
+    /// Handle a Universal Link handoff (`NSUserActivityTypeBrowsingWeb`).
+    /// Returns `true` when the activity carried a web URL the SDK consumed as
+    /// acquisition evidence (entry method `ios_universal_link`); `false` lets
+    /// the caller fall through to its own activity handling.
+    @discardableResult
+    public func handleUniversalLink(_ userActivity: NSUserActivity) -> Bool {
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+              let url = userActivity.webpageURL else {
+            return false
+        }
+        processIncomingURL(url, entryMethod: "ios_universal_link")
+        return true
+    }
+
+    /// Route an arbitrary incoming URL string context (React Native bridge and
+    /// other host-managed link routers). http(s) URLs are Universal Links;
+    /// everything else is a custom URL scheme.
+    public func handleURL(_ url: URL) {
+        let scheme = url.scheme?.lowercased()
+        let entryMethod = (scheme == "http" || scheme == "https")
+            ? "ios_universal_link"
+            : "ios_custom_url"
+        processIncomingURL(url, entryMethod: entryMethod)
+    }
+
+    /// Single processing funnel for every incoming deep/universal link:
+    /// URL+timestamp dedup → canonical evidence parse → campaign context →
+    /// first/latest-touch persistence → `deep_link_opened` emission.
+    private func processIncomingURL(_ url: URL, entryMethod: String, at date: Date = Date()) {
+        guard isInitialized, config?.modules.deepLinkAttribution != false else { return }
+
+        // Dedup: cold-start and warm-start delegate paths often deliver the
+        // same URL twice within the same launch.
+        let dedupKey = url.absoluteString
+        var isDuplicate = false
+        serialQueue.sync {
+            processedIncomingURLs = processedIncomingURLs.filter {
+                date.timeIntervalSince($0.value) < Aether.incomingURLDedupWindow
             }
-            if Self.clickIdParams.contains(item.name), let val = item.value {
-                clickIds[item.name] = val
-                attribution[item.name] = AnyCodable(val)
+            if let last = processedIncomingURLs[dedupKey],
+               date.timeIntervalSince(last) < Aether.incomingURLDedupWindow {
+                isDuplicate = true
+            } else {
+                processedIncomingURLs[dedupKey] = date
             }
         }
+        if isDuplicate {
+            log("Ignoring duplicate incoming URL delivery")
+            return
+        }
 
-        // Store campaign info for inclusion in event context
+        let parsed = parseAcquisitionEvidence(from: url, entryMethod: entryMethod, at: date)
+
+        // CampaignInfo keeps the declared UTM fields and click IDs, but a deep
+        // link's host is where the user LANDED (destinationDomain), never who
+        // referred them — referrerDomain must stay nil here.
         self.campaignInfo = EventContext.CampaignInfo(
-            source: attribution["utm_source"]?.value as? String,
-            medium: attribution["utm_medium"]?.value as? String,
-            campaign: attribution["utm_campaign"]?.value as? String,
-            content: attribution["utm_content"]?.value as? String,
-            term: attribution["utm_term"]?.value as? String,
-            clickIds: clickIds,
-            referrerDomain: components?.host
+            source: parsed.evidence["utmSource"]?.value as? String,
+            medium: parsed.evidence["utmMedium"]?.value as? String,
+            campaign: parsed.evidence["utmCampaign"]?.value as? String,
+            content: parsed.evidence["utmContent"]?.value as? String,
+            term: parsed.evidence["utmTerm"]?.value as? String,
+            clickIds: parsed.clickIds,
+            referrerDomain: nil
         )
 
-        track("deep_link_opened", properties: attribution)
+        recordAcquisitionTouch(parsed.evidence, at: date)
+
+        var properties: [String: AnyCodable] = [
+            "url": AnyCodable(parsed.sanitizedURL),
+            "entryMethod": AnyCodable(entryMethod),
+        ]
+        for key in ["utmSource", "utmMedium", "utmCampaign", "utmContent", "utmTerm", "utmId"] {
+            if let value = parsed.evidence[key]?.value as? String {
+                properties[key] = AnyCodable(value)
+            }
+        }
+        if let host = parsed.evidence["destinationDomain"]?.value as? String {
+            properties["destinationDomain"] = AnyCodable(host)
+        }
+        if !parsed.clickIds.isEmpty {
+            properties["clickIds"] = AnyCodable(parsed.clickIds.mapValues { AnyCodable($0) })
+        }
+        enqueueEvent(type: .deep_link_opened, properties: properties)
+    }
+
+    /// Parsed representation of one incoming link observation.
+    struct ParsedIncomingURL {
+        /// Shared AcquisitionEvidence (schema v3) as a wire-shaped dictionary.
+        let evidence: [String: AnyCodable]
+        /// Click IDs preserved for CampaignInfo/audit.
+        let clickIds: [String: String]
+        /// URL with the opaque `aether_ref` token stripped — the token only
+        /// travels inside evidence.referralToken, never in raw URL strings.
+        let sanitizedURL: String
+    }
+
+    /// Canonical evidence parser: one URL in, one AcquisitionEvidence
+    /// (schema v3) dictionary out. The SDK observes; it never classifies.
+    func parseAcquisitionEvidence(
+        from url: URL,
+        entryMethod: String,
+        at date: Date = Date()
+    ) -> ParsedIncomingURL {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var evidence: [String: AnyCodable] = [
+            "schemaVersion": AnyCodable(Aether.acquisitionEvidenceSchemaVersion),
+            "entryMethod": AnyCodable(entryMethod),
+        ]
+        var clickIds: [String: String] = [:]
+
+        let utmKeyMap: [String: String] = [
+            "utm_source": "utmSource",
+            "utm_medium": "utmMedium",
+            "utm_campaign": "utmCampaign",
+            "utm_content": "utmContent",
+            "utm_term": "utmTerm",
+            "utm_id": "utmId",
+        ]
+
+        for item in components?.queryItems ?? [] {
+            let name = item.name.lowercased()
+            if let mapped = utmKeyMap[name], let value = item.value, !value.isEmpty {
+                evidence[mapped] = AnyCodable(value)
+            } else if Self.clickIdParams.contains(name), let value = item.value, !value.isEmpty {
+                clickIds[name] = value
+            } else if name == "aether_ref", let value = item.value, !value.isEmpty {
+                // Opaque referral token: captured as-is, verified server-side.
+                evidence["referralToken"] = AnyCodable(value)
+            } else if name == "aether_cid", let value = item.value, !value.isEmpty {
+                // Explicit Aether campaign UUID — always validated server-side.
+                evidence["canonicalCampaignId"] = AnyCodable(value)
+            }
+        }
+        if !clickIds.isEmpty {
+            evidence["clickIds"] = AnyCodable(clickIds.mapValues { AnyCodable($0) })
+        }
+
+        // destinationDomain is the host the user LANDED on. It is not a
+        // referrer and is never surfaced as referrerDomain.
+        if let host = components?.host, !host.isEmpty {
+            evidence["destinationDomain"] = AnyCodable(host)
+        }
+        let path = url.path
+        if !path.isEmpty && path != "/" {
+            let digest = DeviceFingerprint.sha256(path)
+            evidence["destinationPathHash"] = AnyCodable(
+                String(digest.prefix(Aether.destinationPathHashLength))
+            )
+        }
+
+        // Strip the opaque referral token from the transmitted URL string.
+        var sanitizedComponents = components
+        if let items = components?.queryItems {
+            let kept = items.filter { $0.name.lowercased() != "aether_ref" }
+            sanitizedComponents?.queryItems = kept.isEmpty ? nil : kept
+        }
+        let sanitizedURL = sanitizedComponents?.url?.absoluteString ?? url.absoluteString
+        evidence["landingPage"] = AnyCodable(sanitizedURL)
+
+        let observedAt = ISO8601DateFormatter().string(from: date)
+        evidence["firstCapturedAt"] = AnyCodable(observedAt)
+        evidence["lastObservedAt"] = AnyCodable(observedAt)
+        evidence["evidenceExpiresAt"] = AnyCodable(
+            ISO8601DateFormatter().string(from: date.addingTimeInterval(Aether.acquisitionEvidenceTTL))
+        )
+
+        return ParsedIncomingURL(
+            evidence: evidence,
+            clickIds: clickIds,
+            sanitizedURL: sanitizedURL
+        )
+    }
+
+    // MARK: - First / Latest Touch Persistence
+
+    /// Persist a fresh observation: latest touch always advances; first touch
+    /// is written only when none exists (or the stored one has expired), so a
+    /// later, weaker observation can never overwrite the original first touch.
+    private func recordAcquisitionTouch(_ evidence: [String: AnyCodable], at date: Date = Date()) {
+        var latest = evidence
+        latest["firstTouch"] = AnyCodable(false)
+        latestTouchEvidence = latest
+        persistEvidence(latest, forKey: Aether.latestTouchDefaultsKey)
+
+        let existingFirst = firstTouchEvidence
+        if existingFirst == nil || isEvidenceExpired(existingFirst!, at: date) {
+            var first = evidence
+            first["firstTouch"] = AnyCodable(true)
+            firstTouchEvidence = first
+            persistEvidence(first, forKey: Aether.firstTouchDefaultsKey)
+        }
+    }
+
+    private func persistEvidence(_ evidence: [String: AnyCodable], forKey key: String) {
+        if let data = try? JSONEncoder().encode(evidence) {
+            defaults.set(data, forKey: key)
+        }
+    }
+
+    private func loadPersistedEvidence(forKey key: String) -> [String: AnyCodable]? {
+        guard let data = defaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode([String: AnyCodable].self, from: data),
+              (decoded["schemaVersion"]?.value as? Int) == Aether.acquisitionEvidenceSchemaVersion
+        else { return nil }
+        return decoded
+    }
+
+    func isEvidenceExpired(_ evidence: [String: AnyCodable], at date: Date = Date()) -> Bool {
+        guard let raw = evidence["evidenceExpiresAt"]?.value as? String,
+              let expires = ISO8601DateFormatter().date(from: raw) else {
+            // Evidence persisted without an expiry is treated as expired
+            // rather than attaching forever.
+            return true
+        }
+        return expires <= date
+    }
+
+    /// The evidence stamped on outgoing event contexts: the latest unexpired
+    /// touch, falling back to an unexpired first touch. Nil once expired.
+    private func activeAcquisitionEvidence(at date: Date) -> [String: AnyCodable]? {
+        if let latest = latestTouchEvidence, !isEvidenceExpired(latest, at: date) {
+            return latest
+        }
+        if let first = firstTouchEvidence, !isEvidenceExpired(first, at: date) {
+            return first
+        }
+        return nil
+    }
+
+    /// First-touch acquisition evidence as a JSON string (nil when absent or
+    /// expired). Used by the React Native bridge.
+    public func getFirstTouchAttributionJSON() -> String? {
+        guard let first = firstTouchEvidence, !isEvidenceExpired(first) else { return nil }
+        guard let data = try? JSONEncoder().encode(first) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Latest-touch acquisition evidence as a JSON string (nil when absent or
+    /// expired). Used by the React Native bridge.
+    public func getLatestTouchAttributionJSON() -> String? {
+        guard let latest = latestTouchEvidence, !isEvidenceExpired(latest) else { return nil }
+        guard let data = try? JSONEncoder().encode(latest) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    // MARK: - Deferred Attribution (deterministic server handoff)
+
+    /// Resolve a deterministic deferred-attribution handoff.
+    ///
+    /// iOS has no Android-style install referrer: deferred attribution is only
+    /// possible when the pre-install surface registered a handoff server-side
+    /// and the app can present the SAME explicit identifier (e.g. a code the
+    /// user typed, or an identifier carried through a deterministic channel).
+    /// The SDK never fingerprints its way to a match — an unmatched install
+    /// simply stays Direct / Unknown server-side, and no event is emitted.
+    ///
+    /// On a resolved response the returned evidence is stored as the first
+    /// touch (only if none exists yet) and `deferred_attribution_resolved`
+    /// is emitted.
+    public func resolveDeferredHandoff(identifier: String, completion: @escaping (Bool) -> Void) {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isInitialized, let config = config, !trimmed.isEmpty,
+              let url = URL(string: "\(config.endpoint)/v1/attribution/deferred/resolve") else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
+        request.timeoutInterval = 10.0
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["identifier": trimmed])
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard error == nil, (200...299).contains(statusCode),
+                  let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let resolved = json["resolved"] as? Bool, resolved,
+                  let serverEvidence = json["evidence"] as? [String: Any] else {
+                // Unmatched, expired, or failed: uniformly no event and no
+                // stored evidence — the install stays Direct / Unknown.
+                completion(false)
+                return
+            }
+
+            let now = Date()
+            let evidence = self.evidenceFromDeferredResolution(serverEvidence, at: now)
+            self.serialQueue.sync {
+                // Deferred evidence becomes the first touch ONLY when no
+                // unexpired first touch exists — never an overwrite.
+                if self.firstTouchEvidence == nil
+                    || self.isEvidenceExpired(self.firstTouchEvidence!, at: now) {
+                    var first = evidence
+                    first["firstTouch"] = AnyCodable(true)
+                    self.firstTouchEvidence = first
+                    self.persistEvidence(first, forKey: Aether.firstTouchDefaultsKey)
+                }
+            }
+
+            var properties: [String: AnyCodable] = [
+                "entryMethod": AnyCodable("verified_source_link"),
+                "proofLevel": AnyCodable("server_observed"),
+            ]
+            if let source = serverEvidence["source"] as? String { properties["source"] = AnyCodable(source) }
+            if let medium = serverEvidence["medium"] as? String { properties["medium"] = AnyCodable(medium) }
+            if let sourceClass = serverEvidence["source_class"] as? String { properties["sourceClass"] = AnyCodable(sourceClass) }
+            if let placement = serverEvidence["placement"] as? String { properties["placement"] = AnyCodable(placement) }
+            self.enqueueEvent(type: .deferred_attribution_resolved, properties: properties)
+            completion(true)
+        }.resume()
+    }
+
+    /// Map the server's snake_case deferred-resolution evidence into the
+    /// shared AcquisitionEvidence (schema v3) wire shape.
+    private func evidenceFromDeferredResolution(
+        _ server: [String: Any],
+        at date: Date
+    ) -> [String: AnyCodable] {
+        let observedAt = ISO8601DateFormatter().string(from: date)
+        var evidence: [String: AnyCodable] = [
+            "schemaVersion": AnyCodable(Aether.acquisitionEvidenceSchemaVersion),
+            "entryMethod": AnyCodable("verified_source_link"),
+            "firstCapturedAt": AnyCodable(observedAt),
+            "lastObservedAt": AnyCodable(observedAt),
+            "evidenceExpiresAt": AnyCodable(
+                ISO8601DateFormatter().string(from: date.addingTimeInterval(Aether.acquisitionEvidenceTTL))
+            ),
+        ]
+        let passthrough: [(server: String, wire: String)] = [
+            ("source", "utmSource"),
+            ("medium", "utmMedium"),
+            ("utm_source", "utmSource"),
+            ("utm_medium", "utmMedium"),
+            ("utm_campaign", "utmCampaign"),
+            ("utm_content", "utmContent"),
+            ("utm_term", "utmTerm"),
+            ("campaign_id", "campaignId"),
+            ("link_id", "verifiedReferralLinkId"),
+            ("placement", "placement"),
+            ("source_class", "sourceClass"),
+            ("proof_level", "proofLevel"),
+        ]
+        for (serverKey, wireKey) in passthrough {
+            if let value = server[serverKey] as? String, !value.isEmpty {
+                evidence[wireKey] = AnyCodable(value)
+            }
+        }
+        return evidence
     }
 
     // MARK: - Push Notification
@@ -1623,6 +2032,9 @@ public final class Aether: NSObject {
                 timezone: TimeZone.current.identifier
             ),
             campaign: self.campaignInfo,
+            // Active acquisition evidence rides on every event while
+            // unexpired (mirrors campaign attachment); nil once expired.
+            acquisitionEvidence: activeAcquisitionEvidence(at: eventDate),
             fingerprint: gatedFingerprint(),
             network: currentNetworkType,
             thermalState: thermalStateString(),

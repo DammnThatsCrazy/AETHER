@@ -201,6 +201,12 @@ def test_step_params_include_source_classification_columns():
     step = _make_step()
     step.update({
         "source_class": "ai_referral",
+        "traffic_origin": "external",
+        "economic_class": "unpaid",
+        "channel_family": "ai",
+        "entry_method": "web_referrer",
+        "proof_level": "domain_verified",
+        "evidence_conflicts": ["paid_click_id_overrides_organic_utm:gclid"],
         "referral_mediation_type": "ai_mediated_human_referral",
         "ai_provider": "openai",
         "ai_product": "chatgpt",
@@ -208,21 +214,25 @@ def test_step_params_include_source_classification_columns():
         "journey_role": "entry",
         "evidence_confidence": 0.9,
         "verification_level": "domain_verified",
-        "source_classifier_version": "2.0",
+        "source_classifier_version": "3.0",
         "source_classification_id": classification_id,
         "attribution_eligible": True,
         "verified_referral_link_id": link_id,
     })
 
     params = _step_params(step)
-    assert len(params) == 44
-    assert params[16:21] == (
-        "ai_referral",
+    assert len(params) == 50
+    # source_class followed by the canonical traffic dimensions (classifier v3.0)
+    assert params[16] == "ai_referral"
+    assert params[17:22] == ("external", "unpaid", "ai", "web_referrer", "domain_verified")
+    import json
+    assert json.loads(params[22]) == ["paid_click_id_overrides_organic_utm:gclid"]
+    assert params[23:27] == (
         "ai_mediated_human_referral",
         "openai",
         "chatgpt",
         "entry",
     )
-    assert str(params[25]) == classification_id
-    assert params[26] is True
-    assert str(params[27]) == link_id
+    assert str(params[31]) == classification_id
+    assert params[32] is True
+    assert str(params[33]) == link_id

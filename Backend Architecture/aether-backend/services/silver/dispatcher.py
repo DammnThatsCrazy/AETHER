@@ -212,8 +212,36 @@ def _extract_and_sanitize_referral_token(
     return token, token_hash
 
 
+async def _record_handoff_replay_audit(tenant_id: str, source_event_id: Any) -> None:
+    """Best-effort audit record for a rejected handoff replay (attack signal)."""
+
+    try:
+        from services.security.audit_ledger import AuditLedger
+
+        await AuditLedger().record(
+            actor_id="silver_dispatcher",
+            actor_type="system",
+            event_type="verified_source_link",
+            resource_type="source_link_handoff",
+            action="replay_reject",
+            outcome="denied",  # type: ignore[arg-type]
+            tenant_id=str(tenant_id),
+            resource_id=str(source_event_id) if source_event_id else None,
+            metadata={"reason": "handoff_token_already_consumed"},
+        )
+    except Exception as exc:  # pragma: no cover — audit must not block Silver
+        logger.warning("handoff_replay_audit_failed tenant=%s: %s", tenant_id, exc)
+
+
 async def _resolve_verified_referral(event: dict[str, Any]) -> None:
-    """Attach only tenant-verified referral metadata to an event in-place."""
+    """Attach only tenant-verified referral metadata to an event in-place.
+
+    ``aether_ref`` carries EITHER a direct verified-link token (existing path)
+    OR a one-time redirect handoff token minted by GET /v1/r/{token}.  The
+    direct path is tried first (no side effects on miss); the handoff path is
+    one-time-consumable, replay-rejected, and marks the redirect link-use as
+    correlated.
+    """
 
     token, token_hash = _extract_and_sanitize_referral_token(event)
     if not token and not token_hash:
@@ -221,17 +249,30 @@ async def _resolve_verified_referral(event: dict[str, Any]) -> None:
     ctx = event.get("context") if isinstance(event.get("context"), dict) else {}
     tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
     source_event_id = event.get("messageId") or event.get("id")
+    handoff_status: str | None = None
     try:
         if token:
             claim = await _verified_referral_links.resolve_token(
                 str(tenant_id), token, source_event_id=source_event_id
             )
+            if claim is None:
+                claim, handoff_status = await _verified_referral_links.consume_handoff(
+                    str(tenant_id), token, source_event_id=source_event_id
+                )
         else:
             claim = await _verified_referral_links.resolve_token_hash(
                 str(tenant_id),
                 str(token_hash),
                 source_event_id=source_event_id,
             )
+            if claim is None:
+                claim, handoff_status = (
+                    await _verified_referral_links.consume_handoff_hash(
+                        str(tenant_id),
+                        str(token_hash),
+                        source_event_id=source_event_id,
+                    )
+                )
     except Exception as exc:
         logger.warning("verified_referral_resolution_error tenant=%s: %s", tenant_id, exc)
         metrics.increment(
@@ -239,9 +280,16 @@ async def _resolve_verified_referral(event: dict[str, Any]) -> None:
         )
         return
     if claim is None:
-        metrics.increment(
-            "verified_referral_resolution_total", labels={"status": "rejected"}
-        )
+        if handoff_status == "replayed":
+            metrics.increment(
+                "verified_referral_resolution_total",
+                labels={"status": "replay_rejected"},
+            )
+            await _record_handoff_replay_audit(str(tenant_id), source_event_id)
+        else:
+            metrics.increment(
+                "verified_referral_resolution_total", labels={"status": "rejected"}
+            )
         return
     event["_verified_referral"] = claim
     metrics.increment(
@@ -284,13 +332,43 @@ class ProjectionOutcome:
         return [s["projector"] for s in self.projector_status if s["status"] == "error"]
 
 
+def _row_campaign_evidence(row: dict[str, Any]) -> bool:
+    """True only when the row carries real campaign-identity evidence.
+
+    Campaign identity is a separate dimension from source classification:
+    utm_source/utm_medium alone are NOT campaign evidence. Evidence is a
+    canonical campaign hint (including a verified-link campaign hint, which
+    arrives as ``_canonical_campaign_id_hint``), utm_campaign, utm_id,
+    external_campaign_id, or a connector flow id.
+    """
+    return bool(
+        row.get("_canonical_campaign_id_hint")
+        or row.get("_utm_id")
+        or row.get("external_campaign_id")
+        or row.get("utm_campaign")
+        or row.get("external_flow_id")
+    )
+
+
 async def _resolve_campaign_rows(rows: list[dict[str, Any]], *, table: str) -> None:
     """Resolve campaign evidence for touchpoint/comms rows in-place.
 
     Calls CampaignResolver per row, updates campaign_id and resolution fields.
+    The resolver is only invoked for rows with campaign evidence — evidence-free
+    rows are terminal ``not_applicable`` and never create Mapping Review rows.
     Never raises — resolution failure writes 'unresolved' status but does not
-    drop the event.
+    drop the event (the row keeps its full source classification).
     """
+    evidence_rows = [row for row in rows if _row_campaign_evidence(row)]
+    evidence_row_ids = {id(row) for row in evidence_rows}
+    for row in rows:
+        if id(row) not in evidence_row_ids:
+            row.pop("_canonical_campaign_id_hint", None)
+            row.pop("_utm_id", None)
+            row["campaign_resolution_status"] = "not_applicable"
+    if not evidence_rows:
+        return
+
     try:
         from services.campaign.resolver import CampaignResolver
         resolver = CampaignResolver()
@@ -301,20 +379,13 @@ async def _resolve_campaign_rows(rows: list[dict[str, Any]], *, table: str) -> N
                 row.pop(k, None)
         return
 
-    for row in rows:
+    for row in evidence_rows:
         canonical_hint = row.pop("_canonical_campaign_id_hint", None)
         utm_id = row.pop("_utm_id", None)
         tenant_id = row.get("tenant_id", "")
         # Comms rows carry provider evidence; touchpoint rows carry UTM evidence.
         platform = row.get("platform") or row.get("provider")
         external_account_id = row.get("external_account_id") or row.get("provider_account_id")
-
-        has_evidence = bool(
-            canonical_hint or utm_id or row.get("external_campaign_id")
-            or row.get("utm_campaign") or row.get("external_flow_id")
-        )
-        if not has_evidence:
-            continue
 
         try:
             result = await resolver.resolve_one(

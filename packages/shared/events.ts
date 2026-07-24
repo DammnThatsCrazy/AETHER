@@ -29,6 +29,11 @@ export type EventType =
   | 'journey_completed'
   | 'journey_abandoned'
   | 'journey_checkpoint'
+  | 'navigation_intent'
+  | 'navigation_arrival'
+  | 'deep_link_opened'
+  | 'app_install_attributed'
+  | 'deferred_attribution_resolved'
   // identity
   | 'identify'
   // consent
@@ -471,6 +476,11 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   journey_completed: 'journey',
   journey_abandoned: 'journey',
   journey_checkpoint: 'journey',
+  navigation_intent: 'journey',
+  navigation_arrival: 'journey',
+  deep_link_opened: 'journey',
+  app_install_attributed: 'journey',
+  deferred_attribution_resolved: 'journey',
   identify: 'identity',
   consent: 'consent',
   conversion: 'commerce',
@@ -867,6 +877,11 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   journey_completed: 'analytics',
   journey_abandoned: 'analytics',
   journey_checkpoint: 'analytics',
+  navigation_intent: 'analytics',
+  navigation_arrival: 'analytics',
+  deep_link_opened: 'analytics',
+  app_install_attributed: 'analytics',
+  deferred_attribution_resolved: 'analytics',
   identify: 'analytics',
   consent: 'analytics',
   conversion: 'marketing',

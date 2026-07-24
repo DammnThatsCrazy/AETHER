@@ -21,6 +21,11 @@ import {
 } from '@aether-app/features/users/use-user-profile';
 import { useUnifiedJourney } from '@aether-app/features/journey';
 import { api } from '@aether-app/lib/api/endpoints';
+import {
+  sourceClassLabel,
+  humanizeRegistryValue,
+  touchpointEvidenceSummary,
+} from '@aether-app/lib/traffic-source';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -824,7 +829,23 @@ function AttributionTab({ userId }: { userId: string }) {
         columns={[
           { key: 'channel', header: 'Channel', render: tp => <Badge variant="default" size="sm">{fmt(tp.channel)}</Badge> },
           { key: 'source', header: 'Source', render: tp => <span className="text-text-secondary">{fmt(tp.source)}</span> },
-          { key: 'source_class', header: 'Source class', render: tp => fmt(tp.source_class) },
+          // Canonical registry label — legacy "direct" normalizes to
+          // direct_unknown and renders "Direct / Unknown" (never "Typed URL").
+          // Hovering the cell shows the evidence detail (entry method, proof,
+          // verification, conflicts) where those optional fields are present.
+          { key: 'source_class', header: 'Source class', render: tp => (
+            <span title={touchpointEvidenceSummary(tp) || undefined}>{sourceClassLabel(tp.source_class)}</span>
+          ) },
+          { key: 'proof', header: 'Proof', render: tp => (
+            tp.proof_level
+              ? <Badge variant="default" size="sm">{humanizeRegistryValue(tp.proof_level)}</Badge>
+              : <span className="text-text-muted">—</span>
+          ) },
+          { key: 'entry_method', header: 'Entry method', render: tp => (
+            tp.entry_method
+              ? <span className="text-text-secondary text-xs">{humanizeRegistryValue(tp.entry_method)}</span>
+              : <span className="text-text-muted">—</span>
+          ) },
           { key: 'ai', header: 'AI provider / product', render: tp => [tp.ai_provider, tp.ai_product].filter(Boolean).map(String).join(' / ') || '—' },
           { key: 'mediation', header: 'Mediation', render: tp => fmt(tp.referral_mediation_type) },
           { key: 'actor', header: 'Actor', render: tp => fmt(tp.actor_type) },

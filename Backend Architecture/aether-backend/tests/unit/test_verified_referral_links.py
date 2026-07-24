@@ -75,6 +75,9 @@ async def test_resolve_is_tenant_scoped_and_returns_strict_server_claim():
         "actor_type": "agent",
         "journey_role": "handoff",
         "source": "anthropic",
+        # Phase-2 additive proof metadata (existing keys above are unchanged).
+        "entry_method": "verified_source_link",
+        "proof_level": "cryptographic",
     }
     refreshed = await repo.get("tenant-a", link["verified_referral_link_id"])
     assert refreshed is not None

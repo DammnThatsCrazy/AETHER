@@ -65,9 +65,31 @@ export interface AcquisitionEvidence {
    */
   referralToken?: string;
 
+  /**
+   * How the entry evidence was physically observed (canonical EntryMethod from
+   * the traffic-source registry, e.g. 'web_referrer', 'android_install_referrer',
+   * 'ios_universal_link'). Descriptive observation only — the backend classifier
+   * remains the sole owner of the final classification.
+   */
+  entryMethod?: string;
+
+  /**
+   * Host of the destination the user arrived at (deep link / app link /
+   * universal link host). This is where the user LANDED, never who referred
+   * them — it must not be reported as referrerDomain.
+   */
+  destinationDomain?: string;
+  /** One-way hash of the destination path when path privacy is configured. */
+  destinationPathHash?: string;
+
+  /** True when this evidence is the persisted first touch (vs latest touch). */
+  firstTouch?: boolean;
+
   // Temporal metadata
   firstCapturedAt?: string;  // ISO 8601
   lastObservedAt?: string;   // ISO 8601
+  /** When the underlying evidence expires and stops attaching to new events. */
+  evidenceExpiresAt?: string;  // ISO 8601
 
   // Disambiguation
   sessionId?: string;
@@ -94,7 +116,7 @@ export type PaidMediaEvidence = AcquisitionEvidence & {
   externalCampaignId: string;
 };
 
-export const ACQUISITION_EVIDENCE_SCHEMA_VERSION = 2;
+export const ACQUISITION_EVIDENCE_SCHEMA_VERSION = 3;
 
 /** Build a minimal AcquisitionEvidence from URL search params (browser). */
 export function evidenceFromSearchParams(params: URLSearchParams): AcquisitionEvidence {
