@@ -36,12 +36,18 @@ from shared.decorators import require_api_key, require_api_key_raw
 from shared.logger.logger import metrics
 from . import metrics as traffic_metrics
 from .classifier import SourceClassifier
+from .config import (
+    TenantTrafficConfigRepository,
+    ConfigValidationError,
+    validate_config,
+)
 from .referral_links import VerifiedReferralLinkRepository
 
 logger = logging.getLogger("aether.traffic")
 
 _classifier = SourceClassifier()
 _verified_referral_links = VerifiedReferralLinkRepository()
+_traffic_config_repo = TenantTrafficConfigRepository()
 
 router = APIRouter(prefix="/v1", tags=["traffic"])
 
@@ -70,6 +76,25 @@ async def _require_referral_link_write(
 ) -> TenantContext:
     if not _referral_link_access_allowed(tenant, "referral_links:write"):
         raise HTTPException(status_code=403, detail="Referral-link write access required")
+    return tenant
+
+
+async def _require_traffic_config_read(
+    tenant: TenantContext = Depends(require_api_key),
+) -> TenantContext:
+    if not (
+        _referral_link_access_allowed(tenant, "traffic_config:read")
+        or _referral_link_access_allowed(tenant, "traffic_config:write")
+    ):
+        raise HTTPException(status_code=403, detail="Traffic-config read access required")
+    return tenant
+
+
+async def _require_traffic_config_write(
+    tenant: TenantContext = Depends(require_api_key),
+) -> TenantContext:
+    if not _referral_link_access_allowed(tenant, "traffic_config:write"):
+        raise HTTPException(status_code=403, detail="Traffic-config write access required")
     return tenant
 
 
@@ -480,6 +505,25 @@ async def redirect_verified_source_link(token: str, request: Request) -> Redirec
         )
         raise HTTPException(status_code=404, detail="Not found")
 
+    # Additive tenant guard (spec §15.4): if the tenant configured a
+    # destination allowlist, refuse to redirect to an off-allowlist host. An
+    # empty/unset allowlist preserves v1 behaviour (any stored destination).
+    try:
+        tenant_cfg = await _traffic_config_repo.get(result["tenant_id"])
+        if not tenant_cfg.allows_destination(result["destination_url"]):
+            traffic_metrics.record_invalid_source_link()
+            metrics.increment(
+                "verified_source_link_redirect_total", labels={"status": "rejected"}
+            )
+            traffic_metrics.record_redirect_latency(
+                (time.monotonic() - _redirect_started) * 1000
+            )
+            raise HTTPException(status_code=404, detail="Not found")
+    except HTTPException:
+        raise
+    except Exception as exc:  # config lookup must never break the redirect
+        logger.warning("traffic_config_allowlist_check_failed: %s", exc)
+
     status = "machine" if result["is_machine"] else "verified"
     metrics.increment(
         "verified_source_link_redirect_total", labels={"status": status}
@@ -660,3 +704,45 @@ async def get_channel_breakdown(
     return {
         "channels": sorted(channels.values(), key=lambda x: x["sessions"], reverse=True),
     }
+
+
+# =============================================================================
+# TENANT TRAFFIC CONFIGURATION (spec §15.4)
+# =============================================================================
+
+
+@router.get("/traffic/config")
+async def get_traffic_config(
+    tenant: TenantContext = Depends(_require_traffic_config_read),
+) -> dict[str, Any]:
+    """Return the tenant's traffic configuration (defaults when unset)."""
+    cfg = await _traffic_config_repo.get(tenant.tenant_id)
+    return {"data": cfg.to_dict()}
+
+
+@router.put("/traffic/config")
+async def put_traffic_config(
+    body: dict[str, Any],
+    tenant: TenantContext = Depends(_require_traffic_config_write),
+) -> dict[str, Any]:
+    """Replace the tenant's traffic configuration.
+
+    Validated against the canonical registry (controlled extension only): a
+    tenant may add aliases that resolve to canonical enum values but can never
+    mint a new canonical source_class / entry_method.
+    """
+    try:
+        cfg = validate_config(tenant.tenant_id, body or {})
+    except ConfigValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    saved = await _traffic_config_repo.upsert(cfg)
+    return {"data": saved.to_dict()}
+
+
+@router.delete("/traffic/config")
+async def delete_traffic_config(
+    tenant: TenantContext = Depends(_require_traffic_config_write),
+) -> dict[str, Any]:
+    """Reset the tenant's traffic configuration to defaults."""
+    deleted = await _traffic_config_repo.delete(tenant.tenant_id)
+    return {"data": {"deleted": deleted}}

@@ -1985,6 +1985,47 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Shadow-mode source-classification divergence facts
+  # (20260804_traffic_ops): subject-linked (source_event_id / touchpoint_id)
+  # legacy-vs-canonical comparison evidence, so consent revocation must
+  # invalidate it and DSR erasure is a hard delete.
+  - resource_type: source_classification_shadow_divergences
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
+  # Per-tenant traffic-intelligence configuration (20260804_traffic_ops):
+  # tenant-owned operational settings, not subject-linked personal data, so no
+  # consent invalidation hook. Standard retention, plain row storage.
+  - resource_type: tenant_traffic_config
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   # ---------------------------------------------------------------------------
   # Operational / platform state — standard retention, plain row storage,
   # no externalization.
