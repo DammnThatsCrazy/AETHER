@@ -18,7 +18,7 @@ source_files:
   - AWS Deployment/aether-aws/terraform/modules/s3/main.tf
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "fdebe49"
+last_synced_commit: "5927380"
 ---
 
 # Aether ML Full Productionization Report
@@ -176,7 +176,10 @@ and Kyber ML frontend paths.
 
 **CI job:** `ml-tests` job expanded from monolithic pytest to three named
 steps: ML registry validation (`make ml-validate`), full test suite, and
-docs consistency check (`make ml-docs-check`).
+docs consistency check (`make ml-docs-check`). The job carries
+`timeout-minutes: 60` — the highest bound in `repo-health.yml`, because the
+ML extras install (`[dev,security,backend,agent,ml]`) plus the training smoke
+is the heaviest job in the workflow.
 
 **Docker Compose profiles:**
 - `integration`: Redis + LocalStack (S3 + SQS/SNS/DynamoDB) + MLflow tracking
