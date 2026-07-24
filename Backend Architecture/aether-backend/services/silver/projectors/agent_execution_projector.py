@@ -104,5 +104,14 @@ class AgentExecutionProjector(BaseProjector):
             "provider": p.get("provider"),
             "object_type": p.get("objectType"),
             "object_id": p.get("objectId"),
+            # Financial observation context (external-account trade / portfolio
+            # observations). Amounts are decimal strings, kept queryable as
+            # first-class silver columns rather than only in the Bronze payload.
+            "symbol": p.get("symbol"),
+            "side": p.get("side"),
+            "quantity": p.get("quantity"),
+            "total_value": p.get("totalValue"),
+            "external_order_id": p.get("externalOrderId"),
+            "account_kind": p.get("accountKind"),
         })
         return ProjectionResult(table="silver_agent_execution_facts", rows=[row])
