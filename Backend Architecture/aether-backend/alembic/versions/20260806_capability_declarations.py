@@ -8,9 +8,11 @@ column here (and no field in the JSONB payload) implies verification.
 
 Follows the BaseRepository shape (id TEXT PK, data JSONB, tenant_id, created_at,
 updated_at) so the runtime JSONB repository and this migration agree. Expression
-indexes cover the two JSONB fields that are actually filtered on: `capability_id`
-(the exact join key back to `capability_catalog`) and `publisher_ref` (origin
-grouping). Purely additive; no destructive changes. Fully reversible.
+indexes cover `capability_id` (the exact join key back to `capability_catalog`) and
+`publisher_ref`. NOTE: the `publisher_ref` index was a mistake — nothing filters that
+field, while the list API filters `provider` and `server_name`, which are indexed by
+`20260807_capability_declaration_indexes`. Left in place here rather than rewritten,
+since this revision may already be applied. Purely additive; fully reversible.
 
 Revision ID: 20260806_capability_declarations
 Revises: 20260805_capability_catalog

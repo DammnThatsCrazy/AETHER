@@ -57,6 +57,7 @@ The finding is *shape*, never intent — the summary says so.
 from __future__ import annotations
 
 import ipaddress
+import re
 from enum import Enum
 from typing import Any, Iterable, Optional
 from urllib.parse import parse_qsl, urlsplit
@@ -84,6 +85,20 @@ _MULTI_WORD_PATTERNS: tuple[tuple[str, ...], ...] = tuple(
 )
 _SINGLE_WORD_PATTERNS: tuple[str, ...] = tuple(
     sorted(p for p in INJECTION_PATTERNS if len(p.split()) == 1)
+)
+
+# Multi-word patterns that are also ordinary tool-name English, excluded for the same
+# reason `bypass` is not matched inside `bypass_cache`: on an agent platform `act_as_*` is
+# a routine delegation/impersonation tool and `new_instructions_v2` is a plausible
+# workflow tool, so matching these reports working software as injection-shaped and trains
+# operators to ignore the finding. Position cannot separate them — "act as" leads
+# `act_as_user` exactly as "ignore previous" leads `ignore_previous_instructions` — so the
+# distinction has to be the phrase itself. Every other multi-word pattern
+# ("developer mode", "system prompt", "ignore above", …) names nothing legitimate in a
+# tool identifier and still matches anywhere in the name.
+_AMBIGUOUS_IN_IDENTIFIERS = frozenset({"act as", "new instructions"})
+_MULTI_WORD_PATTERNS = tuple(
+    p for p in _MULTI_WORD_PATTERNS if " ".join(p) not in _AMBIGUOUS_IN_IDENTIFIERS
 )
 
 
@@ -163,6 +178,52 @@ def _userinfo(authority: str) -> Optional[str]:
     if "@" not in authority:
         return None
     return authority.rsplit("@", 1)[0]
+
+
+def _as_ip_literal(host: str) -> Optional[Any]:
+    """Parse a host as an IP literal, including the obfuscated integer forms.
+
+    ``ipaddress.ip_address`` accepts only dotted-quad and IPv6 text, so
+    ``http://2130706433/x`` (decimal 127.0.0.1) and ``http://0177.0.0.1/x`` (octal) slipped
+    past the private-network check entirely — which is precisely how such a URL would be
+    written by someone trying to slip past it. Returns ``None`` for anything that is not an
+    IP literal at all; no resolution is performed, in either branch.
+    """
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    # Bare integer form: 32-bit value written in decimal, octal (0-prefixed) or hex.
+    try:
+        if re.fullmatch(r"0[xX][0-9a-fA-F]+", host):
+            packed = int(host, 16)
+        elif re.fullmatch(r"0[0-7]+", host):
+            packed = int(host, 8)
+        elif host.isdigit():
+            packed = int(host, 10)
+        else:
+            # Dotted form with octal/hex octets, e.g. 0177.0.0.1
+            parts = host.split(".")
+            if len(parts) != 4:
+                return None
+            octets = []
+            for part in parts:
+                if re.fullmatch(r"0[xX][0-9a-fA-F]+", part):
+                    octets.append(int(part, 16))
+                elif re.fullmatch(r"0[0-7]+", part):
+                    octets.append(int(part, 8))
+                elif part.isdigit():
+                    octets.append(int(part, 10))
+                else:
+                    return None
+            if any(o > 255 for o in octets):
+                return None
+            packed = int.from_bytes(bytes(octets), "big")
+        if not 0 <= packed <= 0xFFFFFFFF:
+            return None
+        return ipaddress.ip_address(packed)
+    except (ValueError, OverflowError):
+        return None
 
 
 def _normalize_tokens(name: str) -> list[str]:
@@ -277,9 +338,8 @@ def _scan_origin(raw_url: str, capability_id: Optional[str]) -> list[CapabilityF
         )
 
     # ── Literal IPs only. No DNS: an unresolvable name is not evidence (see docstring). ──
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
+    ip = _as_ip_literal(host)
+    if ip is None:
         return findings
     if _ip_is_unsafe(ip):
         findings.append(

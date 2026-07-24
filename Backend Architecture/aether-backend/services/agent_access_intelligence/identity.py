@@ -37,12 +37,15 @@ So this module derives only what is honestly derivable from an observation:
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from enum import Enum
 from typing import Any, Optional
 from urllib.parse import urlsplit
 
 __all__ = [
+    "IDENTITY_FIELDS",
     "IdentityState",
+    "asserted_identity_fields",
     "publisher_label_for",
     "publisher_ref_for",
     "artifact_digest_for",
@@ -105,47 +108,81 @@ def publisher_ref_for(
     return "pub_" + hashlib.sha256(label.encode("utf-8")).hexdigest()[:24]
 
 
-def _identity_tuple(record: dict[str, Any]) -> tuple[str, ...]:
-    """The fields whose change means "this is not the same artifact any more".
+# The fields whose change means "this is not the same artifact any more", in a fixed
+# order. Explicitly enumerated rather than derived from the dict, so adding an unrelated
+# field to a capability record (`observation_count`, `last_seen_at`) cannot silently
+# invalidate every stored digest and report the whole inventory as drifted.
+#
+# `server` is synthetic: it resolves to `server_name` falling back to `server_url`,
+# matching `catalog_service._server_key`, so both sides agree on what "the server" is.
+IDENTITY_FIELDS: tuple[str, ...] = (
+    "provider",
+    "server",
+    "tool_name",
+    "protocol_version",
+    "capability_kind",
+)
 
-    Ordered and explicitly enumerated rather than derived from the dict, so adding an
-    unrelated field to a capability record (``observation_count``, ``last_seen_at``)
-    cannot silently invalidate every stored digest and report the whole inventory as
-    drifted.
+
+def _norm_field(record: dict[str, Any], name: str) -> str:
+    """One identity field, normalized to its comparable form.
+
+    Enum members are unwrapped BEFORE stringifying. For `class CapabilityKind(str, Enum)`,
+    `str(member)` is "CapabilityKind.MCP_TOOL", not "mcp_tool" — while the stored row
+    (written via `model_dump(mode="json")`) and any declaration hold the plain value.
+    Without this the digest computed at upsert time would disagree with one recomputed
+    from the row's own stored fields, and a declaration — which can only ever carry a
+    plain string — could never match, so every declared capability would report `drifted`.
     """
-
-    def norm(key: str) -> str:
-        value = record.get(key)
-        if value is None:
-            return ""
-        # Unwrap enum members BEFORE stringifying. For `class CapabilityKind(str, Enum)`,
-        # `str(member)` is "CapabilityKind.MCP_TOOL", not "mcp_tool" — while the stored row
-        # (written via `model_dump(mode="json")`) and any declaration hold the plain value.
-        # Without this the digest computed at upsert time would disagree with a digest
-        # recomputed from the row's own stored fields, and a declaration — which can only
-        # ever carry a plain string — could never match, so every declared capability would
-        # be reported as `drifted`.
-        value = getattr(value, "value", value)
-        return str(value).strip().lower()
-
-    return (
-        norm("provider"),
-        norm("server_name") or norm("server_url"),
-        norm("tool_name"),
-        norm("protocol_version"),
-        norm("capability_kind"),
-    )
+    if name == "server":
+        value = record.get("server_name") or record.get("server_url")
+    else:
+        value = record.get(name)
+    if value is None:
+        return ""
+    value = getattr(value, "value", value)
+    return str(value).strip().lower()
 
 
-def artifact_digest_for(record: dict[str, Any]) -> str:
-    """Digest over a capability's identity tuple.
+def artifact_digest_for(
+    record: dict[str, Any], fields: Optional[Sequence[str]] = None
+) -> str:
+    """Digest over a capability's identity, optionally restricted to ``fields``.
 
-    Not provenance — a digest of unverified fields is still unverified. Its job is to
-    make *change* detectable: the same capability observed later with a different
-    protocol version or kind digests differently, which is what drift compares.
+    Not provenance — a digest of unverified fields is still unverified. Its job is to make
+    *change* detectable: the same capability observed later with a different protocol
+    version or kind digests differently, which is what drift compares.
+
+    ``fields`` exists because **a declaration asserts a subset**. An operator declares the
+    identity they actually know — provider, server, tool — and has no way to know the
+    ``capability_kind`` this service derives internally, or the ``protocol_version`` the
+    server happens to be speaking today. Digesting the full tuple on both sides made every
+    ordinary declaration compare unequal, so the drift surface reported a permanent HIGH
+    "no longer matches what was observed" for capabilities that had never changed once.
+    Drift means *reality diverged from what you asserted*; you cannot diverge from an
+    assertion nobody made. Callers therefore digest the observed row over the same field
+    subset the declaration recorded (`asserted_identity_fields`).
+
+    The subset is order-normalized against ``IDENTITY_FIELDS`` and each entry is
+    name-prefixed, so digests taken over different subsets can never collide.
     """
-    raw = "|".join(_identity_tuple(record))
+    if fields is None:
+        selected: tuple[str, ...] = IDENTITY_FIELDS
+    else:
+        wanted = set(fields)
+        selected = tuple(name for name in IDENTITY_FIELDS if name in wanted)
+    raw = "|".join(f"{name}={_norm_field(record, name)}" for name in selected)
     return "art_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def asserted_identity_fields(record: dict[str, Any]) -> list[str]:
+    """The identity fields a record actually states, in canonical order.
+
+    This is a declaration's comparable surface. Blank/absent fields are not assertions and
+    are excluded, so omitting a field the operator does not know can never later be read
+    as drift.
+    """
+    return [name for name in IDENTITY_FIELDS if _norm_field(record, name)]
 
 
 def declaration_id_for(
@@ -170,10 +207,17 @@ def identity_state_for(
 ) -> IdentityState:
     """Derive the identity state from the two digests.
 
-    A declaration with no digest of its own is treated as ``drifted``, not ``declared``:
-    "someone declared this but we cannot compare it" is an unresolved state, and
-    resolving it toward the reassuring answer is exactly the failure mode this module
-    exists to avoid.
+    ``declared_digest`` being absent means **no declaration exists** for this capability,
+    which is ``observed_only`` — a normal state in a system whose premise is observing
+    things nobody declared.
+
+    It does NOT mean "declared but incomparable". That state must never reach here: a
+    declaration whose digest is missing is an unresolved comparison, and resolving it
+    toward the reassuring ``declared`` would be exactly the failure this module exists to
+    prevent. ``declarations.digest_map`` is what guarantees it — it skips any row missing
+    either half rather than emitting an empty digest, so the only way to get ``None`` here
+    is a genuine absence. If a caller ever sources declared digests some other way, it owns
+    that same guarantee.
     """
     if not declared_digest:
         return IdentityState.OBSERVED_ONLY

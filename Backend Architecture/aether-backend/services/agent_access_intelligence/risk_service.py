@@ -45,7 +45,11 @@ from typing import Any, Optional
 
 from shared.common.common import BadRequestError, NotFoundError
 
-from services.agent_access_intelligence.authority import capability_authority_service
+from services.agent_access_intelligence.authority import (
+    authorization_state,
+    capability_authority_service,
+    server_ref_for,
+)
 from services.agent_access_intelligence.catalog_service import capability_catalog_service
 from services.agent_access_intelligence.declarations import capability_declaration_service
 from services.agent_access_intelligence.identity import (
@@ -72,10 +76,13 @@ IDENTITY_DRIFT_CODE = "identity_drift"
 _CATALOG_SCAN_LIMIT = 1000
 _INSTALLATION_SCAN_LIMIT = 1000
 _DECLARATION_LIMIT = 1000
-# Each authorization check is a delegation-engine evaluation; past this many pairs we
-# report the authorization split as unknown instead of spending unbounded work or
-# guessing.
-_AUTHORIZATION_CHECK_LIMIT = 200
+# Capability authorizations are read ONCE per request in a single bounded query, then
+# matched in memory. Reading them per-capability through the delegation engine was both
+# wrong (it inherited `active_for`'s 200-row newest-first window, so an agent's older live
+# grants fell out and the split reported 0 authorized) and expensive (~400 sequential
+# uncached round-trips on one read-gated GET). Hitting this window reports the split as
+# unknown rather than answering from a partial view.
+_AUTHORIZATION_SCAN_LIMIT = 2000
 
 _RISK_ORDER = {
     RiskLevel.CRITICAL.value: 0,
@@ -133,6 +140,7 @@ class CapabilityRiskService:
         rows = await capability_catalog_service.list_capabilities(
             tenant_id, limit=_CATALOG_SCAN_LIMIT
         )
+        catalog_truncated = len(rows) >= _CATALOG_SCAN_LIMIT
 
         # Module-global lookups (not bound at import) so the scanning lane's function is
         # resolved at call time.
@@ -162,12 +170,21 @@ class CapabilityRiskService:
             "limit": limit,
             "offset": offset,
             "filter": {"code": code},
-            # Counts cover EVERY matching finding, not just the returned page: a
-            # page-scoped total would understate risk for any tenant with more findings
-            # than one page, which is exactly the tenant that needs the number.
+            # Counts cover every matching finding in the scanned window, not just the
+            # returned page: a page-scoped total would understate risk for any tenant with
+            # more findings than one page, which is exactly the tenant that needs the
+            # number. `counts.scope` states whether that window was the whole inventory.
             "counts": {
                 "total": len(items),
-                "scope": "all_matching_findings",
+                # The scope of `total` depends on whether either bounded read was hit.
+                # Claiming "all matching findings" while the catalog window truncated
+                # under-reports risk for exactly the tenant with the most of it, and the
+                # oldest capabilities can never surface no matter how far the caller pages.
+                "scope": (
+                    "all_matching_findings"
+                    if not (catalog_truncated or identity.get("declarations_truncated"))
+                    else "scanned_window_only"
+                ),
                 "by_risk_level": dict(by_risk),
                 "by_code": dict(by_code),
             },
@@ -177,23 +194,33 @@ class CapabilityRiskService:
                 "scan_limit": _CATALOG_SCAN_LIMIT,
                 # A full window may have truncated the catalog; say so rather than
                 # presenting a partial scan as a complete one.
-                "sampled": len(rows) >= _CATALOG_SCAN_LIMIT,
+                "sampled": catalog_truncated,
+                "catalog_truncated": catalog_truncated,
+                "declarations_truncated": bool(identity.get("declarations_truncated")),
+                "complete": not (
+                    catalog_truncated or identity.get("declarations_truncated")
+                ),
             },
         }
 
     async def _identity_findings(
         self, tenant_id: str, rows: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        declared = await capability_declaration_service.digest_map(
+        declared, declarations_truncated = await capability_declaration_service.digest_map(
             tenant_id, limit=_DECLARATION_LIMIT
-        ) or {}
+        )
 
         states: Counter = Counter()
         items: list[dict[str, Any]] = []
         for row in rows:
             capability_id = row.get("capability_id")
-            observed = artifact_digest_for(row)
-            declared_digest = declared.get(capability_id)
+            entry = declared.get(capability_id)
+            declared_digest = entry["digest"] if entry else None
+            # Digest the observed row over the SAME field subset the declaration asserted.
+            # Comparing the full tuple against a partial declaration reported permanent
+            # drift for capabilities that never changed — you cannot diverge from an
+            # assertion nobody made.
+            observed = artifact_digest_for(row, entry["fields"] if entry else None)
             state = identity_state_for(observed, declared_digest)
             states[state.value] += 1
             if state is not IdentityState.DRIFTED:
@@ -218,11 +245,18 @@ class CapabilityRiskService:
 
         return items, {
             "capabilities_examined": len(rows),
-            "declarations_on_file": len(declared),
+            "declarations_read": len(declared),
+            # `declarations_read` is what we looked at, not what exists. When the window
+            # truncated, a declaration outside it makes its capability look
+            # `observed_only` — which is deliberately not a finding — so real drift would
+            # vanish into a clean-looking report. Say so instead.
+            "declarations_truncated": declarations_truncated,
+            "declaration_read_limit": _DECLARATION_LIMIT,
             "declared": states.get(IdentityState.DECLARED.value, 0),
             "drifted": states.get(IdentityState.DRIFTED.value, 0),
             # Reported as a count, never as a finding.
             "observed_only": states.get(IdentityState.OBSERVED_ONLY.value, 0),
+            "drift_detection_complete": not declarations_truncated,
         }
 
     # ------------------------------------------------------------------
@@ -287,16 +321,27 @@ class CapabilityRiskService:
         exposed: set[str] = {
             r["capability_id"] for r in catalog if _server_key(r) in server_keys
         }
+        # Provenance per capability: `invoked` means this agent was actually observed
+        # using it; `server_reachable` means it merely sits on a server the agent
+        # connects to. Both belong in a blast radius, but conflating them in the response
+        # let a summary claim an agent was "observed reaching" 50 tools when it had been
+        # observed invoking one.
+        invoked: set[str] = set()
         for installation in installations:
             for cid in installation.get("capability_ids") or []:
                 exposed.add(cid)
+                invoked.add(cid)
                 if cid not in by_id:
                     # Recorded as reachable but absent from the catalog window: we cannot
                     # describe it, so the totals it belongs to are not ours to state.
                     missing.append(f"capability_catalog:capability_id={cid}")
 
         authorized = await self._authorization_split(
-            tenant_id, agent_id=agent_id, capability_ids=sorted(exposed), missing=missing
+            tenant_id,
+            agent_id=agent_id,
+            capability_ids=sorted(exposed),
+            by_id=by_id,
+            missing=missing,
         )
 
         capabilities = [
@@ -306,6 +351,7 @@ class CapabilityRiskService:
                 "provider": (by_id.get(cid) or {}).get("provider"),
                 "tool_name": (by_id.get(cid) or {}).get("tool_name"),
                 "latest_risk_level": (by_id.get(cid) or {}).get("latest_risk_level"),
+                "basis": "invoked" if cid in invoked else "server_reachable",
                 "authorized": None if authorized is None else (cid in authorized),
             }
             for cid in sorted(exposed)
@@ -324,6 +370,7 @@ class CapabilityRiskService:
         counts = {
             "servers_reachable": len(server_keys),
             "capabilities_exposed": len(exposed),
+            "capabilities_invoked": len(invoked),
             "capabilities_authorized": len(authorized),
             "capabilities_unauthorized": len(exposed) - len(authorized),
         }
@@ -336,11 +383,14 @@ class CapabilityRiskService:
             "servers": sorted(server_keys),
             "capabilities": capabilities,
             "summary": (
-                f"Agent {agent_id} has been observed reaching {counts['servers_reachable']} "
-                f"server(s) and {counts['capabilities_exposed']} capability(ies); "
+                f"Agent {agent_id} has been observed connected to "
+                f"{counts['servers_reachable']} server(s), putting "
+                f"{counts['capabilities_exposed']} capability(ies) within reach; "
                 f"{counts['capabilities_authorized']} authorized, "
-                f"{counts['capabilities_unauthorized']} not. This is observed reach, not a "
-                "proof of total reach."
+                f"{counts['capabilities_unauthorized']} not. Reach is derived from the "
+                "servers this agent was observed connected to, so it includes capabilities "
+                "on those servers the agent was never observed invoking — that is the point "
+                "of a blast radius. It is not a proof of total reach."
             ),
         }
 
@@ -381,11 +431,26 @@ class CapabilityRiskService:
             or capability_id in (i.get("capability_ids") or [])
         ]
         agent_ids = sorted({i["agent_id"] for i in reaching if i.get("agent_id")})
-        if not agent_ids:
-            missing.append(f"capability_installations:capability_id={capability_id}")
+        if not agent_ids and not missing:
+            # An empty result is only unknown when something stopped us from looking. With
+            # a complete, untruncated installation scan and a server binding to match on,
+            # "nobody reaches this" is a computed answer, and returning `unknown` for it
+            # made the surface useless for its most valuable question — "did quarantining
+            # this capability work?" was permanently unanswerable.
+            #
+            # Note the guard is `not missing`, not just the truncation flag: a capability
+            # with no server binding (every `provider_action` — `_upsert_installation`
+            # only writes a row when both an agent and a server key exist) has already
+            # added a missing input above, so it correctly stays unknown rather than
+            # claiming a zero it cannot support.
+            pass
 
         authorized = await self._authorization_split_by_agent(
-            tenant_id, capability_id=capability_id, agent_ids=agent_ids, missing=missing
+            tenant_id,
+            capability_id=capability_id,
+            capability=capability,
+            agent_ids=agent_ids,
+            missing=missing,
         )
         agents = [
             {
@@ -430,23 +495,67 @@ class CapabilityRiskService:
     # Authorization split (returns None when it could not be computed)
     # ------------------------------------------------------------------
 
+    async def _active_authorizations(
+        self, tenant_id: str, *, agent_id: Optional[str], missing: list[str]
+    ) -> Optional[list[dict[str, Any]]]:
+        """Active capability authorizations, read once, or ``None`` if unknowable.
+
+        Replaces a per-capability ``resolve()`` loop, which was wrong twice over:
+
+        * **Correctness.** ``resolve`` → ``DelegationEngine`` → ``active_for`` reads
+          ``find_many(limit=200, ORDER BY created_at DESC)`` and *then* filters to active
+          rows in Python. Revoked authorizations are never deleted, so grant/revoke churn
+          fills that window with dead rows. An agent with 210 lifetime rows whose 3 live
+          authorizations were granted earliest fell entirely outside it, and the endpoint
+          answered ``capabilities_authorized: 0`` with ``exposure_known: true`` and an
+          empty ``missing_inputs`` — "0 authorized, 3 not" about a fully authorized agent.
+          That is the never-report-unknown-as-zero rule broken one layer below the
+          aggregation, and it points the operator at a revocation that should not happen.
+        * **Cost.** Up to 200 capabilities × 2 candidate resources ≈ 400 sequential
+          uncached round-trips on a single ``read``-gated GET.
+
+        This reads the capability authorization rows directly, in one bounded query, and
+        reports truncation instead of silently answering from a partial window.
+        """
+        rows = await capability_authority_service._repo.list_authorizations(
+            tenant_id, agent_id=agent_id, limit=_AUTHORIZATION_SCAN_LIMIT, offset=0
+        )
+        if len(rows) >= _AUTHORIZATION_SCAN_LIMIT:
+            missing.append("capability_authorizations:scan_truncated")
+            return None
+        return [r for r in rows if authorization_state(r) == "active"]
+
+    @staticmethod
+    def _authorizes(row: dict[str, Any], capability_id: str, server_ref: Optional[str]) -> bool:
+        """Whether one authorization row covers one capability.
+
+        Mirrors ``CapabilityAuthorityService.resolve``'s two scope shapes: a row naming the
+        capability directly, or a row naming the server the capability lives on.
+        """
+        if row.get("capability_id") and str(row["capability_id"]) == capability_id:
+            return True
+        return bool(server_ref) and str(row.get("server_ref") or "") == server_ref
+
     async def _authorization_split(
         self,
         tenant_id: str,
         *,
         agent_id: str,
         capability_ids: list[str],
+        by_id: dict[str, dict[str, Any]],
         missing: list[str],
     ) -> Optional[set[str]]:
-        if len(capability_ids) > _AUTHORIZATION_CHECK_LIMIT:
-            missing.append("capability_authorizations:check_truncated")
+        active = await self._active_authorizations(
+            tenant_id, agent_id=agent_id, missing=missing
+        )
+        if active is None:
             return None
         authorized: set[str] = set()
         for cid in capability_ids:
-            facts = await capability_authority_service.resolve(
-                tenant_id=tenant_id, agent_id=agent_id, capability_id=cid
-            )
-            if facts.get("authorized"):
+            row = by_id.get(cid) or {}
+            key = _server_key(row)
+            server_ref = server_ref_for(tenant_id, key) if key else None
+            if any(self._authorizes(a, cid, server_ref) for a in active):
                 authorized.add(cid)
         return authorized
 
@@ -455,18 +564,21 @@ class CapabilityRiskService:
         tenant_id: str,
         *,
         capability_id: str,
+        capability: dict[str, Any],
         agent_ids: list[str],
         missing: list[str],
     ) -> Optional[set[str]]:
-        if len(agent_ids) > _AUTHORIZATION_CHECK_LIMIT:
-            missing.append("capability_authorizations:check_truncated")
+        active = await self._active_authorizations(
+            tenant_id, agent_id=None, missing=missing
+        )
+        if active is None:
             return None
+        key = _server_key(capability)
+        server_ref = server_ref_for(tenant_id, key) if key else None
         authorized: set[str] = set()
         for aid in agent_ids:
-            facts = await capability_authority_service.resolve(
-                tenant_id=tenant_id, agent_id=aid, capability_id=capability_id
-            )
-            if facts.get("authorized"):
+            rows = [a for a in active if str(a.get("agent_id") or "") == aid]
+            if any(self._authorizes(a, capability_id, server_ref) for a in rows):
                 authorized.add(aid)
         return authorized
 
@@ -517,6 +629,7 @@ class CapabilityRiskService:
 _AGENT_COUNT_KEYS = (
     "servers_reachable",
     "capabilities_exposed",
+    "capabilities_invoked",
     "capabilities_authorized",
     "capabilities_unauthorized",
 )

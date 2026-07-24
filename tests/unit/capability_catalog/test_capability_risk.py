@@ -35,7 +35,7 @@ from services.agent_access_intelligence.authority_routes import (
     grant_authorization,
 )
 from services.agent_access_intelligence.catalog_service import capability_catalog_service
-from services.agent_access_intelligence.identity import artifact_digest_for
+from services.agent_access_intelligence.identity import IDENTITY_FIELDS, artifact_digest_for
 from services.agent_access_intelligence.risk_service import IDENTITY_DRIFT_CODE
 from services.agent_access_intelligence.scanning import CapabilityFinding, FindingCode
 
@@ -52,11 +52,27 @@ class StubDeclarations:
     """Stands in for the declarations lane so drift is driven by this test, not by that
     module's write path."""
 
-    def __init__(self, digests: Optional[dict[str, str]] = None) -> None:
+    def __init__(
+        self,
+        digests: Optional[dict[str, str]] = None,
+        *,
+        fields: Optional[list[str]] = None,
+        truncated: bool = False,
+    ) -> None:
+        # `fields` is the identity subset a declaration asserted. Defaulting to the full
+        # tuple keeps these tests comparing like with like; the partial-subset behaviour
+        # has its own dedicated tests below.
         self.digests = dict(digests or {})
+        self.fields = list(fields or IDENTITY_FIELDS)
+        self.truncated = truncated
 
-    async def digest_map(self, tenant_id: str, *, limit: int = 1000) -> dict[str, str]:
-        return dict(self.digests)
+    async def digest_map(
+        self, tenant_id: str, *, limit: int = 1000
+    ) -> tuple[dict[str, dict], bool]:
+        return (
+            {k: {"digest": v, "fields": list(self.fields)} for k, v in self.digests.items()},
+            self.truncated,
+        )
 
 
 def _request(tenant_id: str = "t1", permissions: list[str] | None = None):
@@ -175,6 +191,7 @@ async def test_never_observed_agent_reports_unknown_not_zero():
     assert set(data["counts"]) == {
         "servers_reachable",
         "capabilities_exposed",
+        "capabilities_invoked",
         "capabilities_authorized",
         "capabilities_unauthorized",
     }

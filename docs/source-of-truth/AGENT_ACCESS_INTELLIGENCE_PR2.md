@@ -5,8 +5,9 @@
 governance for observed external agent access (monoprompt §9). Branches from PR 1's merged
 `main`.
 **Status:** Phases A, B1, B2 and C are implemented and land as **multiple commits on one
-branch**, merging once. Phase A merged in #485; B1, B2 and C are on
-`claude/new-session-wqo13a`. Ledger items `AAI-2-*` — each remains
+branch**, merging once per increment. Phase A merged in #485; Phases B1, B2 and C merged in
+#486. The current branch carries the **second-pass adversarial review** of all of them
+(§6c). Ledger items `AAI-2-*` — each remains
 `implementation_in_progress` with an explicit exception rather than a terminal status,
 because `make ci-check` green is not the same as production evidence and
 `scripts/production_status.py` is the only thing that may say otherwise.
@@ -173,7 +174,8 @@ Money/quantity fields (Phases B/C exposure/notional) are decimal strings via
   (`services/security/policy_engine.py`, `services/security/access_control.py`,
   `services/policy/engine.py`, `services/consent/authority.py`) — **not** a second engine.
   §9.3 artifact/publisher identity + §9.4 tool-schema scanning + §9.5 declared-vs-observed drift.
-  B1 (authority + `capability.invoke` policy) is shipped; B2 is not.
+  B1 (authority + `capability.invoke` policy) and B2 (identity, declarations, scanning)
+  are both shipped.
 - **Phase C — `AAI-2-SHADOW-DRIFT`, `AAI-2-BLAST-RADIUS`:** drift findings and bounded
   blast-radius (preserving `unknown`/`missing_inputs`, never reporting unknown exposure as
   zero). Shipped — see §6b.
@@ -401,3 +403,50 @@ since `False == 0`), so a future field cannot reintroduce the lie.
   non-operator tenant and aggregates cross-tenant with explicit tenant filtering.
 - DSR: `build_standard_plan` includes both tables as `HARD_DELETE`; `delete_by_entity` erases a
   tenant's catalog + installations.
+
+---
+
+## 6c. Second-pass adversarial review of Phases A–C
+
+Three read-only reviewers combed the merged code — one per lane (Phase C surfaces;
+declarations + scanning; cross-cutting). They reported findings only and edited nothing, so
+one lane's fix could not invalidate another's finding. Six defects were real and are fixed
+on this branch, with 32 regression tests that fail without their fix.
+
+Every one of them shares a shape worth naming, because it is the shape this product is most
+likely to reproduce: **a surface answering confidently from a partial or incomparable
+input.** None was a crash. Each produced a plausible number or verdict that an operator
+would have believed and acted on.
+
+| # | Defect | Why it mattered |
+|---|---|---|
+| 1 | The artifact digest covered `capability_kind` and `protocol_version` — machine-derived on the observed side, free-text operator input on the declared side | The normal operator flow (declare provider + server + tool) compared unequal **forever**, so drift reported a permanent HIGH "no longer matches what was observed" for capabilities that had never changed |
+| 2 | `grant` hashed the raw operator `server_key`; `resolve` hashed the catalog's stored, sanitized, name-preferred key | Granting by URL against a server the catalog knows by name returned 200 with a `server_ref` and then authorized **nothing** — every invocation denied, no surface showing the grant was inert |
+| 3 | `grant` stored a credential-bearing `server_key` verbatim | The catalog and declaration paths both scrub credentials from a server URL; the security-grant path did not, and echoed it on every read |
+| 4 | `starts_at`/`ends_at` were unvalidated strings compared lexicographically | `"in 30 days" > "2026-07-24T…"` is always true — a grant the operator believed expired in a month never expired, while the API echoed their intended date back |
+| 5 | `?state=` post-filtered a single `limit`-sized page | A tenant with 140 revoked and 12 active authorizations got `{"items": [], "count": 0}` — indistinguishable from "nothing is authorized". The identical bug this PR had already fixed once in `PolicyEngine.list_decisions` |
+| 6 | Three bounded reads answered as if complete | The authorization split inherited `active_for`'s 200-row newest-first window (so a churned agent's older live grants fell out → `capabilities_authorized: 0` with `exposure_known: true`); `digest_map` truncated silently (real drift → a clean-looking report); `counts.scope` claimed `all_matching_findings` regardless |
+
+**Fix 1 changed a design decision, not just a line.** A declaration asserts a *subset* of
+identity. `artifact_digest_for` now takes an optional field list, a declaration records the
+subset it actually asserts (`declared_fields`), and the observed row is digested over that
+same subset. Drift means *reality diverged from what you asserted*; you cannot diverge from
+an assertion nobody made. Subset digests are name-prefixed so digests over different subsets
+cannot collide, and a field the operator **did** assert, changing, still drifts.
+
+Fix 6 also removed roughly 400 sequential uncached round-trips from a `read`-gated GET by
+reading authorizations once per request and matching them in memory.
+
+**Reported and deliberately not changed:** the bare `assert` statements in `risk_service.py`
+and `authority.py`. The lead was worth running down — Python strips `assert` under `-O` — but
+optimized mode is unreachable here (`PYTHONOPTIMIZE` appears nowhere in the repo, the
+Dockerfile CMD is plain `uvicorn`), and if stripped each would raise rather than emit a wrong
+number. They are type-narrowing after a guard, not load-bearing. Recorded as verified-noise
+rather than changed to look responsive.
+
+**Still open, pre-existing, and larger than this branch:** `scripts/docs_drift.py` resolves
+`last_synced_commit` with `git log -1 <sha>..HEAD` and returns `None` on a non-zero exit, so
+a doc whose stamp is not a resolvable commit can never be reported stale. 105 of 199
+source-linked docs currently carry such a stamp. That is a validator hole, not a docs
+problem, and fixing it would mark a large number of docs stale at once — it needs its own
+change with its own review, not a drive-by.
