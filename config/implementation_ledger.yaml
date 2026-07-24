@@ -508,14 +508,34 @@ items:
     customer_impact: A canonical inventory of what each agent can access and do, derived from observed permission/tool/MCP events.
     current_behavior: Not implemented. Permission/tool/MCP observations exist as facts but there is no derived capability catalog.
     required_behavior: A capability catalog projected from agent_execution_facts, keyed by agent/tenant, with provenance back to source observations.
-    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
-    tests_required: [capability catalog projection tests (planned)]
-    evidence_required: [capability catalog projection output (planned)]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/__init__.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/models.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/repositories.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/catalog_service.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/routes.py"
+      - "Backend Architecture/aether-backend/alembic/versions/20260805_capability_catalog.py"
+      - "Backend Architecture/aether-backend/services/silver/dispatcher.py"
+      - "Backend Architecture/aether-backend/main.py"
+      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
+      - config/storage_policies.yaml
+      - config/route_registry.yaml
+    tests_required:
+      - "tests/unit/capability_catalog/test_capability_catalog_service.py"
+      - "tests/unit/capability_catalog/test_capability_catalog_routes.py"
+      - "tests/unit/capability_catalog/test_capability_catalog_integration.py"
+      - "tests/unit/capability_catalog/test_capability_catalog_dsr.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 26 passed"]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-1-CANONICAL-INGESTION]
-    exception: null
+    exception: >
+      Partial: capability catalog + installations inventory (maintained
+      materialization from silver_agent_execution_facts) with read APIs, Kyber
+      health, migration, storage policy, and DSR erasure.
+      Authority/policy/drift/blast-radius deferred to later PR-2 phases.
+      Non-terminal; no completion evidence claimed.
     last_verified_commit: null
 
   - id: AAI-2-AUTHORITY-POLICY
@@ -529,7 +549,7 @@ items:
     affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned), config/agent_authority_policy.yaml (planned)]
     tests_required: [authority policy evaluation tests (planned)]
     evidence_required: [authority policy evaluation output (planned)]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
     status: not_started
     blocked_by: [AAI-2-CAPABILITY-CATALOG]
@@ -547,7 +567,7 @@ items:
     affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
     tests_required: [drift detection tests (planned)]
     evidence_required: [drift detection output (planned)]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
     status: not_started
     blocked_by: [AAI-2-CAPABILITY-CATALOG]
@@ -565,7 +585,7 @@ items:
     affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
     tests_required: [blast-radius computation tests (planned)]
     evidence_required: [blast-radius computation output (planned)]
-    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
     status: not_started
     blocked_by: [AAI-2-AUTHORITY-POLICY]

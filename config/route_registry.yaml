@@ -80,6 +80,8 @@ known_prefixes:
   - /v1/campaign-sources
   - /v1/campaigns
   - /v1/capabilities
+  - /v1/capability-catalog
+  - /v1/capability-installations
   - /v1/clusters
   - /v1/comms
   - /v1/config
