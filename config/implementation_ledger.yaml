@@ -558,7 +558,7 @@ items:
       - "tests/unit/capability_catalog/test_capability_authority_dsr.py"
       - "tests/unit/capability_catalog/test_capability_authority_routes.py"
       - "tests/unit/capability_catalog/test_capability_policy.py"
-    evidence_required: ["pytest tests/unit/capability_catalog/ -> 164 passed"]
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 195 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
     status: implementation_in_progress
@@ -596,13 +596,17 @@ items:
       - "tests/unit/capability_catalog/test_capability_identity.py"
       - "tests/unit/capability_catalog/test_capability_scanning.py"
       - "tests/unit/capability_catalog/test_capability_risk.py"
-    evidence_required: ["pytest tests/unit/capability_catalog/ -> 164 passed"]
+      - "tests/unit/capability_catalog/test_capability_review_regressions.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 195 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
     status: implementation_in_progress
     blocked_by: [AAI-2-CAPABILITY-CATALOG]
     exception: >
-      Implemented: declared-vs-observed identity drift via artifact_digest, and
+      Implemented: declared-vs-observed identity drift via artifact_digest over the
+      identity subset a declaration actually asserts (comparing the full tuple
+      reported permanent drift for every ordinary declaration, since capability_kind
+      and protocol_version are machine-derived and never operator input), and
       GET /v1/capability-risk/findings merging scan findings with drift.
       observed_only is deliberately not a finding — an undeclared capability is
       the normal state in a system whose premise is observing undeclared things —
@@ -623,8 +627,10 @@ items:
     affected_paths:
       - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_service.py"
       - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_routes.py"
-    tests_required: ["tests/unit/capability_catalog/test_capability_risk.py"]
-    evidence_required: ["pytest tests/unit/capability_catalog/ -> 164 passed"]
+    tests_required:
+      - "tests/unit/capability_catalog/test_capability_risk.py"
+      - "tests/unit/capability_catalog/test_capability_review_regressions.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 195 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
     status: implementation_in_progress
@@ -635,9 +641,12 @@ items:
       authorizations. Unknown exposure is never reported as zero — if any
       required input is absent every count is null with exposure_known=false and
       a missing_inputs list, and partial totals are not emitted because a partial
-      number reads as a complete one. Beyond 200 (agent, capability) pairs the
-      authorization split is reported as null with an explicit truncation marker
-      rather than a guessed number. Basis is observed_only; there is no
+      number reads as a complete one. Authorizations are read once per request in
+      one bounded query and matched in memory; hitting that window reports the
+      split as null with an explicit truncation marker rather than a guessed
+      number. Reach distinguishes capabilities the agent was observed invoking
+      from those merely reachable on a server it connects to. Basis is
+      observed_only; there is no
       inventory source beyond observation. Non-terminal; no completion evidence
       claimed.
     last_verified_commit: null
