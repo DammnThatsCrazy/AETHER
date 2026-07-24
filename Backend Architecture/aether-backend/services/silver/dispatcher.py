@@ -90,6 +90,7 @@ for _p in _ALL_PROJECTORS:
         _TYPE_MAP.setdefault(_t, []).append(_p)
 
 _graph_projector = SilverGraphProjector()
+from services.agent_access_intelligence.catalog_service import capability_catalog_service as _capability_catalog
 _verified_referral_links = VerifiedReferralLinkRepository()
 
 _TOUCHPOINT_TABLE = "silver_campaign_touchpoint_facts"
@@ -571,6 +572,9 @@ class SilverDispatcher:
                     outcome.results.append(result)
                     # Fire-and-forget graph mutations; never block or fail Silver writes
                     asyncio.create_task(_graph_projector.maybe_emit(result, event))
+                    # Fire-and-forget capability-catalog maintenance; mirrors the graph
+                    # projector hook — out-of-band, never blocks or fails Silver writes.
+                    asyncio.create_task(_capability_catalog.maybe_record(result, event))
                     outcome.projector_status.append(
                         {"projector": name, "status": "ok",
                          "rows": len(result.rows or []), "latency_ms": round(elapsed_ms, 2)}

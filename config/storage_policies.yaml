@@ -3618,6 +3618,48 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # ---------------------------------------------------------------------------
+  # Agent Access Intelligence (PR 2, Phase A) — tenant-scoped observed
+  # capability inventory + installations. Maintained materialization derived
+  # from silver_agent_execution_facts; standard retention, hard-deletable for
+  # DSR, and consent revocation must invalidate these subject-derived
+  # observations.
+  # ---------------------------------------------------------------------------
+
+  - resource_type: capability_catalog
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
+  - resource_type: capability_installations
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
   - resource_type: entity_wallets
     authoritative_store: postgres
     metadata_store: postgres

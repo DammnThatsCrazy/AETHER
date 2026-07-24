@@ -227,6 +227,17 @@ class DeletionPlan:
                        DataClassification.CONFIDENTIAL, "Delete device fingerprint sessions for entity",
                        entity_field="anonymous_id")
 
+        # Agent Access Intelligence capability inventory (PR 2, Phase A) — the
+        # observed capability catalog + installations hold subject-derived
+        # observations with no per-subject key, so erasure is at tenant
+        # granularity (hard delete by tenant_id).
+        self.add_step("postgresql", "capability_catalog", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete observed capability catalog rows for tenant",
+                       entity_field="tenant_id")
+        self.add_step("postgresql", "capability_installations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete observed capability installations for tenant",
+                       entity_field="tenant_id")
+
         # Silver fact tables — scoped by consent purpose from registry
         self._add_silver_steps(purposes or list(_PURPOSE_RETENTION.keys()))
 
@@ -460,7 +471,21 @@ class DSARRequest:
             reason=f"dsar_{self.request_type}",
         )
         self.deletion_plan.build_standard_plan()
-        result = await self.deletion_plan.execute()
+        # Assemble the DSR store adapters (keyed "<store>:<table>") that the plan
+        # executes against. Wire the Agent Access Intelligence capability repos so
+        # their HARD_DELETE steps actually erase rows via
+        # delete_by_entity("tenant_id", <entity_id>) — for a tenant-erasure DSR
+        # entity_id is the tenant id. Imported lazily to avoid a heavy service
+        # import at module load and any import cycle.
+        from services.agent_access_intelligence.repositories import (
+            CapabilityCatalogRepository,
+            CapabilityInstallationRepository,
+        )
+        store_adapters = {
+            "postgresql:capability_catalog": CapabilityCatalogRepository(),
+            "postgresql:capability_installations": CapabilityInstallationRepository(),
+        }
+        result = await self.deletion_plan.execute(store_adapters)
         self.status = "completed" if result["failed"] == 0 else "partial"
         self.steps_completed.append("deletion_cascade")
         return result

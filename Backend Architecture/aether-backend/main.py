@@ -234,6 +234,11 @@ from services.analytics_automation.routes import router as automation_router
 from services.diagnostics.routes import router as diagnostics_router, commerce_diagnostics_router
 from services.providers.routes import router as providers_router
 from services.capabilities.routes import router as capabilities_router, kyber_router as capabilities_kyber_router
+from services.agent_access_intelligence.routes import (
+    catalog_router as aai_catalog_router,
+    installations_router as aai_installations_router,
+    kyber_router as aai_kyber_catalog_router,
+)
 from services.lake.routes import router as lake_router
 from services.intelligence.routes import kyber_admin_router, router as intelligence_router
 from services.intelligence.customer_success import admin_router as customer_success_admin_router, tenant_router as value_review_router
@@ -609,6 +614,9 @@ def create_app() -> FastAPI:
     app.include_router(providers_router)
     app.include_router(capabilities_router)
     app.include_router(capabilities_kyber_router)  # /v1/kyber/capabilities (operator)
+    app.include_router(aai_catalog_router)              # /v1/capability-catalog (tenant)
+    app.include_router(aai_installations_router)        # /v1/capability-installations (tenant)
+    app.include_router(aai_kyber_catalog_router)        # /v1/kyber/capability-catalog (operator)
     app.include_router(lake_router)
     app.include_router(intelligence_router)
     app.include_router(kyber_admin_router)
