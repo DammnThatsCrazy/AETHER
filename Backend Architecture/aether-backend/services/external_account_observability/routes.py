@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -46,6 +47,42 @@ router = APIRouter()
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+_POSITION_MONEY_KEYS = frozenset({
+    "value", "current_value", "market_value", "avg_cost", "average_cost",
+    "cost_basis", "quantity", "qty", "price", "unrealized_pnl", "realized_pnl",
+    "notional", "amount", "market_price",
+})
+
+
+def _decimalize_positions(positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize known money fields inside free-form observed position dicts to
+    decimal strings so per-position values are not persisted (and propagated
+    downstream) as authoritative binary floats.
+
+    Positions arrive as provider-shaped dicts, so this coerces rather than
+    rejects (unknown keys pass through untouched); top-level money fields on the
+    request models remain strict (reject binary float).
+    """
+    normalized: list[dict[str, Any]] = []
+    for pos in positions or []:
+        if not isinstance(pos, dict):
+            normalized.append(pos)
+            continue
+        row = dict(pos)
+        for key, value in pos.items():
+            if (
+                key.lower() in _POSITION_MONEY_KEYS
+                and value is not None
+                and not isinstance(value, bool)
+            ):
+                try:
+                    row[key] = str(Decimal(str(value)))
+                except (InvalidOperation, ValueError, TypeError):
+                    row[key] = value
+        normalized.append(row)
+    return normalized
 
 
 def _new_id() -> str:
@@ -221,7 +258,10 @@ async def observe_brokerage_account(req: BrokerageRequest, request: Request) -> 
             tenant_id=tenant_id,
             event_name="agentic_account_observed",
             provider_id=provider_id,
-            provider_event_id=req.external_account_id,
+            # Distinct facet from the plain account observation (same event_name,
+            # same external_account_id) so the two do not collide at the Bronze
+            # uniqueness boundary and drop the brokerage observation.
+            provider_event_id=f"brokerage:{req.external_account_id}",
             agent_id=req.agent_id,
             actor_id=req.agent_id,
             properties=_prune_none({
@@ -256,7 +296,7 @@ async def observe_portfolio_snapshot(req: PortfolioSnapshotRequest, request: Req
         portfolio_obs_id=obs_id,
         brokerage_obs_id=req.brokerage_obs_id,
         total_value=req.total_value,
-        positions=req.positions,
+        positions=_decimalize_positions(req.positions),
         tenant_id=tenant_id,
         snapshot_at=req.observed_at or _utc_now(),
     )
@@ -318,7 +358,12 @@ async def observe_trade_order(req: OrderObsRequest, request: Request) -> ExtAcco
             tenant_id=tenant_id,
             event_name="agent_trade_order_observed",
             provider_id="unknown",
-            provider_event_id=req.external_order_id,
+            # Namespace by the observed brokerage so the same external_order_id
+            # from two brokerages does not collide; include status so lifecycle
+            # transitions (pending -> filled) are distinct, projected events while
+            # identical (order, status) resends still dedupe.
+            integration_id=req.brokerage_obs_id,
+            provider_event_id=(f"{req.external_order_id}:{req.status}" if req.external_order_id else None),
             agent_id=req.agent_id,
             actor_id=req.agent_id,
             observed_at=req.observed_at,

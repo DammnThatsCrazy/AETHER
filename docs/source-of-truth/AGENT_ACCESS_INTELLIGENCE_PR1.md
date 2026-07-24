@@ -130,9 +130,13 @@ Pipeline sources: `services/agentic_observability/pipeline.py`,
 ## 5. Migration / rollout behavior
 
 - **Flag:** `AGENTIC_OBS_CANONICAL_SPINE_ENABLED` — **default OFF**.
-- **Live precondition:** the canonical delegation is only active when the flag is ON
-  **and** the FT-6 relay is live (`OUTBOX_RELAY_ENABLED=true`, `outbox-relay` runtime role
-  running). If the relay is not live, delegation is not engaged.
+- **Live precondition:** delegation is engaged by the flag alone
+  (`AGENTIC_OBS_CANONICAL_SPINE_ENABLED` ON, or the request tenant in the canary list).
+  Projection to Silver/graph additionally requires the FT-6 relay to be draining
+  `event_outbox` (`OUTBOX_RELAY_ENABLED=true`, `outbox-relay` runtime role running). A
+  startup coherence guard (`main.py` lifespan) fails closed in staging/production — and
+  warns in local/dev — when the spine flag is set while the relay is off, so delegated
+  observations cannot silently queue unprojected.
 - **Flag OFF (default):** unchanged synchronous behavior — the compatibility routes run the
   existing `AgenticIngestionPipeline` and its bespoke silver/outbox repositories. Byte-for-byte
   identical public contracts.

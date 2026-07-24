@@ -362,6 +362,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.route_registry.route_registry_enforced:
         app.state.route_policy_inventory = validate_mounted_routes(app.routes)
 
+    # Coherence guard (AAI PR-1): the canonical agentic-observability spine only
+    # PROJECTS while the FT-6 outbox relay drains event_outbox. If delegation is
+    # enabled without the relay, delegated observations durably queue in
+    # event_outbox but are never projected. Fail closed in staging/production;
+    # warn in local/dev.
+    _aoi = settings.agentic_observability_ingestion
+    if (
+        (_aoi.canonical_spine_enabled or _aoi.canary_tenant_ids)
+        and not settings.ingestion_v2.outbox_relay_enabled
+    ):
+        _spine_msg = (
+            "AGENTIC_OBS_CANONICAL_SPINE_ENABLED (or canary tenants) is set but "
+            "OUTBOX_RELAY_ENABLED is false: delegated agentic observations will "
+            "durably queue in event_outbox and never project until the relay runs."
+        )
+        if settings.env in (Environment.STAGING, Environment.PRODUCTION):
+            raise RuntimeError(f"fail-closed: {_spine_msg}")
+        logger.warning(_spine_msg)
+
     # Runtime-role gating (PR 4 / FT-4). With WORKER_ROLES_ENABLED off, both
     # gates are True → this lifespan is byte-identical to before. With it on, a
     # pure "api" process starts neither the stream consumers nor the supervised

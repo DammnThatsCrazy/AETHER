@@ -25,7 +25,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from repositories.agentic_observability_repos import AgentActivityRepository
 from services.ingestion.bronze_bulk import BronzeSDKEvent, OutboxEvent, ingest_many
 from services.ingestion.generated_registry import CANONICAL_EVENT_TYPES
 from services.ingestion.validation import (
@@ -60,19 +59,25 @@ def compute_event_id(
     *,
     tenant_id: str,
     provider_id: str,
+    event_type: str,
     integration_id: Optional[str],
     environment_id: Optional[str],
     provider_event_id: Optional[str],
 ) -> str:
-    """Deterministic, provider/integration/environment/tenant-namespaced id.
+    """Deterministic, event-type/provider/integration/environment/tenant-namespaced id.
 
     A stable ``provider_event_id`` yields a deterministic 32-char key so retries
     of the same external event dedupe at the Bronze uniqueness boundary. Absent a
     provider event id there is nothing to dedupe on, so a fresh uuid is used
     (unique, but non-idempotent).
+
+    ``event_type`` is part of the namespace so two DIFFERENT observations that
+    happen to share a ``provider_event_id`` (e.g. a status transition emitted as
+    a distinct event, or two endpoints observing the same entity) do not collide
+    and silently drop one at the Bronze uniqueness boundary.
     """
     if provider_event_id:
-        raw = f"{tenant_id}:{provider_id}:{integration_id or ''}:{environment_id or ''}:{provider_event_id or ''}"
+        raw = f"{tenant_id}:{provider_id}:{event_type}:{integration_id or ''}:{environment_id or ''}:{provider_event_id or ''}"
         return hashlib.sha256(raw.encode()).hexdigest()[:32]
     return uuid.uuid4().hex
 
@@ -112,6 +117,7 @@ async def ingest_observation(
     event_id = compute_event_id(
         tenant_id=tenant_id,
         provider_id=provider_id,
+        event_type=event_name,
         integration_id=integration_id,
         environment_id=environment_id,
         provider_event_id=provider_event_id,
@@ -184,27 +190,10 @@ async def ingest_observation(
     result = await ingest_many([bronze], [outbox])
     status = result.statuses[0] if result.statuses else "duplicate"
 
-    # Legacy compat: keep obs_agent_activities populated so existing Kyber read
-    # routes keep returning counts. insert() upserts by id → idempotent on replay.
-    try:
-        await AgentActivityRepository().insert(event_id, {
-            "observation_id": event_id,
-            "event_id": event_id,
-            "tenant_id": tenant_id,
-            "event_name": event_name,
-            "agent_id": agent_id,
-            "actor_id": actor_id,
-            "provider": provider_id,
-            "integration_id": integration_id,
-            "environment_id": environment_id,
-            "observed_at": observed_at,
-            "received_at": now_iso,
-            "status": status,
-            "properties": scrubbed_props,
-            "source": _SOURCE,
-        })
-    except Exception as exc:  # pragma: no cover — compat store is best-effort
-        logger.warning("obs_agent_activities compat upsert failed", extra={"error": str(exc)})
+    # Legacy per-type compat writes (obs_agent_tools / obs_agent_connections /
+    # obs_agent_risk_signals / obs_agent_activities) are owned by the calling
+    # routes so each Kyber read surface counts its own store accurately; the
+    # spine writer stays canonical-only and does not inflate a catch-all table.
 
     metrics.increment(
         "agentic_obs_canonical_ingest_total",

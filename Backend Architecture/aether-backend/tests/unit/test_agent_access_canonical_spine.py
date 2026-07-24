@@ -370,13 +370,16 @@ def test_same_provider_event_id_is_idempotent_duplicate():
     _run(_flow())
 
 
-def test_event_id_is_namespaced_by_provider_integration_environment_tenant():
+def test_event_id_is_namespaced_by_type_provider_integration_environment_tenant():
     kw = dict(
-        tenant_id="t1", provider_id="mcp", integration_id="int-1",
-        environment_id="prod", provider_event_id="prov-evt-ns",
+        tenant_id="t1", provider_id="mcp", event_type="agent_tool_invocation_observed",
+        integration_id="int-1", environment_id="prod", provider_event_id="prov-evt-ns",
     )
     base = compute_event_id(**kw)
     assert compute_event_id(**{**kw, "provider_id": "other"}) != base
+    # event_type is part of the namespace so two DIFFERENT observations that share
+    # a provider_event_id (e.g. two endpoints on the same entity) do not collide.
+    assert compute_event_id(**{**kw, "event_type": "agent_mcp_connection_observed"}) != base
     assert compute_event_id(**{**kw, "integration_id": "other"}) != base
     assert compute_event_id(**{**kw, "environment_id": "other"}) != base
     assert compute_event_id(**{**kw, "tenant_id": "other"}) != base
@@ -505,21 +508,51 @@ def test_economics_amount_rejects_binary_float_and_round_trips_decimal_string(sp
 # 6. Kyber read compat — legacy obs_agent_activities count still increments
 # ---------------------------------------------------------------------------
 
-def test_kyber_activity_count_increments_after_delegated_observation():
-    tenant = "tenant-kyber"
+def test_kyber_per_type_count_increments_after_delegated_observation(spine_on):
+    # Corrected architecture: the ROUTE owns the legacy per-type compat write
+    # (the canonical bridge is spine-only, so it no longer inflates a catch-all
+    # activities table). The Kyber "tools" count therefore increments from the
+    # type-specific obs_agent_tools store even on the delegated path.
+    from repositories.agentic_observability_repos import AgentToolRepository
 
-    async def _flow():
-        repo = AgentActivityRepository()
-        before = await repo.count({"tenant_id": tenant})
-        await ingest_observation(
-            tenant_id=tenant,
-            event_name="agent_tool_invocation_observed",
-            provider_id="mcp",
-            provider_event_id="prov-evt-kyber",
-            agent_id="agent-kyber",
-            properties={"agentId": "agent-kyber", "toolName": "search_web", "provider": "mcp"},
+    tool_repo = AgentToolRepository()
+    before = _run(tool_repo.count({"tenant_id": "tenant-a"}))
+    resp = _client().post(
+        "/v1/observability/agent/tools",
+        json={"tenant_id": "tenant-a", "agent_id": "agent-kyber",
+              "tool_name": "search_web", "status": "succeeded_observed"},
+    )
+    assert resp.status_code == 201, resp.text
+    after = _run(tool_repo.count({"tenant_id": "tenant-a"}))
+    assert after == before + 1, f"legacy obs_agent_tools did not increment: {before} -> {after}"
+
+
+# ---------------------------------------------------------------------------
+# 7. Regression — decimal-safe amount must not crash the default risk path
+# ---------------------------------------------------------------------------
+
+def test_evaluate_risk_handles_decimal_string_amount_without_crash():
+    # ObservationEconomics.amount is now a decimal-safe STRING; evaluate_risk
+    # (run on the default flag-OFF path for every agent event) must parse it
+    # before comparing, not do ``"500" > 10000`` which raised TypeError -> HTTP 500.
+    from services.agentic_observability.models import (
+        AgenticObservationRecord, ObservationActor, ObservationObject,
+        ObservationAction, ObservationEconomics, ObservationProvenance, ActorType,
+    )
+    from services.agentic_observability.risk_signals import evaluate_risk
+
+    def _record(amount: str) -> AgenticObservationRecord:
+        return AgenticObservationRecord(
+            event_name="agent_activity_observed",
+            tenant_id="t1",
+            actor=ObservationActor(actor_type=ActorType.AGENT, actor_id="a1"),
+            object=ObservationObject(object_type="resource"),
+            action=ObservationAction(name="x"),
+            economics=ObservationEconomics(amount=amount, currency="USD"),
+            provenance=ObservationProvenance(raw_event_hash="h", normalized_by="t"),
         )
-        after = await repo.count({"tenant_id": tenant})
-        assert after == before + 1, f"legacy obs_agent_activities did not increment: {before} -> {after}"
 
-    _run(_flow())
+    big = evaluate_risk(_record("15000"))  # must NOT raise
+    assert "large_economic_amount_observed" in big.reason_codes
+    small = evaluate_risk(_record("5"))
+    assert "large_economic_amount_observed" not in small.reason_codes

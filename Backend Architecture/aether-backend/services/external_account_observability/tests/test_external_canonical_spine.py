@@ -189,6 +189,52 @@ def test_portfolio_flag_on_writes_bronze_outbox_and_legacy(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# (b2) Idempotency namespacing — status transitions & account facets don't collide
+# ---------------------------------------------------------------------------
+
+def test_order_status_transition_is_not_deduped(monkeypatch):
+    # An order re-observed pending -> filled (same external_order_id + brokerage)
+    # must produce TWO distinct canonical events, not collapse the 'filled'
+    # transition into a Bronze duplicate of 'pending'.
+    monkeypatch.setattr(
+        "services.external_account_observability.routes._use_canonical_spine",
+        lambda tenant_id: True,
+    )
+    client = _client()
+    base = {"tenant_id": "tenant-a", "agent_id": "agent-1", "symbol": "AAPL",
+            "side": "buy", "quantity": "2.5", "brokerage_obs_id": "brk-1",
+            "external_order_id": "ext-order-1"}
+    r1 = client.post("/v1/observability/external-accounts/order-observations",
+                     json={**base, "status": "pending"})
+    r2 = client.post("/v1/observability/external-accounts/order-observations",
+                     json={**base, "status": "filled"})
+    assert r1.status_code == 201, r1.text
+    assert r2.status_code == 201, r2.text
+    assert len(_bronze()) == 2, _bronze()
+    assert len(_outbox()) == 2, _outbox()
+
+
+def test_account_and_brokerage_observations_do_not_collide(monkeypatch):
+    # The same external_account_id observed via the account endpoint and the
+    # brokerage endpoint (both event_name agentic_account_observed) must be TWO
+    # distinct canonical events, not one deduped away at the Bronze boundary.
+    monkeypatch.setattr(
+        "services.external_account_observability.routes._use_canonical_spine",
+        lambda tenant_id: True,
+    )
+    client = _client()
+    acct = client.post("/v1/observability/external-accounts",
+                       json={"tenant_id": "tenant-a", "agent_id": "agent-1",
+                             "provider": "robinhood", "external_account_id": "acct-123"})
+    brk = client.post("/v1/observability/external-accounts/brokerage",
+                      json={"tenant_id": "tenant-a", "agent_id": "agent-1",
+                            "provider": "robinhood", "external_account_id": "acct-123"})
+    assert acct.status_code == 201, acct.text
+    assert brk.status_code == 201, brk.text
+    assert len(_bronze()) == 2, _bronze()
+
+
+# ---------------------------------------------------------------------------
 # (c) Flag OFF — no bronze/outbox rows, response shape unchanged
 # ---------------------------------------------------------------------------
 
