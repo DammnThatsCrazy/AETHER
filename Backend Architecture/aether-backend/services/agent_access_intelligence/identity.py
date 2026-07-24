@@ -116,7 +116,17 @@ def _identity_tuple(record: dict[str, Any]) -> tuple[str, ...]:
 
     def norm(key: str) -> str:
         value = record.get(key)
-        return str(value).strip().lower() if value is not None else ""
+        if value is None:
+            return ""
+        # Unwrap enum members BEFORE stringifying. For `class CapabilityKind(str, Enum)`,
+        # `str(member)` is "CapabilityKind.MCP_TOOL", not "mcp_tool" — while the stored row
+        # (written via `model_dump(mode="json")`) and any declaration hold the plain value.
+        # Without this the digest computed at upsert time would disagree with a digest
+        # recomputed from the row's own stored fields, and a declaration — which can only
+        # ever carry a plain string — could never match, so every declared capability would
+        # be reported as `drifted`.
+        value = getattr(value, "value", value)
+        return str(value).strip().lower()
 
     return (
         norm("provider"),

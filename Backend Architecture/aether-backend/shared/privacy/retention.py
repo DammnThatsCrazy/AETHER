@@ -237,6 +237,9 @@ class DeletionPlan:
         self.add_step("postgresql", "capability_installations", DeletionBehavior.HARD_DELETE,
                        DataClassification.CONFIDENTIAL, "Delete observed capability installations for tenant",
                        entity_field="tenant_id")
+        self.add_step("postgresql", "capability_declarations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete declared capability records for tenant",
+                       entity_field="tenant_id")
 
         # Delegations — including Agent Access Intelligence capability authorizations
         # (PR 2, Phase B1), which are stored as delegation rows. This closes a
@@ -493,6 +496,9 @@ class DSARRequest:
         # delete_by_entity("tenant_id", <entity_id>) — for a tenant-erasure DSR
         # entity_id is the tenant id. Imported lazily to avoid a heavy service
         # import at module load and any import cycle.
+        from services.agent_access_intelligence.declarations import (
+            CapabilityDeclarationRepository,
+        )
         from services.agent_access_intelligence.repositories import (
             CapabilityCatalogRepository,
             CapabilityInstallationRepository,
@@ -502,6 +508,7 @@ class DSARRequest:
         store_adapters = {
             "postgresql:capability_catalog": CapabilityCatalogRepository(),
             "postgresql:capability_installations": CapabilityInstallationRepository(),
+            "postgresql:capability_declarations": CapabilityDeclarationRepository(),
             # Both delegation steps share one adapter key ("<store>:<table>"); the
             # plan passes each step's own entity_field, so grantee- and grantor-side
             # erasure both execute against the same repository.

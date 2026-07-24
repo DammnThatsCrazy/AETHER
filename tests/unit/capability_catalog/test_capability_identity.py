@@ -115,6 +115,19 @@ def test_digest_is_case_and_whitespace_normalized():
     )
 
 
+def test_enum_members_digest_as_their_plain_value():
+    """`str(CapabilityKind.MCP_TOOL)` is "CapabilityKind.MCP_TOOL", but the stored row and
+    every declaration hold "mcp_tool". If the enum were stringified naively, the digest
+    written at upsert would disagree with one recomputed from the row's own stored fields,
+    and no declaration could ever match — Phase C would report the whole declared inventory
+    as drifted."""
+    from services.agent_access_intelligence.models import CapabilityKind
+
+    assert artifact_digest_for({"capability_kind": CapabilityKind.MCP_TOOL}) == (
+        artifact_digest_for({"capability_kind": "mcp_tool"})
+    )
+
+
 def test_digest_falls_back_to_server_url_when_there_is_no_server_name():
     with_name = artifact_digest_for({"server_name": "acme-mcp"})
     with_url = artifact_digest_for({"server_url": "acme-mcp"})

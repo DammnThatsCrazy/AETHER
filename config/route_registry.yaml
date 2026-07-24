@@ -82,8 +82,10 @@ known_prefixes:
   - /v1/capabilities
   - /v1/capability-authorizations
   - /v1/capability-catalog
+  - /v1/capability-declarations
   - /v1/capability-installations
   - /v1/capability-policy
+  - /v1/capability-risk
   - /v1/clusters
   - /v1/comms
   - /v1/config

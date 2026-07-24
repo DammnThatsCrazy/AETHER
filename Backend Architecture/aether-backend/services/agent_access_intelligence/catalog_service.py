@@ -79,12 +79,17 @@ def _sanitize_server_url(url: Optional[str]) -> Optional[str]:
     unchanged (it is treated as an opaque server name, which carries no userinfo/query)."""
     if not url:
         return url
+    # `urlsplit` treats everything before the first ":" as a scheme even when no "://"
+    # follows. So "user:pass@mcp.example.com/v1" parses as scheme="user" with an EMPTY
+    # netloc — the userinfo strip below would find nothing and the credential would be
+    # persisted verbatim into a durable, operator-readable catalog row. Parsing schemeless
+    # input under a synthetic "//" authority forces the leading token to be read as the
+    # netloc, so the same stripping and redaction run for both shapes.
+    schemeless = "://" not in url
+    target = "//" + url if schemeless else url
     try:
-        parts = urlsplit(url)
+        parts = urlsplit(target)
     except ValueError:
-        return url
-    if not parts.scheme and "@" not in parts.netloc:
-        # Not a URL (opaque server name) — nothing credential-bearing to strip.
         return url
     netloc = parts.netloc.rsplit("@", 1)[-1] if "@" in parts.netloc else parts.netloc
     query = parts.query
@@ -95,7 +100,10 @@ def _sanitize_server_url(url: Optional[str]) -> Optional[str]:
                 for k, v in parse_qsl(query, keep_blank_values=True)
             ]
         )
-    return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+    cleaned = urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+    if schemeless and cleaned.startswith("//"):
+        cleaned = cleaned[2:]
+    return cleaned
 
 
 def _fact_fields(row: dict[str, Any]) -> dict[str, Any]:
