@@ -1931,6 +1931,9 @@ object Aether : DefaultLifecycleObserver {
         if (config?.debug == true) Log.d(TAG, message)
     }
 
+    /** Debug log accessor for same-module optional integrations (interaction). */
+    internal fun debugLog(message: String) = log(message)
+
 
     // =========================================================================
     // DEVICE FINGERPRINT

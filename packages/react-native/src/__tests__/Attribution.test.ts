@@ -16,6 +16,8 @@ const { nativeMethods } = vi.hoisted(() => ({
     getFirstTouchAttribution: vi.fn(async (): Promise<unknown> => null),
     getLatestTouchAttribution: vi.fn(async (): Promise<unknown> => null),
     handleURL: vi.fn(),
+    handleQrScanResult: vi.fn(),
+    handleNfcUri: vi.fn(),
     resolveDeferredHandoff: vi.fn(async (): Promise<unknown> => null),
   },
 }));
@@ -81,6 +83,20 @@ describe('Aether.attribution — native delegation', () => {
     );
   });
 
+  it('handleQrScanResult delegates the host-decoded QR URL to the native parser', () => {
+    Aether.attribution.handleQrScanResult('https://app.example.com/qr?utm_source=poster');
+    expect(nativeMethods.handleQrScanResult).toHaveBeenCalledWith(
+      'https://app.example.com/qr?utm_source=poster',
+    );
+  });
+
+  it('handleNfcUri delegates the host-decoded NFC URI to the native parser', () => {
+    Aether.attribution.handleNfcUri('https://app.example.com/nfc?aether_ref=abc');
+    expect(nativeMethods.handleNfcUri).toHaveBeenCalledWith(
+      'https://app.example.com/nfc?aether_ref=abc',
+    );
+  });
+
   it('resolveDeferredHandoff resolves evidence on a server match', async () => {
     nativeMethods.resolveDeferredHandoff.mockResolvedValueOnce(firstTouchJSON);
     const evidence = await Aether.attribution.resolveDeferredHandoff('HANDOFF-123');
@@ -104,22 +120,30 @@ describe('Aether.attribution — null-safety without a linked native module', ()
     const savedFirst = nativeMethods.getFirstTouchAttribution;
     const savedLatest = nativeMethods.getLatestTouchAttribution;
     const savedHandle = nativeMethods.handleURL;
+    const savedQr = nativeMethods.handleQrScanResult;
+    const savedNfc = nativeMethods.handleNfcUri;
     const savedResolve = nativeMethods.resolveDeferredHandoff;
     // Simulate an app running with an older native SDK that predates the
     // attribution methods (optional-chained natively, so undefined, not throw).
     delete (nativeMethods as Record<string, unknown>).getFirstTouchAttribution;
     delete (nativeMethods as Record<string, unknown>).getLatestTouchAttribution;
     delete (nativeMethods as Record<string, unknown>).handleURL;
+    delete (nativeMethods as Record<string, unknown>).handleQrScanResult;
+    delete (nativeMethods as Record<string, unknown>).handleNfcUri;
     delete (nativeMethods as Record<string, unknown>).resolveDeferredHandoff;
     try {
       await expect(Aether.attribution.getFirstTouch()).resolves.toBeNull();
       await expect(Aether.attribution.getLatestTouch()).resolves.toBeNull();
       expect(() => Aether.attribution.handleURL('myapp://landing')).not.toThrow();
+      expect(() => Aether.attribution.handleQrScanResult('myapp://qr')).not.toThrow();
+      expect(() => Aether.attribution.handleNfcUri('myapp://nfc')).not.toThrow();
       await expect(Aether.attribution.resolveDeferredHandoff('id')).resolves.toBeNull();
     } finally {
       nativeMethods.getFirstTouchAttribution = savedFirst;
       nativeMethods.getLatestTouchAttribution = savedLatest;
       nativeMethods.handleURL = savedHandle;
+      nativeMethods.handleQrScanResult = savedQr;
+      nativeMethods.handleNfcUri = savedNfc;
       nativeMethods.resolveDeferredHandoff = savedResolve;
     }
   });
@@ -128,14 +152,15 @@ describe('Aether.attribution — null-safety without a linked native module', ()
 describe('Tracked press interaction (AetherPressable core)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('emits interaction_observed with the stable controlId and no text capture', () => {
+  it('emits ui_interaction_observed with the stable controlId and no text capture', () => {
     emitTrackedPress('checkout.confirm');
-    expect(nativeMethods.observe).toHaveBeenCalledWith('interaction_observed', {
+    expect(nativeMethods.observe).toHaveBeenCalledWith('ui_interaction_observed', {
       controlId: 'checkout.confirm',
-      interactionType: 'press',
+      controlType: 'pressable',
+      action: 'press',
     });
     const props = nativeMethods.observe.mock.calls[0][1] as Record<string, unknown>;
-    expect(Object.keys(props).sort()).toEqual(['controlId', 'interactionType']);
+    expect(Object.keys(props).sort()).toEqual(['action', 'controlId', 'controlType']);
   });
 
   it('handler emits first, then delegates the press event to onPress', () => {
@@ -150,9 +175,10 @@ describe('Tracked press interaction (AetherPressable core)', () => {
 
     expect(order).toEqual(['emit', 'onPress']);
     expect(onPress).toHaveBeenCalledWith({ kind: 'press-event' });
-    expect(nativeMethods.observe).toHaveBeenCalledWith('interaction_observed', {
+    expect(nativeMethods.observe).toHaveBeenCalledWith('ui_interaction_observed', {
       controlId: 'cta.primary',
-      interactionType: 'press',
+      controlType: 'pressable',
+      action: 'press',
       screen: 'Home',
     });
   });

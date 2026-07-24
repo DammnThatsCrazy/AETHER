@@ -47,6 +47,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     // Google Play Install Referrer — first-install attribution evidence
     implementation("com.android.installreferrer:installreferrer:2.2")
+    // Optional interaction integrations (spec §12) — compileOnly so they are
+    // only linked when the host app already depends on Compose / Navigation.
+    compileOnly("androidx.compose.ui:ui:1.6.8")
+    compileOnly("androidx.compose.foundation:foundation:1.6.8")
+    compileOnly("androidx.navigation:navigation-runtime-ktx:2.7.7")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.23")
     // Real org.json for JVM unit tests (the mockable android.jar stubs throw)
