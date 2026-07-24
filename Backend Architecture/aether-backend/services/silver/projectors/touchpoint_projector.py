@@ -34,6 +34,9 @@ _TOUCHPOINT_TYPE_MAP: dict[str, str] = {
     "notification_presented": "push_presentation",
     "notification_clicked": "push_click",
     "outcome_observed": "page_view",
+    "deep_link_opened": "deep_link_open",
+    "app_install_attributed": "app_install",
+    "deferred_attribution_resolved": "app_install",
 }
 
 # Positive-engagement touchpoint types that must never be created from
@@ -216,6 +219,15 @@ class TouchpointProjector(BaseProjector):
             ),
             verified_referral=verified_referral,
             explicit_actor_type=explicit_actor_type,
+            declared_entry_method=(
+                acq_ev.get("entryMethod") or acq_ev.get("entry_method")
+            ),
+        )
+        destination_domain = (
+            acq_ev.get("destinationDomain") or acq_ev.get("destination_domain")
+        )
+        destination_path_hash = (
+            acq_ev.get("destinationPathHash") or acq_ev.get("destination_path_hash")
         )
         classification_id = str(uuid5(
             NAMESPACE_URL,
@@ -244,10 +256,6 @@ class TouchpointProjector(BaseProjector):
             or props.get("provider")
         )
 
-        has_campaign_evidence = bool(
-            canonical_campaign_id_hint or external_campaign_id or utm_id or utm_campaign
-        )
-
         row: dict[str, Any] = {
             "touchpoint_id": touchpoint_id,
             "tenant_id": tenant_id,
@@ -274,6 +282,12 @@ class TouchpointProjector(BaseProjector):
             # Source/referral classification is orthogonal to campaign identity.
             # These dimensions travel beside campaign_id; they never populate it.
             "source_class": classified.source_class,
+            "traffic_origin": classified.traffic_origin,
+            "economic_class": classified.economic_class,
+            "channel_family": classified.channel_family,
+            "entry_method": classified.entry_method,
+            "proof_level": classified.proof_level,
+            "evidence_conflicts": list(classified.evidence_conflicts),
             "referral_mediation_type": classified.referral_mediation_type,
             "ai_provider": classified.ai_provider,
             "ai_product": classified.ai_product,
@@ -317,7 +331,9 @@ class TouchpointProjector(BaseProjector):
             # Resolution evidence fields — populated here; status/method set by dispatcher
             "external_campaign_id": external_campaign_id,
             "external_account_id": external_account_id,
-            "campaign_resolution_status": "not_applicable" if not has_campaign_evidence else "not_applicable",
+            # utm_source/utm_medium alone are NOT campaign evidence; the
+            # dispatcher only overwrites this when campaign evidence exists.
+            "campaign_resolution_status": "not_applicable",
             "campaign_resolution_method": None,
             "campaign_resolution_confidence": None,
             "campaign_resolution_version": None,
@@ -342,7 +358,12 @@ class TouchpointProjector(BaseProjector):
                 "source_event_type": event_type,
                 "source_classifier_version": classified.classifier_version,
                 "source_evidence_signals": list(classified.evidence),
+                "source_evidence_conflicts": list(classified.evidence_conflicts),
                 "raw_referrer_present": bool(raw_referrer),
+                # Destination evidence is navigation context, never a
+                # classification input (classification stays source-only).
+                "destination_domain": destination_domain,
+                "destination_path_hash": destination_path_hash,
             },
             "evidence_ids": [source_event_id] if source_event_id else [],
             "idempotency_key": idem_key,
@@ -375,11 +396,18 @@ def _infer_channel(medium: str | None, source: str | None) -> str:
 
 
 def _silver_channel(channel: str) -> str:
-    """Translate classifier display channels into the established Silver vocabulary."""
+    """Translate classifier display channels into the established Silver vocabulary.
+
+    v3 splits the historical blanket "paid" channel into paid_search /
+    paid_social / display and replaces the unsupported "direct" claim with
+    direct_unknown. Downstream consumers (journey channel sequences, gold
+    materialization, attribution channel columns) treat these values as opaque
+    labels; legacy rows retain their historical values until repaired.
+    """
     mapping = {
-        "Paid Search": "paid",
-        "Paid Social": "paid",
-        "Display": "paid",
+        "Paid Search": "paid_search",
+        "Paid Social": "paid_social",
+        "Display": "display",
         "Organic Search": "organic_search",
         "Organic Social": "social",
         "Email": "email",
@@ -390,6 +418,7 @@ def _silver_channel(channel: str) -> str:
         "Agent Referral": "agent_referral",
         "AI Crawler": "ai_crawler",
         "Machine Referral": "machine_referral",
-        "Direct": "direct",
+        "Direct": "direct_unknown",
+        "Direct / Unknown": "direct_unknown",
     }
     return mapping.get(channel, channel.lower().replace(" ", "_") if channel else "other")

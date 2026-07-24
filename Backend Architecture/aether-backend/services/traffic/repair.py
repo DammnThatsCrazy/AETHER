@@ -27,6 +27,11 @@ from services.measurement.engine.journey_compiler import JourneyCompiler
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.touchpoint_repo import TouchpointRepository
 from services.traffic.classifier import SOURCE_CLASSIFIER_VERSION, ClassifiedSource, SourceClassifier
+from services.traffic.generated_registry import (
+    CLICK_ID_CLASSES,
+    LEGACY_PAID_CHANNEL_MAP,
+    SOURCE_CLASS_DEFAULTS,
+)
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.traffic.source_classification_repair")
@@ -130,6 +135,7 @@ class SourceClassificationRepairService:
                                 counters["max_occurred_at"] = iso_occurred
                         classified = self._classify_row(row)
                         fields = _classification_fields(classified)
+                        fields = _apply_legacy_normalization(row, fields)
                         # Historical touchpoints retain only an origin-safe
                         # referrer plus this one-way path fingerprint.  A
                         # reclassification cannot recreate the path from the
@@ -583,6 +589,12 @@ def _classification_fields(classified: ClassifiedSource) -> dict[str, Any]:
         "source": classified.source,
         "medium": classified.medium,
         "source_class": classified.source_class,
+        "traffic_origin": classified.traffic_origin,
+        "economic_class": classified.economic_class,
+        "channel_family": classified.channel_family,
+        "entry_method": classified.entry_method,
+        "proof_level": classified.proof_level,
+        "evidence_conflicts": list(classified.evidence_conflicts),
         "referral_mediation_type": classified.referral_mediation_type,
         "ai_provider": classified.ai_provider,
         "ai_product": classified.ai_product,
@@ -599,6 +611,75 @@ def _classification_fields(classified: ClassifiedSource) -> dict[str, Any]:
         "verified_referral_link_id": classified.verified_referral_link_id,
         "referrer": classified.normalized_referrer or None,
     }
+
+
+_PAID_SOCIAL_SOURCES = frozenset(
+    entry["source"]
+    for entry in CLICK_ID_CLASSES.values()
+    if entry["sourceClass"] == "paid_social"
+)
+
+
+def _legacy_paid_display_channel(row: dict[str, Any]) -> str:
+    """Reconstruct the v2 display channel for a legacy blanket-'paid' row."""
+    channel = str(row.get("channel") or "")
+    if channel in LEGACY_PAID_CHANNEL_MAP:
+        return channel
+    medium = str(row.get("medium") or "").lower()
+    if medium in {"display", "cpm", "banner"}:
+        return "Display"
+    if str(row.get("source") or "").lower() in _PAID_SOCIAL_SOURCES:
+        return "Paid Social"
+    return "Paid Search"
+
+
+def _apply_legacy_normalization(
+    row: dict[str, Any], fields: dict[str, Any]
+) -> dict[str, Any]:
+    """Normalize legacy v2 'paid' rows whose click evidence is unrecoverable.
+
+    The v2 ledger stored a blanket ``source_class='paid'``; when the click-id
+    provider key survived in the evidence signals, v3 reclassification already
+    yields the canonical paid class. When it did not survive, the paid economic
+    truth must not silently degrade to referral/direct — the stored display
+    channel (via LEGACY_PAID_CHANNEL_MAP) decides the canonical class. Raw
+    immutable evidence is never mutated; only the current projection changes.
+    """
+    if str(row.get("source_class") or "") != "paid":
+        return fields
+    if fields.get("source_class") in {"paid_search", "paid_social", "display", "affiliate"}:
+        return fields
+
+    display_channel = _legacy_paid_display_channel(row)
+    source_class = LEGACY_PAID_CHANNEL_MAP[display_channel]
+    defaults = SOURCE_CLASS_DEFAULTS[source_class]
+    normalized = dict(fields)
+    normalized.update(
+        {
+            "source_class": source_class,
+            "channel": _silver_channel(display_channel),
+            "source": row.get("source") or fields.get("source"),
+            "medium": row.get("medium") or fields.get("medium"),
+            "economic_class": defaults["economicClass"],
+            "channel_family": defaults["channelFamily"],
+            "traffic_origin": "external",
+            "entry_method": "paid_click_id",
+            "proof_level": "declared",
+            "referral_mediation_type": "ordinary_referral",
+            "journey_role": "campaign",
+            "verification_level": "verified_click_id",
+        }
+    )
+    evidence = dict(normalized.get("source_classification_evidence") or {})
+    signals = list(evidence.get("signals") or [])
+    signals.append("legacy_paid_channel_normalization")
+    evidence["signals"] = signals
+    evidence["economic_class"] = defaults["economicClass"]
+    evidence["channel_family"] = defaults["channelFamily"]
+    evidence["entry_method"] = "paid_click_id"
+    evidence["proof_level"] = "declared"
+    normalized["source_classification_evidence"] = evidence
+    return normalized
 
 
 def _identity_ref(row: dict[str, Any]) -> Optional[dict[str, str]]:
@@ -664,7 +745,9 @@ def _historical_user_agent(evidence: dict[str, Any]) -> str:
 
 def _same_current_classification(row: dict[str, Any], fields: dict[str, Any]) -> bool:
     comparable = (
-        "channel", "source", "medium", "source_class", "referral_mediation_type",
+        "channel", "source", "medium", "source_class", "traffic_origin",
+        "economic_class", "channel_family", "entry_method", "proof_level",
+        "referral_mediation_type",
         "ai_provider", "ai_product", "actor_type", "journey_role",
         "verification_level", "normalized_referrer_domain", "referrer_path_hash",
         "attribution_eligible", "verified_referral_link_id",
@@ -676,12 +759,14 @@ def _same_current_classification(row: dict[str, Any], fields: dict[str, Any]) ->
 
 def _silver_channel(channel: str) -> str:
     mapping = {
-        "Paid Search": "paid", "Paid Social": "paid", "Display": "paid",
+        "Paid Search": "paid_search", "Paid Social": "paid_social",
+        "Display": "display",
         "Organic Search": "organic_search", "Organic Social": "social",
         "Email": "email", "Affiliate": "affiliate", "Partner": "partner",
         "Referral": "referral", "AI Referral": "ai_referral",
         "Agent Referral": "agent_referral", "AI Crawler": "ai_crawler",
-        "Machine Referral": "machine_referral", "Direct": "direct",
+        "Machine Referral": "machine_referral", "Direct": "direct_unknown",
+        "Direct / Unknown": "direct_unknown",
     }
     return mapping.get(channel, channel.lower().replace(" ", "_") if channel else "other")
 

@@ -651,7 +651,9 @@ def _touchpoint_exclusion_reason(
     if tp.get("journey_role") == "excluded":
         return "source_journey_role_excluded"
     if direct_traffic_policy == "exclude" and (
-        tp.get("source_class") == "direct"
+        # Legacy rows say "direct"; the canonical vocabulary says
+        # "direct_unknown". Both mean the same absence of source evidence.
+        tp.get("source_class") in ("direct", "direct_unknown")
         or tp.get("referral_mediation_type") == "direct_entry"
     ):
         return "direct_traffic_policy"

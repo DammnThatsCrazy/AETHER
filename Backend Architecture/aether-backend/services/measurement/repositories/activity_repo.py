@@ -50,7 +50,9 @@ class ActivityRepository:
             "browser_id", "install_id", "wallet_id", "wallet_address", "agent_id",
             "activity_family", "activity_type", "actor_type",
             "channel", "source", "medium", "platform", "surface",
-            "source_class", "referral_mediation_type", "ai_provider", "ai_product",
+            "source_class", "traffic_origin", "economic_class", "channel_family",
+            "entry_method", "proof_level", "evidence_conflicts",
+            "referral_mediation_type", "ai_provider", "ai_product",
             "journey_role", "evidence_confidence", "verification_level",
             "source_classifier_version", "normalized_referrer_domain",
             "source_classification_id", "attribution_eligible", "verified_referral_link_id",
@@ -77,6 +79,10 @@ class ActivityRepository:
             activity.get("activity_type"), activity.get("actor_type"),
             activity.get("channel"), activity.get("source"), activity.get("medium"),
             activity.get("platform"), activity.get("surface"), activity.get("source_class"),
+            activity.get("traffic_origin"), activity.get("economic_class"),
+            activity.get("channel_family"), activity.get("entry_method"),
+            activity.get("proof_level"),
+            _json_list(activity.get("evidence_conflicts")),
             activity.get("referral_mediation_type"), activity.get("ai_provider"),
             activity.get("ai_product"), activity.get("journey_role"),
             activity.get("evidence_confidence"), activity.get("verification_level"),
@@ -140,6 +146,8 @@ class ActivityRepository:
         """
         fields = (
             "channel", "source", "medium", "actor_type", "source_class",
+            "traffic_origin", "economic_class", "channel_family",
+            "entry_method", "proof_level", "evidence_conflicts",
             "referral_mediation_type", "ai_provider", "ai_product", "journey_role",
             "evidence_confidence", "verification_level", "source_classifier_version",
             "normalized_referrer_domain", "source_classification_id",
@@ -165,6 +173,8 @@ class ActivityRepository:
         params = [tenant_id, _uuid(touchpoint_id)] + [
             _uuid(classification.get(field))
             if field in {"source_classification_id", "verified_referral_link_id"}
+            else _json_list(classification.get(field))
+            if field == "evidence_conflicts"
             else classification.get(field)
             for field in fields
         ]
@@ -658,6 +668,17 @@ class ActivityRepository:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _json_list(value: Any) -> str:
+    """Serialize a JSON list column value (asyncpg binds str to jsonb)."""
+    if value is None:
+        return json.dumps([])
+    if isinstance(value, (list, tuple)):
+        return json.dumps(list(value), default=str)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, default=str)
+
 
 def _parse_ts(value: Any) -> Optional[datetime]:
     if value is None:

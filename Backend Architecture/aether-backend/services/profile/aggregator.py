@@ -45,6 +45,7 @@ from decimal import Decimal
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
+from services.traffic.generated_registry import canonical_source_class
 from services.value import safe_rollup, value_of
 from services.profile.read_result import DimensionReadResult
 
@@ -789,7 +790,13 @@ class Profile360Aggregator:
                 "metadata": {
                     "channel": s.get("channel"),
                     "source": s.get("source"),
-                    "source_class": s.get("source_class"),
+                    # Read-path normalization only; storage keeps historical
+                    # values until an explicit reclassification repair.
+                    "source_class": _canonical_source_class_or_none(s.get("source_class")),
+                    "economic_class": s.get("economic_class"),
+                    "channel_family": s.get("channel_family"),
+                    "entry_method": s.get("entry_method"),
+                    "proof_level": s.get("proof_level"),
                     "referral_mediation_type": s.get("referral_mediation_type"),
                     "ai_provider": s.get("ai_provider"),
                     "ai_product": s.get("ai_product"),
@@ -847,7 +854,11 @@ class Profile360Aggregator:
                 "activity_type": s.get("activity_type"),
                 "activity_status": s.get("activity_status", "observed"),
                 "actor_type": s.get("actor_type"),
-                "source_class": s.get("source_class"),
+                "source_class": _canonical_source_class_or_none(s.get("source_class")),
+                "economic_class": s.get("economic_class"),
+                "channel_family": s.get("channel_family"),
+                "entry_method": s.get("entry_method"),
+                "proof_level": s.get("proof_level"),
                 "referral_mediation_type": s.get("referral_mediation_type"),
                 "ai_provider": s.get("ai_provider"),
                 "ai_product": s.get("ai_product"),
@@ -1801,6 +1812,13 @@ def _safe_float(v: Any) -> float:
         return float(v or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _canonical_source_class_or_none(value: Any) -> Optional[str]:
+    """Normalize legacy stored source_class values at the API boundary."""
+    if value in (None, ""):
+        return value
+    return canonical_source_class(str(value))
 
 
 def _combine_rollup_status(*rollups: dict) -> str:

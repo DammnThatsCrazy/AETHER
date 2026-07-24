@@ -283,7 +283,14 @@ def test_legacy_property_click_id_is_classified_as_paid_traffic():
     assert row["click_id"] == "paid-click-id"
     assert row["source"] == "google"
     assert row["medium"] == "cpc"
-    assert row["channel"] == "paid"
+    # v3 intentionally replaces the blanket "paid" silver channel with the
+    # canonical paid_search / paid_social / display split.
+    assert row["channel"] == "paid_search"
+    assert row["source_class"] == "paid_search"
+    assert row["economic_class"] == "paid"
+    assert row["channel_family"] == "search"
+    assert row["entry_method"] == "paid_click_id"
+    assert row["proof_level"] == "declared"
     assert row["verification_level"] == "verified_click_id"
 
 

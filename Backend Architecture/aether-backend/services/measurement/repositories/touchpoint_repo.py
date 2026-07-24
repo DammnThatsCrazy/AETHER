@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from shared.logger.logger import get_logger
 from repositories.repos import get_pool
+from services.traffic.generated_registry import canonical_source_class
 
 logger = get_logger("aether.measurement.touchpoint_repo")
 
@@ -27,7 +28,9 @@ _TOUCHPOINT_COLUMNS: tuple[str, ...] = (
     "agent_id", "campaign_id", "ad_group_id", "ad_set_id", "creative_id",
     "ad_id", "placement_id", "keyword_id", "audience_id", "offer_id",
     "landing_page_id", "channel", "source", "medium", "platform",
-    "source_class", "referral_mediation_type", "ai_provider", "ai_product",
+    "source_class", "traffic_origin", "economic_class", "channel_family",
+    "entry_method", "proof_level", "evidence_conflicts",
+    "referral_mediation_type", "ai_provider", "ai_product",
     "actor_type", "journey_role", "evidence_confidence", "verification_level",
     "source_classifier_version", "source_classified_at",
     "normalized_referrer_domain", "referrer_path_hash",
@@ -48,7 +51,11 @@ _TOUCHPOINT_COLUMNS: tuple[str, ...] = (
     "schema_version",
 )
 
-_JSON_COLUMNS = frozenset({"source_classification_evidence", "provenance", "evidence_ids"})
+_JSON_COLUMNS = frozenset({
+    "source_classification_evidence", "provenance", "evidence_ids",
+    "evidence_conflicts",
+})
+_JSON_LIST_COLUMNS = frozenset({"evidence_ids", "evidence_conflicts"})
 _UUID_COLUMNS = frozenset({
     "touchpoint_id", "source_classification_id", "verified_referral_link_id",
 })
@@ -57,7 +64,9 @@ _TIMESTAMP_COLUMNS = frozenset({
 })
 
 _CLASSIFICATION_FIELDS: tuple[str, ...] = (
-    "channel", "source", "medium", "source_class", "referral_mediation_type",
+    "channel", "source", "medium", "source_class", "traffic_origin",
+    "economic_class", "channel_family", "entry_method", "proof_level",
+    "evidence_conflicts", "referral_mediation_type",
     "ai_provider", "ai_product", "actor_type", "journey_role",
     "evidence_confidence", "verification_level", "source_classifier_version",
     "source_classified_at", "normalized_referrer_domain", "referrer_path_hash",
@@ -753,11 +762,32 @@ class TouchpointRepository:
                 """,
                 tenant_id,
             )
+            dimension_rows: dict[str, list[dict[str, Any]]] = {}
+            for key, column in (
+                ("source_classes", "source_class"),
+                ("economic_classes", "economic_class"),
+                ("channel_families", "channel_family"),
+                ("proof_levels", "proof_level"),
+            ):
+                fetched = await conn.fetch(
+                    f"""
+                    SELECT {column} AS name, COUNT(*)::bigint AS count
+                    FROM silver_campaign_touchpoint_facts
+                    WHERE tenant_id=$1 AND privacy_class != 'deleted' AND {column} IS NOT NULL
+                    GROUP BY 1 ORDER BY count DESC, name ASC LIMIT 50
+                    """,
+                    tenant_id,
+                )
+                dimension_rows[key] = _merge_canonical_counts(
+                    [dict(row) for row in fetched],
+                    normalize=(column == "source_class"),
+                )
             return {
                 "summary": dict(summary),
                 "versions": [dict(row) for row in versions],
                 "providers": [dict(row) for row in providers],
                 "mediation": [dict(row) for row in mediation],
+                **dimension_rows,
             }
 
     async def tombstone_for_profile(self, tenant_id: str, profile_id: str) -> int:
@@ -808,6 +838,22 @@ class TouchpointRepository:
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _merge_canonical_counts(
+    rows: list[dict[str, Any]], *, normalize: bool
+) -> list[dict[str, Any]]:
+    """Optionally normalize legacy names, merging counts (read path only)."""
+    merged: dict[str, int] = {}
+    for row in rows:
+        name = str(row.get("name") or "")
+        if normalize:
+            name = canonical_source_class(name)
+        merged[name] = merged.get(name, 0) + int(row.get("count") or 0)
+    return [
+        {"name": name, "count": count}
+        for name, count in sorted(merged.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
 
 def _derive_key(row: dict[str, Any]) -> str:
     src = f"{row.get('tenant_id')}:{row.get('source_event_id')}:{row.get('touchpoint_type')}"
@@ -868,7 +914,7 @@ def _uuid_or_none(value: Any) -> Optional[UUID]:
 
 def _db_value(column: str, value: Any) -> Any:
     if column in _JSON_COLUMNS:
-        default: Any = [] if column == "evidence_ids" else {}
+        default: Any = [] if column in _JSON_LIST_COLUMNS else {}
         return json.dumps(default if value is None else value, default=str)
     if column in _UUID_COLUMNS:
         return _uuid_or_none(value)
@@ -976,6 +1022,10 @@ def _health_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     versions: dict[str, int] = {}
     providers: dict[str, int] = {}
     mediation: dict[str, int] = {}
+    source_classes: dict[str, int] = {}
+    economic_classes: dict[str, int] = {}
+    channel_families: dict[str, int] = {}
+    proof_levels: dict[str, int] = {}
     for row in rows:
         version = row.get("source_classifier_version") or "unclassified"
         versions[version] = versions.get(version, 0) + 1
@@ -993,6 +1043,16 @@ def _health_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if row.get("referral_mediation_type"):
             kind = str(row["referral_mediation_type"])
             mediation[kind] = mediation.get(kind, 0) + 1
+        for values, field, normalize in (
+            (source_classes, "source_class", True),
+            (economic_classes, "economic_class", False),
+            (channel_families, "channel_family", False),
+            (proof_levels, "proof_level", False),
+        ):
+            raw = row.get(field)
+            if raw:
+                name = canonical_source_class(str(raw)) if normalize else str(raw)
+                values[name] = values.get(name, 0) + 1
     as_rows = lambda values: [
         {"name": name, "count": count}
         for name, count in sorted(values.items(), key=lambda item: (-item[1], item[0]))
@@ -1002,6 +1062,10 @@ def _health_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "versions": as_rows(versions),
         "providers": as_rows(providers),
         "mediation": as_rows(mediation),
+        "source_classes": as_rows(source_classes),
+        "economic_classes": as_rows(economic_classes),
+        "channel_families": as_rows(channel_families),
+        "proof_levels": as_rows(proof_levels),
     }
 
 

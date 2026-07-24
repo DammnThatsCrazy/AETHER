@@ -379,7 +379,9 @@ async def _insert_steps(conn: Any, steps: list[dict[str, Any]]) -> None:
             activity_id, activity_family, activity_type,
             transition_type, transition_evidence,
             actor_type, channel, source,
-            source_class, referral_mediation_type,
+            source_class, traffic_origin, economic_class, channel_family,
+            entry_method, proof_level, evidence_conflicts,
+            referral_mediation_type,
             ai_provider, ai_product, journey_role,
             evidence_confidence, verification_level,
             source_classifier_version, normalized_referrer_domain,
@@ -396,7 +398,7 @@ async def _insert_steps(conn: Any, steps: list[dict[str, Any]]) -> None:
             $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
             $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
             $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-            $41,$42,$43,$44
+            $41,$42,$43,$44,$45,$46,$47,$48,$49,$50
         )
         ON CONFLICT (tenant_id, journey_version_id, step_position) DO NOTHING
         """,
@@ -424,6 +426,12 @@ def _step_params(s: dict[str, Any]) -> tuple:
         s.get("channel"),
         s.get("source"),
         s.get("source_class"),
+        s.get("traffic_origin"),
+        s.get("economic_class"),
+        s.get("channel_family"),
+        s.get("entry_method"),
+        s.get("proof_level"),
+        json.dumps(list(s.get("evidence_conflicts") or [])),
         s.get("referral_mediation_type"),
         s.get("ai_provider"),
         s.get("ai_product"),

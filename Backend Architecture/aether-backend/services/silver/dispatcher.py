@@ -284,13 +284,43 @@ class ProjectionOutcome:
         return [s["projector"] for s in self.projector_status if s["status"] == "error"]
 
 
+def _row_campaign_evidence(row: dict[str, Any]) -> bool:
+    """True only when the row carries real campaign-identity evidence.
+
+    Campaign identity is a separate dimension from source classification:
+    utm_source/utm_medium alone are NOT campaign evidence. Evidence is a
+    canonical campaign hint (including a verified-link campaign hint, which
+    arrives as ``_canonical_campaign_id_hint``), utm_campaign, utm_id,
+    external_campaign_id, or a connector flow id.
+    """
+    return bool(
+        row.get("_canonical_campaign_id_hint")
+        or row.get("_utm_id")
+        or row.get("external_campaign_id")
+        or row.get("utm_campaign")
+        or row.get("external_flow_id")
+    )
+
+
 async def _resolve_campaign_rows(rows: list[dict[str, Any]], *, table: str) -> None:
     """Resolve campaign evidence for touchpoint/comms rows in-place.
 
     Calls CampaignResolver per row, updates campaign_id and resolution fields.
+    The resolver is only invoked for rows with campaign evidence — evidence-free
+    rows are terminal ``not_applicable`` and never create Mapping Review rows.
     Never raises — resolution failure writes 'unresolved' status but does not
-    drop the event.
+    drop the event (the row keeps its full source classification).
     """
+    evidence_rows = [row for row in rows if _row_campaign_evidence(row)]
+    evidence_row_ids = {id(row) for row in evidence_rows}
+    for row in rows:
+        if id(row) not in evidence_row_ids:
+            row.pop("_canonical_campaign_id_hint", None)
+            row.pop("_utm_id", None)
+            row["campaign_resolution_status"] = "not_applicable"
+    if not evidence_rows:
+        return
+
     try:
         from services.campaign.resolver import CampaignResolver
         resolver = CampaignResolver()
@@ -301,20 +331,13 @@ async def _resolve_campaign_rows(rows: list[dict[str, Any]], *, table: str) -> N
                 row.pop(k, None)
         return
 
-    for row in rows:
+    for row in evidence_rows:
         canonical_hint = row.pop("_canonical_campaign_id_hint", None)
         utm_id = row.pop("_utm_id", None)
         tenant_id = row.get("tenant_id", "")
         # Comms rows carry provider evidence; touchpoint rows carry UTM evidence.
         platform = row.get("platform") or row.get("provider")
         external_account_id = row.get("external_account_id") or row.get("provider_account_id")
-
-        has_evidence = bool(
-            canonical_hint or utm_id or row.get("external_campaign_id")
-            or row.get("utm_campaign") or row.get("external_flow_id")
-        )
-        if not has_evidence:
-            continue
 
         try:
             result = await resolver.resolve_one(
