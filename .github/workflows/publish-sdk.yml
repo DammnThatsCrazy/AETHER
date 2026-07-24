@@ -40,6 +40,7 @@ jobs:
   validate:
     name: Validate & bump version
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       version: ${{ steps.ver.outputs.version }}
       tag:     ${{ steps.ver.outputs.tag }}
@@ -90,6 +91,7 @@ jobs:
   tag:
     name: Commit version bump & push tag
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: validate
     if: ${{ !inputs.dry_run }}
     permissions:
@@ -135,6 +137,7 @@ jobs:
   publish-npm:
     name: Publish to npm
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: validate
     env:
       VERSION: ${{ needs.validate.outputs.version }}
@@ -210,6 +213,7 @@ jobs:
   publish-cocoapods:
     name: Publish to CocoaPods
     runs-on: macos-latest
+    timeout-minutes: 60
     needs: [validate, tag]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
@@ -248,6 +252,7 @@ jobs:
   publish-android:
     name: Publish to GitHub Packages (Maven)
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     needs: validate
     permissions:
       packages: write
@@ -298,6 +303,7 @@ jobs:
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [validate, tag, publish-npm, publish-cocoapods, publish-android]
     if: ${{ !inputs.dry_run }}
     permissions:

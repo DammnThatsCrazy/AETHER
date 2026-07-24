@@ -28,6 +28,7 @@ jobs:
   remote-plan-readiness:
     name: Remote Plan Credential Readiness
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       configured: ${{ steps.credentials.outputs.configured }}
     steps:
@@ -81,6 +82,7 @@ jobs:
   plan:
     name: Terraform Plan (${{ matrix.profile }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -151,6 +153,7 @@ jobs:
     needs: [remote-plan-readiness, plan]
     if: needs.remote-plan-readiness.outputs.configured == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       id-token: write
       contents: read
@@ -232,6 +235,7 @@ jobs:
     needs: [remote-plan-readiness, remote-plan]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Enforce credentialed remote plans
         env:
@@ -252,6 +256,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [remote-plan, require-production-credentials]
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     environment: production
     permissions:
       id-token: write

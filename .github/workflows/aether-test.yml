@@ -25,6 +25,9 @@ on:
       - '.github/workflows/aether-test.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: aether-test-${{ github.ref }}
   cancel-in-progress: true

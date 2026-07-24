@@ -103,7 +103,9 @@ self-approval). Every break-glass grant and every access used under it is audite
 a `SecurityAuditEvent` for sensitive policy keys. It enforces, e.g.: dispatch
 requires an approved decision; elevated/critical dispatch requires an
 `approval_id`; cross-tenant access is blocked; audit export requires permission;
-disabled or unsafe integration dispatch is blocked; audit logs cannot be deleted.
+disabled or unsafe integration dispatch is blocked; audit logs cannot be deleted;
+capability invocation requires an observed capability, an identified agent, and an
+active capability authorization.
 
 ## Audit event model
 

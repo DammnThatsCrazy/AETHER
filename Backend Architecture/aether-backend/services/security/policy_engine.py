@@ -10,7 +10,7 @@ Supported policy keys:
   action.dispatch             action.elevated_dispatch       audit_export.create
   audit_export.download       kyber.operator_access          cross_tenant.access
   integration.configure       webhook.dispatch_safety        billing.admin_access
-  data.deletion_request
+  data.deletion_request       capability.invoke
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ _SENSITIVE_KEYS = frozenset({
     "decision.approve", "action.dispatch", "action.elevated_dispatch",
     "audit_export.create", "audit_export.download", "kyber.operator_access",
     "cross_tenant.access", "integration.configure", "webhook.dispatch_safety",
-    "billing.admin_access", "data.deletion_request",
+    "billing.admin_access", "data.deletion_request", "capability.invoke",
 })
 
 # Hosts/ranges a webhook may never target (SSRF / metadata protection).
@@ -310,12 +310,96 @@ class PolicyEngine:
         )
         return await self._finalize(d, actor_type=actor_type, **audit)
 
+    async def check_capability_invocation(
+        self, *, actor_id: str, actor_type: ActorType, tenant_id: str,
+        capability_id: str, agent_id: Optional[str] = None,
+        capability_observed: bool = False, has_active_authorization: bool = False,
+        authorization_id: Optional[str] = None, latest_risk_level: Optional[str] = None,
+        **audit: Any,
+    ) -> PolicyDecision:
+        """Decide whether an agent may invoke an observed external capability.
+
+        Inputs are pre-resolved facts (mirroring every other policy here, which takes
+        booleans rather than doing its own I/O) — ``CapabilityAuthorityService.resolve``
+        supplies them. That keeps the security package free of an Agent Access
+        Intelligence import and keeps this the platform's only policy engine.
+
+        ``capability.invoke`` is a sensitive key, so *every* decision — allow included —
+        is persisted to ``security_policy_decisions`` and written to the audit ledger.
+        That persistence is what makes the decision log a real record rather than a
+        deny-only sample.
+
+        ``latest_risk_level`` deliberately does **not** change the verdict. No policy
+        source in this repo defines a risk threshold that blocks invocation, and
+        inventing one here would be a fabricated control that operators would reasonably
+        believe is enforced. Risk travels in the audit metadata; risk-driven findings
+        are a separate, explicit surface.
+        """
+        meta = dict(audit.pop("metadata", None) or {})
+        meta.update({
+            "capability_id": capability_id,
+            "agent_id": agent_id,
+            "capability_observed": capability_observed,
+            "latest_risk_level": latest_risk_level,
+            # Named `capability_grant_id`, not `authorization_id`: contracts.SECRET_RE
+            # matches the substring "authorization" and sanitize_metadata DROPS any key
+            # it matches, so an `authorization_id` key would silently vanish from the
+            # ledger and the evidence log would never record *which* grant permitted the
+            # invocation. The sanitizer is correct and is not weakened; the key is renamed.
+            "capability_grant_id": authorization_id,
+        })
+
+        def _deny(reason: str, required_action: str) -> PolicyDecision:
+            return self._decision(
+                policy_key="capability.invoke", actor_id=actor_id, actor_type=actor_type,
+                action="invoke", resource_type="capability", tenant_id=tenant_id,
+                resource_id=capability_id, allowed=False, severity='block',
+                reason=reason, required_action=required_action,
+            )
+
+        if not capability_observed:
+            return await self._finalize(
+                _deny(
+                    "capability not in tenant inventory",
+                    "observe or authorize it explicitly before invocation",
+                ),
+                actor_type=actor_type, metadata=meta, **audit,
+            )
+        if not agent_id:
+            return await self._finalize(
+                _deny(
+                    "invoking agent is unidentified",
+                    "attribute the invocation to an agent",
+                ),
+                actor_type=actor_type, metadata=meta, **audit,
+            )
+        if not has_active_authorization:
+            return await self._finalize(
+                _deny(
+                    "no active capability authorization",
+                    "grant one via POST /v1/capability-authorizations",
+                ),
+                actor_type=actor_type, metadata=meta, **audit,
+            )
+        d = self._decision(
+            policy_key="capability.invoke", actor_id=actor_id, actor_type=actor_type,
+            action="invoke", resource_type="capability", tenant_id=tenant_id,
+            resource_id=capability_id, allowed=True,
+            reason="active capability authorization",
+        )
+        return await self._finalize(d, actor_type=actor_type, metadata=meta, **audit)
+
     async def list_decisions(
         self, tenant_id: Optional[str] = None, limit: int = 100,
+        policy_key: Optional[str] = None,
     ) -> list[dict]:
+        # `policy_key` filters in the query rather than after the fact: a caller that
+        # wants one policy's log must not receive an empty page merely because the
+        # tenant's most recent `limit` decisions belong to other policies.
+        extra = {"policy_key": policy_key} if policy_key else None
         if tenant_id:
-            return await self._repo.list_for_tenant(tenant_id, limit=limit)
-        return await self._repo.list_all(limit=limit)
+            return await self._repo.list_for_tenant(tenant_id, limit=limit, extra=extra)
+        return await self._repo.list_all(limit=limit, extra=extra)
 
 
 policy_engine = PolicyEngine()

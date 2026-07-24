@@ -44,7 +44,14 @@ async def test_standard_plan_includes_capability_tables_as_hard_delete():
     plan = DeletionPlan(entity_id="t1", tenant_id="t1")
     plan.build_standard_plan()
     steps = {s["table"]: s for s in plan.steps if s["table"].startswith("capability_")}
-    assert set(steps) == {"capability_catalog", "capability_installations"}
+    # Exact set on purpose: a new capability_* table that reaches production WITHOUT an
+    # erasure step should fail here rather than pass silently. capability_declarations
+    # joined the set in Phase B2.
+    assert set(steps) == {
+        "capability_catalog",
+        "capability_declarations",
+        "capability_installations",
+    }
     for step in steps.values():
         assert step["behavior"] == "hard_delete"
         assert step["entity_field"] == "tenant_id"

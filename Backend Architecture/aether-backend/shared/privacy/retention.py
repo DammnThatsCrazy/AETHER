@@ -237,6 +237,25 @@ class DeletionPlan:
         self.add_step("postgresql", "capability_installations", DeletionBehavior.HARD_DELETE,
                        DataClassification.CONFIDENTIAL, "Delete observed capability installations for tenant",
                        entity_field="tenant_id")
+        self.add_step("postgresql", "capability_declarations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete declared capability records for tenant",
+                       entity_field="tenant_id")
+
+        # Delegations — including Agent Access Intelligence capability authorizations
+        # (PR 2, Phase B1), which are stored as delegation rows. This closes a
+        # pre-existing gap: `delegations` had NO erasure step at all, so a subject's
+        # grants survived a DSAR. Erasure runs on BOTH sides of the grant, since the
+        # subject may be either the grantee or the grantor. This is a deliberate
+        # behavioral change for pre-existing delegation rows, not only for the new
+        # capability authorizations.
+        self.add_step("postgresql", "delegations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL,
+                       "Delete delegations/capability authorizations granted TO the subject",
+                       entity_field="grantee_entity_id")
+        self.add_step("postgresql", "delegations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL,
+                       "Delete delegations/capability authorizations granted BY the subject",
+                       entity_field="grantor_entity_id")
 
         # Silver fact tables — scoped by consent purpose from registry
         self._add_silver_steps(purposes or list(_PURPOSE_RETENTION.keys()))
@@ -477,13 +496,23 @@ class DSARRequest:
         # delete_by_entity("tenant_id", <entity_id>) — for a tenant-erasure DSR
         # entity_id is the tenant id. Imported lazily to avoid a heavy service
         # import at module load and any import cycle.
+        from services.agent_access_intelligence.declarations import (
+            CapabilityDeclarationRepository,
+        )
         from services.agent_access_intelligence.repositories import (
             CapabilityCatalogRepository,
             CapabilityInstallationRepository,
         )
+        from repositories.repos import DelegationRepository
+
         store_adapters = {
             "postgresql:capability_catalog": CapabilityCatalogRepository(),
             "postgresql:capability_installations": CapabilityInstallationRepository(),
+            "postgresql:capability_declarations": CapabilityDeclarationRepository(),
+            # Both delegation steps share one adapter key ("<store>:<table>"); the
+            # plan passes each step's own entity_field, so grantee- and grantor-side
+            # erasure both execute against the same repository.
+            "postgresql:delegations": DelegationRepository(),
         }
         result = await self.deletion_plan.execute(store_adapters)
         self.status = "completed" if result["failed"] == 0 else "partial"

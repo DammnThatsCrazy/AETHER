@@ -21,6 +21,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from shared.common.common import NotFoundError
 from shared.logger.logger import get_logger
 
+from .identity import artifact_digest_for, publisher_label_for, publisher_ref_for
 from .models import (
     Capability,
     CapabilityInstallation,
@@ -78,12 +79,17 @@ def _sanitize_server_url(url: Optional[str]) -> Optional[str]:
     unchanged (it is treated as an opaque server name, which carries no userinfo/query)."""
     if not url:
         return url
+    # `urlsplit` treats everything before the first ":" as a scheme even when no "://"
+    # follows. So "user:pass@mcp.example.com/v1" parses as scheme="user" with an EMPTY
+    # netloc — the userinfo strip below would find nothing and the credential would be
+    # persisted verbatim into a durable, operator-readable catalog row. Parsing schemeless
+    # input under a synthetic "//" authority forces the leading token to be read as the
+    # netloc, so the same stripping and redaction run for both shapes.
+    schemeless = "://" not in url
+    target = "//" + url if schemeless else url
     try:
-        parts = urlsplit(url)
+        parts = urlsplit(target)
     except ValueError:
-        return url
-    if not parts.scheme and "@" not in parts.netloc:
-        # Not a URL (opaque server name) — nothing credential-bearing to strip.
         return url
     netloc = parts.netloc.rsplit("@", 1)[-1] if "@" in parts.netloc else parts.netloc
     query = parts.query
@@ -94,7 +100,10 @@ def _sanitize_server_url(url: Optional[str]) -> Optional[str]:
                 for k, v in parse_qsl(query, keep_blank_values=True)
             ]
         )
-    return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+    cleaned = urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+    if schemeless and cleaned.startswith("//"):
+        cleaned = cleaned[2:]
+    return cleaned
 
 
 def _fact_fields(row: dict[str, Any]) -> dict[str, Any]:
@@ -235,16 +244,33 @@ class CapabilityCatalogService:
             dedup_ids = clamp_dedup_ids([sid] + [s for s in prior_dedup if s != sid])
             samples = clamp_event_ids([sid] + [s for s in prior_samples if s != sid])
 
+        # Identity fields are computed from the MERGED values (new observation falling back
+        # to the stored row), not from the incoming fact alone: a later observation that
+        # omits `protocol_version` must not change the artifact digest and report drift that
+        # nothing actually drifted.
+        merged = {
+            "capability_kind": _prefer_kind((existing or {}).get("capability_kind"), kind),
+            "provider": f.get("provider") or (existing or {}).get("provider"),
+            "server_name": f.get("server_name") or (existing or {}).get("server_name"),
+            "server_url": f.get("server_url") or (existing or {}).get("server_url"),
+            "tool_name": f.get("tool_name") or (existing or {}).get("tool_name"),
+            "protocol_version": f.get("protocol_version")
+            or (existing or {}).get("protocol_version"),
+        }
+
         record = Capability(
             capability_id=cap_id,
             tenant_id=tenant_id,
-            capability_kind=_prefer_kind((existing or {}).get("capability_kind"), kind),
-            provider=f.get("provider") or (existing or {}).get("provider"),
-            server_name=f.get("server_name") or (existing or {}).get("server_name"),
-            server_url=f.get("server_url") or (existing or {}).get("server_url"),
-            tool_name=f.get("tool_name") or (existing or {}).get("tool_name"),
-            protocol_version=f.get("protocol_version") or (existing or {}).get("protocol_version"),
+            capability_kind=merged["capability_kind"],
+            provider=merged["provider"],
+            server_name=merged["server_name"],
+            server_url=merged["server_url"],
+            tool_name=merged["tool_name"],
+            protocol_version=merged["protocol_version"],
             latest_risk_level=f.get("risk_level") or (existing or {}).get("latest_risk_level"),
+            publisher_ref=publisher_ref_for(merged["server_url"], merged["provider"]),
+            publisher_label=publisher_label_for(merged["server_url"], merged["provider"]),
+            artifact_digest=artifact_digest_for(merged),
             first_seen_at=(existing or {}).get("first_seen_at") or f.get("occurred_at"),
             last_seen_at=_max_ts((existing or {}).get("last_seen_at"), f.get("occurred_at")),
             observation_count=prior_count if is_replay else prior_count + 1,
