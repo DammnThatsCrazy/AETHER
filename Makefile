@@ -25,7 +25,7 @@
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
         validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
-        validate-route-registry validate-implementation-ledger \
+        validate-route-registry validate-implementation-ledger validate-reference-packs \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults
 
 # Centralized subsystem paths — single place to rename if directories move.
@@ -330,6 +330,9 @@ test\:ingestion-roundtrip: ## Run SDK→Bronze field round-trip tests
 
 validate-meter-names: ## Check metrics.increment() names in ingestion/connector paths are canonical
 	python scripts/validate_meter_names.py
+
+validate-reference-packs: ## Validate agent-access reference packs (schema, unique pack ids, grounded reference packs)
+	python scripts/validate_reference_packs.py
 
 # ── Unified Intelligence Plane gates ────────────────────────────────────────
 temporal-integrity: ## Temporal static gates + kernel/ingestion temporal tests

@@ -1,0 +1,105 @@
+# =============================================================================
+# Aether — Agent Access Reference Pack: mcp_generic (AAI-3)
+#
+# The protocol-level pack for MCP-observed capabilities. MCP is a protocol, not
+# a vendor: this pack describes the observation shape AETHER itself defines for
+# it, so it applies to ANY MCP server a tenant's agents reach. No vendor,
+# endpoint, or product detail is asserted.
+#
+# Grounded in AETHER's own MCP vocabulary:
+#   - ObservationProvider.MCP == "mcp" (agentic_observability/models.py)
+#   - MCPObservationContext(server_name, server_url, tool_name,
+#     protocol_version) + event_normalizer._extract_mcp, which reads both the
+#     nested `mcp.*` form and the provider-flat form
+#   - CapabilityKind.MCP_TOOL (agent_access_intelligence/models.py)
+#   - catalog_service._server_key(): server identity is `server_name` and falls
+#     back to `server_url`
+#
+# WHAT BREAKS IF THIS FILE IS WRONG
+#   Same asymmetry as every pack: `approved_scope_baselines` is handed straight
+#   to provider_framework.compute_permission_findings(), where a too-broad
+#   baseline silences real `unexpected_new_scope` findings (false all-clear)
+#   while a missing baseline merely surfaces everything for review. Wrong
+#   naming hints mean a tenant wires the wrong observation field and the
+#   capability catalog keys capabilities on nothing.
+#
+# Validated by scripts/validate_reference_packs.py (read-only, no mutation).
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/agent_access_reference_packs/mcp_generic.yaml
+pack_id: mcp_generic
+pack_version: 1.0.0
+pack_status: reference
+
+provider_id: mcp
+display_name: MCP (generic server)
+description: >-
+  Protocol-level pack for capabilities observed over MCP. Applies to any MCP
+  server; asserts nothing about a specific vendor's server or tools.
+
+grounded_in:
+  - "Backend Architecture/aether-backend/services/agentic_observability/models.py::ObservationProvider.MCP"
+  - "Backend Architecture/aether-backend/services/agentic_observability/models.py::MCPObservationContext"
+  - "Backend Architecture/aether-backend/services/agentic_observability/event_normalizer.py::_extract_mcp"
+  - "Backend Architecture/aether-backend/services/agent_access_intelligence/models.py::CapabilityKind.MCP_TOOL"
+  - "Backend Architecture/aether-backend/services/agent_access_intelligence/catalog_service.py::_server_key"
+
+# AETHER only ever observes MCP traffic; it never executes against a server.
+read_only: true
+# Deliberately false: no MCP webhook consumer exists in this repo. Setting this
+# true would imply a delivery path that does not exist.
+webhook_supported: false
+supported_operations:
+  - tool_invocation_observation
+  - server_installation_observation
+
+capability_kind_defaults:
+  default: mcp_tool
+  by_object_type:
+    tool: mcp_tool
+    resource: resource
+
+# Observation field names, in the precedence order the normalizer applies.
+# `_extract_mcp` reads the nested `mcp.<field>` form first, then the flat form;
+# the ingestion smoke path additionally carries the camelCase SDK property
+# names. catalog_service._server_key() derives server identity as
+# server_name or server_url.
+naming_hints:
+  server_name_fields:
+    - mcp.server_name
+    - server_name
+    - serverName
+  server_url_fields:
+    - mcp.server_url
+    - server_url
+    - serverUrl
+  tool_name_fields:
+    - mcp.tool_name
+    - tool_name
+    - toolName
+    - tools[0]
+  protocol_version_fields:
+    - mcp.protocol_version
+    - protocol_version
+    - protocolVersion
+
+observation_hints:
+  server_identity_precedence:
+    - server_name
+    - server_url
+  # Capability identity is (tenant, provider, server_key, tool_name) —
+  # models.capability_id_for(). An observation missing BOTH server fields
+  # cannot be keyed to an installation.
+  capability_identity_fields:
+    - provider
+    - server_key
+    - tool_name
+
+# `none_asserted` = zero approved scopes shipped. MCP defines no standard scope
+# vocabulary that this repository can verify, and per-server scope strings are
+# vendor-specific. Tenants author baselines keyed by
+# AuthorizationGrantRecord.grant_id; until then every observed scope is
+# surfaced for review rather than silently approved.
+baseline_status: none_asserted
+approved_scope_baselines: {}

@@ -57,6 +57,7 @@ const KyberInteropOpsPage = lazy(() => import('@kyber/pages/interop/kyber-intero
 const Campaign360Page = lazy(() => import('@kyber/pages/measurement/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
 const DeliveryOpsPage = lazy(() => import('@kyber/pages/delivery').then(m => ({ default: m.DeliveryOpsPage })));
 const AgentTelemetryPage = lazy(() => import('@kyber/pages/agent-telemetry').then(m => ({ default: m.AgentTelemetryPage })));
+const AgentAccessPage = lazy(() => import('@kyber/pages/agent-access').then(m => ({ default: m.AgentAccessPage })));
 const PaymentRailsPage = lazy(() => import('@kyber/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
 const AiEfficiencyPage = lazy(() => import('@kyber/pages/ai-efficiency').then(m => ({ default: m.AiEfficiencyPage })));
 const TargetingIntelligencePage = lazy(() => import('@kyber/pages/targeting').then(m => ({ default: m.TargetingIntelligencePage })));
@@ -149,6 +150,7 @@ export function AppRouter() {
                 <Route path="/interoperability/ops" element={<PageSuspense><KyberInteropOpsPage /></PageSuspense>} />
                 <Route path="/delivery" element={<PageSuspense><DeliveryOpsPage /></PageSuspense>} />
                 <Route path="/agent-telemetry" element={<PageSuspense><AgentTelemetryPage /></PageSuspense>} />
+                <Route path="/agent-access" element={<PageSuspense><AgentAccessPage /></PageSuspense>} />
                 <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />
                 <Route path="/ai-efficiency" element={<PageSuspense><AiEfficiencyPage /></PageSuspense>} />
                 <Route path="/targeting" element={<PageSuspense><TargetingIntelligencePage /></PageSuspense>} />

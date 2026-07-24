@@ -1,0 +1,79 @@
+# =============================================================================
+# Aether — Agent Access Reference Pack: example_provider (AAI-3) — TEMPLATE
+#
+# THIS IS NOT A REAL PROVIDER. `pack_status: example` marks a pack whose
+# contents are invented for illustration. It exists for two reasons:
+#
+#   1. It is the copy-me template for authoring a new pack, and the only place
+#      in this directory where a NON-EMPTY `approved_scope_baselines` is shown,
+#      so the exact shape consumed by
+#      provider_framework.compute_permission_findings() is documented by
+#      example rather than by prose.
+#   2. It is the executable proof that the shape is accepted — the test
+#      tests/unit/capability_catalog/test_reference_packs.py feeds these
+#      baselines to compute_permission_findings() directly.
+#
+# `provider_id: example_provider` matches no adapter in
+# provider_framework.provider_registry, so these fake scopes can never be
+# returned for a real provider: approved_scope_baselines_for() matches on
+# provider_id exactly. Do not rename provider_id to a real provider.
+#
+# Real packs must set `pack_status: reference` and list `grounded_in` — the
+# validator requires it, which is what stops an invented pack from shipping as
+# though it were authoritative.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/agent_access_reference_packs/example_provider.yaml
+pack_id: example_provider
+pack_version: 1.0.0
+pack_status: example
+
+provider_id: example_provider
+display_name: Example Provider (template — not a real provider)
+description: >-
+  Illustrative template. Every scope, field name and identifier below is
+  fictional and must not be copied into a reference pack as fact.
+
+# One of: mcp_tool | provider_action | account | resource | unknown
+# (services/agent_access_intelligence/models.py::CapabilityKind)
+capability_kind_defaults:
+  default: provider_action
+  by_object_type:
+    document: resource
+    portfolio: account
+
+naming_hints:
+  server_name_fields:
+    - mcp.server_name
+    - server_name
+  tool_name_fields:
+    - mcp.tool_name
+    - tool_name
+
+observation_hints:
+  account_type: example_account
+  object_type_default: document
+
+# ---------------------------------------------------------------------------
+# `approved_scope_baselines` — the shape passed VERBATIM as the
+# `approved_scope_baselines` argument of compute_permission_findings().
+#
+#   key   = AuthorizationGrantRecord.grant_id (the function looks up
+#           approved_scope_baselines[grant.grant_id]; a grant with no entry
+#           defaults to [], i.e. every one of its scopes is reported)
+#   value = the list of scopes approved for that grant
+#
+# Any grant scope outside its list becomes an `unexpected_new_scope`
+# PermissionFinding. Widening a list here silences that finding — which is why
+# a real pack ships only baselines it can ground.
+# ---------------------------------------------------------------------------
+baseline_status: asserted
+approved_scope_baselines:
+  example-grant-read-only:
+    - example.accounts.read
+    - example.documents.read
+  example-grant-read-write:
+    - example.accounts.read
+    - example.documents.read
+    - example.documents.write

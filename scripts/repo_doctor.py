@@ -366,6 +366,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="route graph writes through the canonical mutation gateway; shrink scripts/allowlists/graph_write_paths.json only",
     )
     run(
+        ["python", "scripts/validate_reference_packs.py"],
+        name="Agent-access reference packs (schema, unique pack ids, grounded reference packs)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="fix the reported fields in config/agent_access_reference_packs/*.yaml; the schema is owned by services/agent_access_intelligence/reference_packs.py::pack_violations",
+    )
+    run(
         ["python", "scripts/validate_projector_ownership.py"],
         name="Silver projector ownership (registry == dispatcher; one activity owner per event type)",
         results=results,

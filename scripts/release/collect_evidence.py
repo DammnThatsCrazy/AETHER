@@ -57,6 +57,12 @@ EVIDENCE_CHECKS = [
     ("implementation_ledger", "scripts/release/check_implementation_ledger.py"),
     ("sdk_conformance", "scripts/release/sdk_conformance.py"),
     ("required_release_checks", "scripts/release/check_required_checks.py"),
+    # Agent Access Intelligence: the reference packs supply the approved scope
+    # baselines that `compute_permission_findings` compares observed grants against.
+    # A malformed or missing pack silently removes a provider's baseline, and the
+    # permission surface then reports no scope violations for it — a false all-clear,
+    # which is exactly the class of thing an evidence bundle exists to rule out.
+    ("agent_access_reference_packs", "scripts/validate_reference_packs.py"),
 ]
 
 EXTERNAL_ATTESTATION_ID = "FT-EXT-ATTESTATION"

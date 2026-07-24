@@ -249,6 +249,24 @@ from services.agent_access_intelligence.declaration_routes import (
 from services.agent_access_intelligence.risk_routes import (
     capability_risk_router as aai_capability_risk_router,
 )
+from services.agent_access_intelligence.provider_routes import (
+    capability_providers_router as aai_capability_providers_router,
+)
+from services.agent_access_intelligence.reconciliation_routes import (
+    capability_reconciliation_router as aai_capability_reconciliation_router,
+)
+from services.agent_access_intelligence.access_graph_routes import (
+    capability_graph_router as aai_capability_graph_router,
+)
+from services.agent_access_intelligence.profile_routes import (
+    capability_profiles_router as aai_capability_profiles_router,
+)
+from services.agent_access_intelligence.alert_routes import (
+    capability_alerts_router as aai_capability_alerts_router,
+)
+from services.agent_access_intelligence.kyber_ops_routes import (
+    capability_kyber_ops_router as aai_capability_kyber_ops_router,
+)
 from services.lake.routes import router as lake_router
 from services.intelligence.routes import kyber_admin_router, router as intelligence_router
 from services.intelligence.customer_success import admin_router as customer_success_admin_router, tenant_router as value_review_router
@@ -631,6 +649,12 @@ def create_app() -> FastAPI:
     app.include_router(aai_capability_policy_router)    # /v1/capability-policy (tenant)
     app.include_router(aai_capability_declarations_router)  # /v1/capability-declarations (tenant)
     app.include_router(aai_capability_risk_router)      # /v1/capability-risk (tenant)
+    app.include_router(aai_capability_providers_router)      # /v1/capability-providers (tenant)
+    app.include_router(aai_capability_reconciliation_router)  # /v1/capability-reconciliation (tenant)
+    app.include_router(aai_capability_graph_router)          # /v1/capability-graph (tenant)
+    app.include_router(aai_capability_profiles_router)       # /v1/capability-profiles (tenant)
+    app.include_router(aai_capability_alerts_router)         # /v1/capability-alerts (tenant)
+    app.include_router(aai_capability_kyber_ops_router)      # /v1/kyber/capability-ops (operator)
     app.include_router(lake_router)
     app.include_router(intelligence_router)
     app.include_router(kyber_admin_router)

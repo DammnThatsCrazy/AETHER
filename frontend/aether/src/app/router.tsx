@@ -49,6 +49,7 @@ const StablecoinsPage = lazy(() => import('@aether-app/pages/stablecoins').then(
 const StablecoinAssetPage = lazy(() => import('@aether-app/pages/stablecoins').then(m => ({ default: m.StablecoinAssetPage })));
 const DerivativesPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesPage })));
 const DerivativesAccountPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesAccountPage })));
+const AgentAccessPage = lazy(() => import('@aether-app/pages/agent-access').then(m => ({ default: m.AgentAccessPage })));
 const InteropPage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropPage })));
 const InteropMessagePage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropMessagePage })));
 
@@ -135,6 +136,7 @@ export function AppRouter() {
                 <Route path="/stablecoins/:assetId" element={<PageSuspense><StablecoinAssetPage /></PageSuspense>} />
                 <Route path="/derivatives" element={<PageSuspense><DerivativesPage /></PageSuspense>} />
                 <Route path="/derivatives/accounts/:accountId" element={<PageSuspense><DerivativesAccountPage /></PageSuspense>} />
+                <Route path="/agent-access" element={<PageSuspense><AgentAccessPage /></PageSuspense>} />
                 <Route path="/interoperability" element={<PageSuspense><InteropPage /></PageSuspense>} />
                 <Route path="/interoperability/messages/:messageId" element={<PageSuspense><InteropMessagePage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />

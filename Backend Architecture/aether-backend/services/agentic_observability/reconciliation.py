@@ -74,13 +74,45 @@ class AgenticReconciliationService:
         agentic_count = await self._activity.count_by_source(tenant_id, "agentic_observability")
         dead_lettered = outbox_counts.get("dead_lettered", 0)
         failed = outbox_counts.get("failed", 0)
+
+        # `healthy` requires evidence of a working pipeline, not merely an absence of
+        # failures. Every table read above belongs to the bespoke medallion path that PR 1
+        # REMOVED when agentic observation was delegated to the canonical ingestion spine
+        # (see pipeline.py: "There is no parallel Bronze/Silver/canonical/outbox
+        # architecture here anymore"). Nothing writes them today, so every count is 0 —
+        # and the old expression read that as `healthy` for every tenant, forever. An empty
+        # pipeline reported as a healthy one is the most misleading output an operations
+        # surface can produce: it is indistinguishable from a working one.
+        #
+        # Zero observed rows is therefore UNKNOWN, not healthy. The counts stay visible so
+        # a caller can see exactly what was and was not found.
+        observed_any = bool(
+            bronze_count
+            or agentic_count
+            or any(silver_counts.values())
+            or any(outbox_counts.values())
+        )
+        if dead_lettered > 0 or failed > 10:
+            health = "degraded"
+        elif observed_any:
+            health = "healthy"
+        else:
+            health = "unknown"
+
         return {
             "tenant_id": tenant_id,
             "bronze_observations": bronze_count,
             "silver_facts": silver_counts,
             "canonical_activities": agentic_count,
             "outbox": outbox_counts,
-            "health": "degraded" if (dead_lettered > 0 or failed > 10) else "healthy",
+            "health": health,
+            "health_basis": (
+                "no rows found in any agentic medallion table; these tables have no writer "
+                "since agentic observation was delegated to the canonical ingestion spine, "
+                "so an empty result cannot distinguish 'no activity' from 'not wired'"
+                if health == "unknown"
+                else "derived from observed row counts and outbox failure state"
+            ),
             "observation_only": True,
         }
 
@@ -119,15 +151,33 @@ class AgenticReconciliationService:
             filters={"tenant_id": tenant_id}, limit=limit
         )
         gaps: list[str] = []
+        unidentified = 0
         for row in bronze_rows:
-            obs_id = row.get("observation_id", "")
+            obs_id = row.get("observation_id") or ""
+            if not obs_id:
+                # A row with no observation id cannot be traced. Querying canonical
+                # activities for "" always finds nothing, so the old code appended "" to
+                # `gaps` and reported a phantom gap with an empty id — a fabricated
+                # finding about a record it could not identify.
+                unidentified += 1
+                continue
             canonical = await self._activity.find_by_source_event(tenant_id, obs_id)
             if not canonical:
                 gaps.append(obs_id)
+
+        truncated = len(bronze_rows) >= limit
+        shown = gaps[:20]
         return {
             "tenant_id": tenant_id,
             "checked": len(bronze_rows),
+            # `checked` counts the bounded window, not the tenant's bronze rows. Saying so
+            # keeps a windowed pass from reading as a complete one.
+            "scan_limit": limit,
+            "scan_truncated": truncated,
+            "complete": not truncated,
+            "unidentified_rows": unidentified,
             "gap_count": len(gaps),
-            "gaps": gaps[:20],
+            "gaps": shown,
+            "gaps_truncated": len(gaps) > len(shown),
             "observation_only": True,
         }
