@@ -4,6 +4,8 @@
 // No source classification, no channel grouping, no regex matching.
 // =============================================================================
 
+import { sanitizeUrl } from '../utils';
+
 const CLICK_ID_PARAMS = [
   'gclid', 'msclkid', 'fbclid', 'ttclid', 'twclid',
   'li_fat_id', 'rdt_cid', 'scid', 'dclid', 'epik',
@@ -73,9 +75,11 @@ export class TrafficSourceTracker {
       utmTerm: params.get('utm_term'),
       utmContent: params.get('utm_content'),
       // Opaque server-verified referral evidence; no client-side interpretation.
+      // The typed referralToken field is the ONLY carrier — the landing page
+      // URL below is sanitized so aether_ref never travels inside a URL.
       referralToken: params.get('aether_ref'),
       clickIds,
-      landingPage: window.location.href,
+      landingPage: sanitizeUrl(window.location.href),
     };
 
     // Persist to sessionStorage so SPA navigations retain the original source

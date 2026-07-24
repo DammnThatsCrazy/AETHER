@@ -37,7 +37,7 @@ import { PerformanceModule } from './modules/performance';
 import { DeviceFingerprintCollector } from './core/fingerprint';
 import { SDKHealthAgent } from './health/sdk-health-agent';
 import type { SDKManifest as RemoteSDKManifest } from './health/sdk-health-agent';
-import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
+import { generateId, now, getPageContext, getDeviceContext, getCampaignContext, configureUrlSanitization } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
 import { isCanonicalEventType } from './core/generated-consent-map';
 import {
@@ -107,6 +107,13 @@ class AetherSDK implements AetherSDKInterface {
     this.config = config;
     this.debug = config.debug ?? false;
     this.log('info', 'Initializing Aether SDK v' + SDK_VERSION);
+
+    // URL sanitization must be configured before any URL leaves the SDK
+    // (traffic detection, first pageView). Privacy-safe default: on.
+    configureUrlSanitization({
+      enabled: config.privacy?.sanitizeUrls,
+      additionalParams: config.privacy?.sensitiveQueryParams,
+    });
 
     const modules = config.modules ?? {};
 
@@ -977,12 +984,19 @@ class AetherSDK implements AetherSDKInterface {
   }
 
   private initAnalytics(config: AetherConfig, modules: NonNullable<AetherConfig['modules']>): void {
-    // Auto-discovery — minimal click tracker
+    // Auto-discovery — minimal click tracker + navigation correlation
     if (modules.autoDiscovery !== false) {
       this.autoDiscovery = new AutoDiscoveryModule(
-        { onTrack: (event, props) => this.track(event, props) }
+        {
+          onTrack: (event, props) => this.track(event, props),
+          onObserve: (type, props) => this.observe(type, props),
+        },
+        { navigationCorrelation: modules.navigationCorrelation }
       );
       this.autoDiscovery.start();
+      // Consume a pending navigation intent from the previous page (full
+      // page-load arrival); SPA arrivals are consumed in setupSPATracking.
+      this.autoDiscovery.recordArrival();
     }
   }
 
@@ -1259,7 +1273,12 @@ class AetherSDK implements AetherSDKInterface {
       this.lastRouteCheckpointPath = path;
       this.checkpointJourney(path, { stepName: document.title || path, metadata: { source: 'spa_route' } });
     };
-    const onRoute = () => { this.pageView(); checkpoint(); };
+    const onRoute = () => {
+      this.pageView();
+      // SPA route completion — correlate a pending navigation_intent.
+      this.autoDiscovery?.recordArrival();
+      checkpoint();
+    };
     const origPush = history.pushState;
     const origReplace = history.replaceState;
     history.pushState = (...args) => { origPush.apply(history, args); setTimeout(onRoute, 0); };

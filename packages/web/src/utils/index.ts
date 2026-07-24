@@ -117,15 +117,100 @@ export function getDeviceContext(): DeviceContext {
   };
 }
 
-/** Get current page context */
+// =============================================================================
+// URL SANITIZATION (privacy-safe transmission)
+// =============================================================================
+
+/**
+ * Query parameters stripped from every transmitted URL. `aether_ref` flows
+ * ONLY through the typed `referralToken` field; click IDs are shipped through
+ * the typed `clickIds` map; token-shaped auth params never leave the page.
+ */
+const DEFAULT_SENSITIVE_URL_PARAMS = [
+  'aether_ref', 'aether_cid',
+  // Advertising click identifiers (typed clickIds map is the sole carrier).
+  'gclid', 'msclkid', 'fbclid', 'ttclid', 'twclid',
+  'li_fat_id', 'rdt_cid', 'scid', 'dclid', 'epik',
+  'irclickid', 'aff_id', 'gbraid', 'wbraid',
+  // Token-shaped auth/session parameters.
+  'token', 'access_token', 'id_token', 'refresh_token', 'auth_token',
+  'api_key', 'apikey', 'auth', 'authorization', 'jwt', 'session_id',
+  'password', 'secret', 'code', 'reset_token',
+];
+
+let sanitizationEnabled = true;
+let sensitiveUrlParams = new Set(DEFAULT_SENSITIVE_URL_PARAMS);
+
+/** Configure URL sanitization from AetherConfig (privacy-safe default: on). */
+export function configureUrlSanitization(options?: {
+  enabled?: boolean;
+  additionalParams?: string[];
+}): void {
+  sanitizationEnabled = options?.enabled !== false;
+  sensitiveUrlParams = new Set([
+    ...DEFAULT_SENSITIVE_URL_PARAMS,
+    ...(options?.additionalParams ?? []).map((p) => p.toLowerCase()),
+  ]);
+}
+
+/** Strip a query string (leading '?' optional) of sensitive parameters. */
+export function sanitizeSearch(search: string): string {
+  if (!sanitizationEnabled || !search) return search;
+  const raw = search.startsWith('?') ? search.slice(1) : search;
+  const params = new URLSearchParams(raw);
+  for (const key of Array.from(params.keys())) {
+    if (sensitiveUrlParams.has(key.toLowerCase())) params.delete(key);
+  }
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : '';
+}
+
+/**
+ * Strip fragments and sensitive query params (aether_ref, aether_cid, click
+ * IDs, token params) from a URL before it is transmitted anywhere.
+ * Relative URLs are resolved against the current page origin when available.
+ */
+export function sanitizeUrl(url: string | undefined | null): string {
+  if (!url) return '';
+  if (!sanitizationEnabled) return url;
+  try {
+    const base = typeof window !== 'undefined' ? window.location.href : undefined;
+    const parsed = new URL(url, base);
+    parsed.hash = '';
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      if (sensitiveUrlParams.has(key.toLowerCase())) parsed.searchParams.delete(key);
+    }
+    const result = parsed.toString();
+    // Sensitive material embedded outside the query (e.g. malformed values
+    // that parse into the path) cannot be retained safely.
+    let lowered = result.toLowerCase();
+    try { lowered = decodeURIComponent(result).toLowerCase(); } catch { /* keep encoded */ }
+    for (const param of sensitiveUrlParams) {
+      if (lowered.includes(`${param}=`)) return '';
+    }
+    return result;
+  } catch {
+    // Unparsable values that visibly carry a sensitive param cannot be
+    // retained safely.
+    const lowered = url.toLowerCase();
+    for (const param of sensitiveUrlParams) {
+      if (lowered.includes(`${param}=`)) return '';
+    }
+    return url;
+  }
+}
+
+/** Get current page context (URLs sanitized before transmission) */
 export function getPageContext(): PageContext {
   return {
-    url: window.location.href,
+    url: sanitizeUrl(window.location.href),
     path: window.location.pathname,
     title: document.title,
-    referrer: document.referrer,
-    search: window.location.search,
-    hash: window.location.hash,
+    referrer: sanitizeUrl(document.referrer),
+    search: sanitizeSearch(window.location.search),
+    // Fragments frequently carry tokens (OAuth implicit flows, reset links);
+    // they are dropped whenever sanitization is on.
+    hash: sanitizationEnabled ? '' : window.location.hash,
   };
 }
 
@@ -133,26 +218,10 @@ export function getPageContext(): PageContext {
 export function getCampaignContext(): CampaignContext {
   const params = new URLSearchParams(window.location.search);
 
-  const getReferrerType = (): CampaignContext['referrerType'] => {
-    if (!document.referrer) return 'direct';
-    try {
-      const ref = new URL(document.referrer);
-      const domain = ref.hostname.toLowerCase();
-      const searchEngines = ['google', 'bing', 'yahoo', 'duckduckgo', 'baidu', 'yandex'];
-      const socialNetworks = ['facebook', 'twitter', 'linkedin', 'instagram', 'tiktok', 'reddit', 'youtube'];
-
-      if (searchEngines.some((se) => domain.includes(se))) {
-        return params.get('gclid') || params.get('msclkid') ? 'paid' : 'organic';
-      }
-      if (socialNetworks.some((sn) => domain.includes(sn))) return 'social';
-      if (params.get('utm_medium')?.toLowerCase() === 'email') return 'email';
-      return 'referral';
-    } catch {
-      return 'unknown';
-    }
-  };
-
-  const ctx: CampaignContext = { referrerType: getReferrerType() };
+  // Source classification is backend-owned (SDKs observe; the backend
+  // classifies). referrerType stays in the envelope for shape compatibility
+  // but is never derived client-side from hardcoded domain lists anymore.
+  const ctx: CampaignContext = { referrerType: 'unknown' };
 
   if (document.referrer) {
     try { ctx.referrerDomain = new URL(document.referrer).hostname; } catch { /* malformed */ }

@@ -212,8 +212,36 @@ def _extract_and_sanitize_referral_token(
     return token, token_hash
 
 
+async def _record_handoff_replay_audit(tenant_id: str, source_event_id: Any) -> None:
+    """Best-effort audit record for a rejected handoff replay (attack signal)."""
+
+    try:
+        from services.security.audit_ledger import AuditLedger
+
+        await AuditLedger().record(
+            actor_id="silver_dispatcher",
+            actor_type="system",
+            event_type="verified_source_link",
+            resource_type="source_link_handoff",
+            action="replay_reject",
+            outcome="denied",  # type: ignore[arg-type]
+            tenant_id=str(tenant_id),
+            resource_id=str(source_event_id) if source_event_id else None,
+            metadata={"reason": "handoff_token_already_consumed"},
+        )
+    except Exception as exc:  # pragma: no cover — audit must not block Silver
+        logger.warning("handoff_replay_audit_failed tenant=%s: %s", tenant_id, exc)
+
+
 async def _resolve_verified_referral(event: dict[str, Any]) -> None:
-    """Attach only tenant-verified referral metadata to an event in-place."""
+    """Attach only tenant-verified referral metadata to an event in-place.
+
+    ``aether_ref`` carries EITHER a direct verified-link token (existing path)
+    OR a one-time redirect handoff token minted by GET /v1/r/{token}.  The
+    direct path is tried first (no side effects on miss); the handoff path is
+    one-time-consumable, replay-rejected, and marks the redirect link-use as
+    correlated.
+    """
 
     token, token_hash = _extract_and_sanitize_referral_token(event)
     if not token and not token_hash:
@@ -221,17 +249,30 @@ async def _resolve_verified_referral(event: dict[str, Any]) -> None:
     ctx = event.get("context") if isinstance(event.get("context"), dict) else {}
     tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
     source_event_id = event.get("messageId") or event.get("id")
+    handoff_status: str | None = None
     try:
         if token:
             claim = await _verified_referral_links.resolve_token(
                 str(tenant_id), token, source_event_id=source_event_id
             )
+            if claim is None:
+                claim, handoff_status = await _verified_referral_links.consume_handoff(
+                    str(tenant_id), token, source_event_id=source_event_id
+                )
         else:
             claim = await _verified_referral_links.resolve_token_hash(
                 str(tenant_id),
                 str(token_hash),
                 source_event_id=source_event_id,
             )
+            if claim is None:
+                claim, handoff_status = (
+                    await _verified_referral_links.consume_handoff_hash(
+                        str(tenant_id),
+                        str(token_hash),
+                        source_event_id=source_event_id,
+                    )
+                )
     except Exception as exc:
         logger.warning("verified_referral_resolution_error tenant=%s: %s", tenant_id, exc)
         metrics.increment(
@@ -239,9 +280,16 @@ async def _resolve_verified_referral(event: dict[str, Any]) -> None:
         )
         return
     if claim is None:
-        metrics.increment(
-            "verified_referral_resolution_total", labels={"status": "rejected"}
-        )
+        if handoff_status == "replayed":
+            metrics.increment(
+                "verified_referral_resolution_total",
+                labels={"status": "replay_rejected"},
+            )
+            await _record_handoff_replay_audit(str(tenant_id), source_event_id)
+        else:
+            metrics.increment(
+                "verified_referral_resolution_total", labels={"status": "rejected"}
+            )
         return
     event["_verified_referral"] = claim
     metrics.increment(
