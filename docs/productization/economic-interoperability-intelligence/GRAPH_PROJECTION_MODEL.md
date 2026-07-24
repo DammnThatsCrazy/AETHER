@@ -11,14 +11,20 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
   - packages/shared/graph-contract.ts
 canonical_owner: platform@aether
-last_synced_commit: "794492e"
+last_synced_commit: "4a16247"
 ---
 
 # Graph Projection Model
 
-8.12.0 adds 8 vertex types and 82 edge types; the per-domain alignment
+8.12.0 adds 8 vertex types and 87 edge types; the per-domain alignment
 docs (`STABLECOIN_GRAPH_ALIGNMENT`, `DERIVATIVES_GRAPH_ALIGNMENT`,
-`INTEROP_GRAPH_ALIGNMENT`) carry the full lists.
+`INTEROP_GRAPH_ALIGNMENT`) carry the full lists. The traffic-intelligence
+acquisition/attribution edges are included: `ARRIVED_THROUGH_SOURCE`,
+`USED_PLACEMENT`, `ORIGINATED_FROM_LINK`, and
+`ATTRIBUTED_TO_PLATFORM_EVIDENCE` are `EXCLUDED`-layer topology edges, while
+`REFERRED_ENTITY` (AI/agent → entity) participates in the `A2H` layer. All
+five are mapped in `_EDGE_LAYER_MAP` and projected by `SilverGraphProjector`
+from touchpoint facts (tenant-scoped, replay-safe).
 
 Cross-domain rules:
 

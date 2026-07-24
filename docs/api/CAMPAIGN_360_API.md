@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
-last_synced_commit: "33f4303"
+last_synced_commit: "4a16247"
 ---
 
 # Campaign 360 API Reference
