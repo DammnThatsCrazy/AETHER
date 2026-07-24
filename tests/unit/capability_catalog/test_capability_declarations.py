@@ -213,7 +213,7 @@ async def test_withdraw_hard_deletes_and_returns_the_removed_record(svc, repo):
     # Hard delete: the row is gone, not flagged.
     assert await repo.find_by_id(record["declaration_id"]) is None
     assert await svc.list(tenant_id="t1") == []
-    assert await svc.digest_map("t1") == {}
+    assert await svc.digest_map("t1") == ({}, False)
     with pytest.raises(NotFoundError):
         await svc.get(tenant_id="t1", declaration_id=record["declaration_id"])
 
@@ -245,15 +245,20 @@ async def test_digest_map_is_tenant_scoped_and_skips_incomparable_rows(svc, repo
     b = await svc.declare(**_decl(tool_name="write"))
     await svc.declare(**_decl(tenant_id="t2"))
 
-    mapping = await svc.digest_map("t1")
-    assert mapping == {
+    mapping, truncated = await svc.digest_map("t1")
+    assert truncated is False
+    assert {k: v["digest"] for k, v in mapping.items()} == {
         a["capability_id"]: a["artifact_digest"],
         b["capability_id"]: b["artifact_digest"],
     }
-    assert all(v.startswith("art_") for v in mapping.values())
+    assert all(v["digest"].startswith("art_") for v in mapping.values())
+    # Each entry carries the identity subset the declaration actually asserted, so the
+    # observed side can be digested over the same fields instead of the full tuple.
+    assert all(v["fields"] for v in mapping.values())
     # Tenant scoping: t2's declaration is invisible here and vice versa.
-    assert set(await svc.digest_map("t2")).isdisjoint(mapping)
-    assert await svc.digest_map("t3") == {}
+    t2_map, _ = await svc.digest_map("t2")
+    assert set(t2_map).isdisjoint(mapping)
+    assert await svc.digest_map("t3") == ({}, False)
 
     # Rows that cannot be compared are skipped rather than emitted with empty strings.
     await repo.insert("dec_nodigest", {
@@ -264,10 +269,10 @@ async def test_digest_map_is_tenant_scoped_and_skips_incomparable_rows(svc, repo
         "declaration_id": "dec_nocap", "tenant_id": "t1",
         "capability_id": "", "artifact_digest": "art_orphan",
     })
-    after = await svc.digest_map("t1")
+    after, _ = await svc.digest_map("t1")
     assert after == mapping
     assert "cap_incomplete" not in after
-    assert "art_orphan" not in after.values()
+    assert "art_orphan" not in {v["digest"] for v in after.values()}
 
 
 async def test_private_fields_never_reach_the_public_record(svc, repo):

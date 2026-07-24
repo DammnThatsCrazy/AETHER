@@ -178,7 +178,18 @@ class CapabilityDeclarationService:
             **{k: fields[k] for k in _IDENTITY_FIELDS},
             "publisher_ref": identity.publisher_ref_for(fields["server_url"], fields["provider"]),
             "publisher_label": identity.publisher_label_for(fields["server_url"], fields["provider"]),
-            "artifact_digest": identity.artifact_digest_for(fields),
+            # A declaration asserts a SUBSET of identity, and drift is only ever measured
+            # over that subset. An operator declares what they know — provider, server,
+            # tool — and cannot know the `capability_kind` this service derives internally
+            # or the `protocol_version` the server speaks today. Digesting the full tuple
+            # made every ordinary declaration compare unequal, so the risk surface reported
+            # a permanent HIGH "no longer matches what was observed" for capabilities that
+            # had never changed. The asserted field list is stored so the observed side can
+            # be digested over exactly the same fields at comparison time.
+            "declared_fields": identity.asserted_identity_fields(fields),
+            "artifact_digest": identity.artifact_digest_for(
+                fields, identity.asserted_identity_fields(fields)
+            ),
             "declared_by_entity_id": _clean(declared_by_entity_id),
             # First declaration wins for `declared_at`; `updated_at` moves on re-declare,
             # so "when did this tenant first assert this" survives an edit.
@@ -235,22 +246,43 @@ class CapabilityDeclarationService:
         )
         return [self._public(r) for r in rows]
 
-    async def digest_map(self, tenant_id: str, *, limit: int = 1000) -> dict[str, str]:
-        """``{capability_id: artifact_digest}`` for one tenant — the drift comparison input.
+    async def digest_map(
+        self, tenant_id: str, *, limit: int = 1000
+    ) -> tuple[dict[str, dict[str, Any]], bool]:
+        """The drift comparison input for one tenant, plus whether the read was truncated.
 
-        Rows missing either half are **skipped**, never emitted with an empty string: an
+        Returns ``({capability_id: {"digest": ..., "fields": [...]}}, truncated)``.
+
+        ``fields`` is the identity subset the declaration actually asserted; the caller
+        must digest the observed row over the same subset, or every ordinary declaration
+        compares unequal and the surface fabricates permanent drift.
+
+        Rows missing either half are **skipped**, never emitted with an empty digest: an
         empty declared digest compares unequal to every observed digest, which
         ``identity.identity_state_for`` would report as ``drifted``. Reporting drift for a
-        row we simply cannot compare would fabricate a finding."""
+        row we cannot compare would fabricate a finding.
+
+        ``truncated`` is returned rather than swallowed because the failure it prevents is
+        silent and one-directional: a declaration outside the window makes its capability
+        look ``observed_only``, which is deliberately *not* a finding — so real drift would
+        disappear and the caller would be told the scan was clean. Every other bounded read
+        in this package discloses when it is hit; this one is no exception.
+        """
         rows = await self._repo.list_for_tenant(tenant_id, limit=limit)
-        out: dict[str, str] = {}
+        truncated = len(rows) >= limit
+        out: dict[str, dict[str, Any]] = {}
         for row in rows:
             capability_id = row.get("capability_id")
             digest = row.get("artifact_digest")
             if not capability_id or not digest:
                 continue
-            out[str(capability_id)] = str(digest)
-        return out
+            out[str(capability_id)] = {
+                "digest": str(digest),
+                # Declarations written before `declared_fields` existed fall back to the
+                # full tuple, which is how they were digested at the time.
+                "fields": list(row.get("declared_fields") or identity.IDENTITY_FIELDS),
+            }
+        return out, truncated
 
     # ── serialization ─────────────────────────────────────────────────────────
 

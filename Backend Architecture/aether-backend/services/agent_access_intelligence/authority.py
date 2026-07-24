@@ -47,8 +47,10 @@ import uuid
 from typing import Any, Optional
 
 from shared.common.common import BadRequestError, NotFoundError, utc_now
+from shared.temporal.instant import TemporalError, parse_instant_strict
 from shared.logger.logger import get_logger
 from repositories.repos import DelegationRepository
+from services.agent_access_intelligence.catalog_service import _sanitize_server_url
 from services.agent_access_intelligence.repositories import CapabilityCatalogRepository
 from services.delegation.engine import DelegationEngine
 
@@ -63,6 +65,47 @@ SERVER_RESOURCE_PREFIX = "capability-server:"
 # ``*`` and ``:`` so a caller-supplied id can never become a glob pattern or inject a
 # second resource segment. Server keys are NOT constrained by this — they are hashed.
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
+
+# Bounded catalog scan used to canonicalize an operator-supplied server key at grant time.
+# A write-path read, so the cost is paid once per grant rather than per invocation.
+_SERVER_MATCH_SCAN = 1000
+
+# Bounded window scanned when paging by the DERIVED `state` filter (see `list`).
+_STATE_FILTER_SCAN = 2000
+
+
+def _validate_boundary(label: str, value: Optional[str]) -> Optional[str]:
+    """Normalize an ISO-8601 grant boundary, or reject it.
+
+    `authorization_state` and `DelegationRepository.active_for` both compare these as
+    STRINGS (`str(ends_at) <= now`). String comparison against an unparseable value is not
+    an error — it is silently wrong: `"in 30 days" > "2026-07-24T…"` is always true, so a
+    grant the operator believes expires in a month never expires at all, the API echoes
+    their intended date back, and nothing anywhere reports a problem. Parsing here is what
+    makes the string comparison downstream safe.
+
+    Parsing goes through `shared.temporal.parse_instant_strict`, the platform's canonical
+    instant authority, which also rejects timezone-NAIVE values. That strictness is
+    deliberate and is kept: `"2026-08-01"` names a different moment in every timezone, and
+    silently assuming UTC would be precisely the policy decision that module documents as
+    the caller's to make explicitly.
+
+    The result is normalized to UTC and serialized with `.isoformat()` (a `+00:00` suffix,
+    matching `utc_now().isoformat()`) rather than the `Z` form, so that the lexicographic
+    comparisons downstream order by meaning instead of by punctuation.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return parse_instant_strict(text).isoformat()
+    except TemporalError as exc:
+        raise BadRequestError(
+            f"{label} must be an ISO-8601 instant with an explicit offset "
+            f"(e.g. 2026-08-01T00:00:00Z); got {text!r} ({exc.reason_code})"
+        ) from exc
 
 
 def server_ref_for(tenant_id: str, server_key: str) -> str:
@@ -238,6 +281,10 @@ class CapabilityAuthorityService:
     ) -> dict:
         if not agent_id or not agent_id.strip():
             raise BadRequestError("agent_id is required")
+        starts_at = _validate_boundary("starts_at", starts_at)
+        ends_at = _validate_boundary("ends_at", ends_at)
+        if starts_at and ends_at and ends_at <= starts_at:
+            raise BadRequestError("ends_at must be after starts_at")
         if bool(capability_id) == bool(server_key):
             raise BadRequestError(
                 "provide exactly one of capability_id (one capability) or "
@@ -259,8 +306,25 @@ class CapabilityAuthorityService:
             assert server_key is not None  # guarded by the exactly-one check above
             if not server_key.strip():
                 raise BadRequestError("server_key must not be blank")
-            server_ref = server_ref_for(tenant_id, server_key)
+            # Canonicalize against the observed catalog BEFORE hashing.
+            #
+            # `resolve()` derives the server ref from the catalog row's stored key
+            # (`server_name` preferred, else the sanitized `server_url`). Hashing the raw
+            # operator input instead made the two derivations agree only by luck: the API
+            # invites either form ("its observed name or URL"), but a grant keyed on the
+            # URL never matched a server the catalog knows by name. The grant returned 200
+            # and then silently authorized nothing — every invocation denied, with no
+            # surface anywhere showing the grant was inert.
+            canonical, server_observed = await self._canonical_server_key(
+                tenant_id, server_key
+            )
+            server_ref = server_ref_for(tenant_id, canonical)
             resources = [server_resource(server_ref)]
+            # Store the canonical key, sanitized. `catalog_service` and `declarations`
+            # both scrub credentials out of a server URL before persisting one; this is a
+            # durable row served back on every list/read, so it does too.
+            server_key = _sanitize_server_url(canonical)
+            capability_observed = server_observed
 
         scope = {"actions": [INVOKE_ACTION], "resources": resources}
         validate_capability_scope(scope)
@@ -280,6 +344,31 @@ class CapabilityAuthorityService:
             metadata=metadata,
         )
         return self._public(record)
+
+    async def _canonical_server_key(
+        self, tenant_id: str, server_key: str
+    ) -> tuple[str, bool]:
+        """Map an operator-supplied server key onto the key the catalog is keyed by.
+
+        Returns ``(canonical_key, observed)``. An operator may name a server by either the
+        form the catalog shows — its `server_name` or its `server_url` — and both must
+        produce the same ref, because `resolve()` only ever derives one of them. Matching
+        is case-insensitive and compares the sanitized URL, since that is the form stored.
+
+        When nothing in the tenant's catalog matches, the operator's own value is returned
+        with ``observed=False``: pre-authorizing a server nobody has observed yet is
+        legitimate, and the flag is what makes "this grant currently matches nothing"
+        visible instead of silent.
+        """
+        wanted = _sanitize_server_url(server_key.strip()).strip().lower()
+        rows = await self._catalog.list_for_tenant(tenant_id, limit=_SERVER_MATCH_SCAN)
+        for row in rows:
+            name = str(row.get("server_name") or "").strip()
+            url = str(row.get("server_url") or "").strip()
+            if wanted in {name.lower(), url.lower()}:
+                # `resolve()` prefers server_name, so the canonical key must too.
+                return (name or url), True
+        return server_key.strip(), False
 
     async def revoke(
         self, *, tenant_id: str, authorization_id: str, revoked_by_entity_id: str
@@ -314,17 +403,54 @@ class CapabilityAuthorityService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict]:
-        rows = await self._repo.list_authorizations(
+        if not state:
+            rows = await self._repo.list_authorizations(
+                tenant_id,
+                agent_id=agent_id,
+                capability_id=capability_id,
+                limit=limit,
+                offset=offset,
+            )
+            return [self._public(r) for r in rows]
+
+        # `state` is DERIVED from revoked_at/ends_at/starts_at, so it cannot be a query
+        # filter. Filtering a single `limit`-sized page would repeat the bug this package
+        # already fixed once in `PolicyEngine.list_decisions`: a tenant with 140 revoked
+        # and 12 active authorizations would get `{"items": [], "count": 0}` for
+        # `?state=active` — indistinguishable from "this tenant has authorized nothing" —
+        # and paging would walk an arbitrary subset. Scan a bounded superset, filter, then
+        # page the filtered list.
+        scanned = await self._repo.list_authorizations(
             tenant_id,
             agent_id=agent_id,
             capability_id=capability_id,
-            limit=limit,
-            offset=offset,
+            limit=_STATE_FILTER_SCAN,
+            offset=0,
         )
-        public = [self._public(r) for r in rows]
-        if state:
-            public = [r for r in public if r["state"] == state]
-        return public
+        matched = [r for r in (self._public(x) for x in scanned) if r["state"] == state]
+        return matched[offset : offset + limit]
+
+    async def count_by_state(
+        self, *, tenant_id: str, agent_id: Optional[str] = None
+    ) -> dict[str, Any]:
+        """State histogram over the same bounded window `list(state=...)` pages.
+
+        Returned alongside a filtered list so an empty page is legible: the caller can see
+        whether "no active authorizations" means none exist or means the window truncated.
+        """
+        scanned = await self._repo.list_authorizations(
+            tenant_id, agent_id=agent_id, limit=_STATE_FILTER_SCAN, offset=0
+        )
+        counts: dict[str, int] = {}
+        for row in scanned:
+            key = authorization_state(row)
+            counts[key] = counts.get(key, 0) + 1
+        return {
+            "counts": counts,
+            "scanned": len(scanned),
+            "scan_limit": _STATE_FILTER_SCAN,
+            "truncated": len(scanned) >= _STATE_FILTER_SCAN,
+        }
 
     async def resolve(
         self, *, tenant_id: str, agent_id: Optional[str], capability_id: str
@@ -348,8 +474,9 @@ class CapabilityAuthorityService:
         if not agent_id:
             return facts
 
-        # Specific capability first, then server-wide. Both reads hit the same
-        # 60s-cached `active_for(agent_id, tenant_id)` set.
+        # Specific capability first, then server-wide. Both reads go through
+        # `active_for(agent_id, tenant_id)`; this repository is constructed without a cache
+        # client, so they are two live reads rather than one cached set.
         candidates = [capability_resource(capability_id)]
         server_key = (capability or {}).get("server_name") or (capability or {}).get("server_url")
         if server_key:
