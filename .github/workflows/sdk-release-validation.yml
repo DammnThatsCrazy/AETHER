@@ -17,6 +17,13 @@ on:
       - 'scripts/release/sdk_conformance.py'
       - 'packages/shared/sdk-parity.json'
       - '.github/workflows/sdk-release-validation.yml'
+  # Narrower than the `push` list above, deliberately. This workflow's `ios` job runs
+  # on macos-latest, which bills at a 10x minute multiplier; `docs/source-of-truth/**`,
+  # `docs/reports/**` and `CHANGELOG.md` matched almost every PR in this repo, so
+  # documentation-only changes were paying for a full native SDK validation. Pushes to
+  # main keep the broad list — that is the sweep that precedes a release. The `ios` job
+  # itself is NOT gated: tests/unit/test_release_workflow_controls.py requires native SDK
+  # validation to run on pull requests, and a PR that touches the SDK still gets it.
   pull_request:
     paths:
       - 'packages/shared/**'
@@ -25,9 +32,6 @@ on:
       - 'packages/ios/**'
       - 'packages/android/**'
       - 'docs/SDK*.md'
-      - 'docs/source-of-truth/**'
-      - 'docs/reports/**'
-      - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
       - 'scripts/release/sdk_conformance.py'
       - 'packages/shared/sdk-parity.json'
