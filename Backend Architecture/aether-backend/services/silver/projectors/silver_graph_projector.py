@@ -92,7 +92,16 @@ class SilverGraphProjector:
         "silver_outcome_facts":        "_emit_outcome",
         "silver_comms_facts":          "_emit_comms",
         "silver_agent_execution_facts": "_emit_agent_execution",
+        "silver_campaign_touchpoint_facts": "_emit_touchpoint_source",
     }
+
+    # entry_method values that carry platform-verified install evidence.
+    _PLATFORM_EVIDENCE_ENTRY_METHODS = frozenset({
+        "android_install_referrer",
+        "android_app_link",
+        "ios_universal_link",
+        "ios_adattributionkit",
+    })
 
     async def maybe_emit(self, result: ProjectionResult, event: dict[str, Any]) -> None:
         if not _EMIT_ENABLED or result.skipped or not result.rows:
@@ -182,3 +191,106 @@ class SilverGraphProjector:
         # agent_task events already drive existing EXECUTED_AS/PRODUCED edges
         # via the dedicated graph_mutations.py handler — no additional emission needed.
         pass
+
+    async def _emit_touchpoint_source(self, result: ProjectionResult, event: dict[str, Any]) -> None:
+        """Project canonical source/attribution relationships (spec §13.6).
+
+        Reads the classified touchpoint rows (never the raw event) and emits, per
+        row: entity/session arrived-through-source, session used-placement,
+        journey originated-from-link, install attributed-to-platform-evidence,
+        and agent/AI referred-entity. All edges are tenant-scoped and
+        replay-safe: the edge identity is (from, to, edge_type), so replaying an
+        event upserts the same edges idempotently.
+        """
+        for row in result.rows:
+            tenant_id = str(row.get("tenant_id") or "default")
+            source_event_id = str(row.get("source_event_id") or "")
+            if not source_event_id:
+                continue
+            occurred_at = _as_iso(row.get("occurred_at"))
+            entity_id = (
+                row.get("profile_id") or row.get("cluster_id") or row.get("anonymous_id") or ""
+            )
+            session_id = row.get("session_id") or ""
+
+            # 1. arrived-through-source (entity or session → Source node)
+            source_class = row.get("source_class")
+            arrived_from = entity_id or session_id
+            if arrived_from and source_class:
+                source_token = str(row.get("source") or "unknown")
+                source_vertex = f"source:{tenant_id}:{source_class}:{source_token}"
+                await _emit(
+                    _edge(
+                        EdgeType.ARRIVED_THROUGH_SOURCE, str(arrived_from), source_vertex,
+                        tenant_id, source_event_id, occurred_at, consent_purpose="analytics",
+                    ),
+                    subject_id=str(arrived_from),
+                )
+
+            # 2. used-placement (session → Placement node)
+            placement_id = row.get("placement_id")
+            if session_id and placement_id:
+                placement_vertex = f"placement:{tenant_id}:{placement_id}"
+                await _emit(
+                    _edge(
+                        EdgeType.USED_PLACEMENT, str(session_id), placement_vertex,
+                        tenant_id, source_event_id, occurred_at, consent_purpose="analytics",
+                    ),
+                    subject_id=str(session_id),
+                )
+
+            # 3. originated-from-link (session/journey → VerifiedSourceLink node)
+            link_id = row.get("verified_referral_link_id")
+            link_from = session_id or entity_id
+            if link_from and link_id:
+                link_vertex = f"sourcelink:{tenant_id}:{link_id}"
+                await _emit(
+                    _edge(
+                        EdgeType.ORIGINATED_FROM_LINK, str(link_from), link_vertex,
+                        tenant_id, source_event_id, occurred_at, consent_purpose="analytics",
+                    ),
+                    subject_id=str(link_from),
+                )
+
+            # 4. install attributed-to-platform-evidence (entity → PlatformEvidence node)
+            entry_method = row.get("entry_method")
+            if (
+                entity_id
+                and entry_method in self._PLATFORM_EVIDENCE_ENTRY_METHODS
+                and row.get("proof_level") == "platform_verified"
+            ):
+                evidence_vertex = f"platform_evidence:{tenant_id}:{entry_method}"
+                await _emit(
+                    _edge(
+                        EdgeType.ATTRIBUTED_TO_PLATFORM_EVIDENCE, str(entity_id), evidence_vertex,
+                        tenant_id, source_event_id, occurred_at, consent_purpose="analytics",
+                    ),
+                    subject_id=str(entity_id),
+                )
+
+            # 5. agent/AI referred-entity (Agent/AI node → entity)
+            actor_type = row.get("actor_type")
+            ai_provider = row.get("ai_provider")
+            agent_id = row.get("agent_id")
+            if entity_id and (actor_type in ("agent", "ai") or ai_provider or agent_id):
+                if agent_id:
+                    referrer_vertex = f"agent:{tenant_id}:{agent_id}"
+                elif ai_provider:
+                    referrer_vertex = f"ai:{tenant_id}:{ai_provider}"
+                else:
+                    referrer_vertex = f"{actor_type}:{tenant_id}:unknown"
+                await _emit(
+                    _edge(
+                        EdgeType.REFERRED_ENTITY, referrer_vertex, str(entity_id),
+                        tenant_id, source_event_id, occurred_at, consent_purpose="analytics",
+                    ),
+                    subject_id=referrer_vertex,
+                )
+
+
+def _as_iso(value: Any) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)

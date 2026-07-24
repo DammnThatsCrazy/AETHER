@@ -637,6 +637,18 @@ class EdgeType:
     ATTRIBUTED_TO_CAMPAIGN   = "ATTRIBUTED_TO_CAMPAIGN"    # Event/Conversion → Campaign
     TOUCHPOINT_IN            = "TOUCHPOINT_IN"             # Touchpoint → Journey
 
+    # ── Traffic intelligence — source/attribution edges (spec §13.6) ───────
+    # Canonical source-classification relationships projected from
+    # silver_campaign_touchpoint_facts. Source/Placement/SourceLink/
+    # PlatformEvidence are non-human attribution nodes, so entity→node edges
+    # are EXCLUDED from the four operational layers; REFERRED_ENTITY
+    # (agent/AI → entity) is a genuine A2H interaction.
+    ARRIVED_THROUGH_SOURCE          = "ARRIVED_THROUGH_SOURCE"          # Entity/Session → Source
+    USED_PLACEMENT                  = "USED_PLACEMENT"                  # Session → Placement
+    ORIGINATED_FROM_LINK            = "ORIGINATED_FROM_LINK"            # Journey/Session → VerifiedSourceLink
+    ATTRIBUTED_TO_PLATFORM_EVIDENCE = "ATTRIBUTED_TO_PLATFORM_EVIDENCE"  # Install/Entity → PlatformEvidence
+    REFERRED_ENTITY                 = "REFERRED_ENTITY"                 # Agent/AI → Entity
+
     # ── Phase 2: Journey step edges ──────────────────────────────────────
     NEXT_IN_JOURNEY          = "NEXT_IN_JOURNEY"           # Touchpoint → Touchpoint (ordered)
     ABANDONED_AT             = "ABANDONED_AT"              # Entity → Touchpoint (drop-off)
