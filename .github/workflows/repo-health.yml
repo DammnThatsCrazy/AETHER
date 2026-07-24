@@ -22,6 +22,7 @@ env:
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       ml: ${{ steps.filter.outputs.ml }}
     steps:
@@ -47,6 +48,7 @@ jobs:
     # Runs on PRs only; push events to main skip this check.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       BASE_REF: ${{ github.base_ref }}
     steps:
@@ -72,6 +74,7 @@ jobs:
     # Has no write permissions so that attacker-controlled scripts in a PR
     # cannot push to the repository even if they escape the validation steps.
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,6 +122,7 @@ jobs:
     # Still strictly gated to pushes to main — never runs on PR-head, never write on PRs.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
@@ -155,6 +159,7 @@ jobs:
 
   python-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -184,6 +189,7 @@ jobs:
 
   noesis-backend-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       NOESIS_ENABLED: "true"
       NOESIS_LLM_ENABLED: "false"
@@ -227,6 +233,7 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.ml == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -253,6 +260,7 @@ jobs:
 
   typescript:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -298,6 +306,7 @@ jobs:
   e2e-tenant:
     needs: typescript
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -324,6 +333,7 @@ jobs:
 
   staging-preflight-dry-run:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -349,6 +359,7 @@ jobs:
     needs: [lint-docs, python-tests, noesis-backend-tests, ml-tests, typescript, e2e-tenant, staging-preflight-dry-run]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       LINT_DOCS_RESULT:          ${{ needs.lint-docs.result }}
       PYTHON_TESTS_RESULT:       ${{ needs.python-tests.result }}

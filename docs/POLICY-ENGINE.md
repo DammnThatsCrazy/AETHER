@@ -26,6 +26,7 @@ OODA approval flows — it never bypasses them.
 | `audit_export.create` / `download` | Require export permission; block cross-tenant export; require approval for sensitive export types. |
 | `webhook.dispatch_safety` | Block dispatch if integration disabled or destination unsafe (private/loopback/metadata/non-HTTPS). |
 | `data.deletion_request` | Block audit-log deletion; require a manifest for cross-resource deletion. |
+| `capability.invoke` | Block invocation of a capability that is not in the tenant's observed inventory, that is not attributed to an agent, or that has no active capability authorization. |
 
 `PolicyDecision` carries `allowed`, `reason`, `severity` (`info`/`warning`/`block`),
 and an optional `required_action`.

@@ -23,6 +23,9 @@ on:
       - '.github/workflows/kyber-e2e.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: kyber-e2e-${{ github.ref }}
   cancel-in-progress: true

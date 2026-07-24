@@ -39,6 +39,7 @@ jobs:
   plan:
     if: inputs.action == 'plan'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions: {contents: read, id-token: write}
     env:
       TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
@@ -101,6 +102,7 @@ jobs:
   apply:
     if: inputs.action == 'apply'
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     environment: production-terraform
     permissions: {contents: read, actions: read, id-token: write}
     steps:
