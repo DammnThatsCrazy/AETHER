@@ -57,7 +57,12 @@ data class ModuleConfig(
     val walletTracking: Boolean = false,
     val purchaseTracking: Boolean = true,
     val errorTracking: Boolean = true,
-    val experiments: Boolean = false
+    val experiments: Boolean = false,
+    /**
+     * How long persisted acquisition evidence (first / latest touch) remains
+     * attachable to outgoing events before it expires. Default 30 days.
+     */
+    val attributionEvidenceTtlDays: Int = 30
 )
 
 data class PrivacyConfig(
@@ -186,11 +191,19 @@ object Aether : DefaultLifecycleObserver {
     private var lastActivityMs: Long = 0L
     private var currentJourneyId: String? = null
     private var currentJourneyName: String? = null
-    private val CLICK_ID_PARAMS = setOf(
-        "gclid", "msclkid", "fbclid", "ttclid", "twclid",
-        "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
-        "irclickid", "aff_id"
-    )
+
+    // --- Acquisition evidence (deep links + install referrer) -----------------
+    // Click-id vocabulary lives in AetherUtils.kt (CLICK_ID_PARAMS) so the
+    // canonical evidence parser and this object share one definition.
+    private const val PREF_ACQ_FIRST_TOUCH = "aether_acq_first_touch_v1"
+    private const val PREF_ACQ_LATEST_TOUCH = "aether_acq_latest_touch_v1"
+    private const val PREF_RECENT_DEEP_LINKS = "aether_deeplink_recent_v1"
+    private const val EXTRA_DEEP_LINK_PROCESSED = "com.aether.sdk.deep_link_processed"
+    private const val RECENT_DEEP_LINK_LIMIT = 25
+    private const val DEEP_LINK_DEDUP_WINDOW_MS = 10 * 60 * 1000L
+    private const val DEFAULT_ATTRIBUTION_TTL_DAYS = 30
+    private var activeAcquisitionEvidence: JSONObject? = null
+    private val recentDeepLinks = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val EVENT_CONSENT_PURPOSE = mapOf(
         "track" to "analytics", "page" to "analytics", "screen" to "analytics",
         "heartbeat" to "analytics", "error" to "analytics", "performance" to "analytics",
@@ -449,6 +462,12 @@ object Aether : DefaultLifecycleObserver {
             application.registerActivityLifecycleCallbacks(ActivityTracker())
         }
 
+        // Automatic deep-link intent attribution (ACTION_VIEW data URLs).
+        // Explicit handleDeepLink()/onNewIntent() remain available regardless.
+        if (config.modules.deepLinkAttribution) {
+            application.registerActivityLifecycleCallbacks(DeepLinkIntentTracker())
+        }
+
         // Uncaught exception handler
         if (config.modules.errorTracking) {
             setupErrorTracking()
@@ -463,6 +482,20 @@ object Aether : DefaultLifecycleObserver {
         log("Aether Android SDK initialized (v$VERSION)")
 
         loadPersistedQueue()
+
+        // Restore persisted acquisition state (latest-touch evidence + intent dedup list).
+        activeAcquisitionEvidence = loadStoredEvidence(PREF_ACQ_LATEST_TOUCH)
+        loadRecentDeepLinks()
+
+        // Google Play Install Referrer: first-eligible-launch retrieval with a
+        // persisted state machine (never duplicates install attribution).
+        if (config.modules.deepLinkAttribution) {
+            try {
+                InstallReferrerHandler(application.applicationContext, prefs!!).connectIfEligible()
+            } catch (t: Throwable) {
+                log("Install referrer handler unavailable: ${t.javaClass.simpleName}")
+            }
+        }
 
         // Health agent: fleet heartbeat + manifest fetch
         val hAgent = AetherHealthAgent(
@@ -639,10 +672,19 @@ object Aether : DefaultLifecycleObserver {
         anonymousId = UUID.randomUUID().toString()
         sessionId = UUID.randomUUID().toString()
         eventSequence = 0
+        // Acquisition evidence is identity-scoped: reset()/logout clears both
+        // touches. The install-referrer state machine is device/install-scoped
+        // and intentionally survives so install attribution never duplicates.
+        activeAcquisitionEvidence = null
+        campaignContext = null
+        recentDeepLinks.clear()
         prefs?.edit()
             ?.remove("userId")
             ?.remove("walletAddress")
             ?.remove("consentState")
+            ?.remove(PREF_ACQ_FIRST_TOUCH)
+            ?.remove(PREF_ACQ_LATEST_TOUCH)
+            ?.remove(PREF_RECENT_DEEP_LINKS)
             ?.putString("anonymousId", anonymousId)
             ?.apply()
         log("SDK reset")
@@ -726,41 +768,283 @@ object Aether : DefaultLifecycleObserver {
 
     private fun clearPersistedQueue() { queueFile()?.delete() }
 
+    // =========================================================================
+    // DEEP-LINK & INSTALL ATTRIBUTION
+    //
+    // The SDK observes evidence and names the entry method; the backend
+    // classifies. A deep link's host is the DESTINATION domain — it is never
+    // written to referrerDomain. referrerDomain is only populated from a real
+    // external referrer (Intent.EXTRA_REFERRER).
+    // =========================================================================
+
+    /**
+     * Explicit deep-link escape hatch. https links are verified-capable Android
+     * App Links ("android_app_link"); custom schemes handed to this API are
+     * recorded as "manual_sdk_evidence".
+     */
     fun handleDeepLink(url: String) {
-        try {
-            val uri = java.net.URI(url)
-            val params = uri.query?.split("&")?.associate {
-                val parts = it.split("=", limit = 2)
-                parts[0] to (parts.getOrNull(1) ?: "")
-            } ?: emptyMap()
-
-            val attribution = mutableMapOf<String, Any?>("url" to url)
-            val clickIds = JSONObject()
-            params.forEach { (key, value) ->
-                if (key.startsWith("utm_")) {
-                    attribution[key] = value
-                }
-                if (key in CLICK_ID_PARAMS) {
-                    clickIds.put(key, value)
-                    attribution[key] = value
-                }
+        val entryMethod =
+            if (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)) {
+                "android_app_link"
+            } else {
+                "manual_sdk_evidence"
             }
+        processDeepLink(url, entryMethod, externalReferrer = null)
+    }
 
-            // Store campaign context for inclusion in event context
-            campaignContext = JSONObject().apply {
-                put("source", params["utm_source"] ?: "")
-                put("medium", params["utm_medium"] ?: "")
-                put("campaign", params["utm_campaign"] ?: "")
-                put("content", params["utm_content"] ?: "")
-                put("term", params["utm_term"] ?: "")
-                put("clickIds", clickIds)
-                put("referrerDomain", uri.host ?: "")
-            }
+    /**
+     * Forward `onNewIntent` deliveries (singleTop / singleTask activities) so
+     * automatic attribution also covers warm-start deep links.
+     */
+    fun onNewIntent(intent: android.content.Intent?) {
+        handleAttributionIntent(intent)
+    }
 
-            track("deep_link_opened", attribution)
-        } catch (e: Exception) {
-            log("Failed to parse deep link: ${e.message}")
+    /** First-touch acquisition evidence (shared schema v3), or null when absent/expired. */
+    fun getFirstTouchAttribution(): JSONObject? =
+        loadStoredEvidence(PREF_ACQ_FIRST_TOUCH)?.let { JSONObject(it.toString()) }
+
+    /** Latest-touch acquisition evidence (shared schema v3), or null when absent/expired. */
+    fun getLatestTouchAttribution(): JSONObject? =
+        loadStoredEvidence(PREF_ACQ_LATEST_TOUCH)?.let { JSONObject(it.toString()) }
+
+    private fun processDeepLink(url: String, entryMethod: String, externalReferrer: String?) {
+        val evidence = parseAcquisitionEvidenceFromUrl(url, entryMethod, dateFormat.format(Date()))
+        if (evidence == null) {
+            log("Failed to parse deep link")
+            return
         }
+
+        // referrerDomain must reflect a real external referrer or stay absent.
+        val externalReferrerDomain = externalReferrer?.let { ref ->
+            if (ref.startsWith("http://", ignoreCase = true) || ref.startsWith("https://", ignoreCase = true)) {
+                try { java.net.URI(ref).host } catch (_: Exception) { null }
+            } else null
+        }
+        if (!externalReferrer.isNullOrEmpty()) {
+            evidence.put("referrer", sanitizeAttributionUrl(externalReferrer))
+            externalReferrerDomain?.let { evidence.put("referrerDomain", it) }
+        }
+
+        // Envelope-compat campaign context (context.campaign): UTM fields only.
+        // The deep-link host is intentionally NOT set as referrerDomain here.
+        campaignContext = JSONObject().apply {
+            put("source", evidence.optString("utmSource", ""))
+            put("medium", evidence.optString("utmMedium", ""))
+            put("campaign", evidence.optString("utmCampaign", ""))
+            put("content", evidence.optString("utmContent", ""))
+            put("term", evidence.optString("utmTerm", ""))
+            put("clickIds", evidence.optJSONObject("clickIds") ?: JSONObject())
+            put("referrerDomain", externalReferrerDomain ?: "")
+        }
+
+        // Persist as active acquisition evidence BEFORE emitting so the
+        // deep_link_opened event itself carries context.acquisitionEvidence.
+        storeAcquisitionEvidence(evidence)
+
+        val props = mutableMapOf<String, Any?>(
+            // Transmitted URL strings are always sanitized (no aether tokens,
+            // no click IDs, no fragment).
+            "url" to sanitizeAttributionUrl(url),
+            "entryMethod" to entryMethod,
+        )
+        evidence.optString("destinationDomain").takeIf { it.isNotEmpty() }?.let { props["destinationDomain"] = it }
+        evidence.optString("destinationPathHash").takeIf { it.isNotEmpty() }?.let { props["destinationPathHash"] = it }
+        externalReferrerDomain?.let { props["referrerDomain"] = it }
+        for ((evidenceKey, propKey) in UTM_EVIDENCE_TO_PARAM) {
+            evidence.optString(evidenceKey).takeIf { it.isNotEmpty() }?.let { props[propKey] = it }
+        }
+        track("deep_link_opened", props)
+    }
+
+    private val UTM_EVIDENCE_TO_PARAM = listOf(
+        "utmSource" to "utm_source", "utmMedium" to "utm_medium",
+        "utmCampaign" to "utm_campaign", "utmContent" to "utm_content",
+        "utmTerm" to "utm_term", "utmId" to "utm_id",
+    )
+
+    private fun handleAttributionIntent(intent: android.content.Intent?) {
+        if (config?.modules?.deepLinkAttribution != true) return
+        if (intent == null || intent.action != android.content.Intent.ACTION_VIEW) return
+        val data = intent.dataString ?: return
+        // Dedup layer 1: a processed marker travels with the Intent itself, so
+        // the same delivered Intent (activity recreation, config changes) is
+        // never attributed twice — even across process death, since extras are
+        // restored with the intent.
+        if (intent.getBooleanExtra(EXTRA_DEEP_LINK_PROCESSED, false)) return
+        // Dedup layer 2: a bounded recent list of data-URL hashes with capture
+        // timestamps (in-memory + prefs). The Intent carries no creation
+        // timestamp, so recency is bounded by a fixed dedup window instead —
+        // identical links re-opened later are attributed again by design.
+        val dedupHash = sha256Canonical(data).take(24)
+        if (!rememberDeepLink(dedupHash)) {
+            log("Deep link intent already processed — skipped")
+            return
+        }
+        try { intent.putExtra(EXTRA_DEEP_LINK_PROCESSED, true) } catch (_: Exception) { }
+
+        val scheme = intent.data?.scheme?.lowercase(Locale.US)
+        val entryMethod = if (scheme == "http" || scheme == "https") "android_app_link" else "manual_sdk_evidence"
+        processDeepLink(data, entryMethod, readExternalReferrer(intent))
+    }
+
+    /** Real external referrer, if the launching app supplied one (never the link's own host). */
+    private fun readExternalReferrer(intent: android.content.Intent): String? {
+        val uriReferrer: android.net.Uri? = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(android.content.Intent.EXTRA_REFERRER, android.net.Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(android.content.Intent.EXTRA_REFERRER) as? android.net.Uri
+            }
+        } catch (_: Exception) { null }
+        return uriReferrer?.toString() ?: intent.getStringExtra("android.intent.extra.REFERRER_NAME")
+    }
+
+    private fun rememberDeepLink(hash: String): Boolean {
+        val now = System.currentTimeMillis()
+        pruneRecentDeepLinks(now)
+        val prior = recentDeepLinks[hash]
+        if (prior != null && now - prior < DEEP_LINK_DEDUP_WINDOW_MS) return false
+        recentDeepLinks[hash] = now
+        persistRecentDeepLinks()
+        return true
+    }
+
+    private fun pruneRecentDeepLinks(now: Long) {
+        val iterator = recentDeepLinks.entries.iterator()
+        while (iterator.hasNext()) {
+            if (now - iterator.next().value >= DEEP_LINK_DEDUP_WINDOW_MS) iterator.remove()
+        }
+        while (recentDeepLinks.size > RECENT_DEEP_LINK_LIMIT) {
+            val oldest = recentDeepLinks.entries.minByOrNull { it.value } ?: break
+            recentDeepLinks.remove(oldest.key)
+        }
+    }
+
+    private fun persistRecentDeepLinks() {
+        try {
+            val entries = JSONArray()
+            for (entry in recentDeepLinks.entries) {
+                entries.put(JSONObject().apply { put("h", entry.key); put("ts", entry.value) })
+            }
+            prefs?.edit()?.putString(PREF_RECENT_DEEP_LINKS, entries.toString())?.apply()
+        } catch (_: Exception) { }
+    }
+
+    private fun loadRecentDeepLinks() {
+        val raw = prefs?.getString(PREF_RECENT_DEEP_LINKS, null) ?: return
+        try {
+            val entries = JSONArray(raw)
+            val now = System.currentTimeMillis()
+            for (i in 0 until entries.length()) {
+                val entry = entries.optJSONObject(i) ?: continue
+                val hash = entry.optString("h")
+                val ts = entry.optLong("ts")
+                if (hash.isNotEmpty() && now - ts < DEEP_LINK_DEDUP_WINDOW_MS) {
+                    recentDeepLinks[hash] = ts
+                }
+            }
+        } catch (_: Exception) {
+            prefs?.edit()?.remove(PREF_RECENT_DEEP_LINKS)?.apply()
+        }
+    }
+
+    /**
+     * Google Play Install Referrer payload, delivered exactly once per install
+     * by [InstallReferrerHandler]. Parses the referrer through the SAME
+     * canonical evidence parser ("android_install_referrer"), persists it as
+     * first-install evidence, and emits app_install_attributed through the
+     * consent-gated queue. Never throws (the handler's consumed-state marking
+     * must not be derailed by emission errors).
+     */
+    internal fun handleInstallReferrer(
+        referrer: String,
+        referrerClickTimestampSeconds: Long,
+        installBeginTimestampSeconds: Long,
+        installVersion: String?,
+        googlePlayInstantParam: Boolean,
+    ) {
+        try {
+            val evidence = parseInstallReferrerEvidence(referrer, dateFormat.format(Date()))
+            storeAcquisitionEvidence(evidence)
+
+            val props = mutableMapOf<String, Any?>(
+                "entryMethod" to "android_install_referrer",
+                "attributionProvider" to "google_play_install_referrer",
+                "googlePlayInstant" to googlePlayInstantParam,
+            )
+            if (referrerClickTimestampSeconds > 0) {
+                props["referrerClickTimestamp"] = dateFormat.format(Date(referrerClickTimestampSeconds * 1000L))
+            }
+            if (installBeginTimestampSeconds > 0) {
+                props["installBeginTimestamp"] = dateFormat.format(Date(installBeginTimestampSeconds * 1000L))
+            }
+            installVersion?.takeIf { it.isNotEmpty() }?.let { props["installVersion"] = it }
+            for ((evidenceKey, propKey) in UTM_EVIDENCE_TO_PARAM) {
+                evidence.optString(evidenceKey).takeIf { it.isNotEmpty() }?.let { props[propKey] = it }
+            }
+            evidence.optString("referralToken").takeIf { it.isNotEmpty() }?.let { props["referralToken"] = it }
+            evidence.optJSONObject("clickIds")?.let { props["clickIds"] = it }
+
+            enqueueEvent("app_install_attributed", props)
+        } catch (e: Exception) {
+            log("Install referrer handling failed: ${e.javaClass.simpleName}")
+        }
+    }
+
+    // --- First-touch / latest-touch evidence persistence ----------------------
+
+    private fun evidenceTtlMs(): Long {
+        val days = config?.modules?.attributionEvidenceTtlDays ?: DEFAULT_ATTRIBUTION_TTL_DAYS
+        return days.toLong() * 24L * 60L * 60L * 1000L
+    }
+
+    private fun isEvidenceExpired(evidence: JSONObject): Boolean {
+        val expiresAt = evidence.optString("evidenceExpiresAt", "")
+        if (expiresAt.isEmpty()) return false
+        return try {
+            val parsed = dateFormat.parse(expiresAt) ?: return false
+            parsed.time <= System.currentTimeMillis()
+        } catch (_: Exception) { false }
+    }
+
+    private fun loadStoredEvidence(key: String): JSONObject? {
+        val raw = prefs?.getString(key, null) ?: return null
+        return try {
+            val evidence = JSONObject(raw)
+            if (isEvidenceExpired(evidence)) {
+                prefs?.edit()?.remove(key)?.apply()
+                null
+            } else evidence
+        } catch (_: Exception) {
+            prefs?.edit()?.remove(key)?.apply()
+            null
+        }
+    }
+
+    @Synchronized
+    private fun storeAcquisitionEvidence(evidence: JSONObject) {
+        try {
+            val expiresAtIso = dateFormat.format(Date(System.currentTimeMillis() + evidenceTtlMs()))
+            val latest = JSONObject(evidence.toString()).apply {
+                put("firstTouch", false)
+                put("evidenceExpiresAt", expiresAtIso)
+            }
+            val editor = prefs?.edit()
+            editor?.putString(PREF_ACQ_LATEST_TOUCH, latest.toString())
+            // First touch is only set when absent or expired — later evidence
+            // never overwrites it.
+            if (loadStoredEvidence(PREF_ACQ_FIRST_TOUCH) == null) {
+                val first = JSONObject(evidence.toString()).apply {
+                    put("firstTouch", true)
+                    put("evidenceExpiresAt", expiresAtIso)
+                }
+                editor?.putString(PREF_ACQ_FIRST_TOUCH, first.toString())
+            }
+            editor?.apply()
+            activeAcquisitionEvidence = latest
+        } catch (_: Exception) { }
     }
 
     fun trackPushOpened(data: Map<String, String>) {
@@ -1358,6 +1642,15 @@ object Aether : DefaultLifecycleObserver {
             })
         }
         campaignContext?.let { put("campaign", it) }
+        // Active acquisition evidence (latest touch) rides on every event until
+        // it expires — mirrors the campaign context merge above.
+        activeAcquisitionEvidence?.let { evidence ->
+            if (isEvidenceExpired(evidence)) {
+                activeAcquisitionEvidence = null
+            } else {
+                put("acquisitionEvidence", evidence)
+            }
+        }
         // Active journey snapshot on every event (web SDK context.journey parity);
         // journeyName doubles as journeyType, exactly as startJourney stamps them.
         currentJourneyId?.let { journeyId ->
@@ -1634,6 +1927,24 @@ object Aether : DefaultLifecycleObserver {
     // =========================================================================
     // ACTIVITY TRACKER
     // =========================================================================
+
+    /**
+     * Automatic deep-link attribution: observes ACTION_VIEW launch intents at
+     * activity creation. Warm-start deliveries to singleTop/singleTask
+     * activities require the host app to forward [onNewIntent]. Dedup is
+     * handled inside [handleAttributionIntent].
+     */
+    private class DeepLinkIntentTracker : Application.ActivityLifecycleCallbacks {
+        override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {
+            try { handleAttributionIntent(activity.intent) } catch (_: Exception) { }
+        }
+        override fun onActivityStarted(a: android.app.Activity) {}
+        override fun onActivityResumed(a: android.app.Activity) {}
+        override fun onActivityPaused(a: android.app.Activity) {}
+        override fun onActivityStopped(a: android.app.Activity) {}
+        override fun onActivitySaveInstanceState(a: android.app.Activity, s: android.os.Bundle) {}
+        override fun onActivityDestroyed(a: android.app.Activity) {}
+    }
 
     private class ActivityTracker : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: android.app.Activity) {
