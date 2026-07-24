@@ -393,3 +393,363 @@ items:
     blocked_by: []
     exception: External action — must never be claimed as complete from within the repo.
     last_verified_commit: null
+
+  # =========================================================================
+  # Release train: AGENT_ACCESS_INTELLIGENCE
+  #
+  # Co-hosted in this canonical ledger because the release checks
+  # (scripts/release/check_implementation_ledger.py + check_foundation.py)
+  # validate a single items list. Item ids are namespaced AAI-<phase>-<name>.
+  # PR 1 (this session) routes the agentic-observability plane through the
+  # existing durable FT-5/FT-6 Bronze+outbox spine behind a default-OFF flag.
+  # Every phase-2/3/4 item is recorded honestly as not_started with blockers.
+  # Nothing here is terminal; no completion evidence is claimed.
+  # Compatibility & ownership map:
+  #   docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md
+  # =========================================================================
+
+  # ---- PR 1 — Canonical ingestion spine adoption (this PR) ----------------
+  - id: AAI-1-CANONICAL-INGESTION
+    title: Route the agentic-observability plane through the canonical Bronze+outbox spine
+    domain: agent-access-intelligence
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: Agentic observations become durable, replayable, and share one canonical Silver + graph lineage instead of a bespoke synchronous pipeline.
+    current_behavior: Agentic-observability routes run a bespoke synchronous Bronze to Silver to canonical_activity to AgenticProjectionOutbox pipeline (services/agentic_observability/pipeline.py) writing obs_ bronze plus bespoke silver_agent_* fact tables.
+    required_behavior: >
+      Behind AGENTIC_OBS_CANONICAL_SPINE_ENABLED (default off), the compatibility
+      routes normalize to canonical *_observed events and delegate to the durable
+      /v1/batch spine (bronze_sdk_events + event_outbox to outbox_relay to
+      SilverDispatcher to AgentExecutionProjector to silver_agent_execution_facts,
+      plus canonical_activity and SilverGraphProjector). Flag off preserves the
+      current synchronous behavior byte-for-byte.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/agentic_observability/routes.py
+      - Backend Architecture/aether-backend/services/agentic_observability/pipeline.py
+      - Backend Architecture/aether-backend/services/external_account_observability/routes.py
+      - Backend Architecture/aether-backend/services/ingestion/outbox_relay.py
+      - Backend Architecture/aether-backend/services/silver/dispatcher.py
+      - Backend Architecture/aether-backend/services/silver/projectors/agent_execution_projector.py
+      - Backend Architecture/aether-backend/services/silver/projectors/silver_graph_projector.py
+      - Backend Architecture/aether-backend/config/settings.py
+    tests_required: [tests/unit/test_agentic_canonical_spine.py (flag-off/flag-on parity — planned)]
+    evidence_required: [pytest agentic canonical-spine delegation output, flag-off vs flag-on projection parity]
+    docs_required:
+      - docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md
+      - docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md
+    owner: ingestion
+    status: implementation_in_progress
+    blocked_by: [FT-5-INGESTION-V2, FT-6-OUTBOX-RELAY]
+    exception: >
+      This PR introduces the default-off delegation flag and its compatibility
+      contract; the canonical Bronze+outbox spine (FT-5/FT-6) is reused rather
+      than rebuilt. Full rollout evidence, canary metrics, dual-path parity
+      proof, and decommissioning of the dormant bespoke pipeline are deferred to
+      later PRs. No completion evidence is claimed — item is intentionally
+      non-terminal.
+    last_verified_commit: null
+
+  - id: AAI-1-CONTRACT-SPINE
+    title: Reuse event-registry + projector-ownership contracts for agentic observations
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: general_availability_blocker
+    customer_impact: Agentic observations map onto already-registered canonical event types and projector ownership, avoiding a divergent contract surface.
+    current_behavior: The bespoke pipeline maps event names to bespoke silver_agent_* tables in-code; canonical *_observed agent events with silverProjection agent_execution_facts already exist in the registry but are not the ingestion path for these routes.
+    required_behavior: The delegation path uses the existing event-registry *_observed types (silverProjection agent_execution_facts) and the AgentExecutionProjector ownership; net-new provider-neutral event types are deferred, not invented here.
+    affected_paths:
+      - packages/shared/contracts/event-registry.json
+      - Backend Architecture/aether-backend/services/silver/projectors/agent_execution_projector.py
+      - Backend Architecture/aether-backend/services/silver/dispatcher.py
+    tests_required: [tests/unit/test_agentic_canonical_spine.py (event-name to agent_execution_facts mapping — planned)]
+    evidence_required: [event-registry agent_execution_facts coverage output]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: ingestion
+    status: implementation_in_progress
+    blocked_by: []
+    exception: >
+      Partial: reuses the existing event-registry and projector-ownership
+      contracts. Net-new provider-neutral event types and any registry additions
+      are deferred to AAI-3-PROVIDER-FRAMEWORK. Non-terminal; no completion
+      evidence claimed.
+    last_verified_commit: null
+
+  - id: AAI-1-OUTBOX-WORKERS
+    title: Reuse the existing event_outbox relay for agentic observation delivery
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: general_availability_blocker
+    customer_impact: Downstream Silver/graph work for agentic observations rides the same replayable relay as the rest of the platform rather than a bespoke worker.
+    current_behavior: Graph projection for agentic observations rides AgenticProjectionOutbox + AgenticGraphOutboxWorker (services/agentic_observability/outbox_worker.py); the platform event_outbox relay is separate.
+    required_behavior: When delegating, agentic observations are relayed by the existing event_outbox relay (services/ingestion/outbox_relay.py, FT-6) and its Silver/graph workers; no net-new relay is built.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/ingestion/outbox_relay.py
+      - Backend Architecture/aether-backend/services/ingestion/workers.py
+      - Backend Architecture/aether-backend/config/settings.py
+    tests_required: [tests/unit/test_outbox_relay.py (existing relay coverage — reused)]
+    evidence_required: [pytest tests/unit/test_outbox_relay.py output]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: platform
+    status: implementation_in_progress
+    blocked_by: [FT-6-OUTBOX-RELAY]
+    exception: >
+      Satisfied by reuse of the existing FT-6 event_outbox relay; no bespoke
+      relay is introduced. Full agentic-plane wiring is only live when the
+      AAI-1-CANONICAL-INGESTION flag is on and OUTBOX_RELAY_ENABLED=true.
+      Non-terminal; no completion evidence claimed.
+    last_verified_commit: null
+
+  # ---- PR 2 — Capability, authority, drift, blast radius (NOT started) -----
+  - id: AAI-2-CAPABILITY-CATALOG
+    title: Agent capability catalog (observed capabilities/permissions inventory)
+    domain: agent-access-intelligence
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: A canonical inventory of what each agent can access and do, derived from observed permission/tool/MCP events.
+    current_behavior: Not implemented. Permission/tool/MCP observations exist as facts but there is no derived capability catalog.
+    required_behavior: A capability catalog projected from agent_execution_facts, keyed by agent/tenant, with provenance back to source observations.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
+    tests_required: [capability catalog projection tests (planned)]
+    evidence_required: [capability catalog projection output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: security
+    status: not_started
+    blocked_by: [AAI-1-CANONICAL-INGESTION]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-2-AUTHORITY-POLICY
+    title: Authority policy model for agent access (authorized vs observed authority)
+    domain: agent-access-intelligence
+    severity: P1
+    release_class: enterprise_ga_blocker
+    customer_impact: Declares the authority each agent is granted so observed behavior can be evaluated against policy.
+    current_behavior: Not implemented. No canonical authority-policy model for agent access.
+    required_behavior: A policy model expressing granted authority per agent/capability with evaluation hooks against the capability catalog.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned), config/agent_authority_policy.yaml (planned)]
+    tests_required: [authority policy evaluation tests (planned)]
+    evidence_required: [authority policy evaluation output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: security
+    status: not_started
+    blocked_by: [AAI-2-CAPABILITY-CATALOG]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-2-SHADOW-DRIFT
+    title: Shadow/drift detection (declared authority vs observed capability drift)
+    domain: agent-access-intelligence
+    severity: P1
+    release_class: enterprise_ga_blocker
+    customer_impact: Surfaces agents whose observed access drifts from their declared/authorized authority.
+    current_behavior: Not implemented. No drift detector between declared authority and observed capability.
+    required_behavior: A detector that diffs the authority policy against the observed capability catalog and emits drift findings.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
+    tests_required: [drift detection tests (planned)]
+    evidence_required: [drift detection output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: security
+    status: not_started
+    blocked_by: [AAI-2-CAPABILITY-CATALOG]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-2-BLAST-RADIUS
+    title: Blast-radius analysis for agent access
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: enterprise_ga_blocker
+    customer_impact: Quantifies the potential impact scope of a given agent/credential from the access graph.
+    current_behavior: Not implemented. No blast-radius computation over agent access.
+    required_behavior: A blast-radius computation over the capability catalog and access graph, bounded per agent/credential.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
+    tests_required: [blast-radius computation tests (planned)]
+    evidence_required: [blast-radius computation output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: security
+    status: not_started
+    blocked_by: [AAI-2-AUTHORITY-POLICY]
+    exception: null
+    last_verified_commit: null
+
+  # ---- PR 3 — Provider framework, evidence, reconciliation, packs ----------
+  - id: AAI-3-PROVIDER-FRAMEWORK
+    title: Provider-neutral integration framework for agent access sources
+    domain: agent-access-intelligence
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: A provider-neutral framework for onboarding agent-access sources without bespoke per-provider ingestion.
+    current_behavior: Not implemented. Provider handling is bespoke; no neutral framework or net-new provider-neutral event types.
+    required_behavior: A provider-neutral framework plus the deferred net-new provider-neutral *_observed event types registered in the event registry.
+    affected_paths: [Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py, packages/shared/contracts/event-registry.json]
+    tests_required: [provider framework conformance tests (planned)]
+    evidence_required: [provider framework conformance output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: ingestion
+    status: not_started
+    blocked_by: [AAI-1-CANONICAL-INGESTION]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-3-PROVIDER-EVIDENCE
+    title: Provider evidence capture and attestation
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: audit_readiness_blocker
+    customer_impact: Captures provider-side evidence/attestations backing each observed agent-access source.
+    current_behavior: Not implemented. No provider-evidence capture layer.
+    required_behavior: An evidence-capture layer producing attestations linked to provider observations and the capability catalog.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
+    tests_required: [provider evidence capture tests (planned)]
+    evidence_required: [provider evidence capture output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: security
+    status: not_started
+    blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-3-RECONCILIATION
+    title: Reconciliation of observed access vs provider source of truth
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: audit_readiness_blocker
+    customer_impact: Detects missing/orphaned/mismatched access between observed events and provider source of truth.
+    current_behavior: Not implemented. No reconciliation across observed access and provider sources.
+    required_behavior: A reconciler comparing observed capability state against provider-reported state with missing/orphan/mismatch findings.
+    affected_paths: [Backend Architecture/aether-backend/services/agentic_observability/reconciliation.py]
+    tests_required: [reconciliation tests (planned)]
+    evidence_required: [reconciliation output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: data
+    status: not_started
+    blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-3-REFERENCE-PACKS
+    title: Reference integration packs for common agent-access providers
+    domain: agent-access-intelligence
+    severity: P3
+    release_class: informational
+    customer_impact: Curated reference packs shorten onboarding for common providers.
+    current_behavior: Not implemented. No reference packs.
+    required_behavior: Curated, versioned reference packs built on the provider framework.
+    affected_paths: [config/agent_access_reference_packs/ (planned)]
+    tests_required: [reference pack validation tests (planned)]
+    evidence_required: [reference pack validation output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: product
+    status: not_started
+    blocked_by: [AAI-3-PROVIDER-FRAMEWORK]
+    exception: null
+    last_verified_commit: null
+
+  # ---- PR 4 — Graph, profiles, surfaces, ops, GA hardening -----------------
+  - id: AAI-4-GRAPH
+    title: Agent access graph
+    domain: agent-access-intelligence
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: A queryable graph of agents, capabilities, resources, and access relationships.
+    current_behavior: Not implemented as a dedicated access graph; graph edges are projected generically by SilverGraphProjector.
+    required_behavior: A dedicated agent-access graph projection and query surface built on canonical projections.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
+    tests_required: [access graph projection tests (planned)]
+    evidence_required: [access graph projection output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: graph
+    status: not_started
+    blocked_by: [AAI-1-CANONICAL-INGESTION]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-4-PROFILES-JOURNEYS
+    title: Agent profiles and access journeys
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: general_availability_blocker
+    customer_impact: Per-agent profiles and access journeys built on the access graph.
+    current_behavior: Not implemented. No agent-access profiles/journeys surface.
+    required_behavior: Profile and journey compilation over the agent-access graph.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
+    tests_required: [profile/journey compilation tests (planned)]
+    evidence_required: [profile/journey compilation output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: product
+    status: not_started
+    blocked_by: [AAI-4-GRAPH]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-4-AETHER-UI
+    title: Aether tenant UI surfaces for agent access intelligence
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: general_availability_blocker
+    customer_impact: Tenant-facing UI to explore agent access, capabilities, drift, and blast radius.
+    current_behavior: Not implemented. No Aether UI surfaces for agent access intelligence.
+    required_behavior: Aether tenant UI surfaces consuming the profiles/journeys and graph APIs.
+    affected_paths: [frontend/aether/ (planned)]
+    tests_required: [Aether UI surface tests (planned)]
+    evidence_required: [Aether UI surface build/output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: frontend
+    status: not_started
+    blocked_by: [AAI-4-PROFILES-JOURNEYS]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-4-KYBER-OPS
+    title: Kyber operator surfaces for agent access intelligence
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: enterprise_ga_blocker
+    customer_impact: Operator surfaces to review agent access, authority drift, and blast radius across tenants.
+    current_behavior: Not implemented. Kyber agentic-observability admin views exist but not the access-intelligence operator surfaces.
+    required_behavior: Kyber operator surfaces (operator-gated) for authority, drift, and blast-radius review.
+    affected_paths: [Backend Architecture/aether-backend/services/agentic_observability/routes.py, frontend/kyber/ (planned)]
+    tests_required: [Kyber operator surface tests (planned)]
+    evidence_required: [Kyber operator surface output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: ops
+    status: not_started
+    blocked_by: [AAI-2-AUTHORITY-POLICY]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-4-NOESIS-ALERTS-EXPORTS
+    title: Noesis alerts and exports for agent access intelligence
+    domain: agent-access-intelligence
+    severity: P2
+    release_class: general_availability_blocker
+    customer_impact: Alerting on drift/blast-radius findings and export of access-intelligence datasets.
+    current_behavior: Not implemented. No Noesis alerts/exports wired for agent access intelligence.
+    required_behavior: Noesis alert rules and export jobs over drift and blast-radius findings.
+    affected_paths: [Backend Architecture/aether-backend/services/noesis/ (planned)]
+    tests_required: [Noesis alert/export tests (planned)]
+    evidence_required: [Noesis alert/export output (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: product
+    status: not_started
+    blocked_by: [AAI-2-SHADOW-DRIFT, AAI-2-BLAST-RADIUS]
+    exception: null
+    last_verified_commit: null
+
+  - id: AAI-4-GA-HARDENING
+    title: GA hardening for agent access intelligence
+    domain: agent-access-intelligence
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: Final GA hardening — performance, quotas, docs, and evidence bundle for the access-intelligence surfaces.
+    current_behavior: Not implemented. GA hardening not started.
+    required_behavior: Performance/quota hardening, complete docs, and an evidence bundle across the AAI surfaces.
+    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
+    tests_required: [GA hardening suites (planned)]
+    evidence_required: [AAI evidence bundle (planned)]
+    docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
+    owner: platform
+    status: not_started
+    blocked_by: [AAI-4-AETHER-UI, AAI-4-KYBER-OPS, AAI-4-NOESIS-ALERTS-EXPORTS, AAI-3-RECONCILIATION]
+    exception: null
+    last_verified_commit: null
