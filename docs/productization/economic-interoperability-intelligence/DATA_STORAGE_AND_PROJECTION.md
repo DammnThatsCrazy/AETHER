@@ -39,6 +39,18 @@ The card-linked payment rail slice adds `CardLinkedProjector`
 observes card-context SDK events after every canonical projector has run
 and is never the canonical-activity owner for an event.
 
+`_ALL_PROJECTORS` is not the whole of what the dispatcher does per
+result. After each successful projection it also fires **out-of-band,
+fire-and-forget hooks** via `asyncio.create_task`: `SilverGraphProjector.
+maybe_emit` (graph mutations) and `CapabilityCatalogService.maybe_record`
+(the agent-access capability inventory). These are deliberately **not**
+projectors — they are absent from `_ALL_PROJECTORS` and from the
+projector-ownership registry, never own canonical activity, and swallow
+their own errors so they can neither block nor fail a Silver write. The
+trade-off is explicit: a dropped task is a missed derived-read-model
+update, never a lost fact. Silver remains the system of record, and a
+derived read-model is rebuildable from it.
+
 ## Gold
 
 ClickHouse `ReplacingMergeTree` DDL modules:
