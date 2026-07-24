@@ -4,9 +4,12 @@
 **Scope:** PR 2 — capability catalog, software identity, authority/policy, and runtime
 governance for observed external agent access (monoprompt §9). Branches from PR 1's merged
 `main`.
-**Status:** partial / in progress. Landing incrementally as multiple commits on one branch
-(the full PR merges once, at the end). Ledger items `AAI-2-*`. No completion evidence is
-claimed for un-shipped phases.
+**Status:** Phases A, B1, B2 and C are implemented and land as **multiple commits on one
+branch**, merging once. Phase A merged in #485; B1, B2 and C are on
+`claude/new-session-wqo13a`. Ledger items `AAI-2-*` — each remains
+`implementation_in_progress` with an explicit exception rather than a terminal status,
+because `make ci-check` green is not the same as production evidence and
+`scripts/production_status.py` is the only thing that may say otherwise.
 
 This document is the source of truth for **how observed agent access is turned into a
 tenant-scoped capability inventory, and how authority/policy/governance extend the existing
@@ -171,18 +174,18 @@ Money/quantity fields (Phases B/C exposure/notional) are decimal strings via
   `services/policy/engine.py`, `services/consent/authority.py`) — **not** a second engine.
   §9.3 artifact/publisher identity + §9.4 tool-schema scanning + §9.5 declared-vs-observed drift.
   B1 (authority + `capability.invoke` policy) is shipped; B2 is not.
-- **Phase C — `AAI-2-SHADOW-DRIFT`, `AAI-2-BLAST-RADIUS`:** shadow detection, drift findings,
-  and bounded blast-radius (preserving `unknown`/`missing_inputs`, never reporting unknown
-  exposure as zero).
+- **Phase C — `AAI-2-SHADOW-DRIFT`, `AAI-2-BLAST-RADIUS`:** drift findings and bounded
+  blast-radius (preserving `unknown`/`missing_inputs`, never reporting unknown exposure as
+  zero). Shipped — see §6b.
 
 ---
 
 ## 6a. Phase B build contract — `AAI-2-AUTHORITY-POLICY`
 
-**B1 is shipped** (`services/agent_access_intelligence/authority.py`,
-`authority_routes.py`, `services/security/policy_engine.py::check_capability_invocation`).
-**B2 is not started**; the B2 subsection below remains a contract, not a description of
-shipped code.
+**B1 and B2 are both shipped.** B1: `authority.py`, `authority_routes.py`,
+`policy_engine.py::check_capability_invocation`. B2: `identity.py`, `declarations.py`,
+`declaration_routes.py`, `scanning.py`, migration `20260806_capability_declarations`.
+The B2 subsection below now describes shipped code; §6b covers Phase C.
 
 Phase B lands as **two commits on the same branch**: **B1 authority + capability-aware policy
 decisions** (§9.6/§9.7), then **B2 artifact/publisher identity + tool-schema scanning + the
@@ -324,9 +327,61 @@ out as a deliberate behavioral change rather than buried.
   loopback host reusing `policy_engine._is_unsafe_destination`, injection-shaped tool names
   reusing `services/noesis/models.py::INJECTION_PATTERNS`) producing findings — **no new severity
   enum**; it reuses `services/agentic_observability/models.py::RiskLevel`.
-- **§9.5 declared-vs-observed drift.** Requires the declared side, which does not exist today.
-  B2 adds it; the drift **findings surface** (`/v1/capability-risk/findings`) belongs to Phase C
-  alongside shadow detection and blast radius, so the two halves of one report ship together.
+- **§9.5 declared-vs-observed drift.** B2 adds the declared side
+  (`capability_declarations`); the drift **findings surface** is Phase C, §6b.
+
+### B2 as built — three corrections worth recording
+
+The digest and the declared row must be comparable, and two defects made them not be:
+
+1. `_identity_tuple` originally stringified enum members naively. For
+   `CapabilityKind(str, Enum)`, `str(member)` is `"CapabilityKind.MCP_TOOL"` while the
+   stored row (`model_dump(mode="json")`) and every declaration hold `"mcp_tool"`. The
+   digest written at upsert therefore disagreed with one recomputed from the row's own
+   stored fields, and no declaration could ever match — Phase C would have reported the
+   entire declared inventory as `drifted`. Enum values are unwrapped before stringifying.
+2. `catalog_service._sanitize_server_url` leaked credentials for schemeless URLs.
+   `urlsplit` treats everything before the first `:` as a scheme even with no `://`
+   following, so `user:pass@mcp.example.com/v1` parsed as `scheme="user"` with an **empty**
+   netloc: the userinfo strip found nothing and the credential was persisted verbatim into
+   a durable, operator-readable catalog row. Schemeless input is now parsed under a
+   synthetic authority so the same stripping and query redaction run for both shapes;
+   opaque server names and `host:port` values are unchanged.
+3. `INSECURE_TRANSPORT` fired on `wss://`. MCP servers are commonly reached over WebSocket
+   and `wss` **is** TLS, so `_TLS_SCHEMES` is `{https, wss}`; `ws` and `http` stay out.
+
+Identity is computed from the **merged** record (new observation falling back to the stored
+row), not the incoming fact alone — otherwise a later observation that simply omits
+`protocol_version` changes the digest and manufactures drift that nothing actually drifted.
+The identity tuple is explicitly enumerated rather than derived from the record dict, so
+adding an unrelated field (`observation_count`, `last_seen_at`) cannot invalidate every
+stored digest at once.
+
+## 6b. Phase C build record — `AAI-2-SHADOW-DRIFT`, `AAI-2-BLAST-RADIUS`
+
+`risk_service.py` + `risk_routes.py`, prefix `/v1/capability-risk`, both routes
+`require_permission("read")`. No new table, no migration, no event type — Phase C reads the
+stores A/B1/B2 already own.
+
+**`GET /findings`** merges scan findings with identity drift.
+`observed_only` is deliberately **not** a finding: an undeclared capability is the normal
+state in a system whose entire premise is observing things nobody declared, and reporting
+it as a finding would make the surface useless on day one. It is carried in the counts.
+
+**`GET /blast-radius`** — the honesty rule, which is the whole point of the endpoint:
+
+| condition | response |
+|---|---|
+| any required input absent | **every** count `null`, `exposure_known: false`, `missing_inputs` names each absent input, `summary` states exposure is unknown |
+| all inputs present | real counts, including a genuine `0` where zero was actually computed |
+
+Partial totals are never emitted — a partial number reads as a complete one. Authorization
+uses `capability_authority_service.resolve()` per (agent, capability) pair rather than
+listing grants, because a list-and-match would miss server-wide `capability-server:` grants.
+Past 200 pairs the split is reported as `null` with an explicit
+`capability_authorizations:check_truncated` marker rather than a guessed number. A test
+walks the entire response recursively and fails on any zero-valued number (bools excluded,
+since `False == 0`), so a future field cannot reintroduce the lie.
 
 ---
 

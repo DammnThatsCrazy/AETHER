@@ -558,19 +558,24 @@ items:
       - "tests/unit/capability_catalog/test_capability_authority_dsr.py"
       - "tests/unit/capability_catalog/test_capability_authority_routes.py"
       - "tests/unit/capability_catalog/test_capability_policy.py"
-    evidence_required: ["pytest tests/unit/capability_catalog/ -> 63 passed"]
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 164 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
     status: implementation_in_progress
     blocked_by: [AAI-2-CAPABILITY-CATALOG]
     exception: >
-      Partial (Phase B1): capability authorizations stored as delegation rows
-      (no sixth grant concept, no migration) with grant/list/get/revoke routes,
-      plus a capability.invoke policy on the existing PolicyEngine and a
-      delegations DSR erasure step. No declarative config/agent_authority_policy.yaml
-      exists — authority is per-tenant row state, not static config.
-      Phase B2 (declared artifact/publisher identity, tool-schema scanning) and
-      drift/blast-radius are not started. Non-terminal; no completion evidence claimed.
+      Phases B1 and B2 implemented. B1: capability authorizations stored as
+      delegation rows (no sixth grant concept, no migration) with
+      grant/list/get/revoke routes, a capability.invoke policy on the existing
+      PolicyEngine, and a delegations DSR erasure step. B2: artifact/publisher
+      identity plus a declared-capability record and pure-function tool/schema
+      scanning. No declarative config/agent_authority_policy.yaml exists —
+      authority is per-tenant row state, not static config. There is
+      deliberately NO verified publisher state: nothing in the backend can
+      cryptographically verify a third-party artifact, so publisher_ref is a
+      grouping key for a claimed origin and artifact_digest detects change, not
+      provenance. Non-terminal; ci-check green is not production evidence and no
+      completion evidence is claimed.
     last_verified_commit: null
 
   - id: AAI-2-SHADOW-DRIFT
@@ -581,14 +586,30 @@ items:
     customer_impact: Surfaces agents whose observed access drifts from their declared/authorized authority.
     current_behavior: Not implemented. No drift detector between declared authority and observed capability.
     required_behavior: A detector that diffs the authority policy against the observed capability catalog and emits drift findings.
-    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
-    tests_required: [drift detection tests (planned)]
-    evidence_required: [drift detection output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/identity.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/declarations.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/scanning.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_service.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_routes.py"
+    tests_required:
+      - "tests/unit/capability_catalog/test_capability_identity.py"
+      - "tests/unit/capability_catalog/test_capability_scanning.py"
+      - "tests/unit/capability_catalog/test_capability_risk.py"
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 164 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-2-CAPABILITY-CATALOG]
-    exception: null
+    exception: >
+      Implemented: declared-vs-observed identity drift via artifact_digest, and
+      GET /v1/capability-risk/findings merging scan findings with drift.
+      observed_only is deliberately not a finding — an undeclared capability is
+      the normal state in a system whose premise is observing undeclared things —
+      so "shadow" is reported as a count, not an alert. Scanning is pure (no DNS)
+      and reuses the existing unsafe-IP/blocked-host primitives and injection
+      vocabulary rather than adding a second severity model. Non-terminal; no
+      completion evidence claimed.
     last_verified_commit: null
 
   - id: AAI-2-BLAST-RADIUS
@@ -599,14 +620,26 @@ items:
     customer_impact: Quantifies the potential impact scope of a given agent/credential from the access graph.
     current_behavior: Not implemented. No blast-radius computation over agent access.
     required_behavior: A blast-radius computation over the capability catalog and access graph, bounded per agent/credential.
-    affected_paths: [Backend Architecture/aether-backend/services/agent_access_intelligence/ (planned)]
-    tests_required: [blast-radius computation tests (planned)]
-    evidence_required: [blast-radius computation output (planned)]
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_service.py"
+      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_routes.py"
+    tests_required: ["tests/unit/capability_catalog/test_capability_risk.py"]
+    evidence_required: ["pytest tests/unit/capability_catalog/ -> 164 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md]
     owner: security
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [AAI-2-AUTHORITY-POLICY]
-    exception: null
+    exception: >
+      Implemented: GET /v1/capability-risk/blast-radius, bounded per agent or
+      capability, derived from observed installations/catalog plus resolved
+      authorizations. Unknown exposure is never reported as zero — if any
+      required input is absent every count is null with exposure_known=false and
+      a missing_inputs list, and partial totals are not emitted because a partial
+      number reads as a complete one. Beyond 200 (agent, capability) pairs the
+      authorization split is reported as null with an explicit truncation marker
+      rather than a guessed number. Basis is observed_only; there is no
+      inventory source beyond observation. Non-terminal; no completion evidence
+      claimed.
     last_verified_commit: null
 
   # ---- PR 3 — Provider framework, evidence, reconciliation, packs ----------
