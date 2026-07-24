@@ -37,6 +37,27 @@ describe('TrafficSourceTracker referral evidence', () => {
 
     expect(afterNavigation.referralToken).toBe('first-token');
     expect(afterNavigation.landingPage).toBe(first.landingPage);
-    expect(afterNavigation.landingPage).toContain('/first?aether_ref=first-token');
+    // First-touch landing page is retained, but the sanitized URL never
+    // carries aether_ref — the typed referralToken field is the only carrier.
+    expect(afterNavigation.landingPage).toContain('/first');
+    expect(afterNavigation.landingPage).not.toContain('aether_ref');
+  });
+
+  it('strips aether_ref and other sensitive params from the transmitted landing page', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/landing?utm_source=partner&aether_ref=secret-token&gclid=click-1#access_token=abc',
+    );
+
+    const detected = new TrafficSourceTracker().detect();
+
+    expect(detected.referralToken).toBe('secret-token');
+    expect(detected.clickIds).toMatchObject({ gclid: 'click-1' });
+    expect(detected.landingPage).toContain('utm_source=partner');
+    expect(detected.landingPage).not.toContain('aether_ref');
+    expect(detected.landingPage).not.toContain('secret-token');
+    expect(detected.landingPage).not.toContain('gclid');
+    expect(detected.landingPage).not.toContain('access_token');
   });
 });
