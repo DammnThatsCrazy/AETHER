@@ -7,9 +7,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { SemanticReviewQueuePage } from '@kyber/pages/semantic';
 import type { KyberRole } from '@kyber/types';
 
-// The rest client builds relative URLs in mocked mode, which Node's fetch cannot
-// resolve — pin the runtime to local-live so requests hit the absolute base URL
-// that the MSW server intercepts. (vi.hoisted: the vi.mock factories below are
+// Pin the runtime to the explicit live local environment so requests hit the
+// absolute base URL that the MSW server intercepts. (vi.hoisted: the vi.mock factories below are
 // hoisted above ordinary top-level consts.)
 const API = vi.hoisted(() => 'http://localhost:8000');
 
@@ -17,8 +16,8 @@ vi.mock('@kyber/lib/env', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@kyber/lib/env')>();
   return {
     ...actual,
-    env: { ...actual.env, VITE_KYBER_ENV: 'local-live' as const, VITE_API_BASE_URL: API },
-    getEnvironment: () => 'local-live' as const,
+    env: { ...actual.env, VITE_KYBER_ENV: 'local' as const, VITE_API_BASE_URL: API },
+    getEnvironment: () => 'local' as const,
     getRuntimeMode: () => 'live' as const,
   };
 });

@@ -1,10 +1,29 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { AuthProvider, useAuth } from '@aether-app/features/auth';
+import {
+  AuthProvider,
+  SESSION_EXPIRY_KEY,
+  SESSION_KEY,
+  SESSION_TOKEN_KEY,
+  useAuth,
+} from '@aether-app/features/auth';
 import { ThemeProvider } from '@aether/ui';
+import { api } from '@aether-app/lib/api/endpoints';
 
-// In local-mocked mode (default when VITE_AETHER_ENV is unset), AuthProvider
-// auto-dispatches MOCK_LOGIN with the dev user in its useEffect.
+vi.mock('@aether-app/lib/api/endpoints', () => ({
+  api: { me: { profile: vi.fn() } },
+}));
+
+const profileMock = vi.mocked(api.me.profile);
+const BACKEND_PROFILE = {
+  tenant_id: 'tenant-from-backend',
+  name: 'Verified Tenant',
+  contact_email: 'verified@tenant.example',
+  plan: { plan_id: 'P1', display_name: 'Hobbyist', monthly_quota: 1000, burst_rpm: 10 },
+  billing: {},
+  api_key_count: 1,
+  is_admin: true,
+};
 
 function TestConsumer() {
   const { isAuthenticated, user, isLoading } = useAuth();
@@ -28,28 +47,75 @@ function renderWithProviders(ui: React.ReactElement) {
   );
 }
 
-describe('Auth boot flow (local-mocked)', () => {
-  it('auto-authenticates the dev user', async () => {
+describe('Auth boot flow (test environment)', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    profileMock.mockReset();
+  });
+
+  it('does not authenticate without a backend-issued credential', async () => {
     renderWithProviders(<TestConsumer />);
     const status = await screen.findByTestId('auth-status');
-    expect(status.textContent).toBe('authenticated');
+    expect(status.textContent).toBe('unauthenticated');
   });
 
-  it('surfaces the mock dev user identity', async () => {
+  it('does not synthesize a user identity', async () => {
     renderWithProviders(<TestConsumer />);
-    const email = await screen.findByTestId('user-email');
-    expect(email.textContent).toBe('dev@aether.local');
-  });
-
-  it('displays the mock display name', async () => {
-    renderWithProviders(<TestConsumer />);
-    const name = await screen.findByTestId('user-name');
-    expect(name.textContent).toBe('Dev User');
+    await screen.findByText('unauthenticated');
+    expect(screen.queryByTestId('user-email')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('user-name')).not.toBeInTheDocument();
   });
 
   it('transitions out of loading state', async () => {
     renderWithProviders(<TestConsumer />);
     const loading = await screen.findByTestId('loading');
     expect(loading.textContent).toBe('ready');
+  });
+
+  it('validates a stored session with the backend and uses only backend identity', async () => {
+    sessionStorage.setItem(SESSION_TOKEN_KEY, 'sess_real_backend_token');
+    sessionStorage.setItem(
+      SESSION_EXPIRY_KEY,
+      new Date(Date.now() + 60 * 60_000).toISOString(),
+    );
+    profileMock.mockResolvedValue(BACKEND_PROFILE);
+
+    renderWithProviders(<TestConsumer />);
+
+    expect(await screen.findByText('authenticated')).toBeInTheDocument();
+    expect(screen.getByTestId('user-email')).toHaveTextContent('verified@tenant.example');
+    expect(screen.getByTestId('user-name')).toHaveTextContent('Verified Tenant');
+    expect(profileMock).toHaveBeenCalledOnce();
+  });
+
+  it('validates a stored API key before granting access', async () => {
+    sessionStorage.setItem(SESSION_KEY, 'ak_real_backend_key');
+    profileMock.mockResolvedValue(BACKEND_PROFILE);
+
+    renderWithProviders(<TestConsumer />);
+
+    expect(await screen.findByText('authenticated')).toBeInTheDocument();
+    expect(profileMock).toHaveBeenCalledOnce();
+  });
+
+  it('rejects and clears a stored credential when backend validation fails', async () => {
+    sessionStorage.setItem(SESSION_KEY, 'ak_revoked_backend_key');
+    profileMock.mockRejectedValue(new Error('Unauthorized'));
+
+    renderWithProviders(<TestConsumer />);
+
+    expect(await screen.findByText('unauthenticated')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-email')).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
+  });
+
+  it('does not restore a session token without a valid absolute expiry', async () => {
+    sessionStorage.setItem(SESSION_TOKEN_KEY, 'sess_missing_expiry');
+
+    renderWithProviders(<TestConsumer />);
+
+    expect(await screen.findByText('unauthenticated')).toBeInTheDocument();
+    expect(sessionStorage.getItem(SESSION_TOKEN_KEY)).toBeNull();
+    expect(profileMock).not.toHaveBeenCalled();
   });
 });

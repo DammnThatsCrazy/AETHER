@@ -2,34 +2,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ApprovalQueue } from '@kyber/components/commerce/approval-queue';
 import { LifecycleTraceView } from '@kyber/components/commerce/lifecycle-trace-view';
-import { fixtureLifecycleTrace } from '@kyber/fixtures/commerce';
-
-// Force mocked mode for all tests
-vi.mock('@kyber/lib/env', async () => {
-  const actual = await vi.importActual<typeof import('@kyber/lib/env')>('@kyber/lib/env');
-  return {
-    ...actual,
-    isLocalMocked: () => true,
-    getRuntimeMode: () => 'mocked',
-  };
-});
+import { approvalsApi } from '@kyber/lib/api/commerce';
+import { fixtureApprovalQueue, fixtureLifecycleTrace } from '../fixtures/commerce';
 
 describe('ApprovalQueue', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.spyOn(approvalsApi, 'list').mockImplementation(async (filters) => {
+      const status = filters?.status;
+      return status
+        ? fixtureApprovalQueue.filter((approval) => approval.status === status)
+        : fixtureApprovalQueue;
+    });
   });
 
-  it('renders queue in mocked mode', async () => {
+  it('renders the API-backed queue', async () => {
     render(
       <ApprovalQueue canApprove={false} currentUserId="user_test" />
     );
     await waitFor(() => {
       expect(screen.getByText(/APPROVAL QUEUE/)).toBeInTheDocument();
     });
-    expect(screen.getByText(/MOCKED/)).toBeInTheDocument();
+    expect(approvalsApi.list).toHaveBeenCalledWith(undefined);
   });
 
-  it('shows both critical and normal approvals from fixtures', async () => {
+  it('shows both critical and normal approvals returned by the API', async () => {
     render(
       <ApprovalQueue canApprove={false} currentUserId="user_test" />
     );
@@ -90,9 +87,9 @@ describe('ApprovalQueue', () => {
       <ApprovalQueue canApprove={false} currentUserId="user_test" statusFilter="approved" />
     );
     await waitFor(() => {
-      // No fixtures match 'approved' status in the queue (both are pending)
       expect(screen.getByText(/no approvals in queue/)).toBeInTheDocument();
     });
+    expect(approvalsApi.list).toHaveBeenCalledWith({ status: 'approved' });
   });
 });
 

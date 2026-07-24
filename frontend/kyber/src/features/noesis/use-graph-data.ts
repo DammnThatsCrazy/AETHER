@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import type { GraphNode, GraphEdge, GraphCluster, GraphLayer, GraphOverlay, EntityType } from '@kyber/types';
-import { isLocalMocked } from '@kyber/lib/env';
-import { getMockGraphData } from '@kyber/fixtures/graph';
 import { api } from '@kyber/lib/api/endpoints';
 
 interface GraphqlNode {
@@ -103,16 +101,6 @@ export function useGraphData() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLocalMocked()) {
-      const data = getMockGraphData();
-      setNodes(data.nodes);
-      setEdges(data.edges);
-      setClusters(data.clusters);
-      setIsLoading(false);
-      return;
-    }
-
-    // Live mode: fetch graph via GraphQL
     setIsLoading(true);
     setError(null);
 
@@ -149,6 +137,7 @@ export function useGraphData() {
     edges: filteredEdges,
     clusters,
     isLoading,
+    error,
     activeLayer,
     setActiveLayer,
     activeOverlay,

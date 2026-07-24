@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { WebSocketClient, type WebSocketStatus } from '@kyber/lib/api';
-import { getRuntimeMode } from '@kyber/lib/env';
 
 interface UseWebSocketOptions {
   readonly path: string;
@@ -15,7 +14,7 @@ export function useWebSocket({ path, onMessage, enabled = true }: UseWebSocketOp
   onMessageRef.current = onMessage;
 
   useEffect(() => {
-    if (!enabled || getRuntimeMode() === 'mocked') return;
+    if (!enabled || false) return;
 
     const client = new WebSocketClient({
       path,

@@ -1,20 +1,16 @@
 import { createContext, useContext, useCallback, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import type { AuthState, KyberUser, KyberRole, AuthTokens } from '@kyber/types';
-import { isMockAuthAllowed, isLocalMocked } from '@kyber/lib/env';
-import { MOCK_USERS } from '@kyber/fixtures/auth';
 
 interface AuthContextValue extends AuthState {
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  switchMockUser: (role: KyberRole) => void;
 }
 
 type AuthAction =
   | { type: 'AUTH_START' }
   | { type: 'AUTH_SUCCESS'; user: KyberUser; tokens: AuthTokens }
   | { type: 'AUTH_FAILURE'; error: string | null }
-  | { type: 'AUTH_LOGOUT' }
-  | { type: 'MOCK_LOGIN'; user: KyberUser };
+  | { type: 'AUTH_LOGOUT' };
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
@@ -26,8 +22,6 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       return { isAuthenticated: false, user: null, isLoading: false, error: action.error };
     case 'AUTH_LOGOUT':
       return { isAuthenticated: false, user: null, isLoading: false, error: null };
-    case 'MOCK_LOGIN':
-      return { isAuthenticated: true, user: action.user, isLoading: false, error: null };
   }
 }
 
@@ -133,13 +127,6 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Auto-login in local mocked mode
-    if (isLocalMocked()) {
-      const defaultUser = MOCK_USERS.kyber_engineering_command;
-      dispatch({ type: 'MOCK_LOGIN', user: defaultUser });
-      return;
-    }
-
     // Check for OIDC callback
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
@@ -199,12 +186,6 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }
 
   const login = useCallback(async () => {
-    if (isMockAuthAllowed() && !currentTokens) {
-      const defaultUser = MOCK_USERS.kyber_engineering_command;
-      dispatch({ type: 'MOCK_LOGIN', user: defaultUser });
-      return;
-    }
-
     dispatch({ type: 'AUTH_START' });
 
     const { env } = await import('@kyber/lib/env');
@@ -238,23 +219,14 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
     dispatch({ type: 'AUTH_LOGOUT' });
 
-    if (!isMockAuthAllowed()) {
-      const { env } = await import('@kyber/lib/env');
-      if (env.VITE_OIDC_AUTHORITY) {
-        window.location.href = `${env.VITE_OIDC_AUTHORITY}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
-        return;
-      }
+    const { env } = await import('@kyber/lib/env');
+    if (env.VITE_OIDC_AUTHORITY) {
+      window.location.href = `${env.VITE_OIDC_AUTHORITY}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
     }
   }, []);
 
-  const switchMockUser = useCallback((role: KyberRole) => {
-    if (!isMockAuthAllowed()) return;
-    const user = MOCK_USERS[role];
-    dispatch({ type: 'MOCK_LOGIN', user });
-  }, []);
-
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, switchMockUser }}>
+    <AuthContext.Provider value={{ ...state, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

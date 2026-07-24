@@ -108,15 +108,14 @@ export function SignupPage() {
     setOtpError(null);
     try {
       const response = await api.auth.verifyEmail(email.trim(), otp);
-      const verifiedName = response.name;
       const grant = resolveAuthGrant(response);
       if (grant.kind === 'session') {
         // Trust-plane posture: a durable session was started — there is no
         // reusable API key to reveal, so skip the key-reveal step entirely.
-        sessionLogin(grant.session, email.trim(), verifiedName || name.trim());
+        await sessionLogin(grant.session);
         setStep(3);
       } else {
-        apiKeyLogin(grant.apiKey, email.trim(), verifiedName || name.trim());
+        await apiKeyLogin(grant.apiKey);
         setRevealedKey(grant.apiKey);
         setStep(2 as Step);
         // Keep on step 2 to show key reveal; advance to 3 after user saves key
@@ -203,7 +202,7 @@ export function SignupPage() {
                     minLength={2}
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    placeholder="Alex Reeves"
+                    placeholder="Your full name"
                     className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
                   />
                 </div>

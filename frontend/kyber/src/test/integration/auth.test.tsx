@@ -5,15 +5,14 @@ import { AuthProvider, useAuth } from '@kyber/features/auth';
 import { ThemeProvider } from '@aether/ui';
 import { NotificationProvider } from '@kyber/features/notifications';
 
-// In local-mocked mode (default VITE_KYBER_ENV), mock auth auto-logs in
-
 function TestConsumer() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, login } = useAuth();
   return (
     <div>
       <span data-testid="auth-status">{isAuthenticated ? 'authenticated' : 'unauthenticated'}</span>
       {user && <span data-testid="user-role">{user.role}</span>}
       {user && <span data-testid="user-name">{user.displayName}</span>}
+      <button type="button" onClick={() => void login()}>Log in</button>
     </div>
   );
 }
@@ -31,16 +30,16 @@ function renderWithProviders(ui: React.ReactElement) {
 }
 
 describe('Auth boot flow', () => {
-  it('auto-authenticates in local-mocked mode', async () => {
+  it('does not auto-authenticate in the explicit test environment', async () => {
     renderWithProviders(<TestConsumer />);
-    // In local-mocked mode, auto-login happens in useEffect
     const status = await screen.findByTestId('auth-status');
-    expect(status.textContent).toBe('authenticated');
+    expect(status.textContent).toBe('unauthenticated');
   });
 
-  it('assigns engineering command role by default in mock mode', async () => {
+  it('fails closed when OIDC is not configured', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<TestConsumer />);
-    const role = await screen.findByTestId('user-role');
-    expect(role.textContent).toBe('kyber_engineering_command');
+    await user.click(screen.getByRole('button', { name: 'Log in' }));
+    expect(await screen.findByTestId('auth-status')).toHaveTextContent('unauthenticated');
   });
 });

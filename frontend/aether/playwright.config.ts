@@ -22,10 +22,9 @@ export default defineConfig({
     port: 5175,
     reuseExistingServer: !process.env.CI,
     env: {
-      // Disable local-mocked auth so unauthenticated routes redirect to /login
-      // rather than auto-logging in the mock user. Required for E2E tests to
-      // reach /signup and /login pages.
-      VITE_AETHER_ENV: 'staging',
+      VITE_AETHER_ENV: 'test',
+      VITE_API_BASE_URL: 'http://localhost:8000',
+      VITE_AETHER_ENDPOINT: 'http://localhost:8000',
     },
   },
 });

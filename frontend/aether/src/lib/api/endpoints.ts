@@ -1372,10 +1372,11 @@ export const api = {
     /** Authenticated tenant profile, plan, and billing. */
     profile: () =>
       restClient.get('/v1/me', wrap(unknownSchema)).then(r => r.data as {
+        tenant_id: string;
         name: string;
-        email: string;
+        contact_email: string;
         plan: { plan_id: string; display_name: string; monthly_quota: number; burst_rpm: number };
-        billing: { subscription_status: string; current_period_end: string | null };
+        billing: { subscription_status?: string; current_period_end?: string | null };
         api_key_count: number;
         is_admin: boolean;
       }),

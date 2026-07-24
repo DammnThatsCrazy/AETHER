@@ -16,6 +16,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    env: {
+      VITE_AETHER_ENV: 'test',
+      VITE_API_BASE_URL: 'http://localhost:8000',
+      VITE_AETHER_ENDPOINT: 'http://localhost:8000',
+    },
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     coverage: {

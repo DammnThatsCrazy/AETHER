@@ -98,7 +98,7 @@ export function ControllerCard({ controller, displayMode, className }: Controlle
           </Badge>
         )}
         <span className="text-[10px] text-text-muted font-mono ml-auto" title={`Uptime: ${uptime}`}>
-          {formatRelative(lastActivity, timeCtx, now)}
+          {lastActivity ? formatRelative(lastActivity, timeCtx, now) : 'activity unavailable'}
         </span>
       </CardFooter>
     </Card>

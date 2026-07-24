@@ -42,3 +42,11 @@ def test_shared_pkg_build_step_present_in_source() -> None:
         "repo_doctor must build packages/shared before typecheck to ensure "
         "dist/ is present when repo-consistency CI runs typecheck"
     )
+
+
+def test_frontend_data_truth_source_and_bundle_gates_present() -> None:
+    import inspect
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_frontend_data_truth.py"]' in source
+    assert 'scripts/validate_frontend_data_truth.py", "--build-bundles"]' in source

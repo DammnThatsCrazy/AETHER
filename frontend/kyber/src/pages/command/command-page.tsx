@@ -56,7 +56,7 @@ function buildTimelineFeed(
   charStatus: CHARStatus,
   displayMode: ControllerDisplayMode,
 ): TimelineEntry[] {
-  const controllerEntries: TimelineEntry[] = controllers.map((c) => {
+  const controllerEntries: TimelineEntry[] = controllers.filter((c) => c.lastActivity).map((c) => {
     const name =
       displayMode === 'functional'
         ? CONTROLLER_FUNCTIONAL_NAMES[c.name]
@@ -71,20 +71,22 @@ function buildTimelineFeed(
     };
   });
 
-  const charEntries: TimelineEntry[] = [
-    {
-      id: 'char-brief',
-      timestamp: charStatus.lastBriefAt,
-      label: `CHAR brief issued — ${charStatus.coordinationState} state`,
-      type: 'char' as const,
-    },
-    ...charStatus.escalations.map((esc, i) => ({
-      id: `char-esc-${i}`,
-      timestamp: charStatus.lastBriefAt,
-      label: esc,
-      type: 'char' as const,
-    })),
-  ];
+  const charEntries: TimelineEntry[] = charStatus.lastBriefAt
+    ? [
+        {
+          id: 'char-brief',
+          timestamp: charStatus.lastBriefAt,
+          label: `CHAR brief issued — ${charStatus.coordinationState} state`,
+          type: 'char' as const,
+        },
+        ...charStatus.escalations.map((esc, i) => ({
+          id: `char-esc-${i}`,
+          timestamp: charStatus.lastBriefAt,
+          label: esc,
+          type: 'char' as const,
+        })),
+      ]
+    : [];
 
   return [...controllerEntries, ...charEntries].sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
@@ -96,7 +98,7 @@ function buildTimelineFeed(
 // ---------------------------------------------------------------------------
 
 export function CommandPage() {
-  const { controllers, objectives, schedules, charStatus, displayMode, setDisplayMode, isLoading } = useCommandData();
+  const { controllers, objectives, schedules, charStatus, displayMode, setDisplayMode, isLoading, error } = useCommandData();
 
   // Derived data
   const blockedObjectives = useMemo(
@@ -119,10 +121,18 @@ export function CommandPage() {
     [controllers, charStatus, displayMode],
   );
 
-  if (isLoading || !charStatus) {
+  if (isLoading) {
     return (
       <PageWrapper title="Command" subtitle="Controller orchestration overview">
         <div className="text-xs text-neutral-500 font-mono animate-pulse">Loading command data...</div>
+      </PageWrapper>
+    );
+  }
+
+  if (error || !charStatus) {
+    return (
+      <PageWrapper title="Command" subtitle="Controller orchestration overview">
+        <EmptyState title="Command data unavailable" description={error ?? 'The backend did not return command status.'} />
       </PageWrapper>
     );
   }

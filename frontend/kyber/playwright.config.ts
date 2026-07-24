@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const inheritedEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+);
+
 export default defineConfig({
   testDir: './src/test/e2e',
   fullyParallel: true,
@@ -19,6 +23,15 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
+    env: {
+      ...inheritedEnvironment,
+      VITE_KYBER_ENV: 'test',
+      VITE_API_BASE_URL: 'http://localhost:8000',
+      VITE_AETHER_ENDPOINT: 'http://localhost:8000',
+      VITE_AUTH0_DOMAIN: 'identity.invalid',
+      VITE_AUTH0_CLIENT_ID: 'kyber-playwright',
+      VITE_AUTH0_REDIRECT_URI: 'http://localhost:5174/callback',
+    },
     port: 5174,
     reuseExistingServer: !process.env.CI,
   },

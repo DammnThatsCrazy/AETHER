@@ -21,10 +21,14 @@ import { LoginPage } from '@aether-app/pages/login/login-page';
 import { api } from '@aether-app/lib/api/endpoints';
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
-  api: { auth: { login: vi.fn() } },
+  api: {
+    auth: { login: vi.fn() },
+    me: { profile: vi.fn() },
+  },
 }));
 
 const loginMock = vi.mocked(api.auth.login);
+const profileMock = vi.mocked(api.me.profile);
 
 const SESSION_GRANT = {
   tenant_id: 'tenant-1',
@@ -73,6 +77,16 @@ describe('Login flow — trust-plane session model', () => {
   beforeEach(() => {
     sessionStorage.clear();
     loginMock.mockReset();
+    profileMock.mockReset();
+    profileMock.mockResolvedValue({
+      tenant_id: 'tenant-1',
+      name: 'Backend Tenant',
+      contact_email: 'owner@tenant.dev',
+      plan: { plan_id: 'P1', display_name: 'Hobbyist', monthly_quota: 1000, burst_rpm: 10 },
+      billing: {},
+      api_key_count: 1,
+      is_admin: true,
+    });
   });
 
   it('stores the session token (not an api key) for a session grant', async () => {

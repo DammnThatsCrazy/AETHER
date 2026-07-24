@@ -36,7 +36,7 @@ export class AuthApiError extends Error {
  * Factory that creates a fetch-based API client bound to a token getter.
  *
  * @param getToken - async function that returns the current access token,
- *   or null/undefined if not authenticated (e.g. in local-mocked mode).
+ *   or null/undefined if not authenticated (e.g. in local development mode).
  */
 export function createAuthApiClient(
   getToken: () => Promise<string | null | undefined>,
