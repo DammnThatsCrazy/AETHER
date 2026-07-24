@@ -34,6 +34,9 @@ export type EventType =
   | 'deep_link_opened'
   | 'app_install_attributed'
   | 'deferred_attribution_resolved'
+  | 'qr_code_scanned'
+  | 'nfc_tag_read'
+  | 'app_clip_invoked'
   // identity
   | 'identify'
   // consent
@@ -231,6 +234,7 @@ export type EventType =
   | 'surface_entered'
   | 'surface_exited'
   | 'interaction_observed'
+  | 'ui_interaction_observed'
   | 'feature_started'
   | 'feature_completed'
   | 'feature_abandoned'
@@ -481,6 +485,9 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   deep_link_opened: 'journey',
   app_install_attributed: 'journey',
   deferred_attribution_resolved: 'journey',
+  qr_code_scanned: 'journey',
+  nfc_tag_read: 'journey',
+  app_clip_invoked: 'journey',
   identify: 'identity',
   consent: 'consent',
   conversion: 'commerce',
@@ -659,6 +666,7 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   surface_entered: 'interaction',
   surface_exited: 'interaction',
   interaction_observed: 'interaction',
+  ui_interaction_observed: 'interaction',
   feature_started: 'interaction',
   feature_completed: 'interaction',
   feature_abandoned: 'interaction',
@@ -882,6 +890,9 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   deep_link_opened: 'analytics',
   app_install_attributed: 'analytics',
   deferred_attribution_resolved: 'analytics',
+  qr_code_scanned: 'analytics',
+  nfc_tag_read: 'analytics',
+  app_clip_invoked: 'analytics',
   identify: 'analytics',
   consent: 'analytics',
   conversion: 'marketing',
@@ -1060,6 +1071,7 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   surface_entered: 'analytics',
   surface_exited: 'analytics',
   interaction_observed: 'analytics',
+  ui_interaction_observed: 'analytics',
   feature_started: 'analytics',
   feature_completed: 'analytics',
   feature_abandoned: 'analytics',

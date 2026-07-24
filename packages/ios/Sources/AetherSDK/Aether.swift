@@ -146,6 +146,8 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case journey_started, journey_paused, journey_resumed, journey_continued, journey_completed, journey_abandoned, journey_checkpoint
     // Acquisition attribution — SDKs observe evidence; the backend classifies
     case navigation_intent, navigation_arrival, deep_link_opened, app_install_attributed, deferred_attribution_resolved
+    // QR / NFC / App Clip acquisition capture + native UI interaction observation
+    case qr_code_scanned, nfc_tag_read, app_clip_invoked, ui_interaction_observed
     case identify, consent
     case conversion, payment_initiated, payment_completed, payment_failed, approval_requested, approval_resolved, entitlement_granted, entitlement_revoked, access_granted, access_denied
     case wallet, transaction, contract_action
@@ -530,6 +532,9 @@ public final class Aether: NSObject {
         .navigation_intent: "analytics", .navigation_arrival: "analytics",
         .deep_link_opened: "analytics", .app_install_attributed: "analytics",
         .deferred_attribution_resolved: "analytics",
+        // QR / NFC / App Clip acquisition capture + native UI interaction observation
+        .qr_code_scanned: "analytics", .nfc_tag_read: "analytics",
+        .app_clip_invoked: "analytics", .ui_interaction_observed: "analytics",
         .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
         .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce",
         // x402 — legacy + lifecycle

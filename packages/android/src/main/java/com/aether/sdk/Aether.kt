@@ -215,6 +215,11 @@ object Aether : DefaultLifecycleObserver {
         "navigation_intent" to "analytics", "navigation_arrival" to "analytics",
         "deep_link_opened" to "analytics", "app_install_attributed" to "analytics",
         "deferred_attribution_resolved" to "analytics",
+        // QR / NFC / App Clip acquisition capture (host app decodes; SDK attributes)
+        "qr_code_scanned" to "analytics", "nfc_tag_read" to "analytics",
+        "app_clip_invoked" to "analytics",
+        // Native UI interaction observation (metadata-only)
+        "ui_interaction_observed" to "analytics",
         "experiment" to "marketing", "conversion" to "marketing",
         "consent" to "analytics",
         "payment_initiated" to "commerce", "payment_completed" to "commerce",
