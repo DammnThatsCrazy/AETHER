@@ -1,4 +1,5 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, useTimeContext, type TimeContext } from '@aether/ui';
+import { SOURCE_CLASS_DEFAULTS, canonicalSourceClass, type SourceClass } from '@aether/shared';
 import { PageWrapper } from '@kyber/components/layout';
 import { useMeasurementOps } from '@kyber/features/measurement';
 import { api } from '@kyber/lib/api';
@@ -65,6 +66,33 @@ function compactValue(value: unknown, ctx: TimeContext): string {
       .join(' · ') || '—';
   }
   return String(value);
+}
+
+/**
+ * Canonical customer-facing label for a source_class value from the generated
+ * traffic-source registry. Legacy "direct" normalizes to direct_unknown and
+ * renders "Direct / Unknown" — the operator surface never claims "Typed URL".
+ */
+function sourceClassRegistryLabel(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const canonical = canonicalSourceClass(String(value));
+  return SOURCE_CLASS_DEFAULTS[canonical as SourceClass]?.label ?? String(value);
+}
+
+/**
+ * Rewrite a source-class breakdown so its rows are labeled with canonical
+ * registry labels while keeping counts/details untouched. Non-array input is
+ * passed through unchanged (HealthBreakdown handles the rest defensively).
+ */
+function labeledSourceClassBreakdown(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map(item => {
+    if (!isRow(item)) return item;
+    const classKey = ['source_class', 'name', 'class'].find(key => item[key] != null);
+    if (!classKey) return item;
+    const { [classKey]: rawClass, ...rest } = item;
+    return { name: sourceClassRegistryLabel(rawClass), ...rest };
+  });
 }
 
 function HealthBreakdown({ title, value }: { readonly title: string; readonly value: unknown }) {
