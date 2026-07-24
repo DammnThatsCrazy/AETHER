@@ -158,9 +158,9 @@ describe('Kyber Traffic Intelligence Operations page', () => {
 
     await waitFor(() => {
       const last = capturedQueries[capturedQueries.length - 1]!;
-      return expect(last.get('tenant')).toBe('tenant_042')
-        && expect(last.get('platform')).toBe('ios')
-        && expect(last.get('sdk')).toBe('swift');
+      expect(last.get('tenant')).toBe('tenant_042');
+      expect(last.get('platform')).toBe('ios');
+      expect(last.get('sdk')).toBe('swift');
     });
   });
 
