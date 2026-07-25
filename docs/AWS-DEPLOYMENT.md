@@ -12,167 +12,462 @@ source_files:
   - AWS Deployment/aether-aws/terraform/
   - AWS Deployment/aether-aws/config/
 canonical_owner: platform@aether
-estimated_read_minutes: 14
+estimated_read_minutes: 18
 toc_depth: 3
 last_synced_commit: 48fb9d4
 ---
 
 # AWS Deployment — Infrastructure Reference
 
-Internal reference for Aether's AWS infrastructure. All resources are managed
-by Terraform (`AWS Deployment/aether-aws/terraform/`) and deployed via the
-Python orchestrator (`AWS Deployment/aether-aws/main.py`).
+Internal reference for Aether's AWS infrastructure as the Terraform in this
+repository actually defines it.
 
-## Account topology
+## Scope — three different things live under `AWS Deployment/`
 
-Six isolated AWS accounts are used. Cross-account IAM roles enforce least-privilege
-access between them.
+Read this section before anything else. Conflating these three is the single
+most common way to end up describing infrastructure that does not exist.
 
-| Account alias | Account ID | Primary workload |
-|---------------|-----------|-----------------|
-| `aether-dev` | `111111111111` | Developer sandboxes, ephemeral CI environments |
-| `aether-staging` | `222222222222` | Pre-production services |
-| `aether-production` | `333333333333` | Customer-facing production workloads |
-| `aether-data` | `444444444444` | ClickHouse, S3 data lake, MSK, SageMaker |
-| `aether-security` | `555555555555` | GuardDuty master, Security Hub, CloudTrail aggregation |
-| `aether-demo` | `666666666666` | Stable demo environment |
+| Path | What it is |
+|---|---|
+| `AWS Deployment/aether-aws/terraform/` | **The live Terraform root.** One VPC, one account, profile-driven. Everything in this page's *Live infrastructure* sections describes this and only this. |
+| `AWS Deployment/aether-aws/{README.md,main.py,config/aws_config.py}` and the `scripts/` package | A **reference/demo model**, not provisioning code. `main.py` is a demo runner that prints a six-account, five-VPC architecture from constants in `config/aws_config.py`. It does not wrap `terraform`, it has no `plan`/`apply` commands, and nothing it prints is provisioned by the live root. See [Reference model](#reference-model--described-not-provisioned). |
+| `AWS Deployment/aether-aws/terraform/environments/{dev,staging,production,demo}/` and `AWS Deployment/main.tf` | A **dead second Terraform tree**. See [Dead second tree](#dead-second-terraform-tree). |
 
-All accounts sit inside a single AWS Organization. SCPs enforce guardrails such
-as region restriction (us-east-1 primary, us-west-2 DR), mandatory encryption,
-and blocking public S3 bucket creation.
+`AWS Deployment/aether-aws/main.py` does **not** deploy anything, and there is
+no `dr_failover.py` anywhere in the repository.
 
-## Networking
+---
 
-Five VPCs are provisioned. Each VPC uses a `/16` CIDR with public, private, and
-data subnets across three availability zones.
+## Live infrastructure
 
-| VPC | CIDR block | Account |
-|-----|-----------|---------|
-| `aether-dev-vpc` | `10.0.0.0/16` | dev |
-| `aether-staging-vpc` | `10.1.0.0/16` | staging |
-| `aether-production-vpc` | `10.2.0.0/16` | production |
-| `aether-data-vpc` | `10.3.0.0/16` | data |
-| `aether-demo-vpc` | `10.4.0.0/16` | demo |
+### Profile selection
 
-Production and data VPCs are peered. All inter-account traffic travels over AWS
-PrivateLink or VPC peering — never over the public internet.
+Nearly every cost- and shape-relevant decision in the root is made by one
+variable:
 
-## Compute — ECS Fargate
-
-All application services run on ECS Fargate (no EC2 instances to manage).
-
-| Service | CPU (vCPU) | Memory (GB) | Min tasks | Max tasks |
-|---------|-----------|------------|-----------|-----------|
-| Backend API | 1 | 2 | 2 | 20 |
-| Ingestion Server | 1 | 2 | 2 | 30 |
-| WebSocket Gateway | 0.5 | 1 | 2 | 10 |
-| Kyber Service | 1 | 2 | 1 | 10 |
-| Agent Controller | 2 | 4 | 1 | 5 |
-| ML Inference | 2 | 8 | 1 | 10 |
-| Consent Service | 0.5 | 1 | 2 | 10 |
-| Notification Service | 0.5 | 1 | 1 | 5 |
-| Scheduler | 0.25 | 0.5 | 1 | 1 |
-
-Auto-scaling triggers are CPU ≥ 70% or ALB request count ≥ 1 000 per task
-(ingestion) / 500 per task (other services). Scale-in cooldown is 300 seconds.
-
-## Data stores
-
-| Store | Service | Purpose |
-|-------|---------|---------|
-| Neptune (r6g.xlarge) | Amazon Neptune | Knowledge graph — identity resolution, entity relationships |
-| TimescaleDB on RDS (r6g.2xlarge, Multi-AZ) | Amazon RDS | Time-series analytics, sensor streams |
-| ElastiCache Redis (r6g.large, cluster mode) | Amazon ElastiCache | Session state, rate-limit counters, pub/sub |
-| S3 + Athena | Amazon S3 / Athena | Raw event archive, ad-hoc analytics |
-| OpenSearch (r6g.2xlarge, 3 nodes) | Amazon OpenSearch | Full-text search, log aggregation |
-| DynamoDB (on-demand) | Amazon DynamoDB | Feature flags, consent records, API key store |
-| SageMaker | Amazon SageMaker | ML model training and batch inference |
-| MSK (kafka.m5.xlarge, 3 brokers) | Amazon MSK | Event streaming — ingestion fan-out |
-
-All data stores use encryption at rest (AWS-managed keys in non-production,
-customer-managed KMS keys in production). TLS 1.2+ enforced in transit.
-
-## Terraform modules
-
-The Terraform codebase is split into 16 reusable modules under
-`AWS Deployment/aether-aws/terraform/modules/`:
-
-| Module | Manages |
-|--------|---------|
-| `vpc` | VPC, subnets, route tables, NACLs |
-| `vpc_endpoints` | VPC Interface and Gateway endpoints |
-| `alb` | Application Load Balancer, listeners, target groups |
-| `ecs` | ECS cluster, Fargate service, task definition |
-| `ecr` | ECR repositories, lifecycle policies |
-| `aurora` | Aurora PostgreSQL cluster, subnet group, parameter group |
-| `rds` | RDS instance, subnet group, parameter group |
-| `elasticache` | Redis cluster, subnet group |
-| `msk` | MSK cluster, broker configuration |
-| `neptune` | Neptune cluster, subnet group |
-| `dynamodb_cache` | DynamoDB table used for caching (TTL-backed) |
-| `sqs` | SQS queues, dead-letter queues |
-| `auth0` | Auth0 API resource server and application config |
-| `secrets` | Secrets Manager secrets, rotation schedule |
-| `monitoring` | CloudWatch alarms, dashboards, metric filters |
-| `ml_drift_lambda` | Lambda function for ML model drift detection |
-
-## Environment cost estimates
-
-| Environment | Monthly estimate | Notes |
-|-------------|-----------------|-------|
-| dev | ~$2 000 | Low-capacity; no Multi-AZ |
-| staging | ~$3 000 | Production-like topology, reduced instance sizes |
-| production | ~$15 000 | Full redundancy, Multi-AZ, Reserved Instances |
-| demo | ~$2 500 | Stable, always-on; mirrors staging sizing |
-
-Production Reserved Instances (1-year, no upfront) cover the baseline compute
-and reduce on-demand cost by ~35%.
-
-## Disaster recovery
-
-| Metric | Target |
-|--------|--------|
-| RPO (Recovery Point Objective) | 1 hour |
-| RTO (Recovery Time Objective) | 4 hours |
-| DR region | us-west-2 |
-| DR drill cadence | Quarterly |
-
-DR is achieved through:
-- RDS Multi-AZ with cross-region read replica in us-west-2
-- S3 Cross-Region Replication to a us-west-2 bucket
-- ECS task definitions and Terraform state replicated to us-west-2
-- Route 53 health-check failover records pointing at the DR ALB
-- Runbook: `AWS Deployment/aether-aws/scripts/dr_failover.py`
-
-DR drills are scheduled quarterly and results recorded in the incident log.
-
-## Deploying infrastructure changes
-
-The standard workflow for any Terraform change:
-
-```bash
-cd "AWS Deployment/aether-aws"
-python main.py plan --env staging      # review plan output
-python main.py apply --env staging     # apply to staging first
-# validate staging, then:
-python main.py plan --env production
-python main.py apply --env production
+```hcl
+deployment_profile = "staging" | "production-lean" | "production-scale" | "enterprise-isolated"
 ```
 
-`main.py` wraps `terraform` with account-role assumption, state backend
-configuration, and a dry-run gate that requires explicit `--apply` confirmation
-for changes to production.
+`profiles.tf` derives `enable_*` locals and backend selectors from it and
+`main.tf` wires those into module `count` and module inputs, so a
+`production-lean` plan structurally cannot contain a forbidden resource.
+Canonical policy data is `config/deployment_profiles.yaml`;
+`config/terraform_resource_contracts.yaml` maps each policy key to the module
+address and cardinality a conforming plan must show. The per-profile matrix,
+including the six non-cloud profiles, is
+[Deployment Profiles](DEPLOYMENT-PROFILES.md).
 
-Changes to production infrastructure require a change-management ticket and a
-second approver from `platform@aether` before `apply` is permitted.
+| | staging | production-lean | production-scale | enterprise-isolated |
+|---|---|---|---|---|
+| Database | Aurora Serverless v2 | Aurora Serverless v2 | Aurora Serverless v2 | Aurora Serverless v2 |
+| Aurora ACU floor / ceiling | 0 / 2 | 0.5 / 4 | 1 / 8 | 2 / 16 |
+| Cache | DynamoDB | DynamoDB | ElastiCache Redis | ElastiCache Redis |
+| Events | SNS → SQS | SNS → SQS | MSK Kafka | MSK Kafka |
+| Graph | Aurora Postgres | Aurora Postgres | Neptune | Neptune |
+| Analytics | Postgres | Postgres | ClickHouse (selector only) | ClickHouse (selector only) |
+| ML serving | inline in backend | inline in backend | dedicated ECS service | dedicated ECS service |
+| Egress | `public_ip` — **0 NAT** | `public_ip` — **0 NAT** | `single_nat` — 1 NAT | `ha_nat` — 3 NAT |
+| Legacy RDS | never | never | never | never |
+| Frontends | S3 static origins | S3 static origins | S3 static origins | S3 static origins |
+| Log retention | 3 days | 3 days | 7 days | 30 days |
+
+Apply a profile with its checked-in variable file:
+
+```bash
+cd "AWS Deployment/aether-aws/terraform"
+terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
+```
+
+`backend_image_digest` and `ml_image_digest` have no defaults and are validated
+against `^sha256:[0-9a-f]{64}$`: every plan pins the exact digests approved by
+the release manifest.
+
+### Account and environment topology
+
+**One AWS account and one region per workspace.** `var.aws_region` defaults to
+`us-east-1`, `var.project` to `AETHER`, and `var.environment` to `production`
+(validated to `production | staging | dev`). Resource names are built as
+`${var.project}-${var.environment}`.
+
+Only `profiles/staging.tfvars` overrides `environment`. **The three
+production-class profiles all inherit `production` and therefore generate
+identical resource names** — ECS cluster, ALB, log groups, IAM roles, SQS
+queues, S3 buckets. Separate Terraform state keys
+(`profiles/<profile>/terraform.tfstate`) keep the *state* apart and do nothing
+about the *names*. Two production-class profiles cannot be applied into the same
+account and region; **they require separate AWS accounts.** This is a known,
+unfixed constraint recorded in `DECOMMISSION.md`, and it is why a side-by-side
+comparison of two production-class profiles is not currently possible.
+
+Remote state is mandatory (`backend "s3" {}` with no inline configuration);
+bucket, key, lock table and region are injected per profile at `init` time by
+the workflows. Terraform `~> 1.5`, AWS provider `~> 5.0`, plus the `random`,
+`auth0` and `archive` providers.
+
+### Networking
+
+**One VPC per workspace**, `var.vpc_cidr` default `10.0.0.0/16`, with three
+subnet tiers computed as `/20`s across the region's availability zones:
+
+| Tier | Purpose |
+|---|---|
+| public | ALB, and NAT gateways when the profile has any |
+| private | ECS tasks |
+| isolated | Aurora, and ElastiCache / MSK / Neptune where provisioned. No default route. |
+
+Egress is chosen by `var.network_egress_mode`, which replaced the old
+`enable_nat_gateway_ha` boolean because that could only choose between one NAT
+and three and had no way to express "no NAT at all" — the posture the
+cost-capped profiles actually want.
+
+| Value | NAT gateways | Elastic IPs | ECS task networking |
+|---|---|---|---|
+| `public_ip` | 0 | 0 | public IP on the task ENI |
+| `single_nat` | 1 shared | 1 | private, egress via NAT |
+| `ha_nat` | 1 per AZ | 1 per AZ | private, egress via NAT |
+| `vpc_endpoints` | 0 | 0 | private, no general egress |
+| `none` | 0 | 0 | private, no egress |
+
+Omit the variable to take the profile default. `nat_gateway_unless_explicit` is
+a forbidden resource for `production-lean` and `staging`; **setting this
+variable to a NAT mode on a cost-capped profile is that explicit opt-in** and
+must be reviewed as a cost-policy exception.
+
+The private default route is a standalone `aws_route.private_nat`, counted
+independently, which is what makes a private route table with no egress path
+expressible at all. VPC flow logs are enabled on the VPC.
+
+### Compute — ECS Fargate
+
+All application compute is ECS Fargate. There are no EC2 instances to manage,
+and no self-managed Prometheus or Grafana servers at any profile.
+
+The deployable unit is a **service**, not a role, and the service count depends
+on the profile's `execution_mode` in `config/runtime_deployment.yaml`:
+
+**`consolidated` — `staging` and `production-lean`: two always-on tasks.**
+
+| Service | Roles hosted | vCPU / MiB (lean) | Desired | Max | Capacity |
+|---|---|---|---|---|---|
+| `api` (ECS service `AETHER-<env>-backend`) | `api` | 1024 / 2048 | 1 | 4 | FARGATE only |
+| `lean-worker` | `outbox-relay`, `stream-worker`, `identity-worker`, `graph-writer`, `measurement-worker`, `semantic-worker`, `materializer`, `maintenance` | 2048 / 8192 | 1 | 4 | FARGATE only |
+
+Staging runs the same shape one size down (`lean-worker` at 1024 / 4096, max 2).
+`lean-worker` never uses Spot at any capacity because it hosts `outbox-relay`,
+the at-least-once delivery path.
+
+**`dedicated` — `production-scale` and `enterprise-isolated`: nine services.**
+
+| Service | Desired | Max | vCPU / MiB | Surge capacity (scale) |
+|---|---|---|---|---|
+| `api` | 3 | 12 | 2048 / 4096 | FARGATE |
+| `outbox-relay` | 2 | 6 | 1024 / 2048 | FARGATE |
+| `stream-worker` | 3 | 12 | 2048 / 4096 | FARGATE_SPOT |
+| `identity-worker` | 2 | 8 | 1024 / 2048 | FARGATE_SPOT |
+| `graph-writer` | 2 | 8 | 1024 / 2048 | FARGATE_SPOT |
+| `measurement-worker` | 2 | 8 | 1024 / 2048 | FARGATE_SPOT |
+| `semantic-worker` | 2 | 8 | 1024 / 2048 | FARGATE_SPOT |
+| `materializer` | 2 | 8 | 1024 / 2048 | FARGATE_SPOT |
+| `maintenance` | 1 | 1 | 1024 / 2048 | FARGATE (no queue to drain) |
+
+`enterprise-isolated` uses the same sizing with **no Spot anywhere**: a
+reclaimed surge task is an availability event to explain, not a discount to
+report. Spot is forbidden outright on `api` and on any service hosting
+`outbox-relay`, enforced by
+`scripts/release/check_delivery_topology.py::SPOT_FORBIDDEN_ROLES`.
+
+Autoscaling is `alb-request-count-per-target` at 800 requests/target for `api`
+and `sqs-queue-depth` for workers (500 messages/task on the delivery path, 1000
+elsewhere), with 180 s / 300 s cooldowns. `min_capacity` equals the desired
+count and is the always-on floor; `max_capacity` is the surge ceiling.
+
+A dedicated `aether-ml-serving` service, its ALB target group and its
+`/v1/ml/*` listener rule exist only on `production-scale` and
+`enterprise-isolated`. On the cost-capped profiles there is no rule and ML runs
+inline in the backend process.
+
+`staging_state = "asleep"` multiplies every desired count, every autoscaling
+floor and every capacity-provider base count by zero, so a sleeping staging
+environment owns exactly the same services as an awake one. `max_capacity` is
+deliberately not scaled.
+
+### Data stores
+
+| Store | Provisioned on | Notes |
+|---|---|---|
+| Aurora Serverless v2 Postgres + writer | **all profiles** | Database, graph and analytics of record. Isolated subnets, customer-managed KMS key, AWS-managed master password rotation into `aether/db-password`. |
+| DynamoDB cache table | **all profiles** | Read/write autoscaling, TTL-backed. |
+| SNS fanout topic → per-role SQS queues + DLQs | **all profiles** | One queue per role, so a consolidated task binds one queue per hosted role. |
+| S3 object lake, log archive, SPA origins | **all profiles** | Public access blocked, SSE configured. |
+| Secrets Manager + KMS | **all profiles** | Stubs created empty; rotation Lambda. |
+| ElastiCache Redis 7.x | scale / enterprise | TLS in transit, AUTH token in Secrets Manager only, KMS at rest. `cache.t3.micro` default. |
+| MSK Kafka | scale / enterprise | 3 brokers (`kafka.m5.large`, Kafka 3.5.1), TLS, KMS, CloudWatch metrics. |
+| Neptune | scale / enterprise | `db.r6g.large`, cluster size 1 by default, IAM auth, KMS. |
+| Legacy RDS Postgres | **never** | `enable_legacy_rds` is the literal `false`. Retained in code only as an importable rollback target — see `DECOMMISSION.md`. |
+
+There is **no OpenSearch, no SageMaker, no Athena, no TimescaleDB and no
+ClickHouse resource** in this root. `analytics: clickhouse` on the two uncapped
+profiles is a *selector* that drives `local.analytics_backend`; no module
+provisions ClickHouse at any profile.
+
+Gating a module with `count` turns its outputs into a list, so nothing reads a
+gated module's output directly — everything goes through normalized locals
+(`local.redis_host`, `local.kafka_bootstrap_servers`, `local.neptune_endpoint`,
+…) that resolve to `""` when the backend is absent. The idiom is
+`try(module.x[0].out, "")`, deliberately not `try(one(module.x[*].out), "")`:
+`one([])` returns `null` and `try` only traps errors, so the `one()` form feeds
+a null into a string input.
+
+Which backend a running task uses is passed explicitly (`event_broker`,
+`cache_backend`, `graph_backend`, `analytics_backend`), never inferred from
+whether a host string happens to be empty.
+
+### Static frontends
+
+The Aether and Kyber SPAs are immutable object-store origins at **every**
+profile — `aws_s3_bucket.static_frontend` with public access blocked,
+server-side encryption, and SSM parameters the deploy workflow resolves bucket
+names from. `frontend_ecs_services` is a forbidden resource everywhere; the root
+creates no frontend ECS service at any profile.
+
+**The CDN distribution is provisioned outside this root.** The S3 origins and
+their SSM pointers are the Terraform-owned half of the contract, as
+`config/terraform_resource_contracts.yaml` states explicitly. There is no
+CloudFront resource in the live tree.
+
+### Terraform modules
+
+Seventeen module directories exist under `terraform/modules/`. Modules marked
+**gated** are provisioned only for the profiles listed.
+
+| Module | Manages | Gate |
+|---|---|---|
+| `vpc` | VPC, three subnet tiers, security groups, flow logs, NAT per `nat_mode` | always; NAT and the redis/msk/neptune SGs gated |
+| `ecr` | 4 private ECR repositories with lifecycle policies | always |
+| `secrets` | Secrets Manager stubs (KMS-encrypted), rotation Lambda | always |
+| `aurora` | Aurora Serverless v2 cluster + writer, KMS | always |
+| `dynamodb_cache` | DynamoDB cache table with read/write autoscaling | always |
+| `sqs` | SNS fanout topic, shared + per-role SQS queues, DLQs | always |
+| `alb` | Internet-facing ALB, HTTP→HTTPS redirect, backend target group | always; **gated** ML target group + `/v1/ml/*` rule |
+| `ecs` | Fargate cluster, backend service, per-service task definitions, IAM roles, autoscaling | always; **gated** dedicated ML service |
+| `monitoring` | SNS alerts, CloudWatch alarms, dashboard, S3 log archive | always; per-backend alarms **gated** |
+| `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always |
+| `auth0` | SPA clients + API resource server | always |
+| `elasticache` | Redis 7.x, TLS in transit, AUTH token, KMS at rest | **gated** — scale / enterprise |
+| `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics | **gated** — scale / enterprise |
+| `neptune` | Neptune cluster + instances, IAM auth, KMS | **gated** — scale / enterprise |
+| `rds` | Legacy RDS Postgres | **never** — superseded by Aurora |
+| `s3` | — | **not instantiated by this root** |
+| `vpc_endpoints` | — | **not instantiated by this root** |
+
+### Observability
+
+CloudWatch-native at every tier. `modules/monitoring` declares ten alarm
+resources: seven always created — `alb_5xx`, `aurora_max_acu`, `ml_drift`,
+`dynamodb_cache_throttled`, `sqs_queue_depth`, `sqs_oldest_message_age`,
+`sqs_dlq_depth` — and three created only when the matching store exists:
+`elasticache_memory`, `msk_offline_partitions`, `neptune_cpu`.
+
+Alarms follow the backend by design. A profile that swaps Redis for DynamoDB and
+Kafka for SQS must ship alarms for DynamoDB and SQS, or the cost reduction has
+silently bought an observability gap; and an alarm pointing at a dimension that
+does not exist sits permanently in `INSUFFICIENT_DATA` and masks real alerts.
+
+Alarm wiring has never been observed firing and resolving in a deployed account.
+`COND-OBSERVABILITY-LIVE` is unmet.
+
+### Verification
+
+```bash
+make test-terraform-profiles          # terraform validate + terraform test
+make validate-cost-policy-terraform   # static: profiles.tf locals encode the policy
+make validate-terraform-profile-policy # a real plan JSON scored against the contracts
+make validate-cost-model              # that inventory priced against the budget
+```
+
+`terraform validate` passes, and `terraform test -filter=tests/profile_plan.tftest.hcl`
+passes for all four cloud profiles across five provider-mocked run blocks
+(`staging`, `staging_asleep`, `production_lean`, `production_scale`,
+`enterprise_isolated`). Assertions read the **planned module graph** —
+`length(module.msk) == 0`, `length(module.vpc.nat_gateway_ids) == 3`,
+`module.vpc.nat_mode == "ha"` — not the locals that produced it, so a local that
+stops being wired into a `count` is caught rather than passed over. They are
+mutation-proven: forcing `count = 1` on MSK fails the lean run block with
+`module.msk is tuple with 1 element`. No AWS credentials are required.
+
+### Cost
+
+`production-lean`'s fixed baseline measures **USD 184.13/month** — over the
+USD 150 design target, under the USD 200 hard ceiling; the gate warns and
+passes, and the deviation is reviewed and accepted. Staging is budgeted at
+USD 25 target / USD 50 ceiling against 40 scheduled awake hours per month. The
+two uncapped profiles carry no budget block by design. The full model, the
+per-line breakdown, the usage-variable band and the deviation record are in
+[Cost Optimization](COST-OPTIMIZATION.md); it is not restated here.
+
+No AWS invoice exists for any profile. Every figure is a modelled projection
+from a pinned price book against a plan inventory.
+
+---
+
+## Promotion and apply
+
+`.github/workflows/infrastructure.yml` **plans and validates only; it never
+applies.** The `apply-production-lean` job that once auto-applied on every push
+to `main` has been deleted. On a push to `main` its
+`require-production-credentials` job gates *promotability*, not an apply.
+
+`.github/workflows/terraform-promote.yml` is the **sole apply path**:
+`workflow_dispatch`-only, per-profile GitHub environment
+(`staging-terraform`, `production-lean-terraform`,
+`production-scale-terraform`, `enterprise-terraform`), and an apply that
+consumes the exact reviewed binary plan and **never re-plans**. Before applying
+it re-verifies the plan digest against the dispatched checksum, the profile, the
+state key, the plan's own recorded commit (which it checks out rather than
+trusting the dispatch ref), the Terraform version, the `.terraform.lock.hcl`
+digest and the 24-hour expiry, and it re-runs the policy and cost validators at
+the reviewed commit.
+
+Operator procedure: [Deployment Runbook](DEPLOYMENT-RUNBOOK.md). Staging's
+wake/validate/sleep cycle: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md).
+
+## Post-deploy steps
+
+1. **Confirm the SNS email subscription.** AWS sends a confirmation to
+   `alert_email`; alarms deliver nothing until the link is clicked.
+2. **Inject secret values.** Secrets Manager stubs are created empty. Store raw
+   secret strings, not JSON objects — ECS `valueFrom` injects the entire secret
+   string, so a JSON wrapper needs a JSON-key suffix on the ARN and is
+   error-prone. `aether/db-password` is populated automatically by Aurora's
+   managed rotation; `aether/redis-auth-token` exists only on profiles that
+   provision Redis.
+3. **Push images.** Task definitions pin an immutable digest, so a new digest is
+   a new task definition and deploys itself. The ML image is only needed on
+   profiles that run the dedicated ML service.
+4. **Run migrations** from inside the VPC (ECS Exec, bastion, or a one-off
+   Fargate task). On a `public_ip` profile set `assignPublicIp=ENABLED` — there
+   is no NAT to egress through.
+5. **Verify `/v1/ready`**, which fails unless the database alembic revision
+   equals the packaged head.
+
+## Migration hazards and decommissioning
+
+Removing applied infrastructure — including turning a backend off by changing
+the deployment profile — goes through
+`AWS Deployment/aether-aws/terraform/DECOMMISSION.md`. **A profile flip that
+shows `Plan: … 1 to destroy` on a data store is a stop-the-line event**, not a
+diff to skim.
+
+- **Seven ECS services are destroyed** the first time a workspace moves from the
+  per-role shape to the consolidated one. This is correct and intended, and it
+  is deliberately *not* hidden behind `moved` blocks: it is a change of
+  deployment unit, not a rename. Queues, DLQs, consumer groups and retry
+  policies survive; in-flight messages stay in their queues and are drained once
+  the consolidated task is stable.
+- **The private default route migration is a maintenance window.** The route
+  moved from an inline `route` attribute to a standalone `aws_route`, which
+  `moved` cannot express — an inline block is an attribute, not an addressable
+  resource. On the first apply against a NAT-carrying workspace Terraform
+  performs two unordered operations on the live egress path. Apply it alone,
+  expect brief egress unavailability, and verify afterwards that each private
+  route table has exactly one `0.0.0.0/0` route to the intended gateway — in
+  `ha` mode, the NAT in the same AZ. `nat_mode = "none"` workspaces are
+  unaffected.
+- **`moved.tf` covers fourteen addresses**: the four gated root modules (`rds`,
+  `elasticache`, `msk`, `neptune`), five dedicated-ML resources inside
+  `module.ecs`, two inside `module.alb`, and three VPC data-store security
+  groups. Without them, adding `count` would rename state addresses and plan a
+  destroy-and-recreate of live clusters. Do not delete them until every
+  pre-existing workspace has applied at least once.
+- **"Kept for rollback safety" must be time-bounded.** Every retained resource
+  needs a named owner, an explicit expiry in `config/implementation_ledger.yaml`
+  and a decommission ticket. An expired retention is unowned cost, and must be
+  escalated rather than silently extended.
 
 ## Security posture
 
-- **IMDSv2 required** on all EC2 instances (Fargate is exempt; no IMDS access)
-- **VPC Flow Logs** enabled on all VPCs, forwarded to the `aether-security` account
-- **GuardDuty** enabled organisation-wide with automated finding notifications
-- **Security Hub** aggregates findings from GuardDuty, Inspector, and Macie
-- **CloudTrail** organisation trail with 7-year retention in the security account
-- **S3 Block Public Access** enforced at the organisation level via SCP
-- **No long-lived IAM users** in production; all access via IAM Roles with
-  time-limited STS tokens
+What the live root implements:
+
+- No secret values in Terraform state or code; all secrets fetched from Secrets
+  Manager at container start-up.
+- Data stores in isolated subnets with no default route.
+- Customer-managed KMS keys for Aurora and Secrets; per-store KMS on
+  ElastiCache, MSK and Neptune where provisioned.
+- ECS tasks use dedicated IAM roles with least-privilege policies scoped to the
+  queues, tables and secrets the selected profile actually provisions.
+- ALB enforces TLS 1.3 minimum (`ELBSecurityPolicy-TLS13-1-2-2021-06`).
+- VPC flow logs capture all traffic.
+- On `public_ip` profiles ECS tasks carry a public IP for egress; inbound access
+  is governed entirely by the task security group, which accepts traffic only
+  from the ALB.
+- Fargate has no IMDS access, so IMDSv2 hardening is not applicable to it.
+
+Not implemented by this root, and therefore not claimed: GuardDuty, Security
+Hub, Inspector, Macie, an organisation CloudTrail, organisation-level SCPs,
+cross-account log forwarding, or WAF. There is one account, not an
+Organization. No compliance certification, external attestation or audit
+coverage is claimed anywhere.
+
+## Disaster recovery
+
+**The live root provisions no DR posture.** There is no cross-region read
+replica, no S3 Cross-Region Replication, no us-west-2 standby, no Route 53
+health-check failover, and no `dr_failover.py` script. Aurora carries a
+`backup_retention_days` default of 7 and `enterprise-isolated` sets
+`db_multi_az = true`; that is the whole of the durability story in Terraform
+today.
+
+RPO/RTO targets, DR regions and drill cadences appear in the reference model
+below. They are **aspirational targets, not implemented controls**, and no drill
+has been run.
+
+---
+
+## Reference model — described, not provisioned
+
+`AWS Deployment/aether-aws/README.md` and `config/aws_config.py` describe a
+larger target architecture: six AWS accounts under one Organization
+(dev/staging/production/data/security/demo), five VPCs, nine named ECS
+services, eight managed data stores including SageMaker Serverless and Athena,
+SCP guardrails, budget configurations, DR strategies and compliance controls.
+`main.py --stub-aws` prints that model; the operational packages under
+`scripts/{network,monitoring,cost,security,capacity,dr}` operate against it.
+
+**None of it is provisioned by the live Terraform root**, and the account IDs in
+it (`111111111111` … `666666666666`) are placeholders. Treat that material as a
+design reference and a demo surface. Do not quote its cost estimates, account
+topology, data-store inventory or DR posture as a description of Aether's
+infrastructure.
+
+## Dead second Terraform tree
+
+`AWS Deployment/aether-aws/terraform/environments/{dev,staging,production,demo}/`
+and `AWS Deployment/main.tf` are a second, dead Terraform tree. Between them they
+reference seven modules that do not exist in this repository — `cloudfront`,
+`opensearch`, `dynamodb`, `sagemaker`, `api_gateway`, `iam`, `waf` — so
+`terraform init` fails there, and `environments/demo/main.tf` is not valid HCL.
+
+They are not the deployment path, nothing applies them, and they describe an
+architecture Aether does not run. Do not modify, extend, "fix" or copy patterns
+out of that tree. The live root is
+`AWS Deployment/aether-aws/terraform/`, and the live variable surface is
+`variables.tf` plus `profiles/*.tfvars`.
+
+## What is not claimed
+
+- No environment has been applied, billed, load-tested or rolled back. No
+  credentialed plan has been produced against real remote state.
+- No multi-region, active-active or DR posture exists in Terraform.
+- No compliance certification, external attestation or audit coverage.
+- Readiness is reported as a code-complete column and an externally-verified
+  column and is never merged into one number; `deployment_ready` is `false`.
+  See [Release Evidence](RELEASE-EVIDENCE.md).
+
+## See also
+
+- [Deployment Profiles](DEPLOYMENT-PROFILES.md)
+- [AWS Lean Production](AWS-LEAN-PRODUCTION.md)
+- [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md)
+- [Cost Optimization](COST-OPTIMIZATION.md)
+- [Deployment Runbook](DEPLOYMENT-RUNBOOK.md)

@@ -559,7 +559,11 @@ Verified in this repository, reproducibly:
   `enterprise_isolated`. Assertions read the **planned module graph**
   (`length(module.msk) == 0` and friends), not the locals that produced it, so
   a local that stops being wired into `count` is caught rather than passed. The
-  assertions are mutation-tested: a deliberate regression genuinely fails them.
+  assertions were mutation-checked by hand during development — forcing
+  `count = 1` on `module.msk` fails with `module.msk is tuple with 1 element` —
+  so they are known not to be tautological. There is no automated mutation
+  harness in the repo; that check is a development-time discipline, not a
+  standing gate.
 - `scripts/release/check_cost_policy_terraform.py` statically evaluates the
   `profiles.tf` locals and proves each forbidden toggle resolves to `false` for
   `production-lean`.

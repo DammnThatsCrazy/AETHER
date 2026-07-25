@@ -78,13 +78,22 @@ and the distinction is load-bearing:
 Only the fixed baseline is gated. The usage band is always reported alongside
 it so nobody mistakes the baseline for the bill.
 
-## Measured production-lean cost
+## Modelled production-lean cost
 
 Produced by `scripts/release/check_cost_model.py --profile production-lean`
 against the canonical inventory that
-`scripts/release/check_terraform_plan_policy.py` emits from a real
-`terraform show -json` plan (Terraform 1.9.8, us-east-1). Result: **PASS with a
+`scripts/release/check_terraform_plan_policy.py` emits. Result: **PASS with a
 target warning.**
+
+**Read the provenance of that inventory before quoting the number.** It is
+derived from `tests/fixtures/terraform_plans/production-lean-valid.json`, a
+committed fixture written by hand to match the shape this Terraform root
+produces. It is **not** the output of a credentialed `terraform show -json`
+against real state, because no such plan has ever been produced — this
+repository has no AWS credentials and no state backend. The fixture is
+representative, and it is checked against the module graph the plan tests
+assert, but "representative" is not "observed". Every figure below inherits
+that caveat.
 
 ### Fixed baseline — USD 184.13/month
 
@@ -100,9 +109,11 @@ target warning.**
 
 Priced at zero and accounted for explicitly rather than omitted: the
 `db.serverless` Aurora writer instance (ACU consumption bills on the cluster),
-all nine CloudWatch alarms and the dashboard (inside the always-free
+all seven CloudWatch alarms and the single dashboard (inside the always-free
 allowances of 10 alarms and 3 dashboards), and every entry in
-`zero_cost_types`.
+`zero_cost_types`. Note the alarm count sits close to the free allowance:
+adding four more alarms starts billing at USD 0.10 each, so an observability
+change is also a cost change.
 
 Fargate is **121.10** of the 184.13 — 66% of the fixed baseline. Aurora's floor
 is 24%. Those two lines are the entire optimisation surface; everything else

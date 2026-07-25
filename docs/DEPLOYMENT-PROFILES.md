@@ -6,139 +6,543 @@ visibility: I
 audience: [ops, architect]
 status: stable
 canonical_owner: platform@aether
-estimated_read_minutes: 6
+estimated_read_minutes: 22
 toc_depth: 3
 ---
 
 # Deployment Profiles
 
-Aether's architecture stays viable across ten deployment profiles, from a
-zero-backend local mock to a fully isolated enterprise deployment. The canonical
-matrix — including backend selectors and the production-lean cost policy — lives
-in `config/deployment_profiles.yaml` and is validated by
-`make validate-profile-config` and `make validate-cost-policy`.
+Aether declares ten deployment profiles, from a zero-backend local mock to a
+contractually isolated enterprise deployment. `config/deployment_profiles.yaml`
+is the canonical matrix — backend selectors, cost policy and numeric budgets —
+and `scripts/release/check_profile_config.py` validates it.
 
-## Profiles
+Four of the ten are **cloud profiles**: `staging`, `production-lean`,
+`production-scale`, `enterprise-isolated`. Only those four are selectable in
+Terraform through `var.deployment_profile`, and only those four have a
+`profiles/*.tfvars` file, a plan test and a policy contract. The other six are
+declared so the architecture stays viable through them; they are described
+honestly below, including where the automation does not exist.
 
-| Profile | Class | Purpose |
-|---|---|---|
-| `local-mocked` | local | Frontend/product work without a backend (MSW mocks). |
-| `local-live` | local | Normal backend development (Postgres + one backend + inline ML). |
-| `local-full` | local | Full local integration (all local dependencies). |
-| `demo-static` | demo | Zero/near-zero cost static demo. |
-| `demo-live` | demo | Temporary live demo with a synthetic tenant + TTL cleanup. |
-| `preview` | preview | PR-specific environment on shared foundation; auto-expires. |
-| `staging` | staging | Release rehearsal; wakes for validation, sleeps after. |
-| `production-lean` | production | First customer / early controlled production. |
-| `production-scale` | production | Higher traffic once justified. |
-| `enterprise-isolated` | enterprise | Contractual/regulatory customer isolation. |
+`deployment_profile` is not documentation. It drives module `count` and module
+inputs in the Terraform root, so a `production-lean` plan structurally cannot
+contain a forbidden resource. See
+[Terraform enforcement](#terraform-enforcement) for exactly how that is proven.
 
-## production-lean cost policy
+## Profile summary
 
-`production-lean` is the founding-tenant target. It **must** provision
-CloudFront/S3 static frontends, an ALB, explicit ECS runtime-role services, Aurora Serverless
-v2, SQS/SNS, DynamoDB, an S3 object lake, Secrets/KMS, CloudWatch alarms, inline
-ML, and a Postgres graph.
+| Profile | Class | Selectable in Terraform | Cost-capped | Runtime execution mode | NAT gateways |
+|---|---|---|---|---|---|
+| `local-mocked` | local | no | n/a | n/a (no backend) | n/a |
+| `local-live` | local | no | n/a | single process | n/a |
+| `local-full` | local | no | n/a | compose per-role | n/a |
+| `demo-static` | demo | no | yes | n/a (static only) | n/a |
+| `demo-live` | demo | no | yes | not implemented | n/a |
+| `preview` | preview | no | yes | not implemented | n/a |
+| `staging` | staging | **yes** | yes (USD 25 / 50) | `consolidated` — 2 tasks | **0** |
+| `production-lean` | production | **yes** | yes (USD 150 / 200) | `consolidated` — 2 tasks | **0** |
+| `production-scale` | production | **yes** | no | `dedicated` — 9 services | 1 (`single`) |
+| `enterprise-isolated` | enterprise | **yes** | no | `dedicated` — 9 services | 3 (`ha`) |
 
-It **must not** provision:
+---
 
-```
-msk                          elasticache
-neptune                      clickhouse
-dedicated_ml_service         frontend_ecs_services
-legacy_rds                   nat_gateway_unless_explicit
-always_on_staging_compute    prometheus_grafana_servers
-```
+## `local-mocked`
 
-`make validate-cost-policy` asserts this forbidden set is declared in the
-canonical policy data. `make validate-cost-policy-terraform` extends this to the
-infrastructure layer — see [Terraform enforcement](#terraform-enforcement-deployment_profile)
-below (ledger item `FT-9-TERRAFORM-PROFILES`).
-
-### Cost posture (estimates only)
-
-Relative to the heavy default stack, `production-lean` targets approximately
-**75–90% lower** monthly infra cost; relative to a lean-ish stack, approximately
-**50–70% lower**. These are estimates; the enforceable guarantee is the
-forbidden-resource policy, not a dollar figure.
-
-## Terraform enforcement (deployment_profile)
-
-The infrastructure at `AWS Deployment/aether-aws/terraform/` selects a profile
-through the `deployment_profile` variable (validated to one of `staging`,
-`production-lean`, `production-scale`, `enterprise-isolated`; default
-`production-lean`). Ready-made variable files live under `profiles/`:
-
-```bash
-terraform apply -var-file=profiles/production-lean.tfvars
-terraform apply -var-file=profiles/production-scale.tfvars
-```
-
-`profiles.tf` derives a set of `enable_*` resource toggles from the profile. For
-`production-lean` every toggle for a forbidden resource is false by derivation —
-each is `local.scale || local.enterprise` (false when lean) or literal `false`:
-
-| Forbidden resource | Terraform local |
+| | |
 |---|---|
-| `msk` | `enable_msk` |
-| `elasticache` | `enable_elasticache` |
-| `neptune` | `enable_neptune` |
-| `clickhouse` | `enable_clickhouse` |
-| `dedicated_ml_service` | `enable_dedicated_ml` |
-| `frontend_ecs_services` | `enable_frontend_ecs` |
-| `legacy_rds` | `enable_legacy_rds` (literal `false`) |
-| `nat_gateway_unless_explicit` | `enable_nat_gateway` |
-| `prometheus_grafana_servers` | `enable_prometheus_grafana` |
+| **Purpose** | Frontend and product work with no backend at all. |
+| **Selection** | Run the SPAs with MSW mocks; no backend process, no containers. |
+| **Resource inventory** | `aether-spa`, `kyber-spa`, `demo-spa`, `mock-data-msw`. Nothing else. |
+| **Runtime topology** | None. No API, no workers, no queues. |
+| **Data behaviour** | All responses are mock fixtures. No database, no persistence. |
+| **Network behaviour** | Localhost only. |
+| **Cost posture** | Zero. `cost_capped: false` because there is nothing to cap. |
+| **TTL / lifecycle** | None; a developer stops the dev server. |
+| **Security posture** | No credentials, no tenant data, no secrets. The profile explicitly forbids `backend`, `postgres`, `redis`, `localstack`, `clickhouse`, `ml` and `aws-services`, so a mocked session cannot silently acquire a real backend. |
+| **Validation** | `make validate-profile-config` (declaration coherence); `python scripts/validate_frontend_data_truth.py` asserts no synthetic dataset is compiled into a non-demo bundle. |
+| **Limitations** | Proves nothing about the backend. Never a source of release evidence. |
+| **Promotion path** | → `local-live`. |
+
+## `local-live`
+
+| | |
+|---|---|
+| **Purpose** | Normal backend development. |
+| **Selection** | `docker-compose up` with the default services (Postgres + one backend process). |
+| **Resource inventory** | Postgres, one backend process, inline ML, local frontends. Optional: LocalStack, ClickHouse, legacy Redis, observability. |
+| **Runtime topology** | One process. The `all` role is a local/test convenience token and is **never deployable** — `scripts/release/check_delivery_topology.py` enforces that. |
+| **Data behaviour** | `database: postgres`, `graph: postgres`, `analytics: postgres`, `cache: memory`, `event: memory`, `object: memory`, `ml: inline`. |
+| **Network behaviour** | Localhost only. |
+| **Cost posture** | Zero. |
+| **TTL / lifecycle** | None. |
+| **Security posture** | Trust-plane flags default **off** in `local`/`dev`, preserving legacy API-key responses — see [Founding-Tenant Production](FOUNDING-TENANT-PRODUCTION.md). Do not use local defaults as a model for a deployed environment. |
+| **Validation** | `pytest`, `npm test`, `make ci-check`. |
+| **Limitations** | Memory cache and memory event bus are **forbidden in any deployed profile**. Behaviour that depends on them does not transfer. |
+| **Promotion path** | → `local-full` for integration behaviour, → `staging` for release rehearsal. |
+
+## `local-full`
+
+| | |
+|---|---|
+| **Purpose** | Full local integration — every dependency running locally. |
+| **Selection** | `docker-compose --profile full up`, or the narrower `workers` / `streaming` / `analytics` / `integration` compose profiles. |
+| **Resource inventory** | Postgres, Redis, LocalStack (S3/SNS/SQS), ClickHouse, Kafka + ZooKeeper, MLflow, backend, and one container per worker role. |
+| **Runtime topology** | One container per role, mirroring the `dedicated` cloud shape. This is the only local profile that exercises per-role process isolation. |
+| **Data behaviour** | `cache: redis`, `event: localstack`, `analytics: clickhouse`, `object: localstack-s3`, `ml: inline`. |
+| **Network behaviour** | Docker bridge network; no cloud endpoints. |
+| **Cost posture** | Zero (local compute). |
+| **TTL / lifecycle** | None. |
+| **Security posture** | LocalStack credentials are fake by construction. No real AWS principal is reachable. |
+| **Validation** | `make integration-durable` and `make integration-faults` (both require Docker and must not be silently skipped for a release verdict). |
+| **Limitations** | LocalStack is not SQS/SNS. Consumer-group and DLQ behaviour is representative, not authoritative. |
+| **Promotion path** | → `staging`. |
+
+## `demo-static`
+
+| | |
+|---|---|
+| **Purpose** | Zero/near-zero-cost sales and investor demo. |
+| **Selection** | **Not implemented as automation in this repository.** Declared in the profile matrix only. |
+| **Resource inventory** | Static frontend plus pre-computed synthetic data on S3. `object: s3`; every other backend dimension is `none`. |
+| **Runtime topology** | None — no API and no workers. |
+| **Data behaviour** | Synthetic, pre-computed, immutable. No tenant data of any kind. |
+| **Network behaviour** | Static origin behind a CDN. |
+| **Cost posture** | `cost_capped: true`; no `budget` block and therefore no numeric gate. |
+| **TTL / lifecycle** | None declared. |
+| **Security posture** | No live backend to attack; no credentials issued. `scripts/validate_frontend_data_truth.py` is the control that keeps synthetic demo data out of every other profile's bundle. |
+| **Validation** | `make validate-profile-config`. |
+| **Limitations** | No selection mechanism, no deployment workflow, no infrastructure. Do not describe it as an available environment. |
+| **Promotion path** | → `demo-live` when a live backend is genuinely needed. |
+
+## `demo-live`
+
+| | |
+|---|---|
+| **Purpose** | Temporary live demo against a shared non-production backend. |
+| **Selection** | **Not implemented as automation in this repository.** No Terraform selector, no workflow, no TTL job exists. |
+| **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. |
+| **Runtime topology** | Undeclared — `config/runtime_deployment.yaml` carries no `demo-live` entry. |
+| **Data behaviour** | Synthetic tenant only. Never real customer data. |
+| **Network behaviour** | Shared non-production network. |
+| **Cost posture** | `cost_capped: true`; no numeric budget declared. |
+| **TTL / lifecycle** | `ttl_cleanup_required: true` is **declared but not enforced by any shipped job**. |
+| **Security posture** | Would inherit the shared non-production account's posture. Unproven. |
+| **Validation** | `make validate-profile-config` only. |
+| **Limitations** | The TTL requirement has no enforcement, which is the exact failure mode that leaves demo environments running. Treat the declaration as a design constraint, not a control. |
+| **Promotion path** | None. A demo is never promoted; a release is rehearsed in `staging`. |
+
+## `preview`
+
+| | |
+|---|---|
+| **Purpose** | PR-specific live environment, created only when explicitly requested. |
+| **Selection** | **Not implemented as automation in this repository.** |
+| **Resource inventory** | Shared foundation Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, with a temporary tenant schema/prefix route. |
+| **Runtime topology** | Undeclared in `config/runtime_deployment.yaml`. |
+| **Data behaviour** | Temporary tenant on the shared foundation; auto-expiring. |
+| **Network behaviour** | Shared foundation network. Explicitly **forbids** a dedicated VPC, dedicated ALB, dedicated Aurora or dedicated Neptune. |
+| **Cost posture** | `cost_capped: true`; no numeric budget declared. |
+| **TTL / lifecycle** | `ttl_cleanup_required: true` and `auto-expire` are declared; **no shipped job enforces either**. `run-forever` is a declared forbidden behaviour. |
+| **Security posture** | Would share a foundation database with other previews; isolation would rest entirely on the tenant schema prefix. Unproven. |
+| **Validation** | `make validate-profile-config` only. |
+| **Limitations** | As above — declared constraints without enforcement. |
+| **Promotion path** | None. Preview environments are discarded, not promoted. |
+
+## `staging`
+
+| | |
+|---|---|
+| **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
+| **Selection** | `terraform plan -var-file=profiles/staging.tfvars`, or `.github/workflows/staging-lifecycle.yml`, which dispatches `terraform-promote.yml` for every mutation. `environment = "staging"` is set explicitly; the root default is `production`. |
+| **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, S3 SPA origins + SSM pointers, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. |
+| **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count **and every autoscaling floor** to zero. |
+| **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. Aurora auto-pauses at 0 ACU while asleep. |
+| **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |
+| **Cost posture** | Target USD 25/month, hard ceiling USD 50/month, against a declared `maximum_scheduled_awake_hours_per_month: 40`. Hourly resources are prorated by awake hours; per-month charges (KMS keys, secrets, alarms) accrue regardless of sleep. See [Cost Optimization](COST-OPTIMIZATION.md). |
+| **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and drops autoscaling floors, then fails the run so the lapse is visible. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
+| **Security posture** | Same isolation shape as production-lean. The rehearsal itself probes cross-tenant reads, unauthenticated access and empty-state behaviour with two distinct tenants. |
+| **Validation** | `make test-staging-lifecycle`, `make test-terraform-profiles` (run blocks `staging_profile_plan` and `staging_asleep_profile_plan`), `make deployment-profile-gate`. |
+| **Limitations** | No rehearsal has been executed against real AWS. Every lifecycle control is code-complete and externally unverified — see [Readiness](#readiness-and-what-is-externally-blocked). |
+| **Promotion path** | Staging is not promoted. It rehearses the artifact that `production-lean` will receive. |
+
+## `production-lean`
+
+| | |
+|---|---|
+| **Purpose** | Founding tenant and early controlled production — the smallest footprint that runs the whole platform for a first paying customer. |
+| **Selection** | `terraform plan -var-file=profiles/production-lean.tfvars`. It is also the root default for `var.deployment_profile`. |
+| **Resource inventory** | Identical class list to `staging`, sized for production: Aurora Serverless v2 (`aurora_min_acu = 0.5`, max 4), DynamoDB cache, SNS/SQS + DLQs, S3 object lake, S3 SPA origins + SSM pointers, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs, Prometheus/Grafana. |
+| **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks: `api` (1 vCPU / 2 GiB, max 4) and `lean-worker` (2 vCPU / 8 GiB, max 4) hosting all eight worker roles. No Spot at any capacity, because the task hosts `outbox-relay`. |
+| **Data behaviour** | Aurora Postgres is the database, graph and analytics of record. DynamoDB is the cache. SNS/SQS is the event substrate. ML runs in-process (`remote_ml: false`), so the semantic classifier is a resident model in the `lean-worker` task. |
+| **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. NAT is *forbidden unless explicit*: setting this variable to a NAT mode is the explicit opt-in and must be reviewed as a cost-policy exception. |
+| **Cost posture** | Fixed baseline measures **USD 184.13/month** — USD 34.13 over the USD 150 target and USD 15.87 under the USD 200 hard ceiling. The gate warns and passes. The deviation is reviewed and **accepted**, with both closing levers examined and declined; the full analysis and approval record is in [Cost Optimization](COST-OPTIMIZATION.md). Expected usage-variable cost is a further USD 107.22/month and is not bounded by the ceiling. |
+| **TTL / lifecycle** | None. This profile runs continuously; 730 h/month is the pricing basis. |
+| **Security posture** | Data stores in isolated subnets with no default route. Secrets fetched at container start from Secrets Manager; no secret values in task definitions or state. ALB enforces TLS 1.3 minimum. VPC flow logs on. Tasks carry a public IP for egress; inbound is ALB-only via the security group. |
+| **Validation** | `make deployment-profile-gate` runs the whole no-credentials chain. `make test-terraform-profiles` proves the planned module cardinality; `make validate-terraform-profile-policy` and `make validate-cost-model` score a plan inventory. |
+| **Limitations** | Never applied, never billed, never load-tested. First application of the consolidated shape **destroys seven ECS services** — see [Migration hazards](#migration-hazards). Shares `environment = "production"` with the other two production-class profiles and therefore needs its own AWS account. |
+| **Promotion path** | → `production-scale` on observed, sustained load. Trigger table in [AWS Lean Production](AWS-LEAN-PRODUCTION.md). |
+
+## `production-scale`
+
+| | |
+|---|---|
+| **Purpose** | Higher traffic, once the load that justifies it has been observed. |
+| **Selection** | `terraform plan -var-file=profiles/production-scale.tfvars`. |
+| **Resource inventory** | Everything `production-lean` provisions, **plus** ElastiCache Redis, MSK Kafka (3 brokers), Neptune, the dedicated ML ECS service with its ALB target group and `/v1/ml/*` listener rule, and one NAT gateway. Aurora `min_acu = 1`, max 8. Legacy RDS, self-managed Prometheus/Grafana and frontend ECS services remain forbidden — those are architectural regressions, not cost decisions. |
+| **Runtime topology** | `execution_mode: dedicated`. Nine services, one per role: `api` (×3), `outbox-relay` (×2), `stream-worker` (×3), `identity-worker`, `graph-writer`, `measurement-worker`, `semantic-worker`, `materializer` (×2 each), `maintenance` (×1). Baselines run on-demand; surge above the baseline runs on `FARGATE_SPOT` for the queue-draining roles only — never for `api` or `outbox-relay`. |
+| **Data behaviour** | `cache: redis`, `event: kafka`, `graph: neptune`, `analytics: clickhouse` (selector only — this root provisions no ClickHouse resource), `ml: dedicated`. Aurora remains the database of record. |
+| **Network behaviour** | `network_egress_mode = "single_nat"` → `nat_mode = "single"`. Private task subnets, egress through one shared NAT gateway and one Elastic IP. |
+| **Cost posture** | `cost_capped: false` and **no `budget` block**. Spend is bounded by the traffic that justified the promotion; the workflows detect the absent budget and skip the numeric gate rather than erroring. The shape policy still applies. |
+| **TTL / lifecycle** | None. |
+| **Security posture** | Adds three data stores in isolated subnets, each with its own KMS key and security group. Redis uses TLS in transit and an AUTH token stored only in Secrets Manager. Alarms follow the backend: `elasticache_memory`, `msk_offline_partitions` and `neptune_cpu` are created only when the matching store exists, so no alarm is left permanently in `INSUFFICIENT_DATA`. |
+| **Validation** | `make test-terraform-profiles` run block `production_scale_profile_plan` asserts `length(module.msk) == 1`, `length(module.elasticache) == 1`, `length(module.neptune) == 1`, `length(module.rds) == 0`, one NAT gateway and one NAT EIP. |
+| **Limitations** | ClickHouse is a selector with no module behind it. `analytics: clickhouse` currently resolves to a declared intent, not provisioned infrastructure. Collides on resource names with the other two production-class profiles. |
+| **Promotion path** | ← from `production-lean`; → `enterprise-isolated` when a customer contract requires isolation. |
+
+## `enterprise-isolated`
+
+| | |
+|---|---|
+| **Purpose** | Customer isolation required by contract or regulation. |
+| **Selection** | `terraform plan -var-file=profiles/enterprise-isolated.tfvars`. |
+| **Resource inventory** | The `production-scale` inventory with larger capacity: Aurora `min_acu = 2`, max 16, `db_multi_az = true`, `log_retention_days = 30`, and three NAT gateways with three Elastic IPs (one per AZ). |
+| **Runtime topology** | `execution_mode: dedicated`, same nine services and same sizing as `production-scale`, with one deliberate difference: **no Spot anywhere**. A reclaimed surge task is an availability event to explain, not a discount to report. |
+| **Data behaviour** | Same selectors as `production-scale`. `customer_specific_retention` and `region_specific_deployment` are declared as permitted, and are configured per deployment rather than provisioned by a toggle. |
+| **Network behaviour** | `network_egress_mode = "ha_nat"` → `nat_mode = "ha"`: one NAT gateway per availability zone, private task subnets. |
+| **Cost posture** | `cost_capped: false`, no budget block; spend is recovered contractually per customer. |
+| **TTL / lifecycle** | None. |
+| **Security posture — what is technically implemented** | A dedicated VPC with three-tier subnets; data stores in isolated subnets with no default route; dedicated Aurora, queues, cache, graph and S3/KMS for the deployment; per-deployment customer-managed KMS keys; Multi-AZ database; 30-day log retention; VPC flow logs; TLS 1.3 minimum at the ALB; least-privilege task IAM scoped to the queues, tables and secrets the profile actually provisions. |
+| **Security posture — what is *not* claimed** | No FedRAMP authorization, no government accreditation, no contractual isolation guarantee, no dedicated-account isolation and no regional data-sovereignty claim. `may_enable: dedicated_aws_account` is a permitted *option*, and **no dedicated account has been provisioned** — every control that depends on one is externally unverified. Isolation today is VPC-, key- and state-level within whatever account the profile is applied to. |
+| **Validation** | `make test-terraform-profiles` run block `enterprise_isolated_profile_plan` asserts three NAT gateways, three NAT EIPs, `nat_mode == "ha"`, and the same gated-module cardinalities as `production-scale`. |
+| **Limitations** | Inherits `environment = "production"`, so it collides on resource names with both other production-class profiles and cannot share their account or region. Provisioning a dedicated account is external work. |
+| **Promotion path** | Terminal. `max_supported_profile: enterprise-isolated`; Aether claims nothing beyond it. |
+
+---
+
+## Runtime topology — schema v2
+
+`config/runtime_deployment.yaml` is the canonical deployable topology, and its
+unit is the **ECS service, not the logical role**. Schema v1's flat `roles:` map
+was replaced because the deployable unit changed.
+
+A `services:` entry is one ECS service and one task definition. Its `roles:`
+list names the logical roles that one process hosts. `execution_mode` names the
+packing strategy:
+
+- **`consolidated`** — one task hosts several logical roles through an execution
+  group token (`services/runtime/roles.py::EXECUTION_GROUPS`).
+  `production-lean` and `staging` run **2 always-on tasks, not 10**: `api`, plus
+  one `lean-worker` whose task hosts all eight worker roles —
+  `outbox-relay`, `stream-worker`, `identity-worker`, `graph-writer`,
+  `measurement-worker`, `semantic-worker`, `materializer`, `maintenance`.
+- **`dedicated`** — one task per logical role. `production-scale` and
+  `enterprise-isolated`, where per-role scaling and per-role blast radius are
+  worth eight extra task definitions.
+
+**Consolidation moves the process boundary and nothing else.** Inside a
+consolidated task every member role keeps its own queue, consumer group, DLQ,
+retry policy, backpressure budget, metrics label and restart behaviour, resolved
+in-process by `services/runtime/roles.py::roles_in` and
+`services/runtime/consumer_specs.py`. Terraform carries the role list for one
+reason only: a consolidated task must bind one SQS queue per hosted role, which
+a single `SQS_QUEUE_URL` cannot express.
+
+Two invariants are enforced by `scripts/release/check_delivery_topology.py`:
+
+- Every role in `roles.py::WORKER_ROLES` is hosted by **exactly one** service in
+  **every** profile — never orphaned, never claimed twice. `api` never hosts a
+  worker role or a consumer, and the local/test role `all` is never deployable.
+- Spot is forbidden outright on `api` and on any service hosting
+  `outbox-relay`, so a Spot reclaim can never interrupt public traffic or the
+  at-least-once delivery path.
+
+The service key **is** the `AETHER_ROLE` token the container boots with, which
+is why the consolidated service is keyed `lean-worker` and not `workers`. A
+service key maps 1:1 to `"<project>-<env>-<key>"` with one load-bearing
+exception: `api` is served by the Terraform-provisioned
+`"<project>-<env>-backend"` service. `deploy.yml` special-cases that mapping and
+`check_delivery_topology.py` pins it in both places.
+
+### `staging_state`
+
+`staging` declares a `staging_state` block with `awake` (multiplier 1) and
+`asleep` (multiplier 0). The multiplier is applied in `profiles.tf` to three
+values, and all three are load-bearing:
+
+| Scaled | Why |
+|---|---|
+| `desired_count` | The obvious one, and on its own not enough. |
+| autoscaling `min_capacity` | Application Auto Scaling clamps a service back up to its floor. A floor of 1 against a desired count of 0 revives the task within a cooldown, so staging never sleeps while appearing to. |
+| capacity provider `base_count` | A guaranteed on-demand floor under a desired count of 0 is what `check_delivery_topology.py` rejects as `CAPACITY_BASE_EXCEEDS_DESIRED`. |
+
+`max_capacity` is deliberately **not** scaled: the ceiling is a static safety
+bound on the shape, and collapsing it would erase the reviewed envelope from a
+sleeping plan. An asleep environment therefore owns exactly the same services as
+an awake one and wakes by flipping one input, not by planning a different shape.
+
+`staging_state` is a **plan-time input** to `terraform-promote.yml`. An apply
+consumes the stored plan and cannot reshape it. Profiles with no `staging_state`
+block are always at full capacity, and the three production-class profiles
+ignore the input entirely.
+
+Validate with `make test-runtime-topology` and `make validate-delivery-topology`.
+
+---
+
+## Terraform enforcement
+
+The Terraform root at `AWS Deployment/aether-aws/terraform/` selects a profile
+through `var.deployment_profile`, validated to one of `staging`,
+`production-lean`, `production-scale`, `enterprise-isolated` (default
+`production-lean`). `profiles.tf` derives `enable_*` locals from it, and
+`main.tf` wires those into module `count` and module inputs.
+
+Enforcement is proven at three distinct layers. They check different things and
+none of them substitutes for another.
+
+### 1. Static tripwire — locals resolve to false
 
 `make validate-cost-policy-terraform`
-(`scripts/release/check_cost_policy_terraform.py`) statically asserts that these
-locals resolve to false for `production-lean`, that the `deployment_profile`
-variable and its validation exist, and that each `profiles/*.tfvars` sets a valid
-profile matching its filename. It runs in `release-gate` and
-`founding-tenant-release-gate` (not in `ci-check`).
+(`scripts/release/check_cost_policy_terraform.py`) reads `profiles.tf` as text
+and statically evaluates each toggle. Every forbidden-for-lean toggle is a
+closed boolean expression over the four profiles, or the literal `false`:
 
-The Infrastructure Profiles workflow has two explicit evidence layers for
-`staging`, `production-lean`, `production-scale`, and
-`enterprise-isolated`:
+| Forbidden resource | Terraform local | Derivation |
+|---|---|---|
+| `msk` | `enable_msk` | `local.scale \|\| local.enterprise` |
+| `elasticache` | `enable_elasticache` | `local.scale \|\| local.enterprise` |
+| `neptune` | `enable_neptune` | `local.scale \|\| local.enterprise` |
+| `clickhouse` | `enable_clickhouse` | `local.scale \|\| local.enterprise` (selector only) |
+| `dedicated_ml_service` | `enable_dedicated_ml` | `local.scale \|\| local.enterprise` |
+| `nat_gateway_unless_explicit` | `enable_nat_gateway` | `local.scale \|\| local.enterprise` |
+| `frontend_ecs_services` | `enable_frontend_ecs` | literal `false` — no profile |
+| `legacy_rds` | `enable_legacy_rds` | literal `false` — no profile |
+| `prometheus_grafana_servers` | `enable_prometheus_grafana` | literal `false` — no profile |
 
-1. Every pull request runs a provider-mocked Terraform configuration plan against
-   the real root module, provider schemas, checked-in `profiles/*.tfvars`, and
-   profile assertions. It uses no remote state or live provider APIs and publishes
-   an immutable `terraform-configuration-plan-*` artifact.
-2. When the repository has the complete deployment secret set, a separate OIDC
-   job runs an environment-authoritative plan with an isolated remote-state key
-   and publishes an immutable `terraform-remote-plan-*` artifact.
+The validator also asserts that the `deployment_profile` variable and its
+validation exist, and that each `profiles/*.tfvars` sets a profile matching its
+filename. It needs no plan and no credentials, so it catches a regression the
+moment it is written. It runs in `release-gate` and
+`founding-tenant-release-gate`, not in `ci-check`.
 
-If the deployment secrets are absent, pull requests receive a readiness notice
-and the remote-plan jobs are skipped; the four configuration-plan checks still
-must pass. A push to `main` fails closed before promotion when credentials are
-incomplete or any remote plan does not pass. The credentialed layer requires
-`AWS_INFRA_ROLE_ARN`, `TF_STATE_BUCKET`, `TF_LOCK_TABLE`, and the
-`TF_*` inputs for ACM, domain, alerts, Auth0, and the Aether/Kyber application
-URLs.
+### 2. Config-plan tests — planned module cardinality
 
-The static cost-policy validator remains a defense-in-depth check. Reviewers
-must distinguish configuration-plan evidence from environment-authoritative
-remote-plan evidence and inspect the latter before promotion. Neither artifact
-proves that an environment has been applied or certified.
+`make test-terraform-profiles` runs `terraform validate` and then
+`terraform test -filter=tests/profile_plan.tftest.hcl`. **`terraform validate`
+passes, and `terraform test` passes for all four cloud profiles.** Five
+provider-mocked run blocks — `staging_profile_plan`,
+`staging_asleep_profile_plan`, `production_lean_profile_plan`,
+`production_scale_profile_plan`, `enterprise_isolated_profile_plan` — assert
+against the **planned module graph**, not against the locals that produced it:
 
-## Backend selectors
+```hcl
+length(module.msk)              == 0    # production-lean
+length(module.vpc.nat_gateway_ids) == 0
+module.vpc.nat_mode             == "none"
 
-Each profile declares a selector for every backend dimension (`database`,
-`cache`, `event`, `graph`, `analytics`, `object`, `ml`). Runtime enforcement of
-these selectors (rejecting memory backends in production, explicit worker roles)
-is tracked in the ledger as `FT-4-RUNTIME-ROLES`.
+length(module.msk)              == 1    # production-scale
+length(module.vpc.nat_gateway_ids) == 1
 
-## Runtime-role deployment topology
+length(module.vpc.nat_gateway_ids) == 3 # enterprise-isolated
+module.vpc.nat_mode             == "ha"
+```
 
-`config/runtime_deployment.yaml` is the deployable topology contract. Each
-non-local profile gives `api`, `outbox-relay`, `stream-worker`,
-`identity-worker`, `graph-writer`, `measurement-worker`, `materializer`, and
-`maintenance` its own service sizing. The local/test convenience role `all` is
-not deployable. `make validate-delivery-topology` compares this contract to the
-canonical Python role registry and fails when a role is missing or duplicated.
+Reading the graph rather than the locals is the point: a local that stops being
+wired into a `count` is caught rather than passed over. The assertions are
+**mutation-proven** — forcing `count = 1` on MSK fails the lean run block with
+`module.msk is tuple with 1 element`. No AWS credentials are required.
 
-The production-lean contract also requires static Aether and Kyber bundles and
-inline ML. It does not allow frontend ECS services or a dedicated ML service.
-Deployment registers a new task-definition revision for every required role,
-waits for every service, and treats a missing service as an error.
+### 3. Plan policy — a real plan JSON, scored against contracts
+
+`scripts/release/check_terraform_plan_policy.py` reads an actual
+`terraform show -json` plan, derives a canonical resource inventory
+(`artifacts/profile-resource-inventory.json`) and scores it against
+`config/terraform_resource_contracts.yaml`, which maps every policy key to the
+module address and cardinality a conforming plan must show. This is the layer
+that catches a resource the locals never modelled.
+
+```bash
+make validate-terraform-profile-policy   # defaults to the committed lean fixture
+make validate-cost-model                 # prices that inventory against the budget
+make test-plan-policy                    # validator against pass/fail fixtures
+```
+
+`PLAN_JSON` defaults to `tests/fixtures/terraform_plans/production-lean-valid.json`
+so the gate is runnable without credentials. CI overrides it with a real plan.
+Both `infrastructure.yml` and `terraform-promote.yml` run the validator against
+plan JSON they produced, and the cost model against the inventory it emitted.
+
+### What the enforcement does *not* prove
+
+A configuration plan is not an applied environment. Neither the mocked run
+blocks nor the fixture-scored policy result demonstrates that a plan was
+produced with credentials against the real remote state, and none of them
+demonstrates that anything was applied. Reviewers must distinguish
+configuration-plan evidence from environment-authoritative remote-plan
+evidence, and must read the latter before promotion. `always_on_staging_compute`
+in particular has nothing to count in a production plan — it is a lifecycle
+property enforced by the staging automation, not a plan assertion.
+
+---
+
+## Promotion and the apply path
+
+`.github/workflows/infrastructure.yml` is **plan-and-validate only and never
+applies Terraform.** The `apply-production-lean` job that auto-applied on every
+push to `main` has been **deleted**. What remains there:
+
+- a provider-mocked configuration plan for each of the four profiles on every
+  PR, publishing an immutable `terraform-configuration-plan-*` artifact;
+- an OIDC remote plan per profile when the complete credential set is present,
+  publishing `terraform-remote-plan-*` plus the policy and cost reports;
+- `require-production-credentials`, which on a push to `main` gates
+  **promotability**, not an apply: a commit is only dispatchable for promotion
+  if its main-branch run proved the credential set exists and all four profiles
+  produced a credentialed, policy- and cost-validated remote plan.
+
+`.github/workflows/terraform-promote.yml` is the **sole apply path**. It is
+`workflow_dispatch`-only — no push, tag, schedule or path trigger can reach an
+apply — and the apply job consumes the exact binary plan the plan job produced.
+**Apply never re-plans.** Before it runs it verifies:
+
+| Bound | Check |
+|---|---|
+| Plan identity | `reviewed.tfplan` digest equals the dispatched `plan_checksum`, and `sha256sum --check` passes on the recorded manifest |
+| Profile | `reviewed.profile` equals the dispatched profile |
+| State key | `reviewed.state-key` equals `profiles/<profile>/terraform.tfstate` |
+| Commit | apply checks out the plan's **own recorded commit**, not the dispatch ref, and verifies `HEAD` matches |
+| Terraform version | the installed version equals `reviewed.terraform-version` |
+| Lockfile | `sha256(.terraform.lock.hcl)` equals `reviewed.lock.sha256`, captured before `init` |
+| Expiry | the plan is **valid for 24 hours**; a longer claimed window, an inverted window or an expired plan all fail |
+| Policy and cost | `check_terraform_plan_policy.py` and `check_cost_model.py` are re-run at the reviewed commit — the artifact reports are evidence, not proof |
+
+Approval is per profile. The apply job binds to a distinct GitHub environment —
+`staging-terraform`, `production-lean-terraform`, `production-scale-terraform`,
+`enterprise-terraform` — so staging cannot borrow production's reviewers and
+production cannot be applied behind staging's.
+
+`staging_state` (`awake` | `asleep`) is a plan-time input recorded alongside the
+plan as `reviewed.staging-state`, so a reviewer can see which shape was
+approved. The three production-class profiles ignore it.
+
+`.github/workflows/staging-lifecycle.yml` never runs `terraform apply` itself;
+every mutation is a dispatch of `terraform-promote.yml`, and it independently
+re-verifies the reviewed plan (including asserting the planned ECS desired
+counts and autoscaling floors match the pinned `awake`/`asleep` shape) before
+dispatching. `.github/workflows/staging-ttl-guard.yml` deliberately runs no
+Terraform at all: its only enforcement action is an ECS scale-to-zero, which can
+only reduce running compute.
+
+---
+
+## Migration hazards
+
+Three hazards apply to the first application of the current profile shape. All
+three are correct and intended; each needs planning.
+
+- **Seven ECS services are destroyed.** Collapsing eight dedicated worker
+  services into one `lean-worker` is a genuine **destroy of seven ECS
+  services** on any workspace that already applied the per-role shape. This is
+  not hidden behind `moved` blocks and must not be: it is a change of
+  deployment unit, not a rename. Queues, DLQs, consumer groups and retry
+  policies all survive; the roles are re-hosted, not removed. Plan for a gap
+  between the old services draining and the new task becoming healthy.
+- **The private default route is a maintenance window.** The NAT default route
+  moved from an inline `route` attribute inside `aws_route_table.private` to a
+  standalone `aws_route.private_nat`. `moved` **cannot** express this — an
+  inline route block is an attribute, not an addressable resource, so there is
+  nothing to move from. On the first apply against a NAT-carrying workspace
+  (`production-scale`, `enterprise-isolated`) Terraform performs two unordered
+  operations on the live egress path. Apply it alone, expect a brief egress
+  outage, and afterwards verify each private route table has exactly one
+  `0.0.0.0/0` route to the intended gateway — in `ha` mode, the NAT in the same
+  AZ. `nat_mode = "none"` workspaces are unaffected.
+- **The three production-class profiles collide on resource names.**
+  `production-lean`, `production-scale` and `enterprise-isolated` all inherit
+  the root default `environment = "production"`; only `staging.tfvars` overrides
+  it. Resource names are `${var.project}-${var.environment}`, so all three
+  generate identical ECS cluster, ALB, log group, IAM, queue and bucket names.
+  Separate state keys keep the *state* apart and do nothing about the *names*.
+  **They require separate AWS accounts**, not just separate state keys.
+
+The mirror-image hazard — adding `count` to a module renaming its state address
+from `module.x` to `module.x[0]`, which would otherwise plan a
+destroy-and-recreate of a live cluster — is covered by 14 `moved` blocks in
+`moved.tf`. Do not delete them until every pre-existing workspace has applied at
+least once. Intentional removal of any data store goes through
+`AWS Deployment/aether-aws/terraform/DECOMMISSION.md`, never through a profile
+toggle.
+
+### Dead second Terraform tree
+
+`AWS Deployment/aether-aws/terraform/environments/{dev,staging,production,demo}/`
+and `AWS Deployment/main.tf` are a second, **dead** Terraform tree. Between them
+they reference seven modules that do not exist in this repository —
+`cloudfront`, `opensearch`, `dynamodb`, `sagemaker`, `api_gateway`, `iam`,
+`waf` — so `terraform init` fails there, and `environments/demo/main.tf` is not
+valid HCL. It is not the deployment path and nothing applies it. Do not modify,
+extend, "fix" or copy patterns out of it.
+
+---
+
+## Readiness, and what is externally blocked
+
+Readiness is reported as three numbers by
+`make deployment-readiness-score` (`scripts/release/check_deployment_readiness.py`)
+against `config/deployment_readiness.yaml`. **They are never merged into one
+number**, and the code-complete column must never be quoted as "the score".
+
+| Scorecard | Code-complete | Externally verified | Gate (on externally verified) |
+|---|---|---|---|
+| overall | 100 / 100 | **20 / 100** | 90 |
+| `production-lean` | 100 / 100 † | **20 / 100** | 92 |
+| `staging` | 75 / 100 | **0 / 100** | 95 |
+
+† 80 / 100 in a clean checkout. `LEAN-COST-CEILING` requires
+`reports/cost/cost-report.json`, which is generated and gitignored; it reaches
+100 only after `make validate-cost-model` has written it, as
+`make deployment-profile-gate` does before scoring.
+
+**1 of 17 hard gate conditions is met** (`COND-NO-EXPIRED-EXCEPTIONS`), and
+`deployment_ready` is `false`.
+
+Externally blocked — recorded as blocked, never counted as done:
+
+- credentialed `terraform plan` and `terraform apply` against the real backend
+  and state key;
+- a real staging wake → validate → sleep rehearsal, and the **two consecutive**
+  complete rehearsals the 100% gate requires;
+- Infracost's credentialed second opinion on the cost model;
+- seven days of observed AWS billing plus projected-vs-actual reconciliation;
+- sustained load observation against a deployed environment;
+- DNS and TLS certificate confirmation against real hostnames;
+- enterprise dedicated-account provisioning.
+
+## Validation commands
+
+```bash
+make deployment-profile-gate          # every profile gate that runs without AWS credentials
+make validate-profile-config          # profile matrix + posture schema
+make validate-cost-policy             # forbidden/required resource declarations
+make validate-cost-policy-terraform   # Terraform locals statically encode the policy
+make validate-delivery-topology       # every worker role owned by exactly one service
+make validate-terraform-profile-policy # score a real plan JSON against the contracts
+make validate-cost-model              # price the inventory against the numeric budget
+make test-terraform-profiles          # provider-mocked per-profile plan tests
+make test-runtime-topology            # execution-group topology
+make test-plan-policy                 # plan-policy validator against fixtures
+make test-workflow-controls           # no automatic apply, reviewed-plan integrity
+make test-cost-model                  # ceilings, fail-closed pricing, exception expiry
+make test-staging-lifecycle           # wake/sleep + TTL guard structural controls
+make deployment-readiness-score       # the three-column scorecard
+make collect-deployment-evidence      # materialise release-evidence/ with its checksum
+```
+
+## See also
+
+- [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the `production-lean` profile in depth
+- [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md) — the staging lifecycle procedure
+- [Cost Optimization](COST-OPTIMIZATION.md) — cost model, budgets and the accepted deviation
+- [AWS Deployment — Infrastructure Reference](AWS-DEPLOYMENT.md) — what the Terraform root actually provisions
+- [Deployment Runbook](DEPLOYMENT-RUNBOOK.md) — operator procedure
+- [Release Evidence](RELEASE-EVIDENCE.md) — the evidence bundle
