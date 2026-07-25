@@ -134,6 +134,14 @@ class TestAuthMiddlewareIntegration:
         monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
         monkeypatch.setenv("EXTRACTION_CANARY_SEED", "test-extraction-canary-seed-for-tests")
         monkeypatch.setenv("SDK_CONFIG_SECRET", "test-sdk-config-secret-for-tests")
+        # Kyber workforce SSO/WebAuthn anchors. A non-local Settings() already requires
+        # seven secrets; these are the same kind. The guard itself is covered by
+        # tests/security/test_kyber_gate_migration.py — this test must trip only
+        # the guard it is actually testing.
+        monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "test-kyber-client-id")
+        monkeypatch.setenv("KYBER_GOOGLE_REDIRECT_URI", "https://kyber.test.invalid/v1/kyber/auth/callback")
+        monkeypatch.setenv("KYBER_WEBAUTHN_RP_ID", "kyber.test.invalid")
+        monkeypatch.setenv("KYBER_WEBAUTHN_ORIGIN", "https://kyber.test.invalid")
 
         with backend_module_path():
             auth_mod = importlib.import_module("shared.auth.auth")

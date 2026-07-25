@@ -109,6 +109,15 @@ class TestStripeSettings:
             CANARY_SECRET_SEED="test-canary-secret-seed-for-tests",
             EXTRACTION_CANARY_SEED="test-extraction-canary-seed-for-tests",
             SDK_CONFIG_SECRET="test-sdk-config-secret-for-tests",
+            # Kyber workforce SSO/WebAuthn anchors. A non-local Settings()
+            # already requires seven secrets; these are the same kind. The
+            # guard itself is covered by
+            # tests/security/test_kyber_gate_migration.py — this test must trip
+            # only the guard it is actually testing.
+            KYBER_GOOGLE_CLIENT_ID="test-kyber-client-id",
+            KYBER_GOOGLE_REDIRECT_URI="https://kyber.test.invalid/v1/kyber/auth/callback",
+            KYBER_WEBAUTHN_RP_ID="kyber.test.invalid",
+            KYBER_WEBAUTHN_ORIGIN="https://kyber.test.invalid",
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="",
             STRIPE_WEBHOOK_SECRET="",
@@ -132,6 +141,15 @@ class TestStripeSettings:
             CANARY_SECRET_SEED="test-canary-secret-seed-for-tests",
             EXTRACTION_CANARY_SEED="test-extraction-canary-seed-for-tests",
             SDK_CONFIG_SECRET="test-sdk-config-secret-for-tests",
+            # Kyber workforce SSO/WebAuthn anchors. A non-local Settings()
+            # already requires seven secrets; these are the same kind. The
+            # guard itself is covered by
+            # tests/security/test_kyber_gate_migration.py — this test must trip
+            # only the guard it is actually testing.
+            KYBER_GOOGLE_CLIENT_ID="test-kyber-client-id",
+            KYBER_GOOGLE_REDIRECT_URI="https://kyber.test.invalid/v1/kyber/auth/callback",
+            KYBER_WEBAUTHN_RP_ID="kyber.test.invalid",
+            KYBER_WEBAUTHN_ORIGIN="https://kyber.test.invalid",
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="sk_test_x",
             STRIPE_WEBHOOK_SECRET="whsec_x",

@@ -40,6 +40,14 @@ def test_shared_store_rejects_inmemory_outside_local(monkeypatch):
     monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
     monkeypatch.setenv("EXTRACTION_CANARY_SEED", "test-extraction-canary-seed-for-tests")
     monkeypatch.setenv("SDK_CONFIG_SECRET", "test-sdk-config-secret-for-tests")
+    # Kyber workforce SSO/WebAuthn anchors. A non-local Settings() already requires
+    # seven secrets; these are the same kind. The guard itself is covered by
+    # tests/security/test_kyber_gate_migration.py — this test must trip only
+    # the guard it is actually testing.
+    monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "test-kyber-client-id")
+    monkeypatch.setenv("KYBER_GOOGLE_REDIRECT_URI", "https://kyber.test.invalid/v1/kyber/auth/callback")
+    monkeypatch.setenv("KYBER_WEBAUTHN_RP_ID", "kyber.test.invalid")
+    monkeypatch.setenv("KYBER_WEBAUTHN_ORIGIN", "https://kyber.test.invalid")
     # PR 4: production requires an explicit role + non-memory core backends.
     monkeypatch.setenv("AETHER_ROLE", "api")
     monkeypatch.setenv("CACHE_BACKEND", "redis")
@@ -64,6 +72,14 @@ def test_journey_store_rejects_inmemory_outside_local(monkeypatch):
     monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
     monkeypatch.setenv("EXTRACTION_CANARY_SEED", "test-extraction-canary-seed-for-tests")
     monkeypatch.setenv("SDK_CONFIG_SECRET", "test-sdk-config-secret-for-tests")
+    # Kyber workforce SSO/WebAuthn anchors. A non-local Settings() already requires
+    # seven secrets; these are the same kind. The guard itself is covered by
+    # tests/security/test_kyber_gate_migration.py — this test must trip only
+    # the guard it is actually testing.
+    monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "test-kyber-client-id")
+    monkeypatch.setenv("KYBER_GOOGLE_REDIRECT_URI", "https://kyber.test.invalid/v1/kyber/auth/callback")
+    monkeypatch.setenv("KYBER_WEBAUTHN_RP_ID", "kyber.test.invalid")
+    monkeypatch.setenv("KYBER_WEBAUTHN_ORIGIN", "https://kyber.test.invalid")
     # PR 4: production requires an explicit role + non-memory core backends.
     monkeypatch.setenv("AETHER_ROLE", "api")
     monkeypatch.setenv("CACHE_BACKEND", "redis")
