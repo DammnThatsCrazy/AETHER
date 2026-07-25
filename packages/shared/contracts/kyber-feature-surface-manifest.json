@@ -1,0 +1,734 @@
+{
+  "_comment": "Canonical map of every tenant-visible Aether surface to its Kyber Tenant Mirror counterpart. Generated from frontend/aether/src/app/router.tsx by scripts/generate_feature_surface_manifest.py \u2014 edit the generator or the exception reasons, never the entries by hand. tenant_parity_required=true means the mirror MUST return byte-identical tenantVisible data for the same tenant, query and contract version; the operator is otherwise debugging a different system than the tenant runs. Only 'tenantVisible' participates in the parity digest; operatorDiagnostics is additive and never alters a tenant-visible value.",
+  "schemaVersion": "1.0.0",
+  "surfaces": [
+    {
+      "feature_id": "callback",
+      "aether_route": "/callback",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "pre-authentication OIDC landing",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "login",
+      "aether_route": "/login",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "pre-authentication",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "signup",
+      "aether_route": "/signup",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "pre-authentication tenant creation",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "legal-data-retention",
+      "aether_route": "/legal/data-retention",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "static legal copy, no tenant data",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "root",
+      "aether_route": "/",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "redirect only",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "users",
+      "aether_route": "/users",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/users",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "users-id",
+      "aether_route": "/users/:id",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/users/:id",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaigns",
+      "aether_route": "/campaigns",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaigns",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaigns-id",
+      "aether_route": "/campaigns/:id",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaigns/:id",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaign-intelligence",
+      "aether_route": "/campaign-intelligence",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaign-intelligence",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaign-intelligence-registry",
+      "aether_route": "/campaign-intelligence/registry",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaign-intelligence/registry",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaign-intelligence-sources",
+      "aether_route": "/campaign-intelligence/sources",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaign-intelligence/sources",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaign-intelligence-mapping-review",
+      "aether_route": "/campaign-intelligence/mapping-review",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaign-intelligence/mapping-review",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaign-intelligence-quality",
+      "aether_route": "/campaign-intelligence/quality",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaign-intelligence/quality",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "campaign-intelligence-campaigns-new",
+      "aether_route": "/campaign-intelligence/campaigns/new",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/campaign-intelligence/campaigns/new",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "graph",
+      "aether_route": "/graph",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/graph",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "noesis",
+      "aether_route": "/noesis",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/noesis",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "settings",
+      "aether_route": "/settings",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-configuration; operators must not mutate it from a mirror",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "settings-notifications",
+      "aether_route": "/settings/notifications",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-configuration",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "onboarding",
+      "aether_route": "/onboarding",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-setup wizard; no operator equivalent",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "billing",
+      "aether_route": "/billing",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant billing portal; operator view is /v1/kyber/revops",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "usage-plan",
+      "aether_route": "/usage-plan",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant plan self-service; operator view is /v1/kyber/revops",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "me",
+      "aether_route": "/me",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "the caller's own account; an operator's own account is /v1/kyber/me",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "geo",
+      "aether_route": "/geo",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/geo",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "geo-level-geoId",
+      "aether_route": "/geo/:level/:geoId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/geo/:level/:geoId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "audit-exports",
+      "aether_route": "/audit-exports",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant-initiated export UI; operator exports are capability-gated separately",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "value-review",
+      "aether_route": "/value-review",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/value-review",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "security",
+      "aether_route": "/security",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant's own security settings; operator plane is /security/*",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "system-status",
+      "aether_route": "/system-status",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/system-status",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "data-quality",
+      "aether_route": "/data-quality",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/data-quality",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "integrations",
+      "aether_route": "/integrations",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/integrations",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "rewards",
+      "aether_route": "/rewards",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/rewards",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "rewards-decisions",
+      "aether_route": "/rewards/decisions",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/rewards/decisions",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "rewards-approval-queue",
+      "aether_route": "/rewards/approval-queue",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/rewards/approval-queue",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "rewards-rails",
+      "aether_route": "/rewards/rails",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/rewards/rails",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "rewards-campaigns-new",
+      "aether_route": "/rewards/campaigns/new",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/rewards/campaigns/new",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "suggestions",
+      "aether_route": "/suggestions",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/suggestions",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "clusters-clusterId",
+      "aether_route": "/clusters/:clusterId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/clusters/:clusterId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "delivery",
+      "aether_route": "/delivery",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/delivery",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "deployments",
+      "aether_route": "/deployments",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/deployments",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "deployments-id",
+      "aether_route": "/deployments/:id",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/deployments/:id",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "imports",
+      "aether_route": "/imports",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/imports",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "imports-id",
+      "aether_route": "/imports/:id",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/imports/:id",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "payment-rails",
+      "aether_route": "/payment-rails",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/payment-rails",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "ai-efficiency",
+      "aether_route": "/ai-efficiency",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/ai-efficiency",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "stablecoins",
+      "aether_route": "/stablecoins",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/stablecoins",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "stablecoins-assetId",
+      "aether_route": "/stablecoins/:assetId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/stablecoins/:assetId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "derivatives",
+      "aether_route": "/derivatives",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/derivatives",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "derivatives-accounts-accountId",
+      "aether_route": "/derivatives/accounts/:accountId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/derivatives/accounts/:accountId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "agent-access",
+      "aether_route": "/agent-access",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/agent-access",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "interoperability",
+      "aether_route": "/interoperability",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/interoperability",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "interoperability-messages-messageId",
+      "aether_route": "/interoperability/messages/:messageId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/interoperability/messages/:messageId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    }
+  ]
+}
