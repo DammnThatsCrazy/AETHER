@@ -71,12 +71,33 @@ class CampaignResolver:
     def __init__(
         self,
         registry_service: Optional[CampaignRegistryService] = None,
+        *,
+        campaign_repo: Optional[CampaignRegistryRepository] = None,
+        external_ref_repo: Optional[ExternalRefRepository] = None,
+        alias_repo: Optional[AliasRepository] = None,
+        review_repo: Optional[MappingReviewRepository] = None,
     ) -> None:
-        self._registry = registry_service or CampaignRegistryService()
-        self._campaigns = CampaignRegistryRepository()
-        self._external_refs = ExternalRefRepository()
-        self._aliases = AliasRepository()
-        self._reviews = MappingReviewRepository()
+        """Construct the resolver, optionally injecting its repositories.
+
+        Each repository defaults to the process-wide, pool-resolving instance,
+        so existing callers are unaffected. Injection matters here because
+        resolution confidence and alias precedence are the behaviours most worth
+        testing against a controlled store.
+
+        When repositories are injected, the registry service is built from the
+        same ones unless it too is supplied — otherwise the resolver and the
+        registry it delegates to would read from two different stores.
+        """
+        self._campaigns = campaign_repo or CampaignRegistryRepository()
+        self._external_refs = external_ref_repo or ExternalRefRepository()
+        self._aliases = alias_repo or AliasRepository()
+        self._reviews = review_repo or MappingReviewRepository()
+        self._registry = registry_service or CampaignRegistryService(
+            campaign_repo=self._campaigns,
+            external_ref_repo=self._external_refs,
+            alias_repo=self._aliases,
+            review_repo=self._reviews,
+        )
 
     async def resolve_one(
         self,

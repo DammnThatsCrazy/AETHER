@@ -134,7 +134,7 @@ class TestCampaignRegistryService:
             platform="google_ads",
             external_account_id="acc-001",
             external_campaign_id="ggl-camp-001",
-            name="Summer Sale",
+            external_campaign_name="Summer Sale",
         ))
         assert cid is not None
         # Must be a valid UUID
@@ -142,20 +142,20 @@ class TestCampaignRegistryService:
 
     def test_upsert_external_idempotent(self):
         svc = _make_registry()
-        cid1 = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", "Camp A"))
-        cid2 = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", "Camp A"))
+        cid1 = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", external_campaign_name="Camp A"))
+        cid2 = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", external_campaign_name="Camp A"))
         assert str(cid1) == str(cid2)
 
     def test_upsert_external_rename_retains_uuid(self):
         svc = _make_registry()
-        cid1 = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", "Old Name"))
-        cid2 = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", "New Name"))
+        cid1 = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", external_campaign_name="Old Name"))
+        cid2 = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", external_campaign_name="New Name"))
         assert str(cid1) == str(cid2)
 
     def test_upsert_external_different_platforms_different_campaigns(self):
         svc = _make_registry()
-        cid_g = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "same-id", "Camp"))
-        cid_m = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "same-id", "Camp"))
+        cid_g = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "same-id", external_campaign_name="Camp"))
+        cid_m = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "same-id", external_campaign_name="Camp"))
         assert str(cid_g) != str(cid_m)
 
     def test_create_custom_campaign(self):
@@ -165,7 +165,7 @@ class TestCampaignRegistryService:
 
     def test_add_alias_and_retrieve(self):
         svc = _make_registry()
-        cid = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g1", "Camp"))
+        cid = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g1", external_campaign_name="Camp"))
         _run(svc.add_alias("t1", cid, alias_type="utm_campaign", value="summer-sale-2026"))
         reviews = _run(svc.list_mapping_reviews("t1", status="open", limit=100))
         # Alias itself doesn't create a review; just verify no error
@@ -212,8 +212,8 @@ class TestCampaignRegistryService:
 
     def test_tenant_isolation_campaigns(self):
         svc = _make_registry()
-        cid_a = _run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "g1", "Camp"))
-        cid_b = _run(svc.upsert_external_campaign("tenant_b", "google_ads", "acc", "g1", "Camp"))
+        cid_a = _run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "g1", external_campaign_name="Camp"))
+        cid_b = _run(svc.upsert_external_campaign("tenant_b", "google_ads", "acc", "g1", external_campaign_name="Camp"))
         assert str(cid_a) != str(cid_b)
 
 
@@ -223,7 +223,7 @@ class TestCampaignRegistryService:
 
 class TestCampaignResolver:
     def _seed_campaign(self, svc, tenant, platform, account, external_id, name="Camp"):
-        return _run(svc.upsert_external_campaign(tenant, platform, account, external_id, name))
+        return _run(svc.upsert_external_campaign(tenant, platform, account, external_id, external_campaign_name=name))
 
     def test_resolve_by_exact_external_ref(self):
         svc = _make_registry()
@@ -383,7 +383,7 @@ class TestAliasValidity:
 class TestArchive:
     def test_archive_preserves_campaign_record(self):
         svc = _make_registry()
-        cid = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g-arch", "Archived"))
+        cid = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g-arch", external_campaign_name="Archived"))
         _run(svc.archive_external_campaign("t1", "google_ads", "acc", "g-arch"))
         # Campaign UUID should still be accessible (history preserved)
         quality = _run(svc.get_mapping_quality("t1"))

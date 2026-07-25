@@ -8,13 +8,15 @@ the canonical campaign_id field.
 
 from __future__ import annotations
 
+import logging
+
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from shared.logger.logger import get_logger, metrics
+from shared.logger.logger import get_logger, log_event, metrics
 
 from services.campaign.normalization import (
     build_evidence_hash,
@@ -142,7 +144,7 @@ class CampaignRegistryService:
             )
         except Exception as exc:
             # Race condition: another worker created the campaign; re-read it
-            logger.warning("campaign_create_race", error=str(exc), platform=canonical_platform, ext_id=ext_id)
+            log_event(logger, logging.WARNING, "campaign_create_race", error=str(exc), platform=canonical_platform, ext_id=ext_id)
             existing_ref = await self._external_refs.get_exact(
                 tenant_id, canonical_platform, ext_account, ext_id
             )
@@ -173,7 +175,7 @@ class CampaignRegistryService:
         )
 
         metrics.increment("campaign_registry_upsert_total", labels={"origin": "external", "action": "create"})
-        logger.info(
+        log_event(logger, logging.INFO,
             "campaign_registered",
             tenant_id=tenant_id,
             campaign_id=str(campaign_id),
@@ -258,7 +260,7 @@ class CampaignRegistryService:
             properties=properties or {},
         )
         metrics.increment("campaign_registry_upsert_total", labels={"origin": "custom", "action": "create"})
-        logger.info("custom_campaign_created", tenant_id=tenant_id, campaign_id=str(campaign["campaign_id"]))
+        log_event(logger, logging.INFO, "custom_campaign_created", tenant_id=tenant_id, campaign_id=str(campaign["campaign_id"]))
         return campaign
 
     # ── Alias management ──────────────────────────────────────────────────────
@@ -373,7 +375,7 @@ class CampaignRegistryService:
                         created_by=resolved_by,
                         provenance={"source": "mapping_review_resolution", "review_id": str(review_id)},
                     )
-            logger.info("mapping_review_resolved", tenant_id=tenant_id, review_id=str(review_id), campaign_id=str(campaign_id))
+            log_event(logger, logging.INFO, "mapping_review_resolved", tenant_id=tenant_id, review_id=str(review_id), campaign_id=str(campaign_id))
         return result
 
     async def ignore_review(self, tenant_id: str, review_id: UUID) -> Optional[dict]:

@@ -2,12 +2,25 @@
 
 These repositories bypass the generic JSONB BaseRepository and write to
 the structured Alembic-managed tables introduced in migration 20260627_campaign_registry.
-They require an asyncpg pool (no in-memory fallback) to enforce the production
-invariant that canonical campaign identity is never transient.
+
+Pool policy
+-----------
+Canonical campaign identity must never be transient: two processes must not mint
+different UUIDs for the same external campaign, and an identity must survive a
+restart. Outside local development that invariant is enforced by requiring a real
+pool — :func:`_require_pool` raises when one is absent rather than falling back.
+
+A DB-free in-memory path is retained for local development and tests only, and is
+structurally unreachable anywhere else. This module previously documented "no
+in-memory fallback" while implementing one in eleven places and hard-failing in a
+twelfth, which meant a misconfigured production process could silently fabricate
+campaign identity that vanished on restart. The guard below is what makes the
+stated invariant true, rather than a comment asserting it.
 """
 
 from __future__ import annotations
 
+import os
 import json
 import uuid
 from datetime import datetime, timezone
@@ -20,15 +33,44 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.campaign.repository")
 
-# In-memory fallbacks for local development — never used in production
+# In-memory stores backing the local-development path. Reachable only when
+# _require_pool() has confirmed the environment permits a DB-free run.
 _LOCAL_CAMPAIGNS: dict[str, dict] = {}
 _LOCAL_EXTERNAL_REFS: dict[str, dict] = {}
 _LOCAL_ALIASES: dict[str, dict] = {}
 _LOCAL_REVIEWS: dict[str, dict] = {}
 
+# Environments permitted to run without a database. Everything else — including
+# integration, which is deliberately production-shaped — must have a real pool.
+_POOL_OPTIONAL_ENVIRONMENTS = frozenset({"local", "dev", "test"})
+
 
 async def _pool():
     return await get_pool()
+
+
+def _pool_is_optional() -> bool:
+    """Whether this environment may run the campaign registry without a pool.
+
+    Read at call time rather than import time so a test or a process that sets
+    AETHER_ENV after import is still evaluated against the value in force.
+    """
+    return os.environ.get("AETHER_ENV", "local") in _POOL_OPTIONAL_ENVIRONMENTS
+
+
+def _require_pool(pool: Any, operation: str) -> None:
+    """Fail closed when a pool is absent in an environment that requires one.
+
+    Raising here is the point: the alternative is minting a campaign UUID in
+    process memory, which two workers would do differently for the same external
+    campaign and which would not survive a restart.
+    """
+    if pool is None and not _pool_is_optional():
+        raise RuntimeError(
+            f"campaign registry {operation} requires a database pool in "
+            f"AETHER_ENV={os.environ.get('AETHER_ENV', 'local')}; refusing to "
+            "fabricate transient campaign identity in memory"
+        )
 
 
 class _PoolBackedRepository:
@@ -58,10 +100,16 @@ class _PoolBackedRepository:
 
         Injection is checked first so a test double is never silently bypassed
         in favour of a real connection.
+
+        The environment guard lives here rather than at each of the twelve call
+        sites so no future method can reach an in-memory store without passing
+        it. Returning ``None`` is only possible where a DB-free run is allowed.
         """
-        if self._injected_pool is not None:
-            return self._injected_pool
-        return await _pool()
+        pool = self._injected_pool
+        if pool is None:
+            pool = await _pool()
+        _require_pool(pool, type(self).__name__)
+        return pool
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -387,8 +435,6 @@ class AliasRepository(_PoolBackedRepository):
     ) -> Optional[dict]:
         """Create alias; returns None if an active alias already exists (conflict)."""
         pool = await self._acquire_pool()
-        if pool is None:
-            raise RuntimeError("Database pool unavailable")
         try:
             row = await pool.fetchrow(
                 """
