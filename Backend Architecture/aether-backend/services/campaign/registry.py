@@ -50,11 +50,26 @@ ALIAS_TYPE_QR_CODE = "qr_code"
 class CampaignRegistryService:
     """Authoritative campaign registry operations."""
 
-    def __init__(self) -> None:
-        self._campaigns = CampaignRegistryRepository()
-        self._external_refs = ExternalRefRepository()
-        self._aliases = AliasRepository()
-        self._reviews = MappingReviewRepository()
+    def __init__(
+        self,
+        *,
+        campaign_repo: Optional[CampaignRegistryRepository] = None,
+        external_ref_repo: Optional[ExternalRefRepository] = None,
+        alias_repo: Optional[AliasRepository] = None,
+        review_repo: Optional[MappingReviewRepository] = None,
+    ) -> None:
+        """Construct the service, optionally injecting its repositories.
+
+        Each repository defaults to the process-wide, pool-resolving instance,
+        so existing no-argument callers are unaffected. Injection exists because
+        the service's behaviour — confidence scoring, alias resolution, review
+        queueing — is worth testing against a controlled store rather than only
+        against a live pool.
+        """
+        self._campaigns = campaign_repo or CampaignRegistryRepository()
+        self._external_refs = external_ref_repo or ExternalRefRepository()
+        self._aliases = alias_repo or AliasRepository()
+        self._reviews = review_repo or MappingReviewRepository()
 
     # ── External campaign upsert ──────────────────────────────────────────────
 

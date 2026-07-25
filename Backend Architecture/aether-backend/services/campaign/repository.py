@@ -31,6 +31,39 @@ async def _pool():
     return await get_pool()
 
 
+class _PoolBackedRepository:
+    """Base for the campaign repositories, allowing the pool to be injected.
+
+    These repositories originally reached the database only through the
+    module-level :func:`_pool` lookup and defined no ``__init__``, while callers
+    on both sides assumed constructor injection: ``routes.py`` constructs
+    ``ExternalRefRepository(None)`` and ``AliasRepository(None)``, and the test
+    suite constructs all four with a fake pool. Both raised
+    ``TypeError: ... takes no arguments`` — the routes ones at runtime, on any
+    request reaching those handlers.
+
+    That went unnoticed because ``Backend Architecture/aether-backend/tests/``
+    was executed by no gate.
+
+    Passing ``pool=None`` keeps the original behaviour (resolve lazily via
+    ``get_pool()``), so the no-argument call sites in ``resolver.py`` and
+    ``registry.py`` are unaffected.
+    """
+
+    def __init__(self, pool: Any = None) -> None:
+        self._injected_pool = pool
+
+    async def _acquire_pool(self) -> Any:
+        """Return the injected pool, or resolve the process-wide one.
+
+        Injection is checked first so a test double is never silently bypassed
+        in favour of a real connection.
+        """
+        if self._injected_pool is not None:
+            return self._injected_pool
+        return await _pool()
+
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _row_to_dict(row: Any) -> dict:
@@ -43,11 +76,11 @@ def _now() -> datetime:
 
 # ── CampaignRegistryRepository ────────────────────────────────────────────────
 
-class CampaignRegistryRepository:
+class CampaignRegistryRepository(_PoolBackedRepository):
     """Typed repository for the campaigns table."""
 
     async def get_by_id(self, tenant_id: str, campaign_id: UUID) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             record = _LOCAL_CAMPAIGNS.get(str(campaign_id))
             return record if record and record.get("tenant_id") == tenant_id else None
@@ -83,7 +116,7 @@ class CampaignRegistryRepository:
         last_seen_at: Optional[datetime] = None,
         properties: Optional[dict] = None,
     ) -> dict:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         now = _now()
         if pool is None:
             record = {
@@ -127,7 +160,7 @@ class CampaignRegistryRepository:
         last_seen_at: Optional[datetime] = None,
         archived_at: Optional[datetime] = None,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return None
         sets: list[str] = ["updated_at = NOW()"]
@@ -160,7 +193,7 @@ class CampaignRegistryRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return []
         conditions = ["tenant_id = $1", "archived_at IS NULL"]
@@ -191,7 +224,7 @@ class CampaignRegistryRepository:
 
 # ── ExternalRefRepository ─────────────────────────────────────────────────────
 
-class ExternalRefRepository:
+class ExternalRefRepository(_PoolBackedRepository):
     """Typed repository for campaign_external_refs."""
 
     async def get_exact(
@@ -201,7 +234,7 @@ class ExternalRefRepository:
         external_account_id: str,
         external_campaign_id: str,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             key = f"{tenant_id}::{platform}::{external_account_id}::{external_campaign_id}"
             return _LOCAL_EXTERNAL_REFS.get(key)
@@ -228,7 +261,7 @@ class ExternalRefRepository:
         source_connector_id: Optional[str] = None,
         raw_metadata: Optional[dict] = None,
     ) -> dict:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             key = f"{tenant_id}::{platform}::{external_account_id}::{external_campaign_id}"
             now = _now()
@@ -270,7 +303,7 @@ class ExternalRefRepository:
         return _row_to_dict(row)
 
     async def list_for_campaign(self, tenant_id: str, campaign_id: UUID) -> list[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return []
         rows = await pool.fetch(
@@ -282,7 +315,7 @@ class ExternalRefRepository:
 
 # ── AliasRepository ───────────────────────────────────────────────────────────
 
-class AliasRepository:
+class AliasRepository(_PoolBackedRepository):
     """Typed repository for campaign_aliases."""
 
     async def get_active(
@@ -291,7 +324,7 @@ class AliasRepository:
         alias_type: str,
         alias_value_normalized: str,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return None
         row = await pool.fetchrow(
@@ -312,7 +345,7 @@ class AliasRepository:
         """Batch lookup: lookups is list of (alias_type, alias_value_normalized)."""
         if not lookups:
             return {}
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return {}
         # Use unnest for a single round-trip
@@ -353,7 +386,7 @@ class AliasRepository:
         provenance: Optional[dict] = None,
     ) -> Optional[dict]:
         """Create alias; returns None if an active alias already exists (conflict)."""
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             raise RuntimeError("Database pool unavailable")
         try:
@@ -377,7 +410,7 @@ class AliasRepository:
             raise
 
     async def expire(self, tenant_id: str, alias_id: UUID) -> bool:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return False
         result = await pool.execute(
@@ -387,7 +420,7 @@ class AliasRepository:
         return result.split()[-1] != "0"
 
     async def list_for_campaign(self, tenant_id: str, campaign_id: UUID) -> list[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return []
         rows = await pool.fetch(
@@ -399,7 +432,7 @@ class AliasRepository:
 
 # ── MappingReviewRepository ───────────────────────────────────────────────────
 
-class MappingReviewRepository:
+class MappingReviewRepository(_PoolBackedRepository):
     """Typed repository for campaign_resolution_reviews."""
 
     async def get_or_create_open(
@@ -410,7 +443,7 @@ class MappingReviewRepository:
         candidate_campaign_ids: list[UUID],
     ) -> dict:
         """Upsert: increment observed_count on existing open review, else create."""
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             key = f"{tenant_id}::open::{evidence_hash}"
             now = _now()
@@ -457,7 +490,7 @@ class MappingReviewRepository:
         resolved_by: str,
         note: Optional[str] = None,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return None
         row = await pool.fetchrow(
@@ -473,7 +506,7 @@ class MappingReviewRepository:
         return _row_to_dict(row) if row else None
 
     async def set_status(self, tenant_id: str, review_id: UUID, status: str) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return None
         row = await pool.fetchrow(
@@ -488,7 +521,7 @@ class MappingReviewRepository:
         limit: int = 50,
         cursor: Optional[datetime] = None,
     ) -> list[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return []
         if cursor:
@@ -504,7 +537,7 @@ class MappingReviewRepository:
         return [_row_to_dict(r) for r in rows]
 
     async def increment_affected_touchpoints(self, tenant_id: str, evidence_hash: str, count: int = 1) -> None:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return
         await pool.execute(
