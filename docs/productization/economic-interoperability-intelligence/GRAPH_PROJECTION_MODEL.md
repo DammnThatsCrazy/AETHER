@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
   - packages/shared/graph-contract.ts
 canonical_owner: platform@aether
-last_synced_commit: "538fde8"
+last_synced_commit: "15b8889"
 ---
 
 # Graph Projection Model
@@ -45,6 +45,33 @@ Cross-domain rules:
   A vertex is removed only when the failed import is its canonical owner, the
   vertex has no ownership history from another import, and no active edge still
   references it. Pre-existing or shared vertices are retained.
+
+## Tenant scoping on reads
+
+The tenant a vertex or edge belongs to is resolved through
+`shared/graph/graph.py::tenant_of`, which reads either spelling the graph
+carries: vertex producers write camelCase `tenantId` (`SilverGraphProjector`)
+while edge producers write snake_case `tenant_id` (`build_edge_properties`,
+`revoke_edge`, `delete_vertex_if_orphaned`). `TENANT_PROPERTY` names the
+canonical spelling for new writes and for the Neptune predicate; `tenant_of`
+means existing rows in both spellings resolve without a backfill. An absent or
+empty tenant property resolves to `None`, which callers must treat as "not this
+tenant" rather than as a wildcard.
+
+Per-tenant reads use `GraphClient.get_vertices_for_tenant(tenant_id, limit)`,
+which puts the predicate **inside** the query — Neptune
+`.has(TENANT_PROPERTY, t).limit(n)`, in-memory filter-then-slice — so the cap
+bounds that tenant's rows. `get_all_vertices(limit)` remains for genuinely
+global reads and applies its cap to the whole graph; using it to answer a
+per-tenant question truncates silently, because the tenant's rows may sort past
+the cap and never reach the filter. `scripts/validate_graph_scoped_reads.py` is
+a shrink-only gate that fails CI when a module under `services/` calls the
+global read.
+
+The same resolution applies to `current_graph_digest`: `_canonical_props`
+normalises the tenant key so a ledger replay that stored one spelling digests
+equal to a live graph holding the other, rather than reporting a parity failure
+between two representations of identical state.
 
 The card-linked payment rail slice adds 5 vertex types (`CARD_PROGRAM`,
 `CARD_ISSUER`, `PAYMENT_NETWORK`, `CARD_LINKED_FLOW`, `CARD_BENCHMARK`)

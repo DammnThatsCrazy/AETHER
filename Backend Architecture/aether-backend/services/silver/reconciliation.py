@@ -8,6 +8,12 @@ Read-only worker that identifies data quality issues in the live graph:
 
 The worker NEVER mutates the graph. It produces a ReconciliationReport
 for human or automated review.
+
+Every check is per-tenant: ``run(tenant_id)`` is the only entry point and each
+check reads only that tenant's vertices. They therefore use the tenant-scoped
+read, so the 10k cap bounds the tenant's own rows rather than a global page
+that is filtered afterwards (which silently reported "no issues" for any tenant
+sorting past the cap).
 """
 
 from __future__ import annotations
@@ -84,12 +90,10 @@ class SilverReconciliationWorker:
         return ReconciliationReport(**report_kwargs)
 
     async def _find_orphaned_vertices(self, tenant_id: str) -> list[str]:
-        """Return vertex IDs that have no edges and no tenantId property."""
-        all_verts = await self._graph.get_all_vertices(limit=10000)
+        """Return IDs of the tenant's vertices that have no edges at all."""
+        tenant_verts = await self._graph.get_vertices_for_tenant(tenant_id, limit=10000)
         orphaned: list[str] = []
-        for v in all_verts:
-            if v.properties.get("tenantId") != tenant_id:
-                continue
+        for v in tenant_verts:
             in_edges = await self._graph.get_edges(v.vertex_id, direction="in")
             out_edges = await self._graph.get_edges(v.vertex_id, direction="out")
             if not in_edges and not out_edges:
@@ -98,13 +102,11 @@ class SilverReconciliationWorker:
 
     async def _find_duplicate_edges(self, tenant_id: str) -> list[tuple[str, str, str]]:
         """Return (from, to, type) tuples for edge pairs that appear more than once."""
-        all_verts = await self._graph.get_all_vertices(limit=10000)
+        tenant_verts = await self._graph.get_vertices_for_tenant(tenant_id, limit=10000)
         seen: dict[tuple[str, str, str], int] = {}
         duplicates: list[tuple[str, str, str]] = []
 
-        for v in all_verts:
-            if v.properties.get("tenantId") != tenant_id:
-                continue
+        for v in tenant_verts:
             edges = await self._graph.get_edges(v.vertex_id, direction="out")
             for e in edges:
                 key = (e.from_vertex_id, e.to_vertex_id, e.edge_type)
@@ -116,11 +118,9 @@ class SilverReconciliationWorker:
 
     async def _find_missing_projections(self, tenant_id: str) -> list[str]:
         """Return vertex IDs of types that should have projection edges but don't."""
-        all_verts = await self._graph.get_all_vertices(limit=10000)
+        tenant_verts = await self._graph.get_vertices_for_tenant(tenant_id, limit=10000)
         missing: list[str] = []
-        for v in all_verts:
-            if v.properties.get("tenantId") != tenant_id:
-                continue
+        for v in tenant_verts:
             if v.vertex_type not in _EXPECTED_PROJECTION_VERTEX_TYPES:
                 continue
             out_edges = await self._graph.get_edges(v.vertex_id, direction="out")
@@ -131,11 +131,9 @@ class SilverReconciliationWorker:
 
     async def _find_stale_identity_versions(self, tenant_id: str) -> list[str]:
         """Return vertex IDs that appear to be superseded but lack a superseded_at property."""
-        all_verts = await self._graph.get_all_vertices(limit=10000)
+        tenant_verts = await self._graph.get_vertices_for_tenant(tenant_id, limit=10000)
         stale: list[str] = []
-        for v in all_verts:
-            if v.properties.get("tenantId") != tenant_id:
-                continue
+        for v in tenant_verts:
             in_edges = await self._graph.get_edges(v.vertex_id, direction="in")
             is_superseded = any(e.edge_type in _IDENTITY_VERSION_EDGE_TYPES for e in in_edges)
             if is_superseded and not v.properties.get("superseded_at"):

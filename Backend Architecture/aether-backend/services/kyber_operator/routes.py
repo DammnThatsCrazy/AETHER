@@ -201,8 +201,9 @@ async def tenant_operational_envelope(
     _require_kyber_operator(request)
 
     # ── Graph health ──────────────────────────────────────────────────────────
-    all_verts = await graph.get_all_vertices(limit=10000)
-    tenant_verts = [v for v in all_verts if v.properties.get("tenantId") == tenant_id]
+    # Scoped to the path tenant: the cap bounds THAT tenant's rows, so an
+    # envelope for a tenant sorting past a global page no longer reports zero.
+    tenant_verts = await graph.get_vertices_for_tenant(tenant_id, limit=10000)
     graph_node_count = len(tenant_verts)
 
     # Count edges for the sampled nodes

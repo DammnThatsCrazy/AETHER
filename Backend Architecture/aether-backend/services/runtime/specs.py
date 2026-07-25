@@ -80,6 +80,21 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_directory_sync_coro()
 
+    def _kyber_retention_sweep() -> Coroutine[Any, Any, None]:
+        """Delete terminal, aged-out rows from Kyber's short-lived tables.
+
+        The storage-plane lifecycle resolves the correct ``short_lived`` window
+        but can only reach externalized objects and Bronze rows; Kyber's
+        session / step-up / challenge tables are plain JSONB rows, so nothing
+        acted on that window. This loop is the executor. It rides the existing
+        ``maintenance`` role alongside ``retention_sweep`` for the same reason
+        directory sync does — one periodic loop does not justify a new runtime
+        role and its deploy-profile/compose/Terraform fan-out.
+        """
+        from services.kyber.retention import build_kyber_retention_coro
+
+        return build_kyber_retention_coro()
+
     async def _run_delivery_worker() -> None:
         """Own a DeliveryWorker instance for the lifetime of this coroutine.
 
@@ -207,6 +222,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="kyber_directory_sync",
             factory=_kyber_directory_sync,
             enabled=lambda: bool(settings.kyber_workforce.directory_sync_enabled),
+        ),
+        # Gated by the same master switch as the storage-plane retention sweep:
+        # this worker is the Kyber half of FT-8 retention, not a second policy.
+        WorkerSpec(
+            name="kyber_retention_sweep",
+            factory=_kyber_retention_sweep,
+            enabled=lambda: bool(settings.storage_plane.lifecycle_retention_enabled),
         ),
         WorkerSpec(
             name="delivery_worker",

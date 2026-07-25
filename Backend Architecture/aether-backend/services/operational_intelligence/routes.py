@@ -993,8 +993,12 @@ async def graph_overlay(
     _require_read(request, body.tenantId)
     metrics.increment("graph_overlay")
 
-    all_verts = await graph.get_all_vertices(limit=body.limit)
-    all_verts = [v for v in all_verts if v.properties.get("tenantId") == body.tenantId]
+    # ``body.limit`` bounds the TENANT's own rows, not a global page that is
+    # then filtered — a caller can no longer influence how much of other
+    # tenants' data is scanned. Clamped to the node budget so no request can
+    # ask for an unbounded scan.
+    scan_limit = min(body.limit, QUERY_BUDGET_DEFAULTS["max_nodes"])
+    all_verts = await graph.get_vertices_for_tenant(body.tenantId, limit=scan_limit)
     all_edges: list[Edge] = []
     for v in all_verts:
         all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
@@ -1058,8 +1062,10 @@ async def graph_filter(
     _require_read(request, body.tenantId)
     metrics.increment("graph_filter")
 
-    all_verts = await graph.get_all_vertices(limit=body.limit)
-    all_verts = [v for v in all_verts if v.properties.get("tenantId") == body.tenantId]
+    # Tenant-scoped read: the cap applies to this tenant's rows. Clamped to the
+    # node budget so a caller-supplied limit cannot request an unbounded scan.
+    scan_limit = min(body.limit, QUERY_BUDGET_DEFAULTS["max_nodes"])
+    all_verts = await graph.get_vertices_for_tenant(body.tenantId, limit=scan_limit)
     all_edges: list = []
     for v in all_verts:
         all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
@@ -1137,8 +1143,12 @@ async def universal_graph_query(
                     seen_vids.add(anchor_v.vertex_id)
                     all_nodes.insert(0, anchor_v)
     else:
-        raw_verts = await graph.get_all_vertices(limit=QUERY_BUDGET_DEFAULTS["max_nodes"])
-        all_nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+        # Full-scan branch, scoped to the tenant: the node budget bounds this
+        # tenant's rows so a tenant sorting past a global page is not silently
+        # returned an empty graph.
+        all_nodes = await graph.get_vertices_for_tenant(
+            body.tenant_id, limit=QUERY_BUDGET_DEFAULTS["max_nodes"]
+        )
         if body.as_of:
             # Apply valid-time filter for historical replay on full-scan results
             as_of_dt = body.as_of
@@ -1260,10 +1270,12 @@ async def graph_facets(
     metrics.increment("graph_facets")
     start = time.monotonic()
 
-    # Fetch the global hard cap first, then filter by tenant before applying body.limit
-    # so tenant vertices beyond the global scan slice are not silently excluded.
-    raw_verts = await graph.get_all_vertices(limit=QUERY_BUDGET_DEFAULTS["max_nodes"])
-    nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+    # Scoped read: the node budget caps THIS tenant's rows, so tenant vertices
+    # are never excluded by where they happen to sort in a global page.
+    # ``body.limit`` still trims the facet input afterwards, as before.
+    nodes = await graph.get_vertices_for_tenant(
+        body.tenant_id, limit=QUERY_BUDGET_DEFAULTS["max_nodes"]
+    )
     if body.limit:
         nodes = nodes[:body.limit]
 
@@ -1349,8 +1361,12 @@ async def graph_export(
 
     # In local/in-memory mode we complete synchronously and return inline.
     # In production this would enqueue a Celery task and return status=queued.
-    raw_verts = await graph.get_all_vertices(limit=body.limit)
-    nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+    # ``body.limit`` now bounds the tenant's own rows. Bulk export is not
+    # governed by QUERY_BUDGET_DEFAULTS["max_nodes"] (that budget sizes an
+    # interactive query response, and a 500-row ceiling would break export);
+    # the request model's own ``le=100000`` is the ceiling, and because the
+    # read is tenant-scoped the limit can no longer widen a cross-tenant scan.
+    nodes = await graph.get_vertices_for_tenant(body.tenant_id, limit=body.limit)
     if body.filter:
         nodes, _ = _apply_boolean_filter(nodes, [], body.filter)
 
@@ -2114,8 +2130,8 @@ async def graph_health(
     else:
         effective_tenant_id = tenant.tenant_id
 
-    all_verts = await graph.get_all_vertices(limit=10000)
-    all_verts = [v for v in all_verts if v.properties.get("tenantId") == effective_tenant_id]
+    # Scoped to the resolved tenant (own tenant, or a Kyber-authorised target).
+    all_verts = await graph.get_vertices_for_tenant(effective_tenant_id, limit=10000)
     all_edges: list[Edge] = []
     for v in all_verts:
         all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))

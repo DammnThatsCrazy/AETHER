@@ -823,6 +823,11 @@ class IngestionV2Config:
 #     registry's retention_class/delete_behavior (legal holds always block).
 #   - retention_standard_days: age applied to retention_class "standard"
 #     resources by the storage-plane lifecycle (legal class is never swept).
+#   - retention_short_lived_days: age applied to retention_class "short_lived"
+#     resources — operational state (workforce sessions, step-up grants,
+#     single-use WebAuthn / device-proof challenges) that must NOT inherit the
+#     standard year-long window. Deliberately short; legal class is still
+#     never swept.
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -836,6 +841,7 @@ class StoragePlaneConfig:
     bronze_compaction_interval_s: int = _env_int("BRONZE_COMPACTION_INTERVAL_S", 3600)
     lifecycle_retention_enabled: bool = _env_bool("STORAGE_LIFECYCLE_RETENTION_ENABLED", False)
     retention_standard_days: int = _env_int("STORAGE_RETENTION_STANDARD_DAYS", 365)
+    retention_short_lived_days: int = _env_int("STORAGE_RETENTION_SHORT_LIVED_DAYS", 7)
 
 
 # ---------------------------------------------------------------------------

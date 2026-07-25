@@ -11,7 +11,12 @@ Policy comes from config/storage_policies.yaml ONLY (via
 module never invents a parallel policy source:
 
   * ``retention_class``  — ``standard`` resources age out after
-                           ``STORAGE_RETENTION_STANDARD_DAYS``; ``legal``
+                           ``STORAGE_RETENTION_STANDARD_DAYS``;
+                           ``short_lived`` resources (operational state such as
+                           workforce sessions, step-up grants and single-use
+                           WebAuthn / device-proof challenges) age out after the
+                           much shorter ``STORAGE_RETENTION_SHORT_LIVED_DAYS``
+                           and must never inherit the standard window; ``legal``
                            resources are NEVER swept by this lifecycle
                            (compliance-owned).
   * ``delete_behavior``  — ``hard_delete`` removes rows + object bytes +
@@ -100,6 +105,7 @@ class StorageLifecycle:
         *,
         policies_path: Optional[Path] = None,
         standard_retention_days: Optional[int] = None,
+        short_lived_retention_days: Optional[int] = None,
     ) -> None:
         # Lifecycle mutations (retention deletion, DSR re-pack) are compliance
         # operations: the manager overrides the master write-path flag while
@@ -110,6 +116,7 @@ class StorageLifecycle:
         self.rows = row_store or BronzeRowStore()
         self._hold_repo = hold_repo
         self._standard_retention_days = standard_retention_days
+        self._short_lived_retention_days = short_lived_retention_days
 
     # -- collaborators ---------------------------------------------------------
 
@@ -135,6 +142,14 @@ class StorageLifecycle:
         from config.settings import settings  # lazy — avoids import cycles
 
         return int(settings.storage_plane.retention_standard_days)
+
+    def _short_lived_days(self) -> int:
+        """Retention window for ``retention_class == "short_lived"`` types."""
+        if self._short_lived_retention_days is not None:
+            return self._short_lived_retention_days
+        from config.settings import settings  # lazy — avoids import cycles
+
+        return int(settings.storage_plane.retention_short_lived_days)
 
     # ═══════════════════════════════════════════════════════════════════════
     # LEGAL HOLDS
@@ -237,9 +252,18 @@ class StorageLifecycle:
     # ═══════════════════════════════════════════════════════════════════════
 
     def _retention_days(self, policy: StoragePolicy) -> Optional[int]:
-        """None = never swept by this lifecycle (legal class is compliance-owned)."""
+        """Retention window in days for a policy's ``retention_class``.
+
+        None = never swept by this lifecycle (legal class is compliance-owned).
+        ``short_lived`` gets its own, much shorter window: sessions, step-up
+        grants and single-use challenges are operational state and must not
+        survive for the standard (year-long) window. Every other class —
+        including ``standard`` — uses the standard window.
+        """
         if policy.retention_class == "legal":
             return None
+        if policy.retention_class == "short_lived":
+            return self._short_lived_days()
         return self._standard_days()
 
     async def apply_retention(

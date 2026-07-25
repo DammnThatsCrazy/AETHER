@@ -665,3 +665,44 @@ kyber_routes:
     capability: kyber.workforce.self.read
     disclosure: D0
     action_class: 1
+
+  # ── Raw evidence (D5) ─────────────────────────────────────────────────────
+  #
+  # STEP_UP_REQUIRED_FROM is D4 (services/kyber/access/disclosure.py), so a
+  # declaration at D4 or above is the thing that makes step-up demandable at
+  # all. Each one is a real friction increase for operators, so only routes
+  # that genuinely hand back record-level evidence are declared here.
+  #
+  # The import detail route returns a stored import session verbatim — any
+  # tenant's, unmasked, including its mapping and full commit history. That is
+  # the single mounted Kyber route that serves the "unmasked raw records"
+  # definition of D5, which is why it is the only route carrying
+  # kyber.tenant.raw.read. Its sibling POST .../requeue is already D4; reading
+  # the record the requeue acts on cannot be the cheaper act of the two.
+  # kyber.tenant.raw.read is tenant_scoped, so this additionally requires an
+  # active, purpose-bound tenant access scope.
+  - route: "GET /v1/kyber/imports/{import_id}"
+    capability: kyber.tenant.raw.read
+    disclosure: D5
+    action_class: 0
+
+  # ── Emergency root access ─────────────────────────────────────────────────
+  #
+  # services/kyber/access/emergency.py, mounted as `emergency_router`. Asking
+  # for emergency authority grants nothing and is self-scoped; approving is
+  # what confers it and is the same authority class as handing out a role
+  # binding (class 5, which demands step-up on its own); the active list names
+  # operators, reasons and tickets, which is audit evidence about individuals
+  # and therefore D4.
+  - route: "POST /v1/kyber/emergency/request"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 1
+  - route: "POST /v1/kyber/emergency/{request_id}/approve"
+    capability: kyber.role.manage
+    disclosure: D1
+    action_class: 5
+  - route: "GET /v1/kyber/emergency/active"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0

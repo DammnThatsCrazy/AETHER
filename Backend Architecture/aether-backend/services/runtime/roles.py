@@ -79,6 +79,10 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # dedicated runtime role and the deploy-profile/compose/Terraform
             # topology fan-out that would come with one.
             "kyber_directory_sync",
+            # Kyber's short-lived tables (sessions, step-up grants, single-use
+            # challenges) are plain JSONB rows the storage-plane retention
+            # sweep cannot reach. Same role, same cadence, same master switch.
+            "kyber_retention_sweep",
         }
     ),
 }

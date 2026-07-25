@@ -50,6 +50,8 @@ class FakeKyberContext:
         tenant_scopes: set[str] | None = None,
         role_template_ids: tuple[str, ...] = (),
         authenticated: bool = True,
+        granted_disclosure: int = 0,
+        stepped_up: bool = False,
     ) -> None:
         self.operator_id = operator_id
         self.capabilities = frozenset(capabilities or set())
@@ -57,6 +59,11 @@ class FakeKyberContext:
         self.active_tenant_scopes = frozenset(tenant_scopes or set())
         self.role_template_ids = role_template_ids
         self.authenticated = authenticated
+        # The real KyberAccessContext carries both. The boundary enforces a
+        # route's declared `minimum_disclosure` against the first and, for a
+        # route disclosing record-level evidence (D4+), demands the second.
+        self.granted_disclosure = granted_disclosure
+        self.stepped_up = stepped_up
 
 
 class FakeRequest:
@@ -234,7 +241,13 @@ def test_middleware_allows_when_the_declared_capability_is_held(
     monkeypatch.setattr(
         settings, "route_registry", replace(settings.route_registry, route_registry_enforced=True)
     )
-    workforce_session(FakeKyberContext(capabilities={"kyber.audit.read"}))
+    # This route is declared D4. Holding the capability is necessary but no
+    # longer sufficient: the boundary also requires the caller's disclosure
+    # ceiling to reach D4 and — because D4 is record-level evidence — a live
+    # step-up elevation.
+    workforce_session(FakeKyberContext(
+        capabilities={"kyber.audit.read"}, granted_disclosure=4, stepped_up=True
+    ))
 
     path = "/v1/admin/kyber/security/audit-events"
     assert mw._evaluate_kyber_capability(
@@ -281,7 +294,8 @@ def test_middleware_denies_a_tenant_scoped_capability_without_a_matching_scope(
         settings, "route_registry", replace(settings.route_registry, route_registry_enforced=True)
     )
     workforce_session(FakeKyberContext(
-        capabilities={"kyber.tenant.mirror.read"}, tenant_scopes={"tenant-other"}
+        capabilities={"kyber.tenant.mirror.read"}, tenant_scopes={"tenant-other"},
+        granted_disclosure=3,
     ))
 
     path = "/v1/kyber/tenants/{tenant_id}/operational-envelope"
@@ -290,7 +304,8 @@ def test_middleware_denies_a_tenant_scoped_capability_without_a_matching_scope(
     assert mw._evaluate_kyber_capability(request, path, _declared_policy(path, "GET")) is not None
 
     workforce_session(FakeKyberContext(
-        capabilities={"kyber.tenant.mirror.read"}, tenant_scopes={"tenant-a"}
+        capabilities={"kyber.tenant.mirror.read"}, tenant_scopes={"tenant-a"},
+        granted_disclosure=3,
     ))
     assert mw._evaluate_kyber_capability(request, path, _declared_policy(path, "GET")) is None
 
@@ -469,3 +484,58 @@ def test_local_defaults_keep_the_legacy_path_available():
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert proc.stdout.strip() == "False True False"
     assert KyberWorkforceConfig is not None
+
+
+def test_middleware_denies_a_declared_d4_route_without_step_up(
+    kyber_flags, workforce_session, monkeypatch
+):
+    """A `disclosure:` declaration must actually enforce something.
+
+    `minimum_disclosure` was set on every schema-v3 RoutePolicy and read by
+    nothing, so a `disclosure: D4` declaration was a policy record with no
+    enforcement behind it — declared-but-inert. D4 is record-level evidence, so
+    reaching it requires a live step-up elevation.
+    """
+    from config.settings import settings
+    from middleware import middleware as mw
+
+    kyber_flags(workforce_identity_enabled=True, backend_authz_enforced=True)
+    monkeypatch.setattr(
+        settings, "route_registry", replace(settings.route_registry, route_registry_enforced=True)
+    )
+    path = "/v1/admin/kyber/security/audit-events"
+    request = FakeRequest(method="GET", path=path)
+    policy = _declared_policy(path, "GET")
+    assert policy.minimum_disclosure == "D4", "fixture drifted: this route is no longer D4"
+
+    # Capability held, ceiling reaches D4, but no step-up.
+    workforce_session(FakeKyberContext(
+        capabilities={"kyber.audit.read"}, granted_disclosure=4, stepped_up=False
+    ))
+    assert mw._evaluate_kyber_capability(request, path, policy) is not None
+
+    # Stepped up: allowed.
+    workforce_session(FakeKyberContext(
+        capabilities={"kyber.audit.read"}, granted_disclosure=4, stepped_up=True
+    ))
+    assert mw._evaluate_kyber_capability(request, path, policy) is None
+
+
+def test_middleware_denies_when_the_disclosure_ceiling_is_below_the_declaration(
+    kyber_flags, workforce_session, monkeypatch
+):
+    """An observer must not reach a route that discloses more than their ceiling."""
+    from config.settings import settings
+    from middleware import middleware as mw
+
+    kyber_flags(workforce_identity_enabled=True, backend_authz_enforced=True)
+    monkeypatch.setattr(
+        settings, "route_registry", replace(settings.route_registry, route_registry_enforced=True)
+    )
+    path = "/v1/admin/kyber/security/audit-events"
+    workforce_session(FakeKyberContext(
+        capabilities={"kyber.audit.read"}, granted_disclosure=1, stepped_up=True
+    ))
+    assert mw._evaluate_kyber_capability(
+        FakeRequest(method="GET", path=path), path, _declared_policy(path, "GET")
+    ) is not None

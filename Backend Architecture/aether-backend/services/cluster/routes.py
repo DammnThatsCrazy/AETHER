@@ -180,12 +180,8 @@ async def _get_tenant_cluster_vertices(
     tenant_id: str, graph: GraphClient
 ) -> list[Vertex]:
     """Return all cluster vertices belonging to the tenant."""
-    all_verts = await graph.get_all_vertices(limit=5000)
-    return [
-        v for v in all_verts
-        if v.vertex_type in CLUSTER_VERTEX_TYPES
-        and v.properties.get("tenantId") == tenant_id
-    ]
+    tenant_verts = await graph.get_vertices_for_tenant(tenant_id, limit=5000)
+    return [v for v in tenant_verts if v.vertex_type in CLUSTER_VERTEX_TYPES]
 
 
 async def _get_cluster_vertex(
@@ -216,11 +212,10 @@ async def _get_cluster_member_vertices(
 
     # Also check edges going *from* each potential member to this cluster
     # (handles cases where edges are indexed by entity vertex)
-    all_verts = await graph.get_all_vertices(limit=5000)
+    scoped_verts = await graph.get_vertices_for_tenant(tenant_id, limit=5000)
     tenant_verts = {
-        v.vertex_id: v for v in all_verts
-        if v.properties.get("tenantId") == tenant_id
-        and v.vertex_type not in CLUSTER_VERTEX_TYPES
+        v.vertex_id: v for v in scoped_verts
+        if v.vertex_type not in CLUSTER_VERTEX_TYPES
     }
 
     # Check outbound edges from each entity vertex pointing to this cluster
