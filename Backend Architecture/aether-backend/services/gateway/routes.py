@@ -13,6 +13,7 @@ from config.settings import settings
 from shared.common.common import APIResponse, utc_now
 from shared.logger.logger import metrics
 from dependencies.providers import get_registry
+from services.gateway import component_status
 from services.gateway.readiness import readiness_report
 
 router = APIRouter(tags=["Gateway"])
@@ -20,27 +21,44 @@ router = APIRouter(tags=["Gateway"])
 
 @router.get("/health")
 @router.get("/v1/health")
-async def health_check():
-    """Deep health check — probes all dependencies."""
-    registry = get_registry()
-    dep_health = await registry.health_check()
+async def health_check(request: Request):
+    """Container liveness probe — is this process alive and serving?
 
-    all_ok = all(v.get("status") == "ok" for v in dep_health.values())
+    ECS uses this route as the API container's ``healthCheck`` command and the
+    ALB target group uses it as its health check path, so it answers a liveness
+    question and keeps returning 200 for as long as the process can serve. A
+    degraded dependency must not make the orchestrator kill an otherwise-live
+    container; that verdict belongs to ``/v1/ready``, which returns 503.
+
+    What the body reports is a different matter: every per-component state here
+    is derived from observed state (router table, dependency probes, worker
+    supervisor, published backlog gauges, model registry, work counters), and a
+    signal this process cannot observe is reported as unknown and listed under
+    the component's ``unverified`` key. See services/gateway/component_status.py.
+    """
+    registry = get_registry()
+    dependency_health = await registry.health_check()
+
+    components = component_status.component_report(
+        dependency_health=dependency_health,
+        route_paths=component_status.collect_route_paths(request.app),
+        worker_view=component_status.collect_worker_view(request.app),
+        metrics_snapshot=metrics.snapshot(),
+    )
+    dependencies_ok = all(
+        entry.get("status") == component_status.STATUS_OK
+        for entry in dependency_health.values()
+        if isinstance(entry, dict)
+    )
+    components_ok = component_status.aggregate_status(components) == component_status.STATUS_OK
+
     return {
-        "status": "healthy" if all_ok else "degraded",
+        "status": "healthy" if dependencies_ok and components_ok else "degraded",
+        "probe": "liveness",
+        "readiness_probe": "/v1/ready",
         "timestamp": utc_now().isoformat(),
-        "dependencies": dep_health,
-        "services": {
-            "ingestion": "ok",
-            "identity": "ok",
-            "analytics": "ok",
-            "ml_serving": "ok",
-            "agent": "ok",
-            "campaign": "ok",
-            "consent": "ok",
-            "notification": "ok",
-            "admin": "ok",
-        },
+        "dependencies": dependency_health,
+        "components": components,
     }
 
 
