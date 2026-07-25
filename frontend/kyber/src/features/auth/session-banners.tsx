@@ -1,8 +1,9 @@
 /**
  * Persistent session banners.
  *
- * Same contract as `@aether/ui`'s `MockModeBanner`: purely presentational,
- * `role="status"`, data-attributes for tests, rendered above the app chrome.
+ * Same contract as the shared mock-mode banner in `@aether/ui`: purely
+ * presentational, `role="status"`, data-attributes for tests, rendered above
+ * the app chrome.
  * These surface backend session facts that change what the operator is allowed
  * to do — an operator should never discover a restricted session by getting a
  * silent 403 on a button click.

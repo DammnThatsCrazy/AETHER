@@ -29,6 +29,16 @@ const BuyerPersonasPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ def
 const ROICalculatorsPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.ROICalculatorsPage })));
 const SalesReadinessPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.SalesReadinessPage })));
 const SecurityPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.SecurityPage })));
+// Kyber workforce administration. Each page renders from backend-supplied
+// capabilities and shows its own forbidden state, so routing them is not a
+// grant — the backend still decides on every request.
+const WorkforcePage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.WorkforcePage })));
+const InvitationsPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.InvitationsPage })));
+const RolesPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.RolesPage })));
+const DevicesPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.DevicesPage })));
+const SessionsPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.SessionsPage })));
+const AccessPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.AccessPage })));
+const AuditPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.AuditPage })));
 const ReliabilityPage = lazy(() => import('@kyber/pages/reliability').then(m => ({ default: m.ReliabilityPage })));
 const IntelligenceQualityPage = lazy(() => import('@kyber/pages/intelligence-quality').then(m => ({ default: m.IntelligenceQualityPage })));
 const ConnectorsPage = lazy(() => import('@kyber/pages/connectors').then(m => ({ default: m.ConnectorsPage })));
@@ -127,6 +137,13 @@ export function AppRouter() {
                 <Route path="/roi-calculators" element={<PageSuspense><ROICalculatorsPage /></PageSuspense>} />
                 <Route path="/sales-readiness" element={<PageSuspense><SalesReadinessPage /></PageSuspense>} />
                 <Route path="/security" element={<PageSuspense><SecurityPage /></PageSuspense>} />
+                <Route path="/security/workforce" element={<PageSuspense><WorkforcePage /></PageSuspense>} />
+                <Route path="/security/invitations" element={<PageSuspense><InvitationsPage /></PageSuspense>} />
+                <Route path="/security/roles" element={<PageSuspense><RolesPage /></PageSuspense>} />
+                <Route path="/security/devices" element={<PageSuspense><DevicesPage /></PageSuspense>} />
+                <Route path="/security/sessions" element={<PageSuspense><SessionsPage /></PageSuspense>} />
+                <Route path="/security/access" element={<PageSuspense><AccessPage /></PageSuspense>} />
+                <Route path="/security/audit" element={<PageSuspense><AuditPage /></PageSuspense>} />
                 <Route path="/rewards" element={<PageSuspense><RewardsHealthPage /></PageSuspense>} />
                 <Route path="/rewards/:tenantId" element={<PageSuspense><RewardsDrilldownPage /></PageSuspense>} />
                 <Route path="/intelligence/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />

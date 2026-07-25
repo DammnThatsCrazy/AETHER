@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { screen, waitFor, act } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from './auth-context';
@@ -89,7 +90,7 @@ function codeOnly(text: string): string {
 }
 
 describe('no client-side identity derivation', () => {
-  const authDir = resolve(process.cwd(), 'src/features/auth');
+  const authDir = dirname(fileURLToPath(import.meta.url));
   const sources = [
     'auth-context.tsx',
     'session-client.ts',

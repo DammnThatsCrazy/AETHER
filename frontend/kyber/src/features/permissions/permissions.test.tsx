@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PermissionGate } from './permission-gate';
@@ -179,12 +180,9 @@ function codeOnly(text: string): string {
 }
 
 describe('the canViewAll privilege bug is gone', () => {
-  const source = codeOnly(
-    readFileSync(resolve(process.cwd(), 'src/features/permissions/permissions.ts'), 'utf8'),
-  );
-  const gate = codeOnly(
-    readFileSync(resolve(process.cwd(), 'src/features/permissions/permission-gate.tsx'), 'utf8'),
-  );
+  const here = dirname(fileURLToPath(import.meta.url));
+  const source = codeOnly(readFileSync(resolve(here, 'permissions.ts'), 'utf8'));
+  const gate = codeOnly(readFileSync(resolve(here, 'permission-gate.tsx'), 'utf8'));
 
   it('defines no canViewAll flag', () => {
     expect(source).not.toMatch(/canViewAll\s*[:?]/);

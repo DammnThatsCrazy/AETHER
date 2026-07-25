@@ -45,10 +45,13 @@ export const KYBER_WORKFORCE_ENDPOINTS = {
 } as const;
 
 /**
- * Audit read. NOTE for the backend worker: this path is assumed — it is the
- * only endpoint on this surface not present in the handed-down contract list.
- * See `integration_notes` in the worker report.
+ * Audit read.
+ *
+ * This is the pre-existing security audit ledger, which lives under the admin
+ * Kyber surface rather than the workforce plane — there is no
+ * `/v1/kyber/audit/events`. Reading it requires `kyber.audit.read`.
+ * See `Backend Architecture/aether-backend/services/security/admin_routes.py`.
  */
 export const KYBER_AUDIT_ENDPOINTS = {
-  events: '/v1/kyber/audit/events',
+  events: '/v1/admin/kyber/security/audit-events',
 } as const;
