@@ -419,6 +419,18 @@ describe('KyberCommandsPage — authority', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows a loading state before the command queue resolves', () => {
+    restGet.mockImplementation(() => new Promise(() => undefined));
+    const { container } = renderPage();
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+  });
+
+  it('renders an authoritative empty command queue', async () => {
+    mockApi({ commands: { commands: [], total: 0 } });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('No commands in this queue')).toBeInTheDocument());
+  });
+
   it('shows the error state with the backend reason when the queue fails', async () => {
     mockApi({ commandsError: new Error('A fresh step-up is required') });
     renderPage();

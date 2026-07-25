@@ -68,7 +68,7 @@ function OverviewTab({ cluster }: { cluster: NonNullable<ReturnType<typeof useCl
           <p className="text-sm text-text-secondary">{cluster.formation_reason}</p>
         </div>
       )}
-      {cluster.risk_score !== null && (
+      {cluster.risk_score != null && (
         <div>
           <p className="text-xs text-text-muted mb-1">Risk score</p>
           <div className="flex items-center gap-2">
@@ -76,12 +76,12 @@ function OverviewTab({ cluster }: { cluster: NonNullable<ReturnType<typeof useCl
               <div
                 className="h-full rounded-full"
                 style={{
-                  width: `${(cluster.risk_score ?? 0) * 100}%`,
-                  backgroundColor: (cluster.risk_score ?? 0) >= 0.7 ? '#ef4444' : (cluster.risk_score ?? 0) >= 0.4 ? '#eab308' : '#22c55e',
+                  width: `${cluster.risk_score * 100}%`,
+                  backgroundColor: cluster.risk_score >= 0.7 ? '#ef4444' : cluster.risk_score >= 0.4 ? '#eab308' : '#22c55e',
                 }}
               />
             </div>
-            <span className="text-xs font-mono text-text-primary">{((cluster.risk_score ?? 0) * 100).toFixed(1)}</span>
+            <span className="text-xs font-mono text-text-primary">{(cluster.risk_score * 100).toFixed(1)}</span>
           </div>
         </div>
       )}

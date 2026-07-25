@@ -57,9 +57,9 @@ export function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Users</h1>
-          <p className="text-sm text-text-secondary mt-0.5">
+          <div className="text-sm text-text-secondary mt-0.5">
             {isLoading ? <Skeleton className="w-20 h-3 inline-block" /> : `${users.length} users`}
-          </p>
+          </div>
         </div>
         <Button variant="ghost" size="sm" onClick={reload}>Refresh</Button>
       </div>

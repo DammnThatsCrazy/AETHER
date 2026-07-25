@@ -41,7 +41,7 @@ class TraceRecord(BaseModel):
     service: str
     endpoint: str
     duration_ms: float = Field(..., ge=0.0)
-    status: str = Field(default="ok", pattern="^(ok|error|timeout|cancelled)$")
+    status: str = Field(..., pattern="^(ok|error|timeout|cancelled)$")
     error: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     timestamp: str = Field(
@@ -128,13 +128,15 @@ async def summary(request: Request):
 
     error_traces = [t for t in traces if t.get("status") in ("error", "timeout")]
     total = len(traces)
-    err_rate = (len(error_traces) / total) if total else 0.0
+    err_rate = (len(error_traces) / total) if total else None
 
-    durations = [float(t.get("duration_ms", 0.0)) for t in traces]
+    durations = [
+        float(t["duration_ms"]) for t in traces if t.get("duration_ms") is not None
+    ]
     durations.sort()
-    p50 = durations[len(durations) // 2] if durations else 0.0
+    p50 = durations[len(durations) // 2] if durations else None
     p95_idx = max(0, int(len(durations) * 0.95) - 1)
-    p95 = durations[p95_idx] if durations else 0.0
+    p95 = durations[p95_idx] if durations else None
 
     return APIResponse(data={
         "trace_sample_size": total,
@@ -143,4 +145,5 @@ async def summary(request: Request):
         "p95_duration_ms": p95,
         "counter_keys": len(snap.get("counters", {})),
         "histogram_keys": len(snap.get("histograms", {})),
+        "availability": "available" if traces else "insufficient_evidence",
     }).to_dict()

@@ -265,6 +265,11 @@ class ConnectorService:
             )
 
         secret = await self._resolve_secret(config)
+        if connector.requires_secret and not secret:
+            raise ValueError(
+                f"Connector {connector_type} credential is unavailable; "
+                "configure a valid vault secret before syncing"
+            )
         try:
             events = await connector.pull(config, since=since, secret=secret)
             status = "healthy"
@@ -290,14 +295,13 @@ class ConnectorService:
         await _audit(tenant_id, actor_id, "system", "connector_sync", connector_type,
                      "allowed" if status == "healthy" else "blocked",
                      {"events": len(events), "status": status})
-        if status == "error":
+        if status == "failed":
             from services.delivery.adapters.base import ConnectorSyncError
             raise ConnectorSyncError(
                 f"Connector sync failed: {error_detail}",
                 connector_type=connector_type,
                 tenant_id=tenant_id,
             )
-        import os
         import uuid as _uuid
         from repositories.lake import bronze_connectors
         ingested = 0
@@ -336,11 +340,9 @@ class ConnectorService:
             )
         except Exception as exc:  # pragma: no cover - best-effort, never break sync
             logger.warning(f"connector cursor upsert failed tenant={tenant_id} type={connector_type}: {exc}")
-        mode = os.getenv("AETHER_ENV", "local").lower()
-        detail = f"live sync ({connector_type})" if mode != "local" else f"local mode — no external API call ({connector_type})"
         return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
                           events_ingested=ingested, events=events,
-                          detail=detail)
+                          detail=f"provider sync ({connector_type})")
 
     async def ingest_webhook(self, connector_type: str, tenant_id: str, *, raw_body: bytes,
                              signature: Optional[str] = None, timestamp: Optional[str] = None,

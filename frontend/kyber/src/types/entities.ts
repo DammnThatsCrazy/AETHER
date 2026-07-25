@@ -7,13 +7,13 @@ export interface Entity {
   readonly type: EntityType;
   readonly name: string;
   readonly displayLabel: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
+  readonly createdAt?: string | undefined;
+  readonly updatedAt?: string | undefined;
   readonly health: HealthStatus;
-  readonly trustScore: number;
-  readonly riskScore: number;
-  readonly anomalyScore: number;
-  readonly needsHelp: boolean;
+  readonly trustScore: number | null;
+  readonly riskScore: number | null;
+  readonly anomalyScore: number | null;
+  readonly needsHelp: boolean | null;
   readonly needsHelpReason?: string | undefined;
   readonly tags: readonly string[];
   readonly metadata: Record<string, unknown>;
@@ -31,8 +31,8 @@ export interface Profile360Summary {
   readonly lastSeen?: string | undefined;
   readonly walletCount: number;
   readonly agentCount: number;
-  readonly trust: number;
-  readonly risk: number;
+  readonly trust: number | null;
+  readonly risk: number | null;
   readonly primaryMetrics: readonly Profile360Metric[];
   readonly secondaryMetrics: readonly Profile360Metric[];
 }

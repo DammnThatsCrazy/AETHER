@@ -135,12 +135,11 @@ export function useReviewData() {
 
   const selectedBatch = batches.find(b => b.id === selectedBatchId) ?? null;
 
-  const resolveItem = useCallback((itemId: string, status: ReviewStatus, reason: string, attribution: ActionAttribution): Promise<void> => {
+  const resolveItem = useCallback((itemId: string, status: ReviewStatus, reason: string): Promise<void> => {
     return api.agent.submitTask('review', 'high', {
       item_id: itemId,
       decision: status,
       reason,
-      actor: attribution,
       batch_id: selectedBatchId ?? '',
     })
       .then(() => api.agent.audit())

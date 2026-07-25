@@ -2,8 +2,8 @@
 
 Resolves a USD valuation for a native value across fiat identity, FX, token
 market price, and peg-aware stablecoin valuation. Real adapters (FX API, market
-data, Chainlink peg feeds) are credential-gated and registered at deploy time;
-this module ships deterministic fixtures so CI needs no live credentials.
+data, Chainlink peg feeds) register observed rates at deploy time. No runtime
+reference prices are bundled.
 
 Invariants:
   - a source being unavailable yields **unpriced** (usd_value None), never 0;
@@ -14,27 +14,27 @@ Invariants:
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Optional
+from typing import Callable, Optional
 
 from shared.common.common import utc_now
 from services.stablecoin.valuation import classify_peg
 from services.value.models import is_usd
 
-# --- Deterministic CI fixtures (swapped for live adapters at deploy time) ----
-_FX_RATES_TO_USD: dict[str, Decimal] = {
-    "EUR": Decimal("1.08"), "GBP": Decimal("1.27"), "JPY": Decimal("0.0067"),
-    "CAD": Decimal("0.73"), "AUD": Decimal("0.66"),
-}
-_TOKEN_PRICES_USD: dict[str, Decimal] = {
-    "ETH": Decimal("3000"), "BTC": Decimal("60000"), "SOL": Decimal("150"),
-    "MATIC": Decimal("0.70"), "AVAX": Decimal("35"), "ARB": Decimal("1.10"),
-}
 _STABLECOIN_SYMBOLS = {"USDC", "USDT", "DAI", "PYUSD", "USDP", "TUSD", "GUSD"}
-# Peg-aware observed prices (source-backed snapshot; NOT an assumed $1).
-_STABLECOIN_PEG_USD: dict[str, Decimal] = {
-    "USDC": Decimal("1.000"), "USDT": Decimal("0.999"), "DAI": Decimal("1.001"),
-    "PYUSD": Decimal("1.000"), "USDP": Decimal("1.000"), "TUSD": Decimal("0.998"),
-}
+PriceObservation = tuple[Decimal, str, str, str]
+PriceProvider = Callable[[str], Optional[PriceObservation]]
+_providers: list[PriceProvider] = []
+
+
+def register_price_provider(provider: PriceProvider) -> None:
+    """Register a canonical observed-rate provider."""
+    if provider not in _providers:
+        _providers.append(provider)
+
+
+def clear_price_providers() -> None:
+    """Clear process-local provider registrations (startup/test lifecycle)."""
+    _providers.clear()
 
 
 def _valuation(
@@ -68,26 +68,36 @@ def price(amount: Optional[Decimal], currency: Optional[str]) -> Optional[dict]:
         return _valuation(amount, method="fiat_identity", source="usd_identity",
                           rate=Decimal(1), confidence="high", freshness="live")
 
+    observation = next(
+        (observed for provider in _providers if (observed := provider(sym)) is not None),
+        None,
+    )
+    if observation is None:
+        return None
+    rate, source, freshness, observed_confidence = observation
+
     if sym in _STABLECOIN_SYMBOLS:
-        peg = _STABLECOIN_PEG_USD.get(sym)
-        if peg is None:
-            return None  # no peg snapshot -> unpriced (never assume $1)
+        peg = rate
         status = classify_peg((peg - Decimal(1)) * Decimal("10000"))
-        confidence = {"on_peg": "high", "minor_deviation": "medium", "depegged": "low"}[status]
+        confidence = (
+            "low"
+            if status == "depegged"
+            else observed_confidence
+        )
         warning = None if status == "on_peg" else f"stablecoin {status.replace('_', ' ')}"
         return _valuation(amount * peg, method="stablecoin_peg_verified",
-                          source="peg_snapshot", rate=peg, confidence=confidence,
-                          warning=warning)
+                          source=source, rate=peg, confidence=confidence,
+                          freshness=freshness, warning=warning)
 
-    if sym in _FX_RATES_TO_USD:
-        rate = _FX_RATES_TO_USD[sym]
-        return _valuation(amount * rate, method="fx_rate", source="fx_reference", rate=rate)
-
-    if sym in _TOKEN_PRICES_USD:
-        rate = _TOKEN_PRICES_USD[sym]
-        return _valuation(amount * rate, method="market_price", source="market_reference", rate=rate)
-
-    return None  # unknown asset -> unpriced, never 0
+    method = "fx_rate" if len(sym) == 3 and sym.isalpha() else "market_price"
+    return _valuation(
+        amount * rate,
+        method=method,
+        source=source,
+        rate=rate,
+        confidence=observed_confidence,
+        freshness=freshness,
+    )
 
 
 def is_stablecoin(currency: Optional[str]) -> bool:

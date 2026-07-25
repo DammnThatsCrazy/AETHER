@@ -12,6 +12,7 @@ export function Campaign360Graph({ campaignId, timeStart, timeEnd }: Props) {
   const [population, setPopulation] = useState('observed');
   const [depth, setDepth] = useState(2);
   const [submitted, setSubmitted] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const cyRef = useRef<HTMLDivElement>(null);
   const cyInstance = useRef<unknown>(null);
 
@@ -38,6 +39,7 @@ export function Campaign360Graph({ campaignId, timeStart, timeEnd }: Props) {
     const nodes = (graphData.nodes as Array<Record<string, unknown>> | undefined) ?? [];
     const edges = (graphData.edges as Array<Record<string, unknown>> | undefined) ?? [];
 
+    setRenderError(null);
     import('cytoscape').then(({ default: cytoscape }) => {
       if (cyInstance.current) {
         (cyInstance.current as { destroy(): void }).destroy();
@@ -55,7 +57,9 @@ export function Campaign360Graph({ campaignId, timeStart, timeEnd }: Props) {
         ],
         layout: { name: 'cose' },
       });
-    }).catch(() => {});
+    }).catch((cause: unknown) => {
+      setRenderError(cause instanceof Error ? cause.message : 'graph renderer unavailable');
+    });
   }, [graphData]);
 
   useEffect(() => {
@@ -95,7 +99,8 @@ export function Campaign360Graph({ campaignId, timeStart, timeEnd }: Props) {
 
       {submitted && loading && <LoadingState lines={3} />}
       {submitted && error && <ErrorState title="Graph unavailable" message={error} />}
-      {submitted && graphData && !loading && (
+      {submitted && renderError && <ErrorState title="Graph renderer unavailable" message={renderError} />}
+      {submitted && graphData && !loading && !renderError && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

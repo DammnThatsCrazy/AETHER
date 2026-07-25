@@ -42,4 +42,6 @@ consistent on `@aether/ui` — but intentionally utilitarian, not final design.
 
 Tenant isolation in the UI (Aether never shows Kyber internals; Kyber aggregate
 views never show raw tenant-private payloads), every page's empty/loading/error
-states, and local-mocked mode. See [Frontend QA](FRONTEND-QA.md).
+states, and the live API data-truth contract. Empty and unavailable are
+different visual states; demo disclosure appears only from backend provenance.
+See [Frontend QA](FRONTEND-QA.md).

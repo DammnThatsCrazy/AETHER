@@ -39,8 +39,10 @@ A running checklist of the productization surfaces and their readiness. See
 
 ## Live Telemetry
 
-- [x] Flag-guarded live signals with in-memory fallback across onboarding,
-      customer success, billing/revops, reliability, and data quality
+- [x] Flag-guarded live signals across onboarding, customer success,
+      billing/revops, reliability, and data quality
+- [x] Dependency failure is unavailable/error, never a synthetic or empty-success
+      fallback
 
 ## External Billing Readiness
 
@@ -53,6 +55,16 @@ A running checklist of the productization surfaces and their readiness. See
       quality, audit exports)
 - [x] Kyber operator surfaces (reliability, intelligence quality, revops, security,
       implementation, packages, deployment readiness, GTM)
+- [x] Aether/Kyber live API runtime only; no browser MSW startup or normal mock
+      environment
+- [x] Fail-closed frontend environment validation and scoped legacy-worker/cache
+      migration
+- [x] Repository validator rejects runtime fixture imports and known synthetic
+      production-bundle literals
+- [ ] Versioned backend demo seed/status/verify/reset pipeline, idempotency, and
+      tenant-isolated reset (PR 3)
+- [ ] Clean-install, API-unavailable, seed, reset, staging, and production
+      certification report (PR 4)
 
 ## OODA Suggestion Intelligence
 
@@ -76,6 +88,9 @@ A running checklist of the productization surfaces and their readiness. See
 
 - [x] Env-driven config, safe-by-default feature flags, documented local commands
 - [x] `.env.example` covers all new flags and placeholders
+- [x] Normal local startup is backend-backed and never seeds automatically
+- [ ] Backend seed policy must refuse production and require an explicit
+      staging policy and tenant allowlist (PR 3)
 
 ## Reward Enablement (A6)
 

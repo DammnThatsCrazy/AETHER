@@ -1,13 +1,12 @@
 """14 production-shaped inbound connector adapters.
 
 Each adapter overrides test_connection() and pull() with real HTTP calls when
-a secret is provided (non-local mode). In local/test mode the base mocked
-behavior applies. Secrets are never stored in config — they are resolved by
+a secret is provided. Local/test use the same truthful credential-gated path.
+Secrets are never stored in config — they are resolved by
 ConnectorService from the vault and passed per-request.
 """
 from __future__ import annotations
 
-import os
 from typing import Any, Optional
 
 from services.integrations.connectors.base import (
@@ -21,7 +20,7 @@ from services.integrations.connectors.base import (
 
 def _is_live(secret: Optional[str]) -> bool:
     """Return True when a real API call should be made."""
-    return bool(secret) and os.getenv("AETHER_ENV", "local").lower() != "local"
+    return bool(secret)
 
 
 async def _http_get(url: str, headers: dict) -> tuple[int, dict]:

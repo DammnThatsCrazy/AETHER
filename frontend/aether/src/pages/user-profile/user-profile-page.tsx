@@ -735,7 +735,7 @@ function BehavioralTab({ userId }: { userId: string }) {
           <p className="text-xs text-text-muted mb-3">Overall confidence: {Math.round(Number(why.overall_confidence) * 100)}%</p>
         )}
         {topSignals.length === 0
-          ? <p className="text-xs text-text-muted">No anomalies detected.</p>
+          ? <p className="text-xs text-text-muted">No behavioral signals were returned.</p>
           : topSignals.map((sig, i) => (
               <SignalRowWithEvidence key={i} sig={asRecord(sig)} severityVariant={severityVariant} />
             ))
@@ -918,7 +918,7 @@ function RelationshipsTab({ userId }: { userId: string }) {
       {/* Identity cluster */}
       <Section title="Identity cluster (same real-world actor)" loading={cl}>
         {clusterMembers.length === 0
-          ? <p className="text-xs text-text-muted">No cluster detected — entity appears unique.</p>
+          ? <p className="text-xs text-text-muted">No identity-cluster evidence was returned.</p>
           : (
             <>
               <div className="grid grid-cols-3 gap-3 mb-3">
@@ -1544,11 +1544,15 @@ export function UserProfilePage() {
   const { id: userId = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [window, setWindow] = useState<TimeWindow>('30d');
-  const { data: summary, isLoading: headerLoading } = useUserProfile(userId);
+  const { data: summary, isLoading: headerLoading, error: headerError } = useUserProfile(userId);
   const s = asRecord(summary);
 
   if (!userId) {
     return <ErrorState title="No user ID" message="Please select a user from the list." />;
+  }
+
+  if (headerError) {
+    return <ErrorState title="Failed to load user profile" message={headerError} className="p-8" />;
   }
 
   return (

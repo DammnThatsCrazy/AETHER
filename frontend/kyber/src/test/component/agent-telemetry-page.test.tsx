@@ -101,6 +101,12 @@ beforeEach(() => {
 });
 
 describe('Kyber Agent Telemetry page', () => {
+  it('shows loading while the fleet request is pending', () => {
+    mocks.agentTelemetryDeployments.mockReturnValue(new Promise(() => undefined));
+    const { container } = render(<MemoryRouter><AgentTelemetryPage /></MemoryRouter>);
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+  });
+
   it('renders fleet aggregates and the per-deployment table', async () => {
     render(<MemoryRouter><AgentTelemetryPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Agent Telemetry')).toBeInTheDocument());

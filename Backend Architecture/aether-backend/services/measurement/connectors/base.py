@@ -96,3 +96,36 @@ class BaseConnector(ABC):
         return hashlib.sha256(
             ":".join([self.tenant_id, self.connector_type, *parts]).encode()
         ).hexdigest()
+
+    def _sync_result(
+        self,
+        *,
+        spend_records_written: int = 0,
+        conversion_records_written: int = 0,
+        touchpoint_records_written: int = 0,
+        errors: Optional[list[str]] = None,
+        cursor_state: Optional[dict[str, Any]] = None,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> SyncResult:
+        """Build a contract-complete result for connectors with provider APIs."""
+        return SyncResult(
+            connector_id=self.connector_id,
+            connector_type=self.connector_type,
+            spend_records_written=spend_records_written,
+            conversion_records_written=conversion_records_written,
+            touchpoint_records_written=touchpoint_records_written,
+            errors=errors or [],
+            cursor_state=cursor_state or {},
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+
+    def _health(self, healthy: bool, message: str) -> ConnectorHealth:
+        """Build a truthful, connector-scoped health observation."""
+        return ConnectorHealth(
+            connector_id=self.connector_id,
+            connector_type=self.connector_type,
+            healthy=healthy,
+            status_message=message,
+        )

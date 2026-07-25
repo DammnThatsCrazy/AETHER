@@ -82,6 +82,10 @@ function HealthStat({ label, value, tone = 'default' }: HealthStatProps) {
   );
 }
 
+function observedCount(value: number | null | undefined, timeCtx: ReturnType<typeof useTimeContext>): string {
+  return value == null ? '—' : formatCount(value, timeCtx);
+}
+
 interface ProviderHealthCardProps {
   readonly provider: PaymentRailProvider;
   readonly health: PaymentRailHealthRecord | undefined;
@@ -104,16 +108,16 @@ function ProviderHealthCard({ provider, health, syncing, syncDisabled, onSync }:
         </div>
         {configured ? (
           <>
-            <HealthStat label="Sessions 24h" value={formatCount(health?.sessions_observed_24h ?? 0, timeCtx)} />
-            <HealthStat label="Completed 24h" value={formatCount(health?.sessions_completed_24h ?? 0, timeCtx)} tone="success" />
-            <HealthStat label="Failed 24h" value={formatCount(health?.sessions_failed_24h ?? 0, timeCtx)} tone="danger" />
+            <HealthStat label="Sessions 24h" value={observedCount(health?.sessions_observed_24h, timeCtx)} />
+            <HealthStat label="Completed 24h" value={observedCount(health?.sessions_completed_24h, timeCtx)} tone="success" />
+            <HealthStat label="Failed 24h" value={observedCount(health?.sessions_failed_24h, timeCtx)} tone="danger" />
             <HealthStat
               label="Webhooks 24h"
-              value={`${formatCount(health?.webhook_verified_24h ?? 0, timeCtx)} ok / ${formatCount(health?.webhook_rejected_24h ?? 0, timeCtx)} rejected`}
-              tone={(health?.webhook_rejected_24h ?? 0) > 0 ? 'warning' : 'default'}
+              value={`${observedCount(health?.webhook_verified_24h, timeCtx)} ok / ${observedCount(health?.webhook_rejected_24h, timeCtx)} rejected`}
+              tone={health?.webhook_rejected_24h != null && health.webhook_rejected_24h > 0 ? 'warning' : 'default'}
             />
-            <HealthStat label="Unresolved" value={formatCount(health?.sessions_unresolved ?? 0, timeCtx)} tone={(health?.sessions_unresolved ?? 0) > 0 ? 'warning' : 'default'} />
-            <HealthStat label="Conflicts" value={formatCount(health?.reconciliation_conflicts ?? 0, timeCtx)} tone={(health?.reconciliation_conflicts ?? 0) > 0 ? 'danger' : 'default'} />
+            <HealthStat label="Unresolved" value={observedCount(health?.sessions_unresolved, timeCtx)} tone={health?.sessions_unresolved != null && health.sessions_unresolved > 0 ? 'warning' : 'default'} />
+            <HealthStat label="Conflicts" value={observedCount(health?.reconciliation_conflicts, timeCtx)} tone={health?.reconciliation_conflicts != null && health.reconciliation_conflicts > 0 ? 'danger' : 'default'} />
             <HealthStat label="Matched rate" value={formatMatchedRate(health?.reconciliation_matched_rate)} />
             <HealthStat label="Last event" value={formatDateTime(health?.last_event_at, timeCtx)} />
             <Button

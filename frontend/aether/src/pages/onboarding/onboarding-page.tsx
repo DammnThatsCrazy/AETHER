@@ -1,8 +1,9 @@
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, GlyphIcon, LoadingState, StatusIndicator, TerminalSeparator } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, GlyphIcon, LoadingState, StatusIndicator, TerminalSeparator } from '@aether/ui';
 import { useEventRequirements, useGoLiveReadiness, useOnboardingChecklist, useOnboardingStatus, usePatchOnboardingStep, useSdkInstructions } from '@aether-app/features/onboarding';
 import type { ImplementationBlocker, ImplementationStep } from '@aether/shared';
 
-function scoreColor(score: number) {
+function scoreColor(score: number | null) {
+  if (score == null) return 'text-text-muted';
   if (score >= 80) return 'text-success';
   if (score >= 50) return 'text-warning';
   return 'text-danger';
@@ -39,6 +40,7 @@ export function OnboardingPage() {
   const patchStep = usePatchOnboardingStep();
 
   if (status.isLoading && !status.data) return <LoadingState lines={6} className="p-8" />;
+  if (status.error) return <ErrorState message="Onboarding status unavailable" onRetry={status.refetch} className="p-8" />;
   const plan = status.data?.plan;
   const steps = checklist.data?.items ?? status.data?.steps ?? [];
   const blockers = checklist.data?.blockers ?? status.data?.blockers ?? [];
@@ -56,11 +58,11 @@ export function OnboardingPage() {
 
       <div className="grid gap-4 md:grid-cols-4">
         {[
-          ['Implementation Health', plan?.implementation_health_score ?? 0],
-          ['Go-live Readiness', plan?.go_live_readiness_score ?? Number(readiness.data?.['score'] ?? 0)],
-          ['Value Readiness', plan?.value_readiness_score ?? 0],
-          ['Expansion Readiness', plan?.expansion_readiness_score ?? 0],
-        ].map(([label, value]) => <Card key={label}><CardContent className="p-4"><div className="text-xs text-text-muted">{label}</div><div className={`text-2xl font-mono ${scoreColor(Number(value))}`}>{value}%</div></CardContent></Card>)}
+          ['Implementation Health', plan?.implementation_health_score ?? null],
+          ['Go-live Readiness', plan?.go_live_readiness_score ?? (readiness.data?.['score'] as number | null | undefined) ?? null],
+          ['Value Readiness', plan?.value_readiness_score ?? null],
+          ['Expansion Readiness', plan?.expansion_readiness_score ?? null],
+        ].map(([label, value]) => <Card key={label}><CardContent className="p-4"><div className="text-xs text-text-muted">{label}</div><div className={`text-2xl font-mono ${scoreColor(value as number | null)}`}>{value == null ? '—' : `${value}%`}</div></CardContent></Card>)}
       </div>
 
       <Card>
@@ -77,8 +79,8 @@ export function OnboardingPage() {
         </Card>
         <div className="space-y-4">
           <Card><CardHeader><CardTitle>Required Tenant Actions</CardTitle></CardHeader><CardContent className="space-y-2">{(checklist.data?.tenant_actions ?? []).slice(0, 5).map((a: ImplementationStep) => <div key={a.step_id} className="text-xs text-text-secondary">• {a.title}</div>)}{!(checklist.data?.tenant_actions ?? []).length && <EmptyState title="No tenant actions" description="Nothing is waiting on your team." />}</CardContent></Card>
-          <Card><CardHeader><CardTitle>SDK Install Instructions</CardTitle></CardHeader><CardContent className="text-xs text-text-secondary space-y-1">{((sdk.data?.['steps'] as string[] | undefined) ?? ['Install the Aether SDK.', 'Initialize with tenant-scoped credentials.']).map(item => <div key={item}>• {item}</div>)}</CardContent></Card>
-          <Card><CardHeader><CardTitle>Event Requirements</CardTitle></CardHeader><CardContent className="text-xs text-text-secondary space-y-2"><div>Minimum volume: {String(events.data?.['minimum_event_volume'] ?? 0)}</div><TerminalSeparator />{((events.data?.['required_events'] as string[] | undefined) ?? []).map(e => <Badge key={e} size="sm">{e}</Badge>)}</CardContent></Card>
+          <Card><CardHeader><CardTitle>SDK Install Instructions</CardTitle></CardHeader><CardContent className="text-xs text-text-secondary space-y-1">{sdk.error ? <ErrorState message="SDK instructions unavailable" onRetry={sdk.refetch} /> : ((sdk.data?.['steps'] as string[] | undefined) ?? []).length ? ((sdk.data?.['steps'] as string[]).map(item => <div key={item}>• {item}</div>)) : <EmptyState title="No SDK instructions" description="Instructions have not been published for this tenant." />}</CardContent></Card>
+          <Card><CardHeader><CardTitle>Event Requirements</CardTitle></CardHeader><CardContent className="text-xs text-text-secondary space-y-2">{events.error ? <ErrorState message="Event requirements unavailable" onRetry={events.refetch} /> : <><div>Minimum volume: {events.data?.['minimum_event_volume'] == null ? '—' : String(events.data['minimum_event_volume'])}</div><TerminalSeparator />{((events.data?.['required_events'] as string[] | undefined) ?? []).map(e => <Badge key={e} size="sm">{e}</Badge>)}</>}</CardContent></Card>
           <Card><CardHeader><CardTitle>Visible Blockers</CardTitle></CardHeader><CardContent>{blockers.length ? blockers.map((b: ImplementationBlocker) => <div key={b.blocker_id} className="rounded border border-border-default p-2 text-xs"><b>{b.severity}</b> — {b.title}</div>) : <EmptyState title="No blockers" description="There are no tenant-visible blockers." />}</CardContent></Card>
         </div>
       </div>

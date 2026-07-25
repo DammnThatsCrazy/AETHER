@@ -98,7 +98,7 @@ export function GeoPage() {
     window,
   });
 
-  const { data: entitiesData, isLoading: entitiesLoading } = useGeoEntities({
+  const { data: entitiesData, isLoading: entitiesLoading, error: entitiesError, refetch: refetchEntities } = useGeoEntities({
     level: currentLevel,
     geo_id: currentGeoId ?? 'global',
     window,
@@ -186,7 +186,7 @@ export function GeoPage() {
               <CardContent className="p-4">
                 <p className="text-xs text-text-muted font-mono">Entities</p>
                 <p className="text-2xl font-mono text-accent mt-1">
-                  {formatCount(summary.entity_count ?? 0, timeCtx)}
+                  {summary.entity_count == null ? '—' : formatCount(summary.entity_count, timeCtx)}
                 </p>
               </CardContent>
             </Card>
@@ -209,8 +209,8 @@ export function GeoPage() {
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-text-muted font-mono">Anomaly flags</p>
-                <p className={`text-2xl font-mono mt-1 ${(summary.anomaly_flags ?? 0) > 0 ? 'text-warning' : 'text-text-primary'}`}>
-                  {summary.anomaly_flags ?? 0}
+                <p className={`text-2xl font-mono mt-1 ${summary.anomaly_flags != null && summary.anomaly_flags > 0 ? 'text-warning' : 'text-text-primary'}`}>
+                  {summary.anomaly_flags ?? '—'}
                 </p>
               </CardContent>
             </Card>
@@ -252,14 +252,14 @@ export function GeoPage() {
                       </button>
                     ),
                   },
-                  { key: 'entities', header: 'Entities', render: c => <span className="font-mono">{formatCount(c.entity_count as number ?? 0, timeCtx)}</span> },
+                  { key: 'entities', header: 'Entities', render: c => <span className="font-mono">{c.entity_count == null ? '—' : formatCount(c.entity_count as number, timeCtx)}</span> },
                   { key: 'conv', header: 'Conv. rate', render: c => fmtPct(c.conversion_rate as number | null) },
                   {
                     key: 'anomaly',
                     header: 'Anomalies',
                     render: c => {
-                      const flags = c.anomaly_flags as number ?? 0;
-                      return flags > 0 ? <Badge variant="warning" size="sm">{flags}</Badge> : <span className="text-text-muted">—</span>;
+                      const flags = c.anomaly_flags as number | null | undefined;
+                      return flags != null ? <Badge variant={flags > 0 ? 'warning' : 'default'} size="sm">{flags}</Badge> : <span className="text-text-muted">—</span>;
                     },
                   },
                 ]}
@@ -273,6 +273,7 @@ export function GeoPage() {
       <TerminalSeparator label="entities at this level" className="my-6" />
 
       {entitiesLoading && <LoadingState lines={5} />}
+      {entitiesError && <ErrorState message="Failed to load geographic entities" onRetry={refetchEntities} />}
 
       {!entitiesLoading && entitiesData && (
         <>

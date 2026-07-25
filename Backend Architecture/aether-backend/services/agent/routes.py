@@ -132,7 +132,7 @@ class ReviewDecision(BaseModel):
 
 class ControllerHeartbeat(BaseModel):
     controller: str
-    status: str = Field(default="healthy", pattern="^(healthy|degraded|failed|unknown)$")
+    status: str = Field(default="unknown", pattern="^(healthy|degraded|failed|unknown)$")
     queue_depth: int = Field(default=0, ge=0)
     worker_id: str = "kyber"
     metadata: dict[str, Any] = Field(default_factory=dict)

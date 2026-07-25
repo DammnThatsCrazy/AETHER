@@ -38,15 +38,6 @@ export const commerceApi = {
       .get(`/v1/x402/resources/${resourceId}`, envelope(protectedResourceSchema))
       .then((r) => r.data),
 
-  seedResources: () =>
-    restClient
-      .post(
-        '/v1/x402/resources/seed',
-        envelope(z.object({ resources: z.number(), tenant_id: z.string() })),
-        {}
-      )
-      .then((r) => r.data),
-
   // ─── Preflight / Challenge / Authorize / Verify / Grant ───────────
 
   preflight: (holderId: string, resourceId: string) =>

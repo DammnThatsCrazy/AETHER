@@ -59,20 +59,17 @@ apps/kyber/
 ## Data Flow
 
 ```
-Backend APIs ─────────────────────────┐
-  REST  /v1/analytics/*               │
-  GQL   /v1/analytics/graphql          ├─→ Centralized Adapters ─→ Feature Hooks ─→ Pages
-  WS    /v1/analytics/ws/events        │       (lib/api/)         (features/*)      (pages/*)
-                                       │
-Mock Fixtures (fixtures/) ─────────────┘
-  Switched via env: VITE_KYBER_ENV
+Backend APIs
+  REST  /v1/analytics/*
+  GQL   /v1/analytics/graphql         ─→ API clients ─→ Feature Hooks ─→ Pages
+  WS    /v1/analytics/ws/events           (lib/api/)    (features/*)      (pages/*)
 ```
 
 ## Key Patterns
 
 - **System components**: All third-party UI is wrapped in Kyber-owned components
 - **Feature modules**: Each page has a corresponding feature module with data hooks
-- **Adapter switching**: `isLocalMocked()` gates between fixture data and live API calls
+- **Backend-only data**: production hooks call canonical API clients in every runtime environment
 - **Schema validation**: All API responses validated with Zod before entering state
 - **Error boundaries**: Route-level + component-level error boundaries
 - **Lazy loading**: All page routes are code-split via `React.lazy`
@@ -167,7 +164,7 @@ import { useWebSocket } from '@kyber/hooks';
 const { status } = useWebSocket({
   path: '/ws/v1/analytics/events',
   onMessage: handleEvent,
-  enabled: !isLocalMocked(),
+  enabled: true,
 });
 ```
 
@@ -206,8 +203,8 @@ once.
    export { useCampaigns } from './use-campaigns';
    ```
 
-4. **Fixtures** — Add `src/fixtures/<domain>.ts` with deterministic mock data.
-   Guard behind `isLocalMocked()` in the feature hook.
+4. **Tests** — Add test-only handlers and fixtures under `src/test/`. Runtime
+   hooks must never import them.
 
 5. **Components** — Create `src/components/<domain>/` for domain-specific UI.
 
@@ -302,12 +299,9 @@ Within the same directory, relative imports are fine (`./cache`, `./use-query`).
 
 ## Authentication
 
-Auth uses PKCE OIDC with in-memory token storage (never persisted to
-`localStorage` in production). In `local-mocked` / `local-live` mode,
-`AuthProvider` auto-grants a mock engineer user.
-
-Access the token inside API clients via `getAccessToken()` from
-`@kyber/features/auth` — never read it from context or state directly.
+Auth uses a backend-owned session represented by an HttpOnly cookie. Browser
+code cannot read or manufacture the credential. Local development obtains the
+same kind of session through the backend's local-only development-session flow.
 
 Role-based access is enforced via `<PermissionGate>` from
 `@kyber/features/permissions`. Gate at the component level for UI affordances;
@@ -315,20 +309,18 @@ the backend enforces authorization independently.
 
 ---
 
-## Mock vs Live Mode
+## Backend-only data path
 
 `VITE_KYBER_ENV` controls the runtime:
 
 | Value | API calls | Auth |
 |---|---|---|
-| `local-mocked` | Skipped — fixtures used | Auto-granted |
-| `local-live` | `http://localhost:8000` via Vite proxy | Mock allowed |
+| `local` | Configured local backend | Backend development session |
 | `staging` | Staging backend | Real OIDC |
 | `production` | Production backend | Real OIDC |
 
-Guard mock code with `isLocalMocked()`. For adapter-switching, use
-`createAdapter(mockImpl, liveImpl)` or `createLazyAdapter(...)` from
-`@kyber/lib/adapters`.
+There is no runtime mock adapter. API failures remain failures, successful
+empty responses remain empty, and test fixtures are confined to test paths.
 
 ---
 
@@ -401,6 +393,6 @@ When wiring a new backend endpoint to the frontend:
 - [ ] Define a Zod response schema (inline or in `src/lib/schemas/`)
 - [ ] Wrap with `apiResponseSchema(yourSchema)` to unwrap the backend envelope
 - [ ] Use `.passthrough()` if the backend may add fields not yet modeled
-- [ ] Add mock fixtures in `src/fixtures/<domain>.ts`
+- [ ] Add test-only response handlers under `src/test/`
 - [ ] Write a feature hook using `useQuery` or `useMutation`
-- [ ] Test against `VITE_KYBER_ENV=local-live` before marking complete
+- [ ] Test against `VITE_KYBER_ENV=local` and a live local backend before marking complete

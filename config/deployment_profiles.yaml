@@ -35,23 +35,8 @@ max_supported_profile: enterprise-isolated
 
 profiles:
 
-  local-mocked:
-    purpose: Frontend/product work without a backend.
-    class: local
-    cost_capped: false
-    backends:
-      database: none
-      cache: none
-      event: none
-      graph: none
-      analytics: none
-      object: none
-      ml: none
-    runs: [aether-spa, kyber-spa, demo-spa, mock-data-msw]
-    forbids: [backend, postgres, redis, localstack, clickhouse, ml, aws-services]
-
-  local-live:
-    purpose: Normal backend development.
+  local:
+    purpose: Normal live backend development. Frontends never simulate the API.
     class: local
     cost_capped: false
     backends:
@@ -79,22 +64,8 @@ profiles:
       ml: inline
     runs: [all-local-dependencies]
 
-  demo-static:
-    purpose: Zero/near-zero cost sales/investor demo.
-    class: demo
-    cost_capped: true
-    backends:
-      database: none
-      cache: none
-      event: none
-      graph: none
-      analytics: none
-      object: s3
-      ml: none
-    runs: [static-frontend, synthetic-precomputed-data]
-
-  demo-live:
-    purpose: Temporary live demo.
+  demo:
+    purpose: Temporary live demo with an explicitly seeded backend tenant.
     class: demo
     cost_capped: true
     ttl_cleanup_required: true
@@ -106,7 +77,7 @@ profiles:
       analytics: postgres
       object: s3
       ml: inline
-    runs: [shared-nonproduction-backend, synthetic-tenant, ttl-cleanup]
+    runs: [shared-nonproduction-backend, explicit-backend-seed, synthetic-tenant, ttl-cleanup]
 
   preview:
     purpose: PR-specific live environment, only when explicitly requested.

@@ -7,12 +7,34 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from services.value import (
     account_rules,
     ltv_rules,
     portfolio_rules,
+    price_sources,
     tvl_rules,
 )
+
+
+@pytest.fixture(autouse=True)
+def observed_price_provider():
+    rates = {
+        "ETH": Decimal("3000"),
+        "BTC": Decimal("60000"),
+        "USDC": Decimal("1.000"),
+        "EUR": Decimal("1.08"),
+    }
+    price_sources.register_price_provider(
+        lambda symbol: (
+            (rates[symbol], "test_observation", "observed", "high")
+            if symbol in rates
+            else None
+        )
+    )
+    yield
+    price_sources.clear_price_providers()
 
 
 # --------------------------------------------------------------------------- TVL

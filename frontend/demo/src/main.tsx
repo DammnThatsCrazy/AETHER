@@ -1,22 +1,29 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { getDemoEnv } from './lib/env';
+import { getDemoConfig } from './lib/env';
 import './styles/index.css';
 
-async function bootstrap() {
-  // Fail closed before anything renders: VITE_DEMO_ENV has no default.
-  getDemoEnv();
-  // Compared against the build-time literal rather than a helper call so the
-  // branch is statically eliminated: outside `local-mocked` the MSW worker
-  // chunk is never emitted, not merely never executed.
-  if (import.meta.env.VITE_DEMO_ENV === 'local-mocked') {
-    const { worker } = await import('./mocks/browser');
-    await worker.start({ onUnhandledRequest: 'bypass' });
-  }
-  const root = document.getElementById('root');
-  if (!root) throw new Error('Root element not found');
-  createRoot(root).render(<StrictMode><App /></StrictMode>);
+function renderConfigurationError(root: HTMLElement, error: unknown): void {
+  const message = error instanceof Error ? error.message : 'Invalid demo application configuration.';
+  root.textContent = '';
+  const main = document.createElement('main');
+  main.setAttribute('role', 'alert');
+  main.className = 'min-h-screen p-6';
+  const heading = document.createElement('h1');
+  heading.textContent = 'Demo application configuration error';
+  const detail = document.createElement('p');
+  detail.textContent = message;
+  main.append(heading, detail);
+  root.append(main);
 }
 
-void bootstrap();
+const root = document.getElementById('root');
+if (!root) throw new Error('Root element not found');
+
+try {
+  const config = getDemoConfig();
+  createRoot(root).render(<StrictMode><App config={config} /></StrictMode>);
+} catch (error) {
+  renderConfigurationError(root, error);
+}

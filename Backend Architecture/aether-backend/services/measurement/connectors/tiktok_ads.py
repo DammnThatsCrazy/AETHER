@@ -56,6 +56,8 @@ class TikTokAdsConnector(BaseConnector):
         account_id = str(self._config.get("advertiser_id", ""))
 
         try:
+            if not await self.validate_credentials():
+                raise RuntimeError("TikTok Ads credentials unavailable")
             rows = await self._fetch_spend(start.date(), end.date())
             metrics_list: list[ExternalCampaignMetric] = []
             for row in rows:
@@ -105,21 +107,13 @@ class TikTokAdsConnector(BaseConnector):
         )
 
     async def validate_credentials(self) -> bool:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return True
         return bool(self._config.get("access_token") and self._config.get("advertiser_id"))
 
     async def _fetch_spend(self, start_date: date, end_date: date) -> list[dict[str, Any]]:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return []
-
         try:
             import aiohttp  # type: ignore[import]
         except ImportError:
-            logger.warning("aiohttp not installed — TikTok connector requires aiohttp")
-            return []
+            raise RuntimeError("aiohttp not installed — TikTok connector unavailable")
 
         token = self._config.get("access_token")
         advertiser_id = self._config.get("advertiser_id")

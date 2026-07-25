@@ -47,6 +47,12 @@ jobs:
       - name: Frontend data-truth source guardrail
         run: npm run validate:frontend-data-truth
 
+      - name: Frontend route-state coverage
+        run: npm run validate:frontend-route-state
+
+      - name: Clean-install and demo seed safety smokes
+        run: make clean-install-smoke demo-seed-smoke demo-reset-smoke
+
       - name: Contract generator parity check
         run: make generate-contracts-check
 

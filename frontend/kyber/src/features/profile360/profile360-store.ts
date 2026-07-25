@@ -174,9 +174,13 @@ export const profile360Actions = {
 
 export function toTimelineEvent(input: unknown, fallbackId: string): TimelineEvent {
   const value = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const timestamp = value.timestamp ?? value.created_at;
+  if (typeof timestamp !== 'string' || !timestamp) {
+    throw new Error('Profile timeline event is missing its backend observation timestamp');
+  }
   return {
     id: String(value.id ?? fallbackId),
-    timestamp: String(value.timestamp ?? value.created_at ?? new Date().toISOString()),
+    timestamp,
     type: String(value.type ?? value.event_type ?? 'event'),
     title: String(value.title ?? value.event_type ?? value.type ?? 'Profile event'),
     description: String(value.description ?? value.summary ?? ''),

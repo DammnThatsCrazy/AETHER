@@ -18,16 +18,20 @@ import { api } from '@aether-app/lib/api/endpoints';
 
 // ── Tenant ID resolution ──────────────────────────────────────────────────────
 
-function useTenantId(): string {
+function useTenantId(): { tenantId: string; loading: boolean; error: string | null } {
   const [tenantId, setTenantId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api.me.profile().then(data => {
       const r = data as Record<string, unknown>;
       const id = String(r['tenant_id'] ?? r['tenantId'] ?? '');
-      if (id) setTenantId(id);
-    }).catch(() => {});
+      if (!id) throw new Error('Authenticated profile omitted tenant identity');
+      setTenantId(id);
+    }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
   }, []);
-  return tenantId;
+  return { tenantId, loading, error };
 }
 
 // ── Cluster Inspector ─────────────────────────────────────────────────────────
@@ -132,15 +136,14 @@ function FraudInvestigationAction({ nodeId, nodeLabel, tenantId }: { nodeId: str
 // ── Inspector ─────────────────────────────────────────────────────────────────
 
 function ScoreBar({ label, value, colorFn }: { label: string; value: number | undefined; colorFn: (v: number) => string }) {
-  const v = value ?? 0;
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-text-secondary">{label}</span>
-        <span className="font-mono text-text-primary">{v.toFixed(2)}</span>
+        <span className="font-mono text-text-primary">{value?.toFixed(2) ?? '—'}</span>
       </div>
       <div className="h-1.5 w-full bg-surface-overlay rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${v * 100}%`, backgroundColor: colorFn(v) }} />
+        {value != null && <div className="h-full rounded-full transition-all" style={{ width: `${value * 100}%`, backgroundColor: colorFn(value) }} />}
       </div>
     </div>
   );
@@ -345,8 +348,8 @@ const OVERLAYS: { value: GraphOverlay; label: string }[] = [
 const NODE_COLUMNS = [
   { key: 'label', header: 'Entity', render: (n: GraphNode) => <span className="font-mono text-text-primary text-xs">{n.label}</span> },
   { key: 'kind', header: 'Kind', render: (n: GraphNode) => <Badge size="sm">{n.kind}</Badge> },
-  { key: 'trust', header: 'Trust', render: (n: GraphNode) => <span className={cn('font-mono text-xs', (n.trustScore ?? 0) >= 0.5 ? 'text-success' : 'text-danger')}>{n.trustScore?.toFixed(2) ?? '—'}</span> },
-  { key: 'risk', header: 'Risk', render: (n: GraphNode) => <span className={cn('font-mono text-xs', (n.riskScore ?? 0) >= 0.5 ? 'text-danger' : 'text-success')}>{n.riskScore?.toFixed(2) ?? '—'}</span> },
+  { key: 'trust', header: 'Trust', render: (n: GraphNode) => <span className={cn('font-mono text-xs', n.trustScore == null ? 'text-text-muted' : n.trustScore >= 0.5 ? 'text-success' : 'text-danger')}>{n.trustScore?.toFixed(2) ?? '—'}</span> },
+  { key: 'risk', header: 'Risk', render: (n: GraphNode) => <span className={cn('font-mono text-xs', n.riskScore == null ? 'text-text-muted' : n.riskScore >= 0.5 ? 'text-danger' : 'text-success')}>{n.riskScore?.toFixed(2) ?? '—'}</span> },
   { key: 'id', header: 'ID', render: (n: GraphNode) => <code className="text-[10px] text-text-muted truncate max-w-[120px] block">{n.id}</code> },
 ];
 
@@ -359,7 +362,8 @@ export function GraphPage() {
 
   // Declared before useGraphData so they can be passed as options
   const [replayDate, setReplayDate] = useState<string | null>(null);
-  const tenantId = useTenantId();
+  const tenant = useTenantId();
+  const { tenantId } = tenant;
 
   const {
     nodes, edges, clusters,
@@ -517,7 +521,9 @@ export function GraphPage() {
       const resp = await api.graphIntelligence.explain({ tenant_id: tenantId, path_id: pathId });
       const exp = (resp as { data?: PathExplanation }).data;
       if (exp) setPathExplanations(prev => ({ ...prev, [pathId]: exp }));
-    } catch { /* ignore */ }
+    } catch (e) {
+      setPathError(e instanceof Error ? e.message : 'Path explanation unavailable.');
+    }
   }, [pathExplanations, tenantId]);
 
   const handleSaveToInvestigation = useCallback(async (pathId: string, snapshotId?: string) => {
@@ -531,30 +537,33 @@ export function GraphPage() {
       if (snapshotId) {
         // Best-effort: attach snapshot to new case (would need caseId from create response)
       }
-    } catch { /* ignore */ }
+    } catch (e) {
+      setPathError(e instanceof Error ? e.message : 'Unable to save investigation.');
+    }
   }, [tenantId]);
 
-  if (error) {
+  // Keep derived hooks above loading/error returns so tenant bootstrap does not
+  // change hook order between renders.
+  const riskAlertCount = useMemo(
+    () => nodes.filter(n => n.riskScore != null && n.riskScore >= 0.7).length,
+    [nodes],
+  );
+
+  if (tenant.error || error) {
     return (
       <div className="p-8">
-        <ErrorState title="Failed to load graph" message={error} />
+        <ErrorState title="Failed to load graph" message={tenant.error ?? error ?? 'Graph unavailable'} />
       </div>
     );
   }
 
-  if (isLoading) {
+  if (tenant.loading || isLoading) {
     return (
       <div className="p-8">
         <LoadingState lines={6} />
       </div>
     );
   }
-
-  // ── Summary stats derived from current graph data ─────────────────────────
-  const riskAlertCount = useMemo(
-    () => nodes.filter(n => (n.riskScore ?? 0) >= 0.7).length,
-    [nodes],
-  );
 
   return (
     <div className="p-6 space-y-4 h-full flex flex-col">

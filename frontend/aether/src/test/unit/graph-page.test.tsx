@@ -86,16 +86,16 @@ function renderWithRouter() {
 }
 
 describe('GraphPage — path API integration', () => {
-  it('renders graph canvas and page title', () => {
+  it('renders graph canvas and page title', async () => {
     renderWithRouter();
-    expect(screen.getByText('Entity Graph')).toBeInTheDocument();
+    expect(await screen.findByText('Entity Graph')).toBeInTheDocument();
     expect(screen.getByTestId('graph-canvas')).toBeInTheDocument();
   });
 
   it('calls paths API (not local BFS) when two nodes selected in path mode', async () => {
     const { api } = await import('@aether-app/lib/api/endpoints');
     renderWithRouter();
-    fireEvent.click(screen.getByText('Path finder'));
+    fireEvent.click(await screen.findByText('Path finder'));
     fireEvent.click(screen.getByText('Select node-X'));
     fireEvent.click(screen.getByText('Select node-Y'));
 
@@ -111,7 +111,7 @@ describe('GraphPage — path API integration', () => {
 
   it('shows PathInspector when a path is found', async () => {
     renderWithRouter();
-    fireEvent.click(screen.getByText('Path finder'));
+    fireEvent.click(await screen.findByText('Path finder'));
     fireEvent.click(screen.getByText('Select node-X'));
     fireEvent.click(screen.getByText('Select node-Y'));
 
@@ -124,7 +124,7 @@ describe('GraphPage — path API integration', () => {
     const { api } = await import('@aether-app/lib/api/endpoints');
     vi.mocked(api.graphIntelligence.paths).mockResolvedValueOnce({ data: { paths: [], explanations: [] } });
     renderWithRouter();
-    fireEvent.click(screen.getByText('Path finder'));
+    fireEvent.click(await screen.findByText('Path finder'));
     fireEvent.click(screen.getByText('Select node-X'));
     fireEvent.click(screen.getByText('Select node-Y'));
 
@@ -133,9 +133,9 @@ describe('GraphPage — path API integration', () => {
     });
   });
 
-  it('shows traversal mode buttons in path mode', () => {
+  it('shows traversal mode buttons in path mode', async () => {
     renderWithRouter();
-    fireEvent.click(screen.getByText('Path finder'));
+    fireEvent.click(await screen.findByText('Path finder'));
     expect(screen.getByRole('button', { name: 'Shortest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Strongest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'K-Shortest' })).toBeInTheDocument();

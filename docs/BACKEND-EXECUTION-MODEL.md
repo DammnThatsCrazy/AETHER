@@ -89,7 +89,7 @@ Each subsystem binds an explicit backend, declared via env and surfaced on
 | `ANALYTICS_BACKEND` | `postgres` | |
 | `OBJECT_BACKEND` | `s3` | |
 | `ML_MODE` | `inline` | `inline` or `remote`. |
-| `DEPLOYMENT_PROFILE` | `local-live` | Drives compose/helm wiring & ops tooling. |
+| `DEPLOYMENT_PROFILE` | `local` | Drives compose/helm wiring & ops tooling. |
 
 ## Ingestion event-outbox relay (FT-6)
 

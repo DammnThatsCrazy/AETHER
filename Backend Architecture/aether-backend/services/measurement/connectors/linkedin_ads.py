@@ -53,43 +53,19 @@ class LinkedInAdsConnector(BaseConnector):
         return await self.backfill(start, end)
 
     async def backfill(self, start: date, end: date) -> SyncResult:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return await self._mock_backfill(start, end)
         return await self._live_backfill(start, end)
-
-    async def _mock_backfill(self, start: date, end: date) -> SyncResult:
-        """Return a mock SyncResult for local/test environments."""
-        account_id = self._config.get("ad_account_id", "mock-li-account")
-        metrics_list: list[ExternalCampaignMetric] = []
-        current = start
-        while current <= end:
-            metrics_list.append(ExternalCampaignMetric(
-                platform=_CONNECTOR_TYPE,
-                external_account_id=account_id,
-                external_campaign_id=f"mock-li-camp-{self.connector_id[:8]}",
-                external_campaign_name="Mock LinkedIn Campaign",
-                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
-                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
-                impressions=3000, clicks=45, spend=Decimal("75.00"), currency="USD",
-            ))
-            current += timedelta(days=1)
-
-        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
-        logger.info("LinkedIn mock backfill: connector=%s rows=%d", self.connector_id, write_result.spend_records_written)
-        return SyncResult(rows_upserted=write_result.spend_records_written, new_cursor={"last_sync_date": str(end)})
 
     async def _live_backfill(self, start: date, end: date) -> SyncResult:
         try:
             import httpx
         except ImportError:
             logger.error("httpx not installed; LinkedIn live sync unavailable")
-            return SyncResult(rows_upserted=0, errors=["httpx not installed"], new_cursor={})
+            return self._sync_result(errors=["httpx not installed"])
 
-        access_token = self.config.get("access_token", "")
-        ad_account_id = self.config.get("ad_account_id", "")
+        access_token = self._config.get("access_token", "")
+        ad_account_id = self._config.get("ad_account_id", "")
         if not access_token or not ad_account_id:
-            return SyncResult(rows_upserted=0, errors=["Missing access_token or ad_account_id"], new_cursor={})
+            return self._sync_result(errors=["Missing access_token or ad_account_id"])
 
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -152,18 +128,18 @@ class LinkedInAdsConnector(BaseConnector):
                 logger.error("LinkedIn API error: %s", exc)
                 errors.append(str(exc))
 
-        return SyncResult(rows_upserted=rows_upserted, errors=errors, new_cursor={"last_sync_date": str(end)})
+        return self._sync_result(
+            spend_records_written=rows_upserted,
+            errors=errors,
+            cursor_state={"last_sync_date": str(end)},
+        )
 
     async def health_check(self) -> ConnectorHealth:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return ConnectorHealth(status="healthy", message="mock mode")
-
         try:
             import httpx
-            access_token = self.config.get("access_token", "")
+            access_token = self._config.get("access_token", "")
             if not access_token:
-                return ConnectorHealth(status="error", message="Missing access_token")
+                return self._health(False, "Missing access_token")
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(
                     f"{_BASE_URL}/adAccounts",
@@ -171,15 +147,15 @@ class LinkedInAdsConnector(BaseConnector):
                     params={"q": "search"},
                 )
                 if resp.status_code == 401:
-                    return ConnectorHealth(status="error", message="Unauthorized — token expired or invalid")
+                    return self._health(False, "Unauthorized — token expired or invalid")
                 resp.raise_for_status()
-                return ConnectorHealth(status="healthy", message="API credentials valid")
+                return self._health(True, "API credentials valid")
         except Exception as exc:
-            return ConnectorHealth(status="error", message=str(exc))
+            return self._health(False, str(exc))
 
     async def validate_credentials(self) -> bool:
         health = await self.health_check()
-        return health.status == "healthy"
+        return health.healthy
 
 
 def _idempotency_id(connector_id: str, key: str) -> str:

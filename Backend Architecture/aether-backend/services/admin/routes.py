@@ -319,8 +319,8 @@ async def get_usage_detail(tenant_id: str, request: Request):
 #
 # Stripe Price IDs come from settings.stripe_billing (env vars). PLAN_CATALOG
 # remains the single source of truth for plan identity, quota, RPM, and
-# pricing. Local-mode mocked URLs are produced by stripe_client when
-# AETHER_ENV=local and Stripe configuration is incomplete.
+# pricing. Missing configuration and provider failures are reported as
+# unavailable; no environment manufactures billing sessions.
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -413,7 +413,6 @@ async def create_checkout_session(
     return APIResponse(data={
         "url": session.url,
         "session_id": session.session_id,
-        "mocked": session.mocked,
         "plan_tier": plan_tier.value,
     }).to_dict()
 
@@ -431,7 +430,6 @@ async def create_portal_session(tenant_id: str, request: Request):
     )
     return APIResponse(data={
         "url": portal.url,
-        "mocked": portal.mocked,
     }).to_dict()
 
 

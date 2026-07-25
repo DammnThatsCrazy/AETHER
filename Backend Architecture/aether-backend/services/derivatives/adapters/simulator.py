@@ -1,5 +1,5 @@
 """Deterministic simulator adapter — the reference implementation every
-conformance rule is proven against. MOCKED_LOCAL by definition; it exists
+conformance rule is proven against. It is test scaffolding; it exists
 so the pipeline, state machines, and P&L can be exercised end-to-end
 without any venue credentials."""
 
@@ -81,7 +81,7 @@ def _scenario(seed: int) -> list[dict[str, Any]]:
 class SimulatorAdapter(DerivativesAdapter):
     adapter_id = "simulator"
     display_name = "Deterministic Simulator (reference)"
-    implementation_status = ImplementationStatus.MOCKED_LOCAL
+    implementation_status = ImplementationStatus.SCAFFOLDED
     capabilities = (
         "reference_data", "account_snapshot", "order_lifecycle", "position",
         "funding", "reconciliation",

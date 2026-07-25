@@ -25,23 +25,28 @@ interface GraphqlEntitiesResponse {
   errors?: { message: string }[] | null;
 }
 
-function mapProfileToEntity(profile: ProfileResponse, entityId: string): Entity {
-  const now = new Date().toISOString();
+export function mapProfileToEntity(profile: ProfileResponse, entityId: string): Entity {
+  const record = profile as Record<string, unknown>;
   const userId = profile.user_id ?? entityId;
   return {
     id: userId,
-    type: ((profile as Record<string, unknown>).type as EntityType) ?? 'customer',
-    name: (profile as Record<string, unknown>).name as string ?? userId,
-    displayLabel: (profile as Record<string, unknown>).label as string ?? userId,
-    createdAt: (profile as Record<string, unknown>).created_at as string ?? now,
-    updatedAt: (profile as Record<string, unknown>).updated_at as string ?? now,
-    health: { status: 'unknown' as const, lastChecked: now },
-    trustScore: 0,
-    riskScore: 0,
-    anomalyScore: 0,
-    needsHelp: false,
-    needsHelpReason: undefined,
-    tags: [],
+    type: (record.type as EntityType) ?? 'customer',
+    name: (record.name as string) ?? userId,
+    displayLabel: (record.label as string) ?? userId,
+    createdAt: (record.created_at as string) ?? undefined,
+    updatedAt: (record.updated_at as string) ?? undefined,
+    health: {
+      status: typeof record.health_status === 'string'
+        ? (record.health_status as Entity['health']['status'])
+        : 'unknown',
+      lastChecked: (record.health_observed_at as string) ?? undefined,
+    },
+    trustScore: typeof record.trust_score === 'number' ? record.trust_score : null,
+    riskScore: typeof record.risk_score === 'number' ? record.risk_score : null,
+    anomalyScore: typeof record.anomaly_score === 'number' ? record.anomaly_score : null,
+    needsHelp: typeof record.needs_help === 'boolean' ? record.needs_help : null,
+    needsHelpReason: typeof record.needs_help_reason === 'string' ? record.needs_help_reason : undefined,
+    tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : [],
     metadata: {
       events: profile.events ?? [],
       connections: profile.connections ?? [],
@@ -51,23 +56,23 @@ function mapProfileToEntity(profile: ProfileResponse, entityId: string): Entity 
   };
 }
 
-function mapGraphqlNodeToEntity(node: GraphqlEntityNode): Entity {
-  const now = new Date().toISOString();
+export function mapGraphqlNodeToEntity(node: GraphqlEntityNode): Entity {
+  const properties = node.properties ?? {};
   return {
     id: node.id,
     type: (node.type as EntityType) ?? 'customer',
     name: node.label ?? node.id,
     displayLabel: node.label ?? node.id,
-    createdAt: now,
-    updatedAt: now,
-    health: { status: 'unknown' as const, lastChecked: now },
-    trustScore: 0,
-    riskScore: 0,
-    anomalyScore: 0,
-    needsHelp: false,
-    needsHelpReason: undefined,
-    tags: [],
-    metadata: node.properties ?? {},
+    createdAt: typeof properties.created_at === 'string' ? properties.created_at : undefined,
+    updatedAt: typeof properties.updated_at === 'string' ? properties.updated_at : undefined,
+    health: { status: 'unknown' as const, lastChecked: undefined },
+    trustScore: typeof properties.trust_score === 'number' ? properties.trust_score : null,
+    riskScore: typeof properties.risk_score === 'number' ? properties.risk_score : null,
+    anomalyScore: typeof properties.anomaly_score === 'number' ? properties.anomaly_score : null,
+    needsHelp: typeof properties.needs_help === 'boolean' ? properties.needs_help : null,
+    needsHelpReason: typeof properties.needs_help_reason === 'string' ? properties.needs_help_reason : undefined,
+    tags: Array.isArray(properties.tags) ? properties.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+    metadata: properties,
   };
 }
 

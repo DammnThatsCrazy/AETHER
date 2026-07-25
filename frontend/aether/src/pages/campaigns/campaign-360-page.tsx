@@ -651,12 +651,15 @@ export function Campaign360Page() {
 
   const [campaign, setCampaign] = useState<AnyRecord | null>(null);
   const [campaignLoading, setCampaignLoading] = useState(true);
+  const [campaignError, setCampaignError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!campaignId) return;
     setCampaignLoading(true);
+    setCampaignError(null);
     (api.campaigns.get(campaignId) as Promise<AnyRecord>)
       .then(d => setCampaign((d as AnyRecord)?.data as AnyRecord ?? d))
+      .catch(error => setCampaignError(error instanceof Error ? error.message : String(error)))
       .finally(() => setCampaignLoading(false));
   }, [campaignId]);
 
@@ -665,6 +668,9 @@ export function Campaign360Page() {
   }
 
   if (!campaignId) return null;
+  if (campaignError) {
+    return <div className="p-8"><ErrorState title="Failed to load campaign" message={campaignError} /></div>;
+  }
 
   return (
     <div className="p-8 space-y-6">

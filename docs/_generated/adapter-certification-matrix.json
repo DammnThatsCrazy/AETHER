@@ -2,91 +2,62 @@
   "generated_from": "Backend Architecture/aether-backend/shared/certification/registry.py",
   "providers": {
     "derivatives:drift": {
-      "adapter": "drift",
+      "adapter": "drift(unimplemented)",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "fills",
-        "funding",
-        "markets",
-        "position",
-        "reference_data"
-      ],
+      "capabilities": [],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
       "provider": "drift",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "derivatives:dydx": {
-      "adapter": "dydx",
+      "adapter": "dydx(unimplemented)",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "account_snapshot",
-        "fills",
-        "markets",
-        "orders",
-        "position",
-        "realtime_account_stream",
-        "reference_data"
-      ],
+      "capabilities": [],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
       "provider": "dydx",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "derivatives:gmx": {
-      "adapter": "gmx",
+      "adapter": "gmx(unimplemented)",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "fills",
-        "funding",
-        "markets",
-        "position",
-        "reference_data"
-      ],
+      "capabilities": [],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
       "provider": "gmx",
-      "required_credentials": [
-        "read_only_api_key"
-      ],
+      "required_credentials": [],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "derivatives:hyperliquid": {
-      "adapter": "hyperliquid",
+      "adapter": "hyperliquid(unimplemented)",
       "adapter_version": "0.1.0",
       "capabilities": [
         "account_snapshot",
         "fills",
         "funding",
-        "margin_snapshot",
         "markets",
-        "position",
-        "realtime_account_stream",
-        "reference_data"
+        "realtime_account_stream"
       ],
       "domain": "derivatives",
       "first_release": true,
@@ -97,24 +68,15 @@
       ],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "websocket",
       "unsupported": []
     },
     "interop:axelar": {
       "adapter": "axelar",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "asset_transfer",
-        "attestation_observation",
-        "delivery_observation",
-        "direct_rpc_observation",
-        "execution_observation",
-        "historical_backfill",
-        "message_observation",
-        "payload_decoding"
-      ],
+      "capabilities": [],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -124,24 +86,15 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:chainlink_ccip": {
       "adapter": "chainlink_ccip",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "asset_transfer",
-        "attestation_observation",
-        "delivery_observation",
-        "direct_rpc_observation",
-        "historical_backfill",
-        "message_observation",
-        "payload_decoding",
-        "retry_tracking"
-      ],
+      "capabilities": [],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -151,23 +104,15 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:debridge": {
       "adapter": "debridge",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "delivery_observation",
-        "direct_rpc_observation",
-        "historical_backfill",
-        "intent_observation",
-        "message_observation",
-        "reorg_recovery",
-        "settlement_observation"
-      ],
+      "capabilities": [],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -177,22 +122,15 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:hyperlane": {
       "adapter": "hyperlane",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "delivery_observation",
-        "direct_rpc_observation",
-        "historical_backfill",
-        "message_observation",
-        "payload_decoding",
-        "reorg_recovery"
-      ],
+      "capabilities": [],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -202,23 +140,15 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:ibc": {
       "adapter": "ibc",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "asset_transfer",
-        "attribute_event_observation",
-        "continuity_recovery",
-        "delivery_observation",
-        "historical_backfill",
-        "message_observation",
-        "settlement_observation"
-      ],
+      "capabilities": [],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -228,21 +158,15 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:layerzero": {
       "adapter": "layerzero_v2",
       "adapter_version": "1.0.0",
-      "capabilities": [
-        "delivery_observation",
-        "direct_rpc_observation",
-        "historical_backfill",
-        "message_observation",
-        "payload_decoding"
-      ],
+      "capabilities": [],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -252,23 +176,15 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:wormhole": {
       "adapter": "wormhole",
       "adapter_version": "0.1.0",
-      "capabilities": [
-        "asset_transfer",
-        "attestation_observation",
-        "delivery_observation",
-        "direct_rpc_observation",
-        "historical_backfill",
-        "message_observation",
-        "payload_decoding"
-      ],
+      "capabilities": [],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -278,8 +194,8 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "credential_waiting",
-      "state_rank": 2,
+      "state": "scaffolded",
+      "state_rank": 1,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -458,7 +374,8 @@
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 18
+      "credential_waiting": 7,
+      "scaffolded": 11
     },
     "first_release": 18,
     "total": 18

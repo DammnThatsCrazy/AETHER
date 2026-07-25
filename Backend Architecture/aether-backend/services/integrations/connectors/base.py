@@ -2,8 +2,8 @@
 
 A connector pulls/receives events from an external SaaS platform and normalizes
 them into Aether's event envelope for graph enrichment. Adapters are
-import-safe, disabled by default, and mocked in local mode; real API calls are
-credential-gated TODOs. Secrets are never stored in `ConnectorConfig.config` or
+import-safe and disabled by default; provider calls are credential-gated in
+every environment. Secrets are never stored in `ConnectorConfig.config` or
 returned via the API — only a non-secret `secret_configured` signal is exposed.
 
 Taxonomy extension: ConnectorClass, ConnectorRole, DataFlowDirection,
@@ -130,7 +130,6 @@ class ImplementationStatus(str, Enum):
 
     Do not claim a connector is live if it is only mocked or credential-gated.
     """
-    MOCKED_LOCAL = "mocked_local"
     SCAFFOLDED = "scaffolded"
     PRODUCTION_SHAPED = "production_shaped"
     CREDENTIAL_GATED = "credential_gated"
@@ -198,7 +197,7 @@ class ConnectorDescriptor(BaseModel):
     lake_write_policy: LakeWritePolicy = LakeWritePolicy.TENANT_ONLY
     graph_write_policy: GraphWritePolicy = GraphWritePolicy.TENANT_GRAPH_ONLY
     model_training_eligibility: ModelTrainingEligibility = ModelTrainingEligibility.NEVER
-    implementation_status: ImplementationStatus = ImplementationStatus.MOCKED_LOCAL
+    implementation_status: ImplementationStatus = ImplementationStatus.CREDENTIAL_GATED
     priority_phase: PriorityPhase = PriorityPhase.NOT_SCHEDULED
     risk_tier: RiskTier = RiskTier.LOW
     # Capability flags
@@ -292,7 +291,7 @@ class BaseConnector:
     lake_write_policy: LakeWritePolicy = LakeWritePolicy.TENANT_ONLY
     graph_write_policy: GraphWritePolicy = GraphWritePolicy.TENANT_GRAPH_ONLY
     model_training_eligibility: ModelTrainingEligibility = ModelTrainingEligibility.NEVER
-    implementation_status: ImplementationStatus = ImplementationStatus.MOCKED_LOCAL
+    implementation_status: ImplementationStatus = ImplementationStatus.CREDENTIAL_GATED
     priority_phase: PriorityPhase = PriorityPhase.NOT_SCHEDULED
     risk_tier: RiskTier = RiskTier.LOW
     supports_byok: bool = False
@@ -372,30 +371,34 @@ class BaseConnector:
     async def test_connection(
         self, config: ConnectorConfig, secret: Optional[str] = None
     ) -> ConnectionTestResult:
-        """Default mocked test. Subclasses override with a live API ping.
-
-        When secret is provided and the environment is non-local, subclass
-        implementations should make a real API health-check call.
-        """
+        """Fail closed unless a subclass performs a real provider check."""
         if not config.enabled:
             return ConnectionTestResult(connector_type=self.connector_type, ok=False, status="disabled",
                                         detail="connector disabled")
         if self.requires_secret and not config.secret_configured:
             return ConnectionTestResult(connector_type=self.connector_type, ok=False, status="not_configured",
                                         detail="missing credential (configure secret in the vault)")
-        return ConnectionTestResult(connector_type=self.connector_type, ok=True, status="ok",
-                                    detail="mocked connection ok (local mode)")
+        if self.requires_secret and not secret:
+            return ConnectionTestResult(
+                connector_type=self.connector_type,
+                ok=False,
+                status="not_configured",
+                detail="configured credential could not be resolved",
+            )
+        return ConnectionTestResult(
+            connector_type=self.connector_type,
+            ok=True,
+            status="ready",
+            detail="credential resolved; provider check required",
+        )
 
     async def pull(
         self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None
     ) -> list[NormalizedEvent]:
-        """Default mocked pull → no events. Subclasses override.
-
-        When secret is provided and the environment is non-local, subclass
-        implementations make real API list/sync calls. Must remain tenant-scoped
-        and rate-limited.
-        """
-        return []
+        """Subclasses must implement a provider-backed pull."""
+        raise NotImplementedError(
+            f"{self.connector_type} does not implement a provider-backed pull"
+        )
 
     def parse_webhook(self, payload: dict[str, Any]) -> list[NormalizedEvent]:
         """Map a verified inbound webhook payload to normalized events.

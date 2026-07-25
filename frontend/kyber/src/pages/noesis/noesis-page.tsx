@@ -106,6 +106,7 @@ function KyberMessageBubble({ message }: { readonly message: NoesisMessageItem }
 export function NoesisPage() {
   const [messages, setMessages] = useState<NoesisMessageItem[]>([]);
   const [suggestedPrompts, setSuggestedPrompts] = useState<readonly string[]>(FALLBACK_PROMPTS);
+  const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null);
   const query = useNoesisQuery();
   const focusHandled = useRef(false);
 
@@ -114,7 +115,9 @@ export function NoesisPage() {
       const caps = res.capabilities ?? [];
       const prompts: string[] = caps.flatMap(c => (c.example_prompts ?? []).filter((p): p is string => Boolean(p))).slice(0, 6);
       if (prompts.length > 0) setSuggestedPrompts(prompts);
-    }).catch(() => {});
+    }).catch((cause: unknown) => {
+      setCapabilitiesError(cause instanceof Error ? cause.message : 'Noesis capabilities unavailable');
+    });
   }, []);
 
   async function handleSubmit(message: string) {
@@ -149,7 +152,7 @@ export function NoesisPage() {
       suggestedPrompts={suggestedPrompts}
       messages={messages}
       isLoading={query.isLoading}
-      error={query.error}
+      error={query.error ?? capabilitiesError}
       surfaceTone="kyber"
       emptyTitle="Noesis is ready for operator intelligence"
       emptyDescription="Use natural language to route into safe read-only graph, health, alert, tenant, agent, reward, and entity lookups."

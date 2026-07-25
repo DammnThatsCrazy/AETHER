@@ -48,11 +48,11 @@ export function getProfile360Summary(entity: Entity, timeline: readonly Timeline
   const walletCount = readMetric(m, ['walletCount', 'wallet_count', 'wallets'], readArray(m['wallets']).length || neighborhood?.nodes.filter((n) => n.type === 'wallet').length || 0);
   const agentCount = readMetric(m, ['agentCount', 'agent_count', 'agents'], readArray(m['agents']).length || neighborhood?.nodes.filter((n) => n.type === 'agent').length || 0);
   const journeyCount = readMetric(m, ['journeyCount', 'active_journeys', 'journeys'], timeline.filter((event) => event.type.includes('journey')).length);
-  const rewardStatus = readString(m['rewardStatus'] ?? financial['reward_status'], entity.tags.includes('rewarded') ? 'eligible' : 'monitoring');
+  const rewardStatus = readString(m['rewardStatus'] ?? financial['reward_status'], 'Unavailable');
   const automationRatio = readMetric(analytics, ['automation_ratio', 'automationRatio'], readMetric(system, ['automation_ratio', 'automationRatio'], 0));
   const activeRegions = readMetric(analytics, ['active_regions', 'activeRegions', 'regions'], readArray(analytics['regions']).length);
-  const platformSummary = readString(m['platformSummary'] ?? devices['summary'] ?? analytics['platform_summary'], 'mixed');
-  const spendingSignal = readString(financial['spending_signal'] ?? financial['spendingSignal'], 'steady');
+  const platformSummary = readString(m['platformSummary'] ?? devices['summary'] ?? analytics['platform_summary'], 'Unavailable');
+  const spendingSignal = readString(financial['spending_signal'] ?? financial['spendingSignal'], 'Unavailable');
 
   const base = [
     metric('Wallets', walletCount, walletCount > 0 ? 'good' : 'default'),
@@ -62,9 +62,9 @@ export function getProfile360Summary(entity: Entity, timeline: readonly Timeline
 
   const typeMetrics: readonly Profile360Metric[] = entity.type === 'agent'
     ? [
-      metric('Owner', readString(m['owner'] ?? system['owner'], 'unassigned'), 'info'),
+      metric('Owner', readString(m['owner'] ?? system['owner'], 'Unavailable'), 'info'),
       metric('Executions', readMetric(system, ['execution_count', 'executionCount'], timeline.filter((e) => e.type.includes('execution')).length), 'default'),
-      metric('Delegation', readString(m['delegationStatus'] ?? system['delegation_status'], 'bounded'), 'warn'),
+      metric('Delegation', readString(m['delegationStatus'] ?? system['delegation_status'], 'Unavailable'), 'warn'),
       metric('Runtime', readString(m['runtimeStatus'] ?? system['runtime_status'], entity.health.status), 'default'),
     ]
     : entity.type === 'organization'
@@ -141,8 +141,14 @@ export function getAnalytics(entity: Entity, timeline: readonly TimelineEvent[],
     platforms: fromRecord(analytics['platforms'], [metric('platforms', nodeTypes['platform'] ?? 0)]),
     spendingPatterns: fromRecord(financial['spending_patterns'], [metric('financial events', eventTypes['transaction'] ?? eventTypes['financial'] ?? 0)]),
     rewardOpportunities: fromRecord(financial['reward_opportunities'], [metric('reward events', eventTypes['reward'] ?? 0)]),
-    trustSignals: [metric('trust', entity.trustScore.toFixed(2), entity.trustScore > 0.7 ? 'good' : 'warn'), metric('risk', entity.riskScore.toFixed(2), entity.riskScore < 0.3 ? 'good' : 'warn')],
-    anomalyIndicators: [metric('anomaly', entity.anomalyScore.toFixed(2), entity.anomalyScore > 0.4 ? 'bad' : 'good'), metric('causal chains', new Set(timeline.map((event) => event.causalityId).filter(Boolean)).size)],
+    trustSignals: [
+      metric('trust', entity.trustScore === null ? 'Unavailable' : entity.trustScore.toFixed(2), entity.trustScore === null ? 'default' : entity.trustScore > 0.7 ? 'good' : 'warn'),
+      metric('risk', entity.riskScore === null ? 'Unavailable' : entity.riskScore.toFixed(2), entity.riskScore === null ? 'default' : entity.riskScore < 0.3 ? 'good' : 'warn'),
+    ],
+    anomalyIndicators: [
+      metric('anomaly', entity.anomalyScore === null ? 'Unavailable' : entity.anomalyScore.toFixed(2), entity.anomalyScore === null ? 'default' : entity.anomalyScore > 0.4 ? 'bad' : 'good'),
+      metric('causal chains', new Set(timeline.map((event) => event.causalityId).filter(Boolean)).size),
+    ],
   };
 }
 

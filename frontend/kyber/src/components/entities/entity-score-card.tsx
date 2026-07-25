@@ -3,7 +3,7 @@ import { cn } from '@kyber/lib/utils';
 
 interface EntityScoreCardProps {
   readonly label: string;
-  readonly value: number;
+  readonly value: number | null;
   readonly inverted?: boolean;
 }
 
@@ -16,6 +16,16 @@ function getScoreColor(value: number, inverted: boolean): string {
 }
 
 export function EntityScoreCard({ label, value, inverted = false }: EntityScoreCardProps) {
+  if (value === null) {
+    return (
+      <Card className="border border-border-subtle">
+        <CardContent className="p-3 text-center">
+          <div className="text-xs uppercase tracking-wider opacity-70 mb-1">{label}</div>
+          <div className="text-sm font-mono text-text-muted">Unavailable</div>
+        </CardContent>
+      </Card>
+    );
+  }
   const colorClass = getScoreColor(value, inverted);
 
   return (

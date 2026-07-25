@@ -39,7 +39,7 @@ export function Profile360SummaryCard({ entity, summary }: Profile360SummaryCard
               </div>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
                 <span className="font-mono">{entity.id}</span>
-                <span>last seen {formatRelativeTime(summary.lastSeen ?? entity.updatedAt)}</span>
+                <span>last seen {summary.lastSeen ?? entity.updatedAt ? formatRelativeTime(summary.lastSeen ?? entity.updatedAt ?? '') : 'unavailable'}</span>
                 <span>status {summary.status ?? entity.health.status}</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
@@ -51,7 +51,7 @@ export function Profile360SummaryCard({ entity, summary }: Profile360SummaryCard
           <div className="grid min-w-[220px] grid-cols-3 gap-2 text-center">
             <div className="rounded border border-border-subtle bg-neutral-950/30 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-wider text-neutral-500">Trust</div>
-              <div className={cn('font-mono text-sm', summary.trust > 0.7 ? 'text-green-400' : summary.trust > 0.4 ? 'text-yellow-400' : 'text-red-400')}>{summary.trust.toFixed(2)}</div>
+              <div className={cn('font-mono text-sm', summary.trust === null ? 'text-neutral-500' : summary.trust > 0.7 ? 'text-green-400' : summary.trust > 0.4 ? 'text-yellow-400' : 'text-red-400')}>{summary.trust === null ? '—' : summary.trust.toFixed(2)}</div>
             </div>
             <div className="rounded border border-border-subtle bg-neutral-950/30 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-wider text-neutral-500">Wallets</div>

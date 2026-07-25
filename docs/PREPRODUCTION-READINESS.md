@@ -30,8 +30,9 @@ is a readiness gate, not a certification.
       [Security Readiness](SECURITY-READINESS.md) when available).
 - [ ] **Flags**: new systems default off; enable intentionally; partner ecosystem
       stays future-flagged off.
-- [ ] **Frontends**: Aether/Kyber/Demo build with env-driven API URLs; local-mocked
-      mode boots; empty/loading/error states present.
+- [ ] **Frontends**: Aether/Kyber/Demo build with explicit env-driven API URLs;
+      live-empty startup and loading/empty/populated/unavailable states pass;
+      production bundles contain no runtime fixtures or browser MSW worker.
 - [ ] **Observability**: metrics scrape (`/v1/metrics`); reliability dashboards
       populate; SLOs tracked.
 - [ ] **CI**: repo-health, frontend tests, e2e all green; docs validation passes.

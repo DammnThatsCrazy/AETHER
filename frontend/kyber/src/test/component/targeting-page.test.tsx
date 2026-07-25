@@ -150,6 +150,12 @@ beforeEach(() => {
 });
 
 describe('Kyber Targeting Intelligence page', () => {
+  it('shows loading while the fleet request is pending', () => {
+    mocks.targetingHealth.mockReturnValue(new Promise(() => undefined));
+    const { container } = render(<MemoryRouter><TargetingIntelligencePage /></MemoryRouter>);
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+  });
+
   it('renders fleet health, the leakage queue, mapping quality, release readiness, and the audit trail', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Targeting Intelligence')).toBeInTheDocument());

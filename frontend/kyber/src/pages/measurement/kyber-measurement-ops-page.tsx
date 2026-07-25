@@ -11,7 +11,7 @@ type RepairMode = 'dryRun' | 'live';
 
 function createRepairRequestId(): string {
   return globalThis.crypto?.randomUUID?.()
-    ?? `repair-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    ?? `repair-${crypto.randomUUID()}`;
 }
 
 function ConfirmButton({ label, onConfirm, disabled }: { readonly label: string; readonly onConfirm: () => Promise<unknown>; readonly disabled?: boolean }) {

@@ -28,15 +28,6 @@ const conversationDetailSchema = z.object({
   })).default([]),
 }).passthrough();
 
-const FALLBACK_PROMPTS = [
-  'Show my highest-value user segments.',
-  'Which campaigns created the best users this week?',
-  'Find users with abnormal purchase behavior.',
-  'Summarize wallet activity over the last 7 days.',
-  'Show reward opportunities.',
-  "Explain this user's Profile 360.",
-];
-
 interface ConversationSummary {
   readonly conversation_id: string;
   readonly last_message: string;
@@ -51,8 +42,10 @@ export function NoesisPage() {
   const [conversationId, setConversationId] = useState<string | null>(
     () => sessionStorage.getItem(SESSION_CONV_KEY)
   );
-  const [suggestedPrompts, setSuggestedPrompts] = useState<readonly string[]>(FALLBACK_PROMPTS);
+  const [suggestedPrompts, setSuggestedPrompts] = useState<readonly string[]>([]);
   const [pastConversations, setPastConversations] = useState<ConversationSummary[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const query = useNoesisQuery();
 
@@ -64,12 +57,12 @@ export function NoesisPage() {
         if (res.messages && res.messages.length > 0) {
           const restored: NoesisMessageItem[] = [];
           for (const turn of res.messages) {
-            restored.push({ id: `user-${Math.random()}`, role: 'user', content: turn.message ?? '' });
-            restored.push({ id: `assistant-${Math.random()}`, role: 'assistant', content: turn.answer ?? '' });
+            restored.push({ id: crypto.randomUUID(), role: 'user', content: turn.message ?? '' });
+            restored.push({ id: crypto.randomUUID(), role: 'assistant', content: turn.answer ?? '' });
           }
           setMessages(restored);
         }
-      }).catch(() => {});
+      }).catch((e: unknown) => setHistoryError(e instanceof Error ? e.message : String(e)));
     }
   }, []);
 
@@ -78,7 +71,7 @@ export function NoesisPage() {
       const caps = res.capabilities ?? [];
       const prompts: string[] = caps.flatMap(c => (c.example_prompts ?? []).filter((p): p is string => Boolean(p))).slice(0, 6);
       if (prompts.length > 0) setSuggestedPrompts(prompts);
-    }).catch(() => {});
+    }).catch((e: unknown) => setCapabilitiesError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   useEffect(() => {
@@ -89,21 +82,21 @@ export function NoesisPage() {
         last_intent: c.last_intent ?? '',
         last_ts: c.last_ts ?? '',
       })));
-    }).catch(() => {});
+    }).catch((e: unknown) => setHistoryError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   async function handleSubmit(message: string) {
-    const convId = conversationId ?? `conv-${Date.now()}`;
+    const convId = conversationId ?? crypto.randomUUID();
     if (!conversationId) {
       setConversationId(convId);
       sessionStorage.setItem(SESSION_CONV_KEY, convId);
     }
-    const userMessage: NoesisMessageItem = { id: `user-${Date.now()}`, role: 'user', content: message };
+    const userMessage: NoesisMessageItem = { id: crypto.randomUUID(), role: 'user', content: message };
     setMessages(prev => [...prev, userMessage]);
     const response = await query.mutate({ message, context: { current_page: window.location.pathname, conversation_id: convId } });
     if (response) {
       setMessages(prev => [...prev, {
-        id: `assistant-${Date.now()}`,
+        id: crypto.randomUUID(),
         role: 'assistant',
         content: response.answer,
         response,
@@ -116,14 +109,17 @@ export function NoesisPage() {
     sessionStorage.setItem(SESSION_CONV_KEY, conv.conversation_id);
     setMessages([]);
     setShowHistory(false);
-    const res = await restClient.get(`/v1/noesis/conversations/${conv.conversation_id}`, conversationDetailSchema).catch(() => null);
-    if (res?.messages) {
+    try {
+      const res = await restClient.get(`/v1/noesis/conversations/${conv.conversation_id}`, conversationDetailSchema);
       const restored: NoesisMessageItem[] = [];
-      for (const turn of res.messages) {
-        restored.push({ id: `user-${Math.random()}`, role: 'user', content: turn.message ?? '' });
-        restored.push({ id: `assistant-${Math.random()}`, role: 'assistant', content: turn.answer ?? '' });
+      for (const turn of res.messages ?? []) {
+        restored.push({ id: crypto.randomUUID(), role: 'user', content: turn.message ?? '' });
+        restored.push({ id: crypto.randomUUID(), role: 'assistant', content: turn.answer ?? '' });
       }
       setMessages(restored);
+      setHistoryError(null);
+    } catch (e) {
+      setHistoryError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -156,6 +152,11 @@ export function NoesisPage() {
         </div>
       )}
       <div className="flex-1 min-w-0">
+        {(historyError || capabilitiesError) && (
+          <div role="alert" className="mb-3 rounded border border-danger/40 bg-danger/10 p-3 text-xs text-danger">
+            Noesis metadata unavailable. Conversation queries remain available; history or suggested prompts could not be loaded.
+          </div>
+        )}
         <NoesisWorkspace
           title="Ask Aether"
           subtitle="Use natural language to query your tenant's intelligence graph, profiles, campaigns, rewards, consent-safe activity, wallets, agents, and alerts."

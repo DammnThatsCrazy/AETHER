@@ -55,33 +55,26 @@ def clean():
 
 # ── Intelligence quality scoring ─────────────────────────────────────────────
 
-async def test_intelligence_quality_score_is_normalized_and_complete():
+async def test_intelligence_quality_score_is_unavailable_without_evidence():
     score = await intelligence_quality_service.compute_score("tenant-a")
     for field in QUALITY_DIMENSIONS:
-        assert 0.0 <= score[field] <= 1.0
-    assert 0.0 <= score["overall_intelligence_quality_score"] <= 1.0
-    assert score["status"] in ("healthy", "watch", "degraded", "critical")
+        assert score[field] is None
+    assert score["overall_intelligence_quality_score"] is None
+    assert score["status"] == "unknown"
+    assert score["availability"] == "insufficient_evidence"
     assert score["tenant_id"] == "tenant-a"
 
 
-async def test_scores_are_deterministic_per_tenant():
-    a1 = await intelligence_quality_service.compute_score("tenant-a")
-    a2 = await intelligence_quality_service.compute_score("tenant-a")
-    b = await intelligence_quality_service.compute_score("tenant-b")
-    assert a1["overall_intelligence_quality_score"] == a2["overall_intelligence_quality_score"]
-    # different tenants get distinct (but stable) jittered scores
-    assert a1["overall_intelligence_quality_score"] != b["overall_intelligence_quality_score"]
-
-
-async def test_dimension_reports_expose_tracked_metrics():
-    events = intelligence_quality_service.dimension_report("events", "tenant-a")
-    assert "event_volume" in events and "quality_score" in events and "status" in events
-    schema = intelligence_quality_service.dimension_report("schema", "tenant-a")
-    assert "change_type_counts" in schema
-    identity = intelligence_quality_service.dimension_report("identity", "tenant-a")
-    assert "merge_rate" in identity
-    graph = intelligence_quality_service.dimension_report("graph", "tenant-a")
-    assert "orphaned_vertices" in graph
+async def test_dimension_reports_require_authoritative_observation():
+    events = await intelligence_quality_service.dimension_report("events", "tenant-a")
+    assert events["quality_score"] is None
+    assert events["status"] == "unknown"
+    assert events["availability"] == "insufficient_evidence"
+    observed = await intelligence_quality_service.report_dimension(
+        "events", "tenant-a", quality_score=0.82, metrics={"event_volume": 12}
+    )
+    assert observed["quality_score"] == 0.82
+    assert (await intelligence_quality_service.dimension_report("events", "tenant-a"))["event_volume"] == 12
 
 
 # ── Tenant-facing routes (isolation + auth) ──────────────────────────────────
@@ -91,7 +84,6 @@ async def test_tenant_overview_route():
     assert "score" in data and "dimensions" in data
     assert data["score"]["tenant_id"] == "tenant-a"
     assert len(data["dimensions"]) == len(QUALITY_DIMENSIONS)
-    # seeded drift is platform-wide (tenant_id=None) so the tenant sees none of it
     assert data["open_drift_event_count"] == 0
 
 
@@ -121,7 +113,11 @@ async def test_kyber_route_allows_operator():
 
 async def test_kyber_tenants_view_is_aggregate_only():
     data = unwrap(await dq.intelligence_quality_tenants(req("olympus", permissions=OP_PERMS), tenant_ids=None))
-    assert data["items"], "expected aggregate per-tenant scores"
+    assert data["items"] == []
+    await intelligence_quality_service.report_score(
+        "tenant-a", "tenant", {field: 0.8 for field in QUALITY_DIMENSIONS}
+    )
+    data = unwrap(await dq.intelligence_quality_tenants(req("olympus", permissions=OP_PERMS), tenant_ids=None))
     for row in data["items"]:
         # aggregate-only: scalar score + status, never raw per-dimension payloads
         assert set(row.keys()) == {"tenant_id", "overall_intelligence_quality_score", "status", "calculated_at"}
@@ -129,18 +125,22 @@ async def test_kyber_tenants_view_is_aggregate_only():
 
 # ── Drift events ─────────────────────────────────────────────────────────────
 
-async def test_drift_events_seeded_and_listed():
+async def test_drift_events_are_empty_until_reported():
     items = await drift_service.list()
-    assert len(items) >= 3
-    types = {d["drift_type"] for d in items}
-    assert "schema_drift" in types
+    assert items == []
 
 
 async def test_drift_acknowledge_and_resolve_lifecycle():
+    created = await drift_service.create({
+        "drift_event_id": "drift-real",
+        "drift_type": "recommendation_quality_drift",
+        "severity": "medium",
+        "reason": "observed",
+    })
     operator = req("olympus", permissions=OP_PERMS)
-    acked = unwrap(await dq.intelligence_quality_acknowledge("drift_seed_reco_quality", operator))
+    acked = unwrap(await dq.intelligence_quality_acknowledge(created["drift_event_id"], operator))
     assert acked["status"] == "acknowledged" and acked["acknowledged_at"]
-    resolved = unwrap(await dq.intelligence_quality_resolve("drift_seed_reco_quality", operator, dq.DriftResolve(resolution_note="tuned weights")))
+    resolved = unwrap(await dq.intelligence_quality_resolve(created["drift_event_id"], operator, dq.DriftResolve(resolution_note="tuned weights")))
     assert resolved["status"] == "resolved" and resolved["resolved_at"]
 
 
@@ -151,9 +151,14 @@ async def test_resolve_unknown_drift_raises():
 
 
 async def test_drift_mutation_requires_operator_admin():
+    created = await drift_service.create({
+        "drift_event_id": "drift-readonly",
+        "drift_type": "schema_drift",
+        "severity": "low",
+    })
     # read-only operator (no admin) cannot acknowledge/resolve
     with pytest.raises(PermissionError):
-        await dq.intelligence_quality_acknowledge("drift_seed_reco_quality", req("olympus", permissions=["kyber:operator"]))
+        await dq.intelligence_quality_acknowledge(created["drift_event_id"], req("olympus", permissions=["kyber:operator"]))
 
 
 # ── Contamination → Security/Governance escalation ───────────────────────────

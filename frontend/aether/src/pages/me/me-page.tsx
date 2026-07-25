@@ -109,7 +109,7 @@ export function MePage() {
   const { toast } = useToast();
   const timeCtx = useTimeContext();
   const { data: profile, isLoading: profileLoading, error: profileError, refetch: refetchProfile } = useMeProfile();
-  const { data: usage, isLoading: usageLoading } = useUsage();
+  const { data: usage, isLoading: usageLoading, error: usageError, refetch: refetchUsage } = useUsage();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -133,12 +133,6 @@ export function MePage() {
   const planId = profile.plan.plan_id;
   const subscriptionStatus = profile.billing.subscription_status;
   const statusVariant = subscriptionStatus === 'active' ? 'healthy' : subscriptionStatus === 'trialing' ? 'degraded' : 'unknown';
-
-  const eventsUsed = usage?._fallback ? 0 : (usage?.events_used ?? 0);
-  const eventsQuota = usage?._fallback ? profile.plan.monthly_quota : (usage?.events_quota ?? profile.plan.monthly_quota);
-  const rpmPeak = usage?._fallback ? 0 : (usage?.rpm_peak ?? 0);
-  const rpmLimit = usage?._fallback ? profile.plan.burst_rpm : (usage?.rpm_limit ?? profile.plan.burst_rpm);
-  const daysRemaining = usage?.days_remaining ?? null;
 
   return (
     <div className="p-8 max-w-2xl">
@@ -164,12 +158,13 @@ export function MePage() {
       {/* Usage Dashboard */}
       <Card>
         <CardContent className="space-y-5 pt-4">
-          {!usageLoading && usage?._fallback && (
-            <p className="text-text-muted text-xs font-mono -mb-1">
-              Usage data unavailable — quota limits shown
-            </p>
+          {usageLoading && <LoadingState lines={3} />}
+          {usageError && <ErrorState message="Usage data unavailable" onRetry={refetchUsage} />}
+          {!usageLoading && !usageError && !usage && (
+            <p className="text-text-muted text-xs font-mono">Usage has not been measured for this billing period.</p>
           )}
-          {!usageLoading && !usage?._fallback && usage?.period_start && (
+          {!usageLoading && !usageError && usage && <>
+          {usage.period_start && (
             <p className="text-text-muted text-xs font-mono -mb-1">
               {formatDate(usage.period_start, timeCtx)}
               {' – '}
@@ -180,8 +175,8 @@ export function MePage() {
 
           <UsageBar
             label="Events this month"
-            used={eventsUsed}
-            total={eventsQuota}
+            used={usage.events_used}
+            total={usage.events_quota}
             unit="events"
             showRemaining
             showUpgradeCta
@@ -191,8 +186,8 @@ export function MePage() {
 
           <UsageBar
             label="Burst rate limit"
-            used={rpmPeak}
-            total={rpmLimit}
+            used={usage.rpm_peak}
+            total={usage.rpm_limit}
             unit="req/min"
             showRemaining={false}
             showUpgradeCta={false}
@@ -200,21 +195,21 @@ export function MePage() {
 
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-text-muted">Billing period</span>
-            {daysRemaining !== null && daysRemaining >= 0 ? (
-              <span className={daysRemaining <= 3 ? (daysRemaining === 0 ? 'text-danger' : 'text-warning') : 'text-text-secondary'}>
-                {daysRemaining === 0 ? 'Resets today' : `${daysRemaining} days remaining`}
+            {usage.days_remaining >= 0 ? (
+              <span className={usage.days_remaining <= 3 ? (usage.days_remaining === 0 ? 'text-danger' : 'text-warning') : 'text-text-secondary'}>
+                {usage.days_remaining === 0 ? 'Resets today' : `${usage.days_remaining} days remaining`}
               </span>
             ) : (
               <span className="text-text-muted">—</span>
             )}
           </div>
 
-          {(usage?.overage_events ?? 0) > 0 && (
+          {usage.overage_events > 0 && (
             <div className="bg-danger/10 border border-danger/30 rounded p-3 text-xs font-mono space-y-1">
               <div className="flex items-center gap-1.5">
                 <GlyphIcon glyph="[!]" className="text-danger" />
                 <span className="text-danger">
-                  {formatCount(usage!.overage_events, timeCtx)} events over quota this period
+                  {formatCount(usage.overage_events, timeCtx)} events over quota this period
                 </span>
               </div>
               <p className="text-text-muted">Overage charges apply. Upgrade your plan to avoid fees.</p>
@@ -223,6 +218,7 @@ export function MePage() {
               </button>
             </div>
           )}
+          </>}
         </CardContent>
       </Card>
 

@@ -73,7 +73,7 @@ async def data_quality_overview(request: Request):
 
 async def _tenant_dimension(request: Request, route_key: str):
     tenant_id = _current_tenant_id(request)
-    return APIResponse(data=intelligence_quality_service.dimension_report(route_key, tenant_id)).to_dict()
+    return APIResponse(data=await intelligence_quality_service.dimension_report(route_key, tenant_id)).to_dict()
 
 
 @tenant_router.get("/events")
@@ -147,7 +147,7 @@ async def intelligence_quality_drift_events(
 @admin_router.get("/schema-drift")
 async def intelligence_quality_schema_drift(request: Request):
     _require_operator(request)
-    report = intelligence_quality_service.dimension_report("schema", None)
+    report = await intelligence_quality_service.dimension_report("schema", None)
     drift = await drift_service.list(drift_type="schema_drift")
     return APIResponse(data={"report": report, "drift_events": drift}).to_dict()
 
@@ -155,37 +155,37 @@ async def intelligence_quality_schema_drift(request: Request):
 @admin_router.get("/identity")
 async def intelligence_quality_identity(request: Request):
     _require_operator(request)
-    return APIResponse(data=intelligence_quality_service.dimension_report("identity", None)).to_dict()
+    return APIResponse(data=await intelligence_quality_service.dimension_report("identity", None)).to_dict()
 
 
 @admin_router.get("/graph")
 async def intelligence_quality_graph(request: Request):
     _require_operator(request)
-    return APIResponse(data=intelligence_quality_service.dimension_report("graph", None)).to_dict()
+    return APIResponse(data=await intelligence_quality_service.dimension_report("graph", None)).to_dict()
 
 
 @admin_router.get("/recommendations")
 async def intelligence_quality_recommendations(request: Request):
     _require_operator(request)
-    return APIResponse(data=intelligence_quality_service.dimension_report("recommendations", None)).to_dict()
+    return APIResponse(data=await intelligence_quality_service.dimension_report("recommendations", None)).to_dict()
 
 
 @admin_router.get("/outcomes")
 async def intelligence_quality_outcomes(request: Request):
     _require_operator(request)
-    return APIResponse(data=intelligence_quality_service.dimension_report("outcomes", None)).to_dict()
+    return APIResponse(data=await intelligence_quality_service.dimension_report("outcomes", None)).to_dict()
 
 
 @admin_router.get("/playbooks")
 async def intelligence_quality_playbooks(request: Request):
     _require_operator(request)
-    return APIResponse(data=intelligence_quality_service.dimension_report("playbooks", None)).to_dict()
+    return APIResponse(data=await intelligence_quality_service.dimension_report("playbooks", None)).to_dict()
 
 
 @admin_router.get("/contamination")
 async def intelligence_quality_contamination(request: Request):
     _require_operator(request)
-    report = intelligence_quality_service.contamination_report(None)
+    report = await intelligence_quality_service.contamination_report(None)
     events = await drift_service.list(drift_type="tenant_data_contamination")
     return APIResponse(data={"report": report, "drift_events": events}).to_dict()
 

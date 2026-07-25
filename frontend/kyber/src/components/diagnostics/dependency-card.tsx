@@ -21,7 +21,7 @@ export function DependencyCard({ dependency }: DependencyCardProps) {
           </div>
           <div className="flex justify-between">
             <span className="text-text-muted">Latency</span>
-            <span className="text-text-secondary">{formatDuration(dependency.latencyMs)}</span>
+            <span className="text-text-secondary">{dependency.latencyMs === null ? 'Unavailable' : formatDuration(dependency.latencyMs)}</span>
           </div>
           {dependency.lastError && (
             <div className="text-danger text-[10px] mt-1 truncate">{dependency.lastError}</div>

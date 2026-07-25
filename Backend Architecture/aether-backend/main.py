@@ -561,6 +561,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.worker_supervisor = supervisor
         await supervisor.start_all()
 
+    from services.demo_seed.startup import maybe_seed_demo_on_start
+
+    if await maybe_seed_demo_on_start(app, environment=settings.env.value):
+        logger.warning(
+            "Explicit backend demo seed completed | tenant=%s | namespace=%s",
+            os.getenv("AETHER_DEMO_TENANT_ID", "").strip(),
+            os.getenv("AETHER_DEMO_SEED_NAMESPACE", "").strip(),
+        )
+
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
         f"| debug={settings.debug} | version={settings.api.version}"
@@ -581,6 +590,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # ═══════════════════════════════════════════════════════════════════════
 # APP FACTORY
 # ═══════════════════════════════════════════════════════════════════════
+
+def _mount_development_auth(app: FastAPI, environment: str) -> None:
+    """Mount loopback development auth only in explicitly local profiles."""
+    from services.auth.dev_routes import mount_development_auth
+    mount_development_auth(app, environment)
+
+
+def _mount_demo_seed_routes(app: FastAPI, environment: str) -> None:
+    """Mount disclosure everywhere and mutations only in explicit local mode."""
+    from services.demo_seed.routes import build_demo_seed_status_router
+
+    app.include_router(build_demo_seed_status_router())
+    if environment in {"local", "test"} and os.getenv(
+        "AETHER_DEMO_ROUTE_TOKEN", ""
+    ).strip():
+        from services.demo_seed.routes import build_demo_seed_mutation_router
+
+        app.include_router(build_demo_seed_mutation_router())
+
 
 def create_app() -> FastAPI:
     _docs = None if settings.is_production else "/docs"
@@ -730,6 +758,8 @@ def create_app() -> FastAPI:
     app.include_router(kyber_revops_router)
     app.include_router(auth_router)
     app.include_router(admin_auth_router)
+    _mount_development_auth(app, settings.env.value)
+    _mount_demo_seed_routes(app, settings.env.value)
     app.include_router(contact_router)
     app.include_router(recommendations_router)
     app.include_router(notification_alerts_router)

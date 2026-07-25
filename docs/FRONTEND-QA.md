@@ -13,7 +13,7 @@ estimated_read_minutes: 5
 # Frontend QA
 
 QA audit across the three apps: **Aether** (tenant), **Kyber** (operator), and
-**Demo**. All run locally in `local-mocked` mode (MSW) with no backend.
+**Demo**. All run against the real FastAPI backend; a clean backend is empty.
 
 ## Apps & surfaces
 
@@ -31,8 +31,10 @@ QA audit across the three apps: **Aether** (tenant), **Kyber** (operator), and
   / `ErrorState`; data hooks handle all three.
 - [x] **Permission gating**: Kyber operator surfaces are operator-gated; Aether
   shows only current-tenant data; Kyber aggregate views are tenant-anonymous.
-- [x] **Local-mocked**: all three boot on MSW with no backend; the MSW worker is
-  preserved.
+- [x] **Live-empty**: normal local startup uses the backend and shows successful
+  empty or unavailable states without browser fixtures or MSW interception.
+- [x] **Failure truth**: backend/network failure is visibly unavailable and
+  never becomes empty-success or a successful local mutation.
 - [x] **Tests**: Aether vitest, Kyber vitest (unit/component/integration) +
   Playwright e2e smoke, Demo vitest render. Run via `npm run test:frontend` /
   `test:e2e`.
@@ -44,6 +46,7 @@ QA audit across the three apps: **Aether** (tenant), **Kyber** (operator), and
 ```bash
 npm run test:frontend     # aether + kyber + demo vitest
 npm run test:e2e          # kyber Playwright smoke
+python scripts/validate_frontend_data_truth.py
 ```
 
 See [UX Handoff Notes](UX-HANDOFF-NOTES.md) and [Demo App UX](DEMO-APP-UX.md).

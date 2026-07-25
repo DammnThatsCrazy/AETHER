@@ -35,7 +35,23 @@ locally.
   fails fast if they are missing.
 - **Frontends** build with env-driven API URLs (`VITE_API_BASE_URL`); do not
   hardcode `localhost` for deployment. `VITE_AETHER_ENV` / `VITE_KYBER_ENV`
-  select mocked vs live vs staging vs production.
+  are explicitly `local`, `staging`, or `production` (`test` is reserved for
+  automation). Invalid configuration prevents normal application startup.
+  Staging and production require complete authentication configuration;
+  production API URLs must be HTTPS.
+
+## Frontend data-truth contract
+
+- Aether and Kyber are API-backed in every normal runtime environment.
+- A clean deployment is live and empty. Empty collections render empty states;
+  API/dependency failures render unavailable/error states.
+- Production bundles contain no browser MSW worker, runtime fixture imports,
+  mock authentication tokens, or synthetic operational datasets.
+- A scoped startup migration removes only legacy `mockServiceWorker.js`
+  registrations and their caches.
+- Normal backend startup and database migrations never seed demonstration data.
+  Demo seed/reset are explicit backend operations, refused in production, and
+  allowed in staging only by an explicit policy and tenant allowlist.
 
 ## Feature flags default safe
 
@@ -57,6 +73,7 @@ The backend exposes health under `/v1/health`; tenant-safe status is at
 - Frontends build per environment with `VITE_*` config.
 - Local and production config are separated via `.env` files and `VITE_*` envs.
 - Feature flags default safe; partner ecosystem is future-flagged off.
+- Frontend data-truth source and production-bundle scans are required CI gates.
 
 See [Local Development](LOCAL-DEVELOPMENT.md) and
 [External Billing Integration](EXTERNAL-BILLING-INTEGRATION.md).
