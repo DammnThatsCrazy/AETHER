@@ -331,6 +331,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="keep services/policy/ decision fields + signal-use-matrix wiring intact",
     )
     run(
+        ["python", "scripts/validate_kyber_seams.py"],
+        name="Kyber cross-package seam integrity (declared calls still resolve)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="fix the caller, or update services/kyber/seams.py if a seam legitimately moved",
+    )
+    run(
         ["python", "scripts/validate_sdk_release_alignment.py"],
         name="SDK release alignment",
         results=results,
