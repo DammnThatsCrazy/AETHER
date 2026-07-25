@@ -21,6 +21,10 @@ AccessRole = Literal[
     'tenant_viewer', 'tenant_billing_admin', 'tenant_security_admin',
     'olympus_operator', 'olympus_support', 'olympus_admin', 'olympus_security',
     'olympus_revops', 'auditor',
+    # Olympus workforce roles (Kyber workforce identity). Bound to a workforce
+    # principal via olympus_role_bindings — never to an Aether tenant.
+    'olympus_founder', 'olympus_engineering', 'olympus_product',
+    'olympus_observer',
 ]
 
 GovernanceDomain = Literal[
@@ -28,6 +32,12 @@ GovernanceDomain = Literal[
     'outcomes', 'playbooks', 'integrations', 'audit_exports', 'billing',
     'onboarding', 'customer_success', 'kyber_admin', 'security', 'governance',
     'reliability', 'data_quality',
+    # Kyber operating-plane domains. `kyber_workforce` covers operator identity,
+    # devices and role administration; `kyber_tenant` covers scoped tenant
+    # inspection (Tenant Mirror + raw tenant reads); `kyber_command` covers the
+    # governed command plane. Kept distinct from `kyber_admin` (fleet/platform
+    # aggregates) so read authority never implies workforce or command authority.
+    'kyber_workforce', 'kyber_tenant', 'kyber_command',
 ]
 
 PermissionAction = Literal[

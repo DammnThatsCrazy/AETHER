@@ -389,6 +389,13 @@ def register_middleware(app: FastAPI) -> None:
             return JSONResponse(status_code=denial.code.value, content=denial.to_dict())
         route_template = route_template or request.url.path
 
+        # Bind the request for service-layer code that authorizes against the
+        # Kyber workforce plane but is not handed a Request (Noesis). The
+        # ContextVar is set on this request's own task context, so it is never
+        # visible to another request and needs no teardown here.
+        from services.security.request_context import bind_current_request
+        bind_current_request(request)
+
         # --- Auth (skip public paths) ---
         if not _is_public_path(route_template):
             try:
@@ -816,6 +823,96 @@ async def _run_extraction_mesh(
     return None  # Request allowed to proceed
 
 
+def _declared_target_tenant(path: str, request: Request, pol) -> Optional[str]:
+    """The tenant a declared Kyber route targets, read from its path template."""
+    try:
+        from services.security.route_registry import (
+            declaration_path_params,
+            match_declaration,
+        )
+    except Exception:
+        return None
+    method = getattr(request, "method", "GET")
+    decl = match_declaration(path, method)
+    if decl is None:
+        return None
+    concrete = getattr(getattr(request, "url", None), "path", None) or path
+    params = declaration_path_params(decl.template, concrete)
+    for key in ("tenant_id", "tenant_id_param", "tenantId"):
+        if params.get(key):
+            return params[key]
+    return None
+
+
+def _evaluate_kyber_capability(request: Request, path: str, pol) -> Optional[AetherError]:
+    """Enforce a route's DECLARED Kyber capability at the authorization boundary.
+
+    Runs only for routes carrying a schema-v3 declaration and only while
+    ``KYBER_BACKEND_AUTHZ_ENFORCED`` is on — that flag is the rollback lever for
+    the whole capability plane. Within it, denial vs. observe follows the same
+    ``route_registry_enforced`` switch every other route-policy check uses.
+
+    Denies when the workforce context is unresolvable, when the principal lacks
+    the declared capability, when the declared action class exceeds the
+    principal's ceiling, or when a tenant-scoped capability has no matching
+    active scope.
+    """
+    capability = getattr(pol, "required_capability", None)
+    if not capability:
+        return None
+    kw = getattr(settings, "kyber_workforce", None)
+    if kw is None or not kw.backend_authz_enforced:
+        return None
+
+    rr = settings.route_registry
+    from shared.common.common import ForbiddenError
+
+    def _fail(reason: str) -> Optional[AetherError]:
+        if rr.route_registry_enforced:
+            return ForbiddenError("ROUTE_POLICY_KYBER_CAPABILITY_REQUIRED")
+        logger.warning(
+            f"route policy: kyber capability {capability} not satisfied on {path} ({reason})"
+        )
+        try:
+            metrics.increment(
+                "route_policy_kyber_capability_observed",
+                labels={"capability": capability, "reason": reason},
+            )
+        except Exception:
+            pass
+        return None
+
+    from services.security.request_context import (
+        context_has_capability,
+        context_has_tenant_scope,
+        context_max_action_class,
+        kyber_access_context,
+    )
+
+    ctx = kyber_access_context(request)
+    if ctx is None:
+        return _fail("no_workforce_context")
+    if not context_has_capability(ctx, capability):
+        return _fail("capability_missing")
+    if int(getattr(pol, "action_class", 0) or 0) > context_max_action_class(ctx):
+        return _fail("action_class_exceeded")
+
+    try:
+        from services.kyber.access.capabilities import get_capability
+        declared = get_capability(capability)
+    except Exception:
+        declared = None
+    if declared is not None and declared.tenant_scoped:
+        # When the route names a tenant the scope must match it; otherwise the
+        # boundary can only require that SOME scope is active and leaves the
+        # precise target to the route's own Kyber dependency, which knows the
+        # resource the identifier belongs to.
+        target = _declared_target_tenant(path, request, pol)
+        if not context_has_tenant_scope(ctx, target):
+            return _fail("tenant_scope_missing")
+    return None
+
+
 def _evaluate_route_policy(request: Request, path: str, context) -> Optional[AetherError]:
     """Apply the canonical route policy and return a stable denial.
 
@@ -853,7 +950,7 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
 
         if pol.kyber_operator_required:
             from services.security.request_context import is_kyber_operator
-            if not is_kyber_operator(context):
+            if not is_kyber_operator(context, request=request):
                 if rr.route_registry_enforced:
                     return ForbiddenError(
                         "ROUTE_POLICY_KYBER_OPERATOR_REQUIRED"
@@ -863,6 +960,13 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
                     metrics.increment("route_policy_kyber_observed")
                 except Exception:
                     pass
+
+            # Declared capability enforcement (route registry schema v3). This
+            # is what carries capability-level authority to the ~158 existing
+            # `require_kyber_operator` call sites without editing them.
+            denial = _evaluate_kyber_capability(request, path, pol)
+            if denial is not None:
+                return denial
         if context is None:
             if pol.requires_auth:
                 return ForbiddenError("ROUTE_POLICY_AUTH_REQUIRED")

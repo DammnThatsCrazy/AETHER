@@ -66,12 +66,25 @@ def upgrade() -> None:
         "delivery_jobs",
         [sa.text("(data->>'intent_id')")],
     )
-    # Partial index for the worker poll query — only runnable jobs
+    # Partial index for the worker poll query — only runnable jobs.
+    #
+    # Two corrections against the original form, which was invalid Postgres and
+    # therefore made this migration — and `alembic upgrade head` from a clean
+    # database — fail outright:
+    #   1. a cast expression in an index column list needs its own parentheses;
+    #      bare `(expr)::type ASC` is a syntax error.
+    #   2. `text::timestamptz` is STABLE, not IMMUTABLE (it depends on the
+    #      TimeZone setting), so it cannot appear in an index expression at all.
+    #      `next_attempt_at` is stored as a Z-suffixed ISO-8601 string, which
+    #      orders lexicographically exactly as it orders chronologically, so
+    #      indexing the raw text preserves the intended poll ordering.
+    # `(data->>'priority')::int` is IMMUTABLE and is kept as a cast so numeric
+    # priorities do not sort as strings.
     op.execute(
         """CREATE INDEX idx_delivery_jobs_runnable
            ON delivery_jobs (
-               (data->>'priority')::int ASC,
-               (data->>'next_attempt_at')::timestamptz ASC
+               ((data->>'priority')::int) ASC,
+               (data->>'next_attempt_at') ASC
            )
            WHERE data->>'state' IN ('queued', 'failed')"""
     )

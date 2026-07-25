@@ -10,7 +10,7 @@ Supported policy keys:
   action.dispatch             action.elevated_dispatch       audit_export.create
   audit_export.download       kyber.operator_access          cross_tenant.access
   integration.configure       webhook.dispatch_safety        billing.admin_access
-  data.deletion_request       capability.invoke
+  data.deletion_request       capability.invoke              kyber.access
 """
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ _SENSITIVE_KEYS = frozenset({
     "audit_export.create", "audit_export.download", "kyber.operator_access",
     "cross_tenant.access", "integration.configure", "webhook.dispatch_safety",
     "billing.admin_access", "data.deletion_request", "capability.invoke",
+    "kyber.access",
 })
 
 # Hosts/ranges a webhook may never target (SSRF / metadata protection).
@@ -214,6 +215,79 @@ class PolicyEngine:
             resource_id=resource_id, allowed=True, reason="access authorized",
         )
         return await self._finalize(d, actor_type=actor_type, **audit)
+
+    async def check_kyber_access(
+        self, *, actor_id: str, operator_id: Optional[str], session_id: Optional[str],
+        device_id: Optional[str], capability: str, action_class: int, route_id: str,
+        environment: str, target_tenant: Optional[str], purpose: Optional[str],
+        requested_disclosure: Optional[str], granted_disclosure: Optional[str],
+        allowed: bool, denial_reason: Optional[str] = None,
+        step_up_required: bool = False, approval_required: bool = False,
+        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> PolicyDecision:
+        """Record a Kyber workforce access decision as a first-class policy decision.
+
+        The Kyber access plane (capability + disclosure + tenant scope + device +
+        session strength) is evaluated by ``services.kyber.access.dependencies``;
+        this method is where the RESULT becomes evidence. It deliberately does
+        not re-evaluate authority: a second, divergent copy of the rules is
+        exactly the failure this design avoids.
+
+        ``kyber.access`` is a sensitive policy key, so allowed decisions are
+        persisted alongside denials — an operator access log that only records
+        refusals is not an access log. Persistence runs through the shared
+        ``_finalize`` path, so the decision lands in ``security_policy_decisions``
+        and a linked ``audit_ledger`` entry is written; there is no second table
+        and no second ledger.
+
+        ``target_tenant`` becomes the decision's ``tenant_id`` so a tenant's
+        operator-access history is queryable by tenant, exactly like
+        ``cross_tenant.access``.
+        """
+        actor_type: ActorType = 'olympus_operator'
+        meta = dict(metadata or {})
+        meta.update({
+            "capability": capability,
+            "action_class": action_class,
+            "route_id": route_id,
+            "environment": environment,
+            "operator_id": operator_id,
+            # Named `*_ref`, not `session_id`/`device_id` wholesale: these are
+            # opaque handles that belong in the evidence trail, and keeping the
+            # explicit keys makes a decision reconstructable from the ledger.
+            "session_ref": session_id,
+            "device_ref": device_id,
+            "purpose": purpose,
+            "requested_disclosure": requested_disclosure,
+            "granted_disclosure": granted_disclosure,
+            "step_up_required": step_up_required,
+            "approval_required": approval_required,
+        })
+
+        if allowed:
+            reason = "kyber access authorized"
+            required_action = None
+        else:
+            reason = denial_reason or f"capability {capability!r} not authorized"
+            required_action = None
+            if step_up_required:
+                required_action = "complete step-up authentication"
+            elif approval_required:
+                required_action = "obtain approval for this action"
+            elif target_tenant:
+                required_action = "request a purpose-bound tenant access scope"
+
+        decision = self._decision(
+            policy_key="kyber.access", actor_id=actor_id, actor_type=actor_type,
+            action=capability, resource_type="kyber_route", resource_id=route_id,
+            tenant_id=target_tenant, allowed=allowed, reason=reason,
+            severity='info' if allowed else 'block', required_action=required_action,
+        )
+        return await self._finalize(
+            decision, actor_type=actor_type,
+            ip_address=ip_address, user_agent=user_agent, metadata=meta,
+        )
 
     async def check_audit_export(
         self, *, actor_id: str, actor_type: ActorType, tenant_id: str,

@@ -961,3 +961,184 @@ items:
       limits on the new surfaces, and the six known gaps listed in the doc. Non-terminal;
       no completion evidence claimed.
     last_verified_commit: null
+
+  - id: KWI-1-WORKFORCE-IDENTITY
+    title: Olympus workforce identity replaces tenant-shaped Kyber operators
+    domain: trust-security
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Olympus operators no longer have to exist as Aether customer tenants to reach
+      Kyber, removing a standing cross-boundary privilege path into tenant data.
+    current_behavior: >
+      Kyber operator identity was two environment variables — a raw `kyber:operator`
+      permission string on a TenantContext, or membership in KYBER_OPERATOR_TENANT_IDS
+      (default empty). No operator record, no operator session, no device. The Kyber
+      frontend decoded the ID token in the browser without verification and mapped a
+      groups claim to roles the backend had never heard of, and its OIDC flow posted to
+      /v1/auth/token and /v1/auth/refresh, neither of which existed.
+    required_behavior: >
+      Every production Kyber user resolves to an invite-created Olympus workforce
+      principal authenticated through Google Workspace with backend-side code+PKCE
+      exchange. No customer authentication path can create a principal; no first login
+      auto-provisions one. Suspension and offboarding revoke access immediately.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/kyber/identity/"
+      - "Backend Architecture/aether-backend/alembic/versions/20260809_kyber_workforce.py"
+      - "docs/source-of-truth/KYBER_WORKFORCE_IDENTITY.md"
+      - "docs/runbooks/KYBER_ACCOUNT_RECOVERY.md"
+      - "docs/runbooks/KYBER_WORKFORCE_OFFBOARDING.md"
+    tests_required:
+      - "tests/security/test_kyber_identity.py"
+    evidence_required: ["make ci-check exit 0 with the Kyber identity suite green"]
+    docs_required:
+      - docs/source-of-truth/KYBER_WORKFORCE_IDENTITY.md
+      - docs/runbooks/KYBER_ACCOUNT_RECOVERY.md
+      - docs/runbooks/KYBER_WORKFORCE_OFFBOARDING.md
+    owner: security
+    status: implementation_in_progress
+    blocked_by: []
+    exception: >
+      Real Google Workspace OIDC and Admin SDK behaviour cannot be exercised in CI —
+      no tenant, no credentials. Those paths are covered by contract tests against
+      recorded discovery/JWKS fixtures plus a mock provider that refuses to construct
+      outside local/dev/test. Automated offboarding is only as fast as directory
+      reconciliation when the Admin SDK is configured; without it, manual Kyber
+      suspension is the authoritative immediate control and the runbook says so.
+    last_verified_commit: null
+
+  - id: KWI-1-DEVICE-TRUST
+    title: BYOD device trust — WebAuthn, browser-bound proof key, server-issued grant
+    domain: trust-security
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Operator access to tenant data requires a specific approved personal device, so a
+      stolen password or a synced passkey alone cannot reach production.
+    current_behavior: >
+      No device concept existed. A valid identity signal was sufficient for full Kyber
+      authority, and there was no way to revoke access for one machine.
+    required_behavior: >
+      A production Kyber session requires an approved device record, a WebAuthn platform
+      credential with userVerification required, and a browser-profile-bound
+      non-extractable ECDSA P-256 proof key. Self-approval is refused and audited.
+      A second personal machine requires its own approval. Device revocation terminates
+      every session bound to it. No company-owned hardware is required.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/kyber/devices/"
+      - "frontend/kyber/src/features/device-trust/"
+      - "pyproject.toml"
+      - "docs/source-of-truth/KYBER_DEVICE_TRUST.md"
+      - "docs/runbooks/KYBER_DEVICE_LOSS.md"
+    tests_required:
+      - "tests/security/test_kyber_devices.py"
+    evidence_required: ["make ci-check exit 0 with the Kyber device suite green"]
+    docs_required:
+      - docs/source-of-truth/KYBER_DEVICE_TRUST.md
+      - docs/runbooks/KYBER_DEVICE_LOSS.md
+    owner: security
+    status: implementation_in_progress
+    blocked_by: []
+    exception: >
+      WebAuthn is verified against the py_webauthn library and synthetic credentials;
+      real Touch ID / Windows Hello / Android platform-authenticator behaviour needs
+      manual device testing and is not claimed. Personal-device security is not claimed
+      to be absolute — what is claimed is cryptographic device binding, backend-enforced
+      sessions, least privilege, and immediate revocation.
+    last_verified_commit: null
+
+  - id: KWI-1-SESSIONS-SCOPES
+    title: Durable Kyber sessions, step-up, and purpose-bound tenant access scopes
+    domain: trust-security
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Operator access to a specific tenant is now durable, expiring, revocable and
+      audited, instead of state that vanished on restart and was never enforced.
+    current_behavior: >
+      services/kyber_operator/routes.py kept tenant-entry scopes in a module-level
+      _active_sessions dict — process-local, lost on restart, not shared across
+      replicas, never read by anything else, and audited only by a log line. The
+      returned session_id granted and scoped nothing. There was no operator session
+      at all; cookie-authenticated humans were hardcoded to a tenant Role.EDITOR.
+    required_behavior: >
+      Durable server-side workforce sessions with sliding idle expiry and a hard
+      absolute ceiling, opaque tokens stored only as sha256, __Host- prefixed cookies,
+      rotation on privilege change, and step-up requiring a fresh WebAuthn assertion.
+      Tenant access is a durable kyber_access_scopes row bound to session and device,
+      naming exactly one tenant, with a purpose and expiry. A client-supplied tenant id
+      never grants authority and a mismatch is a denial, never a silent rescope.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/kyber/sessions/"
+      - "Backend Architecture/aether-backend/services/kyber/access/scopes.py"
+      - "Backend Architecture/aether-backend/services/kyber/access/dependencies.py"
+      - "docs/source-of-truth/KYBER_SESSIONS_AND_SCOPES.md"
+      - "docs/runbooks/KYBER_SCOPE_LEAK.md"
+    tests_required:
+      - "tests/security/test_kyber_sessions.py"
+      - "tests/security/test_kyber_scopes.py"
+    evidence_required: ["make ci-check exit 0 with the Kyber session and scope suites green"]
+    docs_required:
+      - docs/source-of-truth/KYBER_SESSIONS_AND_SCOPES.md
+      - docs/runbooks/KYBER_SCOPE_LEAK.md
+    owner: security
+    status: implementation_in_progress
+    blocked_by: []
+    exception: >
+      Session-validation throughput and access-decision write volume need real traffic;
+      metrics are emitted but no measured scale number is claimed. The security audit
+      hash-chain head remains process-local module state — a pre-existing limitation
+      this work inherits rather than fixes, recorded so no durability claim is implied.
+    last_verified_commit: null
+
+  - id: KWI-1-BACKEND-AUTHZ
+    title: Backend-authoritative Kyber capabilities, disclosure levels and route declarations
+    domain: trust-security
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Least-privilege operator access is enforced on the backend, so hiding a control in
+      the browser is no longer what stands between an operator and tenant data.
+    current_behavior: >
+      The Kyber frontend granted canViewAll to every role including kyber_observer, and
+      its role vocabulary had no backend counterpart. The route registry classified only
+      by path prefix, so every /kyber route carried identical authority. Two gates were
+      dead code — operational_intelligence checked a TenantContext field that does not
+      exist, and Noesis authorized cross-tenant access on Role.ADMIN plus natural-language
+      substring matching.
+    required_behavior: >
+      A granular capability vocabulary resolving to the existing AccessControlService
+      grant model, six ordered disclosure levels, and per-route capability declarations
+      in config/route_registry.yaml enforced by the existing middleware boundary.
+      require_kyber_operator becomes a compatibility adapter over require_kyber_access so
+      all existing call sites keep working. Decisions are recorded through the existing
+      PolicyEngine and audit ledger — no second policy engine, RBAC or audit trail.
+      Production must not retain a legacy operator tenant allowlist as authoritative.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/kyber/access/capabilities.py"
+      - "Backend Architecture/aether-backend/services/kyber/access/roles.py"
+      - "Backend Architecture/aether-backend/services/security/route_registry.py"
+      - "Backend Architecture/aether-backend/services/security/request_context.py"
+      - "Backend Architecture/aether-backend/services/security/policy_engine.py"
+      - "config/route_registry.yaml"
+      - "frontend/kyber/src/features/permissions/"
+      - "docs/source-of-truth/KYBER_ACCESS_CONTROL.md"
+    tests_required:
+      - "tests/security/test_kyber_gate_migration.py"
+      - "tests/security/test_kyber_boundary.py"
+      - "tests/unit/test_route_registry_coverage.py"
+    evidence_required: ["make ci-check exit 0 with the route-registry and Kyber boundary suites green"]
+    docs_required:
+      - docs/source-of-truth/KYBER_ACCESS_CONTROL.md
+    owner: security
+    status: implementation_in_progress
+    blocked_by: []
+    exception: >
+      Command capabilities (kyber.command.*) are declared so the route registry has a
+      stable vocabulary to classify against; their routes arrive with the command plane
+      and are not implemented here. Directory reconciliation runs as a supervised worker
+      under the existing maintenance runtime role rather than a dedicated
+      kyber-directory-sync role — a deliberate deviation, since a new runtime role would
+      fan out across roles.py, settings, deploy profiles, compose, Terraform and two
+      topology validators for one reconciliation loop.
+    last_verified_commit: null

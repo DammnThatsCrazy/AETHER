@@ -11,13 +11,18 @@
 #     (this covers `/v1/admin/kyber/*` as well as `/v1/kyber/*`);
 #   - public paths come from shared/rate_limit/feature_gate.py.
 #
+# schema_version 3 adds the OPTIONAL `kyber_routes` block: a per-route
+# declaration of the Kyber capability, disclosure ceiling and action class a
+# route requires. Declarations only ADD authority requirements — an undeclared
+# Kyber route keeps the operator-required fallback above and never becomes open.
+#
 # default_decision is `deny`: a mounted route whose 2-segment prefix is NOT in
 # `known_prefixes` is UNCLASSIFIED and fails tests/unit/test_route_registry_coverage.py
 # (the default-deny ratchet — a new route prefix must be classified here before it
 # can ship). Validated for well-formedness by scripts/release/check_route_registry.py.
 # =============================================================================
 
-schema_version: 2
+schema_version: 3
 canonical_source: config/route_registry.yaml
 enforcement_status: enforced
 default_decision: deny
@@ -165,3 +170,348 @@ known_prefixes:
   - /v1/traffic
   - /v1/value-review
   - /v1/web3
+
+# =============================================================================
+# Kyber route declarations (schema v3)
+#
+# Each entry names the capability a Kyber route requires, the disclosure ceiling
+# it may reveal, and the action class it performs. The middleware authorization
+# boundary (middleware/middleware.py::_evaluate_route_policy) enforces these
+# behind KYBER_BACKEND_AUTHZ_ENFORCED, which is what lets capability-level
+# authority reach ~158 existing `require_kyber_operator` call sites without
+# editing them.
+#
+#   route         "<METHOD> <fastapi path template>"; METHOD may be "*".
+#   capability    MUST be in services/kyber/access/capabilities.py
+#                 ALL_CAPABILITY_IDS — an unknown id fails at load.
+#   disclosure    D0..D5 (services/kyber/access/disclosure.py).
+#   action_class  0 read · 1 annotate · 2 retry · 3 recompute · 4 high impact
+#                 · 5 fleet destructive.
+#
+# Capabilities marked tenant_scoped additionally require an active, purpose-bound
+# tenant access scope; where the route carries a {tenant_id} the boundary matches
+# the scope against that tenant.
+#
+# UNDECLARED IS NOT UNGUARDED: a Kyber route with no entry here still requires an
+# operator (kyber_operator_required is derived from the path), it is simply not
+# yet capability-classified. Routes are added here as their authority is mapped.
+# =============================================================================
+kyber_routes:
+  # ── Platform / fleet health & release topology ────────────────────────────
+  - route: "GET /v1/admin/kyber/reliability/overview"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/reliability/pipelines"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/reliability/queues"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/reliability/services"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/reliability/slos"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/identity-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/resolution-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/outcome-capture-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/recommendation-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/audit-export-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/deployment-modes"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/admin/kyber/deployment-readiness"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/admin/kyber/package-readiness"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/capabilities"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/capability-catalog/health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/capability-catalog/shadow"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/semantic/fleet-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/semantic/review-queue"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/jobs/timeline"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/imports/timeline"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/overview"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/journey-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/campaign/fleet-health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/source-classification/health"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/source-classification/operations"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/overview"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/readiness"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/drift"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/alerts"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/models"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/models/{model_id}"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/artifacts"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/artifacts/{model_id}"
+    capability: kyber.platform.release.read
+    disclosure: D0
+    action_class: 0
+
+  # ── Cost / spend aggregates ───────────────────────────────────────────────
+  - route: "GET /v1/admin/kyber/revops/overview"
+    capability: kyber.platform.cost.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/revops/usage"
+    capability: kyber.platform.cost.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/revops/revenue-leakage"
+    capability: kyber.platform.cost.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/revops/value-created"
+    capability: kyber.platform.cost.read
+    disclosure: D1
+    action_class: 0
+
+  # ── Security, audit & governance reads ────────────────────────────────────
+  - route: "GET /v1/admin/kyber/security/overview"
+    capability: kyber.audit.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/audit-events"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/policy-decisions"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/operator-access"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/break-glass"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/tenant-isolation"
+    capability: kyber.audit.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/data-requests"
+    capability: kyber.policy.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/data-retention"
+    capability: kyber.policy.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/security/governance-evidence-packs"
+    capability: kyber.policy.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/audit"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/ml/security"
+    capability: kyber.audit.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/merge-split-audit"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/campaign/audit"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/kyber/capability-ops/authority"
+    capability: kyber.policy.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/capability-ops/blast-radius"
+    capability: kyber.policy.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/capability-ops/drift"
+    capability: kyber.policy.read
+    disclosure: D1
+    action_class: 0
+
+  # ── Incidents, postmortems & runbooks ─────────────────────────────────────
+  - route: "GET /v1/admin/kyber/incidents"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/admin/kyber/incidents/{incident_id}"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/admin/kyber/incidents"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "PATCH /v1/admin/kyber/incidents/{incident_id}"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "GET /v1/admin/kyber/postmortems"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/admin/kyber/postmortems"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "PATCH /v1/admin/kyber/postmortems/{postmortem_id}"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "GET /v1/admin/kyber/runbooks"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/admin/kyber/runbooks"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "PATCH /v1/admin/kyber/runbooks/{runbook_id}"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+
+  # ── Single-tenant inspection (tenant_scoped → needs an active scope) ───────
+  - route: "GET /v1/kyber/tenants/{tenant_id}/operational-envelope"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/tenants/{tenant_id_param}"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/measurement/campaign/tenant/{tenant_id_param}"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/admin/kyber/onboarding/tenants/{tenant_id}"
+    capability: kyber.tenant.mirror.read_masked
+    disclosure: D2
+    action_class: 0
+  - route: "GET /v1/admin/kyber/customer-success/accounts/{tenant_id}"
+    capability: kyber.tenant.mirror.read_masked
+    disclosure: D2
+    action_class: 0
+
+  # ── Command plane (bounded, tenant-scoped operator actions) ───────────────
+  - route: "POST /v1/kyber/jobs/{job_id}/requeue"
+    capability: kyber.command.requeue
+    disclosure: D4
+    action_class: 2
+  - route: "POST /v1/kyber/imports/{import_id}/requeue"
+    capability: kyber.command.requeue
+    disclosure: D4
+    action_class: 2
+  - route: "POST /v1/kyber/measurement/tenants/{tenant_id_param}/recompute-all"
+    capability: kyber.command.recompute
+    disclosure: D4
+    action_class: 3
+  - route: "POST /v1/kyber/measurement/campaign/tenant/{tenant_id_param}/reprocess"
+    capability: kyber.command.recompute
+    disclosure: D4
+    action_class: 3
+  - route: "POST /v1/kyber/measurement/conversions/{conversion_id}/recompute"
+    capability: kyber.command.recompute
+    disclosure: D4
+    action_class: 3
+  - route: "POST /v1/kyber/measurement/journeys/{journey_id}/rebuild"
+    capability: kyber.command.rebuild
+    disclosure: D4
+    action_class: 3
+  - route: "POST /v1/kyber/measurement/connectors/{connector_id}/backfill"
+    capability: kyber.command.replay
+    disclosure: D4
+    action_class: 3
+
+  # ── INTEGRATOR INSERTION POINT ────────────────────────────────────────────
+  # New Kyber routes (workforce identity, devices, sessions, scopes, the rest of
+  # the command plane) are declared BELOW this line. Until a route is declared it
+  # falls back to operator-required, so adding a route can never open it up —
+  # but it also stays capability-unclassified, which is a gap, not a state to
+  # leave a shipped route in.
