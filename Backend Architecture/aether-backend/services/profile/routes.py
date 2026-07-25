@@ -1366,7 +1366,7 @@ async def get_merge_history(
         "redirected": redirected,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "empty",
+        "source_status": await _event_source_status(items),
     }).to_dict()
 
 
@@ -1404,8 +1404,33 @@ async def get_split_history(
         "redirected": redirected,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "empty",
+        "source_status": await _event_source_status(items),
     }).to_dict()
+
+
+async def _event_source_status(items: list) -> str:
+    """Classify why a result set is what it is, without guessing.
+
+    Three outcomes that must stay distinct, because collapsing them is how a
+    surface reports confidence it has not earned:
+
+    - ``missing``   — the store could not be consulted, so nothing is known.
+    - ``empty``     — the store answered, and the entity genuinely has no events.
+    - ``available`` — the store answered with events.
+
+    The identity event stores return ``[]`` for both of the first two cases, so
+    reachability is established via the pool rather than inferred from an empty
+    list. Reporting ``empty`` for an unreachable store asserts that the entity
+    has no merge or split history — a claim nobody checked.
+    """
+    if items:
+        return "available"
+    try:
+        from repositories.repos import get_pool
+        reachable = await get_pool() is not None
+    except Exception:
+        reachable = False
+    return "empty" if reachable else "missing"
 
 
 # ── Attribution Endpoint ────────────────────────────────────────────
@@ -1739,7 +1764,7 @@ async def get_agent_executions(
         "entity_id": user_id,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "missing",
+        "source_status": await _event_source_status(items),
     }).to_dict()
 
 
