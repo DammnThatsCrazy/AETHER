@@ -360,6 +360,7 @@ jobs:
         id: verify
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
+          EXPECTED_STATE: awake
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/reviewed-plan"
@@ -368,12 +369,18 @@ jobs:
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
-            reviewed.policy.txt reviewed.cost.txt
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
             test -s "$artefact" || { echo "::error::reviewed plan is missing ${artefact}"; exit 1; }
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          # The shape this run asked terraform-promote to plan. The authoritative
+          # check is the desired-count assertion against the plan JSON in
+          # wake-validate; this refuses a plan that was not even requested for
+          # the state we are about to wake into.
+          test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
+            || { echo "::error::reviewed plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
           sha256sum --check --status reviewed.tfplan.sha256
           reviewed_commit="$(cat reviewed.commit)"
           printf '%s' "$reviewed_commit" | grep -Eq '^[0-9a-f]{40}$' \
@@ -441,6 +448,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           EXPECTED_CHECKSUM: ${{ needs.wake-plan.outputs.plan_checksum || inputs.plan_checksum }}
+          EXPECTED_STATE: awake
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/reviewed-plan"
@@ -449,12 +457,14 @@ jobs:
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
-            reviewed.policy.txt reviewed.cost.txt
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
             test -s "$artefact" || { echo "::error::reviewed plan is missing ${artefact}"; exit 1; }
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
+            || { echo "::error::reviewed plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
           sha256sum --check --status reviewed.tfplan.sha256
           checksum="$(sha256sum reviewed.tfplan | cut -d' ' -f1)"
           if [ -n "$EXPECTED_CHECKSUM" ] && [ "$checksum" != "$EXPECTED_CHECKSUM" ]; then
@@ -676,24 +686,39 @@ jobs:
           set -euo pipefail
           aws ecs describe-clusters --cluster "$STAGING_CLUSTER" --query 'failures' --output text \
             | grep -q '^None$\|^$'
-          mapfile -t services < <(aws ecs list-services --cluster "$STAGING_CLUSTER" \
-            --query 'serviceArns[]' --output text | tr '\t' '\n' | sed '/^$/d')
+          # The AWS call is made on its own so its exit status is observed: a
+          # process substitution would hand `mapfile` an empty array on failure.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services after wake'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
           test "${#services[@]}" -gt 0 || { echo '::error::staging cluster exposes no services after wake'; exit 1; }
           aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "${services[@]}"
           aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
             --query 'services[].[serviceName,desiredCount,runningCount]' --output text
 
       # The awake lease is what staging-ttl-guard.yml enforces. It is written only
-      # after a successful wake, and it always carries an absolute UTC deadline.
+      # after a successful wake, and it always carries absolute UTC timestamps.
+      #
+      # `awake_since` is the ORIGINAL wake. Extensions granted by the TTL guard
+      # move `awake_until` but never `awake_since`, so the guard's total awake
+      # ceiling is measured from the moment staging actually came up rather than
+      # from the most recent extension. Without it, N sequential extensions buy
+      # unbounded awake time.
       - name: Open the awake lease
         env:
           AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
         run: |
           set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           deadline="$(date -u -d "+${AWAKE_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
-          aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" --type String --overwrite \
-            --value "$deadline" --description "staging awake until (UTC); enforced by staging-ttl-guard"
-          echo "staging awake lease expires ${deadline}"
+          lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":0}' "$now" "$deadline")"
+          aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" \
+            --type String --overwrite --value "$lease" \
+            --description "staging awake window (UTC); enforced by staging-ttl-guard"
+          echo "staging awake lease: since ${now}, expires ${deadline}"
 
   # ---------------------------------------------------------------------------
   # Phase 5 — the rehearsal itself.
@@ -759,9 +784,17 @@ jobs:
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
           test "$digest" = "$BACKEND_IMAGE_DIGEST" \
             || { echo '::error::the applied wake plan does not pin the approved release digest'; exit 1; }
-          # Every running staging service must carry exactly that image.
-          mapfile -t services < <(aws ecs list-services --cluster "$STAGING_CLUSTER" \
-            --query 'serviceArns[]' --output text | tr '\t' '\n' | sed '/^$/d')
+          # Every running staging service must carry exactly that image. The
+          # enumeration fails closed: an empty service list would otherwise skip
+          # the loop below and report the image as verified without checking it.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; the running image is unverified'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          test "${#services[@]}" -gt 0 \
+            || { echo '::error::staging exposes no services; the approved image is unverified'; exit 1; }
           for service in "${services[@]}"; do
             task_def="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
               --query 'services[0].taskDefinition' --output text)"
@@ -1256,15 +1289,38 @@ jobs:
         id: already
         run: |
           set -euo pipefail
-          mapfile -t services < <(aws ecs list-services --cluster "$STAGING_CLUSTER" \
-            --query 'serviceArns[]' --output text 2>/dev/null | tr '\t' '\n' | sed '/^$/d')
+          # FAIL CLOSED. `mapfile -t x < <(cmd)` does not observe cmd's exit
+          # status -- `pipefail` does not reach into a process substitution --
+          # so an API error, a throttle or an expired credential used to yield an
+          # empty array that read as "already asleep", skipping the reviewed
+          # sleep plan, the sleep apply AND the last-resort cost stop. The step
+          # is called "provably at zero": unprovable must never be proven. The
+          # AWS call is therefore run on its own, its status checked, and its
+          # stderr kept.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
           if [ "${#services[@]}" -eq 0 ]; then
             echo 'asleep=true' >> "$GITHUB_OUTPUT"
             echo 'staging exposes no ECS services; already at zero'
             exit 0
           fi
-          nonzero="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
-            --query 'length(services[?desiredCount>`0`])' --output text)"
+          if ! nonzero="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+            --query 'length(services[?desiredCount>`0`])' --output text)"; then
+            echo '::error::could not describe staging ECS services; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          case "$nonzero" in
+            ''|*[!0-9]*)
+              echo "::error::staging desired-count query returned '${nonzero}', not a count; treating staging state as UNKNOWN"
+              echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+              exit 1 ;;
+          esac
           if [ "$nonzero" = 0 ]; then
             echo 'asleep=true' >> "$GITHUB_OUTPUT"
           else
@@ -1354,12 +1410,14 @@ jobs:
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
-            reviewed.policy.txt reviewed.cost.txt
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
             test -s "$artefact" || { echo "::error::reviewed sleep plan is missing ${artefact}"; exit 1; }
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
+            || { echo "::error::reviewed sleep plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
           sha256sum --check --status reviewed.tfplan.sha256
           printf '%s' "$(cat reviewed.commit)" | grep -Eq '^[0-9a-f]{40}$' \
             || { echo '::error::reviewed.commit is not a 40-character commit sha'; exit 1; }
@@ -1500,8 +1558,14 @@ jobs:
           set -euo pipefail
           test "$STAGING_CLUSTER" = "AETHER-staging" \
             || { echo '::error::last-resort cost stop refused outside the staging cluster'; exit 1; }
-          mapfile -t services < <(aws ecs list-services --cluster "$STAGING_CLUSTER" \
-            --query 'serviceArns[]' --output text 2>/dev/null | tr '\t' '\n' | sed '/^$/d')
+          # Fail closed: an unreadable service list means the cost stop did not
+          # happen, and a green step here would claim it did.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; the last-resort cost stop did not run'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
           stopped=0
           for service in "${services[@]:-}"; do
             test -n "$service" || continue
@@ -1518,31 +1582,56 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/sleep
-          mapfile -t services < <(aws ecs list-services --cluster "$STAGING_CLUSTER" \
-            --query 'serviceArns[]' --output text 2>/dev/null | tr '\t' '\n' | sed '/^$/d')
-          residual_tasks=0
+          echo '[]' > artifacts/sleep/desired-counts.json
+          residual_tasks=unknown
           zero_ok=true
-          if [ "${#services[@]}" -gt 0 ]; then
-            aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
-              --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
-              --output json > artifacts/sleep/desired-counts.json
-            nonzero="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(1 for s in d if s['desired'] or s['running'] or s['pending']))")"
-            residual_tasks="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(s['running']+s['pending'] for s in d))")"
-            if [ "$nonzero" != 0 ]; then
-              zero_ok=false
-              echo "::error::${nonzero} staging service(s) are still non-zero after sleep"
+          # FAIL CLOSED, twice over. This step reports whether staging is at
+          # zero; an AWS call it could not make proves nothing, and used to be
+          # swallowed into `zero_ok=true`. Neither the service enumeration nor
+          # the autoscaling query may fail silently. This step does NOT exit
+          # early: it must reach the report step so the run ends red with the
+          # reason on the summary, rather than red with no disclosure.
+          if services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+            residual_tasks=0
+            if [ "${#services[@]}" -gt 0 ]; then
+              if aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+                --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
+                --output json > artifacts/sleep/desired-counts.json; then
+                nonzero="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(1 for s in d if s['desired'] or s['running'] or s['pending']))")"
+                residual_tasks="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(s['running']+s['pending'] for s in d))")"
+                if [ "$nonzero" != 0 ]; then
+                  zero_ok=false
+                  echo "::error::${nonzero} staging service(s) are still non-zero after sleep"
+                fi
+              else
+                zero_ok=false
+                residual_tasks=unknown
+                echo '[]' > artifacts/sleep/desired-counts.json
+                echo '::error::could not describe staging ECS services; residual staging compute is UNKNOWN and must not be reported as zero'
+              fi
             fi
           else
-            echo '[]' > artifacts/sleep/desired-counts.json
-          fi
-          # Nothing may be left scheduled or autoscaled back up either.
-          aws application-autoscaling describe-scalable-targets --service-namespace ecs \
-            --query "ScalableTargets[?contains(ResourceId, '${STAGING_CLUSTER}')].{id:ResourceId,min:MinCapacity}" \
-            --output json > artifacts/sleep/autoscaling.json 2>/dev/null || echo '[]' > artifacts/sleep/autoscaling.json
-          floors="$(python -c "import json;d=json.load(open('artifacts/sleep/autoscaling.json'));print(sum(1 for t in d if t.get('min',0)))")"
-          if [ "$floors" != 0 ]; then
             zero_ok=false
-            echo "::error::${floors} staging autoscaling target(s) still hold a non-zero floor"
+            echo '::error::could not enumerate staging ECS services; residual staging compute is UNKNOWN and must not be reported as zero'
+          fi
+          # Nothing may be left scheduled or autoscaled back up either. The
+          # ResourceId is matched on the EXACT cluster: `contains()` would match
+          # any cluster in the account-wide ECS autoscaling namespace whose name
+          # merely contains this one.
+          if aws application-autoscaling describe-scalable-targets --service-namespace ecs \
+            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity}" \
+            --output json > artifacts/sleep/autoscaling.json; then
+            floors="$(python -c "import json;d=json.load(open('artifacts/sleep/autoscaling.json'));print(sum(1 for t in d if t.get('min',0)))")"
+            if [ "$floors" != 0 ]; then
+              zero_ok=false
+              echo "::error::${floors} staging autoscaling target(s) still hold a non-zero floor"
+            fi
+          else
+            zero_ok=false
+            echo '[]' > artifacts/sleep/autoscaling.json
+            echo '::error::could not read staging autoscaling targets; an autoscaling floor could revive staging and cannot be ruled out'
           fi
           # Residual cost, priced from the canonical price book rather than a guess.
           RESIDUAL_JSON=artifacts/sleep/desired-counts.json python - <<'PY'
@@ -1593,9 +1682,18 @@ jobs:
           set -euo pipefail
           cleanup_result=success
           manual=false
+          # `zero_ok` is only true when an AWS call actually PROVED staging is at
+          # zero. An absent or false value (a skipped step, a failed step, an
+          # unreadable API) is a failure, never a pass.
           if [ "${ZERO_OK:-false}" != true ]; then
             cleanup_result=failure
             manual=true
+          fi
+          # The same rule for the pre-sleep state probe: `unknown` is not `true`.
+          if [ "${ALREADY_ASLEEP:-unknown}" = unknown ]; then
+            cleanup_result=failure
+            manual=true
+            echo '::error::staging was never proven to be at zero before the sleep phase ran'
           fi
           if [ "${ALREADY_ASLEEP:-false}" != true ] && [ "${SLEEP_APPLY_CONCLUSION:-}" != success ]; then
             cleanup_result=degraded
@@ -1611,6 +1709,8 @@ jobs:
             echo '| --- | --- |'
             echo "| validation result | ${VALIDATION_RESULT:-unknown} |"
             echo "| cleanup result | ${cleanup_result} |"
+            echo "| staging state before sleep | ${ALREADY_ASLEEP:-unknown} |"
+            echo "| staging proven at zero after sleep | ${ZERO_OK:-false} |"
             echo "| reviewed sleep apply | ${SLEEP_APPLY_CONCLUSION:-not-dispatched} |"
             echo "| services force-scaled to zero | ${SCALED_TO_ZERO:-0} |"
             echo "| residual running/pending tasks | ${RESIDUAL_TASKS:-unknown} |"

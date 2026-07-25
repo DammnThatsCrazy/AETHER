@@ -75,6 +75,7 @@ jobs:
           KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL }}
           KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL }}
         run: |
+          set -euo pipefail
           npm ci
           VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
@@ -94,7 +95,7 @@ jobs:
           BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
-          digest() { printf 'sha256:%s' "$(sha256sum "$1" | cut -d' ' -f1)"; }
+          set -euo pipefail
           python - <<'PY'
           import json, os, hashlib
           from pathlib import Path
@@ -216,6 +217,7 @@ jobs:
           name: ${{ needs.acquire-release.result == 'success' && 'approved-release' || format('release-{0}', github.sha) }}
       - name: Verify release immediately before mutation
         run: |
+          set -euo pipefail
           CHECKSUM=$(cat release.json.sha256)
           SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
           python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum "$CHECKSUM"
@@ -308,6 +310,9 @@ jobs:
           ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
         run: |
+          set -euo pipefail
+          test -n "${ALB_DNS_NAME:-}" || { echo '::error::ALB_DNS_NAME is required for the smoke test'; exit 1; }
+          test -n "${SMOKE_API_KEY:-}" || { echo '::error::SMOKE_API_KEY is required for the smoke test'; exit 1; }
           python scripts/smoke_test.py \
             --base-url "https://${ALB_DNS_NAME}" \
             --api-key "${SMOKE_API_KEY}" \

@@ -7,7 +7,12 @@ unambiguous, parsed YAML wherever a substring assertion would be too weak to
 mean anything (job graphs, `if:` conditions, step ordering, numeric bounds).
 """
 
+import datetime
+import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -20,6 +25,15 @@ LIFECYCLE = "staging-lifecycle.yml"
 TTL_GUARD = "staging-ttl-guard.yml"
 PROMOTE_WORKFLOW = "terraform-promote.yml"
 PROMOTE_PATH = ".github/workflows/terraform-promote.yml"
+
+# Every numeric bound the TTL guard declares. Each one must reach an
+# enforcement decision; a bound that is only echoed is a control in name only.
+TTL_BOUNDS = (
+    "DEFAULT_MAX_AWAKE_HOURS",
+    "MAX_AWAKE_HOURS_CAP",
+    "MAX_EXTENSION_HOURS",
+    "MAX_TOTAL_AWAKE_HOURS",
+)
 
 LIFECYCLE_ACTIONS = (
     "plan-wake",
@@ -47,6 +61,7 @@ REVIEWED_EVIDENCE = (
     "reviewed.resources.json",
     "reviewed.policy.txt",
     "reviewed.cost.txt",
+    "reviewed.staging-state",
 )
 
 
@@ -107,6 +122,76 @@ def _dispatch_invocations(run: str) -> list[str]:
         for line in joined.splitlines()
         if line.strip().startswith("gh workflow run")
     ]
+
+
+def _referenced_text(doc: dict) -> str:
+    """Everything in the workflow that can actually READ a value.
+
+    `run:` bodies, `if:` conditions, step `env:` bindings and action inputs.
+    Deliberately excludes the declaration blocks, so a knob that is declared and
+    never consulted does not look consulted.
+    """
+    parts: list[str] = []
+    for _job_name, job in (doc.get("jobs") or {}).items():
+        if job.get("if"):
+            parts.append(str(job["if"]))
+        for name, value in (job.get("env") or {}).items():
+            parts.append(f"{name}: {value}")
+        for step in job.get("steps") or []:
+            if step.get("if"):
+                parts.append(str(step["if"]))
+            if step.get("run"):
+                parts.append(step["run"])
+            for name, value in (step.get("env") or {}).items():
+                parts.append(f"{name}: {value}")
+            if step.get("with"):
+                parts.append(yaml.safe_dump(step["with"]))
+    return "\n".join(parts)
+
+
+def _guard_step(step_id_or_name: str) -> dict:
+    doc = _workflow_yaml(TTL_GUARD)
+    return next(
+        s
+        for s in _steps(doc, "guard")
+        if s.get("id") == step_id_or_name or s.get("name") == step_id_or_name
+    )
+
+
+def _embedded_python(run: str) -> str:
+    """The `python - <<'PY' ... PY` body embedded in a run block."""
+    assert "<<'PY'" in run, "the run block embeds no python heredoc"
+    return run.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+
+
+def _run_lease_script(lease: str) -> dict:
+    """Execute the guard's real lease-expiry script against one lease value."""
+    env = dict(
+        os.environ,
+        LEASE=lease,
+        DEFAULT_MAX_AWAKE_HOURS="4",
+        MAX_AWAKE_HOURS_CAP="8",
+        MAX_TOTAL_AWAKE_HOURS="12",
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", _embedded_python(_guard_step("state")["run"])],
+        capture_output=True, text=True, env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def _hours_from_now(hours: float) -> str:
+    moment = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=hours)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _lease(since_hours: float, until_hours: float, extensions: int = 0) -> str:
+    return json.dumps({
+        "awake_since": _hours_from_now(since_hours),
+        "awake_until": _hours_from_now(until_hours),
+        "extensions": extensions,
+    })
 
 
 def _enables_strict_bash(run: str) -> bool:
@@ -600,20 +685,56 @@ def test_ttl_guard_default_is_conservative_and_bounded():
     assert 0 < default <= cap <= 12, f"cap {cap} is not a bound on the default"
     assert 0 < extension <= cap, f"an extension of {extension}h can exceed the cap"
     assert cap <= total <= 24, f"total awake ceiling {total} is not bounded"
-    # The dispatch input agrees with the environment default.
     inputs = _on(doc)["workflow_dispatch"]["inputs"]
-    assert inputs["max_awake_hours"]["default"] == str(default)
     assert int(inputs["extend_hours"]["default"]) <= extension
 
 
-def test_ttl_guard_configurable_maximum_is_range_checked():
+def test_the_ttl_guard_advertises_no_bound_it_does_not_enforce():
+    """A knob that never reaches the expiry decision is a control in name only.
+
+    `max_awake_hours` was a dispatch input documented as "1-8, default 4"; it
+    was validated, exported and echoed, and then never consulted by the expiry
+    comparison, which was lease-vs-now. The advertised TTL did not bind. It is
+    gone: the enforced TTL is the lease's own window, which staging-lifecycle.yml
+    chooses at wake time.
+    """
     doc = _workflow_yaml(TTL_GUARD)
-    config = next(s for s in _steps(doc, "guard") if s.get("id") == "config")
-    run = config["run"]
-    assert 'is outside 1..${MAX_AWAKE_HOURS_CAP}' in run, (
-        "max_awake_hours is not bounded by the hard cap"
+    used = _referenced_text(doc)
+
+    inputs = _on(doc)["workflow_dispatch"]["inputs"]
+    assert "max_awake_hours" not in inputs, (
+        "a TTL input is advertised again; it must reach the expiry decision"
     )
-    assert "must be a whole number of hours" in run, "a non-numeric TTL is accepted"
+    for name in inputs:
+        assert f"inputs.{name}" in used, (
+            f"{TTL_GUARD} advertises the input {name!r} but nothing reads it"
+        )
+    # Any input that claims to bound awake time must be read by the very step
+    # that decides expiry, not merely validated and printed.
+    state = _guard_step("state")
+    state_env = " ".join(str(v) for v in (state.get("env") or {}).values())
+    for name in inputs:
+        if "awake" in name:
+            assert f"inputs.{name}" in state_env, (
+                f"{name} claims to bound awake time but never reaches the expiry decision"
+            )
+
+    for bound in TTL_BOUNDS:
+        assert bound in doc["env"], f"{bound} is no longer declared"
+        assert re.search(rf"\$\{{?{bound}\b", used) or bound in used, (
+            f"{bound} is declared but never enters a decision"
+        )
+    # Named per decision, so a bound cannot drift into the wrong one.
+    for bound in ("DEFAULT_MAX_AWAKE_HOURS", "MAX_AWAKE_HOURS_CAP", "MAX_TOTAL_AWAKE_HOURS"):
+        assert bound in state["run"], f"the expiry decision ignores {bound}"
+    assert "MAX_TOTAL_AWAKE_HOURS" in _guard_step("Grant a time-bounded extension")["run"]
+    assert "MAX_EXTENSION_HOURS" in _guard_step("config")["run"]
+
+
+def test_ttl_guard_extension_hours_are_range_checked():
+    run = _guard_step("config")["run"]
+    assert "must be a whole number of hours" in run, "a non-numeric extension is accepted"
+    assert 'is outside 1..${MAX_EXTENSION_HOURS}' in run
     # A scheduled run always enforces; the timer path cannot be made advisory.
     assert 'if [ "$EVENT_NAME" = schedule ]; then' in run
     assert re.search(r'"\$EVENT_NAME" = schedule \]; then\s*\n\s*mode=enforce', run), (
@@ -622,43 +743,90 @@ def test_ttl_guard_configurable_maximum_is_range_checked():
 
 
 def test_ttl_guard_treats_a_missing_or_unreadable_lease_as_expired():
-    doc = _workflow_yaml(TTL_GUARD)
-    state = next(s for s in _steps(doc, "guard") if s.get("id") == "state")
-    run = state["run"]
-    assert "ttl_expired=true" in run, "the guard does not default to expired"
-    # The only way to become non-expired is a parseable lease still in the future.
-    assert re.search(
-        r'if \[ "\$lease_valid" = true \] && \[ "\$now_epoch" -lt "\$lease_epoch" \]', run
-    ), "the guard can consider an unparseable or past lease live"
-    assert "not a parseable UTC timestamp" in run
-    assert "ttl_expired=false" in run
-    assert run.count("ttl_expired=false") == 1, (
-        "there is more than one way to clear the expiry flag"
+    run = _guard_step("state")["run"]
+    script = _embedded_python(run)
+    assert '"expired": True' in script, "the guard does not default to expired"
+    assert script.count('out["expired"] = False') == 2, (
+        "the number of ways to clear the expiry flag changed; each one needs review"
     )
-    # A lease longer than the total ceiling is rejected, so no single write buys
-    # unbounded awake time.
-    assert 'exceeds the ${MAX_TOTAL_AWAKE_HOURS}h total ceiling' in run
+    assert "is not a parseable UTC lease" in script
+    # Behaviour, not text: run the guard's own script.
+    for label, lease in (
+        ("no lease at all", ""),
+        ("whitespace", "   "),
+        ("not a timestamp", "not-a-lease"),
+        ("truncated json", '{"awake_since":'),
+        ("json without a deadline", '{"awake_since":"2026-01-01T00:00:00Z"}'),
+        ("deadline in the past", _lease(-5, -1)),
+        ("wake time in the future", _lease(3, 5)),
+    ):
+        assert _run_lease_script(lease)["expired"] is True, (
+            f"a lease that is {label} was treated as live"
+        )
+    # ...and a good lease is not killed mid-rehearsal.
+    assert _run_lease_script(_lease(-1, 3))["expired"] is False
 
 
-def test_ttl_extensions_are_time_bounded_and_expire_by_themselves():
-    doc = _workflow_yaml(TTL_GUARD)
-    extend = next(
-        s for s in _steps(doc, "guard") if s.get("name") == "Grant a time-bounded extension"
-    )
+def test_a_single_lease_write_cannot_buy_unbounded_awake_time():
+    """Anchored to `awake_since`, so the ceiling is the total awake window."""
+    assert _run_lease_script(_lease(0, 4))["expired"] is False
+    # Wider than MAX_AWAKE_HOURS_CAP for a lease nobody has extended.
+    assert _run_lease_script(_lease(0, 10))["expired"] is True
+    # An extended lease may reach MAX_TOTAL_AWAKE_HOURS, and no further.
+    assert _run_lease_script(_lease(0, 10, extensions=2))["expired"] is False
+    assert _run_lease_script(_lease(0, 13, extensions=3))["expired"] is True
+    # Awake for longer than the total ceiling, however the deadline was reached.
+    assert _run_lease_script(_lease(-13, 1, extensions=9))["expired"] is True
+    # A legacy lease carries no anchor, so the conservative default bounds it.
+    assert _run_lease_script(_hours_from_now(2))["expired"] is False
+    assert _run_lease_script(_hours_from_now(6))["expired"] is True
+
+
+def test_ttl_extensions_are_bounded_from_the_original_wake_not_the_latest_extend():
+    """N sequential extends must not accumulate unbounded awake time.
+
+    An extension REPLACES the deadline. Bounding it by `now + total` can never
+    trip, because a single extension is capped at MAX_EXTENSION_HOURS which is
+    smaller than the total; only the ORIGINAL wake anchors a real ceiling.
+    """
+    extend = _guard_step("Grant a time-bounded extension")
     assert "steps.config.outputs.mode == 'extend'" in str(extend["if"])
     run = extend["run"]
     # The extension is an absolute UTC deadline: it expires with the clock, with
     # no flag to unset and nothing to remember to revoke.
     assert 'date -u -d "+${EXTEND_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ' in run
     assert "put-parameter" in run and "$AWAKE_LEASE_PARAM" in run
-    assert "would exceed the ${MAX_TOTAL_AWAKE_HOURS}h total awake ceiling" in run
+    # THE FIX: the ceiling is measured from the lease's awake_since.
+    assert 'ceiling="$(date -u -d "${LEASE_SINCE} +${MAX_TOTAL_AWAKE_HOURS} hours"' in run, (
+        "the extension ceiling is not anchored to the original wake"
+    )
+    assert re.search(r'ceiling="\$\(date -u -d "\+\$\{MAX_TOTAL_AWAKE_HOURS\} hours"', run) is None, (
+        "the extension ceiling is measured from now, which no extension can ever exceed"
+    )
+    assert extend["env"]["LEASE_SINCE"] == "${{ steps.state.outputs.lease_since }}"
+    # It refuses to extend what it cannot anchor, so there is no way around it.
+    assert "refusing to extend: there is no parseable awake lease" in run
+    assert "records no awake_since to bound the total against" in run
+    # The replacement lease PRESERVES awake_since and counts the extension.
+    assert '"awake_since":"%s"' in run, "the extension resets the original wake time"
+    assert '"$LEASE_SINCE" "$new_deadline" "$extensions"' in run
+    assert 'extensions="$(( ${LEASE_EXTENSIONS:-0} + 1 ))"' in run
     assert "refusing to extend a lease while staging is already asleep" in run, (
         "an extension can be banked before a rehearsal starts"
     )
     assert "extend_reason is required" in run, "extensions need not be justified"
-    # Bounds are checked before the extension is written.
-    config = next(s for s in _steps(doc, "guard") if s.get("id") == "config")
-    assert 'is outside 1..${MAX_EXTENSION_HOURS}' in config["run"]
+
+
+def test_the_wake_lease_records_the_original_wake_time():
+    """The guard's total-awake ceiling is unenforceable without it."""
+    doc = _workflow_yaml(LIFECYCLE)
+    step = next(s for s in _steps(doc, "wake-apply") if s.get("name") == "Open the awake lease")
+    run = step["run"]
+    assert '"awake_since":"%s"' in run and '"awake_until":"%s"' in run
+    assert '"extensions":0' in run
+    assert "put-parameter" in run and "$AWAKE_LEASE_PARAM" in run
+    # The lease the lifecycle writes is one the guard actually accepts.
+    assert _run_lease_script(_lease(0, 4))["expired"] is False
 
 
 def test_an_unexpired_lease_is_not_killed_mid_rehearsal():
@@ -766,3 +934,242 @@ def test_no_secret_is_interpolated_into_a_run_block():
             stripped = line.strip()
             if stripped.startswith("run:") or stripped.startswith("- run:"):
                 assert "secrets." not in stripped, f"{name}: inline secret in {stripped}"
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed live state: an AWS call nobody checked proves nothing
+# ---------------------------------------------------------------------------
+
+
+def test_no_aws_call_is_read_through_an_unchecked_process_substitution():
+    """`mapfile -t x < <(aws ...)` discards the AWS exit status.
+
+    `pipefail` does not reach into a process substitution, so a throttle, an API
+    error or an expired credential yields an EMPTY array — which every reader
+    here interprets as "no services", i.e. "staging is asleep". Every AWS call
+    must be run on its own with its status checked, and only then split.
+    """
+    offenders = []
+    pattern = re.compile(r"<\s*<\(\s*aws\b")
+    for name in (LIFECYCLE, TTL_GUARD):
+        for job, step, run in _all_run_blocks(_workflow_yaml(name)):
+            for line in re.sub(r"\\\n\s*", " ", run).splitlines():
+                if pattern.search(line):
+                    offenders.append(f"{name}:{job}:{step}: {line.strip()[:70]}")
+    assert offenders == [], (
+        "AWS output read through a process substitution, discarding its exit "
+        "status: " + "; ".join(offenders)
+    )
+
+
+def test_no_aws_call_that_decides_staging_state_discards_its_stderr():
+    """`2>/dev/null` on a state-deciding call hides the reason it failed.
+
+    The one legitimate use is best-effort EVIDENCE collection, which is written
+    into `artifacts/` and explicitly tolerated with `|| true`. Nothing reads
+    those files to decide anything, and the exemption is narrow enough that a
+    silenced decision cannot borrow it.
+    """
+    offenders = []
+    for name in (LIFECYCLE, TTL_GUARD):
+        for job, step, run in _all_run_blocks(_workflow_yaml(name)):
+            for line in re.sub(r"\\\n\s*", " ", run).splitlines():
+                stripped = line.strip()
+                if stripped.startswith("#") or "2>/dev/null" not in stripped:
+                    continue
+                if not re.search(r"\baws (ecs|application-autoscaling) ", stripped):
+                    continue
+                best_effort = "|| true" in stripped and "> artifacts/" in stripped
+                if not best_effort:
+                    offenders.append(f"{name}:{job}:{step}: {stripped[:70]}")
+    assert offenders == [], (
+        "an ECS/autoscaling call that decides whether staging is asleep swallows "
+        "its stderr: " + "; ".join(offenders)
+    )
+
+
+def test_the_cleanup_gate_treats_an_unreadable_staging_state_as_not_asleep():
+    """"Provably at zero" must not pass on the strength of a failed API call."""
+    step = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "sleep") if s.get("id") == "already"
+    )
+    run = step["run"]
+    assert "asleep=true" in run
+    # Every failure path publishes `unknown`, and none of them publishes `true`.
+    assert run.count("asleep=unknown") == 3, (
+        "not every unreadable-state path reports the state as unknown"
+    )
+    for guard in (
+        'if ! services_raw="$(aws ecs list-services',
+        'if ! nonzero="$(aws ecs describe-services',
+    ):
+        assert guard in run, f"{guard} is not status-checked"
+    assert "must not be treated as asleep" in run
+    # `asleep=true` has exactly two legitimate sources — a cluster that exposes
+    # no services at all, and a successful describe reporting zero — and both
+    # come AFTER the status check that proves the reading happened.
+    assert run.count("asleep=true") == 2
+    first_guard = run.index('if ! services_raw="$(aws ecs list-services')
+    assert all(
+        position > first_guard
+        for position in (run.index("asleep=true"), run.rindex("asleep=true"))
+    ), "staging can be declared asleep before its state was successfully read"
+    assert re.search(r"''\|\*\[!0-9\]\*\)", run), (
+        "a non-numeric desired-count reading is accepted as a count"
+    )
+    # An unknown state must not skip the reviewed sleep plan or the cost stop.
+    doc = _workflow_yaml(LIFECYCLE)
+    plan_step = next(s for s in _steps(doc, "sleep") if s.get("id") == "sleep-plan")
+    assert "steps.already.outputs.asleep != 'true'" in str(plan_step["if"])
+    last_resort = next(s for s in _steps(doc, "sleep") if s.get("id") == "last-resort")
+    assert "steps.already.outputs.asleep != 'true'" in str(last_resort["if"])
+    assert str(last_resort["if"]).startswith("always()")
+
+
+def test_the_residual_check_never_reports_zero_it_could_not_measure():
+    step = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "sleep") if s.get("id") == "residual"
+    )
+    run = step["run"]
+    # Each of the three AWS reads has a failure branch, and each sets zero_ok=false.
+    assert run.count("zero_ok=false") == 5, (
+        "a residual measurement path no longer fails closed"
+    )
+    assert run.count("residual_tasks=unknown") >= 1
+    for message in (
+        "could not enumerate staging ECS services",
+        "could not describe staging ECS services",
+        "could not read staging autoscaling targets",
+    ):
+        assert message in run, f"{message!r} is not reported"
+    assert "must not be reported as zero" in run
+    # The old swallow: `... > file 2>/dev/null || echo '[]' > file` made an
+    # unreadable autoscaling namespace look empty.
+    assert "|| echo '[]' > artifacts/sleep/autoscaling.json" not in run
+
+
+def test_the_cleanup_report_fails_on_an_unproven_zero():
+    report = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "sleep") if s.get("id") == "report"
+    )
+    run = report["run"]
+    assert '[ "${ZERO_OK:-false}" != true ]' in run, (
+        "an absent zero_ok is not treated as a failure"
+    )
+    assert '[ "${ALREADY_ASLEEP:-unknown}" = unknown ]' in run, (
+        "an unknown pre-sleep state does not fail the cleanup"
+    )
+    assert "never proven to be at zero" in run
+    assert report["env"]["ZERO_OK"] == "${{ steps.residual.outputs.zero_ok }}"
+    assert report["env"]["ALREADY_ASLEEP"] == "${{ steps.already.outputs.asleep }}"
+    # The disclosure reaches the summary a human reads.
+    assert "staging proven at zero after sleep" in run
+    assert 'exit 1' in run
+
+
+def test_the_ttl_guard_never_reports_asleep_on_an_unreadable_environment():
+    """The guard's header promises fail-closed; live ECS state is part of that."""
+    state = _guard_step("state")["run"]
+    assert 'if ! services_raw="$(aws ecs list-services' in state
+    assert "state_known=false" in state
+    assert state.count("state_known=false") == 2, (
+        "an unreadable-state path no longer publishes state_known=false"
+    )
+    assert "will not be reported as asleep" in state
+    assert "state_known=true" in state
+    # The verification pass reports `unknown`, never a fabricated zero.
+    verify = _guard_step("verify")["run"]
+    assert "residual=unknown" in verify
+    assert 'if ! services_raw="$(aws ecs list-services' in verify
+    assert "residual staging compute is UNKNOWN" in verify
+
+    alert = _guard_step("Blocking alert on an unaccountable staging environment")
+    run = alert["run"]
+    assert alert["env"]["STATE_KNOWN"] == "${{ steps.state.outputs.state_known }}"
+    assert 'state_known="${STATE_KNOWN:-false}"' in run, (
+        "an absent state reading defaults to readable"
+    )
+    assert 'if [ "$state_known" != true ]' in run and "manual=true" in run
+    # A non-numeric task count is unknown, and unknown demands a human.
+    assert run.count("''|*[!0-9]*)") == 2, (
+        "an unknown awake or residual task count is not detected"
+    )
+    # The `staging is asleep` notice is reachable only from a known-good reading.
+    asleep_branch = run.split("::notice::staging is asleep")[0]
+    assert 'if [ "$awake_known" = true ] && [ "${AWAKE_TASKS}" -gt 0 ]' in asleep_branch, (
+        "the guard can announce that staging is asleep without having read it"
+    )
+    assert run.count("exit 1") >= 2
+
+
+def test_the_ttl_guard_enforcement_fails_closed_on_an_unreadable_environment():
+    run = _guard_step("enforce")["run"]
+    assert 'if ! services_raw="$(aws ecs list-services' in run
+    assert "TTL enforcement did not run" in run
+    assert 'if ! targets_raw="$(aws application-autoscaling describe-scalable-targets' in run
+    assert "an autoscaling floor may revive staging" in run
+
+
+# ---------------------------------------------------------------------------
+# The autoscaling namespace is account-wide: match the cluster exactly
+# ---------------------------------------------------------------------------
+
+
+def test_every_autoscaling_query_matches_the_staging_cluster_exactly():
+    """`contains(ResourceId, 'AETHER-staging')` reaches other clusters.
+
+    `describe-scalable-targets --service-namespace ecs` is ACCOUNT-WIDE and its
+    ResourceId is `service/<cluster>/<service>`. A substring match hands an
+    hourly cron the authority to zero the autoscaling floor of a service in any
+    cluster whose name merely contains this one.
+    """
+    offenders, checked = [], 0
+    for name in (LIFECYCLE, TTL_GUARD):
+        for job, step, run in _all_run_blocks(_workflow_yaml(name)):
+            if "describe-scalable-targets" not in run:
+                continue
+            checked += 1
+            where = f"{name}:{job}:{step}"
+            if "contains(ResourceId" in run:
+                offenders.append(f"{where} matches the cluster by substring")
+            if "starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')" not in run:
+                offenders.append(f"{where} does not anchor the cluster segment")
+    assert checked >= 2, "the autoscaling queries disappeared rather than being fixed"
+    assert offenders == [], "; ".join(offenders)
+
+
+# ---------------------------------------------------------------------------
+# The recorded staging_state is load-bearing, in both directions
+# ---------------------------------------------------------------------------
+
+
+def test_the_recorded_staging_state_is_asserted_in_both_wake_and_sleep():
+    """It was written by terraform-promote.yml and read by nobody.
+
+    The AUTHORITATIVE control on the applied shape is still the desired-count
+    assertion against the plan JSON — this is the cheap cross-check that the
+    plan under review is the one that was requested.
+    """
+    doc = _workflow_yaml(LIFECYCLE)
+    expectations = {
+        "wake-plan": "awake",
+        "wake-validate": "awake",
+        "sleep": "asleep",
+    }
+    for job, state in expectations.items():
+        step = next(
+            s for s in _steps(doc, job)
+            if s.get("run") and "reviewed.staging-state" in s["run"]
+        )
+        assert step["env"]["EXPECTED_STATE"] == state, f"{job} expects the wrong state"
+        assert 'test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE"' in step["run"], (
+            f"{job} reads the recorded staging_state without comparing it"
+        )
+        assert "not ${EXPECTED_STATE}" in step["run"]
+        required = step["run"].split("for artefact in", 1)[1].split("do", 1)[0]
+        assert "reviewed.staging-state" in required, (
+            f"{job} does not require the recorded staging_state to be present"
+        )
+    # The stronger control it backs up is still the one doing the real work.
+    assert "planned ECS desired counts" in _job_script(doc, "wake-validate")
+    assert "planned ECS desired counts" in _job_script(doc, "sleep")

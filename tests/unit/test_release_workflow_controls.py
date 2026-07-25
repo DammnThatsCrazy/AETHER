@@ -1,6 +1,10 @@
 """Release workflows must validate pull requests without mutating them."""
 
+import importlib.util
+import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -11,6 +15,28 @@ WORKFLOW_DIR = ROOT / ".github" / "workflows"
 
 # The only workflow permitted to run `terraform apply`.
 APPLY_WORKFLOW = "terraform-promote.yml"
+
+# `terraform show -json` does not redact `sensitive = true` root variables, so
+# every workflow that publishes plan JSON must route it through this first.
+SANITISER = "scripts/release/sanitize_terraform_plan_json.py"
+
+# Workflows held to `set -euo pipefail` by THIS file. deploy.yml belongs here
+# because it is the one workflow that mutates ECS on a push to main.
+STRICT_BASH_WORKFLOWS = ("infrastructure.yml", APPLY_WORKFLOW, "deploy.yml")
+# Held to the identical rule by tests/unit/test_staging_lifecycle_controls.py.
+STRICT_BASH_ELSEWHERE = ("staging-lifecycle.yml", "staging-ttl-guard.yml")
+
+# `terraform apply` sites that live in a NESTED `.github/workflows` tree. GitHub
+# only executes the directory at the repository root, so these never run — but
+# they are git-tracked, and moving one into the live directory would restore
+# whatever it contains (in this case an `-auto-approve` apply under `push: main`).
+# They are enumerated so a NEW apply site anywhere in the repository fails the
+# exclusivity test, rather than being tolerated by a root-only glob's silence.
+QUARANTINED_APPLY_SITES = {
+    "cicd/aether-cicd/.github/workflows/cd.yml",
+    "cicd/aether-cicd/.github/workflows/demo-management.yml",
+    "cicd/aether-cicd/.github/workflows/infrastructure.yml",
+}
 TF_PROFILES = ("staging", "production-lean", "production-scale", "enterprise-isolated")
 # Triggers that fire without a human choosing to run the workflow.
 AUTOMATIC_TRIGGERS = {
@@ -33,6 +59,25 @@ def _workflow(name: str) -> str:
 
 def _workflow_names() -> list[str]:
     return sorted(p.name for p in WORKFLOW_DIR.glob("*.y*ml"))
+
+
+def _every_workflow_file() -> list[Path]:
+    """Every `.github/workflows/*.yml` in the repository, nested trees included."""
+    return sorted(
+        path
+        for path in ROOT.rglob("*.y*ml")
+        if path.parent.name == "workflows"
+        and path.parent.parent.name == ".github"
+        and "node_modules" not in path.parts
+    )
+
+
+def _sanitiser():
+    """Import scripts/release/sanitize_terraform_plan_json.py by path."""
+    spec = importlib.util.spec_from_file_location("_plan_sanitiser", ROOT / SANITISER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _workflow_yaml(name: str) -> dict:
@@ -289,14 +334,45 @@ def test_no_automatically_triggered_workflow_reaches_a_terraform_apply():
 
 
 def test_terraform_apply_lives_only_in_the_reviewed_promotion_workflow():
-    appliers = set()
-    for name in _workflow_names():
-        for _job, _step, run in _all_run_blocks(_workflow_yaml(name)):
-            if "terraform apply" in run:
-                appliers.add(name)
-    assert appliers == {APPLY_WORKFLOW}, f"unexpected terraform apply sites: {sorted(appliers)}"
-    # ...and that workflow is dispatch-only, so no ref, tag, path or timer
-    # can start an apply.
+    """Repo-wide, not just the live directory.
+
+    Globbing only `ROOT/.github/workflows` asserted an exclusivity it never
+    checked: a nested `.github/workflows` tree could hold a push-to-main
+    `terraform apply -auto-approve` and a single `git mv` would make it live.
+    """
+    live, quarantined = set(), set()
+    for path in _every_workflow_file():
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict):
+            continue
+        if not any("terraform apply" in run for _j, _s, run in _all_run_blocks(doc)):
+            continue
+        relative = path.relative_to(ROOT).as_posix()
+        if path.parent == WORKFLOW_DIR:
+            live.add(relative)
+        else:
+            quarantined.add(relative)
+
+    assert live == {f".github/workflows/{APPLY_WORKFLOW}"}, (
+        f"unexpected live terraform apply sites: {sorted(live)}"
+    )
+    # Nested apply sites are named, not tolerated by omission. `<=` so that
+    # DELETING one passes and ADDING one fails.
+    assert quarantined <= QUARANTINED_APPLY_SITES, (
+        "a terraform apply appeared in a nested workflow tree that no one has "
+        f"reviewed: {sorted(quarantined - QUARANTINED_APPLY_SITES)}"
+    )
+    # Everything on the quarantine list really is outside the live directory —
+    # that non-liveness is the entire reason it is only quarantined.
+    for relative in QUARANTINED_APPLY_SITES:
+        path = ROOT / relative
+        if path.exists():
+            assert path.parent != WORKFLOW_DIR, (
+                f"{relative} moved into the live workflow directory, which would "
+                "restore a push-to-main auto-apply"
+            )
+    # ...and the one live applier is dispatch-only, so no ref, tag, path or
+    # timer can start an apply.
     assert _triggers(_workflow_yaml(APPLY_WORKFLOW)) == {"workflow_dispatch"}
 
 
@@ -353,7 +429,7 @@ def test_every_piped_terraform_command_enforces_pipe_failure():
 def test_terraform_workflow_run_blocks_enable_strict_bash():
     """GitHub's default shell is `bash -e {0}`: no -u, and no pipefail."""
     offenders = []
-    for name in ("infrastructure.yml", APPLY_WORKFLOW):
+    for name in STRICT_BASH_WORKFLOWS:
         for job_name, step_name, run in _all_run_blocks(_workflow_yaml(name)):
             body = [ln for ln in run.splitlines() if ln.strip() and not ln.strip().startswith("#")]
             if len(body) < 2:
@@ -363,6 +439,31 @@ def test_terraform_workflow_run_blocks_enable_strict_bash():
     assert offenders == [], "multi-line run blocks without `set -euo pipefail`: " + ", ".join(
         offenders
     )
+
+
+def test_strict_bash_scope_covers_every_workflow_that_touches_infrastructure():
+    """Guards the scope of the test above.
+
+    A hardcoded pair of workflow names left `deploy.yml` — the one workflow that
+    mutates ECS on a push to main — outside the strict-bash control entirely.
+    The covered set is therefore derived from what the workflows actually do.
+    """
+    touching = set()
+    mutating = re.compile(
+        r"\bterraform \b|\baws ecs\b|\baws application-autoscaling\b|\baws ssm\b"
+    )
+    for name in _workflow_names():
+        for _job, _step, run in _all_run_blocks(_workflow_yaml(name)):
+            if mutating.search(run):
+                touching.add(name)
+    uncovered = touching - set(STRICT_BASH_WORKFLOWS) - set(STRICT_BASH_ELSEWHERE)
+    assert uncovered == set(), (
+        "workflow(s) run terraform/AWS mutations but no strict-bash test covers "
+        f"them: {sorted(uncovered)}"
+    )
+    # Neither list may drift into naming a workflow that does not exist.
+    for name in STRICT_BASH_WORKFLOWS + STRICT_BASH_ELSEWHERE:
+        assert (WORKFLOW_DIR / name).exists(), f"strict-bash list names a missing {name}"
 
 
 def test_infrastructure_credential_probe_survives_unset_secrets_under_set_u():
@@ -392,8 +493,13 @@ def test_infrastructure_remote_plan_validates_plan_json_for_policy_and_cost():
     doc = _workflow_yaml("infrastructure.yml")
     steps = _steps(doc, "remote-plan")
     remote_plan = _job_script(doc, "remote-plan")
-    # A machine-readable plan must exist for the validators to read.
-    assert 'terraform show -json "tfplan-${PROFILE}" > "remote-plan-${PROFILE}.json"' in remote_plan
+    # A machine-readable plan must exist for the validators to read — produced
+    # under a never-uploaded raw name and sanitised into the published one,
+    # because `terraform show -json` does not redact sensitive root variables.
+    assert 'terraform show -json "tfplan-${PROFILE}" > plan-raw.json' in remote_plan
+    assert SANITISER in remote_plan
+    assert 'plan-raw.json "remote-plan-${PROFILE}.json"' in remote_plan
+    assert "rm -f plan-raw.json" in remote_plan
 
     validating = [
         s
@@ -508,6 +614,7 @@ PLAN_EVIDENCE = {
     ),
     "reviewed.created-utc": "date -u +%Y-%m-%dT%H:%M:%SZ > reviewed.created-utc",
     "reviewed.expires-utc": "date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%SZ > reviewed.expires-utc",
+    "reviewed.staging-state": 'printf \'%s\\n\' "${STAGING_STATE}" > reviewed.staging-state',
 }
 
 
@@ -528,11 +635,18 @@ def test_promotion_plan_records_the_full_plan_provenance():
     assert 'tee "${TF_DIR}/reviewed.policy.txt"' in plan_script
     assert 'tee "${TF_DIR}/reviewed.cost.txt"' in plan_script
     assert '--inventory "${TF_DIR}/reviewed.resources.json"' in plan_script
-    upload = next(
+    uploads = [
         s for s in _steps(doc, "plan") if str(s.get("uses", "")).startswith("actions/upload-artifact")
-    )
-    assert upload["with"]["path"].endswith("reviewed.*")
-    assert upload["with"]["if-no-files-found"] == "error"
+    ]
+    # Two artifacts: reviewable evidence, and the secret-bearing binary plan.
+    assert len(uploads) == 2, "the reviewed plan no longer separates its evidence from the binary plan"
+    evidence, binary = uploads
+    assert "reviewed.*" in evidence["with"]["path"]
+    assert all(u["with"]["if-no-files-found"] == "error" for u in uploads)
+    # Both artifacts must still be reachable through the single download pattern
+    # the apply job and staging-lifecycle.yml use.
+    for upload in uploads:
+        assert upload["with"]["name"].startswith("terraform-plan-${{ inputs.profile }}-")
 
 
 def test_promotion_apply_verifies_every_recorded_field_before_applying():
@@ -630,3 +744,349 @@ def test_promotion_uses_per_profile_terraform_environments():
     # The plan job must not claim any deployment environment: only apply is
     # allowed to sit behind reviewers.
     assert "environment" not in doc["jobs"]["plan"]
+
+
+# ---------------------------------------------------------------------------
+# Secret exposure: `terraform show -json` does NOT redact sensitive root
+# variables, and both plan workflows publish that JSON as a build artifact.
+# ---------------------------------------------------------------------------
+
+
+CANARY = "SUPERSECRET_CANARY_VALUE"
+
+
+def _plan_with_secret(secret: str = CANARY) -> dict:
+    """A minimal `terraform show -json` document shaped like the real one.
+
+    `variables` carries the secret exactly the way Terraform emits it: verbatim,
+    with no redaction and no sensitivity marker of any kind.
+    """
+    return {
+        "format_version": "1.2",
+        "terraform_version": "1.7.5",
+        "variables": {
+            "environment": {"value": "staging"},
+            "network_egress_mode": {"value": "vpc_endpoints"},
+            "auth0_management_client_secret": {"value": secret},
+            "auth0_management_client_id": {"value": "m2m-client-id"},
+        },
+        "planned_values": {
+            "root_module": {
+                "resources": [
+                    {
+                        "address": "aws_ssm_parameter.auth0",
+                        "type": "aws_ssm_parameter",
+                        "name": "auth0",
+                        "values": {"name": "/auth0/secret", "value": secret},
+                        "sensitive_values": {"value": True},
+                    }
+                ],
+                "child_modules": [
+                    {
+                        "address": "module.auth0",
+                        "resources": [
+                            {
+                                "address": "module.auth0.auth0_client.aether",
+                                "type": "auth0_client",
+                                "name": "aether",
+                                "values": {"name": "aether", "client_secret": secret},
+                                "sensitive_values": {"client_secret": True},
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+        "resource_changes": [
+            {
+                "address": "aws_ssm_parameter.auth0",
+                "type": "aws_ssm_parameter",
+                "name": "auth0",
+                "mode": "managed",
+                "change": {
+                    "actions": ["create"],
+                    "before": None,
+                    "after": {"name": "/auth0/secret", "value": secret},
+                    "after_sensitive": {"value": True},
+                },
+            }
+        ],
+        "configuration": {
+            "root_module": {
+                "variables": {
+                    "environment": {"default": "staging"},
+                    "network_egress_mode": {"default": "vpc_endpoints"},
+                    "auth0_management_client_secret": {"sensitive": True},
+                    "auth0_management_client_id": {"sensitive": True},
+                }
+            }
+        },
+        "prior_state": {"values": {"root_module": {"resources": [
+            {"address": "aws_ssm_parameter.auth0", "values": {"value": secret}}
+        ]}}},
+    }
+
+
+def test_the_sanitiser_removes_a_sensitive_root_variable_value():
+    """The exact leak: a `sensitive = true` variable's value in the plan JSON."""
+    clean = _sanitiser().sanitize(_plan_with_secret(), environ={})
+    assert CANARY not in json.dumps(clean), "the sensitive variable value survived"
+    # The variable is still NAMED, so a reviewer can see what was supplied.
+    assert "auth0_management_client_secret" in clean["variables"]
+    assert clean["variables"]["auth0_management_client_secret"]["value"] != CANARY
+
+
+def test_the_sanitiser_keeps_exactly_what_the_policy_gate_reads():
+    """check_terraform_plan_policy.py reads two variable values; keep those."""
+    clean = _sanitiser().sanitize(_plan_with_secret(), environ={})
+    assert clean["variables"]["environment"]["value"] == "staging"
+    assert clean["variables"]["network_egress_mode"]["value"] == "vpc_endpoints"
+    for key in ("format_version", "terraform_version", "planned_values",
+                "resource_changes", "configuration"):
+        assert key in clean, f"the sanitised plan lost {key}"
+    # Non-consumed top-level state that can only carry more values is dropped.
+    assert "prior_state" not in clean
+    # The resources the gate counts survive intact.
+    root = clean["planned_values"]["root_module"]
+    assert root["resources"][0]["values"]["name"] == "/auth0/secret"
+    assert clean["resource_changes"][0]["change"]["actions"] == ["create"]
+
+
+def test_the_variable_allow_list_is_exactly_what_the_policy_gate_reads():
+    """Derived from the consumer, so it cannot quietly widen.
+
+    Widening the allow-list is how the leak comes back: it is the one layer that
+    works without Terraform having told us which variables are sensitive.
+    """
+    policy = (ROOT / "scripts/release/check_terraform_plan_policy.py").read_text(
+        encoding="utf-8"
+    )
+    consumed = set(re.findall(r'\(plan\.get\("variables"\) or \{\}\)\.get\("(\w+)"\)', policy))
+    assert consumed, "the policy gate no longer reads plan variables the way this test detects"
+    assert set(_sanitiser().KEEP_VARIABLE_VALUES) == consumed, (
+        "the sanitiser's variable allow-list no longer matches what "
+        f"check_terraform_plan_policy.py actually reads ({sorted(consumed)})"
+    )
+
+
+def test_the_allow_list_holds_even_when_terraform_declares_no_sensitivity():
+    """The allow-list is an independent layer, not a helper for the literal scrub.
+
+    With no `sensitive` flag in `configuration` and no `TF_VAR_*` in the
+    environment, nothing can identify the secret by value — the allow-list is
+    all that stands between it and the artifact, so it must stand alone.
+    """
+    plan = _plan_with_secret()
+    plan["configuration"]["root_module"]["variables"] = {}
+    clean = _sanitiser().sanitize(plan, environ={})
+    assert clean["variables"]["auth0_management_client_secret"]["value"] != CANARY
+    assert clean["variables"]["auth0_management_client_id"]["value"] != CANARY
+    assert CANARY not in json.dumps(clean["variables"])
+
+
+def test_the_sanitiser_scrubs_secret_values_out_of_resources_too():
+    """A secret copied into a resource argument is still a secret."""
+    clean = _sanitiser().sanitize(_plan_with_secret(), environ={})
+    blob = json.dumps(clean)
+    assert CANARY not in blob
+    child = clean["planned_values"]["root_module"]["child_modules"][0]
+    assert child["resources"][0]["values"]["client_secret"] != CANARY
+    assert clean["resource_changes"][0]["change"]["after"]["value"] != CANARY
+
+
+def test_the_sanitiser_also_scrubs_the_value_supplied_through_the_environment():
+    """The plan is produced from TF_VAR_*; that value must not survive either."""
+    plan = _plan_with_secret()
+    # Terraform emitted a different rendering, but the env still holds the secret.
+    plan["planned_values"]["root_module"]["resources"][0]["values"] = {
+        "name": "/auth0/secret", "value": CANARY, "sensitive_values": None,
+    }
+    plan["planned_values"]["root_module"]["resources"][0].pop("sensitive_values")
+    clean = _sanitiser().sanitize(
+        plan, environ={"TF_VAR_auth0_management_client_secret": CANARY}
+    )
+    assert CANARY not in json.dumps(clean)
+
+
+def test_the_sanitiser_fails_closed_rather_than_writing_a_leaky_plan():
+    """A surviving secret must stop the job, not ship in an artifact.
+
+    The scrubbers rewrite string VALUES. A secret that Terraform emitted as a
+    map KEY survives every structural pass, which is exactly the class of gap
+    the final re-scan exists to catch — so it must raise, not write.
+    """
+    plan = _plan_with_secret()
+    plan["planned_values"]["root_module"]["resources"][0]["values"]["tags"] = {
+        CANARY: "leaked-through-a-key"
+    }
+    raised = False
+    try:
+        _sanitiser().sanitize(plan, environ={})
+    except SystemExit as exc:
+        raised = True
+        assert "still carries a sensitive" in str(exc)
+    assert raised, "sanitisation returned a document that still holds the secret"
+
+
+def test_the_sanitiser_is_runnable_as_the_workflows_invoke_it(tmp_path):
+    source = tmp_path / "plan-raw.json"
+    destination = tmp_path / "plan.json"
+    source.write_text(json.dumps(_plan_with_secret()), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / SANITISER), str(source), str(destination)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert CANARY not in destination.read_text(encoding="utf-8")
+
+
+def test_sanitising_a_real_plan_does_not_change_the_policy_verdict(tmp_path):
+    """Redaction must not become a way to slip a plan past the gate.
+
+    Run check_terraform_plan_policy.py over real fixture plans before and after
+    sanitisation and require identical per-check verdicts — on plans that PASS
+    and on plans that FAIL, so a weakened gate shows up as a fixture that stops
+    failing.
+    """
+    policy = ROOT / "scripts/release/check_terraform_plan_policy.py"
+    fixtures = ROOT / "tests/fixtures/terraform_plans"
+    cases = [
+        ("staging", "staging-awake.json"),
+        ("staging", "staging-asleep.json"),
+        ("production-lean", "production-lean-valid.json"),
+        ("production-lean", "production-lean-nat-gateway.json"),
+        ("production-lean", "production-lean-dedicated-ml.json"),
+    ]
+    for profile, fixture in cases:
+        source = fixtures / fixture
+        if not source.exists():  # pragma: no cover - fixture set may evolve
+            continue
+        clean = tmp_path / f"clean-{fixture}"
+        assert subprocess.run(
+            [sys.executable, str(ROOT / SANITISER), str(source), str(clean)],
+            capture_output=True, text=True,
+        ).returncode == 0
+
+        def verdict(plan: Path, out: Path) -> tuple[int, list]:
+            code = subprocess.run(
+                [sys.executable, str(policy), "--profile", profile,
+                 "--plan-json", str(plan), "--out-dir", str(out)],
+                capture_output=True, text=True, cwd=ROOT,
+            ).returncode
+            result = json.loads((out / "profile-policy-result.json").read_text())
+            return code, [(r["check"], r["status"]) for r in result["results"]]
+
+        raw_code, raw_checks = verdict(source, tmp_path / f"raw-{fixture}")
+        clean_code, clean_checks = verdict(clean, tmp_path / f"san-{fixture}")
+        assert (raw_code, raw_checks) == (clean_code, clean_checks), (
+            f"sanitising {fixture} changed the {profile} policy verdict"
+        )
+        assert raw_checks, f"{fixture} produced no checks at all"
+
+
+def test_no_workflow_publishes_unsanitised_terraform_plan_json():
+    """Every `terraform show -json` must reach an artifact through the sanitiser.
+
+    The raw document is written under a name the upload globs do not match, and
+    deleted; the published name is only ever produced by the sanitiser.
+    """
+    offenders = []
+    for name in _workflow_names():
+        for job_name, step_name, run in _all_run_blocks(_workflow_yaml(name)):
+            if "terraform show -json" not in run:
+                continue
+            where = f"{name}:{job_name}:{step_name}"
+            if SANITISER not in run:
+                offenders.append(f"{where} writes plan JSON without the sanitiser")
+                continue
+            for line in _logical_lines(run):
+                if "terraform show -json" not in line or line.strip().startswith("#"):
+                    continue
+                target = line.rsplit(">", 1)[-1].strip().strip('"')
+                assert target in ("plan-raw.json", '"plan-raw.json"'), (
+                    f"{where}: `terraform show -json` writes straight to {target}; "
+                    "it must land on the never-uploaded raw name first"
+                )
+            assert "rm -f plan-raw.json" in run, f"{where} leaves the raw plan on disk"
+    assert offenders == [], "; ".join(offenders)
+
+
+def test_both_plan_workflows_route_their_plan_json_through_the_sanitiser():
+    """Named explicitly: these are the two workflows that upload plan JSON."""
+    promote = _job_script(_workflow_yaml(APPLY_WORKFLOW), "plan")
+    assert SANITISER in promote
+    assert "plan-raw.json reviewed.tfplan.json" in promote
+    infra = _job_script(_workflow_yaml("infrastructure.yml"), "remote-plan")
+    assert SANITISER in infra
+    assert 'plan-raw.json "remote-plan-${PROFILE}.json"' in infra
+    # The sanitiser runs before anything reads or ships the plan JSON.
+    assert promote.index(SANITISER) < promote.index("check_terraform_plan_policy.py")
+    assert infra.index(SANITISER) < infra.index("check_terraform_plan_policy.py")
+
+
+def test_the_binary_plan_is_treated_as_a_secret_bearing_artifact():
+    """It embeds every root variable value and cannot be sanitised."""
+    doc = _workflow_yaml(APPLY_WORKFLOW)
+    uploads = [
+        s for s in _steps(doc, "plan")
+        if str(s.get("uses", "")).startswith("actions/upload-artifact")
+    ]
+    binary_path = "AWS Deployment/aether-aws/terraform/reviewed.tfplan"
+    evidence = [u for u in uploads if "reviewed.*" in u["with"]["path"]]
+    binary = [u for u in uploads if u["with"]["path"].strip() == binary_path]
+    assert len(evidence) == 1 and len(binary) == 1, (
+        "the binary plan is not uploaded separately from the reviewable evidence"
+    )
+    # The long-lived evidence artifact must NOT contain the binary plan.
+    assert "!AWS Deployment/aether-aws/terraform/reviewed.tfplan" in evidence[0]["with"]["path"]
+    # A reviewed plan is only legal to apply for 24h, so one day is the whole
+    # window the apply path can use.
+    assert int(binary[0]["with"]["retention-days"]) == 1, (
+        "the secret-bearing binary plan outlives the 24h window it can be applied in"
+    )
+    assert int(evidence[0]["with"]["retention-days"]) > 1
+    # ...and the risk is stated where a maintainer will read it.
+    workflow = _workflow(APPLY_WORKFLOW)
+    assert "SECRET-BEARING ARTIFACT" in workflow
+    assert "sensitive = true" in workflow
+
+
+def test_the_apply_verifies_the_plan_run_is_a_run_of_this_workflow():
+    """The artifact-name pattern constrains the name, not the producer."""
+    doc = _workflow_yaml(APPLY_WORKFLOW)
+    steps = _steps(doc, "apply")
+    verify = next(
+        s for s in steps
+        if s.get("run") and "actions/runs/${PLAN_RUN_ID}" in s["run"]
+    )
+    run = verify["run"]
+    assert "'.github/workflows/terraform-promote.yml'" in run, (
+        "the apply does not bind plan_run_id to this workflow file"
+    )
+    assert "not the reviewed promotion workflow" in run
+    assert 'concluded ${run_conclusion}, not success' in run
+    assert run.count("exit 1") >= 2
+    assert verify["env"]["PLAN_RUN_ID"] == "${{ inputs.plan_run_id }}"
+    # It runs BEFORE a single byte of that run's output is downloaded.
+    download = next(
+        i for i, s in enumerate(steps)
+        if str(s.get("uses", "")).startswith("actions/download-artifact")
+    )
+    assert steps.index(verify) < download
+    # The job can actually read run metadata.
+    assert doc["jobs"]["apply"]["permissions"]["actions"] == "read"
+
+
+def test_the_recorded_staging_state_is_load_bearing_in_the_apply():
+    """A file that is written and never read is not a control."""
+    doc = _workflow_yaml(APPLY_WORKFLOW)
+    plan_script = _job_script(doc, "plan")
+    assert "> reviewed.staging-state" in plan_script
+    verify = next(s for s in _steps(doc, "apply") if s.get("id") == "reviewed")
+    run = verify["run"]
+    assert "reviewed.staging-state" in run, "the apply never reads the recorded shape"
+    assert "awake|asleep)" in run, "any string passes as a reviewed staging_state"
+    assert "not awake or asleep" in run
+    # The required-evidence loop lists it, so an artifact missing it is refused.
+    required = run.split("for artefact in", 1)[1].split("do", 1)[0]
+    assert "reviewed.staging-state" in required

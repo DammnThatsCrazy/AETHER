@@ -247,8 +247,23 @@ jobs:
             -lock-timeout=5m \
             -var-file="profiles/${PROFILE}.tfvars" \
             -out="tfplan-${PROFILE}"
+          # The human-readable rendering redacts sensitive values itself and
+          # never prints root variables at all.
           terraform show -no-color "tfplan-${PROFILE}" > "remote-plan-${PROFILE}.txt"
-          terraform show -json "tfplan-${PROFILE}" > "remote-plan-${PROFILE}.json"
+          # SECRET HYGIENE: `terraform show -json` does NOT redact `sensitive = true`
+          # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
+          # verbatim in the top-level `variables` block of the artifact uploaded
+          # below, on every push to main and every same-repo pull request that
+          # touches `AWS Deployment/**`. The raw document is written to a name
+          # that is never uploaded, sanitised, and deleted.
+          terraform show -json "tfplan-${PROFILE}" > plan-raw.json
+          python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \
+            plan-raw.json "remote-plan-${PROFILE}.json"
+          rm -f plan-raw.json
+          # The binary plan is NOT uploaded by this workflow: it embeds every
+          # root variable value and nothing here consumes it. Only the reviewed
+          # promotion workflow ships a binary plan, and only because its apply
+          # must replay that exact plan.
           sha256sum \
             "remote-plan-${PROFILE}.txt" \
             "remote-plan-${PROFILE}.json" > "remote-plan-${PROFILE}.sha256"

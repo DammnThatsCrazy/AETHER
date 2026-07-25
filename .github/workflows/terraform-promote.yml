@@ -159,9 +159,14 @@ jobs:
             -backend-config="encrypt=true"
           terraform validate
           # staging_state is recorded alongside the plan so a reviewer can see
-          # which shape was approved, and so the staging lifecycle can assert
-          # the applied shape matches what it asked for. It is a plan-time input
-          # only: apply consumes the stored plan and cannot reshape it.
+          # which shape was approved. It is load-bearing, not decorative: apply
+          # below refuses a plan whose recorded state is not one of the two legal
+          # tokens, and staging-lifecycle.yml asserts it equals the shape it
+          # asked for before it dispatches an apply. The AUTHORITATIVE control on
+          # the applied shape is still the plan-JSON desired-count assertion in
+          # that workflow; this file is the cheap cross-check that the plan under
+          # review is the one that was requested. It is a plan-time input only:
+          # apply consumes the stored plan and cannot reshape it.
           printf '%s\n' "${STAGING_STATE}" > reviewed.staging-state
           terraform plan -input=false -lock-timeout=5m \
             -var-file="profiles/${PROFILE}.tfvars" \
@@ -169,7 +174,17 @@ jobs:
             -var "ml_image_digest=${ML_IMAGE_DIGEST}" \
             -var "staging_state=${STAGING_STATE}" \
             -out=reviewed.tfplan
-          terraform show -json reviewed.tfplan > reviewed.tfplan.json
+          # SECRET HYGIENE: `terraform show -json` does NOT redact `sensitive = true`
+          # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
+          # verbatim in the top-level `variables` block of an uploaded artifact.
+          # The raw document is written to a name outside the uploaded
+          # `reviewed.*` glob, sanitised into reviewed.tfplan.json, and deleted.
+          terraform show -json reviewed.tfplan > plan-raw.json
+          python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \
+            plan-raw.json reviewed.tfplan.json
+          rm -f plan-raw.json
+          # The human-readable rendering redacts sensitive values itself and
+          # never prints root variables at all.
           terraform show -no-color reviewed.tfplan > reviewed.tfplan.txt
           sha256sum reviewed.tfplan > reviewed.tfplan.sha256
           printf '%s\n' "$COMMIT_SHA" > reviewed.commit
@@ -219,12 +234,34 @@ jobs:
             echo "| created (UTC) | $(cat reviewed.created-utc) |"
             echo "| expires (UTC) | $(cat reviewed.expires-utc) |"
           } >> "$GITHUB_STEP_SUMMARY"
+      # Reviewable evidence. Every `reviewed.*` file EXCEPT the binary plan:
+      # reviewed.tfplan.json is sanitised above, and the remaining files are
+      # checksums, timestamps and rendered reports that carry no secret value.
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ inputs.profile }}-${{ github.sha }}
-          path: AWS Deployment/aether-aws/terraform/reviewed.*
+          path: |
+            AWS Deployment/aether-aws/terraform/reviewed.*
+            !AWS Deployment/aether-aws/terraform/reviewed.tfplan
           if-no-files-found: error
           retention-days: 14
+      # SECRET-BEARING ARTIFACT. The binary plan embeds every root variable value
+      # Terraform was given, including the `sensitive = true` Auth0 management
+      # credentials; nothing can strip them without destroying the exact-plan
+      # apply guarantee. It cannot be dropped because `terraform apply
+      # reviewed.tfplan` is the whole point of this workflow, so instead it is
+      # split out with the SHORTEST retention the apply path can use: a reviewed
+      # plan expires 24h after it is created (reviewed.expires-utc, enforced
+      # below), so one day of retention outlives every plan that is still legal
+      # to apply and nothing beyond it. GitHub artifacts have no per-artifact
+      # ACL, so retention is the only lever here; narrowing readership further
+      # would mean encrypting this file under a repository secret.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.profile }}-binary-${{ github.sha }}
+          path: AWS Deployment/aether-aws/terraform/reviewed.tfplan
+          if-no-files-found: error
+          retention-days: 1
 
   apply:
     if: inputs.action == 'apply'
@@ -265,6 +302,29 @@ jobs:
           test -n "$AWS_TERRAFORM_APPLY_ROLE_ARN" || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN required'; exit 1; }
           test -n "$TF_STATE_BUCKET" || { echo '::error::TF_STATE_BUCKET required'; exit 1; }
           test -n "$TF_LOCK_TABLE" || { echo '::error::TF_LOCK_TABLE required'; exit 1; }
+      # The artifact NAME pattern below constrains what is downloaded, but not
+      # which workflow produced it: any run that uploaded an artifact called
+      # `terraform-plan-<profile>-*` would satisfy it. Bind the run itself to
+      # this workflow file, and require it to have succeeded, before trusting a
+      # single byte of its output. Mirrors the release-run identity check in
+      # staging-lifecycle.yml.
+      - name: Verify the plan run belongs to this workflow and succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PLAN_RUN_ID}")"
+          run_path="$(jq -r '.path' <<<"$run_json")"
+          run_conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+          if [ "$run_path" != '.github/workflows/terraform-promote.yml' ]; then
+            echo "::error::plan run ${PLAN_RUN_ID} belongs to ${run_path}, not the reviewed promotion workflow"
+            exit 1
+          fi
+          if [ "$run_conclusion" != success ]; then
+            echo "::error::plan run ${PLAN_RUN_ID} concluded ${run_conclusion}, not success"
+            exit 1
+          fi
       # Downloaded outside the workspace: the reviewed-commit checkout below
       # cleans the workspace and would otherwise delete the plan.
       - uses: actions/download-artifact@v4
@@ -286,13 +346,22 @@ jobs:
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
-            reviewed.policy.txt reviewed.cost.txt
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
             if [ ! -s "$artefact" ]; then
               echo "::error::reviewed plan is missing required evidence: ${artefact}"
               exit 1
             fi
           done
+
+          # The recorded wake/sleep shape must be one of the two legal tokens.
+          # A plan whose staging_state cannot be named is a plan nobody reviewed
+          # the shape of.
+          reviewed_staging_state="$(cat reviewed.staging-state)"
+          case "$reviewed_staging_state" in
+            awake|asleep) ;;
+            *) echo "::error::reviewed.staging-state is '${reviewed_staging_state}', not awake or asleep"; exit 1 ;;
+          esac
 
           reviewed_profile="$(cat reviewed.profile)"
           if [ "$reviewed_profile" != "$PROFILE" ]; then
