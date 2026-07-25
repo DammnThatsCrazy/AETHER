@@ -52,9 +52,9 @@ class TestCampaignListEndpoint:
         assert len(data) <= 5
 
     def test_create_custom_campaign(self):
-        from services.campaign.routes import create_campaign, CampaignCreateRequest
+        from services.campaign.routes import create_campaign, CampaignCreate
         req = _mock_request()
-        body = CampaignCreateRequest(name="Test Camp", channel="email")
+        body = CampaignCreate(name="Test Camp", channel="email")
         result = _run(create_campaign(req, body))
         assert "data" in result
         data = result["data"]
@@ -62,10 +62,10 @@ class TestCampaignListEndpoint:
         assert data.get("origin") == "custom"
 
     def test_create_campaign_name_required(self):
-        from services.campaign.routes import CampaignCreateRequest
+        from services.campaign.routes import CampaignCreate
         from pydantic import ValidationError
         with pytest.raises((ValidationError, Exception)):
-            CampaignCreateRequest(name="", channel="email")
+            CampaignCreate(name="", channel="email")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -89,9 +89,9 @@ class TestExternalRefsEndpoint:
 class TestAliasEndpoints:
     def test_add_alias_to_campaign(self):
         from services.campaign.routes import create_campaign, add_campaign_alias
-        from services.campaign.routes import CampaignCreateRequest, AliasCreateRequest
+        from services.campaign.routes import CampaignCreate, AliasCreateRequest
         req = _mock_request()
-        camp_result = _run(create_campaign(req, CampaignCreateRequest(name="Alias Test Camp")))
+        camp_result = _run(create_campaign(req, CampaignCreate(name="Alias Test Camp")))
         campaign_id = camp_result["data"]["campaign_id"]
 
         alias_result = _run(add_campaign_alias(
@@ -103,9 +103,9 @@ class TestAliasEndpoints:
 
     def test_list_aliases_empty(self):
         from services.campaign.routes import create_campaign, list_campaign_aliases
-        from services.campaign.routes import CampaignCreateRequest
+        from services.campaign.routes import CampaignCreate
         req = _mock_request()
-        camp_result = _run(create_campaign(req, CampaignCreateRequest(name="No Alias Camp")))
+        camp_result = _run(create_campaign(req, CampaignCreate(name="No Alias Camp")))
         campaign_id = camp_result["data"]["campaign_id"]
 
         result = _run(list_campaign_aliases(campaign_id, req))
@@ -152,12 +152,12 @@ class TestMappingReviewEndpoints:
         assert isinstance(result["data"], list)
 
     def test_resolve_review_missing_campaign_id(self):
-        from services.campaign.routes import resolve_mapping_review, MappingReviewResolveRequest
+        from services.campaign.routes import resolve_mapping_review, ReviewResolve
         from pydantic import ValidationError
         req = _mock_request()
         fake_review_id = str(uuid.uuid4())
         with pytest.raises((ValidationError, Exception)):
-            body = MappingReviewResolveRequest(campaign_id="not-a-uuid")
+            body = ReviewResolve(campaign_id="not-a-uuid")
             _run(resolve_mapping_review(fake_review_id, req, body))
 
     def test_ignore_review_returns_structured(self):

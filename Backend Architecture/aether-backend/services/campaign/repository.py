@@ -435,6 +435,41 @@ class AliasRepository(_PoolBackedRepository):
     ) -> Optional[dict]:
         """Create alias; returns None if an active alias already exists (conflict)."""
         pool = await self._acquire_pool()
+        if pool is None:
+            now = _now()
+            # Mirror the table's partial unique constraint: an alias value may be
+            # reused only once its previous binding has been expired. Returning
+            # None rather than raising matches the SQL path, where a unique
+            # violation is a conflict signal and not an error.
+            for existing in _LOCAL_ALIASES.values():
+                if (
+                    existing["tenant_id"] == tenant_id
+                    and existing["alias_type"] == alias_type
+                    and existing["alias_value_normalized"] == alias_value_normalized
+                    and existing["valid_until"] is None
+                ):
+                    return None
+            record = {
+                "alias_id": uuid.uuid4(),
+                "tenant_id": tenant_id,
+                "campaign_id": campaign_id,
+                "alias_type": alias_type,
+                "alias_value": alias_value,
+                "alias_value_normalized": alias_value_normalized,
+                "platform": platform,
+                "external_account_id": external_account_id,
+                "source": source,
+                "medium": medium,
+                "valid_from": valid_from or now,
+                "valid_until": None,
+                "source_connector_id": source_connector_id,
+                "created_by": created_by,
+                "provenance": provenance or {},
+                "created_at": now,
+                "updated_at": now,
+            }
+            _LOCAL_ALIASES[str(record["alias_id"])] = record
+            return record
         try:
             row = await pool.fetchrow(
                 """
@@ -458,7 +493,20 @@ class AliasRepository(_PoolBackedRepository):
     async def expire(self, tenant_id: str, alias_id: UUID) -> bool:
         pool = await self._acquire_pool()
         if pool is None:
-            return False
+            record = _LOCAL_ALIASES.get(str(alias_id))
+            # Only an active alias owned by this tenant can be expired, matching
+            # the WHERE clause below; returning False for anything else keeps the
+            # "did this actually change something" contract intact.
+            if (
+                record is None
+                or record["tenant_id"] != tenant_id
+                or record["valid_until"] is not None
+            ):
+                return False
+            now = _now()
+            record["valid_until"] = now
+            record["updated_at"] = now
+            return True
         result = await pool.execute(
             "UPDATE campaign_aliases SET valid_until = NOW(), updated_at = NOW() WHERE tenant_id = $1 AND alias_id = $2 AND valid_until IS NULL",
             tenant_id, alias_id,
@@ -468,7 +516,18 @@ class AliasRepository(_PoolBackedRepository):
     async def list_for_campaign(self, tenant_id: str, campaign_id: UUID) -> list[dict]:
         pool = await self._acquire_pool()
         if pool is None:
-            return []
+            # Previously returned [] unconditionally, so an alias written by
+            # create() was invisible to every reader — _LOCAL_ALIASES was
+            # declared but never actually read by anything.
+            return sorted(
+                (
+                    record
+                    for record in _LOCAL_ALIASES.values()
+                    if record["tenant_id"] == tenant_id
+                    and str(record["campaign_id"]) == str(campaign_id)
+                ),
+                key=lambda record: record["created_at"],
+            )
         rows = await pool.fetch(
             "SELECT * FROM campaign_aliases WHERE tenant_id = $1 AND campaign_id = $2 ORDER BY created_at",
             tenant_id, campaign_id,
