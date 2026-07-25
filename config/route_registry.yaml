@@ -515,3 +515,153 @@ kyber_routes:
   # falls back to operator-required, so adding a route can never open it up —
   # but it also stays capability-unclassified, which is a gap, not a state to
   # leave a shipped route in.
+
+  # ── Kyber workforce plane ─────────────────────────────────────────────────
+  #
+  # Four routes are deliberately absent because they establish identity in the
+  # first place and therefore cannot require an established session:
+  #   GET  /v1/kyber/auth/login
+  #   GET  /v1/kyber/auth/callback
+  #   POST /v1/kyber/workforce/invitations/accept
+  #   POST /v1/kyber/auth/bootstrap
+  # Each carries its own fail-closed control (OIDC claim validation against an
+  # existing active principal; a single-use hashed invitation token bound to a
+  # verified Google identity; an env-gated one-time bootstrap that refuses while
+  # any principal exists). They are pinned as exact method+path pairs in
+  # tests/security/test_kyber_boundary.py::_PREAUTH_ROUTES, and a stale entry
+  # there fails the suite.
+
+  # Self-inspection. Reveals only the caller's own identity and session state,
+  # which is why it sits at D0 rather than a fleet level.
+  - route: "GET /v1/kyber/me"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/auth/logout"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 1
+  - route: "GET /v1/kyber/auth/session"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/auth/sessions"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/auth/sessions/{session_id}/revoke"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 1
+
+  # Step-up elevation. Proving possession of the enrolled authenticator is a
+  # self-scoped act; what the elevation then unlocks is gated on its own route.
+  - route: "POST /v1/kyber/auth/step-up/options"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/auth/step-up/verify"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 1
+
+  # Device enrollment is self-scoped; device *approval* is not, and is the
+  # highest-impact non-destructive action in the plane — it is what grants
+  # another machine the ability to hold operator authority.
+  - route: "POST /v1/kyber/devices/registration/options"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/devices/registration/verify"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 1
+  - route: "POST /v1/kyber/devices/proof/challenge"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/devices/proof/verify"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/devices"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/devices/{device_id}/rename"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 1
+  - route: "POST /v1/kyber/devices/{device_id}/approve"
+    capability: kyber.device.approve
+    disclosure: D1
+    action_class: 4
+  - route: "POST /v1/kyber/devices/{device_id}/suspend"
+    capability: kyber.device.approve
+    disclosure: D1
+    action_class: 4
+  - route: "POST /v1/kyber/devices/{device_id}/revoke"
+    capability: kyber.device.approve
+    disclosure: D1
+    action_class: 4
+
+  # Workforce administration. Offboarding and role assignment are class 5: they
+  # are the actions that change who holds authority at all.
+  - route: "GET /v1/kyber/workforce/principals"
+    capability: kyber.workforce.manage
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/workforce/principals/{operator_id}"
+    capability: kyber.workforce.manage
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/workforce/principals/{operator_id}/suspend"
+    capability: kyber.workforce.manage
+    disclosure: D1
+    action_class: 4
+  - route: "POST /v1/kyber/workforce/principals/{operator_id}/offboard"
+    capability: kyber.workforce.manage
+    disclosure: D1
+    action_class: 5
+  - route: "GET /v1/kyber/workforce/invitations"
+    capability: kyber.workforce.manage
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/workforce/invitations"
+    capability: kyber.workforce.manage
+    disclosure: D1
+    action_class: 4
+  - route: "POST /v1/kyber/workforce/invitations/{invitation_id}/revoke"
+    capability: kyber.workforce.manage
+    disclosure: D1
+    action_class: 4
+  - route: "POST /v1/kyber/workforce/principals/{operator_id}/roles"
+    capability: kyber.role.manage
+    disclosure: D1
+    action_class: 5
+  - route: "DELETE /v1/kyber/workforce/roles/{binding_id}"
+    capability: kyber.role.manage
+    disclosure: D1
+    action_class: 5
+
+  # Tenant access scopes. Opening a scope is the act that makes tenant data
+  # reachable at all, so it is declared at the masked tenant level: the scope
+  # request itself never needs more than that, and the disclosure a scoped read
+  # actually receives is re-derived per request as the minimum across the role
+  # ceiling, the capability ceiling and the scope's own level.
+  - route: "POST /v1/kyber/scopes"
+    capability: kyber.tenant.mirror.read_masked
+    disclosure: D2
+    action_class: 1
+  - route: "GET /v1/kyber/scopes/current"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/scopes"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "DELETE /v1/kyber/scopes/{scope_id}"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 1

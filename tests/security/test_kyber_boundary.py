@@ -21,7 +21,47 @@ os.environ.setdefault("AETHER_ENV", "local")
 
 from fastapi.routing import APIRoute  # noqa: E402
 
-_GUARD_NAMES = ("require_kyber_operator", "is_kyber_operator")
+_GUARD_NAMES = (
+    "require_kyber_operator",
+    "is_kyber_operator",
+    # The workforce plane's canonical gate and its helpers. Strictly stronger
+    # than require_kyber_operator: it does everything that gate does (deny every
+    # Aether tenant, fail closed without a session) and additionally enforces
+    # principal status, device approval, session/device binding, capability,
+    # environment, action class, tenant scope, disclosure and step-up.
+    "require_kyber_access",
+    "require_kyber_presence",
+    "resolve_access_context",
+    "require_kyber_capability",
+    "require_kyber_tenant_scope",
+)
+
+# Routes that establish identity in the first place, and therefore cannot
+# require an established operator session without being unreachable. This is
+# NOT a general allowlist: each entry is an exact (method, path) pair, each one
+# is the documented entry point of an authentication flow, and each carries its
+# own fail-closed control listed below. Anything else under /kyber must name a
+# guard from _GUARD_NAMES.
+_PREAUTH_ROUTES: dict[tuple[str, str], str] = {
+    ("GET", "/v1/kyber/auth/login"): (
+        "starts the Google OIDC redirect; issues no authority and sets only a "
+        "single-use state/nonce/PKCE transaction"
+    ),
+    ("GET", "/v1/kyber/auth/callback"): (
+        "completes the OIDC exchange; gated by issuer/audience/state/nonce/"
+        "email_verified/hosted-domain validation and an existing active "
+        "workforce principal — an unknown Google subject is denied"
+    ),
+    ("POST", "/v1/kyber/workforce/invitations/accept"): (
+        "gated by a single-use sha256-hashed invitation token bound to a "
+        "verified Google identity and email"
+    ),
+    ("POST", "/v1/kyber/auth/bootstrap"): (
+        "one-time founder bootstrap; gated by an explicit env flag, a "
+        "configured founder identity, and a hard refusal when any workforce "
+        "principal already exists"
+    ),
+}
 
 
 def iter_api_routes(app):
@@ -35,12 +75,33 @@ def iter_api_routes(app):
                     yield inner
 
 
+#: The one module allowed to mint Kyber authorization dependencies. Matching on
+#: module identity rather than a name substring keeps the check precise: a
+#: helper that merely happens to be called `_require` elsewhere does not count.
+_GATE_MODULE = "services.kyber.access.dependencies"
+
+
+def _is_guard_callable(call) -> bool:
+    """True when a resolved dependency is one of the canonical Kyber gates.
+
+    `require_kyber_access(...)` is a factory, and the dependency it returns is
+    named `require_kyber_access[<capability>]`, so an exact-name match misses
+    it. Accept either the canonical gate module or a name that starts with a
+    known guard.
+    """
+    if call is None:
+        return False
+    if getattr(call, "__module__", "") == _GATE_MODULE:
+        return True
+    name = getattr(call, "__name__", "") or ""
+    return any(name.startswith(guard) for guard in _GUARD_NAMES)
+
+
 def _has_guard_dependency(route: APIRoute) -> bool:
     stack = [route.dependant]
     while stack:
         dependant = stack.pop()
-        call = getattr(dependant, "call", None)
-        if call is not None and getattr(call, "__name__", "") in _GUARD_NAMES:
+        if _is_guard_callable(getattr(dependant, "call", None)):
             return True
         stack.extend(dependant.dependencies or [])
     return False
@@ -59,17 +120,31 @@ def test_every_kyber_route_requires_operator():
 
     unguarded = []
     total = 0
+    seen_preauth: set[tuple[str, str]] = set()
     for route in iter_api_routes(main.app):
         if "/kyber" not in route.path:
             continue
         total += 1
+        methods = sorted(route.methods or [])
+        preauth_keys = {(m, route.path) for m in methods} & set(_PREAUTH_ROUTES)
+        if preauth_keys:
+            seen_preauth |= preauth_keys
+            continue
         if _has_guard_dependency(route) or _has_guard_in_source(route.endpoint):
             continue
         unguarded.append(
-            (route.path, sorted(route.methods or []),
+            (route.path, methods,
              f"{route.endpoint.__module__}.{route.endpoint.__name__}")
         )
     assert total > 0, "no kyber routes found — enumeration is broken"
+
+    # A pre-auth entry that no longer corresponds to a mounted route is stale
+    # permission. Fail rather than let the exemption outlive its route.
+    stale = set(_PREAUTH_ROUTES) - seen_preauth
+    assert not stale, (
+        f"pre-authentication exemption(s) no longer match any mounted route: "
+        f"{sorted(stale)} — remove them from _PREAUTH_ROUTES"
+    )
     assert not unguarded, (
         f"{len(unguarded)} kyber route(s) lack require_kyber_operator — a "
         f"tenant admin could reach internal operator surfaces:\n"
