@@ -16,6 +16,17 @@
 # Every assertion below must be able to fail. Cardinality assertions read the
 # planned module graph (`length(module.x)`), not the locals that produced it,
 # so a local that stops being wired into `count` is caught rather than passed.
+#
+# WHAT THIS FILE DOES NOT PROVE — stated because it used to claim otherwise.
+# A run block's `variables {}` are inputs, so asserting `var.aurora_max_acu == 4`
+# inside the block that sets `aurora_max_acu = 4` cannot fail, and the error
+# message that used to blame `profiles/<profile>.tfvars` was false: `terraform
+# test` reads no tfvars file at all, so editing one changes nothing here. Those
+# clauses are gone. What survives is what a plan can actually decide: values
+# derived from config/runtime_deployment.yaml (which profiles.tf really does
+# read), the profile derivations in profiles.tf, and the shape of the planned
+# module graph. Verifying the CONTENT of profiles/*.tfvars needs a checker that
+# parses those files; it does not belong to, and cannot live in, a mocked plan.
 
 mock_provider "aws" {
   mock_data "aws_availability_zones" {
@@ -55,6 +66,74 @@ mock_provider "aws" {
       dns_suffix = "amazonaws.com"
     }
   }
+
+  # ARNs generated for computed attributes are random 8-character strings, and
+  # the provider schema validates any attribute that must be an ARN before the
+  # API is reached. Plan-only runs never notice, but the `command = apply` run
+  # at the bottom of this file does, so every ARN one resource here consumes
+  # from another is given a syntactically real placeholder. These are shapes,
+  # not identities: several resources of the same type share one value, which
+  # is harmless because nothing asserts on an ARN.
+  mock_resource "aws_kms_key" {
+    defaults = {
+      arn = "arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-000000000000"
+    }
+  }
+
+  mock_resource "aws_iam_role" {
+    defaults = {
+      arn = "arn:aws:iam::111122223333:role/aether-ci-mock"
+    }
+  }
+
+  mock_resource "aws_sns_topic" {
+    defaults = {
+      arn = "arn:aws:sns:us-east-1:111122223333:aether-ci-mock"
+    }
+  }
+
+  mock_resource "aws_cloudwatch_log_group" {
+    defaults = {
+      arn = "arn:aws:logs:us-east-1:111122223333:log-group:/aether/ci-mock"
+    }
+  }
+
+  mock_resource "aws_lb" {
+    defaults = {
+      arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/aether-ci-mock/0000000000000000"
+    }
+  }
+
+  mock_resource "aws_lb_target_group" {
+    defaults = {
+      arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/aether-ci-mock/0000000000000000"
+    }
+  }
+
+  mock_resource "aws_lambda_function" {
+    defaults = {
+      arn = "arn:aws:lambda:us-east-1:111122223333:function:aether-ci-mock"
+    }
+  }
+
+  mock_resource "aws_cloudwatch_event_rule" {
+    defaults = {
+      arn = "arn:aws:events:us-east-1:111122223333:rule/aether-ci-mock"
+    }
+  }
+
+  # manage_master_user_password puts the generated credential in a nested
+  # computed block, and modules/aurora reads master_user_secret[0].secret_arn.
+  # A generated mock leaves that list empty, so the element is declared here.
+  mock_resource "aws_rds_cluster" {
+    defaults = {
+      master_user_secret = [{
+        kms_key_id    = "arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-000000000000"
+        secret_arn    = "arn:aws:secretsmanager:us-east-1:111122223333:secret:aether-ci-mock-000000"
+        secret_status = "active"
+      }]
+    }
+  }
 }
 
 mock_provider "random" {}
@@ -67,16 +146,13 @@ mock_provider "archive" {}
 # ACM/Auth0 values. Declaring them in the test file keeps `terraform test`
 # runnable on its own, with no -var-file and no CI-generated tfvars.
 variables {
-  backend_image_digest           = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-  ml_image_digest                = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-  acm_certificate_arn            = "arn:aws:acm:us-east-1:111122223333:certificate/00000000-0000-0000-0000-000000000000"
-  domain_name                    = "api.ci.aether.invalid"
-  alert_email                    = "terraform-ci@aether.invalid"
-  auth0_domain                   = "ci.aether.invalid"
-  auth0_management_client_id     = "terraform-ci"
-  auth0_management_client_secret = "not-a-production-secret"
-  aether_app_url                 = "https://app.ci.aether.invalid"
-  kyber_app_url                  = "https://kyber.ci.aether.invalid"
+  backend_image_digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  ml_image_digest      = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  acm_certificate_arn  = "arn:aws:acm:us-east-1:111122223333:certificate/00000000-0000-0000-0000-000000000000"
+  domain_name          = "api.ci.aether.invalid"
+  alert_email          = "terraform-ci@aether.invalid"
+  aether_app_url       = "https://app.ci.aether.invalid"
+  kyber_app_url        = "https://kyber.ci.aether.invalid"
 }
 
 # ---------------------------------------------------------------------------
@@ -95,26 +171,54 @@ run "staging_profile_plan" {
     log_retention_days  = 3
   }
 
-  assert {
-    condition = contains(
-      ["staging", "production-lean", "production-scale", "enterprise-isolated"],
-      var.deployment_profile,
-    )
-    error_message = "The selected deployment profile is not deployable."
-  }
-
-  # Reviewed capacity profile, fused with the egress posture profiles.tf must
-  # derive for a cost-capped profile that pins no explicit override.
+  # The egress posture profiles.tf must derive for a cost-capped profile that
+  # pins no explicit override. (var.deployment_profile's own membership in the
+  # deployable set is enforced by its validation block in variables.tf, not by
+  # re-asserting an input against itself here.)
   assert {
     condition = alltrue([
-      var.aurora_min_acu == 0,
-      var.aurora_max_acu == 2,
-      var.log_retention_days == 3,
       local.network_egress_mode == "public_ip",
       local.nat_mode == "none",
       local.assign_public_ip,
     ])
-    error_message = "staging no longer matches the reviewed capacity/egress profile in profiles/staging.tfvars."
+    error_message = "staging no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
+  }
+
+  # TASK PLACEMENT — the first-apply blocker this pins.
+  #
+  # public_ip mode provisions no NAT Gateway, so aws_route.private_nat has
+  # count 0 and the private route tables carry no 0.0.0.0/0 route whatsoever.
+  # A task ENI placed there cannot reach ECR, Secrets Manager or CloudWatch —
+  # assign_public_ip does not help, because egress follows the SUBNET's route
+  # table — so the very first apply ends in CannotPullContainerError and a
+  # circuit-breaker rollback. Tasks must therefore be in the public tier, which
+  # has the IGW default route.
+  #
+  # The assertion reads module.ecs's own placement keys, i.e. the map the three
+  # network_configuration blocks index, not the root local that produced it.
+  # Subnet IDs are unknown until apply and can pin nothing; the "<tier>/<az>"
+  # keys are configuration-derived and known at plan.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.task_subnet_keys) ==
+      "public/us-east-1a,public/us-east-1b,public/us-east-1c",
+      !module.vpc.private_subnets_have_internet_route,
+      local.ecs_task_subnet_tier == "public",
+    ])
+    error_message = "staging places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
+  }
+
+  # The security invariant that must hold BECAUSE of the placement above: a
+  # public IP on the task ENI must buy egress and nothing else. The ECS
+  # security group admits 8000/8080 from the ALB security group only, and no
+  # CIDR ingress of any kind.
+  assert {
+    condition = alltrue([
+      join(",", sort([for rule in module.vpc.ecs_sg_ingress : tostring(rule.port)])) == "8000,8080",
+      alltrue([for rule in module.vpc.ecs_sg_ingress : length(rule.cidr_blocks) == 0]),
+      alltrue([for rule in module.vpc.ecs_sg_ingress : rule.from_alb]),
+    ])
+    error_message = "The ECS task security group admits a CIDR or a port the ALB does not front; with tasks on public IPs that publishes an application port to the internet."
   }
 
   assert {
@@ -284,14 +388,33 @@ run "production_lean_profile_plan" {
 
   assert {
     condition = alltrue([
-      var.aurora_min_acu == 0.5,
-      var.aurora_max_acu == 4,
-      var.log_retention_days == 3,
       local.network_egress_mode == "public_ip",
       local.nat_mode == "none",
       local.assign_public_ip,
     ])
-    error_message = "production-lean no longer matches the reviewed capacity/egress profile in profiles/production-lean.tfvars."
+    error_message = "production-lean no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
+  }
+
+  # Task placement, same reasoning as the staging run: no NAT means the private
+  # route tables have no default route at all, so the public tier is the only
+  # one a task can pull an image from.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.task_subnet_keys) ==
+      "public/us-east-1a,public/us-east-1b,public/us-east-1c",
+      !module.vpc.private_subnets_have_internet_route,
+      local.ecs_task_subnet_tier == "public",
+    ])
+    error_message = "production-lean places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
+  }
+
+  assert {
+    condition = alltrue([
+      join(",", sort([for rule in module.vpc.ecs_sg_ingress : tostring(rule.port)])) == "8000,8080",
+      alltrue([for rule in module.vpc.ecs_sg_ingress : length(rule.cidr_blocks) == 0]),
+      alltrue([for rule in module.vpc.ecs_sg_ingress : rule.from_alb]),
+    ])
+    error_message = "The ECS task security group admits a CIDR or a port the ALB does not front; with tasks on public IPs that publishes an application port to the internet."
   }
 
   # Every forbidden-resource toggle false by derivation. Retained from the
@@ -432,6 +555,25 @@ run "production_lean_profile_plan" {
     error_message = "The lean-worker task does not bind one queue per hosted role; a consolidated task with one queue URL leaves seven roles consuming nothing."
   }
 
+  # DEAD-LETTER BINDING. modules/sqs has always created one DLQ per consumer
+  # role — they are the redrive targets of the role queues — but never
+  # published them, so no task was told where to put a poison message. The
+  # runtime's fallback was to re-publish it onto the queue it had just been
+  # read from, where it was re-received, matched no handler and was deleted:
+  # total silent loss. Every role that owns a queue must therefore also be
+  # handed that queue's DLQ, and the two sets must be identical — a role with a
+  # queue and no dead-letter destination is the exact configuration that loses
+  # events.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.runtime_service_dlq_roles["lean-worker"]) ==
+      join(",", module.ecs.runtime_service_queue_roles["lean-worker"]),
+      join(",", module.ecs.runtime_service_dlq_roles["lean-worker"]) ==
+      "graph-writer,identity-worker,measurement-worker,stream-worker",
+    ])
+    error_message = "The lean-worker task is handed a role queue with no matching dead-letter queue; a poison message on that role has nowhere to go."
+  }
+
   # No Spot anywhere in a consolidated profile: the one worker task hosts
   # outbox-relay, so its surge capacity carries the at-least-once delivery
   # path, and the api service is never interruptible in any profile.
@@ -489,14 +631,25 @@ run "production_scale_profile_plan" {
 
   assert {
     condition = alltrue([
-      var.aurora_min_acu == 1,
-      var.aurora_max_acu == 8,
-      var.log_retention_days == 7,
       local.network_egress_mode == "single_nat",
       local.nat_mode == "single",
       !local.assign_public_ip,
     ])
-    error_message = "production-scale no longer matches the reviewed capacity/egress profile in profiles/production-scale.tfvars."
+    error_message = "production-scale no longer derives the single-NAT egress posture from profiles.tf."
+  }
+
+  # The mirror image of the cost-capped placement: this profile pays for a NAT
+  # Gateway, so the private route tables really do carry a default route and
+  # tasks stay private with no public IP. A regression that moved every profile
+  # to the public tier fails here.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.task_subnet_keys) ==
+      "private/us-east-1a,private/us-east-1b,private/us-east-1c",
+      module.vpc.private_subnets_have_internet_route,
+      local.ecs_task_subnet_tier == "private",
+    ])
+    error_message = "production-scale no longer keeps ECS tasks in the private subnets behind its NAT Gateway."
   }
 
   assert {
@@ -600,6 +753,16 @@ run "production_scale_profile_plan" {
     ])
     error_message = "The production-scale plan does not bind each dedicated service to its own role queue at the reviewed api capacity."
   }
+
+  # Same dead-letter invariant on the dedicated shape: exactly the role the
+  # service is named after, and nothing for a service that owns no queue.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.runtime_service_dlq_roles["stream-worker"]) == "stream-worker",
+      length(module.ecs.runtime_service_dlq_roles["maintenance"]) == 0,
+    ])
+    error_message = "A dedicated production-scale service is not bound to its own dead-letter queue."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -621,15 +784,21 @@ run "enterprise_isolated_profile_plan" {
 
   assert {
     condition = alltrue([
-      var.aurora_min_acu == 2,
-      var.aurora_max_acu == 16,
-      var.db_multi_az == true,
-      var.log_retention_days == 30,
       local.network_egress_mode == "ha_nat",
       local.nat_mode == "ha",
       !local.assign_public_ip,
     ])
-    error_message = "enterprise-isolated no longer matches the reviewed capacity/egress profile in profiles/enterprise-isolated.tfvars."
+    error_message = "enterprise-isolated no longer derives the HA-NAT egress posture from profiles.tf."
+  }
+
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.task_subnet_keys) ==
+      "private/us-east-1a,private/us-east-1b,private/us-east-1c",
+      module.vpc.private_subnets_have_internet_route,
+      local.ecs_task_subnet_tier == "private",
+    ])
+    error_message = "enterprise-isolated no longer keeps ECS tasks in the private subnets behind its per-AZ NAT Gateways."
   }
 
   assert {
@@ -701,4 +870,126 @@ run "enterprise_isolated_profile_plan" {
     ])
     error_message = "The enterprise-isolated plan places a service on FARGATE_SPOT; this profile pays for non-interruptible capacity at every tier."
   }
+}
+
+# ---------------------------------------------------------------------------
+# staging sleep against an APPLIED environment.
+#
+# Everything above plans against empty state, so every ECS service is a CREATE
+# and `desired_count` is always whatever the configuration says. That is why
+# the asleep run near the top of this file passed for months while
+# `staging_state = "asleep"` did not actually stop the API: the backend service
+# carried `lifecycle { ignore_changes = [desired_count] }`, which suppresses
+# the attribute only AFTER create — precisely the case a create-only plan can
+# never exercise.
+#
+# These two runs close that hole. The first APPLIES the awake shape (mocked, so
+# no infrastructure is touched) and leaves state behind; the second plans the
+# asleep shape against that state, which is an UPDATE. With desired_count
+# ignored the planned value is the prior 1 and this fails; with it managed the
+# plan really does say 0.
+#
+# They are last in the file on purpose: run blocks share one state, so an apply
+# placed earlier would turn every later plan into a diff against staging.
+# ---------------------------------------------------------------------------
+
+run "staging_awake_applied" {
+  command = apply
+
+
+  variables {
+    deployment_profile  = "staging"
+    environment         = "staging"
+    staging_state       = "awake"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    log_retention_days  = 3
+  }
+
+  # The baseline this sleeps FROM. Without it a multiplier stuck at 0 would
+  # satisfy the sleep assertions below without ever having run anything.
+  assert {
+    condition = alltrue([
+      module.ecs.backend_service_desired_count == 1,
+      module.ecs.runtime_service_desired_counts["lean-worker"] == 1,
+      module.ecs.backend_autoscaling_bounds.min == 1,
+    ])
+    error_message = "The applied awake staging environment is not at its reviewed baseline capacity."
+  }
+}
+
+run "staging_sleep_plan_against_applied" {
+  command = plan
+
+
+  variables {
+    deployment_profile  = "staging"
+    environment         = "staging"
+    staging_state       = "asleep"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    log_retention_days  = 3
+  }
+
+  # desired_count must be a MANAGED attribute of the applied api service. This
+  # is the clause an `ignore_changes = [desired_count]` regression fails, and
+  # it is also exactly what .github/workflows/staging-lifecycle.yml reads out
+  # of planned_values before it will apply a sleep.
+  assert {
+    condition     = module.ecs.backend_service_desired_count == 0
+    error_message = "The asleep plan leaves the applied api service above zero tasks: desired_count is not reaching the service, so staging never sleeps and the api task runs 24/7."
+  }
+
+  # The workers must reach zero the same way, and the floor must collapse or
+  # Application Auto Scaling clamps everything back up within a cooldown.
+  assert {
+    condition = alltrue([
+      module.ecs.runtime_service_desired_counts["lean-worker"] == 0,
+      module.ecs.backend_autoscaling_bounds.min == 0,
+      local.runtime_service_settings["lean-worker"].autoscaling.min_capacity == 0,
+    ])
+    error_message = "The asleep plan leaves a worker running or an autoscaling floor above zero."
+  }
+
+  # Sleeping is a capacity change, not a shape change: the applied topology is
+  # untouched and the reviewed ceiling still records the envelope to wake into.
+  assert {
+    condition = alltrue([
+      join(",", keys(local.runtime_service_settings)) == "lean-worker",
+      module.ecs.backend_autoscaling_bounds.max == 2,
+      join(",", module.ecs.task_subnet_keys) ==
+      "public/us-east-1a,public/us-east-1b,public/us-east-1c",
+    ])
+    error_message = "Sleeping staging changed its topology instead of only its capacity."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# vpc_endpoints is a declared-but-unimplemented egress mode and must fail closed.
+#
+# modules/vpc_endpoints exists but the root never instantiates it, and the mode
+# provisions no NAT and assigns no public IP. Left permissive it would place ECS
+# tasks in private subnets with no route anywhere — ECR pulls fail with
+# CannotPullContainerError and the deployment circuit-breaker rolls back. That is
+# the exact defect the egress work was written to fix, so selecting the mode is a
+# plan-time error rather than a silent degradation to `none`.
+#
+# This run block is the regression guard: delete the validation in variables.tf
+# and this fails. Remove it only when the module is genuinely wired and priced.
+# ---------------------------------------------------------------------------
+run "vpc_endpoints_egress_mode_is_rejected" {
+  command = plan
+
+  variables {
+    deployment_profile  = "production-lean"
+    environment         = "production"
+    network_egress_mode = "vpc_endpoints"
+    aurora_min_acu      = 0.5
+    aurora_max_acu      = 4
+    log_retention_days  = 3
+  }
+
+  expect_failures = [var.network_egress_mode]
 }

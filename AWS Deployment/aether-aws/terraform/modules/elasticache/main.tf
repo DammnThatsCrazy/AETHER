@@ -24,6 +24,21 @@ resource "aws_kms_key" "redis" {
   tags = {
     Name = "${var.project}-${var.environment}-redis-kms"
   }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
+  }
 }
 
 resource "aws_kms_alias" "redis" {
@@ -49,8 +64,8 @@ resource "aws_elasticache_subnet_group" "this" {
 # --------------------------------------------------------------------------
 
 resource "aws_elasticache_parameter_group" "this" {
-  name   = "${lower(var.project)}-${var.environment}-redis7"
-  family = "redis7"
+  name        = "${lower(var.project)}-${var.environment}-redis7"
+  family      = "redis7"
   description = "${var.project} ${var.environment} Redis 7 parameters"
 
   parameter {
@@ -98,6 +113,21 @@ resource "aws_elasticache_replication_group" "this" {
   tags = {
     Name = "${var.project}-${var.environment}-redis"
   }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -112,6 +142,21 @@ resource "aws_secretsmanager_secret" "redis_auth" {
 
   tags = {
     Name = "${var.project}-${var.environment}-redis-auth"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
   }
 }
 

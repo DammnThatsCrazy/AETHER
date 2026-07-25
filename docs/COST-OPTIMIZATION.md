@@ -95,7 +95,7 @@ representative, and it is checked against the module graph the plan tests
 assert, but "representative" is not "observed". Every figure below inherits
 that caveat.
 
-### Fixed baseline — USD 184.13/month
+### Fixed baseline — USD 187.13/month
 
 | Line item | Terraform address | Sizing | USD/mo |
 |---|---|---|---|
@@ -103,9 +103,10 @@ that caveat.
 | Fargate — `lean-worker` | `module.ecs.aws_ecs_service.runtime_role["lean-worker"]` | 2 vCPU / 8 GiB × 1 task | 85.06 |
 | Aurora Serverless v2 floor | `module.aurora.aws_rds_cluster.this` | 0.5 ACU × 730 h @ $0.12/ACU-h | 43.80 |
 | Application Load Balancer | `module.alb.aws_lb.this` | 1 ALB × 730 h @ $0.0225/h | 16.43 |
-| KMS customer-managed keys | `module.aurora`, `module.secrets` | 2 keys @ $1.00/key-mo | 2.00 |
+| KMS customer-managed keys | `module.aurora`, `module.secrets`, `module.ecr` | 3 keys @ $1.00/key-mo | 3.00 |
+| ECR repositories | `module.ecr` | 4 repos, 10 GiB storage @ $0.10/GiB-mo | 2.00 |
 | Secrets Manager secrets | `module.secrets` | 2 secrets @ $0.40/secret-mo | 0.80 |
-| **Total fixed** | | | **184.13** |
+| **Total fixed** | | | **187.13** |
 
 Priced at zero and accounted for explicitly rather than omitted: the
 `db.serverless` Aurora writer instance (ACU consumption bills on the cluster),
@@ -115,17 +116,17 @@ allowances of 10 alarms and 3 dashboards), and every entry in
 adding four more alarms starts billing at USD 0.10 each, so an observability
 change is also a cost change.
 
-Fargate is **121.10** of the 184.13 — 66% of the fixed baseline. Aurora's floor
+Fargate is **121.10** of the 187.13 — 66% of the fixed baseline. Aurora's floor
 is 24%. Those two lines are the entire optimisation surface; everything else
-sums to 19.23.
+sums to 22.23.
 
 ### Usage-variable band
 
 | Scenario | Variable USD/mo | Total with fixed |
 |---|---|---|
-| low — single quiet pilot tenant | 15.25 | 199.38 |
-| **expected — founding tenant at planned traffic** | **107.22** | **291.35** |
-| high — 10× surprise | 955.40 | 1139.53 |
+| low — single quiet pilot tenant | 15.25 | 202.38 |
+| **expected — founding tenant at planned traffic** | **107.22** | **294.35** |
+| high — 10× surprise | 955.40 | 1142.53 |
 
 Largest expected variable contributors: CloudWatch Logs ingestion across 3 log
 groups (33.60), DynamoDB on-demand (23.75), ALB LCU (17.52), internet egress
@@ -138,9 +139,9 @@ a chatty debug logger can out-cost the load balancer. `log_retention_days` is
 
 ## The $150 target deviation — accepted
 
-`production-lean` sits at **USD 184.13/month fixed, which is USD 34.13 over the
-USD 150 target and USD 15.87 under the USD 200 hard ceiling.** The gate emits
-`⚠ fixed cost USD 184.13/mo exceeds the target USD 150.00/mo (under the 200.00
+`production-lean` sits at **USD 187.13/month fixed, which is USD 37.13 over the
+USD 150 target and USD 12.87 under the USD 200 hard ceiling.** The gate emits
+`⚠ fixed cost USD 187.13/mo exceeds the target USD 150.00/mo (under the 200.00
 ceiling)` and passes.
 
 This deviation has been reviewed and **accepted**. The sizing is not being
@@ -148,13 +149,13 @@ changed and the target is not being moved.
 
 | Field | Value |
 |---|---|
-| **Deviation** | Fixed baseline USD 184.13/mo against a USD 150.00/mo design target. Overage USD 34.13/mo (22.8%). |
+| **Deviation** | Fixed baseline USD 187.13/mo against a USD 150.00/mo design target. Overage USD 37.13/mo (24.8%). |
 | **Reason** | Both levers that would close the gap trade a bounded, known monthly cost for an unbounded, unmeasured availability risk on a live founding tenant. See the two rejected levers below. |
-| **Cost impact** | +USD 34.13/month against target; +USD 409.56/year. Inside the USD 200 hard ceiling with USD 15.87/month of headroom. No `config/cost_exceptions.yaml` entry exists or is required, because the ceiling is not breached — the exception mechanism exists only for ceiling overages. |
+| **Cost impact** | +USD 37.13/month against target; +USD 409.56/year. Inside the USD 200 hard ceiling with USD 12.87/month of headroom. No `config/cost_exceptions.yaml` entry exists or is required, because the ceiling is not breached — the exception mechanism exists only for ceiling overages. |
 | **Security impact** | None. No control, alarm, encryption key, secret, isolation boundary or retention setting is altered by this deviation. The shape policy is unaffected: the plan still provisions zero MSK, ElastiCache, Neptune, ClickHouse, dedicated-ML, frontend-ECS, legacy-RDS, NAT Gateway and Elastic IP resources. |
 | **Operational impact** | Positive relative to the alternatives. Keeping the Aurora floor warm removes a cold-start class of latency incident; keeping `lean-worker` at 2 vCPU / 8 GiB keeps memory headroom on the one task that hosts all eight worker roles. The USD 15.87/month remaining headroom is thin: any new always-on fixed resource must be costed against it before it is added. |
 | **Approved by** | `platform@aether` — repository owner decision, recorded 2026-07-25. |
-| **Review date** | **2026-10-23**, or immediately on the first `COND-COST-RECONCILED` reconciliation of projected against observed spend, whichever is sooner. The deviation cannot be honestly re-argued until a real invoice exists, because the 184.13 figure is a modelled over-estimate (see *Estimation method*). |
+| **Review date** | **2026-10-23**, or immediately on the first `COND-COST-RECONCILED` reconciliation of projected against observed spend, whichever is sooner. The deviation cannot be honestly re-argued until a real invoice exists, because the 187.13 figure is a modelled over-estimate (see *Estimation method*). |
 
 ### Rejected lever 1 — drop the Aurora floor to 0 ACU
 
@@ -197,7 +198,7 @@ This lever was considered and declined. It is not an open action item.
 
 ### What is *not* being claimed
 
-The USD 184.13 figure is a modelled projection from a pinned price book against
+The USD 187.13 figure is a modelled projection from a pinned price book against
 a plan inventory. It is not an observed bill. No AWS invoice for this profile
 exists. The `production-lean` readiness scorecard reports
 `LEAN-COST-CEILING` as built-but-unproven for exactly this reason, and
@@ -331,7 +332,7 @@ The model does **not** account for:
 Every deliberate approximation carries `approximate: true` and an inline note.
 **Over-estimating is the safe direction for a ceiling**, and every unmodelled
 factor above pushes the same way, so the real bill should come in at or below
-USD 184.13 — but that is an argument, not a measurement.
+USD 187.13 — but that is an argument, not a measurement.
 
 This is an order-of-magnitude release gate. It answers "is this roughly a $120
 plan or roughly a $900 plan", which is the only question that matters when the

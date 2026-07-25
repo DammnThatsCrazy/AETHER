@@ -24,7 +24,18 @@ WHAT IT ENFORCES
      `hard_monthly_spend`), unless an active, unexpired, non-blanket entry in
      config/cost_exceptions.yaml grants exactly enough headroom.
   4. Usage-variable cost is reported as a low/expected/high band so the fixed
-     baseline is never mistaken for the whole bill.
+     baseline is never mistaken for the whole bill. A profile with its own
+     entry under `profile_usage_scenarios` is scored against that band instead
+     of the founding-tenant one: charging a month of production traffic to a
+     forty-hour-a-month rehearsal environment made staging's ceiling
+     unsatisfiable awake AND asleep, and a budget no plan can meet measures
+     nothing. A wake/sleep profile gated on total spend with no entry of its
+     own is a usage error rather than a silent fallback.
+  5. A usage-variable type configured into a standing commitment is re-classed
+     and priced as fixed via the price book's `fixed_when` (a PROVISIONED
+     DynamoDB table is the classic one), or it fails closed. Detecting the
+     hiding place and then warning about it is worse than not detecting it:
+     a warning never touches the exit code, so the line reads as handled.
 
 PRECISION
   The price book is an order-of-magnitude release gate, not a billing forecast.
@@ -238,6 +249,32 @@ def price_fixed_resource(
             "desired_count": count, "hourly_per_task": _round(hourly),
         }
 
+    if model == "capacity_units":
+        # Reserved capacity: a quantity in the plan multiplied by a rate, on the
+        # clock. Every declared unit must be present in the plan values -- a
+        # provisioned table whose capacity the plan does not carry is
+        # UNPRICEABLE, never free, because the whole point of re-classing it is
+        # that its cost is fixed and material.
+        total = 0.0
+        units: dict[str, Any] = {}
+        for attribute, spec in (entry.get("units") or {}).items():
+            quantity = _num(values.get(attribute))
+            if quantity is None:
+                raise UnpricedResource(
+                    f"{address}: {resource.get('type')} is billed as "
+                    f"{entry.get('value')} but carries no {attribute!r} in its "
+                    f"plan values, so its reserved capacity cannot be priced"
+                )
+            rate = _num(spec.get("unit_price"))
+            if rate is None:
+                raise UnpricedResource(
+                    f"{address}: price book has no unit_price for {attribute!r}")
+            total += quantity * rate * multiplier
+            units[attribute] = {"quantity": quantity, "unit_price": rate}
+        return total, {"pricing_model": model, "reclassified_from": "usage_variable",
+                       "trigger": f"{entry.get('attribute')}={entry.get('value')}",
+                       "units": units}
+
     if model == "aurora_serverless_v2":
         # Only the configured minimum ACU is a fixed floor. Burst above it is
         # usage-variable. min_capacity 0 (scale-to-zero) legitimately costs $0
@@ -432,10 +469,27 @@ def validate_exceptions(
 # The model
 # ---------------------------------------------------------------------------
 
+def usage_scenarios_for(price_book: dict[str, Any],
+                        profile: str | None) -> tuple[dict[str, Any], str]:
+    """The usage scenarios that apply to a profile, and where they came from.
+
+    `usage_scenarios` is calibrated for a founding tenant in continuous
+    production. Charging that traffic to a forty-hour-a-month rehearsal
+    environment is not conservatism, it is a category error: it made the staging
+    budget unsatisfiable awake AND asleep, so the ceiling measured nothing.
+    A profile with its own entry under `profile_usage_scenarios` uses it whole.
+    """
+    per_profile = (price_book.get("profile_usage_scenarios") or {})
+    if profile and isinstance(per_profile.get(profile), dict):
+        return per_profile[profile], f"profile_usage_scenarios.{profile}"
+    return (price_book.get("usage_scenarios") or {}), "usage_scenarios"
+
+
 def build_cost_model(
     inventory: dict[str, Any],
     price_book: dict[str, Any],
     hours: float,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     """Price an inventory. Returns fixed/variable breakdowns plus unpriced items.
 
@@ -444,7 +498,7 @@ def build_cost_model(
     fixed_book = price_book.get("fixed_resources") or {}
     variable_book = price_book.get("usage_variable_resources") or {}
     zero_patterns = list(price_book.get("zero_cost_types") or [])
-    scenarios = price_book.get("usage_scenarios") or {}
+    scenarios, scenario_source = usage_scenarios_for(price_book, profile)
 
     fixed_items: list[dict[str, Any]] = []
     variable_items: list[dict[str, Any]] = []
@@ -493,19 +547,63 @@ def build_cost_model(
 
         elif res_type in variable_book:
             entry = variable_book[res_type]
+            switch = entry.get("fixed_when") or {}
+            triggered = bool(switch) and str(
+                (resource.get("values") or {}).get(switch.get("attribute"))
+            ) == str(switch.get("value"))
+
+            if triggered:
+                # A usage-variable type configured into a standing commitment --
+                # a PROVISIONED DynamoDB table is the classic one. It is priced
+                # as the fixed cost it is, or it fails closed. Detecting it and
+                # then warning is worse than not detecting it, because a warning
+                # never touches the exit code and the line reads as handled.
+                try:
+                    amount, detail = price_fixed_resource(resource, switch, hours)
+                except UnpricedResource as exc:
+                    unpriced.append({
+                        "address": address, "type": res_type,
+                        "cost_class": "fixed", "monthly_usd": None,
+                        "reason": str(exc),
+                    })
+                    continue
+                item = {
+                    "address": address, "type": res_type, "cost_class": "fixed",
+                    "accrual": switch.get("accrual", "hourly"),
+                    "monthly_usd": _round(amount),
+                    "approximate": bool(switch.get("approximate", False)),
+                    "detail": detail,
+                }
+                fixed_items.append(item)
+                by_type.setdefault(res_type, []).append(item)
+                warnings.append(
+                    f"{address}: {switch.get('attribute')}="
+                    f"{switch.get('value')} makes this a FIXED cost of "
+                    f"${_round(amount):.2f}/mo; it is priced into the baseline "
+                    f"and gated, not waved through"
+                )
+                # Drivers that still bill by usage in this mode (storage) stay
+                # in the variable band rather than being lost with the re-class.
+                keep = [str(d) for d in (switch.get("variable_drivers") or [])]
+                residual = {
+                    "drivers": {k: v for k, v in (entry.get("drivers") or {}).items()
+                                if k in keep}
+                }
+                if residual["drivers"]:
+                    band = price_variable_entry(residual, scenarios)
+                    variable_items.append({
+                        "address": address, "type": res_type,
+                        "cost_class": "usage_variable",
+                        "scenarios": {k: _round(v) for k, v in band.items()},
+                    })
+                continue
+
             band = price_variable_entry(entry, scenarios)
             variable_items.append({
                 "address": address, "type": res_type,
                 "cost_class": "usage_variable",
                 "scenarios": {k: _round(v) for k, v in band.items()},
             })
-            # A provisioned-capacity DynamoDB table is a fixed cost wearing a
-            # usage-variable label. Surface it rather than quietly mis-classing.
-            if (resource.get("values") or {}).get("billing_mode") == "PROVISIONED":
-                warnings.append(
-                    f"{address}: billing_mode=PROVISIONED converts this table's "
-                    f"cost to fixed; the price book models on-demand only"
-                )
 
         elif _is_zero_cost(res_type, zero_patterns):
             zero_items.append({"address": address, "type": res_type, "cost_class": "zero"})
@@ -574,6 +672,7 @@ def build_cost_model(
         "fixed_monthly_usd": fixed_total,
         "variable_monthly_usd": variable_totals,
         "top_contributors": contributors,
+        "usage_scenario_source": scenario_source,
     }
 
 
@@ -632,10 +731,13 @@ def render_markdown(report: dict[str, Any], price_book: dict[str, Any]) -> str:
     add("")
     add("> **These are gate figures, not a bill.** The price book is an "
         "order-of-magnitude model: on-demand list prices, first (most "
-        "expensive) volume tier, no free tier, no Savings Plans or Reserved "
-        "Instances, no cross-AZ transfer. It over-estimates a new account, "
-        "which is the safe direction for a ceiling. It is accurate enough to "
-        "tell a compliant plan from a non-compliant one and nothing more.")
+        "expensive) volume tier, no 12-month new-account free tier (the only "
+        "allowances modelled are the always-free ones declared explicitly as "
+        "`free_allowance` — 10 CloudWatch alarms, 3 dashboards), no Savings "
+        "Plans or Reserved Instances, no cross-AZ transfer. It over-estimates "
+        "a new account, which is the safe direction for a ceiling. It is "
+        "accurate enough to tell a compliant plan from a non-compliant one and "
+        "nothing more.")
     add("")
 
     add("## Budget")
@@ -659,6 +761,9 @@ def render_markdown(report: dict[str, Any], price_book: dict[str, Any]) -> str:
     add("")
     add("Traffic-driven cost. Not part of the pass/fail comparison in `fixed` "
         "mode — the plan cannot determine it — but it is real money.")
+    add("")
+    add(f"Scenario quantities read from `{model['usage_scenario_source']}` in "
+        f"`{PRICE_BOOK_YAML}`.")
     add("")
     add("| Scenario | Variable | Total with fixed |")
     add("| --- | --- | --- |")
@@ -803,6 +908,17 @@ def run(argv: list[str] | None = None) -> int:
         return EXIT_USAGE
     r.ok(f"inventory schema_version {schema} accepted")
 
+    # Scoring a fixture is a legitimate offline exercise of this gate; reporting
+    # the result as though it described a deployment is not. Say which one this
+    # run is, in the output and in the artifact.
+    if inventory.get("synthetic_input"):
+        r.warn(
+            f"this inventory was generated from "
+            f"{inventory.get('generated_from')!r}, a "
+            f"{inventory['synthetic_input']} source: the figures below price a "
+            f"test fixture and are not evidence about any deployment"
+        )
+
     inv_profile = inventory.get("profile")
     if inv_profile != args.profile:
         r.fail(
@@ -846,8 +962,27 @@ def run(argv: list[str] | None = None) -> int:
     # neighbour entry could be used to smuggle headroom past review.
     allowance = _round(sum(e["amount"] for e in applicable)) if exceptions_valid else 0.0
 
+    # A wake/sleep profile gated on TOTAL spend is gated on fixed + expected
+    # variable, so its usage scenario is part of the ceiling. Scoring one
+    # against production-calibrated traffic produces a budget no plan can meet,
+    # which is indistinguishable from having no budget at all.
+    if (budget["mode"] == "total" and budget["awake_hours"] is not None
+            and not isinstance(
+                (price_book.get("profile_usage_scenarios") or {}).get(args.profile),
+                dict)):
+        r.fail(
+            f"profile {args.profile} is budgeted on total spend over "
+            f"{budget['awake_hours']:.0f} awake hours/month but "
+            f"{price_book_path} declares no profile_usage_scenarios entry for "
+            f"it, so it would be scored against production-calibrated traffic "
+            f"and could not meet its own ceiling"
+        )
+        r.finish()
+        return EXIT_USAGE
+
     # --- Model --------------------------------------------------------------
-    model = build_cost_model(inventory, price_book, budget["effective_hours"])
+    model = build_cost_model(inventory, price_book, budget["effective_hours"],
+                             profile=args.profile)
 
     r.require(
         not model["unpriced"],
@@ -917,6 +1052,17 @@ def run(argv: list[str] | None = None) -> int:
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "profile": args.profile,
         "inventory_path": str(args.inventory),
+        # The inventory's OWN provenance, carried forward. Without it the report
+        # records only that it priced `artifacts/profile-resource-inventory.json`
+        # -- a path a fixture-derived inventory and a credentialed one both
+        # occupy -- and a downstream reader cannot tell a priced fixture from a
+        # priced deployment. The chain has to survive one step of indirection or
+        # it is not a chain.
+        "inventory_source": {
+            "path": str(args.inventory),
+            "generated_from": inventory.get("generated_from"),
+            "synthetic_input": inventory.get("synthetic_input"),
+        },
         "terraform_version": inventory.get("terraform_version"),
         "price_book": {
             "path": price_book_path,

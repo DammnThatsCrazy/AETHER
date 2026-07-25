@@ -325,25 +325,51 @@ resource "aws_security_group" "alb" {
 }
 
 # ECS Security Group — accepts traffic from ALB only
+#
+# The rules are declared as DATA in local.ecs_ingress_rules rather than as
+# hand-written inline blocks, and the same list is published as
+# `ecs_sg_ingress` so a provider-mocked plan can assert on it. That matters
+# because ECS tasks run in the PUBLIC subnets with a public IP whenever
+# network_egress_mode is "public_ip" (see the task-placement comment in the
+# root main.tf): the only thing keeping port 8000/8080 off the internet at that
+# point is this security group admitting nothing but the ALB's. The planned
+# `ingress` attribute cannot carry the assertion itself — it contains the ALB
+# security group ID, which is unknown until apply, so the whole set reads as
+# unknown at plan time and any condition over it errors out.
+locals {
+  ecs_ingress_rules = [
+    {
+      description = "Backend port from ALB"
+      port        = 8000
+      # No CIDR ingress, ever. A public IP on the task ENI makes any CIDR here
+      # an internet-reachable application port.
+      cidr_blocks = []
+      from_alb    = true
+    },
+    {
+      description = "ML serving port from ALB"
+      port        = 8080
+      cidr_blocks = []
+      from_alb    = true
+    },
+  ]
+}
+
 resource "aws_security_group" "ecs" {
   name_prefix = "${var.project}-${var.environment}-ecs-"
   description = "ECS tasks: accept traffic from ALB"
   vpc_id      = aws_vpc.this.id
 
-  ingress {
-    description     = "Backend port from ALB"
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  ingress {
-    description     = "ML serving port from ALB"
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+  dynamic "ingress" {
+    for_each = local.ecs_ingress_rules
+    content {
+      description     = ingress.value.description
+      from_port       = ingress.value.port
+      to_port         = ingress.value.port
+      protocol        = "tcp"
+      cidr_blocks     = ingress.value.cidr_blocks
+      security_groups = ingress.value.from_alb ? [aws_security_group.alb.id] : []
+    }
   }
 
   egress {

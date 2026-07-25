@@ -13,9 +13,32 @@ variable "vpc_id" {
   description = "VPC ID"
 }
 
-variable "private_subnet_ids" {
-  type        = list(string)
-  description = "Private subnet IDs for ECS task network interfaces"
+# Subnets for the task ENIs, as {"<tier>/<az>" = subnet-id} — the shape
+# module.vpc.workload_subnets_by_tier publishes. It is a map rather than a
+# list because the key names the tier and is known at plan time, which is what
+# lets tests/profile_plan.tftest.hcl pin task placement per profile; a subnet
+# ID is unknown until apply and can pin nothing.
+#
+# There is deliberately NO private_subnet_ids variable any more. This module
+# must not be able to reach for the private tier on its own: with
+# network_egress_mode = "public_ip" there is no NAT Gateway, the private route
+# tables carry no 0.0.0.0/0 route, and a task placed there cannot pull from
+# ECR at all. The caller owns that decision and passes the result.
+variable "task_subnets" {
+  type        = map(string)
+  description = "Subnets for ECS task ENIs, keyed \"<tier>/<az>\". Must be the public tier whenever assign_public_ip is true."
+
+  validation {
+    condition     = length(var.task_subnets) > 0
+    error_message = "task_subnets must name at least one subnet; an ECS service with no subnet cannot be created."
+  }
+
+  validation {
+    condition = alltrue([
+      for key in keys(var.task_subnets) : can(regex("^(public|private)/", key))
+    ])
+    error_message = "task_subnets keys must be \"public/<az>\" or \"private/<az>\"; the isolated tier has no route out and must never host a task."
+  }
 }
 
 variable "ecs_sg_id" {
@@ -258,6 +281,47 @@ variable "sqs_role_queue_urls" {
 variable "sqs_role_queue_arns" {
   type        = map(string)
   description = "Consumer role -> dedicated queue ARN (IAM policy scoping)"
+  default     = {}
+}
+
+# Dead-letter destinations. These are required, not decorative: the runtime no
+# longer falls back to re-publishing a poison message onto the SOURCE queue —
+# that fallback re-received the copy, matched no handler and deleted it, losing
+# the event silently — so it raises when it has no DLQ to write to.
+variable "sqs_dlq_url" {
+  type        = string
+  description = "Shared events dead-letter queue URL — the SQS_DLQ_QUEUE_URL fallback for a service whose key owns no dedicated DLQ"
+  default     = ""
+}
+
+variable "sqs_dlq_arn" {
+  type        = string
+  description = "Shared events dead-letter queue ARN (IAM policy scoping)"
+  default     = ""
+}
+
+variable "sqs_role_dlq_queue_urls" {
+  type        = map(string)
+  description = "Consumer role -> dedicated dead-letter queue URL, mirroring sqs_role_queue_urls key for key"
+  default     = {}
+
+  # The runtime fails fast when a role's DLQ URL equals its queue URL, because
+  # that configuration dead-letters into the queue it is draining and loops. It
+  # cannot arise from modules/sqs (the two queues differ by a "-dlq" name
+  # suffix), and this makes that structural fact a checked one rather than an
+  # assumed one. Queue URLs are unknown until apply, so the check runs then.
+  validation {
+    condition = alltrue([
+      for role, url in var.sqs_role_dlq_queue_urls :
+      !contains(values(var.sqs_role_queue_urls), url)
+    ])
+    error_message = "A role's dead-letter queue URL is also a role queue URL; dead-lettering there would redeliver the poison message forever."
+  }
+}
+
+variable "sqs_role_dlq_queue_arns" {
+  type        = map(string)
+  description = "Consumer role -> dedicated dead-letter queue ARN. Without sqs:SendMessage on these the task cannot dead-letter at all."
   default     = {}
 }
 

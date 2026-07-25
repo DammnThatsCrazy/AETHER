@@ -67,7 +67,76 @@ def check() -> int:
               "no resource is both required and forbidden",
               f"resources both required and forbidden: {sorted(overlap)}")
 
+    check_always_on_staging_compute(r, data or {})
+
     return r.finish()
+
+
+def check_always_on_staging_compute(r: Reporter, data: dict) -> None:
+    """Evaluate the control the plan gate defers to this file.
+
+    `always_on_staging_compute` is `not_plan_checkable`: a plan cannot show
+    whether an environment is slept after validation, so
+    check_terraform_plan_policy.py records it as DEFERRED rather than passed and
+    names this file as the enforcer. That made this file's job real, and it was
+    not being done — asserting the string appears in a list is not enforcement,
+    it is a spell check.
+
+    What is checkable here is the DATA that makes the prohibition mean
+    something: staging must declare wake/sleep, must carry a bounded awake-hours
+    budget materially smaller than a month, must be budgeted on total spend (so
+    the awake hours actually enter the ceiling), and must declare that it sleeps
+    after validation. Any one of those missing turns "no always-on staging
+    compute" into an unenforced sentence.
+    """
+    staging = ((data.get("profiles") or {}).get("staging") or {})
+    if not staging:
+        r.fail("always_on_staging_compute: no staging profile to enforce it against")
+        return
+
+    forbidden = set((staging.get("cost_policy") or {}).get("forbidden_resources") or [])
+    r.require(
+        "always_on_staging_compute" in forbidden,
+        "staging forbids always_on_staging_compute",
+        "staging does not forbid always_on_staging_compute, so the awake-hours "
+        "budget bounds nothing",
+    )
+
+    r.require(
+        bool(staging.get("wake_sleep")),
+        "staging declares wake_sleep: true",
+        "staging does not declare wake_sleep: true, so its compute is always-on "
+        "by declaration",
+    )
+
+    budget = staging.get("budget") or {}
+    awake = budget.get("maximum_scheduled_awake_hours_per_month")
+    reference = budget.get("pricing_hours_per_month")
+    if not isinstance(awake, (int, float)) or isinstance(awake, bool) or awake <= 0:
+        r.fail("staging declares no positive maximum_scheduled_awake_hours_per_month, "
+               "so nothing bounds how long staging runs")
+    elif not isinstance(reference, (int, float)) or awake >= float(reference):
+        r.fail(f"staging awake-hours budget {awake} is not below its reference month "
+               f"{reference}; an environment awake for a whole month is always-on "
+               f"whatever the profile calls it")
+    else:
+        r.ok(f"staging awake-hours capped at {awake}/month against a "
+             f"{reference}-hour reference month")
+
+    r.require(
+        "target_monthly_spend" in budget and "hard_monthly_spend" in budget,
+        "staging is budgeted on total monthly spend, so the awake hours enter the ceiling",
+        "staging declares no target_monthly_spend/hard_monthly_spend, so its "
+        "awake-hours budget never reaches a numeric ceiling",
+    )
+
+    behavior = [str(b) for b in (staging.get("behavior") or [])]
+    r.require(
+        any("sleep" in b for b in behavior),
+        "staging behavior declares it is slept after validation",
+        f"staging behavior {behavior} never says the environment is slept; the "
+        f"prohibition on always-on compute has no counterpart in the lifecycle",
+    )
 
 
 if __name__ == "__main__":

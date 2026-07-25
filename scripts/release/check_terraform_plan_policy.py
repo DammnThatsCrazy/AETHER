@@ -21,7 +21,35 @@ matchers in config/terraform_resource_contracts.yaml, and asserts:
   * static SPA origins exist wherever the runtime matrix declares them;
   * no dedicated ML service, ECS-hosted frontend or legacy RDS instance in a
     cost-capped profile;
-  * staging compute is not pinned always-on.
+  * staging declares wake/sleep with a bounded awake-hours budget (the
+    lifecycle half is reported DEFERRED, never as a pass -- see below).
+
+MATCHERS ARE PER-RULE, AND FORBIDDEN TYPES ARE NOT SCOPED BY MODULE
+  Every matcher -- a canonical key's parent rule and each of its
+  `additional_rules` -- is counted separately and judged against its own
+  cardinality. Merging sub-rule hits into the parent aggregate let an
+  `at_least_one` parent be satisfied by the parent's own matches while the
+  sub-rule matched nothing, which is how `explicit_runtime_role_services`
+  passed with two ECS services and zero ECR repositories.
+
+  A forbidden matcher names the module that provisions the service today. That
+  address may refine the rule, but it is never the only thing forbidding the
+  resource: any COST-BEARING type a forbidden rule names (anything the price
+  book prices as fixed, plus CURATED_EXPENSIVE_TYPES) is matched at ANY module
+  address. `module.cache.aws_elasticache_replication_group` is the same
+  product, the same bill and the same violation as
+  `module.elasticache.aws_elasticache_replication_group`. Cost-free accessories
+  (`aws_db_subnet_group`, `aws_elasticache_subnet_group`) stay scoped, because
+  those types are legitimately shared -- Aurora provisions a DB subnet group of
+  its own.
+
+DEFERRED IS NOT A PASS
+  `always_on_staging_compute` has a plan-observable half (a staging plan is
+  only permitted awake compute because the profile declares wake/sleep with a
+  bounded awake-hours budget) and a lifecycle half no plan can show. The
+  lifecycle half is recorded with `status: deferred` and the enforcer that owns
+  it, rather than as a pass -- a green status for a control nothing evaluated
+  reads exactly like a control that was checked and held.
 
 FAIL-CLOSED RULES
   Silence must never read as success, so two conditions fail the gate outright
@@ -36,10 +64,16 @@ FAIL-CLOSED RULES
   2. A canonical key in the profile's cost_policy that has no matcher in the
      contracts file. A policy nobody can check is not a policy.
 
-  A weaker third condition is reported as a WARNING rather than a failure: a
-  resource of a covered expensive type that no individual rule matched (for
-  example a KMS key in a module no rule is scoped to). The type has an opinion
-  attached to it somewhere, so this is drift, not a blind spot.
+  3. An actively-planned resource of a type some matcher FORBIDS, at an address
+     no matcher covers. The type carries a "no" somewhere in the contracts and
+     it costs money, so this is the forbidden service one rename away from the
+     rule that would have caught it -- not drift.
+
+  A weaker fourth condition is reported as a WARNING rather than a failure: a
+  resource of a covered expensive type that no individual rule matched and
+  whose type nothing forbids (for example a KMS key in a module no rule is
+  scoped to). The type has an opinion attached to it somewhere and no rule
+  rejects it, so this is drift, not a blind spot.
 
 DESTROY IS NOT A VIOLATION
   A resource whose only planned action is `delete` is on its way out and does
@@ -168,6 +202,25 @@ CURATED_EXPENSIVE_TYPES = frozenset({
 COMPUTE_TYPES = frozenset({
     "aws_ecs_service", "aws_instance", "aws_autoscaling_group",
 })
+
+# Path fragments that mark a plan as SYNTHETIC -- a committed test fixture, a
+# scratch copy, a sample. An inventory built from one is perfectly valid input
+# for this gate (that is what the fixtures are for) but must never be mistaken
+# downstream for a plan that came from a real account, so the inventory records
+# which marker matched rather than leaving the distinction to a reader.
+SYNTHETIC_SOURCE_MARKERS = (
+    "tests/fixtures", "/tmp/", "/var/tmp/", "scratchpad", "fixture",
+    "sample", "example", "synthetic", "mock", "dummy",
+)
+
+
+def synthetic_source(path: str) -> str | None:
+    """The marker that makes `path` a synthetic plan source, or None."""
+    lowered = str(path).replace("\\", "/").lower()
+    for marker in SYNTHETIC_SOURCE_MARKERS:
+        if marker in lowered:
+            return marker
+    return None
 
 
 class PlanError(Exception):
@@ -409,24 +462,54 @@ def _match_task_definition(
 # Contract matchers
 # ---------------------------------------------------------------------------
 
-def iter_rules(contracts: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
-    """Yield (canonical_key, kind, rule) for every matcher, sub-rules included."""
-    out: list[tuple[str, str, dict[str, Any]]] = []
+def iter_rules(contracts: dict[str, Any]) -> list[tuple[str, str, int, dict[str, Any]]]:
+    """Yield (canonical_key, kind, ordinal, rule) for every matcher.
+
+    `ordinal` is 0 for a key's parent rule and 1..n for each entry of its
+    `additional_rules`. Sub-rules carry their own cardinality and must be
+    evaluated against their own count -- merging them into the parent's
+    aggregate is how a sub-rule ends up decorative (an `at_least_one` parent
+    satisfied by the parent's own matches while the sub-rule matched nothing).
+    """
+    out: list[tuple[str, str, int, dict[str, Any]]] = []
     for kind in ("required_resources", "forbidden_resources"):
         for key, rule in (contracts.get(kind) or {}).items():
             if not isinstance(rule, dict):
                 continue
-            out.append((key, kind, rule))
-            for extra in rule.get("additional_rules") or []:
+            out.append((key, kind, 0, rule))
+            for ordinal, extra in enumerate(rule.get("additional_rules") or [], start=1):
                 if isinstance(extra, dict):
-                    out.append((key, kind, extra))
+                    out.append((key, kind, ordinal, extra))
     return out
+
+
+def rules_for(contracts: dict[str, Any], kind: str,
+              key: str) -> list[tuple[int, dict[str, Any]]]:
+    """Every (ordinal, rule) declared for one canonical key under one kind."""
+    return [(ordinal, rule) for k, kd, ordinal, rule in iter_rules(contracts)
+            if k == key and kd == kind]
+
+
+def rule_label(key: str, ordinal: int) -> str:
+    """Stable check-name suffix for a parent rule or one of its sub-rules."""
+    return key if ordinal == 0 else f"{key}.additional[{ordinal - 1}]"
 
 
 def contract_types(contracts: dict[str, Any]) -> set[str]:
     """Every Terraform resource type any matcher in the contracts file names."""
     types: set[str] = set()
-    for _key, _kind, rule in iter_rules(contracts):
+    for _key, _kind, _ordinal, rule in iter_rules(contracts):
+        for res_type in rule.get("resource_types") or []:
+            types.add(str(res_type))
+    return types
+
+
+def forbidden_types(contracts: dict[str, Any]) -> set[str]:
+    """Every resource type named by a `forbidden_resources` matcher."""
+    types: set[str] = set()
+    for _key, kind, _ordinal, rule in iter_rules(contracts):
+        if kind != "forbidden_resources":
+            continue
         for res_type in rule.get("resource_types") or []:
             types.add(str(res_type))
     return types
@@ -445,17 +528,59 @@ def module_matches(rule_address: Any, resource_module: str) -> bool:
     return normalised == rule or normalised.startswith(rule + ".")
 
 
-def rule_matches(rule: dict[str, Any], resource: dict[str, Any]) -> bool:
-    """True when one resource is an instance of what a rule describes."""
+def unscoped_types(rule: dict[str, Any], expensive: set[str]) -> set[str]:
+    """The rule's resource types that are forbidden at ANY module address.
+
+    THE CENTRAL FAIL-OPEN THIS CLOSES
+      A forbidden matcher is written against the module that provisions the
+      service today (`module.elasticache`, `module.msk`, ...). Scoping the
+      matcher to that address means the SAME resource type at any other address
+      matches no rule at all, is merely reported as an unmatched instance, and
+      the plan passes. `module.cache.aws_elasticache_replication_group` is the
+      identical product, the identical bill and the identical policy violation
+      as `module.elasticache.aws_elasticache_replication_group`.
+
+      So a forbidden type that COSTS MONEY -- anything the price book prices as
+      a fixed resource, plus the curated heavyweight services -- is matched
+      wherever it appears. The module address may still refine a rule (it
+      decides which key a resource is attributed to, and it still scopes the
+      cost-free accessories below), but it is never the only thing standing
+      between a forbidden type and a pass.
+
+      Cost-free accessories (`aws_db_subnet_group`, `aws_elasticache_subnet_group`,
+      `aws_msk_configuration`) stay scoped, because those types are legitimately
+      shared: Aurora provisions an `aws_db_subnet_group` of its own, and matching
+      it against the legacy-RDS rule would reject every conforming plan. The
+      product itself (`aws_db_instance`) is caught at any address, which is what
+      the policy is actually about.
+    """
+    return {str(t) for t in (rule.get("resource_types") or []) if str(t) in expensive}
+
+
+def rule_matches(rule: dict[str, Any], resource: dict[str, Any],
+                 anywhere: set[str] | None = None) -> bool:
+    """True when one resource is an instance of what a rule describes.
+
+    `anywhere` names the resource types this rule matches regardless of module
+    address (see unscoped_types). Name prefixes always apply: a rule that only
+    forbids `frontend*` services still only forbids `frontend*` services.
+    """
     types = [str(t) for t in (rule.get("resource_types") or [])]
     if not types or resource["type"] not in types:
         return False
-    if not module_matches(rule.get("module_address"), resource["module_address"]):
-        return False
+    if not (anywhere and resource["type"] in anywhere):
+        if not module_matches(rule.get("module_address"), resource["module_address"]):
+            return False
     prefixes = [str(p) for p in (rule.get("name_prefixes") or [])]
     if prefixes and not any(resource["name"].startswith(p) for p in prefixes):
         return False
     return True
+
+
+def matcher(kind: str, rule: dict[str, Any],
+            expensive: set[str]) -> set[str] | None:
+    """The `anywhere` set to use for one rule: widened only for forbidden ones."""
+    return unscoped_types(rule, expensive) if kind == "forbidden_resources" else None
 
 
 def parse_cardinality(spec: Any) -> tuple[int, float]:
@@ -512,19 +637,32 @@ def build_inventory(
     """Return (inventory document, resources of a covered-but-unmatched type)."""
     rules = iter_rules(contracts)
     covered_types = contract_types(contracts)
+    forbidden = forbidden_types(contracts)
     expensive = expensive_types(price_book)
 
     entries: list[dict[str, Any]] = []
     summary: dict[str, dict[str, Any]] = {}
+    # Per-rule counts, keyed "<canonical key>#<ordinal>". The aggregate summary
+    # above answers "how many instances does this key have"; this answers "did
+    # THIS matcher, with THIS cardinality, find what it says it must".
+    rule_summary: dict[str, dict[str, Any]] = {}
     unmapped: list[dict[str, Any]] = []
     unmatched_instances: list[dict[str, Any]] = []
 
     for resource in resources:
         keys: list[str] = []
-        for key, _kind, rule in rules:
-            if key not in keys and rule_matches(rule, resource):
+        hits: list[str] = []
+        out_of_scope: list[str] = []
+        for key, kind, ordinal, rule in rules:
+            anywhere = matcher(kind, rule, expensive)
+            if not rule_matches(rule, resource, anywhere):
+                continue
+            hits.append(f"{key}#{ordinal}")
+            if not module_matches(rule.get("module_address"), resource["module_address"]):
+                out_of_scope.append(rule_label(key, ordinal))
+            if key not in keys:
                 keys.append(key)
-        entries.append({
+        entry = {
             "address": resource["address"],
             "module_address": resource["module_address"],
             "type": resource["type"],
@@ -533,12 +671,21 @@ def build_inventory(
             "actions": list(resource["actions"]),
             "canonical_keys": keys,
             "values": resource["values"],
-        })
+        }
+        # Additive, outside the pinned schema: which forbidden matchers caught
+        # this resource somewhere other than the module the contract names.
+        if out_of_scope:
+            entry["matched_outside_contracted_module"] = out_of_scope
+        entries.append(entry)
 
         if not is_active(resource):
             continue
         for key in keys:
             bucket = summary.setdefault(key, {"count": 0, "addresses": []})
+            bucket["count"] += 1
+            bucket["addresses"].append(resource["address"])
+        for hit in hits:
+            bucket = rule_summary.setdefault(hit, {"count": 0, "addresses": []})
             bucket["count"] += 1
             bucket["addresses"].append(resource["address"])
 
@@ -559,12 +706,17 @@ def build_inventory(
                     "address": resource["address"],
                     "type": resource["type"],
                     "module_address": resource["module_address"],
+                    # A type some matcher FORBIDS, at an address no matcher
+                    # covers, is not drift -- it is the forbidden service one
+                    # rename away from the rule that would have caught it.
+                    "forbidden_type": resource["type"] in forbidden,
                 })
 
     # Every canonical key the contracts declare appears in the summary, so a
     # zero is an asserted zero rather than a missing entry a reader must guess at.
-    for key, _kind, _rule in rules:
+    for key, _kind, ordinal, _rule in rules:
         summary.setdefault(key, {"count": 0, "addresses": []})
+        rule_summary.setdefault(f"{key}#{ordinal}", {"count": 0, "addresses": []})
 
     inventory = {
         "schema_version": INVENTORY_SCHEMA_VERSION,
@@ -573,9 +725,17 @@ def build_inventory(
         "resources": entries,
         "canonical_summary": {k: summary[k] for k in sorted(summary)},
         "unmapped_expensive": unmapped,
+        # Additive, outside the pinned schema: per-matcher counts, so a
+        # sub-rule's cardinality can be judged on its own matches.
+        "rule_summary": {k: rule_summary[k] for k in sorted(rule_summary)},
         # Additive, outside the pinned schema: provenance for downstream readers.
+        # `synthetic_input` is what stops a fixture-derived inventory from being
+        # read downstream as though it described a real account -- the evidence
+        # bundle and the readiness scorecard both refuse to award a pass to an
+        # artifact whose input was a committed test fixture.
         "plan_format_version": str(plan.get("format_version") or ""),
         "generated_from": plan_path,
+        "synthetic_input": synthetic_source(plan_path),
         "fargate_sizing_resolution": sizing_records,
     }
     return inventory, unmatched_instances
@@ -600,12 +760,26 @@ def _record(results: list[dict[str, Any]], name: str, passed: bool,
     results.append(entry)
 
 
+def _record_deferred(results: list[dict[str, Any]], name: str, detail: str,
+                     **extra: Any) -> None:
+    """Record a control this gate CANNOT decide from a plan.
+
+    `deferred` is neither a pass nor a failure. It exists because reporting
+    `pass` for a control nothing evaluated is a lie that reads identically to a
+    control that was checked and held, and a reader of the result document has
+    no way to tell them apart.
+    """
+    entry = {"check": name, "status": "deferred", "detail": detail}
+    entry.update(extra)
+    results.append(entry)
+
+
 def check_contract_coverage(
     r: Reporter, results: list[dict[str, Any]], policy: dict[str, Any],
     contracts: dict[str, Any],
 ) -> None:
     """Fail closed on a canonical key nobody wrote a matcher for."""
-    declared = {key for key, _kind, _rule in iter_rules(contracts)}
+    declared = {key for key, _kind, _ordinal, _rule in iter_rules(contracts)}
     for kind in ("required_resources", "forbidden_resources"):
         for key in policy.get(kind) or []:
             name = f"contract_coverage.{kind}.{key}"
@@ -624,61 +798,101 @@ def check_contract_coverage(
 
 def check_forbidden(
     r: Reporter, results: list[dict[str, Any]], policy: dict[str, Any],
-    contracts: dict[str, Any], summary: dict[str, Any],
-    resources: list[dict[str, Any]],
+    contracts: dict[str, Any], rule_summary: dict[str, Any],
+    resources: list[dict[str, Any]], expensive: set[str],
 ) -> None:
-    """Every forbidden key must have zero actively-planned instances."""
-    forbidden_rules = contracts.get("forbidden_resources") or {}
+    """Every forbidden matcher must have zero actively-planned instances.
+
+    Each matcher is judged on ITS OWN matches -- the parent rule and every
+    `additional_rules` entry separately -- so a sub-rule cannot be satisfied by
+    the parent's hits. Cost-bearing forbidden types are matched at any module
+    address (see unscoped_types), so relocating a forbidden service into a
+    module the contract does not name is not an escape route.
+    """
     for key in policy.get("forbidden_resources") or []:
-        rule = forbidden_rules.get(key)
-        name = f"forbidden.{key}"
-        if not isinstance(rule, dict):
+        rules = rules_for(contracts, "forbidden_resources", key)
+        if not rules:
             continue  # already reported by check_contract_coverage
-        if rule.get("not_plan_checkable"):
+        if rules[0][1].get("not_plan_checkable"):
             continue  # handled by check_always_on_staging_compute
-        count = _count(summary, key)
-        addresses = _addresses(summary, key)
-        if count == 0:
-            destroying = [
-                res["address"] for res in resources
-                if not is_active(res)
-                and any(rule_matches(sub, res)
-                        for k, _kind, sub in iter_rules(contracts) if k == key)
+        for ordinal, rule in rules:
+            name = f"forbidden.{rule_label(key, ordinal)}"
+            hit = rule_summary.get(f"{key}#{ordinal}") or {}
+            count = int(hit.get("count", 0))
+            addresses = list(hit.get("addresses") or [])
+            anywhere = unscoped_types(rule, expensive)
+            if count == 0:
+                destroying = [
+                    res["address"] for res in resources
+                    if not is_active(res) and rule_matches(rule, res, anywhere)
+                ]
+                suffix = f" ({len(destroying)} being destroyed)" if destroying else ""
+                r.ok(f"forbidden {rule_label(key, ordinal)}: 0 actively-planned "
+                     f"instances{suffix}")
+                _record(results, name, True,
+                        f"{rule_label(key, ordinal)}: 0 actively-planned instances",
+                        count=0, destroying=destroying)
+                continue
+            outside = [
+                address for address in addresses
+                if not module_matches(rule.get("module_address"),
+                                      _module_of(resources, address))
             ]
-            suffix = f" ({len(destroying)} being destroyed)" if destroying else ""
-            r.ok(f"forbidden {key}: 0 actively-planned instances{suffix}")
-            _record(results, name, True, f"{key}: 0 actively-planned instances",
-                    count=0, destroying=destroying)
-        else:
+            relocation = (
+                f"; {len(outside)} of them outside the contracted module address "
+                f"{rule.get('module_address')!r} ({', '.join(outside[:4])}) -- a "
+                f"forbidden resource type is forbidden wherever it is declared"
+                if outside else ""
+            )
             message = (
-                f"forbidden {key}: {count} actively-planned instance(s) in a "
-                f"{policy['_profile']} plan -- {', '.join(addresses[:6])}"
+                f"forbidden {rule_label(key, ordinal)}: {count} actively-planned "
+                f"instance(s) in a {policy['_profile']} plan -- "
+                f"{', '.join(addresses[:6])}{relocation}"
             )
             r.fail(message)
-            _record(results, name, False, message, count=count, addresses=addresses)
+            _record(results, name, False, message, count=count, addresses=addresses,
+                    outside_contracted_module=outside)
+
+
+def _module_of(resources: list[dict[str, Any]], address: str) -> str:
+    for res in resources:
+        if res["address"] == address:
+            return res["module_address"]
+    return ""
 
 
 def check_required(
     r: Reporter, results: list[dict[str, Any]], policy: dict[str, Any],
-    contracts: dict[str, Any], summary: dict[str, Any],
+    contracts: dict[str, Any], rule_summary: dict[str, Any],
 ) -> None:
-    """Every required key must be present at its contracted cardinality."""
-    required_rules = contracts.get("required_resources") or {}
+    """Every required matcher must be present at ITS OWN contracted cardinality.
+
+    Sub-rules are evaluated independently of the parent. Merging their hits into
+    the parent's aggregate is how `explicit_runtime_role_services` came to be
+    satisfied by two ECS services and zero ECR repositories, leaving the
+    `module.ecr` matcher decorative.
+    """
     for key in policy.get("required_resources") or []:
-        rule = required_rules.get(key)
-        name = f"required.{key}"
-        if not isinstance(rule, dict):
+        rules = rules_for(contracts, "required_resources", key)
+        if not rules:
             continue  # already reported by check_contract_coverage
-        low, high = parse_cardinality(rule.get("cardinality"))
-        count = _count(summary, key)
-        if low <= count <= high:
-            r.ok(f"required {key}: {count} instance(s) "
-                 f"({describe_cardinality(rule.get('cardinality'))})")
-            _record(results, name, True, f"{key}: {count} instance(s)", count=count)
-        else:
+        for ordinal, rule in rules:
+            label = rule_label(key, ordinal)
+            name = f"required.{label}"
+            low, high = parse_cardinality(rule.get("cardinality"))
+            hit = rule_summary.get(f"{key}#{ordinal}") or {}
+            count = int(hit.get("count", 0))
+            if low <= count <= high:
+                r.ok(f"required {label}: {count} instance(s) "
+                     f"({describe_cardinality(rule.get('cardinality'))})")
+                _record(results, name, True, f"{label}: {count} instance(s)",
+                        count=count)
+                continue
             evidence = rule.get("evidence") or "n/a"
+            scope = rule.get("module_address")
             message = (
-                f"required {key}: found {count} instance(s), contract requires "
+                f"required {label}: found {count} instance(s) under "
+                f"{scope!r}, contract requires "
                 f"{describe_cardinality(rule.get('cardinality'))} "
                 f"(evidence resource: {evidence})"
             )
@@ -812,9 +1026,30 @@ def check_network_egress(
         "nat_gateway_unless_explicit") or {}
     expected_by_profile = rule.get("expected_by_profile") or {}
     spec = expected_by_profile.get(profile)
+    name = "network_egress_mode"
+
+    # `expected_by_profile` asks "how much NAT egress does this profile buy?",
+    # which is answered in gateways -- not in gateways plus their EIPs, which is
+    # what summing the rule's resource_types would give. The contracts file
+    # names the type to count so the declaration and this check agree on
+    # purpose rather than by coincidence, and a rule that declares the one
+    # without the other is unresolvable rather than silently defaulted.
+    counted_type = rule.get("expected_by_profile_resource_type")
+    if expected_by_profile and not counted_type:
+        message = (
+            f"network egress: {CONTRACTS_YAML} declares expected_by_profile for "
+            f"nat_gateway_unless_explicit but no "
+            f"expected_by_profile_resource_type, so which of "
+            f"{', '.join(str(t) for t in rule.get('resource_types') or [])} the "
+            f"expectation counts is undefined"
+        )
+        r.fail(message)
+        _record(results, name, False, message)
+        return
+
     gateways = [
         res for res in resources
-        if res["type"] == "aws_nat_gateway" and is_active(res)
+        if res["type"] == str(counted_type) and is_active(res)
     ]
     observed = len(gateways)
 
@@ -822,7 +1057,6 @@ def check_network_egress(
     mode = str(declared) if declared not in (None, "") else "unset"
     override_values = [str(v) for v in (rule.get("override_values") or [])]
 
-    name = "network_egress_mode"
     if spec is None:
         detail = f"no expected_by_profile entry for {profile}; observed {observed} NAT gateway(s)"
         r.warn(f"network egress: {detail}")
@@ -1019,14 +1253,20 @@ def check_always_on_staging_compute(
     r.ok(f"always_on_staging_compute: staging is {state} "
          f"({desired} desired task(s)), wake_sleep declared, "
          f"awake-hours capped at {awake_hours}/month")
-    r.warn("always_on_staging_compute: the lifecycle half (the environment is "
-           "actually slept after validation) is enforced by "
-           "scripts/release/check_cost_policy.py and the wake/sleep automation, "
-           "not by this plan gate")
-    _record(results, name, True,
-            f"staging {state}: {desired} desired task(s), wake_sleep declared",
-            desired_total=desired, state=state,
-            deferred_to="scripts/release/check_cost_policy.py")
+    r.warn("always_on_staging_compute: DEFERRED, not passed -- whether the "
+           "environment is actually slept after validation is a lifecycle "
+           "property no plan can show. The plan-observable half (wake_sleep "
+           "declared with a bounded awake-hours budget) held; the lifecycle "
+           "half is enforced by scripts/release/check_cost_policy.py and the "
+           "wake/sleep automation. This gate does not report it as passing.")
+    _record_deferred(
+        results, name,
+        f"staging {state}: {desired} desired task(s), wake_sleep declared and "
+        f"awake hours capped at {awake_hours}/month; whether staging is actually "
+        f"slept after validation is not plan-observable and is NOT asserted here",
+        desired_total=desired, state=state,
+        plan_observable_half="wake_sleep declared with a bounded awake-hours budget",
+        deferred_to="scripts/release/check_cost_policy.py")
 
 
 def check_fail_closed(
@@ -1055,15 +1295,38 @@ def check_fail_closed(
              "a matcher")
         _record(results, name, True, "no unmapped expensive resource types")
 
-    if unmatched_instances:
-        addresses = [item["address"] for item in unmatched_instances]
+    # An unmatched instance of a type SOME rule forbids is not drift. The type
+    # carries a "no" somewhere in the contracts, this instance sits at an
+    # address no matcher covers, and it costs money -- exactly the shape of a
+    # forbidden service renamed out of the rule that would have caught it.
+    forbidden_unmatched = [i for i in unmatched_instances if i.get("forbidden_type")]
+    other_unmatched = [i for i in unmatched_instances if not i.get("forbidden_type")]
+    if forbidden_unmatched:
+        addresses = [item["address"] for item in forbidden_unmatched]
+        message = (
+            f"{len(forbidden_unmatched)} actively-planned resource(s) of a type this "
+            f"profile forbids elsewhere matched no matcher at their address "
+            f"({', '.join(addresses[:6])}); a forbidden type at an uncontracted "
+            f"address must not pass as a warning"
+        )
+        r.fail(message)
+        _record(results, "fail_closed.unmatched_forbidden_type", False, message,
+                addresses=addresses)
+    else:
+        r.ok("fail-closed: no forbidden resource type appears at an address no "
+             "matcher covers")
+        _record(results, "fail_closed.unmatched_forbidden_type", True,
+                "no forbidden type at an uncontracted address")
+
+    if other_unmatched:
+        addresses = [item["address"] for item in other_unmatched]
         r.warn(
-            f"{len(unmatched_instances)} expensive resource(s) matched no individual "
+            f"{len(other_unmatched)} expensive resource(s) matched no individual "
             f"rule though their type is contracted elsewhere: "
             f"{', '.join(addresses[:6])}"
         )
         _record(results, "fail_closed.unmatched_instances", True,
-                f"{len(unmatched_instances)} expensive resources matched no rule",
+                f"{len(other_unmatched)} expensive resources matched no rule",
                 addresses=addresses, severity="warning")
 
 
@@ -1300,10 +1563,12 @@ def check(argv: list[str] | None = None) -> int:
          f"{len(resources) - active} being destroyed")
 
     summary = inventory["canonical_summary"]
+    rule_summary = inventory["rule_summary"]
 
     check_contract_coverage(r, results, policy, contracts)
-    check_forbidden(r, results, policy, contracts, summary, resources)
-    check_required(r, results, policy, contracts, summary)
+    check_forbidden(r, results, policy, contracts, rule_summary, resources,
+                    expensive_types(price_book))
+    check_required(r, results, policy, contracts, rule_summary)
     check_alarm_names(r, results, policy, contracts, resources)
     check_service_cardinality(r, results, profile, runtime, resources)
     check_network_egress(r, results, profile, contracts, plan, resources)
@@ -1330,6 +1595,7 @@ def check(argv: list[str] | None = None) -> int:
         "checks_total": len(results),
         "checks_failed": len(violations),
         "plan_json": str(plan_path),
+        "synthetic_input": inventory["synthetic_input"],
         "terraform_version": inventory["terraform_version"],
         "inventory_json": str(inventory_path),
         "violations": violations,

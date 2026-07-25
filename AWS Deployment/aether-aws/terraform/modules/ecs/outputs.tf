@@ -64,6 +64,11 @@ output "runtime_service_names" {
   value       = [for key, service in aws_ecs_service.runtime_service : service.name]
 }
 
+output "task_subnet_keys" {
+  description = "The \"<tier>/<az>\" keys of the subnets every ECS task ENI in this module is placed in. Configuration-derived, so a provider-mocked plan can assert the network tier; the subnet IDs themselves are unknown until apply."
+  value       = local.task_subnet_keys
+}
+
 output "backend_service_desired_count" {
   description = "Desired task count configured on the aether-backend service"
   value       = aws_ecs_service.backend.desired_count
@@ -87,6 +92,11 @@ output "runtime_service_queue_roles" {
   value       = { for key, queues in local.runtime_service_role_queues : key => sort(keys(queues)) }
 }
 
+output "runtime_service_dlq_roles" {
+  description = "Service key -> the roles it hosts that own a dedicated dead-letter queue, i.e. the exact keys of that task's SQS_ROLE_DLQ_URLS object. Must match runtime_service_queue_roles: a role with a queue and no DLQ has nowhere to put a poison message."
+  value       = { for key, dlqs in local.runtime_service_role_dlqs : key => sort(keys(dlqs)) }
+}
+
 output "runtime_service_capacity_providers" {
   description = "Service key -> the capacity providers its ECS strategy names, sorted"
   value = {
@@ -106,4 +116,9 @@ output "backend_autoscaling_bounds" {
     min = aws_appautoscaling_target.backend.min_capacity
     max = aws_appautoscaling_target.backend.max_capacity
   }
+}
+
+output "runtime_service_log_groups" {
+  description = "Service key -> CloudWatch log group name for that service's tasks. modules/monitoring turns the supervisor's per-role failure line into a metric filter and an alarm, because a consolidated task with one dead role stays at ECS steady state and is otherwise invisible."
+  value       = { for key, group in aws_cloudwatch_log_group.runtime_service : key => group.name }
 }

@@ -86,10 +86,29 @@ module "secrets" {
 
 # ---------------------------------------------------------------------------
 # 4a. RDS Postgres — legacy, never provisioned by a fresh plan
+#
 # Aurora Serverless v2 (E3) is the active database in every profile, so
-# local.enable_legacy_rds is a literal false and this count is always 0. The
-# block is kept so an already-applied instance can be adopted for rollback and
-# retired through DECOMMISSION.md rather than destroyed by a profile flip.
+# local.enable_legacy_rds is a literal false — a shape
+# scripts/release/check_cost_policy_terraform.py requires — and this count is
+# therefore always 0.
+#
+# WHAT THAT MEANS FOR A WORKSPACE THAT ALREADY APPLIED AN RDS INSTANCE, stated
+# exactly, because the previous comment here claimed the opposite: this count
+# does NOT keep an applied instance managed. moved.tf only relocates the state
+# address to module.rds[0]; a count of 0 then plans a destroy of it. What stops
+# that destroy is `lifecycle { prevent_destroy = true }` on
+# aws_db_instance.this and aws_kms_key.rds inside modules/rds — the KMS key
+# encrypts both the storage and the final snapshot, so losing it loses the
+# snapshot too. Terraform therefore FAILS THE PLAN rather than destroying
+# either, and the workspace stays blocked until an operator follows
+# DECOMMISSION.md: release the instance from state (`terraform state rm
+# 'module.rds[0]'`, or a `removed` block with `lifecycle { destroy = false }`)
+# and retire it as a separate, explicitly approved change.
+#
+# Re-adopting a legacy instance as MANAGED infrastructure is deliberately not
+# possible from a variable: legacy_rds is a forbidden resource in all four
+# profiles' cost policy, so a plan containing one is a policy violation by
+# construction, not an operational mode.
 # ---------------------------------------------------------------------------
 
 module "rds" {
@@ -289,13 +308,58 @@ module "alb" {
 # 6. ECS (Fargate)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# ECS task network placement
+#
+# This is an EGRESS decision, not a security one, and getting it wrong makes
+# the very first apply of a cost-capped profile fail outright:
+#
+#   network_egress_mode = "public_ip"  ->  nat_mode = "none"
+#     -> modules/vpc creates no NAT Gateway, so aws_route.private_nat has
+#        count 0 and the private route tables carry NO 0.0.0.0/0 route at all.
+#     -> a task ENI in a private subnet has no path to ECR, Secrets Manager or
+#        CloudWatch. assign_public_ip is inert there: the public IP is on the
+#        ENI, but egress still follows the SUBNET's route table, which has no
+#        default route. The task cannot pull its image
+#        (CannotPullContainerError), the deployment circuit breaker rolls back,
+#        and the service never reaches steady state.
+#     -> tasks therefore run in the PUBLIC subnets, whose route table has the
+#        IGW default route (modules/vpc: aws_route_table.public), which is what
+#        makes assign_public_ip actually work.
+#
+#   single_nat / ha_nat  ->  the private route tables do carry a NAT default
+#        route, so tasks stay private and take no public IP.
+#
+# var.network_egress_mode also accepts "none" and "vpc_endpoints". Both leave
+# assign_public_ip false, so tasks are placed private — correct for the posture
+# each one names, but neither is usable today: "none" is by definition no
+# egress, and this root instantiates no vpc_endpoints module (modules/
+# vpc_endpoints exists but nothing calls it), so "vpc_endpoints" provisions no
+# endpoints and behaves exactly like "none". Neither value is set by any
+# profile or workflow. Wiring the endpoints module is tracked separately.
+#
+# This does NOT make a task port publicly reachable. The ECS security group
+# (modules/vpc: aws_security_group.ecs, built from local.ecs_ingress_rules)
+# admits 8000/8080 from the ALB security group only and has no CIDR ingress of
+# any kind, so a public IP buys egress and nothing else. That invariant is
+# asserted per profile in tests/profile_plan.tftest.hcl; do not weaken it while
+# any profile places tasks in the public tier.
+#
+# Databases are unaffected — every data store stays in the isolated subnets.
+# ---------------------------------------------------------------------------
+
+locals {
+  ecs_task_subnet_tier = local.assign_public_ip ? "public" : "private"
+  ecs_task_subnets     = module.vpc.workload_subnets_by_tier[local.ecs_task_subnet_tier]
+}
+
 module "ecs" {
   source = "./modules/ecs"
 
   environment          = var.environment
   project              = var.project
   vpc_id               = module.vpc.vpc_id
-  private_subnet_ids   = module.vpc.private_subnet_ids
+  task_subnets         = local.ecs_task_subnets
   ecs_sg_id            = module.vpc.ecs_sg_id
   ecr_backend_url      = module.ecr.repository_urls["aether-backend"]
   backend_image_digest = var.backend_image_digest
@@ -338,6 +402,18 @@ module "ecs" {
   sqs_role_queue_urls = module.sqs.role_queue_urls
   sqs_role_queue_arns = module.sqs.role_queue_arns
   sns_topic_arn       = module.sqs.fanout_topic_arn
+
+  # Dead-letter destinations. modules/sqs has always created these queues (they
+  # are the redrive target of each role queue) but never published them, so no
+  # task was ever told where to dead-letter. The runtime's old fallback was to
+  # re-publish the poison message onto the queue it came from, where it was
+  # re-received, matched no handler and was deleted — silent loss. That
+  # fallback is gone and the runtime now raises, so these four inputs are what
+  # keep dead-lettering working at all.
+  sqs_dlq_url             = module.sqs.dlq_url
+  sqs_dlq_arn             = module.sqs.dlq_arn
+  sqs_role_dlq_queue_urls = module.sqs.role_dlq_queue_urls
+  sqs_role_dlq_queue_arns = module.sqs.role_dlq_queue_arns
 
   # The non-api half of the schema-v2 runtime matrix: one entry per deployable
   # ECS SERVICE, keyed by the AETHER_ROLE token its task boots with. A
@@ -424,6 +500,12 @@ module "monitoring" {
   sqs_queue_name            = local.sqs_queue_name
   sqs_dlq_name              = local.sqs_dlq_name
 
+  # A permanently-failed role inside a still-running consolidated task keeps
+  # the ECS service at steady state, so the orchestrator never replaces it.
+  # modules/monitoring turns the supervisor's log line into a metric and an
+  # alarm; without these group names there is no alarm to raise.
+  runtime_service_log_groups = module.ecs.runtime_service_log_groups
+
   alert_email        = var.alert_email
   log_retention_days = var.log_retention_days
 }
@@ -445,14 +527,18 @@ module "ml_drift_lambda" {
 # 9. Auth0 (SPA clients + API resource server)
 # ---------------------------------------------------------------------------
 
+# The Auth0 MANAGEMENT credentials are deliberately absent from this call, and
+# from variables.tf. `terraform show -json` emits every root variable verbatim
+# — `sensitive = true` does not redact the plan JSON's top-level `variables`
+# object — so a credential held as a Terraform variable is a credential in
+# every plan artifact. The provider reads AUTH0_DOMAIN, AUTH0_CLIENT_ID and
+# AUTH0_CLIENT_SECRET from the runner's environment instead; see
+# modules/auth0/main.tf. Nothing here needs them, so nothing here holds them.
 module "auth0" {
   source = "./modules/auth0"
 
-  environment                    = var.environment
-  auth0_domain                   = var.auth0_domain
-  auth0_management_client_id     = var.auth0_management_client_id
-  auth0_management_client_secret = var.auth0_management_client_secret
-  api_audience                   = var.auth0_api_audience
+  environment  = var.environment
+  api_audience = var.auth0_api_audience
 
   aether_callback_urls = ["${var.aether_app_url}/callback"]
   aether_logout_urls   = [var.aether_app_url]

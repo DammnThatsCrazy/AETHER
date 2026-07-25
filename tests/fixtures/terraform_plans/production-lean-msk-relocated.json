@@ -461,6 +461,23 @@
               }
             },
             {
+              "address": "module.ecs.aws_ecs_task_definition.backend",
+              "mode": "managed",
+              "type": "aws_ecs_task_definition",
+              "name": "backend",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "aether-production-backend",
+                "cpu": "1024",
+                "memory": "2048",
+                "requires_compatibilities": [
+                  "FARGATE"
+                ],
+                "network_mode": "awsvpc"
+              }
+            },
+            {
               "address": "module.ecs.aws_ecs_service.backend",
               "mode": "managed",
               "type": "aws_ecs_service",
@@ -504,6 +521,25 @@
                 "enable_execute_command": false
               },
               "index": "lean-worker"
+            }
+          ]
+        },
+        {
+          "address": "module.event_bus",
+          "resources": [
+            {
+              "address": "module.event_bus.aws_msk_cluster.kafka",
+              "mode": "managed",
+              "type": "aws_msk_cluster",
+              "name": "kafka",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cluster_name": "aether-events",
+                "instance_type": "kafka.t3.small",
+                "number_of_broker_nodes": 2,
+                "kafka_version": "3.6.0"
+              }
             }
           ]
         },
@@ -1798,6 +1834,35 @@
       "index": "lean-worker"
     },
     {
+      "address": "module.ecs.aws_ecs_task_definition.backend",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "backend",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "aether-production-backend",
+          "cpu": "1024",
+          "memory": "2048",
+          "requires_compatibilities": [
+            "FARGATE"
+          ],
+          "network_mode": "awsvpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs"
+    },
+    {
       "address": "module.ecs.aws_ecs_task_definition.runtime_role[\"lean-worker\"]",
       "mode": "managed",
       "type": "aws_ecs_task_definition",
@@ -1826,6 +1891,32 @@
       },
       "module_address": "module.ecs",
       "index": "lean-worker"
+    },
+    {
+      "address": "module.event_bus.aws_msk_cluster.kafka",
+      "mode": "managed",
+      "type": "aws_msk_cluster",
+      "name": "kafka",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "cluster_name": "aether-events",
+          "instance_type": "kafka.t3.small",
+          "number_of_broker_nodes": 2,
+          "kafka_version": "3.6.0"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.event_bus"
     },
     {
       "address": "module.monitoring.aws_cloudwatch_dashboard.main",

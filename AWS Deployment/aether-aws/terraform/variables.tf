@@ -115,6 +115,30 @@ variable "network_egress_mode" {
     )
     error_message = "network_egress_mode must be one of: public_ip, single_nat, ha_nat, vpc_endpoints, none."
   }
+
+  # `vpc_endpoints` is a declared mode with no implementation: modules/vpc_endpoints
+  # exists but the root never instantiates it, and this mode provisions no NAT and
+  # assigns no public IP. Selecting it would therefore put tasks in private subnets
+  # with no route to anywhere — ECR pulls fail with CannotPullContainerError, the
+  # deployment circuit-breaker rolls back, and the service never reaches steady
+  # state. That is precisely the defect this egress work was written to fix, so the
+  # mode fails at plan time rather than silently degrading to `none`.
+  #
+  # To implement it: instantiate modules/vpc_endpoints for the interface endpoints
+  # the runtime actually needs (ecr.api, ecr.dkr, s3 gateway, secretsmanager, logs,
+  # sqs, sns, dynamodb gateway), price them in config/aws_price_book.yaml — interface
+  # endpoints are ~$7.30/endpoint/month each, so this is NOT automatically cheaper
+  # than a NAT Gateway and needs the comparison written down — then delete this block.
+  validation {
+    condition     = var.network_egress_mode != "vpc_endpoints"
+    error_message = <<-EOT
+      network_egress_mode = "vpc_endpoints" is declared but not implemented: the
+      root never instantiates modules/vpc_endpoints, so this mode would leave ECS
+      tasks in private subnets with no egress and no endpoints. Use public_ip
+      (zero NAT cost) or single_nat/ha_nat. See variables.tf for what implementing
+      it requires.
+    EOT
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -306,22 +330,16 @@ variable "log_retention_days" {
 # Auth0
 # --------------------------------------------------------------------------
 
-variable "auth0_domain" {
-  type        = string
-  description = "Auth0 tenant domain (e.g. your-tenant.auth0.com)"
-}
-
-variable "auth0_management_client_id" {
-  type        = string
-  description = "Client ID of the Terraform M2M application in Auth0"
-  sensitive   = true
-}
-
-variable "auth0_management_client_secret" {
-  type        = string
-  description = "Client secret of the Terraform M2M application in Auth0"
-  sensitive   = true
-}
+# The Auth0 tenant domain and the Terraform M2M application's client id and
+# secret are NOT declared here, on purpose. A root variable is reproduced in
+# full in `terraform show -json` output regardless of `sensitive = true`, so
+# declaring the secret here put it in clear text in every plan artifact. The
+# auth0 provider takes AUTH0_DOMAIN / AUTH0_CLIENT_ID / AUTH0_CLIENT_SECRET
+# from its own environment, which the CI runner exports; TF_VAR_auth0_* names
+# are no longer read by anything. See modules/auth0/main.tf.
+#
+# Do not "restore for convenience": there is no way to declare a root variable
+# that a plan JSON will not contain.
 
 variable "auth0_api_audience" {
   type        = string

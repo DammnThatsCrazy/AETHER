@@ -37,7 +37,7 @@ into and out of it.
 > **Nothing on this page has been applied.** No credentialed
 > `terraform plan` or `terraform apply` for this profile has run. The
 > `production-lean` scorecard in `config/deployment_readiness.yaml` reads
-> **100/100 code-complete, 20/100 externally-verified** against a gate of 92,
+> **45/100 code-complete, 0/100 externally-verified** against a gate of 92,
 > and `deployment_ready: false`. See [What is proven](#what-is-proven).
 
 ## Selecting the profile
@@ -268,16 +268,16 @@ so an already-applied RDS instance can be adopted and retired through
 
 ## Cost
 
-Modelled fixed baseline: **USD 184.13/month**, inside the USD 200 hard ceiling
-and USD 34.13 over the USD 150 target. That deviation is reviewed and accepted;
+Modelled fixed baseline: **USD 187.13/month**, inside the USD 200 hard ceiling
+and USD 37.13 over the USD 150 target. That deviation is reviewed and accepted;
 the full breakdown, the two rejected sizing levers, the estimation method and
 its assumptions are in [Cost Optimization](COST-OPTIMIZATION.md).
 
 | Scenario | Fixed | Variable | Total |
 |---|---|---|---|
-| low — quiet pilot tenant | 184.13 | 15.25 | **199.38** |
-| expected — founding tenant | 184.13 | 107.22 | **291.35** |
-| high — 10× surprise | 184.13 | 955.40 | **1139.53** |
+| low — quiet pilot tenant | 187.13 | 15.25 | **202.38** |
+| expected — founding tenant | 187.13 | 107.22 | **294.35** |
+| high — 10× surprise | 187.13 | 955.40 | **1142.53** |
 
 **Operating range: roughly USD 200–300/month** at the traffic the commercial
 plan assumes. These are modelled figures from a pinned price book, not an
@@ -570,7 +570,7 @@ Verified in this repository, reproducibly:
 - `scripts/release/check_terraform_plan_policy.py` scores a real plan inventory
   against the contracts and passes.
 - `scripts/release/check_cost_model.py` prices that inventory at
-  USD 184.13/month fixed and passes with a target warning.
+  USD 187.13/month fixed and passes with a target warning.
 
 ## What is externally blocked
 
@@ -602,7 +602,7 @@ recorded as blocked rather than counted as done:
 - No compliance certification, external attestation or audit coverage.
 - The `100/100` figure in the `production-lean` scorecard is the
   **code-complete** column and must never be quoted as "the score". The
-  externally-verified column is `20/100` against a gate of `92`, and
+  externally-verified column is `0/100` against a gate of `92`, and
   `deployment_ready` is `false`.
 
 ## See also

@@ -18,18 +18,28 @@ locks that would all have to be broken at once:
      `required_evidence` entries to resolve on disk AND validate. A missing
      file scores zero. A file that exists but fails its validator also scores
      zero — "present" is not "passing", and the difference is the entire point.
+     An artifact that names a test fixture as its input also scores zero: it is
+     a true statement about a fixture and no statement about a deployment.
 
-  2. CREDENTIALED PROVENANCE. Evidence of kind `credentialed_artifact` must
-     carry a provenance block naming a real AWS account, region, terraform
-     version, capture timestamp, commit and source path. Placeholder accounts,
-     and any source under a temp or scratchpad directory, are rejected by name.
-     Nothing that can be produced by a repository satisfies this kind.
+  2. ATTESTATION, NOT SELF-DECLARATION. Evidence of kind
+     `credentialed_artifact` must carry a structurally valid provenance block
+     (real-looking AWS account, region, terraform version, timezone-aware
+     capture timestamp, commit, non-synthetic source) AND an `attestation`
+     block that a verifier registered in ATTESTATION_VERIFIERS can check.
+     Structural provenance is typed by whoever writes the file, so it is a
+     hygiene check and never evidence. ATTESTATION_VERIFIERS is empty in this
+     repository, which is why the externally-verified score here is zero and
+     cannot be anything else — see the note that prints with every scorecard.
 
   3. THE CONDITION CEILING. Seventeen global conditions are evaluated from
-     artifacts on disk, independently of the control table, and each names the
-     controls it holds hostage. The verified score is capped by the weight of
-     the controls that unmet conditions block. Editing a control cannot raise
-     that ceiling, because the ceiling is not computed from controls.
+     artifacts on disk, independently of the control table. Their identity,
+     kind, evidence path and thresholds are pinned in REQUIRED_CONDITIONS, so
+     the YAML cannot redefine what satisfies one; it supplies prose and blast
+     radius only. The verified score is capped by the weight of the controls
+     that unmet conditions block, and those weights come from
+     PINNED_CONTROL_WEIGHTS rather than from the file being scored — otherwise
+     moving weight off a blocked control and onto an unblocked one would raise
+     the ceiling and the score together, which is exactly what it used to do.
 
   4. THE INVARIANT. If the verified score ever exceeds its ceiling, or reaches
      100 while any condition is unmet, that is not a high score — it is proof
@@ -81,9 +91,14 @@ from typing import Any, Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, main_guard, repo_root  # noqa: E402
+from collect_evidence import BUNDLE_ROOT, BUNDLE_SUBDIRS  # noqa: E402 - one bundle layout
 from release_manifest import canonical  # noqa: E402 - reuse, never re-implement
 
 import yaml  # noqa: E402
+
+# The evidence classes a control's `evidence_path` may name, taken from the
+# bundle collector rather than restated, so the two cannot drift.
+BUNDLE_EVIDENCE_CLASSES = frozenset(BUNDLE_SUBDIRS)
 
 CONFIG_REL = "config/deployment_readiness.yaml"
 COST_EXCEPTIONS_REL = "config/cost_exceptions.yaml"
@@ -109,28 +124,119 @@ TERMINAL_STATUSES = (
 
 EVIDENCE_KINDS = ("check_script", "repo_file", "json_artifact", "credentialed_artifact")
 
-# The seventeen conditions that gate a 100% result. Hardcoded so the bar cannot
-# be lowered by deleting a row from the YAML: a config missing any of these ids
-# is an integrity failure, not a config with fewer conditions.
-REQUIRED_CONDITION_IDS = frozenset({
-    "COND-STAGING-WAKE-APPLIED",
-    "COND-STAGING-TWO-REHEARSALS",
-    "COND-LEAN-PLAN-CREDENTIALED",
-    "COND-COST-OBSERVED-7D",
-    "COND-COST-RECONCILED",
-    "COND-LOAD-VALIDATED",
-    "COND-ROLLBACK-VALIDATED",
-    "COND-NO-UNRESOLVED-P0",
-    "COND-NO-UNRESOLVED-P1",
-    "COND-NO-EXPIRED-EXCEPTIONS",
-    "COND-BUNDLE-CHECKSUM",
-    "COND-MIGRATION-REHEARSED",
-    "COND-SMOKE-PASSED",
-    "COND-SECURITY-VALIDATED",
-    "COND-SLEEP-RESIDUAL",
-    "COND-OBSERVABILITY-LIVE",
-    "COND-PROMOTION-INTEGRITY",
-})
+# The seventeen conditions that gate a 100% result, pinned WHOLE: id, kind,
+# evidence path and any numeric threshold. Pinning ids alone was not enough --
+# deleting a condition was caught, but rewriting all seventeen `kind:` values to
+# `ledger_severity` with a severity no item carries yielded 17/17 met with
+# release-evidence/ absent from disk. The evaluator reads this table, not the
+# YAML, so what a condition MEANS cannot be edited in the file that declares it.
+# The YAML supplies prose and blast radius only, and must agree with this table.
+REQUIRED_CONDITIONS: dict[str, dict[str, Any]] = {
+    "COND-STAGING-WAKE-APPLIED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/lifecycle/staging-wake.json"},
+    "COND-STAGING-TWO-REHEARSALS": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/lifecycle/rehearsal-history.json"},
+    "COND-LEAN-PLAN-CREDENTIALED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/terraform/lean-plan-provenance.json"},
+    "COND-COST-OBSERVED-7D": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/cost/observed-cost.json",
+        "minimum_days": 7},
+    "COND-COST-RECONCILED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/cost/reconciliation.json",
+        "tolerance_percent": 25},
+    "COND-LOAD-VALIDATED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/load/load-result.json"},
+    "COND-ROLLBACK-VALIDATED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/rollback/rollback-result.json"},
+    "COND-NO-UNRESOLVED-P0": {
+        "kind": "ledger_severity", "evidence": LEDGER_REL, "severity": "P0"},
+    "COND-NO-UNRESOLVED-P1": {
+        "kind": "ledger_severity", "evidence": LEDGER_REL, "severity": "P1"},
+    "COND-NO-EXPIRED-EXCEPTIONS": {
+        "kind": "exception_expiry", "evidence": CONFIG_REL},
+    "COND-BUNDLE-CHECKSUM": {
+        "kind": "bundle_checksum", "evidence": "release-evidence/manifest.sha256"},
+    "COND-MIGRATION-REHEARSED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/migrations/migration-result.json"},
+    "COND-SMOKE-PASSED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/smoke/smoke-result.json"},
+    "COND-SECURITY-VALIDATED": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/security/security-result.json"},
+    "COND-SLEEP-RESIDUAL": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/lifecycle/sleep-residual.json"},
+    "COND-OBSERVABILITY-LIVE": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/observability/alarm-evidence.json"},
+    "COND-PROMOTION-INTEGRITY": {
+        "kind": "credentialed_artifact",
+        "evidence": "release-evidence/terraform/promotion-provenance.json"},
+}
+
+REQUIRED_CONDITION_IDS = frozenset(REQUIRED_CONDITIONS)
+
+# Every control, its scorecard and its weight, pinned in code.
+#
+# WHY WEIGHTS ARE PINNED
+#   The docstring used to claim the condition ceiling "is not computed from
+#   controls". It was: `total - sum(weight of blocked controls)`. So moving
+#   weight off a blocked control and onto an unblocked one raised the ceiling
+#   and the verified score together -- a weight edit alone, no new evidence,
+#   took the lean scorecard from 20 to 95 with the gate reported as met and an
+#   exit code of 0. A weight is not evidence, and it is not something the file
+#   being scored gets to choose. Editing one here is a code change with review;
+#   editing one in YAML is now an integrity failure.
+PINNED_CONTROL_WEIGHTS: dict[str, tuple[str, int]] = {
+    "OVR-TERRAFORM-ENFORCEMENT": ("overall", 25),
+    "OVR-LEAN-TOPOLOGY": ("overall", 15),
+    "OVR-PLAN-CI-CORRECTNESS": ("overall", 15),
+    "OVR-COST-ENFORCEMENT": ("overall", 15),
+    "OVR-PROMOTION-ROLLBACK": ("overall", 10),
+    "OVR-STAGING-LIFECYCLE": ("overall", 10),
+    "OVR-CROSS-PROFILE-PARITY": ("overall", 5),
+    "OVR-DOCS-RUNBOOKS": ("overall", 5),
+    "LEAN-FORBIDDEN-EXCLUSION": ("production-lean", 25),
+    "LEAN-REQUIRED-PRESENCE": ("production-lean", 10),
+    "LEAN-RUNTIME-TOPOLOGY": ("production-lean", 20),
+    "LEAN-COST-CEILING": ("production-lean", 20),
+    "LEAN-PROMOTION-INTEGRITY": ("production-lean", 10),
+    "LEAN-OBSERVABILITY-ROLLBACK": ("production-lean", 5),
+    "LEAN-DOCS-EVIDENCE": ("production-lean", 10),
+    "STG-WAKE": ("staging", 10),
+    "STG-EXACT-ARTIFACT": ("staging", 10),
+    "STG-MIGRATIONS": ("staging", 15),
+    "STG-SMOKE": ("staging", 15),
+    "STG-SECURITY-ISOLATION": ("staging", 15),
+    "STG-LOAD": ("staging", 10),
+    "STG-ROLLBACK": ("staging", 10),
+    "STG-SLEEP-RESIDUAL": ("staging", 10),
+    "STG-EVIDENCE-COMPLETE": ("staging", 5),
+}
+
+# Attestation verifiers this tool can actually execute, by `attestation.kind`.
+#
+# DELIBERATELY EMPTY.
+#   `validate_provenance` below checks the SHAPE of a provenance block: twelve
+#   digits, a region that looks like a region, a timezone-aware timestamp. Every
+#   one of those fields is written by whoever writes the file. Fifteen
+#   hand-authored JSONs took the overall verified score from 20 to 95, and
+#   adding this repository's own bundle seal took all three scorecards to 100
+#   with `deployment_ready: true` and no AWS involved at any point.
+#   Nothing in this repository can verify that an artifact came from a real
+#   account, so nothing in this repository may earn an externally-VERIFIED
+#   point. That is not a limitation being worked around; it is the answer.
+#   Registering a verifier here is how that changes, and it takes code.
+ATTESTATION_VERIFIERS: dict[str, Callable[[dict], list[str]]] = {}
 
 _HEX_COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
 _AWS_ACCOUNT = re.compile(r"^[0-9]{12}$")
@@ -262,6 +368,73 @@ def validate_provenance(data: dict) -> list[str]:
     return reasons
 
 
+def verify_attestation(data: dict) -> list[str]:
+    """Return the reasons an artifact is self-declared rather than attested.
+
+    Everything `validate_provenance` inspects was typed by whoever wrote the
+    file. Structural validity is worth checking -- it catches the careless case
+    -- but it is not evidence, and a scorecard that treats it as evidence can be
+    filled in with a text editor: fifteen hand-authored JSONs took the overall
+    verified score from 20 to 95, and adding this repository's own bundle seal
+    took all three scorecards to 100 with `deployment_ready: true`.
+
+    An artifact becomes externally VERIFIED only when something outside this
+    repository vouches for it. ATTESTATION_VERIFIERS is empty, so this rejects
+    everything and says why, rather than returning a number that implies
+    otherwise.
+    """
+    prov = data.get("provenance")
+    attestation = prov.get("attestation") if isinstance(prov, dict) else None
+    available = sorted(ATTESTATION_VERIFIERS) or ["none — no verifier is registered"]
+    if not isinstance(attestation, dict):
+        return [
+            "provenance is self-declared: no `provenance.attestation` block, so "
+            "nothing outside this repository vouches for it, and structural "
+            "provenance alone cannot earn an externally-verified point"
+        ]
+    kind = str(attestation.get("kind", ""))
+    verifier = ATTESTATION_VERIFIERS.get(kind)
+    if verifier is None:
+        return [
+            f"attestation kind {kind!r} has no verifier this tool can execute "
+            f"(available: {', '.join(available)}); a self-declared attestation "
+            f"is still self-declared"
+        ]
+    return list(verifier(data))
+
+
+def synthetic_artifact_reason(data: dict) -> str | None:
+    """Why an artifact describes synthetic input rather than a real deployment.
+
+    Aether's generated artifacts record what they were derived from:
+    `profile-resource-inventory.json` records the plan it read,
+    `cost-report.json` records the inventory, `profile-policy-result.json`
+    records the plan JSON. When that input was a committed test fixture the
+    artifact is a true statement about a fixture and no statement at all about a
+    deployment -- which is how running one make target against the committed
+    fixture moved the code-complete score by 40 points and made the number
+    depend on which gitignored directories happened to exist locally.
+    """
+    for key in ("synthetic_input", "generated_from", "inventory_path",
+                "plan_json", "source", "provenance.source",
+                # One step of indirection: a cost report prices an inventory,
+                # and it is the INVENTORY's input that decides whether the
+                # number describes a deployment or a fixture.
+                "inventory_source.synthetic_input",
+                "inventory_source.generated_from"):
+        found, value = _dig(data, key)
+        if not found or not isinstance(value, str) or not value:
+            continue
+        lowered = value.replace("\\", "/").lower()
+        for marker in UNTRUSTED_SOURCE_MARKERS + ("tests/fixtures",):
+            if marker in lowered:
+                return (f"artifact records {key}={value!r}, a "
+                        f"{marker.strip('/')} source; an artifact derived from a "
+                        f"test fixture is evidence about the fixture, not about "
+                        f"a deployment")
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Evidence validators
 # ---------------------------------------------------------------------------
@@ -347,8 +520,18 @@ def evaluate_evidence(root: Path, entry: dict,
             row["reason"] = f"artifact key {key!r} is not true"
             return row
 
+    # Applies to BOTH artifact kinds and is not configurable from the YAML: an
+    # artifact that names a fixture as its input earns nothing, whichever kind
+    # it was declared as, so the score reflects the commit rather than which
+    # gitignored directories a particular checkout happens to have.
+    synthetic = synthetic_artifact_reason(data)
+    if synthetic:
+        row["reason"] = synthetic
+        row["synthetic"] = True
+        return row
+
     if kind == "credentialed_artifact":
-        reasons = validate_provenance(data)
+        reasons = validate_provenance(data) + verify_attestation(data)
         if reasons:
             row["reason"] = "; ".join(reasons)
             return row
@@ -478,8 +661,24 @@ def evaluate_conditions(root: Path, config: dict) -> list[dict]:
     results: list[dict] = []
     for row in config.get("gate_conditions") or []:
         cid = str(row.get("id"))
-        kind = str(row.get("kind"))
-        evidence = str(row.get("evidence", ""))
+        # What a condition MEANS comes from the pinned table, never from the
+        # file being scored. An id the table does not know cannot be evaluated
+        # at all, and check_integrity has already failed the run for it.
+        pinned = REQUIRED_CONDITIONS.get(cid)
+        if pinned is None:
+            results.append({
+                "id": cid, "description": row.get("description"),
+                "kind": str(row.get("kind")), "evidence": str(row.get("evidence", "")),
+                "met": False,
+                "reason": (f"{cid} is not one of the {len(REQUIRED_CONDITIONS)} pinned "
+                           f"gate conditions, so this tool has no definition of what "
+                           f"would satisfy it"),
+                "blocks_controls": list(row.get("blocks_controls") or []),
+            })
+            continue
+
+        kind = str(pinned["kind"])
+        evidence = str(pinned.get("evidence", ""))
         met, reason = False, ""
 
         if kind == "credentialed_artifact":
@@ -487,20 +686,20 @@ def evaluate_conditions(root: Path, config: dict) -> list[dict]:
             if data is None:
                 reason = f"{evidence} {err}"
             else:
-                reasons = validate_provenance(data)
+                reasons = validate_provenance(data) + verify_attestation(data)
                 if reasons:
                     reason = "; ".join(reasons)
                 else:
                     met, reason = True, ""
                     # Condition-specific thresholds on top of provenance.
-                    minimum_days = row.get("minimum_days")
+                    minimum_days = pinned.get("minimum_days")
                     if minimum_days is not None:
                         observed = data.get("days")
                         if not isinstance(observed, int) or observed < int(minimum_days):
                             met = False
                             reason = (f"{observed!r} days of observed cost, "
                                       f"{minimum_days} required")
-                    tolerance = row.get("tolerance_percent")
+                    tolerance = pinned.get("tolerance_percent")
                     if met and tolerance is not None:
                         variance = data.get("variance_percent")
                         if not isinstance(variance, (int, float)):
@@ -510,17 +709,14 @@ def evaluate_conditions(root: Path, config: dict) -> list[dict]:
                             reason = (f"variance {variance}% exceeds the "
                                       f"{tolerance}% reconciliation tolerance")
         elif kind == "ledger_severity":
-            met, reason = _outstanding_ledger_items(root, str(row.get("severity")))
+            met, reason = _outstanding_ledger_items(root, str(pinned.get("severity")))
         elif kind == "exception_expiry":
             expired = _expired_exceptions(root, config)
             met = not expired
             reason = "; ".join(expired)
         elif kind == "bundle_checksum":
-            verdict = verify_bundle_checksum(
-                root, str((config.get("evidence_bundle") or {}).get("root", "release-evidence"))
-            )
-            met, reason = verdict["verified"], verdict["reason"]
-        else:
+            met, reason = _bundle_condition(root, config)
+        else:  # pragma: no cover - the pinned table has no other kinds
             reason = f"unknown condition kind {kind!r}"
 
         results.append({
@@ -533,6 +729,32 @@ def evaluate_conditions(root: Path, config: dict) -> list[dict]:
             "blocks_controls": list(row.get("blocks_controls") or []),
         })
     return results
+
+
+def _bundle_condition(root: Path, config: dict) -> tuple[bool, str]:
+    """The bundle must verify AND be vouched for by something outside the repo.
+
+    Integrity alone is satisfiable in-repo by construction: collect_evidence.py
+    seals whatever happens to be on disk, so `manifest.json` hashing to
+    `manifest.sha256` proves the bundle has not been edited SINCE it was sealed
+    and nothing whatsoever about where its contents came from. As one of the
+    seventeen conditions for a 100% result, it needs an external anchor, and it
+    is honest about not having one.
+    """
+    bundle_root = str((config.get("evidence_bundle") or {}).get("root", "release-evidence"))
+    verdict = verify_bundle_checksum(root, bundle_root)
+    if not verdict["verified"]:
+        return False, verdict["reason"]
+    manifest, err = _read_json(root / bundle_root / "manifest.json")
+    if manifest is None:  # pragma: no cover - verify_bundle_checksum read it already
+        return False, f"manifest.json {err}"
+    reasons = verify_attestation(manifest)
+    if reasons:
+        return False, (
+            f"{verdict['files_checked']} file(s) hash to their recorded digests, "
+            f"but the manifest is self-sealed: " + "; ".join(reasons)
+        )
+    return True, ""
 
 
 # ---------------------------------------------------------------------------
@@ -556,6 +778,26 @@ def check_integrity(config: dict, reporter: Reporter) -> None:
         if cid in seen:
             reporter.fail(f"duplicate control id {cid}")
         seen.add(cid)
+
+        # Weights are pinned in code. A weight edit in YAML moves the score AND
+        # the ceiling that is supposed to cap it, so it is an integrity failure
+        # rather than a scoring input.
+        pinned = PINNED_CONTROL_WEIGHTS.get(cid)
+        if pinned is None:
+            reporter.fail(
+                f"{cid}: not in PINNED_CONTROL_WEIGHTS; a control that is not "
+                f"pinned in code can be given any weight by editing this file")
+        else:
+            profile, weight = pinned
+            if str(control.get("profile")) != profile:
+                reporter.fail(f"{cid}: profile {control.get('profile')!r} does not "
+                              f"match the pinned scorecard {profile!r}")
+            if int(control.get("weight", 0)) != weight:
+                reporter.fail(
+                    f"{cid}: weight {control.get('weight')} does not match the "
+                    f"pinned weight {weight}; weights are pinned in code because "
+                    f"moving weight between controls moves the condition ceiling "
+                    f"with it")
 
         for field in ("id", "profile", "description", "weight", "required_evidence",
                       "status", "last_verified_commit", "last_verified_at",
@@ -588,6 +830,25 @@ def check_integrity(config: dict, reporter: Reporter) -> None:
                               f"{entry.get('kind')!r}, which is not a known kind")
             if not entry.get("path"):
                 reporter.fail(f"{cid}: evidence {entry.get('id')!r} declares no path")
+            # External evidence is bundle evidence. One that points outside the
+            # bundle would never be collected, reviewed or checksummed with it.
+            if entry.get("external") and not str(entry.get("path", "")).startswith(
+                    BUNDLE_ROOT + "/"):
+                reporter.fail(
+                    f"{cid}: external evidence {entry.get('id')!r} at "
+                    f"{entry.get('path')!r} is outside {BUNDLE_ROOT}/, so it is "
+                    f"never sealed into the evidence bundle")
+
+        # `evidence_path` was required on every control, stored, and read by
+        # nothing. It now has to name a real evidence class of the bundle, and
+        # it is what the report lists a control's collected files from.
+        evidence_path = str(control.get("evidence_path") or "")
+        if evidence_path.rstrip("/").split("/")[-1] not in BUNDLE_EVIDENCE_CLASSES or \
+                not evidence_path.startswith(BUNDLE_ROOT + "/"):
+            reporter.fail(
+                f"{cid}: evidence_path {evidence_path!r} is not one of the "
+                f"{BUNDLE_ROOT}/ evidence classes "
+                f"({', '.join(sorted(BUNDLE_EVIDENCE_CLASSES))})")
 
         # A declared external dependency with no external evidence is the exact
         # shape of a control that quietly scores itself. Reject it outright.
@@ -625,7 +886,10 @@ def check_integrity(config: dict, reporter: Reporter) -> None:
         if not 0 < gate <= int(card.get("total", 0)):
             reporter.fail(f"{profile}: gate {gate} is not within the scorecard total")
 
-    # The seventeen conditions may not be deleted, renamed, or trimmed.
+    # The seventeen conditions may not be deleted, renamed, trimmed -- or
+    # redefined. Pinning ids alone left `kind` and `evidence` editable, and
+    # rewriting all seventeen kinds to `ledger_severity` with a severity no
+    # ledger item carries produced 17/17 met with release-evidence/ absent.
     declared = {str(c.get("id")) for c in config.get("gate_conditions") or []}
     missing = REQUIRED_CONDITION_IDS - declared
     extra = declared - REQUIRED_CONDITION_IDS
@@ -635,8 +899,23 @@ def check_integrity(config: dict, reporter: Reporter) -> None:
         f"gate conditions missing from the config: {sorted(missing)}",
     )
     if extra:
-        reporter.fail(f"unrecognised gate conditions (add them to REQUIRED_CONDITION_IDS "
+        reporter.fail(f"unrecognised gate conditions (add them to REQUIRED_CONDITIONS "
                       f"deliberately, do not invent them in YAML): {sorted(extra)}")
+    drifted: list[str] = []
+    for row in config.get("gate_conditions") or []:
+        pinned = REQUIRED_CONDITIONS.get(str(row.get("id")))
+        if pinned is None:
+            continue
+        for field, expected in pinned.items():
+            actual = row.get(field)
+            if actual != expected:
+                drifted.append(
+                    f"{row.get('id')}.{field} is {actual!r}, pinned as {expected!r}")
+    reporter.require(
+        not drifted,
+        "every gate condition's kind, evidence and thresholds match the pinned table",
+        f"gate condition definitions drifted from the pinned table: {drifted}",
+    )
 
     # Every control a condition claims to block must exist.
     for row in config.get("gate_conditions") or []:
@@ -673,24 +952,53 @@ def score_controls(root: Path, config: dict,
         # in-repo claim, so it earns nothing.
         code_complete = bool(internal) and all(e["satisfied"] for e in internal)
         # Externally verified: code-complete AND every external artifact is
-        # present and credentialed.
-        verified = code_complete and all(e["satisfied"] for e in external)
+        # present and attested.
+        #
+        # `bool(external)` is load-bearing. `all([])` is True, so a control with
+        # ZERO external evidence entries was silently promoted to verified --
+        # which was not an edge case, it was 100% of the shipped verified score:
+        # OVR-LEAN-TOPOLOGY, OVR-CROSS-PROFILE-PARITY and LEAN-RUNTIME-TOPOLOGY
+        # have no external evidence at all, and the tool printed
+        # "externally-verified 20" beside a note saying no AWS is reachable.
+        # A control that declares nothing external has not been verified against
+        # anything external; it is unproven, which is a different word.
+        verified = code_complete and bool(external) and all(
+            e["satisfied"] for e in external)
 
+        cid = str(control.get("id"))
+        pinned = PINNED_CONTROL_WEIGHTS.get(cid)
         rows.append({
             "id": control.get("id"),
             "profile": control.get("profile"),
             "description": control.get("description"),
-            "weight": int(control.get("weight", 0)),
+            # The pinned weight wins wherever one exists, so a YAML weight edit
+            # changes no number at all -- and check_integrity separately fails
+            # the run for the edit, and for any control id that is not pinned.
+            "weight": int(pinned[1]) if pinned else int(control.get("weight", 0)),
+            "declared_weight": int(control.get("weight", 0)),
             "status": control.get("status"),
             "exception": control.get("exception"),
             "external_dependency": control.get("external_dependency") or {},
             "evidence_path": control.get("evidence_path"),
+            "evidence_files": _bundle_files(root, str(control.get("evidence_path") or "")),
             "code_complete": code_complete,
             "externally_verified": verified,
+            "externally_verifiable": bool(external),
+            "external_evidence_entries": len(external),
             "evidence": evidence,
             "unmet": [f"{e['id']}: {e['reason']}" for e in evidence if not e["satisfied"]],
         })
     return rows
+
+
+def _bundle_files(root: Path, evidence_path: str) -> list[str]:
+    """The evidence actually collected under a control's `evidence_path`."""
+    if not evidence_path:
+        return []
+    target = root / evidence_path
+    if not target.is_dir():
+        return []
+    return sorted(p.relative_to(root).as_posix() for p in target.rglob("*") if p.is_file())
 
 
 def build_scorecards(config: dict, controls: list[dict],
@@ -708,9 +1016,13 @@ def build_scorecards(config: dict, controls: list[dict],
         gate = int(meta.get("gate", 0))
         code = sum(c["weight"] for c in members if c["code_complete"])
         verified = sum(c["weight"] for c in members if c["externally_verified"])
-        # The ceiling is computed from unmet conditions only. It deliberately
-        # does not read the controls' own verdicts, so it stays an independent
-        # check on them rather than a restatement of them.
+        # The ceiling is computed from unmet conditions and PINNED weights. It
+        # reads no verdict from the control table, and the weights it sums are
+        # the ones in PINNED_CONTROL_WEIGHTS rather than the ones in the file
+        # being scored -- so editing the file cannot move it in either
+        # direction. (It used to sum the YAML's weights, which meant moving
+        # weight off a blocked control and onto an unblocked one raised the
+        # ceiling and the score together.)
         blocked = sum(c["weight"] for c in members if c["id"] in unmet_blocked)
         ceiling = total - blocked
         cards[profile] = {
@@ -728,6 +1040,13 @@ def build_scorecards(config: dict, controls: list[dict],
             "controls_code_complete": sum(1 for c in members if c["code_complete"]),
             "controls_verified": sum(1 for c in members if c["externally_verified"]),
             "blocked_controls": sorted(c["id"] for c in members if c["id"] in unmet_blocked),
+            # Controls that declare no external evidence can never be verified.
+            # Reported so the shortfall is visible as a property of the control
+            # table rather than looking like missing artifacts.
+            "controls_without_external_evidence": sorted(
+                c["id"] for c in members if not c["externally_verifiable"]),
+            "unverifiable_weight": sum(
+                c["weight"] for c in members if not c["externally_verifiable"]),
         }
     return cards
 
@@ -794,12 +1113,27 @@ def build_report(root: Path, config: dict,
         "deployment_ready": bool(
             not unmet and all(c["gate_met"] for c in cards.values())
         ),
+        "attestation": {
+            "verifiers_registered": sorted(ATTESTATION_VERIFIERS),
+            "note": (
+                "No attestation verifier is registered in this tool, so no "
+                "artifact in this repository can earn an externally-verified "
+                "point, whatever provenance it declares. A provenance block is "
+                "typed by whoever writes the file; treating it as proof would "
+                "make the verified score a text-editing exercise. The verified "
+                "score is therefore 0 by construction here, and that is the "
+                "honest number rather than a missing feature."
+            ),
+        },
         "environment_note": (
             "No AWS credentials, applied infrastructure, billing history or "
             "staging rehearsal is reachable from this repository. Every control "
             "requiring one is reported as unproven, and the externally-verified "
-            "score is capped accordingly. The code-complete score is not a "
-            "readiness figure and must not be quoted as one."
+            "score is capped accordingly. Self-declared provenance never earns a "
+            "verified point: with no attestation verifier registered, the "
+            "externally-verified score here is 0 by construction. The "
+            "code-complete score is not a readiness figure and must not be "
+            "quoted as one."
         ),
     }
 
@@ -821,6 +1155,9 @@ def render(report: dict, profile_filter: str | None = None) -> None:
         print(f"    unproven weight overall   {card['unproven_weight']:>3} points")
         print(f"    max attainable verified   {card['max_attainable_verified_score']:>3} "
               "under the currently unmet gate conditions")
+        print(f"    unverifiable weight     {card['unverifiable_weight']:>5} points "
+              f"in {len(card['controls_without_external_evidence'])} control(s) that "
+              "declare no external evidence and can never be verified")
         print(f"    {mark} gate: {card['gate']} required on "
               f"{card['gate_basis']}, have {card['externally_verified_score']}")
 
@@ -849,6 +1186,7 @@ def render(report: dict, profile_filter: str | None = None) -> None:
             print(f"    · {c['id']} ({c['weight']} pts, {c['profile']}): {c['unmet'][0]}")
 
     print(f"\n  deployment_ready: {report['deployment_ready']}")
+    print(f"\n  {report['attestation']['note']}")
     print(f"\n  {report['environment_note']}")
     print("=" * 70)
 

@@ -27,11 +27,22 @@ terraform {
   }
 }
 
-provider "auth0" {
-  domain        = var.auth0_domain
-  client_id     = var.auth0_management_client_id
-  client_secret = var.auth0_management_client_secret
-}
+# NO `provider "auth0"` BLOCK, AND NO auth0_* CREDENTIAL VARIABLES.
+#
+# `terraform show -json` does not honour `sensitive = true` for ROOT variables:
+# every root variable is emitted verbatim in the plan JSON's top-level
+# `variables` object, sensitive or not. So as long as the management client id
+# and secret were Terraform variables, every plan artifact carried them in
+# clear text, and the only available controls were sanitising the JSON after
+# the fact and shortening artifact retention.
+#
+# The auth0 provider reads AUTH0_DOMAIN, AUTH0_CLIENT_ID and
+# AUTH0_CLIENT_SECRET from its own environment, so the credentials never have
+# to enter Terraform's variable space at all. This module therefore configures
+# no provider and declares no credential variables: the runner exports the
+# AUTH0_* names, the provider picks them up, and the plan JSON has nothing to
+# leak. Exporting them is a workflow responsibility (TF_VAR_auth0_* no longer
+# does anything).
 
 # --------------------------------------------------------------------------
 # API Resource Server
@@ -43,9 +54,9 @@ resource "auth0_resource_server" "api" {
   identifier  = var.api_audience
   signing_alg = "RS256"
 
-  token_lifetime               = 86400   # 24 h
-  token_lifetime_for_web       = 7200    # 2 h for browser sessions
-  allow_offline_access         = false
+  token_lifetime                                  = 86400 # 24 h
+  token_lifetime_for_web                          = 7200  # 2 h for browser sessions
+  allow_offline_access                            = false
   skip_consent_for_verifiable_first_party_clients = true
 
   enforce_policies = true
@@ -78,23 +89,23 @@ resource "auth0_client" "aether" {
   app_type        = "spa"
   oidc_conformant = true
 
-  callbacks               = var.aether_callback_urls
-  allowed_logout_urls     = var.aether_logout_urls
-  web_origins             = var.aether_web_origins
-  allowed_origins         = var.aether_web_origins
+  callbacks           = var.aether_callback_urls
+  allowed_logout_urls = var.aether_logout_urls
+  web_origins         = var.aether_web_origins
+  allowed_origins     = var.aether_web_origins
 
   jwt_configuration {
     alg = "RS256"
   }
 
   refresh_token {
-    rotation_type   = "rotating"
-    expiration_type = "expiring"
-    leeway          = 0
-    token_lifetime  = 2592000  # 30 days
+    rotation_type                = "rotating"
+    expiration_type              = "expiring"
+    leeway                       = 0
+    token_lifetime               = 2592000 # 30 days
     infinite_idle_token_lifetime = false
     infinite_token_lifetime      = false
-    idle_token_lifetime          = 1296000  # 15 days
+    idle_token_lifetime          = 1296000 # 15 days
   }
 }
 
@@ -119,20 +130,20 @@ resource "auth0_client" "kyber" {
   app_type        = "spa"
   oidc_conformant = true
 
-  callbacks               = var.kyber_callback_urls
-  allowed_logout_urls     = var.kyber_logout_urls
-  web_origins             = var.kyber_web_origins
-  allowed_origins         = var.kyber_web_origins
+  callbacks           = var.kyber_callback_urls
+  allowed_logout_urls = var.kyber_logout_urls
+  web_origins         = var.kyber_web_origins
+  allowed_origins     = var.kyber_web_origins
 
   jwt_configuration {
     alg = "RS256"
   }
 
   refresh_token {
-    rotation_type   = "rotating"
-    expiration_type = "expiring"
-    leeway          = 0
-    token_lifetime  = 2592000
+    rotation_type                = "rotating"
+    expiration_type              = "expiring"
+    leeway                       = 0
+    token_lifetime               = 2592000
     infinite_idle_token_lifetime = false
     infinite_token_lifetime      = false
     idle_token_lifetime          = 1296000

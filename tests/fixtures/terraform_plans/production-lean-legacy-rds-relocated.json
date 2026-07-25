@@ -243,6 +243,36 @@
           ]
         },
         {
+          "address": "module.database",
+          "resources": [
+            {
+              "address": "module.database.aws_db_instance.postgres",
+              "mode": "managed",
+              "type": "aws_db_instance",
+              "name": "postgres",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "identifier": "aether-legacy",
+                "instance_class": "db.t4g.micro",
+                "engine": "postgres",
+                "allocated_storage": 20
+              }
+            },
+            {
+              "address": "module.database.aws_db_subnet_group.postgres",
+              "mode": "managed",
+              "type": "aws_db_subnet_group",
+              "name": "postgres",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether-legacy-subnets"
+              }
+            }
+          ]
+        },
+        {
           "address": "module.dynamodb_cache",
           "resources": [
             {
@@ -458,6 +488,23 @@
               "schema_version": 0,
               "values": {
                 "retention_in_days": 30
+              }
+            },
+            {
+              "address": "module.ecs.aws_ecs_task_definition.backend",
+              "mode": "managed",
+              "type": "aws_ecs_task_definition",
+              "name": "backend",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "aether-production-backend",
+                "cpu": "1024",
+                "memory": "2048",
+                "requires_compatibilities": [
+                  "FARGATE"
+                ],
+                "network_mode": "awsvpc"
               }
             },
             {
@@ -1338,6 +1385,55 @@
       "module_address": "module.aurora"
     },
     {
+      "address": "module.database.aws_db_instance.postgres",
+      "mode": "managed",
+      "type": "aws_db_instance",
+      "name": "postgres",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "identifier": "aether-legacy",
+          "instance_class": "db.t4g.micro",
+          "engine": "postgres",
+          "allocated_storage": 20
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.database"
+    },
+    {
+      "address": "module.database.aws_db_subnet_group.postgres",
+      "mode": "managed",
+      "type": "aws_db_subnet_group",
+      "name": "postgres",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-legacy-subnets"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.database"
+    },
+    {
       "address": "module.dynamodb_cache.aws_dynamodb_table.cache",
       "mode": "managed",
       "type": "aws_dynamodb_table",
@@ -1796,6 +1892,35 @@
       },
       "module_address": "module.ecs",
       "index": "lean-worker"
+    },
+    {
+      "address": "module.ecs.aws_ecs_task_definition.backend",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "backend",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "aether-production-backend",
+          "cpu": "1024",
+          "memory": "2048",
+          "requires_compatibilities": [
+            "FARGATE"
+          ],
+          "network_mode": "awsvpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs"
     },
     {
       "address": "module.ecs.aws_ecs_task_definition.runtime_role[\"lean-worker\"]",

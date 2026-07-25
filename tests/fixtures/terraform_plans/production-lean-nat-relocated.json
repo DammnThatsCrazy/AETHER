@@ -461,6 +461,23 @@
               }
             },
             {
+              "address": "module.ecs.aws_ecs_task_definition.backend",
+              "mode": "managed",
+              "type": "aws_ecs_task_definition",
+              "name": "backend",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "aether-production-backend",
+                "cpu": "1024",
+                "memory": "2048",
+                "requires_compatibilities": [
+                  "FARGATE"
+                ],
+                "network_mode": "awsvpc"
+              }
+            },
+            {
               "address": "module.ecs.aws_ecs_service.backend",
               "mode": "managed",
               "type": "aws_ecs_service",
@@ -504,6 +521,33 @@
                 "enable_execute_command": false
               },
               "index": "lean-worker"
+            }
+          ]
+        },
+        {
+          "address": "module.egress",
+          "resources": [
+            {
+              "address": "module.egress.aws_nat_gateway.this",
+              "mode": "managed",
+              "type": "aws_nat_gateway",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "connectivity_type": "public"
+              }
+            },
+            {
+              "address": "module.egress.aws_eip.nat",
+              "mode": "managed",
+              "type": "aws_eip",
+              "name": "nat",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "domain": "vpc"
+              }
             }
           ]
         },
@@ -1798,6 +1842,35 @@
       "index": "lean-worker"
     },
     {
+      "address": "module.ecs.aws_ecs_task_definition.backend",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "backend",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "aether-production-backend",
+          "cpu": "1024",
+          "memory": "2048",
+          "requires_compatibilities": [
+            "FARGATE"
+          ],
+          "network_mode": "awsvpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs"
+    },
+    {
       "address": "module.ecs.aws_ecs_task_definition.runtime_role[\"lean-worker\"]",
       "mode": "managed",
       "type": "aws_ecs_task_definition",
@@ -1826,6 +1899,52 @@
       },
       "module_address": "module.ecs",
       "index": "lean-worker"
+    },
+    {
+      "address": "module.egress.aws_eip.nat",
+      "mode": "managed",
+      "type": "aws_eip",
+      "name": "nat",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "domain": "vpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.egress"
+    },
+    {
+      "address": "module.egress.aws_nat_gateway.this",
+      "mode": "managed",
+      "type": "aws_nat_gateway",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "connectivity_type": "public"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.egress"
     },
     {
       "address": "module.monitoring.aws_cloudwatch_dashboard.main",

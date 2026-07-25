@@ -28,6 +28,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -130,6 +131,163 @@ def test_staging_awake_and_asleep_report_their_state(tmp_path):
 
     assert state(awake) == "awake"
     assert state(asleep) == "asleep"
+
+
+def test_always_on_staging_compute_is_deferred_not_passed(tmp_path):
+    """A green status for a control nothing evaluated is a lie.
+
+    Whether staging is actually slept after validation is a lifecycle property
+    no plan can show. The gate used to record `status: pass` for it anyway,
+    which reads identically to a control that was checked and held.
+    """
+    _, result, _ = run("staging", "staging-awake.json", tmp_path)
+    row = next(i for i in result["results"]
+               if i["check"] == "forbidden.always_on_staging_compute")
+    assert row["status"] == "deferred"
+    assert row["status"] != "pass"
+    assert row["deferred_to"] == "scripts/release/check_cost_policy.py"
+    assert "is NOT asserted here" in row["detail"]
+    # Deferred is not a violation either: the plan-observable half held.
+    assert result["passed"] is True
+    assert row not in result["violations"]
+
+
+def test_a_staging_plan_without_a_wake_sleep_budget_still_fails(tmp_path, monkeypatch):
+    """Deferring the lifecycle half must not defer the plan-observable half."""
+    real = MODULE.load_yaml
+
+    def fake(rel_path):
+        doc = real(rel_path)
+        if rel_path == MODULE.PROFILES_YAML:
+            doc = copy.deepcopy(doc)
+            doc["profiles"]["staging"]["wake_sleep"] = False
+        return doc
+
+    monkeypatch.setattr(MODULE, "load_yaml", fake)
+    code, result, _ = run("staging", "staging-awake.json", tmp_path)
+    assert code == 1
+    assert "forbidden.always_on_staging_compute" in failed_checks(result)
+
+
+def test_valid_enterprise_isolated_plan_passes(tmp_path):
+    """The fourth cloud profile was contracted but never exercised by a plan.
+
+    enterprise-isolated declares its own cost_policy (ha_nat egress, three NAT
+    gateways, the heavy backends permitted contractually) and had no fixture at
+    all, so nothing proved the gate could even run against it.
+    """
+    code, result, inventory = run(
+        "enterprise-isolated", "enterprise-isolated-valid.json", tmp_path)
+    assert code == 0, f"valid enterprise plan rejected: {failed_checks(result)}"
+    nat = next(i for i in result["results"] if i["check"] == "network_egress_mode")
+    assert nat["observed"] == 3 and nat["mode"] == "ha_nat"
+    assert inventory["canonical_summary"]["frontend_ecs_services"]["count"] == 0
+    assert inventory["canonical_summary"]["legacy_rds"]["count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# A forbidden TYPE is forbidden wherever it appears
+# ---------------------------------------------------------------------------
+
+FORBIDDEN_RELOCATIONS = [
+    ("elasticache", "production-lean-elasticache-relocated.json",
+     "module.cache.aws_elasticache_replication_group.this"),
+    ("msk", "production-lean-msk-relocated.json",
+     "module.event_bus.aws_msk_cluster.kafka"),
+    ("neptune", "production-lean-neptune-relocated.json",
+     "module.graph_store.aws_neptune_cluster.this"),
+    ("legacy_rds", "production-lean-legacy-rds-relocated.json",
+     "module.database.aws_db_instance.postgres"),
+    ("nat_gateway_unless_explicit", "production-lean-nat-relocated.json",
+     "module.egress.aws_nat_gateway.this"),
+]
+
+
+@pytest.mark.parametrize("key, fixture, address", FORBIDDEN_RELOCATIONS)
+def test_forbidden_service_at_a_non_canonical_address_still_fails(
+        key, fixture, address, tmp_path):
+    """The central fail-open: module scoping was the only thing forbidding it.
+
+    Every forbidden matcher names the module that provisions the service today.
+    Scoping the matcher there meant the SAME resource type under any other
+    module address matched no rule, was downgraded to a warning, and the plan
+    passed — `module.cache.aws_elasticache_replication_group` is the identical
+    product, the identical bill and the identical violation as
+    `module.elasticache.aws_elasticache_replication_group`.
+    """
+    code, result, inventory = run("production-lean", fixture, tmp_path)
+    assert code == 1, f"a relocated {key} passed the gate: {result['passed']}"
+    assert f"forbidden.{key}" in failed_checks(result)
+    detail = detail_for(result, f"forbidden.{key}")
+    assert address in detail
+    assert "outside the contracted module address" in detail
+    # The inventory says so too, so a reader is not left inferring it.
+    entry = next(r for r in inventory["resources"] if r["address"] == address)
+    assert key in entry["canonical_keys"]
+    assert entry["matched_outside_contracted_module"]
+
+
+@pytest.mark.parametrize("key, fixture, address", FORBIDDEN_RELOCATIONS)
+def test_a_relocated_forbidden_resource_is_never_only_a_warning(
+        key, fixture, address, tmp_path):
+    """It must not land in the warning bucket that never fails the gate."""
+    _, result, inventory = run("production-lean", fixture, tmp_path)
+    warned = next(i for i in result["results"]
+                  if i["check"] == "fail_closed.unmatched_instances")
+    assert address not in (warned.get("addresses") or [])
+    assert address not in [i["address"] for i in inventory["unmapped_expensive"]]
+
+
+def test_cost_free_accessories_stay_scoped_to_their_module(tmp_path):
+    """Widening must not reject a conforming plan.
+
+    `aws_db_subnet_group` is named by the legacy-RDS matcher and is also what
+    Aurora provisions for itself. It carries no cost, so it stays module-scoped;
+    the product it accompanies (`aws_db_instance`) is what is caught anywhere.
+    """
+    _, result, inventory = run(
+        "production-lean", "production-lean-legacy-rds-relocated.json", tmp_path)
+    aurora = next(r for r in inventory["resources"]
+                  if r["address"] == "module.aurora.aws_db_subnet_group.aurora")
+    assert aurora["canonical_keys"] == []
+    relocated = next(r for r in inventory["resources"]
+                     if r["address"] == "module.database.aws_db_subnet_group.postgres")
+    assert relocated["canonical_keys"] == []
+    # The instance beside it is still caught, which is the point.
+    assert "forbidden.legacy_rds" in failed_checks(result)
+
+
+def test_unscoped_types_are_derived_from_the_price_book_not_hand_listed():
+    """Whatever the cost model bills for is what may not hide at a new address."""
+    expensive = MODULE.expensive_types(PRICE_BOOK)
+    rule = CONTRACTS["forbidden_resources"]["elasticache"]
+    unscoped = MODULE.unscoped_types(rule, expensive)
+    assert "aws_elasticache_replication_group" in unscoped
+    assert "aws_elasticache_cluster" in unscoped
+    # Subnet/parameter groups cost nothing and are shared with other services.
+    assert "aws_elasticache_subnet_group" not in unscoped
+
+
+def test_an_expensive_forbidden_type_at_an_uncovered_address_fails_closed(tmp_path):
+    """A forbidden type that dodges every name prefix is a failure, not a warning."""
+    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan["resource_changes"].append({
+        "address": "module.tooling.aws_instance.bastion", "mode": "managed",
+        "type": "aws_instance", "name": "bastion",
+        "module_address": "module.tooling",
+        "change": {"actions": ["create"], "before": None,
+                   "after": {"instance_type": "m6i.large"}},
+    })
+    path = tmp_path / "bastion.json"
+    path.write_text(json.dumps(plan))
+    out = tmp_path / "out"
+    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+                         "--out-dir", str(out)])
+    result = json.loads((out / "profile-policy-result.json").read_text())
+    assert code == 1
+    assert "fail_closed.unmatched_forbidden_type" in failed_checks(result)
+    assert "module.tooling.aws_instance.bastion" in detail_for(
+        result, "fail_closed.unmatched_forbidden_type")
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +405,88 @@ def test_expected_service_count_tracks_the_canonical_matrix(tmp_path):
     check = next(i for i in result["results"] if i["check"] == "cardinality.ecs_services")
     assert check["expected"] == expected
     assert check["observed"] == expected
+
+
+def test_additional_rules_are_evaluated_on_their_own_matches(tmp_path):
+    """A sub-rule's cardinality must be judged on the sub-rule's own hits.
+
+    `explicit_runtime_role_services` is `at_least_one` ECS service in
+    module.ecs, with an `additional_rules` entry requiring at least one
+    `aws_ecr_repository` in module.ecr. Merging the two into one aggregate meant
+    two ECS services satisfied the key while the registry matcher matched
+    nothing at all — the sub-rule was decorative.
+    """
+    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan["resource_changes"] = [
+        c for c in plan["resource_changes"] if c["type"] != "aws_ecr_repository"]
+    for module in plan["planned_values"]["root_module"]["child_modules"]:
+        module["resources"] = [
+            r for r in module["resources"] if r["type"] != "aws_ecr_repository"]
+    path = tmp_path / "no-ecr.json"
+    path.write_text(json.dumps(plan))
+    out = tmp_path / "out"
+    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+                         "--out-dir", str(out)])
+    result = json.loads((out / "profile-policy-result.json").read_text())
+    inventory = json.loads((out / "profile-resource-inventory.json").read_text())
+
+    assert code == 1
+    assert failed_checks(result) == {"required.explicit_runtime_role_services.additional[0]"}
+    detail = detail_for(result, "required.explicit_runtime_role_services.additional[0]")
+    assert "module.ecr" in detail and "aws_ecr_repository.this" in detail
+    # The parent still has its two services, which is exactly why the merged
+    # aggregate hid this: the key as a whole looked satisfied.
+    assert inventory["rule_summary"]["explicit_runtime_role_services#0"]["count"] == 2
+    assert inventory["rule_summary"]["explicit_runtime_role_services#1"]["count"] == 0
+
+
+def test_the_valid_fixture_contains_the_registry_the_real_root_instantiates(tmp_path):
+    """A fixture without module.ecr is not a picture of any plan Aether produces.
+
+    `main.tf` instantiates module "ecr" unconditionally, so a "valid" plan that
+    omitted it was unrepresentative in the one place the sub-rule looks.
+    """
+    _, result, inventory = run("production-lean", "production-lean-valid.json", tmp_path)
+    repos = [r for r in inventory["resources"] if r["type"] == "aws_ecr_repository"]
+    assert len(repos) == 4, "the four repositories modules/ecr declares"
+    assert all(r["module_address"] == "module.ecr" for r in repos)
+    check = next(i for i in result["results"]
+                 if i["check"] == "required.explicit_runtime_role_services.additional[0]")
+    assert check["status"] == "pass" and check["count"] == 4
+
+
+def test_every_fixture_carries_the_registry_module(tmp_path):
+    """Including the negative fixtures: each must fail for ITS OWN reason only."""
+    for fixture in sorted(FIXTURES.glob("*.json")):
+        plan = json.loads(fixture.read_text())
+        types = {c["type"] for c in plan["resource_changes"]}
+        assert "aws_ecr_repository" in types, fixture.name
+
+
+def test_a_zero_cardinality_sub_rule_is_not_absorbed_by_its_parent(tmp_path):
+    """`cloudfront_s3_frontends` is exactly:8 plus a `zero` sub-rule for the edge tier.
+
+    Merged counting let an edge resource inflate the parent's count instead of
+    breaking its own rule, so the two failures were indistinguishable.
+    """
+    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan["resource_changes"].append({
+        "address": "aws_route53_zone.public", "mode": "managed",
+        "type": "aws_route53_zone", "name": "public", "module_address": "",
+        "change": {"actions": ["create"], "before": None,
+                   "after": {"name": "aether.example"}},
+    })
+    path = tmp_path / "with-zone.json"
+    path.write_text(json.dumps(plan))
+    out = tmp_path / "out"
+    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+                         "--out-dir", str(out)])
+    result = json.loads((out / "profile-policy-result.json").read_text())
+    assert code == 1
+    assert "required.cloudfront_s3_frontends.additional[0]" in failed_checks(result)
+    parent = next(i for i in result["results"]
+                  if i["check"] == "required.cloudfront_s3_frontends")
+    assert parent["status"] == "pass" and parent["count"] == 8
 
 
 def test_lean_requires_static_frontends(tmp_path):
@@ -461,6 +701,49 @@ def test_inventory_is_priceable_by_the_real_cost_model(tmp_path):
     assert detail["gib"] == float(task_def["values"]["memory"]) / 1024.0
 
 
+@pytest.mark.parametrize("fixture", ["staging-awake.json", "staging-asleep.json"])
+def test_staging_is_exercised_end_to_end_offline(fixture, tmp_path):
+    """The staging path had one caller: a credentialed workflow that never ran.
+
+    `ci-check` only ever runs PLAN_PROFILE=production-lean and
+    staging-lifecycle.yml needs AWS credentials, so nothing offline ever scored
+    a staging plan against the staging budget — which is how a budget that no
+    plan could satisfy survived. This runs the whole path: plan gate, then cost
+    gate, on the committed staging fixtures.
+    """
+    code, result, _ = run("staging", fixture, tmp_path)
+    assert code == 0, f"staging plan gate rejected {fixture}: {failed_checks(result)}"
+
+    proc = subprocess.run(
+        [sys.executable, "scripts/release/check_cost_model.py",
+         "--profile", "staging", "--today", "2026-07-25",
+         "--inventory", str(tmp_path / MODULE.INVENTORY_JSON),
+         "--out-dir", str(tmp_path / "cost")],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    report = json.loads((tmp_path / "cost" / "cost-report.json").read_text())
+    budget = PROFILES["profiles"]["staging"]["budget"]
+    assert report["budget"]["mode"] == "total"
+    assert report["budget"]["effective_hours"] == float(
+        budget["maximum_scheduled_awake_hours_per_month"])
+    # Satisfiable at all -- both states used to price above the hard ceiling.
+    assert report["gated_amount"] < budget["hard_monthly_spend"]
+    assert report["model"]["usage_scenario_source"] == "profile_usage_scenarios.staging"
+
+
+def test_an_awake_staging_environment_costs_more_than_a_sleeping_one(tmp_path):
+    """If both states priced identically the wake/sleep budget would prove nothing."""
+    def total(fixture: str) -> float:
+        out = tmp_path / fixture
+        run("staging", fixture, out)
+        inventory = json.loads((out / MODULE.INVENTORY_JSON).read_text())
+        model = COST.build_cost_model(inventory, PRICE_BOOK, 40.0, profile="staging")
+        return model["fixed_monthly_usd"] + model["variable_monthly_usd"]["expected"]
+
+    assert total("staging-awake.json") > total("staging-asleep.json")
+
+
 def test_cost_model_cli_consumes_the_emitted_inventory(tmp_path):
     """End-to-end: the artifact this gate writes is the one the cost gate reads."""
     run("production-lean", "production-lean-valid.json", tmp_path)
@@ -649,3 +932,39 @@ def test_expensive_types_are_derived_from_the_price_book():
     assert "aws_msk_cluster" in expensive
     assert "aws_opensearch_domain" in expensive  # curated, not in the price book
     assert "aws_iam_role" not in expensive
+
+
+def test_network_egress_counts_the_type_the_contract_names(tmp_path, monkeypatch):
+    """The count and the declaration must agree on purpose, not by coincidence.
+
+    A rule that declares a per-profile expectation without naming the type it
+    counts is unresolvable: this gate must not fall back to a hardcoded type
+    that happens to match today.
+    """
+    real = MODULE.load_yaml
+
+    def fake(rel_path):
+        doc = real(rel_path)
+        if rel_path == MODULE.CONTRACTS_YAML:
+            doc = copy.deepcopy(doc)
+            doc["forbidden_resources"]["nat_gateway_unless_explicit"].pop(
+                "expected_by_profile_resource_type", None)
+        return doc
+
+    monkeypatch.setattr(MODULE, "load_yaml", fake)
+    code, result, _ = run("production-lean", "production-lean-valid.json", tmp_path)
+    assert code == 1
+    assert "network_egress_mode" in failed_checks(result)
+    assert "expected_by_profile_resource_type" in detail_for(result, "network_egress_mode")
+
+
+def test_scale_and_enterprise_nat_expectations_are_counted_in_gateways(tmp_path):
+    """One NAT gateway plus its EIP is one NAT gateway, not two."""
+    for profile, fixture, expected in (
+        ("production-scale", "production-scale-valid.json", 1),
+        ("enterprise-isolated", "enterprise-isolated-valid.json", 3),
+    ):
+        code, result, _ = run(profile, fixture, tmp_path / profile)
+        assert code == 0, failed_checks(result)
+        row = next(i for i in result["results"] if i["check"] == "network_egress_mode")
+        assert row["observed"] == expected, profile

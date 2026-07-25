@@ -161,16 +161,28 @@ owned by exactly one service in every profile. See
 `make deployment-readiness-score` is the only sanctioned way to state a
 readiness percentage. It reports **three numbers and never merges them**.
 
-| Scorecard | Code-complete | Externally verified | Gate (on externally verified) |
-|---|---|---|---|
-| overall | 100 / 100 | **20 / 100** | 90 |
-| `production-lean` | 100 / 100 † | **20 / 100** | 92 |
-| `staging` | 75 / 100 | **0 / 100** | 95 |
+| Scorecard | Code-complete | Externally verified | Max attainable here | Gate (on externally verified) |
+|---|---|---|---|---|
+| overall | 60 / 100 | **0 / 100** | 20 | 90 |
+| `production-lean` | 45 / 100 | **0 / 100** | 20 | 92 |
+| `staging` | 75 / 100 | **0 / 100** | 10 | 95 |
 
-† 80 / 100 in a clean checkout: `LEAN-COST-CEILING` requires
-`reports/cost/cost-report.json`, which is generated and gitignored, and reaches
-100 only once `make validate-cost-model` has written it — as
-`make deployment-profile-gate` does before scoring.
+**Externally verified is zero, and that is the correct reading.** An earlier
+version of this table reported 20, which was an artifact of a bug rather than a
+measurement: the scorecard computed
+`verified = code_complete and all(e["satisfied"] for e in external)`, and
+`all([])` is `True`, so every control carrying *no* external evidence was
+silently promoted to verified. All 20 points came from three such controls. A
+control must now carry at least one satisfied external evidence entry before it
+can score verified, and nothing in this repository can satisfy one — there is no
+attestation verifier registered, by design, because nothing here can prove an
+artifact came from an AWS account.
+
+The scores are also no longer path-dependent. They used to change depending on
+whether gitignored `artifacts/` and `reports/` happened to be present, so two
+engineers could read different readiness numbers from the same commit;
+artifacts derived from a test fixture now earn nothing, traced one hop
+(cost-report → inventory).
 
 **1 of 17 hard gate conditions is met** (`COND-NO-EXPIRED-EXCEPTIONS`).
 `deployment_ready` is `false`.

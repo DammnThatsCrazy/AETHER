@@ -20,6 +20,21 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 # --------------------------------------------------------------------------
+# Task network placement
+#
+# Every ECS service in this module places its ENIs here, and there is nowhere
+# else for it to place them: the module receives one tier's subnets, not a
+# menu. The keys travel with the IDs so `task_subnet_keys` below can state the
+# tier at plan time — a subnet ID is unknown until apply and can prove nothing
+# about which route table the task will actually use.
+# --------------------------------------------------------------------------
+
+locals {
+  task_subnet_keys = sort(keys(var.task_subnets))
+  task_subnet_ids  = [for key in local.task_subnet_keys : var.task_subnets[key]]
+}
+
+# --------------------------------------------------------------------------
 # CloudWatch Log Groups
 # --------------------------------------------------------------------------
 
@@ -181,7 +196,15 @@ locals {
         "sqs:GetQueueUrl",
         "sqs:ChangeMessageVisibility",
       ]
-      Resource = concat([var.sqs_queue_arn], values(var.sqs_role_queue_arns))
+      # Dead-letter queues are included deliberately. Handing a task a DLQ
+      # URL it has no sqs:SendMessage grant for turns a poison message into an
+      # AccessDenied at exactly the moment the system is already failing.
+      Resource = concat(
+        [var.sqs_queue_arn],
+        values(var.sqs_role_queue_arns),
+        var.sqs_dlq_arn != "" ? [var.sqs_dlq_arn] : [],
+        values(var.sqs_role_dlq_queue_arns),
+      )
     }
   ] : []
 
@@ -378,6 +401,9 @@ resource "aws_ecs_task_definition" "backend" {
           [
             { name = "EVENT_BROKER", value = "sns_sqs" },
             { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
+            # The api task publishes and can consume the shared events queue,
+            # so it needs the same real dead-letter destination the workers do.
+            { name = "SQS_DLQ_QUEUE_URL", value = var.sqs_dlq_url },
           ],
           var.sns_topic_arn != "" ? [
             { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
@@ -456,6 +482,26 @@ locals {
     service => {
       for role in cfg.roles : role => var.sqs_role_queue_urls[role]
       if contains(keys(var.sqs_role_queue_urls), role)
+    }
+  }
+
+  # The dead-letter mirror of the map above, derived the same way from the same
+  # `cfg.roles`, so a consolidated lean-worker is handed all eight of its roles'
+  # DLQs and a dedicated service exactly its own. It has to be per-service for
+  # the same reason the queue map does: one SQS_DLQ_QUEUE_URL can name one
+  # destination, and eight co-hosted roles need eight.
+  #
+  # Getting this wrong is not a degraded mode, it is data loss. Until these
+  # URLs reached the task the runtime had no dead-letter destination at all and
+  # fell back to re-publishing the poison message onto the queue it had just
+  # read it from — where it was re-received, matched no handler, and was
+  # deleted. The runtime now raises rather than doing that, so an unset value
+  # is loud; this map is what stops it being unset.
+  runtime_service_role_dlqs = {
+    for service, cfg in var.runtime_services :
+    service => {
+      for role in cfg.roles : role => var.sqs_role_dlq_queue_urls[role]
+      if contains(keys(var.sqs_role_dlq_queue_urls), role)
     }
   }
 
@@ -551,6 +597,14 @@ resource "aws_ecs_task_definition" "runtime_service" {
           # role instead of eight roles sharing one URL. See the
           # runtime_service_role_queues local above for the full reasoning.
           { name = "SQS_ROLE_QUEUE_URLS", value = jsonencode(local.runtime_service_role_queues[each.key]) },
+          # Dead-letter destinations, exactly mirroring the two lines above:
+          # the single-URL fallback for a service key that owns a queue, and
+          # the per-role object for every role this task hosts. The lookups use
+          # the same key and the same fallback shape as the queue side, so a
+          # role's DLQ is always the "-dlq" sibling of the queue it drains and
+          # never the queue itself.
+          { name = "SQS_DLQ_QUEUE_URL", value = lookup(var.sqs_role_dlq_queue_urls, each.key, var.sqs_dlq_url) },
+          { name = "SQS_ROLE_DLQ_URLS", value = jsonencode(local.runtime_service_role_dlqs[each.key]) },
         ],
         var.sns_topic_arn != "" ? [
           { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
@@ -601,7 +655,7 @@ resource "aws_ecs_service" "runtime_service" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = local.task_subnet_ids
     security_groups  = [var.ecs_sg_id]
     assign_public_ip = var.assign_public_ip
   }
@@ -843,7 +897,7 @@ resource "aws_ecs_service" "backend" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = local.task_subnet_ids
     security_groups  = [var.ecs_sg_id]
     assign_public_ip = var.assign_public_ip
   }
@@ -867,19 +921,40 @@ resource "aws_ecs_service" "backend" {
 
   enable_execute_command = false
 
-  # desired_count stays ignored after create so an apply cannot yank a
-  # scaled-out API back to its baseline mid-peak, and task_definition stays
-  # ignored because the deploy workflow registers the exact revision to run.
+  # task_definition is ignored because the deploy workflow registers the exact
+  # revision to run; Terraform must not roll it back to whatever digest the
+  # last plan happened to pin.
   #
-  # That makes var.backend_desired_count the CREATE-time baseline, which is why
-  # the staging sleep switch does not rely on it alone: it also drops
-  # aws_appautoscaling_target.backend.min_capacity to 0 below. Application Auto
-  # Scaling clamps a running service UP to its floor, so a floor left at 1
-  # would revive the API within a cooldown no matter what desired_count said —
-  # and with the floor at 0 the scale-in side of the tracking policy is free to
-  # take an idle environment down to no tasks at all.
+  # desired_count is deliberately NOT ignored, and that is a correctness
+  # requirement rather than a preference. It used to be, and the effect was
+  # that `staging_state = "asleep"` never stopped the API at all:
+  #
+  #   * ignore_changes suppresses the attribute after CREATE, so the 0 this
+  #     module computes for an asleep environment never reached an applied
+  #     service — it only ever applied to a workspace being created for the
+  #     first time, which is never the case when putting staging to sleep.
+  #   * the autoscaling floor could not finish the job on its own. Dropping
+  #     min_capacity to 0 stops Application Auto Scaling clamping the service
+  #     back UP, but it cannot drive it DOWN to zero: both tracking policies
+  #     below are target-tracking on a utilization metric, and target tracking
+  #     computes ceil(running x metric / target), which from one running task
+  #     at any non-zero CPU is 1, never 0.
+  #   * the workers had no ignore_changes and did sleep, so an asleep staging
+  #     environment quietly kept running exactly the always-on API task the
+  #     "no always-on staging compute" guarantee says it does not.
+  #
+  # It is also what .github/workflows/staging-lifecycle.yml verifies: it reads
+  # `desired_count` out of planned_values for every aws_ecs_service and
+  # compares it against the matrix x the state multiplier. An ignored attribute
+  # plans as its prior value, so that gate could never have passed on a real
+  # sleep plan.
+  #
+  # The cost of managing desired_count is that an apply resets a scaled-out API
+  # to the matrix baseline; the tracking policies below scale it back out
+  # within a 60 s scale-out cooldown. That is the accepted trade, and it is the
+  # same one aws_ecs_service.runtime_service has always made.
   lifecycle {
-    ignore_changes = [desired_count, task_definition]
+    ignore_changes = [task_definition]
   }
 
   tags = {
@@ -908,7 +983,7 @@ resource "aws_ecs_service" "ml" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = local.task_subnet_ids
     security_groups  = [var.ecs_sg_id]
     assign_public_ip = var.assign_public_ip
   }

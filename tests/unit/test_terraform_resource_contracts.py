@@ -364,3 +364,30 @@ def test_the_known_policy_gaps_are_still_gaps():
             f"{key} is now forbidden for {profile} — delete this entry from "
             f"KNOWN_POLICY_GAPS in {Path(__file__).name} so the invariant is "
             f"enforced unconditionally")
+
+
+def test_a_per_profile_expectation_names_the_type_it_counts():
+    """`expected_by_profile` counts ONE type, and must say which.
+
+    `cardinality` sums every type a rule lists; `expected_by_profile` answers a
+    different question — how much egress a profile buys — and answering it in
+    gateways plus their EIPs would read the correct scale and enterprise plans
+    as 2 and 6 against expectations of 1 and 3. The declaration and
+    check_terraform_plan_policy.py::check_network_egress previously agreed only
+    because both happened to mean aws_nat_gateway.
+    """
+    for key, kind, rule in _rules():
+        expectation = rule.get("expected_by_profile")
+        if not expectation:
+            continue
+        counted = rule.get("expected_by_profile_resource_type")
+        assert counted, (
+            f"{kind}.{key} declares expected_by_profile but no "
+            f"expected_by_profile_resource_type, so which of its "
+            f"{rule.get('resource_types')} the expectation counts is undefined")
+        assert counted in (rule.get("resource_types") or []), (
+            f"{kind}.{key}: expected_by_profile_resource_type {counted!r} is not "
+            f"one of the rule's own resource_types")
+        for profile, spec in expectation.items():
+            assert profile in CLOUD_PROFILES, f"{key}: unknown profile {profile}"
+            assert CARDINALITY.match(str(spec)), f"{key}.{profile}: {spec!r}"

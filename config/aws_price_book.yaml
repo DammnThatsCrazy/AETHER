@@ -21,9 +21,15 @@
 # that matters when the ceiling is $200. It is deliberately NOT accurate to the
 # cent, and the generated report says so. Specifically it does not model:
 #   - Savings Plans, Reserved Instances, Compute Savings Plans, or Spot.
-#   - Free-tier allowances (12-month or always-free). Every price here is the
-#     post-free-tier on-demand rate, so the model OVER-estimates a new account.
-#     Over-estimating is the safe direction for a ceiling.
+#   - The 12-month new-account free tier. Every price here is the post-free-tier
+#     on-demand rate, so the model OVER-estimates a new account. Over-estimating
+#     is the safe direction for a ceiling.
+#     The ONLY exception is the handful of always-free allowances written down
+#     explicitly as `free_allowance` below (10 CloudWatch alarms, 3 dashboards).
+#     Those are permanent account-level allowances rather than a new-account
+#     grant, so ignoring them would over-state a steady-state bill instead of a
+#     first-month one. They are declared per entry precisely so "no free tier"
+#     never has to be read as a blanket claim the table does not keep.
 #   - Tiered volume discounts (S3, CloudFront, data transfer all step down with
 #     volume). Rates below are the FIRST, most expensive tier.
 #   - Cross-AZ / cross-region data transfer, which depends on runtime traffic
@@ -573,10 +579,30 @@ usage_variable_resources:
       write_request_units: {unit_price: 0.00000125, unit: WRU}
       read_request_units: {unit_price: 0.00000025, unit: RRU}
       storage_gb_month: {unit_price: 0.25, unit: GB-month}
-    # On-demand (PAY_PER_REQUEST) rates. A table in PROVISIONED mode converts
-    # this into a FIXED cost the model does not price; check_cost_model.py warns
-    # when it sees billing_mode: PROVISIONED so the gap is visible, not silent.
-    notes: On-demand rates; PROVISIONED billing_mode is a fixed cost and is warned on.
+    # A table in PROVISIONED mode is not usage-variable at all: reserved
+    # capacity accrues on the clock whether or not a request arrives, which is
+    # the definition of fixed cost. `fixed_when` re-classes exactly those tables
+    # and prices the reserved capacity, because a detected-but-unpriced fixed
+    # cost is worse than an undetected one -- it looks handled. 4000 RCU + 4000
+    # WCU is ~$2,277/month, more than ten times the lean ceiling, and it must
+    # fail the gate rather than raise a warning nothing reads.
+    # A table whose capacity the plan does not carry is UNPRICEABLE, not free.
+    fixed_when:
+      attribute: billing_mode
+      value: PROVISIONED
+      pricing_model: capacity_units
+      accrual: hourly
+      units:
+        write_capacity: {unit_price: 0.00065, unit: WCU-hour}
+        read_capacity: {unit_price: 0.00013, unit: RCU-hour}
+      # Storage is charged identically in both billing modes, so it stays
+      # usage-variable; only the throughput drivers become fixed.
+      variable_drivers: [storage_gb_month]
+      notes: >-
+        Provisioned capacity, us-east-1: $0.00065 per WCU-hour and $0.00013 per
+        RCU-hour. Auto-scaling above the provisioned floor is not modelled; the
+        floor is what the plan commits to.
+    notes: On-demand rates by default; PROVISIONED capacity is priced as fixed via fixed_when.
 
   aws_sqs_queue:
     cost_class: usage_variable
@@ -696,3 +722,80 @@ usage_scenarios:
     lcu_hours: 7300
     processed_gb: 2000
     internet_egress_gb: 1500
+
+# ---------------------------------------------------------------------------
+# PER-PROFILE USAGE SCENARIOS
+#
+# `usage_scenarios` above is calibrated for a founding tenant in continuous
+# production. Applying it to a wake/sleep rehearsal environment is not
+# conservative, it is wrong: it prices a month of customer traffic against an
+# environment that is awake for forty hours and never serves a customer at all.
+# That is how the staging budget came to be unsatisfiable in both directions —
+# awake and asleep both landed at ~$117 against a $50 ceiling, entirely from
+# production-calibrated variable cost, so the ceiling could not be met by any
+# plan and therefore measured nothing.
+#
+# A profile named here overrides `usage_scenarios` WHOLESALE for that profile.
+# check_cost_model.py fails closed if a wake/sleep profile budgeted on total
+# spend has no entry here, so deleting one is a build failure rather than a
+# silent return to production quantities.
+# ---------------------------------------------------------------------------
+profile_usage_scenarios:
+
+  staging:
+    # Staging serves no tenant. Its traffic is exactly what a rehearsal makes:
+    # a migration run, a smoke suite, a bounded load test and the log volume
+    # those produce, inside the 40 awake hours the profile budgets for. The
+    # `expected` column is one full rehearsal month (roughly two rehearsals);
+    # `high` is a 10x overrun that should prompt a conversation about the
+    # rehearsal, not an outage.
+    low:
+      description: One short smoke-only rehearsal.
+      storage_gb_month: 1
+      put_requests: 5000
+      get_requests: 20000
+      write_request_units: 50000
+      read_request_units: 200000
+      requests: 50000
+      publishes: 20000
+      ingested_gb: 1
+      stored_gb_month: 1
+      data_transfer_out_gb: 1
+      https_requests: 20000
+      lcu_hours: 20
+      processed_gb: 2
+      internet_egress_gb: 2
+    expected:
+      description: Two complete rehearsals inside the 40 awake hours/month budget.
+      storage_gb_month: 2
+      put_requests: 20000
+      get_requests: 100000
+      write_request_units: 200000
+      read_request_units: 800000
+      requests: 200000
+      publishes: 80000
+      ingested_gb: 2
+      stored_gb_month: 2
+      data_transfer_out_gb: 3
+      https_requests: 100000
+      # An ALB only consumes LCUs while it is serving, and staging is awake for
+      # 40 hours a month by budget.
+      lcu_hours: 40
+      processed_gb: 5
+      internet_egress_gb: 5
+    high:
+      description: 10x rehearsal overrun — re-examine the load profile, not the ceiling.
+      storage_gb_month: 20
+      put_requests: 200000
+      get_requests: 1000000
+      write_request_units: 2000000
+      read_request_units: 8000000
+      requests: 2000000
+      publishes: 800000
+      ingested_gb: 20
+      stored_gb_month: 20
+      data_transfer_out_gb: 30
+      https_requests: 1000000
+      lcu_hours: 400
+      processed_gb: 50
+      internet_egress_gb: 50

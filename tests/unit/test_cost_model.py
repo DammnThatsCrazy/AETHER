@@ -290,14 +290,60 @@ def test_fixed_and_variable_costs_are_separated(tmp_path: Path) -> None:
     assert band["low"] < band["expected"] < band["high"]
 
 
-def test_provisioned_dynamodb_is_warned_as_hidden_fixed_cost(tmp_path: Path) -> None:
-    """PROVISIONED capacity is fixed cost the on-demand model does not price."""
+def test_provisioned_dynamodb_is_priced_as_fixed_and_gated(tmp_path: Path) -> None:
+    """PROVISIONED capacity is a standing commitment, so it must reach the gate.
+
+    Detecting the classic hiding place and then warning about it is worse than
+    not detecting it: `r.warn` never touches the exit code, so the line reads
+    as handled while ~$2,900/mo of reserved capacity passes the ceiling.
+    """
+    inv = _write_inventory(tmp_path, "production-lean", [
+        _resource("aws_dynamodb_table.t", "aws_dynamodb_table",
+                  {"billing_mode": "PROVISIONED",
+                   "read_capacity": 4000, "write_capacity": 4000}),
+    ])
+    assert _run(tmp_path, inv) == 1
+
+    report = _report(tmp_path)
+    model = report["model"]
+    # 4000 WCU * $0.00065 + 4000 RCU * $0.00013, on the clock for 730 hours.
+    expected = round((4000 * 0.00065 + 4000 * 0.00013) * 730, 2)
+    assert expected > 2000
+    fixed = [i for i in model["fixed_items"] if i["type"] == "aws_dynamodb_table"]
+    assert len(fixed) == 1
+    assert fixed[0]["monthly_usd"] == expected
+    assert fixed[0]["detail"]["reclassified_from"] == "usage_variable"
+    assert model["fixed_monthly_usd"] == expected
+    assert report["passed"] is False
+    assert any("exceeds the hard ceiling" in f for f in report["failures"])
+    # Storage still bills by usage in provisioned mode, so it stays in the band.
+    assert any(i["type"] == "aws_dynamodb_table" for i in model["variable_items"])
+
+
+def test_provisioned_dynamodb_without_capacity_fails_closed(tmp_path: Path) -> None:
+    """A reserved-capacity table the plan does not size is an error, not a zero."""
     inv = _write_inventory(tmp_path, "production-lean", [
         _resource("aws_dynamodb_table.t", "aws_dynamodb_table",
                   {"billing_mode": "PROVISIONED"}),
     ])
+    assert _run(tmp_path, inv) == 1
+    report = _report(tmp_path)
+    unpriced = report["model"]["unpriced"]
+    assert [u["type"] for u in unpriced] == ["aws_dynamodb_table"]
+    assert unpriced[0]["monthly_usd"] is None
+    assert "reserved capacity cannot be priced" in unpriced[0]["reason"]
+
+
+def test_on_demand_dynamodb_stays_usage_variable(tmp_path: Path) -> None:
+    """The re-class is triggered by billing_mode, not by the resource type."""
+    inv = _write_inventory(tmp_path, "production-lean", [
+        _resource("aws_dynamodb_table.t", "aws_dynamodb_table",
+                  {"billing_mode": "PAY_PER_REQUEST"}),
+    ])
     assert _run(tmp_path, inv) == 0
-    assert any("PROVISIONED" in w for w in _report(tmp_path)["model"]["warnings"])
+    model = _report(tmp_path)["model"]
+    assert model["fixed_monthly_usd"] == 0.0
+    assert [i["type"] for i in model["variable_items"] if i["type"] == "aws_dynamodb_table"]
 
 
 def test_staging_prorates_hourly_cost_but_not_monthly_charges(tmp_path: Path) -> None:
@@ -316,6 +362,78 @@ def test_staging_prorates_hourly_cost_but_not_monthly_charges(tmp_path: Path) ->
     assert by_type["aws_lb"] == round(0.0225 * 40, 2)
     # A KMS key bills the full month whether or not staging ever wakes.
     assert by_type["aws_kms_key"] == 1.00
+
+
+def test_staging_is_scored_against_its_own_usage_scenario(tmp_path: Path) -> None:
+    """A 40-hour rehearsal environment is not a month of founding-tenant traffic.
+
+    `total` mode adds expected variable cost to the fixed baseline, so charging
+    production-calibrated traffic to staging made its $50 ceiling unreachable
+    awake AND asleep — a budget no plan can satisfy measures nothing.
+    """
+    inv = _write_inventory(tmp_path, "staging", [
+        _resource("module.alb.aws_lb.s", "aws_lb", {"load_balancer_type": "application"}),
+        _resource("module.secrets.aws_kms_key.s", "aws_kms_key"),
+        _resource("module.monitoring.aws_s3_bucket.logs", "aws_s3_bucket"),
+        _resource("module.sqs.aws_sqs_queue.events", "aws_sqs_queue"),
+    ])
+    assert _run(tmp_path, inv, profile="staging") == 0
+
+    report = _report(tmp_path)
+    assert report["model"]["usage_scenario_source"] == "profile_usage_scenarios.staging"
+    assert report["gated_amount"] < report["budget"]["target"]
+    # The same inventory under production quantities costs multiples more --
+    # that gap is the whole reason a rehearsal environment needs its own
+    # scenario, and it is what made the staging ceiling unsatisfiable.
+    production = MODULE.build_cost_model(
+        json.loads(inv.read_text()), PRICE_BOOK, 40.0, profile="production-lean")
+    staged = report["model"]["variable_monthly_usd"]["expected"]
+    assert production["variable_monthly_usd"]["expected"] > 4 * staged
+
+
+def test_production_lean_keeps_the_founding_tenant_scenario(tmp_path: Path) -> None:
+    """Only profiles named under profile_usage_scenarios are overridden."""
+    inv = _write_inventory(tmp_path, "production-lean", [
+        _resource("aws_kms_key.main", "aws_kms_key"),
+    ])
+    assert _run(tmp_path, inv) == 0
+    assert _report(tmp_path)["model"]["usage_scenario_source"] == "usage_scenarios"
+
+
+def test_a_wake_sleep_profile_without_its_own_scenario_cannot_be_scored(
+        tmp_path: Path) -> None:
+    """Deleting the staging scenario is a build failure, not a silent regression."""
+    book = copy.deepcopy(PRICE_BOOK)
+    book.pop("profile_usage_scenarios", None)
+    book_path = tmp_path / "price_book.yaml"
+    book_path.write_text(yaml.safe_dump(book, sort_keys=False), encoding="utf-8")
+
+    inv = _write_inventory(tmp_path, "staging", [
+        _resource("aws_kms_key.s", "aws_kms_key"),
+    ])
+    code = _run(tmp_path, inv, profile="staging",
+                extra=["--price-book", str(book_path)])
+    assert code == MODULE.EXIT_USAGE
+
+
+def test_staging_ceiling_still_bites_when_the_environment_never_sleeps(
+        tmp_path: Path) -> None:
+    """The budget must still reject something, or it is decorative."""
+    always_on = [
+        _resource(f"module.ecs.aws_ecs_service.s{n}", "aws_ecs_service",
+                  {"cpu": 1024, "memory": 2048, "desired_count": 2})
+        for n in range(4)
+    ]
+    inv = _write_inventory(tmp_path, "staging", always_on)
+    # Priced at the profile's 40 awake hours these tasks are affordable...
+    assert _run(tmp_path, inv, profile="staging") == 0
+    # ...but the same tasks running the whole month are not, which is what the
+    # awake-hours budget is defending.
+    model = MODULE.build_cost_model(json.loads(inv.read_text()), PRICE_BOOK,
+                                    730.0, profile="staging")
+    staging_budget = PROFILES["profiles"]["staging"]["budget"]
+    total = model["fixed_monthly_usd"] + model["variable_monthly_usd"]["expected"]
+    assert total > staging_budget["hard_monthly_spend"]
 
 
 def test_destroyed_resources_are_not_priced(tmp_path: Path) -> None:
@@ -494,6 +612,88 @@ def test_shipped_exceptions_file_has_no_active_exceptions() -> None:
     assert EXCEPTIONS_FILE["exceptions"] == []
     assert "production-lean" in EXCEPTIONS_FILE["policy"]["no_blanket_exception_profiles"]
     assert EXCEPTIONS_FILE["policy"]["max_duration_days"]["production-lean"] == 30
+
+
+def test_every_exception_policy_constant_is_pinned() -> None:
+    """All five knobs the validator reads, not the two that were pinned.
+
+    `require_distinct_approver`, `max_estimated_amount` and
+    `blanket_scope_tokens` each single-handedly decide whether a bypass is
+    possible, and each was one silent YAML edit from disappearing: dropping the
+    key falls back to a permissive default inside the validator and no test
+    noticed.
+    """
+    policy = EXCEPTIONS_FILE["policy"]
+
+    # 1. No self-approval. Absent, the validator defaults to True but nothing
+    #    would stop the file from turning it off.
+    assert policy["require_distinct_approver"] is True
+
+    # 2. Per-profile duration cap.
+    assert policy["max_duration_days"]["production-lean"] == 30
+
+    # 3. Per-profile amount cap. Deleting the lean entry silently raises the
+    #    cap to the 500.0 default, tripling what a grant can authorise.
+    assert policy["max_estimated_amount"]["production-lean"] == 100
+    assert policy["max_estimated_amount"]["production-lean"] < policy[
+        "max_estimated_amount"].get("default", 500)
+
+    # 4. Profiles that may not hold a blanket grant.
+    assert "production-lean" in policy["no_blanket_exception_profiles"]
+
+    # 5. The tokens that make a grant blanket. An empty list makes the
+    #    blanket-scope rule unenforceable while still appearing to exist.
+    tokens = {str(t).lower() for t in policy["blanket_scope_tokens"]}
+    assert {"all", "*", "everything"} <= tokens
+
+
+def test_the_price_book_does_not_claim_a_free_tier_it_models() -> None:
+    """The header said "no free tier" while `free_allowance` zeroed line items."""
+    allowances = {
+        name: entry["free_allowance"]
+        for name, entry in PRICE_BOOK["fixed_resources"].items()
+        if entry.get("free_allowance")
+    }
+    assert allowances, "no free_allowance entries; this test can be removed"
+    header = (ROOT / "config/aws_price_book.yaml").read_text(encoding="utf-8")
+    header = header.split("schema_version:", 1)[0]
+    assert "free_allowance" in header, (
+        "the price book preamble must say which always-free allowances it "
+        "models, or 'no free tier' reads as a blanket claim it does not keep")
+
+
+def test_cost_policy_enforces_the_control_the_plan_gate_defers_to_it() -> None:
+    """`always_on_staging_compute` was enforced by nobody.
+
+    The contracts file marks it `not_plan_checkable` and names this validator;
+    the validator only asserted the string appeared in a list. Removing every
+    property that makes the prohibition mean something must fail here.
+    """
+    import importlib.util as _il
+
+    spec = _il.spec_from_file_location(
+        "check_cost_policy", ROOT / "scripts/release/check_cost_policy.py")
+    policy_module = _il.module_from_spec(spec)
+    spec.loader.exec_module(policy_module)
+
+    healthy = policy_module.Reporter("healthy")
+    policy_module.check_always_on_staging_compute(healthy, PROFILES)
+    assert healthy.finish() == 0, healthy.failures
+
+    for mutation in (
+        lambda p: p["profiles"]["staging"].__setitem__("wake_sleep", False),
+        lambda p: p["profiles"]["staging"]["budget"].pop(
+            "maximum_scheduled_awake_hours_per_month"),
+        lambda p: p["profiles"]["staging"]["budget"].pop("hard_monthly_spend"),
+        lambda p: p["profiles"]["staging"].__setitem__("behavior", ["deploy"]),
+        lambda p: p["profiles"]["staging"]["cost_policy"]["forbidden_resources"].remove(
+            "always_on_staging_compute"),
+    ):
+        broken = copy.deepcopy(PROFILES)
+        mutation(broken)
+        reporter = policy_module.Reporter("broken")
+        policy_module.check_always_on_staging_compute(reporter, broken)
+        assert reporter.finish() != 0, mutation
 
 
 def test_cost_capped_production_profiles_declare_a_budget() -> None:

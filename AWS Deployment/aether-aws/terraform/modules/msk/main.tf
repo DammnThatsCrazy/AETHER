@@ -23,6 +23,21 @@ resource "aws_kms_key" "msk" {
   tags = {
     Name = "${var.project}-${var.environment}-msk-kms"
   }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
+  }
 }
 
 resource "aws_kms_alias" "msk" {
@@ -48,9 +63,9 @@ resource "aws_cloudwatch_log_group" "msk_broker" {
 # --------------------------------------------------------------------------
 
 resource "aws_msk_configuration" "this" {
-  name              = "${lower(var.project)}-${var.environment}-kafka-config"
-  kafka_versions    = [var.kafka_version]
-  description       = "${var.project} ${var.environment} Kafka configuration"
+  name           = "${lower(var.project)}-${var.environment}-kafka-config"
+  kafka_versions = [var.kafka_version]
+  description    = "${var.project} ${var.environment} Kafka configuration"
 
   server_properties = <<-EOF
     auto.create.topics.enable=false
@@ -73,8 +88,8 @@ resource "aws_msk_cluster" "this" {
   number_of_broker_nodes = var.broker_count
 
   broker_node_group_info {
-    instance_type  = var.broker_instance_type
-    client_subnets = var.subnet_ids
+    instance_type   = var.broker_instance_type
+    client_subnets  = var.subnet_ids
     security_groups = [var.msk_sg_id]
 
     storage_info {
@@ -126,5 +141,20 @@ resource "aws_msk_cluster" "this" {
 
   tags = {
     Name = "${var.project}-${var.environment}-msk"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
   }
 }

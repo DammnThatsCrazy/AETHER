@@ -298,7 +298,7 @@ mutation-proven: forcing `count = 1` on MSK fails the lean run block with
 
 ### Cost
 
-`production-lean`'s fixed baseline measures **USD 184.13/month** — over the
+`production-lean`'s fixed baseline measures **USD 187.13/month** — over the
 USD 150 design target, under the USD 200 hard ceiling; the gate warns and
 passes, and the deviation is reviewed and accepted. Staging is budgeted at
 USD 25 target / USD 50 ceiling against 40 scheduled awake hours per month. The

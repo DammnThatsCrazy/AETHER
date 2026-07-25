@@ -29,7 +29,7 @@
         validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults \
         validate-terraform-profile-policy validate-cost-model test-terraform-profiles test-runtime-topology \
         test-workflow-controls test-cost-model test-staging-lifecycle test-plan-policy \
-        deployment-readiness-score collect-deployment-evidence deployment-profile-gate
+        deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -389,6 +389,7 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
 	python scripts/release/check_cost_model.py \
 		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
+	$(MAKE) validate-staging-budget
 	python scripts/release/check_deployment_readiness.py
 	python scripts/release/check_route_registry.py
 	python scripts/release/check_storage_policies.py
@@ -474,6 +475,26 @@ validate-cost-model: ## Price a plan inventory against the profile's numeric bud
 	python scripts/release/check_cost_model.py \
 		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
 
+# Staging has its own budget (target 25 / hard 50 against a 40h awake month) and
+# its own usage scenario. It was previously exercised only by unit tests, because
+# every gate ran PLAN_PROFILE=production-lean and the only caller of the staging
+# path needed AWS credentials — so a staging budget regression could not surface
+# offline. Both wake states are gated here: asleep is where "no always-on staging
+# compute" is actually provable.
+validate-staging-budget: ## Plan-policy + cost gate for staging, awake and asleep
+	python scripts/release/check_terraform_plan_policy.py --profile staging \
+		--plan-json tests/fixtures/terraform_plans/staging-awake.json \
+		--out-dir artifacts/staging-awake
+	python scripts/release/check_cost_model.py --profile staging \
+		--inventory artifacts/staging-awake/profile-resource-inventory.json \
+		--out-dir reports/cost/staging-awake
+	python scripts/release/check_terraform_plan_policy.py --profile staging \
+		--plan-json tests/fixtures/terraform_plans/staging-asleep.json \
+		--out-dir artifacts/staging-asleep
+	python scripts/release/check_cost_model.py --profile staging \
+		--inventory artifacts/staging-asleep/profile-resource-inventory.json \
+		--out-dir reports/cost/staging-asleep
+
 test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile module cardinality
 	cd "$(TF_DIR)" && terraform init -backend=false -input=false >/dev/null && \
 		terraform validate && \
@@ -507,6 +528,7 @@ deployment-profile-gate: ## Every deployment-profile gate that runs without AWS 
 	$(MAKE) validate-delivery-topology
 	$(MAKE) validate-terraform-profile-policy
 	$(MAKE) validate-cost-model
+	$(MAKE) validate-staging-budget
 	$(MAKE) test-plan-policy
 	$(MAKE) test-runtime-topology
 	$(MAKE) test-workflow-controls

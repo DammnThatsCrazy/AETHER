@@ -148,8 +148,14 @@ locals {
 
   # WHAT THE MULTIPLIER SCALES, and why each one is load-bearing:
   #
-  #   desired_count — the obvious one, and on its own not enough.
-  #   autoscaling min_capacity — the one that actually makes sleep stick.
+  #   desired_count — the obvious one, and on its own not enough. It is also
+  #     only load-bearing because modules/ecs manages it: while
+  #     aws_ecs_service.backend carried `ignore_changes = [desired_count]` this
+  #     zero never reached an applied api service at all, so an "asleep"
+  #     staging environment kept running the api task 24/7 while every plan
+  #     said 0. See the lifecycle comment on that resource.
+  #   autoscaling min_capacity — the other half, and the one that makes sleep
+  #     STICK rather than merely start.
   #     Application Auto Scaling clamps a service up to its floor, so a floor of
   #     1 against a desired count of 0 revives the task within a cooldown and
   #     staging never sleeps at all: the saving evaporates and the "no always-on

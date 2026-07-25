@@ -287,6 +287,153 @@ def test_materialized_bundle_section_lists_absent_subdirectories(tmp_path):
     assert len(section["absent_subdirectories"]) == len(collect_evidence.BUNDLE_SUBDIRS) - 1
 
 
+# ── The bundle is verified, not transcribed ───────────────────────────────
+
+
+def _sealed(tmp_path, files: dict[str, str]) -> Path:
+    bundle = tmp_path / "release-evidence"
+    collect_evidence.write_bundle_layout(bundle, {"commit": "abc1234"})
+    for rel, body in files.items():
+        (bundle / rel).write_text(body, encoding="utf-8")
+    collect_evidence.write_bundle_layout(bundle, {"commit": "abc1234"})
+    return bundle
+
+
+def test_a_sealed_bundle_verifies_by_recomputation(tmp_path):
+    bundle = _sealed(tmp_path, {"cost/cost-report.json": '{"passed": true}'})
+    verdict = collect_evidence.verify_bundle(bundle)
+    assert verdict["verified"] is True
+    assert verdict["files_checked"] == 1
+    assert verdict["computed_sha256"] == verdict["recorded_sha256"]
+
+
+def test_swapping_an_evidence_file_fails_verification(tmp_path):
+    """The defect: per-file digests were written once and never re-derived.
+
+    manifest.sha256 sealed the manifest, the manifest recorded the digests, and
+    every later read returned the RECORDED digest — so a swapped file left the
+    manifest and its checksum in perfect agreement with each other and in
+    complete disagreement with the bundle.
+    """
+    bundle = _sealed(tmp_path, {"cost/cost-report.json": '{"passed": false}'})
+    (bundle / "cost/cost-report.json").write_text('{"passed": true}', encoding="utf-8")
+    verdict = collect_evidence.verify_bundle(bundle)
+    assert verdict["verified"] is False
+    assert "does not match its recorded digest" in verdict["reason"]
+
+
+def test_editing_the_manifest_fails_verification(tmp_path):
+    bundle = _sealed(tmp_path, {"load/load-result.json": '{"rps": 40}'})
+    manifest = bundle / "manifest.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data["file_count"] = 99
+    manifest.write_text(json.dumps(data), encoding="utf-8")
+    verdict = collect_evidence.verify_bundle(bundle)
+    assert verdict["verified"] is False
+    assert "manifest.sha256 records" in verdict["reason"]
+
+
+def test_deleting_an_evidence_file_fails_verification(tmp_path):
+    bundle = _sealed(tmp_path, {"smoke/smoke-result.json": "{}"})
+    (bundle / "smoke/smoke-result.json").unlink()
+    verdict = collect_evidence.verify_bundle(bundle)
+    assert verdict["verified"] is False
+    assert "absent from disk" in verdict["reason"]
+
+
+def test_adding_an_unlisted_file_fails_verification(tmp_path):
+    """A file nothing vouches for is still in the bundle a reviewer is handed."""
+    bundle = _sealed(tmp_path, {"security/security-result.json": "{}"})
+    (bundle / "security/added-later.json").write_text('{"findings": []}',
+                                                      encoding="utf-8")
+    verdict = collect_evidence.verify_bundle(bundle)
+    assert verdict["verified"] is False
+    assert "not listed in the manifest" in verdict["reason"]
+
+
+def test_an_absent_bundle_is_not_verified(tmp_path):
+    verdict = collect_evidence.verify_bundle(tmp_path / "nowhere")
+    assert verdict["verified"] is False
+    assert "not materialized" in verdict["reason"]
+
+
+def test_the_bundle_section_separates_the_claim_from_the_verification(tmp_path):
+    bundle = _sealed(tmp_path, {"cost/cost-report.json": "{}"})
+    section = collect_evidence.evidence_bundle_section(bundle, None)
+    assert section["verification"]["verified"] is True
+    assert section["sha256"] == section["recorded_sha256"]
+
+    (bundle / "cost/cost-report.json").write_text('{"tampered": true}',
+                                                  encoding="utf-8")
+    tampered = collect_evidence.evidence_bundle_section(bundle, None)
+    # The recorded digest is unchanged and still agrees with itself; only
+    # recomputation tells the truth.
+    assert tampered["sha256"] == section["sha256"]
+    assert tampered["verification"]["verified"] is False
+
+
+# ── A cost PASS may not be laundered out of a fixture ──────────────────────
+
+
+def _inventory(path: Path, **extra) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = {"schema_version": 1, "profile": "production-lean", "resources": []}
+    body.update(extra)
+    path.write_text(json.dumps(body), encoding="utf-8")
+
+
+def test_a_fixture_derived_inventory_is_refused_as_cost_input(tmp_path, monkeypatch):
+    monkeypatch.setattr(collect_evidence, "repo_root", lambda: tmp_path)
+    _inventory(tmp_path / collect_evidence.COST_INVENTORY,
+               generated_from="tests/fixtures/terraform_plans/production-lean-valid.json",
+               synthetic_input="tests/fixtures")
+    reason = collect_evidence.synthetic_inventory_reason()
+    assert reason and "test fixture" in reason
+    assert "not reported as a pass" in reason
+
+
+def test_a_missing_inventory_is_refused_as_cost_input(tmp_path, monkeypatch):
+    monkeypatch.setattr(collect_evidence, "repo_root", lambda: tmp_path)
+    reason = collect_evidence.synthetic_inventory_reason()
+    assert reason and "absent" in reason
+
+
+def test_an_inventory_from_a_real_plan_is_accepted(tmp_path, monkeypatch):
+    monkeypatch.setattr(collect_evidence, "repo_root", lambda: tmp_path)
+    _inventory(tmp_path / collect_evidence.COST_INVENTORY,
+               generated_from="artifacts/reviewed.tfplan.json",
+               synthetic_input=None)
+    assert collect_evidence.synthetic_inventory_reason() is None
+
+
+def test_the_bundle_records_a_guarded_check_as_unverifiable_never_as_a_pass(
+        tmp_path, monkeypatch):
+    """The laundering path: cost_model exit 0 PASS beside plan_policy exit 2 FAIL.
+
+    Both checks describe the same deployment. One was pointed at a path a
+    fixture never occupies and honestly failed; the other was pointed at the
+    path `make validate-cost-model` writes the fixture-derived inventory to and
+    reported a pass. The bundle then carried both lines side by side.
+    """
+    monkeypatch.setattr(collect_evidence, "repo_root", lambda: tmp_path)
+    _inventory(tmp_path / collect_evidence.COST_INVENTORY,
+               generated_from="tests/fixtures/terraform_plans/production-lean-valid.json",
+               synthetic_input="fixture")
+    ran: list[str] = []
+    monkeypatch.setattr(collect_evidence, "_run",
+                        lambda script, args=None: ran.append(script) or
+                        {"script": script, "exit_code": 0})
+
+    results = collect_evidence.run_evidence_checks()
+    cost = results["cost_model"]
+    assert cost["exit_code"] != 0
+    assert cost["status"] == "unverifiable_input"
+    assert "scripts/release/check_cost_model.py" not in ran, (
+        "the cost gate must not be run at all against a fixture-derived inventory")
+    # An unguarded check is untouched by this.
+    assert results["cost_policy"]["exit_code"] == 0
+
+
 def test_bundle_manifest_round_trips_through_the_shared_canonicaliser(tmp_path):
     """Two writes of identical content must produce an identical digest."""
     first = collect_evidence.write_bundle_layout(

@@ -13,6 +13,12 @@
 # safe on a workspace that never applied the module (Terraform ignores a moved
 # block whose source address is absent from state).
 #
+# A `moved` block relocates an address; it does not decide whether the resource
+# at the new address survives. That is decided by the module's `count`, and for
+# every gated stateful module the backstop against a count of 0 is
+# `lifecycle { prevent_destroy = true }` on the resources that hold data (and
+# on the KMS keys that make their snapshots readable). See DECOMMISSION.md.
+#
 # Do not delete these blocks until every workspace that predates the profile
 # gating commit has been applied at least once. Deleting them early re-arms the
 # destroy-and-recreate plan they exist to prevent. Intentional removal of any
@@ -20,6 +26,16 @@
 # toggle and never through deleting a moved block.
 # ============================================================================
 
+# module.rds is the one address here whose `moved` block does NOT by itself
+# save the resource. The other three modules are provisioned at some profile,
+# so relocating them to [0] is the whole migration. Legacy RDS is provisioned
+# at NO profile (local.enable_legacy_rds is a literal false), so this block
+# relocates an applied instance to module.rds[0] and the count of 0 then plans
+# to destroy it there. The relocation is still worth doing — it puts the
+# instance at the address DECOMMISSION.md's `terraform state rm` and `removed`
+# commands name — but the thing that actually preserves it is
+# `lifecycle { prevent_destroy = true }` on aws_db_instance.this and
+# aws_kms_key.rds in modules/rds, which turns that destroy into a plan error.
 moved {
   from = module.rds
   to   = module.rds[0]

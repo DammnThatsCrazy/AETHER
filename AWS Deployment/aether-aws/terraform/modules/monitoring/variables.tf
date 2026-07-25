@@ -166,3 +166,13 @@ variable "sqs_oldest_message_age_threshold" {
   description = "Age in seconds of the oldest queued message above which the SQS staleness alarm fires"
   default     = 900
 }
+
+variable "runtime_service_log_groups" {
+  type        = map(string)
+  description = <<-EOT
+    Runtime service key -> CloudWatch log group name for that service's tasks.
+    Used to turn the supervisor's per-role failure line into a metric and an
+    alarm. Empty map = no runtime-role health alarm.
+  EOT
+  default     = {}
+}

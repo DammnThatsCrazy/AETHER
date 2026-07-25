@@ -3,13 +3,13 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "production-lean"
+      "value": "enterprise-isolated"
     },
     "environment": {
       "value": "production"
     },
     "network_egress_mode": {
-      "value": "public_ip"
+      "value": "ha_nat"
     },
     "aws_region": {
       "value": "us-east-1"
@@ -169,6 +169,30 @@
               "values": {
                 "port": 80
               }
+            },
+            {
+              "address": "module.alb.aws_lb_target_group.ml[0]",
+              "mode": "managed",
+              "type": "aws_lb_target_group",
+              "name": "ml",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "port": 8080
+              },
+              "index": 0
+            },
+            {
+              "address": "module.alb.aws_lb_listener_rule.ml_serving[0]",
+              "mode": "managed",
+              "type": "aws_lb_listener_rule",
+              "name": "ml_serving",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "priority": 10
+              },
+              "index": 0
             }
           ]
         },
@@ -469,8 +493,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-backend",
-                "cpu": "1024",
-                "memory": "2048",
+                "cpu": "2048",
+                "memory": "4096",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -486,7 +510,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-backend",
-                "desired_count": 1,
+                "desired_count": 3,
                 "enable_execute_command": false
               }
             },
@@ -499,8 +523,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-outbox-relay",
-                "cpu": "512",
-                "memory": "1024",
+                "cpu": "1024",
+                "memory": "2048",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -517,7 +541,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-outbox-relay",
-                "desired_count": 1,
+                "desired_count": 2,
                 "enable_execute_command": false
               },
               "index": "outbox-relay"
@@ -531,8 +555,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-stream-worker",
-                "cpu": "1024",
-                "memory": "2048",
+                "cpu": "2048",
+                "memory": "4096",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -549,7 +573,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-stream-worker",
-                "desired_count": 1,
+                "desired_count": 3,
                 "enable_execute_command": false
               },
               "index": "stream-worker"
@@ -563,8 +587,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-identity-worker",
-                "cpu": "512",
-                "memory": "1024",
+                "cpu": "1024",
+                "memory": "2048",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -581,7 +605,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-identity-worker",
-                "desired_count": 1,
+                "desired_count": 2,
                 "enable_execute_command": false
               },
               "index": "identity-worker"
@@ -595,8 +619,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-graph-writer",
-                "cpu": "512",
-                "memory": "1024",
+                "cpu": "1024",
+                "memory": "2048",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -613,7 +637,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-graph-writer",
-                "desired_count": 1,
+                "desired_count": 2,
                 "enable_execute_command": false
               },
               "index": "graph-writer"
@@ -627,8 +651,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-measurement-worker",
-                "cpu": "512",
-                "memory": "1024",
+                "cpu": "1024",
+                "memory": "2048",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -645,7 +669,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-measurement-worker",
-                "desired_count": 1,
+                "desired_count": 2,
                 "enable_execute_command": false
               },
               "index": "measurement-worker"
@@ -659,8 +683,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-semantic-worker",
-                "cpu": "512",
-                "memory": "1024",
+                "cpu": "1024",
+                "memory": "2048",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -677,7 +701,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-semantic-worker",
-                "desired_count": 1,
+                "desired_count": 2,
                 "enable_execute_command": false
               },
               "index": "semantic-worker"
@@ -691,8 +715,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-materializer",
-                "cpu": "512",
-                "memory": "1024",
+                "cpu": "1024",
+                "memory": "2048",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -709,7 +733,7 @@
               "schema_version": 0,
               "values": {
                 "name": "aether-production-materializer",
-                "desired_count": 1,
+                "desired_count": 2,
                 "enable_execute_command": false
               },
               "index": "materializer"
@@ -723,8 +747,8 @@
               "schema_version": 0,
               "values": {
                 "family": "aether-production-maintenance",
-                "cpu": "512",
-                "memory": "1024",
+                "cpu": "1024",
+                "memory": "2048",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -745,6 +769,111 @@
                 "enable_execute_command": false
               },
               "index": "maintenance"
+            },
+            {
+              "address": "module.ecs.aws_cloudwatch_log_group.ml",
+              "mode": "managed",
+              "type": "aws_cloudwatch_log_group",
+              "name": "ml",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "retention_in_days": 30
+              }
+            },
+            {
+              "address": "module.ecs.aws_ecs_task_definition.ml[0]",
+              "mode": "managed",
+              "type": "aws_ecs_task_definition",
+              "name": "ml",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "aether-production-ml-serving",
+                "cpu": "2048",
+                "memory": "4096"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.ecs.aws_ecs_service.ml[0]",
+              "mode": "managed",
+              "type": "aws_ecs_service",
+              "name": "ml",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether-production-ml-serving",
+                "desired_count": 2
+              },
+              "index": 0
+            },
+            {
+              "address": "module.ecs.aws_appautoscaling_target.ml[0]",
+              "mode": "managed",
+              "type": "aws_appautoscaling_target",
+              "name": "ml",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "max_capacity": 6
+              },
+              "index": 0
+            },
+            {
+              "address": "module.ecs.aws_appautoscaling_policy.ml_cpu[0]",
+              "mode": "managed",
+              "type": "aws_appautoscaling_policy",
+              "name": "ml_cpu",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "policy_type": "TargetTrackingScaling"
+              },
+              "index": 0
+            }
+          ]
+        },
+        {
+          "address": "module.elasticache",
+          "resources": [
+            {
+              "address": "module.elasticache.aws_elasticache_subnet_group.this[0]",
+              "mode": "managed",
+              "type": "aws_elasticache_subnet_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether-redis"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.elasticache.aws_elasticache_parameter_group.this[0]",
+              "mode": "managed",
+              "type": "aws_elasticache_parameter_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "redis7"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.elasticache.aws_elasticache_replication_group.this[0]",
+              "mode": "managed",
+              "type": "aws_elasticache_replication_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "replication_group_id": "aether-production-redis",
+                "node_type": "cache.t4g.micro",
+                "num_cache_clusters": 2
+              },
+              "index": 0
             }
           ]
         },
@@ -892,6 +1021,160 @@
               "values": {
                 "comparison_operator": "GreaterThanThreshold",
                 "threshold": 1
+              },
+              "index": 0
+            },
+            {
+              "address": "module.monitoring.aws_cloudwatch_metric_alarm.elasticache_memory[0]",
+              "mode": "managed",
+              "type": "aws_cloudwatch_metric_alarm",
+              "name": "elasticache_memory",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "comparison_operator": "GreaterThanThreshold",
+                "threshold": 1
+              },
+              "index": 0
+            },
+            {
+              "address": "module.monitoring.aws_cloudwatch_metric_alarm.msk_offline_partitions[0]",
+              "mode": "managed",
+              "type": "aws_cloudwatch_metric_alarm",
+              "name": "msk_offline_partitions",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "comparison_operator": "GreaterThanThreshold",
+                "threshold": 1
+              },
+              "index": 0
+            },
+            {
+              "address": "module.monitoring.aws_cloudwatch_metric_alarm.neptune_cpu[0]",
+              "mode": "managed",
+              "type": "aws_cloudwatch_metric_alarm",
+              "name": "neptune_cpu",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "comparison_operator": "GreaterThanThreshold",
+                "threshold": 1
+              },
+              "index": 0
+            }
+          ]
+        },
+        {
+          "address": "module.msk",
+          "resources": [
+            {
+              "address": "module.msk.aws_kms_key.msk[0]",
+              "mode": "managed",
+              "type": "aws_kms_key",
+              "name": "msk",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "enable_key_rotation": true
+              },
+              "index": 0
+            },
+            {
+              "address": "module.msk.aws_cloudwatch_log_group.msk_broker[0]",
+              "mode": "managed",
+              "type": "aws_cloudwatch_log_group",
+              "name": "msk_broker",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "retention_in_days": 30
+              },
+              "index": 0
+            },
+            {
+              "address": "module.msk.aws_msk_configuration.this[0]",
+              "mode": "managed",
+              "type": "aws_msk_configuration",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "kafka_versions": [
+                  "3.6.0"
+                ]
+              },
+              "index": 0
+            },
+            {
+              "address": "module.msk.aws_msk_cluster.this[0]",
+              "mode": "managed",
+              "type": "aws_msk_cluster",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cluster_name": "aether-production-msk",
+                "kafka_version": "3.6.0",
+                "number_of_broker_nodes": 3,
+                "broker_node_group_info": [
+                  {
+                    "instance_type": "kafka.m5.large"
+                  }
+                ]
+              },
+              "index": 0
+            }
+          ]
+        },
+        {
+          "address": "module.neptune",
+          "resources": [
+            {
+              "address": "module.neptune.aws_kms_key.neptune[0]",
+              "mode": "managed",
+              "type": "aws_kms_key",
+              "name": "neptune",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "enable_key_rotation": true
+              },
+              "index": 0
+            },
+            {
+              "address": "module.neptune.aws_neptune_subnet_group.this[0]",
+              "mode": "managed",
+              "type": "aws_neptune_subnet_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether-neptune"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.neptune.aws_neptune_cluster.this[0]",
+              "mode": "managed",
+              "type": "aws_neptune_cluster",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cluster_identifier": "aether-production-neptune"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.neptune.aws_neptune_cluster_instance.this[0]",
+              "mode": "managed",
+              "type": "aws_neptune_cluster_instance",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "instance_class": "db.r6g.large"
               },
               "index": 0
             }
@@ -1047,15 +1330,51 @@
           "address": "module.vpc",
           "resources": [
             {
-              "address": "module.vpc.aws_vpc.this",
+              "address": "module.vpc.aws_cloudwatch_log_group.flow_logs",
               "mode": "managed",
-              "type": "aws_vpc",
-              "name": "this",
+              "type": "aws_cloudwatch_log_group",
+              "name": "flow_logs",
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "cidr_block": "10.0.0.0/16"
+                "retention_in_days": 30
               }
+            },
+            {
+              "address": "module.vpc.aws_eip.nat[0]",
+              "mode": "managed",
+              "type": "aws_eip",
+              "name": "nat",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "domain": "vpc"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.vpc.aws_eip.nat[1]",
+              "mode": "managed",
+              "type": "aws_eip",
+              "name": "nat",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "domain": "vpc"
+              },
+              "index": 1
+            },
+            {
+              "address": "module.vpc.aws_eip.nat[2]",
+              "mode": "managed",
+              "type": "aws_eip",
+              "name": "nat",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "domain": "vpc"
+              },
+              "index": 2
             },
             {
               "address": "module.vpc.aws_internet_gateway.this",
@@ -1067,55 +1386,55 @@
               "values": {}
             },
             {
-              "address": "module.vpc.aws_subnet.public[0]",
+              "address": "module.vpc.aws_nat_gateway.this[0]",
               "mode": "managed",
-              "type": "aws_subnet",
-              "name": "public",
+              "type": "aws_nat_gateway",
+              "name": "this",
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "cidr_block": "10.0.0.0/20"
+                "connectivity_type": "public"
               },
               "index": 0
             },
             {
-              "address": "module.vpc.aws_subnet.private[0]",
+              "address": "module.vpc.aws_nat_gateway.this[1]",
               "mode": "managed",
-              "type": "aws_subnet",
-              "name": "private",
+              "type": "aws_nat_gateway",
+              "name": "this",
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "cidr_block": "10.0.48.0/20"
+                "connectivity_type": "public"
               },
-              "index": 0
+              "index": 1
             },
             {
-              "address": "module.vpc.aws_subnet.isolated[0]",
+              "address": "module.vpc.aws_nat_gateway.this[2]",
               "mode": "managed",
-              "type": "aws_subnet",
-              "name": "isolated",
+              "type": "aws_nat_gateway",
+              "name": "this",
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "cidr_block": "10.0.96.0/20"
+                "connectivity_type": "public"
               },
-              "index": 0
-            },
-            {
-              "address": "module.vpc.aws_route_table.public",
-              "mode": "managed",
-              "type": "aws_route_table",
-              "name": "public",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {}
+              "index": 2
             },
             {
               "address": "module.vpc.aws_route_table.private",
               "mode": "managed",
               "type": "aws_route_table",
               "name": "private",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {}
+            },
+            {
+              "address": "module.vpc.aws_route_table.public",
+              "mode": "managed",
+              "type": "aws_route_table",
+              "name": "public",
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {}
@@ -1154,14 +1473,50 @@
               }
             },
             {
-              "address": "module.vpc.aws_cloudwatch_log_group.flow_logs",
+              "address": "module.vpc.aws_subnet.isolated[0]",
               "mode": "managed",
-              "type": "aws_cloudwatch_log_group",
-              "name": "flow_logs",
+              "type": "aws_subnet",
+              "name": "isolated",
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "retention_in_days": 30
+                "cidr_block": "10.0.96.0/20"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.vpc.aws_subnet.private[0]",
+              "mode": "managed",
+              "type": "aws_subnet",
+              "name": "private",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cidr_block": "10.0.48.0/20"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.vpc.aws_subnet.public[0]",
+              "mode": "managed",
+              "type": "aws_subnet",
+              "name": "public",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cidr_block": "10.0.0.0/20"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.vpc.aws_vpc.this",
+              "mode": "managed",
+              "type": "aws_vpc",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cidr_block": "10.0.0.0/16"
               }
             }
           ]
@@ -1431,6 +1786,30 @@
       "module_address": "module.alb"
     },
     {
+      "address": "module.alb.aws_lb_listener_rule.ml_serving[0]",
+      "mode": "managed",
+      "type": "aws_lb_listener_rule",
+      "name": "ml_serving",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "priority": 10
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.alb",
+      "index": 0
+    },
+    {
       "address": "module.alb.aws_lb_target_group.backend",
       "mode": "managed",
       "type": "aws_lb_target_group",
@@ -1452,6 +1831,30 @@
         "after_sensitive": {}
       },
       "module_address": "module.alb"
+    },
+    {
+      "address": "module.alb.aws_lb_target_group.ml[0]",
+      "mode": "managed",
+      "type": "aws_lb_target_group",
+      "name": "ml",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "port": 8080
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.alb",
+      "index": 0
     },
     {
       "address": "module.aurora.aws_db_subnet_group.aurora",
@@ -1942,10 +2345,81 @@
       "module_address": "module.ecr"
     },
     {
+      "address": "module.ecs.aws_appautoscaling_policy.ml_cpu[0]",
+      "mode": "managed",
+      "type": "aws_appautoscaling_policy",
+      "name": "ml_cpu",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "policy_type": "TargetTrackingScaling"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs",
+      "index": 0
+    },
+    {
+      "address": "module.ecs.aws_appautoscaling_target.ml[0]",
+      "mode": "managed",
+      "type": "aws_appautoscaling_target",
+      "name": "ml",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "max_capacity": 6
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs",
+      "index": 0
+    },
+    {
       "address": "module.ecs.aws_cloudwatch_log_group.backend",
       "mode": "managed",
       "type": "aws_cloudwatch_log_group",
       "name": "backend",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "retention_in_days": 30
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs"
+    },
+    {
+      "address": "module.ecs.aws_cloudwatch_log_group.ml",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "ml",
       "provider_name": "registry.terraform.io/hashicorp/aws",
       "change": {
         "actions": [
@@ -2000,7 +2474,7 @@
         "before": null,
         "after": {
           "name": "aether-production-backend",
-          "desired_count": 1,
+          "desired_count": 3,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2011,6 +2485,31 @@
         "after_sensitive": {}
       },
       "module_address": "module.ecs"
+    },
+    {
+      "address": "module.ecs.aws_ecs_service.ml[0]",
+      "mode": "managed",
+      "type": "aws_ecs_service",
+      "name": "ml",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-production-ml-serving",
+          "desired_count": 2
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs",
+      "index": 0
     },
     {
       "address": "module.ecs.aws_ecs_service.runtime_role[\"graph-writer\"]",
@@ -2025,7 +2524,7 @@
         "before": null,
         "after": {
           "name": "aether-production-graph-writer",
-          "desired_count": 1,
+          "desired_count": 2,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2051,7 +2550,7 @@
         "before": null,
         "after": {
           "name": "aether-production-identity-worker",
-          "desired_count": 1,
+          "desired_count": 2,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2103,7 +2602,7 @@
         "before": null,
         "after": {
           "name": "aether-production-materializer",
-          "desired_count": 1,
+          "desired_count": 2,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2129,7 +2628,7 @@
         "before": null,
         "after": {
           "name": "aether-production-measurement-worker",
-          "desired_count": 1,
+          "desired_count": 2,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2155,7 +2654,7 @@
         "before": null,
         "after": {
           "name": "aether-production-outbox-relay",
-          "desired_count": 1,
+          "desired_count": 2,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2181,7 +2680,7 @@
         "before": null,
         "after": {
           "name": "aether-production-semantic-worker",
-          "desired_count": 1,
+          "desired_count": 2,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2207,7 +2706,7 @@
         "before": null,
         "after": {
           "name": "aether-production-stream-worker",
-          "desired_count": 1,
+          "desired_count": 3,
           "enable_execute_command": false
         },
         "after_unknown": {
@@ -2233,8 +2732,8 @@
         "before": null,
         "after": {
           "family": "aether-production-backend",
-          "cpu": "1024",
-          "memory": "2048",
+          "cpu": "2048",
+          "memory": "4096",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2250,6 +2749,32 @@
       "module_address": "module.ecs"
     },
     {
+      "address": "module.ecs.aws_ecs_task_definition.ml[0]",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "ml",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "aether-production-ml-serving",
+          "cpu": "2048",
+          "memory": "4096"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs",
+      "index": 0
+    },
+    {
       "address": "module.ecs.aws_ecs_task_definition.runtime_role[\"graph-writer\"]",
       "mode": "managed",
       "type": "aws_ecs_task_definition",
@@ -2262,8 +2787,8 @@
         "before": null,
         "after": {
           "family": "aether-production-graph-writer",
-          "cpu": "512",
-          "memory": "1024",
+          "cpu": "1024",
+          "memory": "2048",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2292,8 +2817,8 @@
         "before": null,
         "after": {
           "family": "aether-production-identity-worker",
-          "cpu": "512",
-          "memory": "1024",
+          "cpu": "1024",
+          "memory": "2048",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2322,8 +2847,8 @@
         "before": null,
         "after": {
           "family": "aether-production-maintenance",
-          "cpu": "512",
-          "memory": "1024",
+          "cpu": "1024",
+          "memory": "2048",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2352,8 +2877,8 @@
         "before": null,
         "after": {
           "family": "aether-production-materializer",
-          "cpu": "512",
-          "memory": "1024",
+          "cpu": "1024",
+          "memory": "2048",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2382,8 +2907,8 @@
         "before": null,
         "after": {
           "family": "aether-production-measurement-worker",
-          "cpu": "512",
-          "memory": "1024",
+          "cpu": "1024",
+          "memory": "2048",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2412,8 +2937,8 @@
         "before": null,
         "after": {
           "family": "aether-production-outbox-relay",
-          "cpu": "512",
-          "memory": "1024",
+          "cpu": "1024",
+          "memory": "2048",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2442,8 +2967,8 @@
         "before": null,
         "after": {
           "family": "aether-production-semantic-worker",
-          "cpu": "512",
-          "memory": "1024",
+          "cpu": "1024",
+          "memory": "2048",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2472,8 +2997,8 @@
         "before": null,
         "after": {
           "family": "aether-production-stream-worker",
-          "cpu": "1024",
-          "memory": "2048",
+          "cpu": "2048",
+          "memory": "4096",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2488,6 +3013,80 @@
       },
       "module_address": "module.ecs",
       "index": "stream-worker"
+    },
+    {
+      "address": "module.elasticache.aws_elasticache_parameter_group.this[0]",
+      "mode": "managed",
+      "type": "aws_elasticache_parameter_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "redis7"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.elasticache",
+      "index": 0
+    },
+    {
+      "address": "module.elasticache.aws_elasticache_replication_group.this[0]",
+      "mode": "managed",
+      "type": "aws_elasticache_replication_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "replication_group_id": "aether-production-redis",
+          "node_type": "cache.t4g.micro",
+          "num_cache_clusters": 2
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.elasticache",
+      "index": 0
+    },
+    {
+      "address": "module.elasticache.aws_elasticache_subnet_group.this[0]",
+      "mode": "managed",
+      "type": "aws_elasticache_subnet_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-redis"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.elasticache",
+      "index": 0
     },
     {
       "address": "module.monitoring.aws_cloudwatch_dashboard.main",
@@ -2610,6 +3209,31 @@
       "index": 0
     },
     {
+      "address": "module.monitoring.aws_cloudwatch_metric_alarm.elasticache_memory[0]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_metric_alarm",
+      "name": "elasticache_memory",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "comparison_operator": "GreaterThanThreshold",
+          "threshold": 1
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.monitoring",
+      "index": 0
+    },
+    {
       "address": "module.monitoring.aws_cloudwatch_metric_alarm.ml_drift",
       "mode": "managed",
       "type": "aws_cloudwatch_metric_alarm",
@@ -2632,6 +3256,56 @@
         "after_sensitive": {}
       },
       "module_address": "module.monitoring"
+    },
+    {
+      "address": "module.monitoring.aws_cloudwatch_metric_alarm.msk_offline_partitions[0]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_metric_alarm",
+      "name": "msk_offline_partitions",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "comparison_operator": "GreaterThanThreshold",
+          "threshold": 1
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.monitoring",
+      "index": 0
+    },
+    {
+      "address": "module.monitoring.aws_cloudwatch_metric_alarm.neptune_cpu[0]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_metric_alarm",
+      "name": "neptune_cpu",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "comparison_operator": "GreaterThanThreshold",
+          "threshold": 1
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.monitoring",
+      "index": 0
     },
     {
       "address": "module.monitoring.aws_cloudwatch_metric_alarm.sqs_dlq_depth[0]",
@@ -2776,6 +3450,207 @@
         "after_sensitive": {}
       },
       "module_address": "module.monitoring"
+    },
+    {
+      "address": "module.msk.aws_cloudwatch_log_group.msk_broker[0]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "msk_broker",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "retention_in_days": 30
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.msk",
+      "index": 0
+    },
+    {
+      "address": "module.msk.aws_kms_key.msk[0]",
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "msk",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "enable_key_rotation": true
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.msk",
+      "index": 0
+    },
+    {
+      "address": "module.msk.aws_msk_cluster.this[0]",
+      "mode": "managed",
+      "type": "aws_msk_cluster",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "cluster_name": "aether-production-msk",
+          "kafka_version": "3.6.0",
+          "number_of_broker_nodes": 3,
+          "broker_node_group_info": [
+            {
+              "instance_type": "kafka.m5.large"
+            }
+          ]
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.msk",
+      "index": 0
+    },
+    {
+      "address": "module.msk.aws_msk_configuration.this[0]",
+      "mode": "managed",
+      "type": "aws_msk_configuration",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "kafka_versions": [
+            "3.6.0"
+          ]
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.msk",
+      "index": 0
+    },
+    {
+      "address": "module.neptune.aws_kms_key.neptune[0]",
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "neptune",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "enable_key_rotation": true
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
+    },
+    {
+      "address": "module.neptune.aws_neptune_cluster.this[0]",
+      "mode": "managed",
+      "type": "aws_neptune_cluster",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "cluster_identifier": "aether-production-neptune"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
+    },
+    {
+      "address": "module.neptune.aws_neptune_cluster_instance.this[0]",
+      "mode": "managed",
+      "type": "aws_neptune_cluster_instance",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "instance_class": "db.r6g.large"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
+    },
+    {
+      "address": "module.neptune.aws_neptune_subnet_group.this[0]",
+      "mode": "managed",
+      "type": "aws_neptune_subnet_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-neptune"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
     },
     {
       "address": "module.secrets.aws_kms_alias.secrets",
@@ -3081,6 +3956,78 @@
       "module_address": "module.vpc"
     },
     {
+      "address": "module.vpc.aws_eip.nat[0]",
+      "mode": "managed",
+      "type": "aws_eip",
+      "name": "nat",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "domain": "vpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.vpc",
+      "index": 0
+    },
+    {
+      "address": "module.vpc.aws_eip.nat[1]",
+      "mode": "managed",
+      "type": "aws_eip",
+      "name": "nat",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "domain": "vpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.vpc",
+      "index": 1
+    },
+    {
+      "address": "module.vpc.aws_eip.nat[2]",
+      "mode": "managed",
+      "type": "aws_eip",
+      "name": "nat",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "domain": "vpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.vpc",
+      "index": 2
+    },
+    {
       "address": "module.vpc.aws_internet_gateway.this",
       "mode": "managed",
       "type": "aws_internet_gateway",
@@ -3100,6 +4047,78 @@
         "after_sensitive": {}
       },
       "module_address": "module.vpc"
+    },
+    {
+      "address": "module.vpc.aws_nat_gateway.this[0]",
+      "mode": "managed",
+      "type": "aws_nat_gateway",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "connectivity_type": "public"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.vpc",
+      "index": 0
+    },
+    {
+      "address": "module.vpc.aws_nat_gateway.this[1]",
+      "mode": "managed",
+      "type": "aws_nat_gateway",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "connectivity_type": "public"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.vpc",
+      "index": 1
+    },
+    {
+      "address": "module.vpc.aws_nat_gateway.this[2]",
+      "mode": "managed",
+      "type": "aws_nat_gateway",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "connectivity_type": "public"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.vpc",
+      "index": 2
     },
     {
       "address": "module.vpc.aws_route_table.private",

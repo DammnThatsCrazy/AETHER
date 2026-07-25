@@ -461,6 +461,23 @@
               }
             },
             {
+              "address": "module.ecs.aws_ecs_task_definition.backend",
+              "mode": "managed",
+              "type": "aws_ecs_task_definition",
+              "name": "backend",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "aether-production-backend",
+                "cpu": "1024",
+                "memory": "2048",
+                "requires_compatibilities": [
+                  "FARGATE"
+                ],
+                "network_mode": "awsvpc"
+              }
+            },
+            {
               "address": "module.ecs.aws_ecs_service.backend",
               "mode": "managed",
               "type": "aws_ecs_service",
@@ -504,6 +521,34 @@
                 "enable_execute_command": false
               },
               "index": "lean-worker"
+            }
+          ]
+        },
+        {
+          "address": "module.graph_store",
+          "resources": [
+            {
+              "address": "module.graph_store.aws_neptune_cluster.this",
+              "mode": "managed",
+              "type": "aws_neptune_cluster",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cluster_identifier": "aether-graph"
+              }
+            },
+            {
+              "address": "module.graph_store.aws_neptune_cluster_instance.this",
+              "mode": "managed",
+              "type": "aws_neptune_cluster_instance",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "identifier": "aether-graph-1",
+                "instance_class": "db.t4g.medium"
+              }
             }
           ]
         },
@@ -1798,6 +1843,35 @@
       "index": "lean-worker"
     },
     {
+      "address": "module.ecs.aws_ecs_task_definition.backend",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "backend",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "aether-production-backend",
+          "cpu": "1024",
+          "memory": "2048",
+          "requires_compatibilities": [
+            "FARGATE"
+          ],
+          "network_mode": "awsvpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.ecs"
+    },
+    {
       "address": "module.ecs.aws_ecs_task_definition.runtime_role[\"lean-worker\"]",
       "mode": "managed",
       "type": "aws_ecs_task_definition",
@@ -1826,6 +1900,53 @@
       },
       "module_address": "module.ecs",
       "index": "lean-worker"
+    },
+    {
+      "address": "module.graph_store.aws_neptune_cluster.this",
+      "mode": "managed",
+      "type": "aws_neptune_cluster",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "cluster_identifier": "aether-graph"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.graph_store"
+    },
+    {
+      "address": "module.graph_store.aws_neptune_cluster_instance.this",
+      "mode": "managed",
+      "type": "aws_neptune_cluster_instance",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "identifier": "aether-graph-1",
+          "instance_class": "db.t4g.medium"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.graph_store"
     },
     {
       "address": "module.monitoring.aws_cloudwatch_dashboard.main",

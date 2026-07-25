@@ -288,7 +288,7 @@
       ],
       "status": "stable",
       "since_version": "8.8.0",
-      "estimated_read_minutes": 14,
+      "estimated_read_minutes": 18,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -477,7 +477,7 @@
       ],
       "status": "stable",
       "since_version": "8.8.0",
-      "estimated_read_minutes": 12,
+      "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -984,7 +984,7 @@
         "architect"
       ],
       "status": "stable",
-      "estimated_read_minutes": 6,
+      "estimated_read_minutes": 22,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -1015,7 +1015,7 @@
       ],
       "status": "beta",
       "since_version": "8.9.0",
-      "estimated_read_minutes": 6,
+      "estimated_read_minutes": 10,
       "canonical_owner": "platform@aether"
     },
     {
@@ -1283,7 +1283,7 @@
         "security"
       ],
       "status": "stable",
-      "estimated_read_minutes": 7,
+      "estimated_read_minutes": 11,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2326,7 +2326,7 @@
       ],
       "status": "beta",
       "since_version": "8.9.0",
-      "estimated_read_minutes": 6,
+      "estimated_read_minutes": 9,
       "canonical_owner": "platform@aether"
     },
     {
@@ -2493,7 +2493,7 @@
         "security"
       ],
       "status": "stable",
-      "estimated_read_minutes": 4,
+      "estimated_read_minutes": 9,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },

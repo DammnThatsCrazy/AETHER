@@ -760,3 +760,73 @@ resource "aws_cloudwatch_dashboard" "main" {
     )
   })
 }
+
+# --------------------------------------------------------------------------
+# Alarm: a runtime role has permanently failed inside a still-running task
+#
+# A consolidated `lean-worker` task hosts eight roles in one process. When one
+# of them exhausts its restart budget the supervisor gives up on it and the
+# other seven keep working, so the container stays up, the ECS service stays
+# at steady state, and the orchestrator has no reason to replace anything — a
+# task doing seven-eighths of its job is indistinguishable from a healthy one.
+#
+# services/runtime/run_role.py::_watch_role_health re-reads
+# supervisor.status_by_role() on an interval and prints
+#
+#     [run_role] role=<role> UNHEALTHY (restarts exhausted) failed=... 
+#
+# for each permanently-failed role. That line is the only externally visible
+# signal today, so it is promoted to a metric here and alarmed on.
+#
+# This makes the state ACTIONABLE; it does not make it self-healing. Automatic
+# replacement needs an ECS container healthCheck, and a healthCheck needs
+# something in the worker container to probe — the runtime services run
+# `python -m services.runtime.run_role <key>` and serve no HTTP at all, so a
+# probe surface has to be added to run_role.py before a healthCheck can be
+# anything but a guaranteed kill. That change lives in the backend tree, not
+# here.
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_metric_filter" "runtime_role_unhealthy" {
+  for_each       = var.runtime_service_log_groups
+  name           = "${var.project}-${var.environment}-${each.key}-role-unhealthy"
+  log_group_name = each.value
+
+  # Matches the literal marker the supervisor health watch prints. Both tokens
+  # are required so an ordinary log line mentioning either word cannot fire it.
+  pattern = "\"[run_role]\" \"UNHEALTHY (restarts exhausted)\""
+
+  metric_transformation {
+    name          = "RuntimeRoleUnhealthy"
+    namespace     = "Aether/Runtime"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+    dimensions = {
+      Service = "$.service"
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "runtime_role_unhealthy" {
+  count = length(var.runtime_service_log_groups) > 0 ? 1 : 0
+
+  alarm_name          = "${var.project}-${var.environment}-runtime-role-unhealthy"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "RuntimeRoleUnhealthy"
+  namespace           = "Aether/Runtime"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+
+  alarm_description = "A runtime role has exhausted its restart budget inside a still-running task. The ECS service will report steady state and will NOT replace the task; the role is simply no longer doing its work."
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-runtime-role-unhealthy-alarm"
+  }
+}

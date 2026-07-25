@@ -29,6 +29,42 @@ Never let step 1 and step 2 collapse into a single `terraform apply`. A profile
 flip that shows `Plan: … 1 to destroy` on a data store is a **stop-the-line
 event**, not a diff to skim.
 
+### How the rule is enforced
+
+The rule above used to be prose only — `prevent_destroy` appeared nowhere in
+this tree — so flipping `deployment_profile` to `production-lean` really did
+plan a destroy of `module.elasticache[0]`, `module.msk[0]` and
+`module.neptune[0]`, the last of them with `skip_final_snapshot = false` and
+its own KMS key. It is now enforced. Every profile-gated stateful resource, and
+every KMS key without which that resource's final snapshot is unreadable,
+carries `lifecycle { prevent_destroy = true }`:
+
+| Module | Protected resources |
+|---|---|
+| `modules/elasticache` | `aws_elasticache_replication_group.this`, `aws_kms_key.redis`, `aws_secretsmanager_secret.redis_auth` |
+| `modules/msk` | `aws_msk_cluster.this`, `aws_kms_key.msk` |
+| `modules/neptune` | `aws_neptune_cluster.this`, `aws_neptune_cluster_instance.this`, `aws_kms_key.neptune` |
+| `modules/rds` | `aws_db_instance.this`, `aws_kms_key.rds` |
+
+A profile flip that would remove any of them now **fails the plan** with
+`Instance cannot be destroyed`. That is the intended outcome: the workspace
+stops, nothing is destroyed, and the operator runs the procedure below rather
+than approving a diff.
+
+Aurora, the DynamoDB cache table, the SQS queues and the S3 origins are
+deliberately not in the table: they are provisioned in *every* profile, so no
+profile flip can remove them, and adding `prevent_destroy` there would only
+block legitimate replacements. They are still covered by the rule at the top of
+this section — the mechanism for them is `deletion_protection` plus review.
+
+**`prevent_destroy` is a literal, not an expression.** Terraform does not allow
+it to depend on a variable, so a genuinely intended removal (step 10 below)
+requires deleting the `lifecycle` block in its own reviewed commit, or — better,
+because it leaves the resource alive while it is verified — releasing the
+resource from state first, which is exactly step 1 of the rule above.
+
+`lifecycle` blocks are not decoration. Do not delete one to make a plan proceed.
+
 `moved.tf` exists for the mirror-image hazard: adding `count` to a module
 renames its state address, and without the `moved` blocks Terraform would plan
 a destroy-and-recreate of the live MSK / ElastiCache / Neptune / RDS resources.
@@ -36,6 +72,24 @@ It covers fourteen addresses — the four gated root modules, the five dedicated
 resources inside `module.ecs`, the two inside `module.alb`, and the three VPC
 data-store security groups. Do not delete those blocks until every workspace has
 applied at least once.
+
+A `moved` block relocates an address; it does not decide whether the resource
+at the new address survives. `module.rds` is the case where that distinction
+bites: legacy RDS is provisioned at no profile (`local.enable_legacy_rds` is a
+literal `false`, which `scripts/release/check_cost_policy_terraform.py`
+requires), so `moved { from = module.rds, to = module.rds[0] }` relocates an
+applied instance to an address whose count is 0. What keeps it alive is the
+`prevent_destroy` in the table above, not the `moved` block. An applied legacy
+RDS therefore surfaces as a **plan error**, and the only way forward is
+releasing it from state:
+
+```bash
+terraform state rm 'module.rds[0]'          # or the un-indexed address, if the
+                                            # moved block has not run yet
+```
+
+after which the instance is unmanaged and live, and the procedure below applies
+to it as a separate, explicitly approved change.
 
 ### One-time migration hazard: the private default route
 
@@ -46,21 +100,90 @@ with no egress path at all — which is what makes `network_egress_mode = "none"
 and `"public_ip"` possible.
 
 `moved` cannot express this: an inline route block is an attribute, not an
-addressable resource, so there is nothing to move *from*. On the **first** apply
-against a workspace that already has NAT (production-scale, enterprise-isolated),
-Terraform will therefore update the route table in place to drop the inline
-route and separately create the `aws_route`. Those are two operations on the
-live egress path, and Terraform does not guarantee their order.
+addressable resource, so there is nothing to move *from*.
 
-Treat that first apply as a **maintenance window**, not a routine promotion:
+**This section previously predicted an in-place route-table update, a brief
+egress outage, and prescribed a maintenance window. That prediction was wrong,
+and acting on it would have produced a failed apply rather than a short
+outage.** `aws_route_table.route` is `Optional` **and `Computed`** in the pinned
+provider (hashicorp/aws ~> 5.0). Removing the inline block from the
+configuration therefore plans **no change at all**: Terraform keeps the prior
+value for a computed attribute nobody sets, and the existing `0.0.0.0/0` route
+survives untouched in AWS. There is no window in which egress is unavailable,
+because nothing is removed.
 
-1. Apply it on its own, not batched with other changes.
-2. Expect a brief window in which private-subnet egress may be unavailable.
-3. Verify afterwards that each private route table has exactly one
-   `0.0.0.0/0` route pointing at the intended NAT Gateway — in `ha` mode, at
-   the NAT in the *same* AZ.
-4. Workspaces with `nat_mode = "none"` (staging, production-lean) are
-   unaffected: they have no NAT today and none after.
+What happens instead is a collision. `aws_route.private_nat[0]` is a *create*,
+and the route it creates already exists, so the apply fails with:
+
+```
+Error: creating Route in Route Table (rtb-…) with destination (0.0.0.0/0): RouteAlreadyExists
+```
+
+#### Remedy A — NAT-carrying workspace (production-scale, enterprise-isolated)
+
+Adopt the existing route into the new resource **before** applying. `aws_route`
+imports with the id `<route-table-id>_<destination-cidr>`:
+
+```bash
+cd "AWS Deployment/aether-aws/terraform"
+
+# The route tables in question, in the order modules/vpc counts them.
+terraform state show 'module.vpc.aws_route_table.private[0]' | grep -E 'id|route'
+
+# single_nat: one shared private route table, one route.
+terraform import \
+  'module.vpc.aws_route.private_nat[0]' \
+  'rtb-0aaaaaaaaaaaaaaaa_0.0.0.0/0'
+
+# ha_nat: one table per AZ, and index N must be imported from the table in the
+# SAME AZ as NAT gateway N, or the plan will rewrite the route to cross AZs.
+terraform import 'module.vpc.aws_route.private_nat[0]' 'rtb-0aaaaaaaaaaaaaaaa_0.0.0.0/0'
+terraform import 'module.vpc.aws_route.private_nat[1]' 'rtb-0bbbbbbbbbbbbbbbb_0.0.0.0/0'
+terraform import 'module.vpc.aws_route.private_nat[2]' 'rtb-0cccccccccccccccc_0.0.0.0/0'
+
+# Now expect a clean plan: no create, no destroy, no route-table change.
+terraform plan -var-file=profiles/<profile>.tfvars
+```
+
+If the plan after import still shows a change to `aws_route.private_nat[N]`,
+the `nat_gateway_id` does not match — you imported the wrong table for that
+index. Re-check the AZ pairing before applying; do not let the apply "fix" it,
+because that rewrite *is* a real egress interruption.
+
+#### Remedy B — workspace going from NAT to no NAT
+
+`nat_mode` moving 1 → 0 (or 3 → 0) does **not** clean the inline route up.
+`aws_route.private_nat` has count 0, so Terraform creates nothing and removes
+nothing, while the route table's state still carries the computed route. Once
+the NAT Gateway is deleted, that route remains and becomes a **blackhole**:
+private-subnet traffic to `0.0.0.0/0` is silently dropped rather than failing
+fast or falling back.
+
+Terraform will not remove it. Delete it explicitly, in the same change:
+
+```bash
+# For every private route table in the VPC.
+aws ec2 describe-route-tables \
+  --filters "Name=tag:Name,Values=AETHER-<env>-rt-private-*" \
+  --query 'RouteTables[].{id:RouteTableId,routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`]}'
+
+aws ec2 delete-route \
+  --route-table-id rtb-0aaaaaaaaaaaaaaaa \
+  --destination-cidr-block 0.0.0.0/0
+
+# Then refresh so state stops reporting a route that no longer exists.
+terraform apply -refresh-only -var-file=profiles/<profile>.tfvars
+```
+
+Note that this transition also moves the ECS tasks from the private subnets to
+the public ones (see the task-placement block in `main.tf`), so verify the
+services reach steady state on the new placement before deleting the gateway.
+
+#### Unaffected
+
+A workspace that has **never** had NAT (a fresh `staging` or `production-lean`)
+is unaffected by either remedy: it has no inline route to collide with and none
+to leave behind.
 
 ### "Kept for rollback safety" must be time-bounded
 
@@ -195,6 +318,17 @@ terraform show -no-color decommission.tfplan > decommission-plan.txt
 The plan must contain **only** the intended resources. Any collateral change —
 a security group rule, a route, an IAM policy, an alarm — must be understood
 and called out in the ticket before approval, not discovered during the apply.
+
+If the target is one of the `prevent_destroy` resources listed under
+["How the rule is enforced"](#how-the-rule-is-enforced), this step fails with
+`Instance cannot be destroyed` — by design. Do not delete the `lifecycle` block
+to get past it in the same commit as the destroy. Either:
+
+- release the resource from state (`terraform state rm`, or a `removed` block
+  with `lifecycle { destroy = false }`) and destroy it out of band, which keeps
+  the guard in place for every other workspace; or
+- remove the `prevent_destroy` line in its **own** commit, reviewed by the two
+  approvers from step 11, and restore it once the decommission is complete.
 
 ### 11. Explicit approval
 

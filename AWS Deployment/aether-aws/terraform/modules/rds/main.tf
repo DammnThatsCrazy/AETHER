@@ -24,6 +24,21 @@ resource "aws_kms_key" "rds" {
   tags = {
     Name = "${var.project}-${var.environment}-rds-kms"
   }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
+  }
 }
 
 resource "aws_kms_alias" "rds" {
@@ -94,12 +109,12 @@ resource "aws_db_parameter_group" "this" {
 resource "aws_db_instance" "this" {
   identifier = "${lower(var.project)}-${var.environment}-postgres"
 
-  engine               = "postgres"
-  engine_version       = "16"
-  instance_class       = var.db_instance_class
-  db_name              = var.db_name
-  username             = "aether_admin"
-  port                 = 5432
+  engine         = "postgres"
+  engine_version = "16"
+  instance_class = var.db_instance_class
+  db_name        = var.db_name
+  username       = "aether_admin"
+  port           = 5432
 
   # AWS manages the master password — it is never stored in Terraform state.
   # The credential JSON is placed in Secrets Manager automatically and rotated
@@ -135,22 +150,37 @@ resource "aws_db_instance" "this" {
   parameter_group_name = aws_db_parameter_group.this.name
 
   # Monitoring
-  monitoring_interval             = 60
-  monitoring_role_arn             = aws_iam_role.rds_enhanced_monitoring.arn
-  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
-  performance_insights_enabled    = true
+  monitoring_interval                   = 60
+  monitoring_role_arn                   = aws_iam_role.rds_enhanced_monitoring.arn
+  enabled_cloudwatch_logs_exports       = ["postgresql", "upgrade"]
+  performance_insights_enabled          = true
   performance_insights_retention_period = 7
 
   # Misc
-  auto_minor_version_upgrade  = true
-  apply_immediately           = false
-  deletion_protection         = var.environment == "production"
+  auto_minor_version_upgrade = true
+  apply_immediately          = false
+  deletion_protection        = var.environment == "production"
 
   tags = {
     Name = "${var.project}-${var.environment}-rds"
   }
 
   depends_on = [aws_db_parameter_group.this]
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
+  }
 }
 
 # --------------------------------------------------------------------------

@@ -17,6 +17,14 @@
 #   at_least_one  -> the matched count MUST be >= 1
 #   exactly:N     -> the matched count MUST equal N
 #
+# `cardinality` is evaluated against the sum of ALL of a rule's resource_types,
+# as described above. A rule may additionally carry `expected_by_profile`, a
+# per-profile cardinality for the profiles where the resource is permitted; it
+# is NOT evaluated over every listed type. The single type it counts is named
+# by that rule's `expected_by_profile_resource_type`, which is required
+# whenever `expected_by_profile` is present. Without it a rule listing several
+# types would have two different, silently disagreeing counts.
+#
 # Address grammar:
 #   module_address is the plan-JSON module address WITHOUT the count index
 #   (e.g. "module.msk"). A counted module appears as "module.msk[0]" in the
@@ -337,9 +345,15 @@ forbidden_resources:
       registers with. Lean serves ML inline inside the backend task, so
       /v1/ml/* falls through to the HTTPS listener default action.
     module_address: module.ecs
+    # All FIVE dedicated-ML resources inside module.ecs, matching the five
+    # `moved` blocks in moved.tf. aws_cloudwatch_log_group was missing, so
+    # aws_cloudwatch_log_group.ml — a real resource gated on the same
+    # enable_dedicated_ml local — was invisible to the matcher and could have
+    # appeared in a lean plan without failing this rule.
     resource_types:
       - aws_ecs_service
       - aws_ecs_task_definition
+      - aws_cloudwatch_log_group
       - aws_appautoscaling_target
       - aws_appautoscaling_policy
     name_prefixes:
@@ -423,6 +437,23 @@ forbidden_resources:
       - module.vpc.nat_gateway_ids
       - module.vpc.nat_eip_ids
       - module.vpc.nat_mode
+    # `cardinality: zero` above applies to BOTH types: production-lean and
+    # staging provision neither a gateway nor an EIP, so summing them per the
+    # algorithm at the top of this file gives the right answer.
+    #
+    # `expected_by_profile` is a different question — "how much NAT egress does
+    # this profile buy?" — and it is answered in gateways, not in gateways plus
+    # addresses. Summing both types would make the correct scale/enterprise
+    # plans read as 2 and 6 against declared expectations of 1 and 3. The type
+    # it counts is therefore named explicitly below rather than left to be
+    # inferred from `resource_types`, which is what previously left the
+    # declaration and check_terraform_plan_policy.py::check_network_egress
+    # (which counts aws_nat_gateway alone) agreeing only by accident.
+    #
+    # There is no information lost: modules/vpc counts aws_eip.nat and
+    # aws_nat_gateway.this from the same local.nat_count, so the EIP total
+    # always equals the gateway total.
+    expected_by_profile_resource_type: aws_nat_gateway
     expected_by_profile:
       staging: zero
       production-lean: zero

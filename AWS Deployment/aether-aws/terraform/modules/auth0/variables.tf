@@ -3,23 +3,6 @@ variable "environment" {
   description = "Deployment environment (staging | production)"
 }
 
-variable "auth0_domain" {
-  type        = string
-  description = "Auth0 tenant domain (e.g. your-tenant.auth0.com)"
-}
-
-variable "auth0_management_client_id" {
-  type        = string
-  description = "Client ID of the Terraform M2M application in Auth0"
-  sensitive   = true
-}
-
-variable "auth0_management_client_secret" {
-  type        = string
-  description = "Client secret of the Terraform M2M application in Auth0"
-  sensitive   = true
-}
-
 variable "api_audience" {
   type        = string
   description = "Audience identifier for the AETHER API resource server"
