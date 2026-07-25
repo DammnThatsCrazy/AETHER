@@ -23,6 +23,10 @@ REQUIRED_FORBIDDEN = {
     "dedicated_ml_service", "frontend_ecs_services",
     "legacy_rds", "nat_gateway_unless_explicit",
     "always_on_staging_compute",
+    # Self-managed Prometheus/Grafana EC2 re-introduces always-on servers the
+    # lean profile replaced with managed CloudWatch. Present in the YAML and in
+    # check_cost_policy_terraform.py's FORBIDDEN_TO_LOCAL map, so it belongs here.
+    "prometheus_grafana_servers",
 }
 REQUIRED_PRESENT = {
     "cloudfront_s3_frontends", "explicit_runtime_role_services",

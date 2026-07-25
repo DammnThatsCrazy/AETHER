@@ -1,17 +1,28 @@
 # =============================================================================
 # Aether — Deployment Profile Matrix (canonical policy data)
 #
-# This file is the single source of truth for Aether's deployment profiles and
-# the cost policy that governs each one. It is consumed by:
-#   - scripts/release/check_profile_config.py   (schema + coherence)
-#   - scripts/release/check_cost_policy.py       (forbidden-resource policy)
-#   - docs/DEPLOYMENT-PROFILES.md                (authored narrative)
+# This file is the single source of truth for Aether's deployment profiles, the
+# cost policy that governs each one, and the numeric budget each cost-capped
+# profile must hold to. It is consumed by:
+#   - scripts/release/check_profile_config.py        (schema + coherence)
+#   - scripts/release/check_cost_policy.py            (forbidden-resource policy)
+#   - scripts/release/check_cost_policy_terraform.py  (Terraform encodes the policy)
+#   - scripts/release/check_cost_model.py             (numeric budget enforcement)
+#   - docs/DEPLOYMENT-PROFILES.md                     (authored narrative)
 #
-# It is DATA, not infrastructure. The Terraform enforcement that asserts a
-# `production-lean` plan actually excludes the forbidden resources is deferred
-# to the release-train PR that introduces the `deployment_profile` Terraform
-# variable (see config/implementation_ledger.yaml → FT-PROFILE-TF). Until then
-# this file fixes the canonical policy so downstream work has a stable target.
+# It is DATA, not infrastructure. The Terraform work that makes the profile
+# selectable and asserts a `production-lean` plan actually excludes the
+# forbidden resources is tracked as config/implementation_ledger.yaml →
+# FT-9-TERRAFORM-PROFILES. This file fixes the canonical policy and the numeric
+# ceilings so every downstream gate scores against one stable target.
+#
+# Two distinct kinds of enforcement live here, and they must not be conflated:
+#   - `cost_policy`  — SHAPE. Which resource classes a profile must/must not
+#                      provision. Enforced against the plan inventory.
+#   - `budget`       — MAGNITUDE. Currency ceilings in USD/month. Enforced by
+#                      check_cost_model.py against config/aws_price_book.yaml.
+# A plan can satisfy the shape policy and still blow the budget (an oversized
+# instance class inside an allowed resource type), so both gates are required.
 # =============================================================================
 
 schema_version: 1
@@ -127,6 +138,47 @@ profiles:
       object: s3
       ml: inline
     behavior: [wake-for-validation, deploy-exact-artifact, run-migrations, smoke-privacy-security-isolation-load, produce-evidence, sleep-after-validation]
+    budget:
+      currency: USD
+      region: us-east-1
+      # Staging is wake/sleep: hourly-accruing resources are only billed while
+      # the environment is awake, so the cost model prorates them by this figure
+      # rather than by pricing_hours_per_month. Per-month charges (KMS keys,
+      # Secrets Manager secrets, alarms) accrue in full regardless of sleep.
+      maximum_scheduled_awake_hours_per_month: 40
+      target_monthly_spend: 25
+      hard_monthly_spend: 50
+      # Reference month length used to convert hourly prices to monthly ones.
+      pricing_hours_per_month: 730
+    cost_policy:
+      # Staging rehearses the production-lean release, so it provisions the same
+      # resource shape. `alb` and the compute behind it are required for the plan
+      # to be a faithful rehearsal; `always_on_staging_compute` below forbids
+      # that compute from being scheduled 24/7, which is the actual cost control.
+      required_resources:
+        - cloudfront_s3_frontends
+        - alb
+        - explicit_runtime_role_services
+        - aurora_serverless_v2
+        - sqs_sns
+        - dynamodb
+        - s3_object_lake
+        - secrets_kms
+        - inline_ml
+        - postgres_graph
+      # Identical heavy-resource exclusions to production-lean, plus the
+      # always-on prohibition that makes the awake-hours budget meaningful.
+      forbidden_resources:
+        - msk
+        - elasticache
+        - neptune
+        - clickhouse
+        - dedicated_ml_service
+        - frontend_ecs_services
+        - legacy_rds
+        - nat_gateway_unless_explicit
+        - always_on_staging_compute
+        - prometheus_grafana_servers
 
   production-lean:
     purpose: First customer and early controlled production.
@@ -172,6 +224,25 @@ profiles:
       # Estimated operational posture vs. the heavy default stack. Estimate only.
       estimated_cost_reduction_vs_heavy: "approximately 75-90% lower monthly infra cost"
       estimated_cost_reduction_vs_lean_ish: "approximately 50-70% lower monthly infra cost"
+    budget:
+      currency: USD
+      region: us-east-1
+      # The FIXED baseline — infrastructure that bills whether or not a single
+      # request arrives. This is the number the gate enforces, because it is the
+      # only part of the bill that is fully determined by the Terraform plan.
+      # `target` is the design goal; exceeding it warns. `hard` is the ceiling;
+      # exceeding it fails the release unless an active, time-bounded entry in
+      # config/cost_exceptions.yaml covers the overage.
+      target_fixed_monthly: 150
+      hard_fixed_monthly: 200
+      # Reference month length used to convert hourly prices to monthly ones.
+      # production-lean runs continuously, so the full 730h applies.
+      pricing_hours_per_month: 730
+      # Usage-driven cost (S3, DynamoDB on-demand, SQS/SNS, log ingestion, data
+      # transfer) is NOT bounded by the ceilings above — it scales with tenant
+      # traffic. It must still be modelled and reported as low/expected/high
+      # scenarios so the total is never presented as just the fixed baseline.
+      variable_cost_model_required: true
 
   production-scale:
     purpose: Higher traffic once justified.
@@ -196,6 +267,42 @@ profiles:
       - nat_or_controlled_egress
       - waf
       - deeper_observability
+    cost_policy:
+      # production-scale legitimately buys the heavy resources listed under
+      # `may_enable` — that is the entire point of the profile — so they are
+      # absent from `forbidden_resources`. What stays required is the baseline
+      # the lean profile also holds: scale ADDS capacity, it never regresses the
+      # delivery, isolation or observability shape.
+      required_resources:
+        - cloudfront_s3_frontends
+        - alb
+        - explicit_runtime_role_services
+        - aurora_serverless_v2
+        - sqs_sns
+        - dynamodb
+        - s3_object_lake
+        - secrets_kms
+        - cloudwatch_alarms
+      # Forbidden even at scale. These are not cost decisions but architectural
+      # regressions: legacy_rds is superseded by Aurora and would fork the
+      # migration path; self-managed Prometheus/Grafana EC2 re-introduces
+      # always-on servers Aether deliberately replaced with managed CloudWatch;
+      # frontend_ecs_services would put the SPAs back on always-on containers
+      # when they are immutable S3 origins behind a CDN at every tier — the
+      # Terraform root creates no frontend ECS service at any profile, so this
+      # is enforcing a property the graph already has rather than a preference.
+      #
+      # frontend_ecs_services was previously absent here while
+      # config/terraform_resource_contracts.yaml declared it forbidden with
+      # `permitted_in: []`, which meant a scale or enterprise plan was never
+      # actually checked for it. Listing it closes that gap.
+      forbidden_resources:
+        - legacy_rds
+        - prometheus_grafana_servers
+        - frontend_ecs_services
+      # No `budget` block: production-scale is cost_capped: false by definition.
+      # Spend is bounded by the traffic that justified the profile, not by a
+      # fixed ceiling, so a numeric gate here would be theatre.
 
   enterprise-isolated:
     purpose: Contractual/regulatory/customer isolation.
@@ -219,3 +326,29 @@ profiles:
       - private_connectivity
       - customer_specific_retention
       - region_specific_deployment
+    cost_policy:
+      # Enterprise isolation is a contractual obligation, so the heavy and
+      # dedicated resources under `may_enable` are permitted without argument.
+      # The required baseline is unchanged: an isolated deployment is the same
+      # architecture in a dedicated blast radius, not a different one.
+      required_resources:
+        - cloudfront_s3_frontends
+        - alb
+        - explicit_runtime_role_services
+        - aurora_serverless_v2
+        - sqs_sns
+        - dynamodb
+        - s3_object_lake
+        - secrets_kms
+        - cloudwatch_alarms
+      # The same architectural regressions barred at scale. A customer paying
+      # for isolation still gets the supported topology, not a forked one —
+      # frontend_ecs_services included: the SPAs are immutable S3 origins behind
+      # a CDN at every tier, and dedicated infrastructure is not a licence to
+      # run a different frontend architecture.
+      forbidden_resources:
+        - legacy_rds
+        - prometheus_grafana_servers
+        - frontend_ecs_services
+      # No `budget` block: enterprise-isolated is cost_capped: false and its
+      # spend is recovered contractually per customer.
