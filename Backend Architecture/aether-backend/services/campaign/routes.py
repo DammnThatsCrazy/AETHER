@@ -46,8 +46,10 @@ _explorer = CampaignPopulationExplorer(
 # ── Request Models ───────────────────────────────────────────────────
 
 class CampaignCreate(BaseModel):
-    name: str
-    channel: str = Field(..., description="e.g. email, social, paid_search, organic")
+    # An unnamed campaign cannot be identified by an operator in any surface
+    # that lists it, so an empty name is rejected rather than stored.
+    name: str = Field(..., min_length=1)
+    channel: str = Field(..., min_length=1, description="e.g. email, social, paid_search, organic")
     start_date: str
     end_date: Optional[str] = None
     budget_usd: Optional[float] = None
@@ -1017,7 +1019,10 @@ sources_router = APIRouter(prefix="/v1/campaign-sources", tags=["Campaign Source
 
 
 class CampaignSourceCreate(BaseModel):
-    platform: str
+    # A source with an empty platform cannot be routed to a connector or
+    # reconciled against provider truth, so it is rejected at the edge rather
+    # than persisted as an unusable row.
+    platform: str = Field(..., min_length=1)
     display_name: Optional[str] = None
     config: dict[str, Any] = Field(default_factory=dict)
 

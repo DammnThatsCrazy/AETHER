@@ -39,14 +39,14 @@ class TestCampaignListEndpoint:
     def test_list_campaigns_returns_dict(self):
         from services.campaign.routes import list_campaigns
         req = _mock_request()
-        result = _run(list_campaigns(req, status=None, origin=None, platform=None, mapping_quality=None, limit=50, offset=0))
+        result = _run(list_campaigns(req, limit=50, cursor=None, status=None, channel=None))
         assert isinstance(result, dict)
         assert "data" in result
 
     def test_list_campaigns_respects_limit(self):
         from services.campaign.routes import list_campaigns
         req = _mock_request()
-        result = _run(list_campaigns(req, status=None, origin=None, platform=None, mapping_quality=None, limit=5, offset=0))
+        result = _run(list_campaigns(req, limit=5, cursor=None, status=None, channel=None))
         data = result.get("data") or []
         assert isinstance(data, list)
         assert len(data) <= 5
@@ -54,7 +54,7 @@ class TestCampaignListEndpoint:
     def test_create_custom_campaign(self):
         from services.campaign.routes import create_campaign, CampaignCreate
         req = _mock_request()
-        body = CampaignCreate(name="Test Camp", channel="email")
+        body = CampaignCreate(name="Test Camp", channel="email", start_date="2026-01-01")
         result = _run(create_campaign(req, body))
         assert "data" in result
         data = result["data"]
@@ -65,7 +65,7 @@ class TestCampaignListEndpoint:
         from services.campaign.routes import CampaignCreate
         from pydantic import ValidationError
         with pytest.raises((ValidationError, Exception)):
-            CampaignCreate(name="", channel="email")
+            CampaignCreate(name="", channel="email", start_date="2026-01-01")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,10 +74,10 @@ class TestCampaignListEndpoint:
 
 class TestExternalRefsEndpoint:
     def test_get_external_refs_unknown_campaign(self):
-        from services.campaign.routes import list_campaign_external_refs
+        from services.campaign.routes import list_external_refs
         req = _mock_request()
         fake_id = str(uuid.uuid4())
-        result = _run(list_campaign_external_refs(fake_id, req))
+        result = _run(list_external_refs(fake_id, req))
         # Should return empty list or 404-style, not crash
         assert isinstance(result, dict)
 
@@ -88,29 +88,29 @@ class TestExternalRefsEndpoint:
 
 class TestAliasEndpoints:
     def test_add_alias_to_campaign(self):
-        from services.campaign.routes import create_campaign, add_campaign_alias
-        from services.campaign.routes import CampaignCreate, AliasCreateRequest
+        from services.campaign.routes import create_campaign, add_alias
+        from services.campaign.routes import CampaignCreate, AliasCreate
         req = _mock_request()
-        camp_result = _run(create_campaign(req, CampaignCreate(name="Alias Test Camp")))
+        camp_result = _run(create_campaign(CampaignCreate(name="Alias Test Camp", channel="email", start_date="2026-01-01"), req))
         campaign_id = camp_result["data"]["campaign_id"]
 
-        alias_result = _run(add_campaign_alias(
+        alias_result = _run(add_alias(
             campaign_id,
+            AliasCreate(alias_type="utm_campaign", alias_value="alias-test-value"),
             req,
-            AliasCreateRequest(alias_type="utm_campaign", value="alias-test-value"),
         ))
         assert "data" in alias_result
 
     def test_list_aliases_empty(self):
-        from services.campaign.routes import create_campaign, list_campaign_aliases
+        from services.campaign.routes import create_campaign, list_aliases
         from services.campaign.routes import CampaignCreate
         req = _mock_request()
-        camp_result = _run(create_campaign(req, CampaignCreate(name="No Alias Camp")))
+        camp_result = _run(create_campaign(CampaignCreate(name="No Alias Camp", channel="email", start_date="2026-01-01"), req))
         campaign_id = camp_result["data"]["campaign_id"]
 
-        result = _run(list_campaign_aliases(campaign_id, req))
+        result = _run(list_aliases(campaign_id, req))
         assert "data" in result
-        assert isinstance(result["data"], list)
+        assert isinstance(result["data"]["items"], list)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -126,15 +126,15 @@ class TestCampaignSourcesEndpoints:
         assert isinstance(result["data"], list)
 
     def test_create_source_requires_platform(self):
-        from services.campaign.routes import create_campaign_source, CampaignSourceCreateRequest
+        from services.campaign.routes import connect_campaign_source, CampaignSourceCreate
         from pydantic import ValidationError
         with pytest.raises((ValidationError, Exception)):
-            CampaignSourceCreateRequest(platform="", connector_id="c1")
+            CampaignSourceCreate(platform="")
 
     def test_sync_source_not_found(self):
-        from services.campaign.routes import sync_campaign_source
+        from services.campaign.routes import trigger_sync
         req = _mock_request()
-        result = _run(sync_campaign_source("nonexistent-connector", req))
+        result = _run(trigger_sync("nonexistent-connector", req))
         # Should return a structured response, not crash
         assert isinstance(result, dict)
 
@@ -147,9 +147,9 @@ class TestMappingReviewEndpoints:
     def test_list_reviews_empty(self):
         from services.campaign.routes import list_mapping_reviews
         req = _mock_request()
-        result = _run(list_mapping_reviews(req, status="open", limit=20, offset=0))
+        result = _run(list_mapping_reviews(req, status="open", limit=20, cursor=None))
         assert "data" in result
-        assert isinstance(result["data"], list)
+        assert isinstance(result["data"]["items"], list)
 
     def test_resolve_review_missing_campaign_id(self):
         from services.campaign.routes import resolve_mapping_review, ReviewResolve
@@ -161,11 +161,11 @@ class TestMappingReviewEndpoints:
             _run(resolve_mapping_review(fake_review_id, req, body))
 
     def test_ignore_review_returns_structured(self):
-        from services.campaign.routes import ignore_mapping_review
+        from services.campaign.routes import ReviewIgnore, ignore_mapping_review
         req = _mock_request()
         fake_review_id = str(uuid.uuid4())
         # Ignoring a non-existent review should not crash; may return error response
-        result = _run(ignore_mapping_review(fake_review_id, req))
+        result = _run(ignore_mapping_review(fake_review_id, ReviewIgnore(note=None), req))
         assert isinstance(result, dict)
 
 
