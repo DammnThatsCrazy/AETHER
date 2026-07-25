@@ -87,53 +87,56 @@ async def revoke_operator_access(
         "errors": [],
     }
 
+    # Each plane is resolved and called EXPLICITLY. An earlier version probed a
+    # tuple of candidate method names through getattr, which meant a wrong
+    # module or symbol was indistinguishable from an absent one: offboarding
+    # reported success while devices stayed approved and tenant scopes stayed
+    # open. Named calls turn that class of mistake into an ImportError or a
+    # TypeError instead of a silent no-op.
+
     try:
         from services.kyber.sessions.service import session_service
     except ImportError:
         report["unavailable"].append("sessions")
     else:
         try:
-            result = await _call_first(
-                session_service,
-                ("revoke_all_for_operator", "revoke_for_operator", "revoke_all"),
-                operator_id=operator_id,
-                reason=reason,
+            report["sessions_revoked"] = _count(
+                await session_service.revoke_for_operator(operator_id, reason=reason)
             )
-            report["sessions_revoked"] = _count(result)
         except Exception as exc:  # noqa: BLE001 - one plane must not block another
             report["errors"].append(f"sessions: {exc}")
 
     try:
-        from services.kyber.devices.service import device_service
+        from services.kyber.devices.approvals import device_approval_service
     except ImportError:
         report["unavailable"].append("devices")
     else:
         try:
-            result = await _call_first(
-                device_service,
-                ("revoke_all_for_operator", "revoke_for_operator", "revoke_all"),
-                operator_id=operator_id,
-                actor_id=actor_id,
-                reason=reason,
-            )
-            report["devices_revoked"] = _count(result)
+            # There is no bulk per-operator revoke on the device plane, and
+            # adding one would duplicate the per-device audit trail. Revoke each
+            # device individually so every revocation keeps its own
+            # DeviceApprovalEvent and audit-ledger record.
+            revoked = 0
+            for device in await device_approval_service.list_devices(operator_id):
+                if device.revoked_at:
+                    continue
+                await device_approval_service.revoke_device(
+                    device.device_id, actor_id=actor_id, reason=reason
+                )
+                revoked += 1
+            report["devices_revoked"] = revoked
         except Exception as exc:  # noqa: BLE001
             report["errors"].append(f"devices: {exc}")
 
     try:
-        from services.kyber.access.scopes import scope_service
+        from services.kyber.access.scopes import access_scope_service
     except ImportError:
         report["unavailable"].append("scopes")
     else:
         try:
-            result = await _call_first(
-                scope_service,
-                ("revoke_all_for_operator", "revoke_for_operator", "revoke_all"),
-                operator_id=operator_id,
-                actor_id=actor_id,
-                reason=reason,
+            report["scopes_revoked"] = _count(
+                await access_scope_service.revoke_for_operator(operator_id, reason=reason)
             )
-            report["scopes_revoked"] = _count(result)
         except Exception as exc:  # noqa: BLE001
             report["errors"].append(f"scopes: {exc}")
 

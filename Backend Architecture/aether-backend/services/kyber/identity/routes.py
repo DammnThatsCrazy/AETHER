@@ -276,7 +276,7 @@ async def kyber_logout(
     except ImportError:  # pragma: no cover
         logger.error("kyber session service unavailable during logout")
     else:
-        await session_service.revoke_session(session_id, reason="logout")
+        await session_service.revoke(session_id, reason="logout")
         revoked = True
 
     await record_authentication_event(
