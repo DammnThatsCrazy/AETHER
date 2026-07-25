@@ -16,7 +16,7 @@
  *     can flip the whole app to logged-out without waiting for a poll.
  */
 
-import { env, getRuntimeMode, getEnvironment } from '@kyber/lib/env';
+import { env, getEnvironment } from '@kyber/lib/env';
 
 /** Readable CSRF cookie paired with the HttpOnly session cookie. */
 // Pinned to the single name the backend actually sets
@@ -60,7 +60,6 @@ export class KyberAuthError extends Error {
  * and a cross-origin base silently drops the session.
  */
 export function resolveControlPlaneBase(): string {
-  if (getRuntimeMode() !== 'live') return '';
   const configured = (env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '');
   if (env.VITE_KYBER_ENV === 'local') return configured;
   if (!configured) return '';

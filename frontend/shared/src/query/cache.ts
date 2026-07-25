@@ -33,7 +33,12 @@ class QueryCache {
 
   setInFlight<T>(key: string, promise: Promise<T>): void {
     this.inFlight.set(key, promise as Promise<unknown>);
-    void promise.finally(() => this.inFlight.delete(key));
+    // Observing both outcomes avoids the orphan rejected promise created by
+    // `finally()`, while still removing the in-flight entry deterministically.
+    void promise.then(
+      () => this.inFlight.delete(key),
+      () => this.inFlight.delete(key),
+    );
   }
 
   invalidate(key: string): void {

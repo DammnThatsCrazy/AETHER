@@ -212,6 +212,10 @@ services:
       BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:-}
       WATERMARK_SECRET_KEY: ${WATERMARK_SECRET_KEY:-}
       CANARY_SECRET_SEED: ${CANARY_SECRET_SEED:-}
+      # Demo records are never inserted unless dev-demo sets this flag.
+      AETHER_DEMO_SEED_ON_START: ${AETHER_DEMO_SEED_ON_START:-false}
+      AETHER_DEMO_TENANT_ID: ${AETHER_DEMO_TENANT_ID:-}
+      AETHER_DEMO_SEED_NAMESPACE: ${AETHER_DEMO_SEED_NAMESPACE:-}
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   # ── Migration job (one-shot) ──────────────────────────────────────

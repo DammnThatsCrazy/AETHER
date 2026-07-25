@@ -8,23 +8,39 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {};
 }
 
+function optionalNumber(...values: unknown[]): number | null {
+  const value = values.find((candidate) => typeof candidate === 'number' && Number.isFinite(candidate));
+  return typeof value === 'number' ? value : null;
+}
+
+function scoreMetric(id: string, label: string, value: number | null, threshold: number, highTone: 'good' | 'warning' | 'danger') {
+  return value === null
+    ? { id, label, value: 'Unavailable', tone: 'default' as const }
+    : { id, label, value: Math.round(value * 100), unit: '%', tone: value > threshold ? highTone : 'default' as const };
+}
+
 function normalizeEntity(raw: unknown, id: string, type: Profile360EntityType): Entity {
   const data = asRecord(raw);
+  const health = asRecord(data.health);
+  const createdAt = data.createdAt ?? data.created_at;
+  const updatedAt = data.updatedAt ?? data.updated_at;
+  const lastChecked = health.lastChecked ?? health.last_checked;
+  const needsHelp = data.needsHelp ?? data.needs_help;
   return {
     id: String(data.id ?? data.user_id ?? data.entity_id ?? id),
     type: (data.type ?? type) as EntityType,
     name: String(data.name ?? data.label ?? data.displayLabel ?? id),
     displayLabel: String(data.displayLabel ?? data.label ?? data.name ?? id),
-    createdAt: String(data.createdAt ?? data.created_at ?? ''),
-    updatedAt: String(data.updatedAt ?? data.updated_at ?? ''),
+    ...(typeof createdAt === 'string' && createdAt ? { createdAt } : {}),
+    ...(typeof updatedAt === 'string' && updatedAt ? { updatedAt } : {}),
     health: {
-      status: String(asRecord(data.health).status ?? 'unknown') as Entity['health']['status'],
-      lastChecked: String(asRecord(data.health).lastChecked ?? asRecord(data.health).last_checked ?? ''),
+      status: String(health.status ?? 'unknown') as Entity['health']['status'],
+      ...(typeof lastChecked === 'string' && lastChecked ? { lastChecked } : {}),
     },
-    trustScore: Number(data.trustScore ?? data.trust_score ?? asRecord(data.intelligence).trust_score ?? 0),
-    riskScore: Number(data.riskScore ?? data.risk_score ?? asRecord(data.risk).score ?? 0),
-    anomalyScore: Number(data.anomalyScore ?? data.anomaly_score ?? 0),
-    needsHelp: Boolean(data.needsHelp ?? data.needs_help ?? false),
+    trustScore: optionalNumber(data.trustScore, data.trust_score, asRecord(data.intelligence).trust_score),
+    riskScore: optionalNumber(data.riskScore, data.risk_score, asRecord(data.risk).score),
+    anomalyScore: optionalNumber(data.anomalyScore, data.anomaly_score),
+    needsHelp: typeof needsHelp === 'boolean' ? needsHelp : null,
     needsHelpReason: data.needsHelpReason || data.needs_help_reason ? String(data.needsHelpReason ?? data.needs_help_reason) : undefined,
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     metadata: data,
@@ -235,8 +251,8 @@ function buildBehavioralSections(raw: Record<string, unknown>, entity: Entity): 
         { id: 'intent', label: 'Intent score', value: intentScore > 0 ? intentScore.toFixed(2) : '—', tone: intentScore > 0.7 ? 'good' : intentScore > 0.4 ? 'warning' : 'default' },
         { id: 'friction', label: 'Friction', value: frictionScore > 0 ? frictionScore.toFixed(2) : '—', tone: frictionScore > 0.6 ? 'danger' : 'default' },
         { id: 'continuity', label: 'Continuity', value: continuityScore > 0 ? continuityScore.toFixed(2) : '—', tone: continuityScore > 0.7 ? 'good' : 'warning' },
-        { id: 'trust', label: 'Trust', value: Math.round(entity.trustScore * 100), unit: '%', tone: entity.trustScore > 0.75 ? 'good' : 'warning' },
-        { id: 'anomaly', label: 'Anomaly', value: Math.round(entity.anomalyScore * 100), unit: '%', tone: entity.anomalyScore > 0.55 ? 'danger' : 'default' },
+        scoreMetric('trust', 'Trust', entity.trustScore, 0.75, 'good'),
+        scoreMetric('anomaly', 'Anomaly', entity.anomalyScore, 0.55, 'danger'),
       ],
       references: refs(signals, 'human'),
       data: { signals, family_counts: Object.fromEntries(familyCounts), behavioral: bData },
@@ -376,8 +392,8 @@ function buildIntelligenceSections(raw: Record<string, unknown>, entity: Entity)
       title: 'Intelligence',
       summary: 'ML-derived signals, predictions, cluster membership, and behavioral intelligence summaries.',
       metrics: [
-        { id: 'trust', label: 'Trust', value: Math.round(entity.trustScore * 100), unit: '%', tone: entity.trustScore > 0.75 ? 'good' : 'warning' },
-        { id: 'risk', label: 'Risk', value: Math.round(entity.riskScore * 100), unit: '%', tone: entity.riskScore > 0.55 ? 'danger' : 'default' },
+        scoreMetric('trust', 'Trust', entity.trustScore, 0.75, 'good'),
+        scoreMetric('risk', 'Risk', entity.riskScore, 0.55, 'danger'),
         { id: 'predictions', label: 'Predictions', value: predictions.length },
         { id: 'signals', label: 'Signals', value: signals.length },
       ],
@@ -457,9 +473,9 @@ function buildSections(entity: Entity, raw: Record<string, unknown>): Profile360
         title: 'Attribution intelligence',
         summary: 'Identifiers, owners, devices, browsers, platforms, regions, and confidence signals unified around this entity.',
         metrics: [
-          { id: 'trust', label: 'Trust', value: Math.round(entity.trustScore * 100), unit: '%', tone: entity.trustScore > 0.75 ? 'good' : 'warning' },
-          { id: 'risk', label: 'Risk', value: Math.round(entity.riskScore * 100), unit: '%', tone: entity.riskScore > 0.55 ? 'danger' : 'default' },
-          { id: 'anomaly', label: 'Anomaly', value: Math.round(entity.anomalyScore * 100), unit: '%', tone: entity.anomalyScore > 0.55 ? 'warning' : 'default' },
+          scoreMetric('trust', 'Trust', entity.trustScore, 0.75, 'good'),
+          scoreMetric('risk', 'Risk', entity.riskScore, 0.55, 'danger'),
+          scoreMetric('anomaly', 'Anomaly', entity.anomalyScore, 0.55, 'warning'),
         ],
         references: refs([...(Array.isArray(raw.identifiers) ? raw.identifiers : []), ...(Array.isArray(raw.connections) ? raw.connections : [])], 'human'),
         data: intelligence,

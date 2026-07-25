@@ -30,6 +30,12 @@ function generateCorrelationId(): string {
   return `aether-${Date.now()}-${++requestCounter}`;
 }
 
+function resolveUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  const base = env.VITE_API_BASE_URL.replace(/\/$/, '');
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -39,7 +45,7 @@ async function request<T>(
 ): Promise<T> {
   const correlationId = generateCorrelationId();
   const startTime = performance.now();
-  const url = path;
+  const url = resolveUrl(path);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -61,6 +67,7 @@ async function request<T>(
     const response = await fetch(url, {
       method,
       headers,
+      credentials: 'include',
       body: body ? JSON.stringify(body) : null,
       signal: options?.signal ?? controller.signal,
     });

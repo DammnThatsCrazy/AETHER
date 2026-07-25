@@ -62,6 +62,8 @@ class GoogleAdsConnector(BaseConnector):
 
         try:
             client = await self._get_client()
+            if client is None:
+                raise RuntimeError("Google Ads credentials or SDK unavailable")
             rows = await self._fetch_campaign_spend(client, start.date(), end.date())
 
             metrics_list: list[ExternalCampaignMetric] = []
@@ -141,13 +143,12 @@ class GoogleAdsConnector(BaseConnector):
     async def _get_client(self) -> Optional[Any]:
         """Return an authenticated Google Ads API client.
 
-        In local/test mode, returns a mock that yields an empty response.
-        In production, instantiates google-ads-python client with OAuth2.
+        Missing credentials or SDK support are unavailable states in every
+        environment; local development must not silently simulate a provider.
         """
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return _MockGoogleAdsClient()
-
+        required = ("developer_token", "client_id", "client_secret", "refresh_token")
+        if any(not self._config.get(key) for key in required):
+            return None
         try:
             from google.ads.googleads.client import GoogleAdsClient as _GAC  # type: ignore[import]
             credentials = {
@@ -159,8 +160,8 @@ class GoogleAdsConnector(BaseConnector):
             }
             return _GAC.load_from_dict(credentials)
         except ImportError:
-            logger.warning("google-ads package not installed — using mock client")
-            return _MockGoogleAdsClient()
+            logger.warning("google-ads package not installed")
+            return None
 
     async def _fetch_campaign_spend(
         self,
@@ -168,9 +169,6 @@ class GoogleAdsConnector(BaseConnector):
         start_date: date,
         end_date: date,
     ) -> list[dict[str, Any]]:
-        if isinstance(client, _MockGoogleAdsClient):
-            return client.fetch_campaign_spend(start_date, end_date)
-
         customer_id = self._config.get("customer_id", "")
         ga_service = client.get_service("GoogleAdsService")
         query = f"""
@@ -198,10 +196,3 @@ class GoogleAdsConnector(BaseConnector):
                 "currency": "USD",
             })
         return rows
-
-
-class _MockGoogleAdsClient:
-    """Local/test stub — returns no spend data."""
-
-    def fetch_campaign_spend(self, start: date, end: date) -> list[dict[str, Any]]:
-        return []

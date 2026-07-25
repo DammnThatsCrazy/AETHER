@@ -7,7 +7,11 @@ from typing import Any, Iterable, Mapping
 
 from services.derivatives.intelligence import EvidenceClass, INTELLIGENCE_VERSION, compute_behavior_features
 from services.derivatives.models import PositionEpochState
-from services.derivatives.multi_venue import CANONICAL_CONCEPTS, cross_venue_parity_report, build_pr5_adapters, normalize_all_fixture_fills
+from services.derivatives.multi_venue import (
+    CANONICAL_CONCEPTS,
+    build_scaffolded_adapters,
+    cross_venue_parity_report,
+)
 
 RELEASE_VERSION = "derivatives-release-v1"
 DETERMINISTIC_METRICS = (
@@ -203,19 +207,16 @@ def deployment_profile_matrix() -> dict[str, Any]:
 
 
 def strict_release_gate_report(overrides: Mapping[str, bool] | None = None) -> dict[str, Any]:
-    gate_values = {key: True for key in STRICT_GATE_KEYS}
-    if overrides:
-        gate_values.update(overrides)
-    adapters = build_pr5_adapters()
-    facts = normalize_all_fixture_fills()
-    gate_values["market_resolution_complete"] = gate_values["market_resolution_complete"] and all(f.canonical_market_id for f in facts)
-    gate_values["licensing_controls_present"] = gate_values["licensing_controls_present"] and all(
-        item["export_filter_required"] for item in provider_licensing_controls().values()
-    )
-    passed = all(gate_values.values())
+    evidence = overrides or {}
+    gate_values: dict[str, bool | None] = {
+        key: evidence.get(key) for key in STRICT_GATE_KEYS
+    }
+    adapters = build_scaffolded_adapters()
+    passed = all(value is True for value in gate_values.values())
     return {
         "release_version": RELEASE_VERSION,
         "passed": passed,
+        "availability": "evaluated" if all(value is not None for value in gate_values.values()) else "insufficient_evidence",
         "gates": gate_values,
         "cross_venue_parity": cross_venue_parity_report(adapters),
         "canonical_concepts": list(CANONICAL_CONCEPTS),

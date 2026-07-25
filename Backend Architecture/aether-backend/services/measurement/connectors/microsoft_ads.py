@@ -57,31 +57,7 @@ class MicrosoftAdsConnector(BaseConnector):
         return await self.backfill(start, end)
 
     async def backfill(self, start: date, end: date) -> SyncResult:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return await self._mock_backfill(start, end)
         return await self._live_backfill(start, end)
-
-    async def _mock_backfill(self, start: date, end: date) -> SyncResult:
-        """Return a mock SyncResult for local/test environments."""
-        account_id = self.config.get("account_id", "")
-        metrics_list: list[ExternalCampaignMetric] = []
-        current = start
-        while current <= end:
-            metrics_list.append(ExternalCampaignMetric(
-                platform=_CONNECTOR_TYPE,
-                external_account_id=account_id,
-                external_campaign_id=f"mock-msft-camp-{self.connector_id[:8]}",
-                external_campaign_name="Mock Microsoft Ads Campaign",
-                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
-                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
-                impressions=6500, clicks=85, spend=Decimal("95.00"), currency="USD",
-            ))
-            current += timedelta(days=1)
-
-        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
-        logger.info("Microsoft Ads mock backfill: connector=%s rows=%d", self.connector_id, write_result.spend_records_written)
-        return SyncResult(rows_upserted=write_result.spend_records_written, new_cursor={"last_sync_date": str(end)})
 
     async def _get_access_token(self) -> str | None:
         """Exchange refresh token for a fresh access token."""
@@ -91,9 +67,9 @@ class MicrosoftAdsConnector(BaseConnector):
                 _OAUTH_URL,
                 data={
                     "grant_type": "refresh_token",
-                    "client_id": self.config.get("client_id", ""),
-                    "client_secret": self.config.get("client_secret", ""),
-                    "refresh_token": self.config.get("refresh_token", ""),
+                    "client_id": self._config.get("client_id", ""),
+                    "client_secret": self._config.get("client_secret", ""),
+                    "refresh_token": self._config.get("refresh_token", ""),
                     "scope": "https://ads.microsoft.com/msads.manage",
                 },
             )
@@ -108,16 +84,16 @@ class MicrosoftAdsConnector(BaseConnector):
             import httpx
         except ImportError:
             logger.error("httpx not installed; Microsoft Ads live sync unavailable")
-            return SyncResult(rows_upserted=0, errors=["httpx not installed"], new_cursor={})
+            return self._sync_result(errors=["httpx not installed"])
 
-        account_id = self.config.get("account_id", "")
-        customer_id = self.config.get("customer_id", "")
+        account_id = self._config.get("account_id", "")
+        customer_id = self._config.get("customer_id", "")
         if not account_id or not customer_id:
-            return SyncResult(rows_upserted=0, errors=["Missing account_id or customer_id"], new_cursor={})
+            return self._sync_result(errors=["Missing account_id or customer_id"])
 
         access_token = await self._get_access_token()
         if not access_token:
-            return SyncResult(rows_upserted=0, errors=["Failed to obtain access token"], new_cursor={})
+            return self._sync_result(errors=["Failed to obtain access token"])
 
         errors: list[str] = []
 
@@ -125,7 +101,7 @@ class MicrosoftAdsConnector(BaseConnector):
             "Authorization": f"Bearer {access_token}",
             "CustomerAccountId": account_id,
             "CustomerId": customer_id,
-            "DeveloperToken": self.config.get("developer_token", ""),
+            "DeveloperToken": self._config.get("developer_token", ""),
         }
 
         # Bing Ads Reporting API: submit report request, poll for download URL
@@ -229,22 +205,22 @@ class MicrosoftAdsConnector(BaseConnector):
 
         write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
         errors.extend(write_result.errors)
-        return SyncResult(rows_upserted=write_result.spend_records_written, errors=errors, new_cursor={"last_sync_date": str(end)})
+        return self._sync_result(
+            spend_records_written=write_result.spend_records_written,
+            errors=errors,
+            cursor_state={"last_sync_date": str(end)},
+        )
 
     async def health_check(self) -> ConnectorHealth:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return ConnectorHealth(status="healthy", message="mock mode")
-
         try:
-            account_id = self.config.get("account_id", "")
-            customer_id = self.config.get("customer_id", "")
+            account_id = self._config.get("account_id", "")
+            customer_id = self._config.get("customer_id", "")
             if not account_id or not customer_id:
-                return ConnectorHealth(status="error", message="Missing account_id or customer_id")
+                return self._health(False, "Missing account_id or customer_id")
 
             access_token = await self._get_access_token()
             if not access_token:
-                return ConnectorHealth(status="error", message="Failed to refresh access token — check client credentials or refresh_token")
+                return self._health(False, "Failed to refresh access token — check client credentials or refresh_token")
 
             import httpx
             async with httpx.AsyncClient(timeout=10) as client:
@@ -254,20 +230,20 @@ class MicrosoftAdsConnector(BaseConnector):
                         "Authorization": f"Bearer {access_token}",
                         "CustomerAccountId": account_id,
                         "CustomerId": customer_id,
-                        "DeveloperToken": self.config.get("developer_token", ""),
+                        "DeveloperToken": self._config.get("developer_token", ""),
                     },
                     params={"AccountId": account_id},
                 )
                 if resp.status_code == 401:
-                    return ConnectorHealth(status="error", message="Unauthorized — token invalid")
+                    return self._health(False, "Unauthorized — token invalid")
                 resp.raise_for_status()
-                return ConnectorHealth(status="healthy", message="API credentials valid")
+                return self._health(True, "API credentials valid")
         except Exception as exc:
-            return ConnectorHealth(status="error", message=str(exc))
+            return self._health(False, str(exc))
 
     async def validate_credentials(self) -> bool:
         health = await self.health_check()
-        return health.status == "healthy"
+        return health.healthy
 
 
 def _idempotency_id(connector_id: str, key: str) -> str:

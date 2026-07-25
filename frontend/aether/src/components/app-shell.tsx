@@ -4,6 +4,7 @@ import {
   cn,
   Badge,
   Button,
+  DemoTenantBanner,
   GlyphIcon,
   TimeLensControl,
   useTheme,
@@ -15,6 +16,7 @@ import {
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth } from '@aether-app/features/auth';
 import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
+import { useDemoSeedStatus } from '@aether-app/features/demo-seed/use-demo-seed-status';
 
 interface NavItemProps {
   to: string;
@@ -81,6 +83,8 @@ export function AppShell({ children }: AppShellProps) {
   const build = useBuildInfo();
   const navigate = useNavigate();
   const [reAuthBanner, setReAuthBanner] = useState(false);
+  const demoSeed = useDemoSeedStatus();
+  const showDemoBanner = demoSeed.data?.seeded === true && demoSeed.data.is_demo_tenant === true;
 
   // R-4: Detect sessionStorage cleared by tab/focus events
   useEffect(() => {
@@ -169,6 +173,12 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Main content */}
       <main className={cn('flex-1 overflow-y-auto', reAuthBanner && 'mt-10')}>
+        {showDemoBanner && (
+          <DemoTenantBanner
+            tenantName={demoSeed.data?.tenant_name}
+            datasetVersion={demoSeed.data?.dataset_version}
+          />
+        )}
         {children}
       </main>
     </div>

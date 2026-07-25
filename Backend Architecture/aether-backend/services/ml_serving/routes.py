@@ -86,19 +86,11 @@ def _resolve_canonical(name_or_alias: str) -> tuple[str, bool]:
             from common.model_registry import resolve_model_id, list_models
             canonical = resolve_model_id(name_or_alias)
         was_deprecated = any(issubclass(w.category, DeprecationWarning) for w in caught)
-    except ImportError:
-        # Fallback: use the static canonical list if registry unavailable
-        canonical = name_or_alias if name_or_alias in _STATIC_CANONICAL_IDS else None
-        was_deprecated = name_or_alias in _STATIC_DEPRECATED_ALIASES
-        if was_deprecated:
-            canonical = _STATIC_DEPRECATED_ALIASES.get(name_or_alias)
+    except ImportError as exc:
+        raise ServiceUnavailableError("Canonical model registry is unavailable") from exc
 
     if canonical is None:
-        try:
-            from common.model_registry import list_models
-            known = sorted(m.model_id for m in list_models())
-        except ImportError:
-            known = _STATIC_CANONICAL_IDS
+        known = sorted(m.model_id for m in list_models())
         raise BadRequestError(
             f"Unknown model: '{name_or_alias}'. "
             f"Known model IDs: {known}. "
@@ -115,9 +107,9 @@ def _get_serving_endpoint(canonical_id: str) -> str:
         entry = get_model(canonical_id)
         if entry and entry.serving_endpoint:
             return entry.serving_endpoint
-    except ImportError:
-        pass
-    return _STATIC_ENDPOINTS.get(canonical_id, "/v1/predict/batch")
+    except ImportError as exc:
+        raise ServiceUnavailableError("Canonical model registry is unavailable") from exc
+    raise ServiceUnavailableError(f"No serving endpoint is registered for model '{canonical_id}'")
 
 
 def _batch_requires_privileged(canonical_id: str) -> bool:
@@ -127,38 +119,9 @@ def _batch_requires_privileged(canonical_id: str) -> bool:
         entry = get_model(canonical_id)
         if entry is not None:
             return entry.batch_requires_privileged
-    except ImportError:
-        pass
-    return True  # Fail secure: require privilege if registry unavailable
-
-
-# ---------------------------------------------------------------------------
-# Static fallbacks (used only when registry import fails)
-# ---------------------------------------------------------------------------
-
-_STATIC_CANONICAL_IDS = [
-    "intent_prediction", "bot_detection", "session_scorer",
-    "identity_resolution", "journey_prediction", "churn_prediction",
-    "ltv_prediction", "anomaly_detection", "campaign_attribution",
-    "bytecode_risk", "trust_score",
-]
-
-_STATIC_DEPRECATED_ALIASES: dict[str, str] = {
-    "identity_gnn": "identity_resolution",  # deprecated alias → canonical
-    "journey_tft": "journey_prediction",    # deprecated alias → canonical
-}
-
-_STATIC_ENDPOINTS: dict[str, str] = {
-    "intent_prediction": "/v1/predict/intent",
-    "bot_detection": "/v1/predict/bot",
-    "session_scorer": "/v1/predict/session-score",
-    "churn_prediction": "/v1/predict/churn",
-    "ltv_prediction": "/v1/predict/ltv",
-    "anomaly_detection": "/v1/predict/batch",
-    "campaign_attribution": "/v1/predict/attribution",
-    "identity_resolution": "/v1/predict/identity",
-    "journey_prediction": "/v1/predict/journey",
-}
+    except ImportError as exc:
+        raise ServiceUnavailableError("Canonical model registry is unavailable") from exc
+    return True  # Fail secure for unknown registry records.
 
 # ---------------------------------------------------------------------------
 # ML serving URL
@@ -237,28 +200,33 @@ async def list_models(request: Request):
     """List all available ML models and their serving status.
 
     Returns the canonical registry-backed model list. Includes live serving
-    status when the ML API is reachable, static registry data otherwise.
+    status when the ML API is reachable and explicit unavailable state otherwise.
     Canonical model IDs are always used; deprecated aliases are listed separately.
     """
     try:
         from common.model_registry import list_models as _list_models
-        registry_models = _list_models()
-        registry_data = [
-            {
-                "model_id": m.model_id,
-                "display_name": m.display_name,
-                "category": m.category,
-                "implementation_type": m.implementation_type,
-                "tier": m.tier,
-                "training_supported": m.training_supported,
-                "serving_supported": m.serving_supported,
-                "deprecated_aliases": m.deprecated_aliases,
-                "current_status": m.current_status,
-            }
-            for m in registry_models
-        ]
-    except ImportError:
-        registry_data = [{"model_id": m, "current_status": "unknown"} for m in _STATIC_CANONICAL_IDS]
+    except ImportError as exc:
+        raise ServiceUnavailableError("Canonical model registry is unavailable") from exc
+    registry_models = _list_models()
+    registry_data = [
+        {
+            "model_id": m.model_id,
+            "display_name": m.display_name,
+            "category": m.category,
+            "implementation_type": m.implementation_type,
+            "tier": m.tier,
+            "training_supported": m.training_supported,
+            "serving_supported": m.serving_supported,
+            "deprecated_aliases": m.deprecated_aliases,
+            "current_status": m.current_status,
+        }
+        for m in registry_models
+    ]
+    deprecated_aliases = {
+        alias: model.model_id
+        for model in registry_models
+        for alias in model.deprecated_aliases
+    }
 
     # Attempt live status from ML serving
     client = _get_client()
@@ -273,16 +241,20 @@ async def list_models(request: Request):
             for reg in registry_data:
                 live = live_by_name.get(reg["model_id"], {})
                 reg["serving_status"] = live.get("status", "unknown")
-                reg["artifact_version"] = live.get("version", "n/a")
+                reg["artifact_version"] = live.get("version")
+        else:
+            for reg in registry_data:
+                reg["serving_status"] = "unavailable"
+                reg["artifact_version"] = None
     except httpx.RequestError:
         logger.debug("ML serving API unreachable for /models — returning registry-only list")
         for reg in registry_data:
             reg["serving_status"] = "unreachable"
-            reg["artifact_version"] = "n/a"
+            reg["artifact_version"] = None
 
     return APIResponse(data={
         "models": registry_data,
-        "deprecated_aliases": _STATIC_DEPRECATED_ALIASES,
+        "deprecated_aliases": deprecated_aliases,
         "note": (
             "Use canonical model_id values. "
             "Deprecated aliases (identity_gnn, journey_tft) resolve to canonical IDs "

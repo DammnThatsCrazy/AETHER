@@ -112,7 +112,6 @@ async def create_checkout_session(body: CheckoutRequest, request: Request):
     return APIResponse(data={
         "session_id": session.session_id,
         "url": session.url,
-        "mocked": session.mocked,
     }).to_dict()
 
 
@@ -130,7 +129,6 @@ async def create_portal_session(request: Request):
     metrics.increment("billing_portal_sessions_created")
     return APIResponse(data={
         "url": session.url,
-        "mocked": session.mocked,
     }).to_dict()
 
 

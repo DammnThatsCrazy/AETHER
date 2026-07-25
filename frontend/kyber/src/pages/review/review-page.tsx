@@ -1,4 +1,3 @@
-import { getEnvironment } from '@kyber/lib/env';
 import { useState, useMemo, useCallback } from 'react';
 import {
   Card, CardHeader, CardTitle, CardContent, CardFooter,
@@ -321,22 +320,9 @@ export function ReviewPage() {
 
     const { actionType, itemId } = actionModal;
     const config = actionConfig[actionType];
-    const now = new Date().toISOString();
-
-    const attribution: ActionAttribution = {
-      userId: principal?.operator_id ?? 'unknown',
-      displayName: principal?.display_name ?? principal?.email ?? 'Unknown User',
-      email: principal?.email ?? 'unknown@aether.internal',
-      role: principal?.role_template_ids[0] ?? '',
-      timestamp: now,
-      environment: getEnvironment(),
-      reason: actionReason,
-      correlationId: `corr-${actionType}-${Date.now()}`,
-    };
-
     setActionSubmitting(true);
     setActionError(null);
-    Promise.resolve(resolveItem(itemId, config.newStatus, actionReason, attribution))
+    Promise.resolve(resolveItem(itemId, config.newStatus, actionReason))
       .then(() => {
         setActionNotice(`${config.label} recorded for item ${itemId}`);
         closeActionModal();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, formatDecimal, useTimeContext, type LocaleContext } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, ErrorState, LoadingState, formatDecimal, useTimeContext, type LocaleContext } from '@aether/ui';
 import { usePlaybookPerformance, usePlaybookPerformanceSummary, usePlaybookRuns, usePlaybookTemplates, usePlaybooks } from '@aether-app/features/intelligence';
 import { api } from '@aether-app/lib/api/endpoints';
 
@@ -16,11 +16,15 @@ function text(value: unknown, fallback = '—') {
 }
 
 function numberText(value: unknown, locale: LocaleContext) {
-  return formatDecimal(Number(value ?? 0), locale, { maximumFractionDigits: 2 });
+  if (value == null || value === '') return '—';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? formatDecimal(parsed, locale, { maximumFractionDigits: 2 }) : '—';
 }
 
 function pct(value: unknown) {
-  return `${Math.round(Number(value ?? 0) * 100)}%`;
+  if (value == null || value === '') return '—';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? `${Math.round(parsed * 100)}%` : '—';
 }
 
 export function PlaybookSystemPanel() {
@@ -55,6 +59,9 @@ export function PlaybookSystemPanel() {
           </div>
         </CardHeader>
         <CardContent>
+          {templates.isLoading && <LoadingState lines={4} />}
+          {templates.error && <ErrorState message="Playbook templates unavailable" onRetry={templates.refetch} />}
+          {!templates.isLoading && !templates.error && (
           <div className="space-y-3">
             {asItems(templates.data).length === 0 ? <p className="text-sm text-text-secondary">No templates available yet.</p> : asItems(templates.data).map((template) => {
               const outcomes = Array.isArray(template.expected_outcome_types) ? template.expected_outcome_types : [];
@@ -82,6 +89,7 @@ export function PlaybookSystemPanel() {
               );
             })}
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -90,7 +98,7 @@ export function PlaybookSystemPanel() {
         <Card>
           <CardHeader><h2 className="text-text-primary font-medium">Tenant playbooks</h2></CardHeader>
           <CardContent>
-            {playbookItems.length === 0 ? <p className="text-sm text-text-secondary">No tenant playbooks created yet.</p> : playbookItems.map((playbook) => (
+            {playbooks.isLoading ? <LoadingState lines={3} /> : playbooks.error ? <ErrorState message="Tenant playbooks unavailable" onRetry={playbooks.refetch} /> : playbookItems.length === 0 ? <p className="text-sm text-text-secondary">No tenant playbooks created yet.</p> : playbookItems.map((playbook) => (
               <button key={text(playbook.playbook_id)} type="button" onClick={() => setSelectedPlaybookId(text(playbook.playbook_id, ''))} className={`mb-2 block w-full rounded-lg border p-3 text-left ${selected === playbook.playbook_id ? 'border-accent bg-accent/10' : 'border-border-subtle'}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-text-primary">{text(playbook.name)}</span>

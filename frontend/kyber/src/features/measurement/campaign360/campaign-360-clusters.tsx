@@ -34,7 +34,7 @@ export function Campaign360Clusters({ campaignId, attributionRunId, timeStart, t
           : (
             <DataTable
               data={items}
-              keyExtractor={r => String(r.cluster_id ?? Math.random())}
+              keyExtractor={r => String(r.cluster_id ?? `${r.name ?? 'unknown'}:${r.created_at ?? 'undated'}`)}
               columns={[
                 { key: 'cluster_id', header: 'Cluster', render: r => (
                   r.cluster_id

@@ -7,7 +7,8 @@ interface EntityListTableProps {
   readonly onSelect: (entity: Entity) => void;
 }
 
-function scoreColor(value: number, inverted = false): string {
+function scoreColor(value: number | null, inverted = false): string {
+  if (value === null) return 'text-neutral-500';
   const effective = inverted ? 1 - value : value;
   if (effective > 0.7) return 'text-green-400';
   if (effective >= 0.4) return 'text-yellow-400';
@@ -55,13 +56,13 @@ export function EntityListTable({ entities, onSelect }: EntityListTableProps) {
                 <StatusIndicator status={entity.health.status} />
               </td>
               <td className={cn('py-2.5 px-3 text-right font-mono', scoreColor(entity.trustScore))}>
-                {entity.trustScore.toFixed(2)}
+                {entity.trustScore === null ? '—' : entity.trustScore.toFixed(2)}
               </td>
               <td className={cn('py-2.5 px-3 text-right font-mono', scoreColor(entity.riskScore, true))}>
-                {entity.riskScore.toFixed(2)}
+                {entity.riskScore === null ? '—' : entity.riskScore.toFixed(2)}
               </td>
               <td className={cn('py-2.5 px-3 text-right font-mono', scoreColor(entity.anomalyScore, true))}>
-                {entity.anomalyScore.toFixed(2)}
+                {entity.anomalyScore === null ? '—' : entity.anomalyScore.toFixed(2)}
               </td>
               <td className="py-2.5 px-3 text-center">
                 {entity.needsHelp ? (
@@ -83,7 +84,7 @@ export function EntityListTable({ entities, onSelect }: EntityListTableProps) {
                 </div>
               </td>
               <td className="py-2.5 px-3 text-right text-neutral-400 text-xs">
-                {formatRelativeTime(entity.updatedAt)}
+                {entity.updatedAt ? formatRelativeTime(entity.updatedAt) : '—'}
               </td>
             </tr>
           ))}

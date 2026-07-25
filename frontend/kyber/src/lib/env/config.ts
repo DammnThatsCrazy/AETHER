@@ -57,10 +57,6 @@ export function getEnvironment() {
   return env.VITE_KYBER_ENV;
 }
 
-export function getRuntimeMode() {
-  return 'live' as const;
-}
-
 export function isProduction() {
   return env.VITE_KYBER_ENV === 'production';
 }

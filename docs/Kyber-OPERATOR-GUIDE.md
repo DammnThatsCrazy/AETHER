@@ -159,7 +159,8 @@ policy decision trees, and economic clusters.
 3. Step through — each step shows graph writes and events emitted
 4. Replay decisions and verify outcomes match expected graph state
 
-**Required scope:** read-only (Lab is always mocked)
+**Required scope:** read-only. Deterministic Lab scenarios are test/replay tools;
+they are not a fallback data source for Kyber operational routes.
 
 ## Common Operator Workflows
 

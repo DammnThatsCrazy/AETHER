@@ -72,17 +72,17 @@ def status_for_score(score: float) -> QualityStatus:
 class IntelligenceQualityScore(BaseModel):
     tenant_id: str | None = None
     scope: str = "tenant"  # "tenant" | "platform"
-    event_quality_score: float = 0.0
-    schema_stability_score: float = 0.0
-    identity_resolution_score: float = 0.0
-    graph_quality_score: float = 0.0
-    profile_quality_score: float = 0.0
-    recommendation_quality_score: float = 0.0
-    outcome_feedback_quality_score: float = 0.0
-    playbook_quality_score: float = 0.0
-    overall_intelligence_quality_score: float = 0.0
+    event_quality_score: float | None = None
+    schema_stability_score: float | None = None
+    identity_resolution_score: float | None = None
+    graph_quality_score: float | None = None
+    profile_quality_score: float | None = None
+    recommendation_quality_score: float | None = None
+    outcome_feedback_quality_score: float | None = None
+    playbook_quality_score: float | None = None
+    overall_intelligence_quality_score: float | None = None
     status: QualityStatus = "unknown"
-    calculated_at: str = Field(default_factory=now_iso)
+    calculated_at: str | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

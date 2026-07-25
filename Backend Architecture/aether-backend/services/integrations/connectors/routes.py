@@ -195,7 +195,7 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
     raw = await request.body()
     sig = request.headers.get("X-Aether-Signature")
     ts = request.headers.get("X-Aether-Timestamp")
-    # Secret resolved from the vault when enabled; None in local/mocked mode.
+    # Secret resolved from the vault when enabled; None means unavailable.
     result = await connector_service.ingest_webhook(
         connector_type, tenant_id, raw_body=raw, signature=sig, timestamp=ts,
         secret=None, headers=dict(request.headers),

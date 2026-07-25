@@ -260,14 +260,18 @@ export function CommandPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="font-mono text-xs">Recovery State</CardTitle>
-                  <Badge variant={controllersInRecovery.length > 0 ? 'danger' : 'success'}>
-                    {controllersInRecovery.length > 0
+                  <Badge variant={controllers.length === 0 ? 'default' : controllersInRecovery.length > 0 ? 'danger' : 'success'}>
+                    {controllers.length === 0
+                      ? 'unavailable'
+                      : controllersInRecovery.length > 0
                       ? `${controllersInRecovery.length} non-idle`
                       : 'all idle'}
                   </Badge>
                 </CardHeader>
                 <CardContent>
-                  {controllersInRecovery.length === 0 ? (
+                  {controllers.length === 0 ? (
+                    <p className="text-xs text-text-muted font-mono">No controller recovery observations were returned.</p>
+                  ) : controllersInRecovery.length === 0 ? (
                     <p className="text-xs text-text-muted font-mono">All controllers in idle recovery state.</p>
                   ) : (
                     <ul className="space-y-1">
@@ -307,7 +311,7 @@ export function CommandPage() {
               Blocked Items ({blockedObjectives.length})
             </h3>
             {blockedObjectives.length === 0 ? (
-              <EmptyState title="No blocked items" description="All objectives are proceeding normally" icon="\u2713" />
+              <EmptyState title="No blocked items" description="No blocked objectives were returned by the backend." icon="\u2713" />
             ) : (
               <div className="space-y-2">
                 {blockedObjectives.map((obj) => {

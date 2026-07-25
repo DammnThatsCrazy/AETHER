@@ -30,7 +30,7 @@ Local mode (`AETHER_ENV=local`) may use the in-memory store for demos and mocked
 
 ## Kyber operator workflows
 
-Kyber should point to the backend with `VITE_API_BASE_URL` when `VITE_KYBER_ENV` is `local-live`, `staging`, or `production`. The Agent Command Center can use:
+Kyber points to the backend with `VITE_API_BASE_URL` when `VITE_KYBER_ENV` is `local`, `staging`, or `production`. The Agent Command Center can use:
 
 - `GET /v1/agent/health` for aggregate health, queues, kill switch, active/blocked/failed objectives, and review counts.
 - `POST /v1/agent/objectives` to submit objectives.

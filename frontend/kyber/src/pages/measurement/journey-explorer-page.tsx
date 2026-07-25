@@ -228,7 +228,7 @@ function HealthPanel() {
           <h4 className="text-xs font-medium text-text-muted mb-2">Failed / partial journeys</h4>
           <DataTable
             data={data.failed_or_partial as Row[]}
-            keyExtractor={r => String(r.journey_id ?? r.profile_id ?? Math.random())}
+            keyExtractor={r => String(r.journey_id ?? r.profile_id ?? `${r.started_at ?? 'undated'}:${r.status ?? 'unknown'}`)}
             columns={[
               { key: 'profile', header: 'Profile', render: r => <span className="font-mono text-xs">{String(r.profile_id ?? '—').slice(0, 12)}…</span> },
               { key: 'quality', header: 'Quality', render: r => <Badge variant={QUALITY_VARIANT[String(r.quality_status)] ?? 'default'}>{String(r.quality_status ?? '—')}</Badge> },

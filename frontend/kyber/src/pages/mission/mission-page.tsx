@@ -142,7 +142,7 @@ export function MissionPage() {
               <p className="text-[11px] text-text-secondary">{data.globalHealth.message}</p>
             )}
             <div className="text-[10px] text-text-muted mt-1">
-              Checked {formatRelativeTime(data.globalHealth.lastChecked)}
+              Checked {data.globalHealth.lastChecked ? formatRelativeTime(data.globalHealth.lastChecked) : 'Unavailable'}
             </div>
           </CardContent>
         </Card>

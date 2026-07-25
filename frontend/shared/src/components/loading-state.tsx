@@ -8,7 +8,11 @@ interface LoadingStateProps {
 
 export function LoadingState({ lines = 3, className }: LoadingStateProps) {
   return (
-    <div className={cn('space-y-3 py-4', className)}>
+    <div
+      className={cn('space-y-3 py-4', className)}
+      role="status"
+      aria-label="Loading data"
+    >
       {Array.from({ length: lines }, (_, i) => (
         <Skeleton key={i} className="h-4" width={`${80 - i * 15}%`} />
       ))}

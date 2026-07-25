@@ -89,8 +89,8 @@ Kyber/operator objective → backend dispatch → durable run record
 ## Kyber Agent Command Center (flag `KYBER_AGENT_COMMAND_CENTER_ENABLED` /
 `enableAgentCommandCenter`)
 
-Live-mode operator surfaces across `local-mocked | local-live | staging |
-production` (`VITE_KYBER_ENV` + `VITE_API_BASE_URL`): worker/runtime health
+Live operator surfaces across `local | staging | production`
+(`VITE_KYBER_ENV` + `VITE_API_BASE_URL`): worker/runtime health
 strip (queue depth, workers, stale, active/failed/stuck runs), run history
 with stuck highlighting, review queue with confirm-gated approve/reject,
 staged-mutation commit visibility, kill-switch state and control, briefings

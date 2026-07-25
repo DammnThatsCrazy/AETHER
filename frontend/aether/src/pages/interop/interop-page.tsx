@@ -13,7 +13,7 @@ import {
 function implementationStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'default' {
   if (status === 'provider_live') return 'success';
   if (status === 'credential_gated') return 'warning';
-  return 'default'; // scaffolded / mocked_local — honest, not alarming
+  return 'default';
 }
 
 export function InteropPage() {

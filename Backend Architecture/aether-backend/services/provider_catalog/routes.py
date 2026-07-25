@@ -392,7 +392,7 @@ async def get_lake_coverage(request: Request):
 
 @lake_router.get("/quarantine")
 async def get_quarantine_summary(request: Request):
-    """Summary of quarantined Bronze records (placeholder — real counts from lake repo)."""
+    """Catalog compliance blocks; no operational quarantine count is inferred."""
     _require_operator(request)
 
     # This endpoint surfaces quarantine status. Real counts come from BronzeRepository.
@@ -403,8 +403,10 @@ async def get_quarantine_summary(request: Request):
 
     return APIResponse(data={
         "quarantine_summary": {
-            "note": "Live Bronze quarantine counts available from lake service. "
-                    "This view shows catalog-level compliance blocks.",
+            "availability": "catalog_only",
+            "quarantined_record_count": None,
+            "note": "Operational quarantine counts are unavailable on this route. "
+                    "This view contains catalog-level compliance blocks only.",
             "compliance_blocked_providers": len(compliance_blocked),
             "compliance_blocked_ids": [p.provider_id for p in compliance_blocked],
         },

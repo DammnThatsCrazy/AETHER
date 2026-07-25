@@ -21,6 +21,34 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 // ─── Common primitives ───────────────────────────────────────────────────────
 const unknownSchema = z.unknown();
+
+const demoSeedStatusSchema = z.object({
+  seeded: z.boolean(),
+  is_demo_tenant: z.boolean(),
+  tenant_id: z.string(),
+  tenant_name: z.string().nullable(),
+  data_origin: z.string().nullable(),
+  namespace: z.string(),
+  dataset_version: z.string(),
+  checksum: z.string(),
+  run_count: z.number(),
+  owned_record_count: z.number(),
+  latest_run: z.object({
+    seed_run_id: z.string().nullable(),
+    dataset_version: z.string().nullable(),
+    namespace: z.string().nullable(),
+    tenant_id: z.string().nullable(),
+    checksum: z.string().nullable(),
+    status: z.string().nullable(),
+    started_at: z.string().nullable(),
+    completed_at: z.string().nullable(),
+    inserted_counts: z.record(z.string(), z.number()),
+    updated_counts: z.record(z.string(), z.number()),
+    skipped_counts: z.record(z.string(), z.number()),
+  }).nullable(),
+});
+
+export type DemoSeedStatus = z.infer<typeof demoSeedStatusSchema>;
 const listOf = (item: z.ZodType) => z.object({ data: z.array(item), total: z.number(), has_more: z.boolean().optional() });
 
 const buildQS = (params: Record<string, string | number | boolean | undefined>) => {
@@ -238,6 +266,14 @@ const sourceClassificationOperationsSchema = z.object({
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
+
+  demoSeed: {
+    status: (tenantId: string) =>
+      restClient.get(
+        `/v1/demo-seed/status${buildQS({ tenant_id: tenantId })}`,
+        wrap(demoSeedStatusSchema),
+      ).then(r => r.data),
+  },
 
   // ── Analytics ──────────────────────────────────────────────────────────────
   analytics: {
@@ -1574,6 +1610,28 @@ export const api = {
         restClient.post(`/v1/admin/tenants/${tenantId}/billing/overage-invoice`, wrap(unknownSchema), params).then(r => r.data),
     },
     kyber: {
+      rewardsHealth: () =>
+        restClient.get('/v1/admin/kyber/rewards/health', wrap(unknownSchema)).then(r => r.data),
+      tenantRewardCampaigns: (tenantId: string, limit = 20, offset = 0) =>
+        restClient.get(
+          `/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/campaigns${buildQS({ limit, offset })}`,
+          wrap(unknownSchema),
+        ).then(r => r.data),
+      tenantRewardDecisions: (tenantId: string, limit = 20, offset = 0) =>
+        restClient.get(
+          `/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/decisions${buildQS({ limit, offset })}`,
+          wrap(unknownSchema),
+        ).then(r => r.data),
+      tenantRewardActions: (tenantId: string, limit = 20, offset = 0) =>
+        restClient.get(
+          `/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/actions${buildQS({ limit, offset })}`,
+          wrap(unknownSchema),
+        ).then(r => r.data),
+      tenantRewardAudit: (tenantId: string, limit = 20, offset = 0) =>
+        restClient.get(
+          `/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/audit${buildQS({ limit, offset })}`,
+          wrap(unknownSchema),
+        ).then(r => r.data),
       strategicOverview: (window = '30d') =>
         restClient.get(`/v1/admin/kyber/strategic-overview${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
       tenantValueHealth: (window = '30d') =>
@@ -2332,18 +2390,3 @@ export const api = {
       restClient.get(`/v1/kyber/tenants/${encodeURIComponent(tenantId)}/operational-envelope`, wrap(unknownSchema)).then(r => r.data),
   },
 };
-
-// ─── Utility: call API with a typed fallback ─────────────────────────────────
-export async function apiCall<T>(
-  fetcher: () => Promise<T>,
-  fallback: T,
-  label: string,
-): Promise<{ data: T; fromApi: boolean }> {
-  try {
-    const data = await fetcher();
-    return { data, fromApi: true };
-  } catch (err) {
-    log.warn(`[API] ${label} failed, using fallback`, { error: err instanceof Error ? err.message : String(err) });
-    return { data: fallback, fromApi: false };
-  }
-}

@@ -38,7 +38,7 @@ const depTypeIcon: Record<string, string> = {
 
 function LagCard({ title, lag }: { readonly title: string; readonly lag: LagMetric }) {
   const trendColor = lag.trend === 'improving' ? 'text-success' : lag.trend === 'degrading' ? 'text-danger' : 'text-text-secondary';
-  const trendArrow = lag.trend === 'improving' ? '\u2193' : lag.trend === 'degrading' ? '\u2191' : '\u2194';
+  const trendArrow = lag.trend === 'improving' ? '\u2193' : lag.trend === 'degrading' ? '\u2191' : lag.trend === 'stable' ? '\u2194' : '—';
 
   return (
     <Card>
@@ -48,15 +48,15 @@ function LagCard({ title, lag }: { readonly title: string; readonly lag: LagMetr
       <CardContent>
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
-            <div className="text-2xl font-mono font-bold text-text-primary">{lag.currentMs}</div>
+            <div className="text-2xl font-mono font-bold text-text-primary">{lag.currentMs ?? '—'}</div>
             <div className="text-xs text-text-secondary">Current (ms)</div>
           </div>
           <div>
-            <div className="text-2xl font-mono font-bold text-text-secondary">{lag.avgMs}</div>
+            <div className="text-2xl font-mono font-bold text-text-secondary">{lag.avgMs ?? '—'}</div>
             <div className="text-xs text-text-secondary">Avg (ms)</div>
           </div>
           <div>
-            <div className="text-2xl font-mono font-bold text-text-secondary">{lag.maxMs}</div>
+            <div className="text-2xl font-mono font-bold text-text-secondary">{lag.maxMs ?? '—'}</div>
             <div className="text-xs text-text-secondary">Max (ms)</div>
           </div>
         </div>
@@ -195,7 +195,7 @@ export function DiagnosticsPage() {
                 <div className="text-sm text-text-secondary">{health.overall.message}</div>
               )}
               <div className="text-xs text-text-muted mt-1">
-                Last checked: {formatTimestamp(health.overall.lastChecked)}
+                Last checked: {health.overall.lastChecked ? formatTimestamp(health.overall.lastChecked) : 'Unavailable'}
               </div>
             </div>
           </div>
@@ -238,9 +238,9 @@ export function DiagnosticsPage() {
                       <span className="text-text-secondary">Latency</span>
                       <span className={cn(
                         'font-mono',
-                        dep.latencyMs < 0 ? 'text-danger' : dep.latencyMs > 30 ? 'text-warning' : 'text-success',
+                        dep.latencyMs === null ? 'text-text-muted' : dep.latencyMs < 0 ? 'text-danger' : dep.latencyMs > 30 ? 'text-warning' : 'text-success',
                       )}>
-                        {dep.latencyMs < 0 ? 'N/A' : `${dep.latencyMs}ms`}
+                        {dep.latencyMs === null ? 'Unavailable' : dep.latencyMs < 0 ? 'N/A' : `${dep.latencyMs}ms`}
                       </span>
                     </div>
                     {dep.status.message && (
@@ -369,7 +369,6 @@ export function DiagnosticsPage() {
               <CardContent>
                 <div className="space-y-3">
                   {health.adapterReadiness
-                    .filter((a: AdapterReadiness) => a.type !== 'mock')
                     .map((adapter: AdapterReadiness) => (
                       <div key={adapter.name} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-0">
                         <div className="flex items-center gap-2">

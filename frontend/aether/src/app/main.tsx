@@ -3,11 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { Providers } from './providers';
 import { AppRouter } from './router';
 import { log } from '@aether-app/lib/logging';
-import { getEnvironment, getRuntimeMode, getStartupValidationSummary } from '@aether-app/lib/env';
+import { getEnvironment, getStartupValidationSummary } from '@aether-app/lib/env';
 import { cleanupLegacyMockWorker } from '@aether-app/lib/browser/legacy-mock-cleanup';
 import '@aether-app/styles/index.css';
 
-log.info(`[AETHER] Starting — env=${getEnvironment()} mode=${getRuntimeMode()}`);
+log.info(`[AETHER] Starting — env=${getEnvironment()} dataSource=backend`);
 
 const validation = getStartupValidationSummary();
 if (!validation.ok) {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { parseProblemDetails, type ProblemDetails } from '@aether/ui';
 import { CSRF_HEADER, readCsrfToken } from '@kyber/lib/auth';
-import { env, getEnvironment, getRuntimeMode } from '@kyber/lib/env';
+import { env, getEnvironment } from '@kyber/lib/env';
 import { log } from '@kyber/lib/logging';
 
 export class RestClientError extends Error {
@@ -33,8 +33,7 @@ function generateCorrelationId(): string {
 /**
  * Resolve the REST base URL for the current runtime/environment.
  *
- * - Mocked mode: relative (MSW intercepts).
- * - local-live: the dev server and backend are different origins with no proxy,
+ * - local: the dev server and backend are different origins with no proxy,
  *   so use the explicit absolute base (defaults to http://localhost:8000).
  * - staging/production: the nginx image proxies /v1 same-origin, and its CSP is
  *   `connect-src 'self'`. Keep relative paths so hosted calls stay same-origin
@@ -44,7 +43,6 @@ function generateCorrelationId(): string {
  *   backend whose CSP/CORS the operator is expected to allow.
  */
 function resolveApiBaseUrl(): string {
-  if (getRuntimeMode() !== 'live') return '';
   const configured = (env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '');
   if (env.VITE_KYBER_ENV === 'local') return configured;
   if (!configured) return '';

@@ -16,13 +16,13 @@ export interface DependencyHealth {
   readonly name: string;
   readonly type: 'database' | 'cache' | 'queue' | 'api' | 'graph' | 'storage' | 'analytics';
   readonly status: HealthStatus;
-  readonly latencyMs: number;
+  readonly latencyMs: number | null;
   readonly lastError?: string | undefined;
 }
 
 export interface CircuitBreakerState {
   readonly name: string;
-  readonly state: 'closed' | 'open' | 'half-open';
+  readonly state: 'closed' | 'open' | 'half-open' | 'unknown';
   readonly failureCount: number;
   readonly lastFailure?: string | undefined;
   readonly nextRetry?: string | undefined;
@@ -39,15 +39,15 @@ export interface ErrorFingerprint {
 }
 
 export interface LagMetric {
-  readonly currentMs: number;
-  readonly avgMs: number;
-  readonly maxMs: number;
-  readonly trend: 'improving' | 'degrading' | 'stable';
+  readonly currentMs: number | null;
+  readonly avgMs: number | null;
+  readonly maxMs: number | null;
+  readonly trend: 'improving' | 'degrading' | 'stable' | 'unknown';
 }
 
 export interface AdapterReadiness {
   readonly name: string;
-  readonly type: 'rest' | 'graphql' | 'websocket' | 'mock';
+  readonly type: 'rest' | 'graphql' | 'websocket';
   readonly ready: boolean;
   readonly lastCheck: string;
   readonly error?: string | undefined;

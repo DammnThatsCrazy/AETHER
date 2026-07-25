@@ -1,0 +1,216 @@
+{
+  "checks": {
+    "clean_install": {
+      "command": "make clean-install-smoke",
+      "exit_code": 0,
+      "output_tail": [
+        "Makefile:805: warning: ignoring old commands for target `derivatives-graph-check'",
+        "Makefile:838: warning: overriding commands for target `derivatives-profile-check'",
+        "Makefile:808: warning: ignoring old commands for target `derivatives-profile-check'",
+        "Makefile:841: warning: overriding commands for target `derivatives-intelligence-release-check'",
+        "Makefile:811: warning: ignoring old commands for target `derivatives-intelligence-release-check'",
+        "cd \"Backend Architecture/aether-backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"clean_install or normal_startup\"",
+        "..                                                                       [100%]",
+        "2 passed, 11 deselected in 0.61s",
+        "python3 scripts/validate_frontend_data_truth.py",
+        "{",
+        "  \"status\": \"pass\",",
+        "  \"checks\": {",
+        "    \"source\": true,",
+        "    \"demo_source\": true,",
+        "    \"bundles\": false,",
+        "    \"bundles_built\": false",
+        "  },",
+        "  \"finding_count\": 0,",
+        "  \"findings\": []",
+        "}"
+      ],
+      "passed": true
+    },
+    "demo_reset": {
+      "command": "make demo-reset-smoke",
+      "exit_code": 0,
+      "output_tail": [
+        "Makefile:792: warning: overriding commands for target `derivatives-test'",
+        "Makefile:773: warning: ignoring old commands for target `derivatives-test'",
+        "Makefile:835: warning: overriding commands for target `derivatives-graph-check'",
+        "Makefile:805: warning: ignoring old commands for target `derivatives-graph-check'",
+        "Makefile:838: warning: overriding commands for target `derivatives-profile-check'",
+        "Makefile:808: warning: ignoring old commands for target `derivatives-profile-check'",
+        "Makefile:841: warning: overriding commands for target `derivatives-intelligence-release-check'",
+        "Makefile:811: warning: ignoring old commands for target `derivatives-intelligence-release-check'",
+        "cd \"Backend Architecture/aether-backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"reset or tenant_ids_are_isolated\"",
+        "...                                                                      [100%]",
+        "3 passed, 10 deselected in 0.51s"
+      ],
+      "passed": true
+    },
+    "demo_seed": {
+      "command": "make demo-seed-smoke",
+      "exit_code": 0,
+      "output_tail": [
+        "Makefile:792: warning: overriding commands for target `derivatives-test'",
+        "Makefile:773: warning: ignoring old commands for target `derivatives-test'",
+        "Makefile:835: warning: overriding commands for target `derivatives-graph-check'",
+        "Makefile:805: warning: ignoring old commands for target `derivatives-graph-check'",
+        "Makefile:838: warning: overriding commands for target `derivatives-profile-check'",
+        "Makefile:808: warning: ignoring old commands for target `derivatives-profile-check'",
+        "Makefile:841: warning: overriding commands for target `derivatives-intelligence-release-check'",
+        "Makefile:811: warning: ignoring old commands for target `derivatives-intelligence-release-check'",
+        "cd \"Backend Architecture/aether-backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"idempotent or status_contract or production_refuses or startup_seed_refuses\"",
+        "....                                                                     [100%]",
+        "4 passed, 9 deselected in 0.51s"
+      ],
+      "passed": true
+    },
+    "production_build": {
+      "command": "npm run build --workspace=frontend/aether --workspace=frontend/kyber --workspace=frontend/demo --if-present",
+      "exit_code": 0,
+      "output_tail": [
+        "- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks",
+        "- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+        "\u2713 built in 6.10s",
+        "",
+        "> @aether/demo@8.12.0 build",
+        "> npm run build:profile",
+        "",
+        "",
+        "> @aether/demo@8.12.0 build:profile",
+        "> tsc --noEmit && vite build",
+        "",
+        "vite v6.4.3 building for production...",
+        "transforming...",
+        "\u2713 89 modules transformed.",
+        "rendering chunks...",
+        "computing gzip size...",
+        "dist/index.html                   0.87 kB \u2502 gzip:  0.44 kB",
+        "dist/assets/index-BIV70HBQ.css   19.35 kB \u2502 gzip:  4.51 kB",
+        "dist/assets/index-BF9bmD-C.js   224.56 kB \u2502 gzip: 70.80 kB \u2502 map: 1,070.94 kB",
+        "\u2713 built in 1.59s"
+      ],
+      "passed": true
+    },
+    "production_bundle_scan": {
+      "command": "/Library/Developer/CommandLineTools/usr/bin/python3 scripts/validate_frontend_data_truth.py --bundles",
+      "exit_code": 0,
+      "output_tail": [
+        "{",
+        "  \"status\": \"pass\",",
+        "  \"checks\": {",
+        "    \"source\": true,",
+        "    \"demo_source\": true,",
+        "    \"bundles\": true,",
+        "    \"bundles_built\": false",
+        "  },",
+        "  \"finding_count\": 0,",
+        "  \"findings\": []",
+        "}"
+      ],
+      "passed": true
+    },
+    "route_state": {
+      "command": "/Library/Developer/CommandLineTools/usr/bin/python3 scripts/validate_frontend_route_state_matrix.py --enforce",
+      "exit_code": 0,
+      "output_tail": [
+        "frontend-route-state: pass (112/124 empty, 59/59 critical)"
+      ],
+      "passed": true
+    },
+    "source_scan": {
+      "command": "/Library/Developer/CommandLineTools/usr/bin/python3 scripts/validate_frontend_data_truth.py",
+      "exit_code": 0,
+      "output_tail": [
+        "{",
+        "  \"status\": \"pass\",",
+        "  \"checks\": {",
+        "    \"source\": true,",
+        "    \"demo_source\": true,",
+        "    \"bundles\": false,",
+        "    \"bundles_built\": false",
+        "  },",
+        "  \"finding_count\": 0,",
+        "  \"findings\": []",
+        "}"
+      ],
+      "passed": true
+    },
+    "staging_build": {
+      "command": "npm run build --workspace=frontend/aether --workspace=frontend/kyber --workspace=frontend/demo --if-present",
+      "exit_code": 0,
+      "output_tail": [
+        "- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks",
+        "- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+        "\u2713 built in 6.30s",
+        "",
+        "> @aether/demo@8.12.0 build",
+        "> npm run build:profile",
+        "",
+        "",
+        "> @aether/demo@8.12.0 build:profile",
+        "> tsc --noEmit && vite build",
+        "",
+        "vite v6.4.3 building for production...",
+        "transforming...",
+        "\u2713 89 modules transformed.",
+        "rendering chunks...",
+        "computing gzip size...",
+        "dist/index.html                   0.87 kB \u2502 gzip:  0.43 kB",
+        "dist/assets/index-BIV70HBQ.css   19.35 kB \u2502 gzip:  4.51 kB",
+        "dist/assets/index-bueFT4el.js   224.56 kB \u2502 gzip: 70.80 kB \u2502 map: 1,070.94 kB",
+        "\u2713 built in 1.31s"
+      ],
+      "passed": true
+    }
+  },
+  "inventory": {
+    "by_final_status": {
+      "remediated in combined live-empty and backend-seed program": 492,
+      "retained test-only fixture": 114,
+      "reviewed and retained non-operational source": 109
+    },
+    "identified_domains_remediated_percent": 100.0,
+    "pending": 0,
+    "total": 715
+  },
+  "metrics": {
+    "api_unavailable_error_state": true,
+    "automatic_normal_startup_seed_paths": 0,
+    "browser_msw_startup_paths": 0,
+    "clean_install": true,
+    "frontend_generated_auth_tokens": 0,
+    "frontend_synthetic_api_mutations": 0,
+    "known_synthetic_bundle_literals": 0,
+    "local_mocked_runtime_branches": 0,
+    "production_build": true,
+    "production_seed_refusal": true,
+    "public_mock_service_workers": 0,
+    "reset_isolation": true,
+    "route_state": {
+      "critical_empty_and_error": 59,
+      "critical_routes": 59,
+      "empty_coverage": 0.9032258064516129,
+      "inventory_errors": [],
+      "metrics": {
+        "empty": 112,
+        "error": 96,
+        "loading": 16,
+        "permission": 10,
+        "populated": 29
+      },
+      "route_counts": {
+        "aether": 47,
+        "kyber": 77
+      },
+      "total_data_bearing_routes": 124
+    },
+    "runtime_aether_fixture_imports": 0,
+    "runtime_aether_mock_imports": 0,
+    "runtime_kyber_fixture_imports": 0,
+    "runtime_kyber_mock_imports": 0,
+    "seed_idempotency": true,
+    "staging_build": true
+  },
+  "passed": true,
+  "program": "aether-live-empty-backend-demo-seed",
+  "schema_version": 1
+}

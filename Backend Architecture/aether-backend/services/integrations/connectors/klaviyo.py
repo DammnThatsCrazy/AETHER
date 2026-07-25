@@ -59,7 +59,7 @@ def _headers(secret: str) -> dict[str, str]:
 
 def _is_live(secret: Optional[str]) -> bool:
     import os
-    return bool(secret) and os.getenv("AETHER_ENV", "local").lower() != "local"
+    return bool(secret)
 
 
 async def _get(url: str, secret: str) -> tuple[int, dict]:

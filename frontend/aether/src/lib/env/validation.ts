@@ -19,37 +19,16 @@ export function validateEnvironment(): ValidationResult[] {
     valid: true,
   });
 
-  const oidcRequired = isProduction() || environment === 'staging';
+  const authRequired = isProduction() || environment === 'staging';
+  const oidcComplete = !!env.VITE_OIDC_AUTHORITY && !!env.VITE_OIDC_CLIENT_ID && !!env.VITE_OIDC_REDIRECT_URI;
+  const auth0Complete = !!env.VITE_AUTH0_DOMAIN && !!env.VITE_AUTH0_CLIENT_ID && !!env.VITE_AUTH0_REDIRECT_URI;
+  const authComplete = oidcComplete || auth0Complete;
   results.push({
-    variable: 'VITE_OIDC_AUTHORITY',
-    required: oidcRequired,
-    present: !!env.VITE_OIDC_AUTHORITY,
-    valid: oidcRequired ? !!env.VITE_OIDC_AUTHORITY : true,
-    message: oidcRequired && !env.VITE_OIDC_AUTHORITY ? 'OIDC authority required for non-local environments' : undefined,
-  });
-
-  results.push({
-    variable: 'VITE_OIDC_CLIENT_ID',
-    required: oidcRequired,
-    present: !!env.VITE_OIDC_CLIENT_ID,
-    valid: oidcRequired ? !!env.VITE_OIDC_CLIENT_ID : true,
-    message: oidcRequired && !env.VITE_OIDC_CLIENT_ID ? 'OIDC client ID required for non-local environments' : undefined,
-  });
-
-  results.push({
-    variable: 'VITE_AUTH0_DOMAIN',
-    required: oidcRequired,
-    present: !!env.VITE_AUTH0_DOMAIN,
-    valid: oidcRequired ? !!env.VITE_AUTH0_DOMAIN : true,
-    message: oidcRequired && !env.VITE_AUTH0_DOMAIN ? 'Auth0 domain required for non-local environments' : undefined,
-  });
-
-  results.push({
-    variable: 'VITE_AUTH0_CLIENT_ID',
-    required: oidcRequired,
-    present: !!env.VITE_AUTH0_CLIENT_ID,
-    valid: oidcRequired ? !!env.VITE_AUTH0_CLIENT_ID : true,
-    message: oidcRequired && !env.VITE_AUTH0_CLIENT_ID ? 'Auth0 client ID required for non-local environments' : undefined,
+    variable: 'AUTH_CONFIGURATION',
+    required: authRequired,
+    present: authComplete,
+    valid: authRequired ? authComplete : true,
+    message: authRequired && !authComplete ? 'Complete OIDC or Auth0 configuration required for non-local environments' : undefined,
   });
 
   results.push({

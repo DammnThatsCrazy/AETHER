@@ -1,4 +1,4 @@
-import { Card, CardHeader, CardContent, Button, Badge } from '@aether/ui';
+import { Card, CardHeader, CardContent, Button } from '@aether/ui';
 import { useAuth } from '@aether-app/features/auth';
 import { DecisionIntelligencePanel } from '@aether-app/components/decision-intelligence-panel';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
@@ -15,7 +15,6 @@ export function HomePage() {
             <p className="text-text-secondary text-sm mt-1">Customer Portal</p>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="success">Connected</Badge>
             <Button variant="ghost" size="sm" onClick={() => void logout()}>
               Sign out
             </Button>

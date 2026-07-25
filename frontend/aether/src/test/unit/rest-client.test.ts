@@ -23,6 +23,10 @@ describe('restClient.get — success', () => {
     const result = await restClient.get('/v1/users/u1', schema);
     expect(result.id).toBe('u1');
     expect(result.name).toBe('Alice');
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/v1/users/u1',
+      expect.objectContaining({ credentials: 'include' }),
+    );
   });
 });
 

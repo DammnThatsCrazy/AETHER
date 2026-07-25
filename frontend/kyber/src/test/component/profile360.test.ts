@@ -268,12 +268,12 @@ describe('toTimelineEvent', () => {
   });
 
   it('falls back to provided id when input has no id', () => {
-    const result = toTimelineEvent({ type: 'login' }, 'fallback-id');
+    const result = toTimelineEvent({ type: 'login', timestamp: '2026-01-01T00:00:00Z' }, 'fallback-id');
     expect(result.id).toBe('fallback-id');
   });
 
   it('normalizes event_type as type', () => {
-    const result = toTimelineEvent({ event_type: 'purchase', id: 'e1' }, 'e1');
+    const result = toTimelineEvent({ event_type: 'purchase', id: 'e1', timestamp: '2026-01-01T00:00:00Z' }, 'e1');
     expect(result.type).toBe('purchase');
   });
 
@@ -282,25 +282,29 @@ describe('toTimelineEvent', () => {
     expect(result.timestamp).toBe('2026-06-01T00:00:00Z');
   });
 
+  it('rejects an event without a backend observation timestamp', () => {
+    expect(() => toTimelineEvent({ id: 'e1' }, 'e1')).toThrow(/observation timestamp/);
+  });
+
   it('defaults severity to info when unrecognized value', () => {
-    const result = toTimelineEvent({ id: 'e1', severity: 'CRITICAL' }, 'e1');
+    const result = toTimelineEvent({ id: 'e1', severity: 'CRITICAL', timestamp: '2026-01-01T00:00:00Z' }, 'e1');
     expect(result.severity).toBe('info');
   });
 
   it('accepts valid severity values', () => {
     for (const sev of ['P0', 'P1', 'P2', 'P3', 'info'] as const) {
-      const result = toTimelineEvent({ id: 'e1', severity: sev }, 'e1');
+      const result = toTimelineEvent({ id: 'e1', severity: sev, timestamp: '2026-01-01T00:00:00Z' }, 'e1');
       expect(result.severity).toBe(sev);
     }
   });
 
   it('uses metadata field for metadata', () => {
-    const result = toTimelineEvent({ id: 'e1', metadata: { key: 'val' } }, 'e1');
+    const result = toTimelineEvent({ id: 'e1', metadata: { key: 'val' }, timestamp: '2026-01-01T00:00:00Z' }, 'e1');
     expect(result.metadata).toEqual({ key: 'val' });
   });
 
   it('falls back to properties when metadata absent', () => {
-    const result = toTimelineEvent({ id: 'e1', properties: { key: 'prop' } }, 'e1');
+    const result = toTimelineEvent({ id: 'e1', properties: { key: 'prop' }, timestamp: '2026-01-01T00:00:00Z' }, 'e1');
     expect(result.metadata).toEqual({ key: 'prop' });
   });
 });

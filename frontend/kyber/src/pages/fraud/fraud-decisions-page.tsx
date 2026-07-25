@@ -163,7 +163,7 @@ export function FraudDecisionsPage() {
             {!isLoading && rows.length > 0 && (
               <DataTable
                 data={rows}
-                keyExtractor={r => String(r.decision_id ?? Math.random())}
+                keyExtractor={r => String(r.decision_id ?? `${r.entity_id ?? 'unknown'}:${r.created_at ?? 'undated'}`)}
                 columns={[
                   {
                     key: 'tier',

@@ -19,13 +19,10 @@ A hybrid of:
 # From repo root
 npm install
 
-# Start in local mocked mode (default)
-cd apps/kyber
-npm run dev
-# Open http://localhost:5174
-
-# Or start in local live mode (requires running Aether backend)
-VITE_KYBER_ENV=local-live npm run dev
+# Start against the local backend
+cd frontend/kyber
+VITE_KYBER_ENV=local VITE_API_BASE_URL=http://localhost:8000 \
+  VITE_AETHER_ENDPOINT=http://localhost:8000 npm run dev
 ```
 
 ## Pages
@@ -41,12 +38,14 @@ VITE_KYBER_ENV=local-live npm run dev
 | Review | Approval workflows with diffs, evidence, rationale, audit trail |
 | Lab | Fixture browser, replay, API inspection, data transforms, export |
 
-## Runtime Modes
+## Runtime Environments
 
-- **local-mocked**: Full app with deterministic fixtures (default)
-- **local-live**: Connected to local Aether services
+- **local**: Connected to local Aether services
 - **staging**: Connected to staging infrastructure
 - **production**: Read-only observer posture by default
+
+Kyber never manufactures operational data in the browser. A successful empty
+backend response renders an empty state; request failures render unavailable.
 
 ## Tech Stack
 

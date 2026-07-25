@@ -313,21 +313,6 @@ class JWTHandler:
 # API KEY VALIDATOR
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Stub keys for LOCAL development only
-_LOCAL_STUB_KEYS: dict[str, dict] = {
-    "ak_test_123": {
-        "tenant_id": "tenant_001",
-        "tier": "pro",
-        "role": "editor",
-        "permissions": [
-            "read", "write", "analytics", "ml:inference",
-            "agent:manage", "campaign:manage", "consent:manage",
-            "admin", "billing", "x402:read", "x402:write",
-        ],
-    },
-}
-
-
 class APIKeyValidator:
     """
     Validates API keys and returns tenant context.
@@ -335,7 +320,8 @@ class APIKeyValidator:
     Production: keys are SHA-256 hashed and stored in Redis (via CacheClient)
     with tenant metadata. Use `register_api_key()` to provision keys.
 
-    Local: stub keys allowed for development without infrastructure.
+    Local development uses the backend development-session route; reusable
+    hardcoded API keys are never accepted.
     """
 
     def __init__(self, environment: Optional[str] = None, cache: Optional[Any] = None):
@@ -371,38 +357,12 @@ class APIKeyValidator:
         return key_hash
 
     def validate(self, api_key: str) -> TenantContext:
-        """Synchronous validation — checks stub keys in LOCAL mode."""
-        from config.settings import Environment
-
-        if self._environment == Environment.LOCAL:
-            key_data = _LOCAL_STUB_KEYS.get(api_key)
-            if key_data:
-                return self._build_context(key_data)
-
-        # Non-local: stub keys are forbidden
-        if api_key in _LOCAL_STUB_KEYS:
-            raise UnauthorizedError("Stub API keys are not allowed in non-local environments")
-
-        # For sync validation without cache, reject
+        """Synchronous validation is unavailable without the durable backend."""
         # Use validate_async() for production key lookup
         raise UnauthorizedError("Invalid API key — use validate_async() for production")
 
     async def validate_async(self, api_key: str) -> TenantContext:
         """Async validation — looks up hashed key in Redis cache."""
-        from config.settings import Environment
-
-        # LOCAL mode: allow stub keys
-        if self._environment == Environment.LOCAL:
-            key_data = _LOCAL_STUB_KEYS.get(api_key)
-            if key_data:
-                ctx = self._build_context(key_data)
-                ctx = await _maybe_apply_billing_plan_tier(ctx)
-                return ctx
-
-        # Reject stub keys outside LOCAL
-        if api_key in _LOCAL_STUB_KEYS:
-            raise UnauthorizedError("Stub API keys are not allowed in non-local environments")
-
         # Production: lookup hashed key in Redis
         if not self._cache:
             raise UnauthorizedError("API key validation unavailable — cache not configured")

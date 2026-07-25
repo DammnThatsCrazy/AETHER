@@ -21,6 +21,3 @@ export type {
 
 export { CapabilityStateBadge, CapabilityStatePanel } from './capability-state-badge';
 export type { CapabilityStateBadgeProps, CapabilityStatePanelProps } from './capability-state-badge';
-
-export { MockModeBanner } from './mock-mode-banner';
-export type { MockModeBannerProps, RuntimeDataMode } from './mock-mode-banner';

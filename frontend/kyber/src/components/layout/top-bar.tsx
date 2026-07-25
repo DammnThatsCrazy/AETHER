@@ -1,5 +1,5 @@
 import { useAuth } from '@kyber/features/auth';
-import { getEnvironment, getRuntimeMode } from '@kyber/lib/env';
+import { getEnvironment } from '@kyber/lib/env';
 import { EnvironmentBadge, Badge, TimeLensControl } from '@aether/ui';
 import { useNotifications } from '@kyber/features/notifications';
 
@@ -7,15 +7,12 @@ export function TopBar() {
   const { principal, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const environment = getEnvironment();
-  const mode = getRuntimeMode();
 
   return (
     <header className="flex items-center justify-between border-b border-border-default bg-surface-sunken px-4 py-2">
       <div className="flex items-center gap-3">
         <EnvironmentBadge environment={environment} />
-        <Badge variant={false ? 'warning' : 'info'}>
-          {mode.toUpperCase()}
-        </Badge>
+        <Badge variant="info">LIVE</Badge>
       </div>
       <div className="flex items-center gap-4">
         <TimeLensControl className="hidden md:flex" />

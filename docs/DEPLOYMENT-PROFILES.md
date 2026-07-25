@@ -33,11 +33,9 @@ contain a forbidden resource. See
 
 | Profile | Class | Selectable in Terraform | Cost-capped | Runtime execution mode | NAT gateways |
 |---|---|---|---|---|---|
-| `local-mocked` | local | no | n/a | n/a (no backend) | n/a |
-| `local-live` | local | no | n/a | single process | n/a |
+| `local` | local | no | n/a | single process | n/a |
 | `local-full` | local | no | n/a | compose per-role | n/a |
-| `demo-static` | demo | no | yes | n/a (static only) | n/a |
-| `demo-live` | demo | no | yes | not implemented | n/a |
+| `demo` | demo | no | yes | backend-seeded shared non-production | n/a |
 | `preview` | preview | no | yes | not implemented | n/a |
 | `staging` | staging | **yes** | yes (USD 25 / 50) | `consolidated` — 2 tasks | **0** |
 | `production-lean` | production | **yes** | yes (USD 150 / 200) | `consolidated` — 2 tasks | **0** |
@@ -46,24 +44,7 @@ contain a forbidden resource. See
 
 ---
 
-## `local-mocked`
-
-| | |
-|---|---|
-| **Purpose** | Frontend and product work with no backend at all. |
-| **Selection** | Run the SPAs with MSW mocks; no backend process, no containers. |
-| **Resource inventory** | `aether-spa`, `kyber-spa`, `demo-spa`, `mock-data-msw`. Nothing else. |
-| **Runtime topology** | None. No API, no workers, no queues. |
-| **Data behaviour** | All responses are mock fixtures. No database, no persistence. |
-| **Network behaviour** | Localhost only. |
-| **Cost posture** | Zero. `cost_capped: false` because there is nothing to cap. |
-| **TTL / lifecycle** | None; a developer stops the dev server. |
-| **Security posture** | No credentials, no tenant data, no secrets. The profile explicitly forbids `backend`, `postgres`, `redis`, `localstack`, `clickhouse`, `ml` and `aws-services`, so a mocked session cannot silently acquire a real backend. |
-| **Validation** | `make validate-profile-config` (declaration coherence); `python scripts/validate_frontend_data_truth.py` asserts no synthetic dataset is compiled into a non-demo bundle. |
-| **Limitations** | Proves nothing about the backend. Never a source of release evidence. |
-| **Promotion path** | → `local-live`. |
-
-## `local-live`
+## `local`
 
 | | |
 |---|---|
@@ -71,7 +52,7 @@ contain a forbidden resource. See
 | **Selection** | `docker-compose up` with the default services (Postgres + one backend process). |
 | **Resource inventory** | Postgres, one backend process, inline ML, local frontends. Optional: LocalStack, ClickHouse, legacy Redis, observability. |
 | **Runtime topology** | One process. The `all` role is a local/test convenience token and is **never deployable** — `scripts/release/check_delivery_topology.py` enforces that. |
-| **Data behaviour** | `database: postgres`, `graph: postgres`, `analytics: postgres`, `cache: memory`, `event: memory`, `object: memory`, `ml: inline`. |
+| **Data behaviour** | `database: postgres`, `graph: postgres`, `analytics: postgres`, `cache: memory`, `event: memory`, `object: memory`, `ml: inline`. Normal startup never seeds records. |
 | **Network behaviour** | Localhost only. |
 | **Cost posture** | Zero. |
 | **TTL / lifecycle** | None. |
@@ -97,36 +78,19 @@ contain a forbidden resource. See
 | **Limitations** | LocalStack is not SQS/SNS. Consumer-group and DLQ behaviour is representative, not authoritative. |
 | **Promotion path** | → `staging`. |
 
-## `demo-static`
-
-| | |
-|---|---|
-| **Purpose** | Zero/near-zero-cost sales and investor demo. |
-| **Selection** | **Not implemented as automation in this repository.** Declared in the profile matrix only. |
-| **Resource inventory** | Static frontend plus pre-computed synthetic data on S3. `object: s3`; every other backend dimension is `none`. |
-| **Runtime topology** | None — no API and no workers. |
-| **Data behaviour** | Synthetic, pre-computed, immutable. No tenant data of any kind. |
-| **Network behaviour** | Static origin behind a CDN. |
-| **Cost posture** | `cost_capped: true`; no `budget` block and therefore no numeric gate. |
-| **TTL / lifecycle** | None declared. |
-| **Security posture** | No live backend to attack; no credentials issued. `scripts/validate_frontend_data_truth.py` is the control that keeps synthetic demo data out of every other profile's bundle. |
-| **Validation** | `make validate-profile-config`. |
-| **Limitations** | No selection mechanism, no deployment workflow, no infrastructure. Do not describe it as an available environment. |
-| **Promotion path** | → `demo-live` when a live backend is genuinely needed. |
-
-## `demo-live`
+## `demo`
 
 | | |
 |---|---|
 | **Purpose** | Temporary live demo against a shared non-production backend. |
 | **Selection** | **Not implemented as automation in this repository.** No Terraform selector, no workflow, no TTL job exists. |
 | **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. |
-| **Runtime topology** | Undeclared — `config/runtime_deployment.yaml` carries no `demo-live` entry. |
-| **Data behaviour** | Synthetic tenant only. Never real customer data. |
+| **Runtime topology** | Shared non-production backend; no browser-side data service. |
+| **Data behaviour** | Versioned backend-seeded synthetic tenant only. Never real customer data; normal startup remains empty. |
 | **Network behaviour** | Shared non-production network. |
 | **Cost posture** | `cost_capped: true`; no numeric budget declared. |
 | **TTL / lifecycle** | `ttl_cleanup_required: true` is **declared but not enforced by any shipped job**. |
-| **Security posture** | Would inherit the shared non-production account's posture. Unproven. |
+| **Security posture** | Would inherit the shared non-production account's posture. Seed/reset additionally require an explicit staging demo policy and tenant allowlist. Unproven. |
 | **Validation** | `make validate-profile-config` only. |
 | **Limitations** | The TTL requirement has no enforcement, which is the exact failure mode that leaves demo environments running. Treat the declaration as a design constraint, not a control. |
 | **Promotion path** | None. A demo is never promoted; a release is rehearsed in `staging`. |

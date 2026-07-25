@@ -2,16 +2,20 @@ import { useEffect, useState } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, useTimeContext, type TimeContext } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
-function useTenantId(): string {
+function useTenantId(): { tenantId: string; loading: boolean; error: string | null } {
   const [tenantId, setTenantId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api.me.profile().then((data: unknown) => {
       const r = data as Record<string, unknown>;
       const id = String(r['tenant_id'] ?? r['tenantId'] ?? '');
-      if (id) setTenantId(id);
-    }).catch(() => {});
+      if (!id) throw new Error('Authenticated profile omitted tenant identity');
+      setTenantId(id);
+    }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
   }, []);
-  return tenantId;
+  return { tenantId, loading, error };
 }
 
 type AnyRecord = Record<string, unknown>;
@@ -136,10 +140,14 @@ function IntentCard({ intent, tenantId }: IntentCardProps) {
   const [attempts, setAttempts] = useState<Record<string, AnyRecord[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState<string | null>(null);
 
   function loadJobs() {
     if (loaded) return;
     setLoaded(true);
+    setJobsLoading(true);
+    setJobsError(null);
     api.delivery.listJobs({ intent_id: String(intent.id), tenantId })
       .then(async (d: unknown) => {
         const jobList = (((d as AnyRecord).data ?? (d as AnyRecord).items) ?? []) as AnyRecord[];
@@ -157,12 +165,15 @@ function IntentCard({ intent, tenantId }: IntentCardProps) {
             if (receiptData?.id) rcpts[jid] = receiptData;
             else if (jobData?.provider_receipt) rcpts[jid] = jobData.provider_receipt as AnyRecord;
             atts[jid] = ((inner?.attempts ?? []) as AnyRecord[]);
-          } catch { atts[jid] = []; }
+          } catch (e) {
+            throw e;
+          }
         }));
         setReceipts(rcpts);
         setAttempts(atts);
       })
-      .catch(() => {/* silently stay empty */});
+      .catch((e: unknown) => setJobsError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setJobsLoading(false));
   }
 
   const source = String(intent.source_type ?? '—');
@@ -185,7 +196,9 @@ function IntentCard({ intent, tenantId }: IntentCardProps) {
       </CardHeader>
       {loaded && (
         <CardContent className="pt-0">
-          {jobs.length === 0
+          {jobsLoading ? <LoadingState lines={3} /> : jobsError ? (
+            <EmptyState title="Delivery jobs unavailable" description={jobsError} />
+          ) : jobs.length === 0
             ? <p className="text-xs text-text-muted">No delivery jobs.</p>
             : (
               <table className="w-full">
@@ -227,7 +240,8 @@ function IntentCard({ intent, tenantId }: IntentCardProps) {
 }
 
 export function DeliveryHistoryPage() {
-  const tenantId = useTenantId();
+  const tenant = useTenantId();
+  const { tenantId } = tenant;
   const [intents, setIntents] = useState<AnyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -251,7 +265,8 @@ export function DeliveryHistoryPage() {
 
   useEffect(() => { load(page); }, [page, tenantId]);
 
-  if (loading) return <main className="p-6"><LoadingState lines={6} /></main>;
+  if (tenant.loading || loading) return <main className="p-6"><LoadingState lines={6} /></main>;
+  if (tenant.error) return <main className="p-6"><EmptyState title="Unable to identify tenant" description={tenant.error} /></main>;
   if (error) return <main className="p-6"><EmptyState title="Unable to load delivery history" description={error} /></main>;
 
   return (

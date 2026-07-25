@@ -2,9 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { settlementApi } from '@kyber/lib/api/settlement';
 import type { Settlement } from '@kyber/lib/schemas/commerce';
 
-const SETTLEMENT_LIST_UNAVAILABLE =
-  'settlement list unavailable: the backend does not expose a settlement collection endpoint';
-
 export interface StuckSettlement {
   settlement_id: string;
   state: string;
@@ -33,9 +30,15 @@ export function useSettlement(): UseSettlementResult {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    setSettlements([]);
-    setError(SETTLEMENT_LIST_UNAVAILABLE);
-    setLoading(false);
+    setError(null);
+    try {
+      setSettlements(await settlementApi.list());
+    } catch (e) {
+      setSettlements([]);
+      setError(e instanceof Error ? e.message : 'failed to load settlements');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const refreshStuck = useCallback(

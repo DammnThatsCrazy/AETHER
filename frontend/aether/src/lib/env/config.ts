@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const envSchema = z.object({
+const baseEnvSchema = z.object({
   VITE_AETHER_ENV: z.enum(['local', 'staging', 'production', 'test']),
   VITE_API_BASE_URL: z.string().url(),
   VITE_AETHER_API_KEY: z.string().default(''),
@@ -23,6 +23,44 @@ const envSchema = z.object({
   VITE_RELEASE_PROFILE: z.string().default(''),
 });
 
+const envSchema = baseEnvSchema.superRefine((value, ctx) => {
+  const nonLocal = value.VITE_AETHER_ENV === 'staging' || value.VITE_AETHER_ENV === 'production';
+  if (nonLocal) {
+    const oidcComplete = Boolean(
+      value.VITE_OIDC_AUTHORITY &&
+      value.VITE_OIDC_CLIENT_ID &&
+      value.VITE_OIDC_REDIRECT_URI,
+    );
+    const auth0Complete = Boolean(
+      value.VITE_AUTH0_DOMAIN &&
+      value.VITE_AUTH0_CLIENT_ID &&
+      value.VITE_AUTH0_REDIRECT_URI,
+    );
+    if (!oidcComplete && !auth0Complete) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['authentication'],
+        message: 'staging and production require a complete OIDC or Auth0 configuration',
+      });
+    }
+  }
+
+  if (value.VITE_AETHER_ENV === 'production') {
+    for (const [field, raw] of [
+      ['VITE_API_BASE_URL', value.VITE_API_BASE_URL],
+      ['VITE_AETHER_ENDPOINT', value.VITE_AETHER_ENDPOINT],
+    ] as const) {
+      if (new URL(raw).protocol !== 'https:') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: 'production backend URLs must use HTTPS',
+        });
+      }
+    }
+  }
+});
+
 export class EnvironmentStartupError extends Error {
   constructor(message: string) {
     super(message);
@@ -32,11 +70,8 @@ export class EnvironmentStartupError extends Error {
 
 export type EnvConfig = z.infer<typeof envSchema>;
 
-function loadEnv(): EnvConfig {
-  const raw: Record<string, string | undefined> = {};
-  for (const key of Object.keys(envSchema.shape)) {
-    raw[key] = import.meta.env[key] as string | undefined;
-  }
+export function parseEnvironment(input: Record<string, string | undefined>): EnvConfig {
+  const raw = { ...input };
   if (raw.VITE_AETHER_ENV === 'local-live') {
     console.warn('[AETHER] VITE_AETHER_ENV=local-live is deprecated; use local. This compatibility path is live-only and cannot enable mocks.');
     raw.VITE_AETHER_ENV = 'local';
@@ -49,14 +84,18 @@ function loadEnv(): EnvConfig {
   return result.data;
 }
 
+function loadEnv(): EnvConfig {
+  const raw: Record<string, string | undefined> = {};
+  for (const key of Object.keys(baseEnvSchema.shape)) {
+    raw[key] = import.meta.env[key] as string | undefined;
+  }
+  return parseEnvironment(raw);
+}
+
 export const env = loadEnv();
 
 export function getEnvironment() {
   return env.VITE_AETHER_ENV;
-}
-
-export function getRuntimeMode() {
-  return 'live' as const;
 }
 
 /**

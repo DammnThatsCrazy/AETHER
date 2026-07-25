@@ -6,7 +6,7 @@ import { setupServer } from 'msw/node';
 import { SemanticSentimentSection } from '@aether-app/pages/user-profile/user-profile-page';
 
 // Requests use relative paths (/v1/...) which resolve against the jsdom origin.
-const API = '';
+const API = 'http://localhost:8000';
 
 function envelope(data: unknown) {
   return { data, status: 'ok', timestamp: new Date().toISOString() };

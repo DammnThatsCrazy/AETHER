@@ -66,65 +66,7 @@ function campaignStatusVariant(s: unknown): 'success' | 'warning' | 'danger' | '
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface TenantRewardsData {
-  campaigns: AnyRecord[];
-  decisions: AnyRecord[];
-  actions: AnyRecord[];
-  auditLog: AnyRecord[];
-  hasMoreCampaigns: boolean;
-  hasMoreDecisions: boolean;
-  hasMoreActions: boolean;
-  hasMoreAudit: boolean;
-}
-
-const EMPTY_TENANT_DATA: TenantRewardsData = {
-  campaigns: [],
-  decisions: [],
-  actions: [],
-  auditLog: [],
-  hasMoreCampaigns: false,
-  hasMoreDecisions: false,
-  hasMoreActions: false,
-  hasMoreAudit: false,
-};
-
 const PAGE_SIZE = 20;
-
-// ─── Mock data builder ────────────────────────────────────────────────────────
-
-function buildMockTenantData(tenantId: string): TenantRewardsData {
-  return {
-    campaigns: [
-      { id: 'camp_001', name: 'Q2 Loyalty Drive', status: 'active', default_rail: 'erc20_transfer', created_at: '2026-04-01T00:00:00Z' },
-      { id: 'camp_002', name: 'Referral Bonus Round', status: 'active', default_rail: 'coinbase_pay', created_at: '2026-04-15T00:00:00Z' },
-      { id: 'camp_003', name: 'Early Adopter Boost', status: 'ended', default_rail: 'circle_usdc', created_at: '2026-01-10T00:00:00Z' },
-    ],
-    decisions: [
-      { id: `dec_${tenantId}_001`, decision: 'eligible', campaign_id: 'camp_001', wallet_address: '0xabc...111', fraud_score: 0.03, attribution_weight: 0.92, created_at: '2026-06-14T14:01:00Z' },
-      { id: `dec_${tenantId}_002`, decision: 'eligible', campaign_id: 'camp_002', wallet_address: '0xdef...222', fraud_score: 0.01, attribution_weight: 0.88, created_at: '2026-06-14T14:00:45Z' },
-      { id: `dec_${tenantId}_003`, decision: 'blocked_fraud', campaign_id: 'camp_001', wallet_address: '0x456...333', fraud_score: 0.91, attribution_weight: 0.00, created_at: '2026-06-14T13:58:00Z' },
-      { id: `dec_${tenantId}_004`, decision: 'ineligible', campaign_id: 'camp_003', wallet_address: '0x789...444', fraud_score: 0.05, attribution_weight: 0.00, created_at: '2026-06-14T13:55:00Z' },
-      { id: `dec_${tenantId}_005`, decision: 'eligible', campaign_id: 'camp_002', wallet_address: '0xccc...555', fraud_score: 0.02, attribution_weight: 0.76, created_at: '2026-06-14T13:52:00Z' },
-    ],
-    actions: [
-      { id: `act_${tenantId}_001`, rail: 'erc20_transfer', status: 'delivered', delivery_attempts: 1, created_at: '2026-06-14T14:01:10Z' },
-      { id: `act_${tenantId}_002`, rail: 'coinbase_pay', status: 'delivered', delivery_attempts: 1, created_at: '2026-06-14T14:00:55Z' },
-      { id: `act_${tenantId}_003`, rail: 'erc20_transfer', status: 'failed', delivery_attempts: 3, created_at: '2026-06-14T13:48:00Z' },
-      { id: `act_${tenantId}_004`, rail: 'circle_usdc', status: 'pending_approval', delivery_attempts: 0, created_at: '2026-06-14T13:45:00Z' },
-    ],
-    auditLog: [
-      { actor_type: 'operator', action: 'campaign.created', target_type: 'campaign', target_id: 'camp_001', created_at: '2026-04-01T09:00:00Z' },
-      { actor_type: 'system', action: 'decision.evaluated', target_type: 'decision', target_id: `dec_${tenantId}_001`, created_at: '2026-06-14T14:01:00Z' },
-      { actor_type: 'operator', action: 'campaign.paused', target_type: 'campaign', target_id: 'camp_002', created_at: '2026-06-14T12:00:00Z' },
-      { actor_type: 'system', action: 'action.delivered', target_type: 'action', target_id: `act_${tenantId}_001`, created_at: '2026-06-14T14:01:10Z' },
-      { actor_type: 'tenant', action: 'rail.configured', target_type: 'rail', target_id: 'erc20_transfer', created_at: '2026-03-20T08:00:00Z' },
-    ],
-    hasMoreCampaigns: false,
-    hasMoreDecisions: true,
-    hasMoreActions: true,
-    hasMoreAudit: false,
-  };
-}
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
 
@@ -132,73 +74,40 @@ async function fetchTenantCampaigns(
   tenantId: string,
   offset: number,
 ): Promise<{ items: AnyRecord[]; hasMore: boolean }> {
-  try {
-    const raw = await (api as AnyRecord as { campaigns?: { list?: (p: AnyRecord) => Promise<AnyRecord> } })
-      .campaigns?.list?.({ tenant_id: tenantId, limit: PAGE_SIZE, offset }) ??
-      await fetch(`/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/campaigns?limit=${PAGE_SIZE}&offset=${offset}`)
-        .then(r => (r.ok ? r.json() : Promise.reject(r.statusText)));
-    const d = (raw as AnyRecord)?.data ?? raw;
-    const items = asArr((d as AnyRecord)?.campaigns ?? (d as AnyRecord)?.items ?? d);
-    const hasMore = Boolean((d as AnyRecord)?.has_more ?? items.length === PAGE_SIZE);
-    return { items, hasMore };
-  } catch {
-    const mock = buildMockTenantData(tenantId);
-    return { items: mock.campaigns, hasMore: mock.hasMoreCampaigns };
-  }
+  const d = await api.admin.kyber.tenantRewardCampaigns(tenantId, PAGE_SIZE, offset) as AnyRecord;
+  const items = asArr(d.campaigns ?? d.items ?? d);
+  const hasMore = Boolean(d.has_more ?? items.length === PAGE_SIZE);
+  return { items, hasMore };
 }
 
 async function fetchTenantDecisions(
   tenantId: string,
   offset: number,
 ): Promise<{ items: AnyRecord[]; hasMore: boolean }> {
-  try {
-    const raw = await fetch(
-      `/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/decisions?limit=${PAGE_SIZE}&offset=${offset}`,
-    ).then(r => (r.ok ? r.json() : Promise.reject(r.statusText)));
-    const d = (raw as AnyRecord)?.data ?? raw;
-    const items = asArr((d as AnyRecord)?.decisions ?? (d as AnyRecord)?.items ?? d);
-    const hasMore = Boolean((d as AnyRecord)?.has_more ?? items.length === PAGE_SIZE);
-    return { items, hasMore };
-  } catch {
-    const mock = buildMockTenantData(tenantId);
-    return { items: mock.decisions, hasMore: mock.hasMoreDecisions };
-  }
+  const d = await api.admin.kyber.tenantRewardDecisions(tenantId, PAGE_SIZE, offset) as AnyRecord;
+  const items = asArr(d.decisions ?? d.items ?? d);
+  const hasMore = Boolean(d.has_more ?? items.length === PAGE_SIZE);
+  return { items, hasMore };
 }
 
 async function fetchTenantActions(
   tenantId: string,
   offset: number,
 ): Promise<{ items: AnyRecord[]; hasMore: boolean }> {
-  try {
-    const raw = await fetch(
-      `/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/actions?limit=${PAGE_SIZE}&offset=${offset}`,
-    ).then(r => (r.ok ? r.json() : Promise.reject(r.statusText)));
-    const d = (raw as AnyRecord)?.data ?? raw;
-    const items = asArr((d as AnyRecord)?.actions ?? (d as AnyRecord)?.items ?? d);
-    const hasMore = Boolean((d as AnyRecord)?.has_more ?? items.length === PAGE_SIZE);
-    return { items, hasMore };
-  } catch {
-    const mock = buildMockTenantData(tenantId);
-    return { items: mock.actions, hasMore: mock.hasMoreActions };
-  }
+  const d = await api.admin.kyber.tenantRewardActions(tenantId, PAGE_SIZE, offset) as AnyRecord;
+  const items = asArr(d.actions ?? d.items ?? d);
+  const hasMore = Boolean(d.has_more ?? items.length === PAGE_SIZE);
+  return { items, hasMore };
 }
 
 async function fetchTenantAuditLog(
   tenantId: string,
   offset: number,
 ): Promise<{ items: AnyRecord[]; hasMore: boolean }> {
-  try {
-    const raw = await fetch(
-      `/v1/admin/kyber/tenants/${encodeURIComponent(tenantId)}/audit?limit=${PAGE_SIZE}&offset=${offset}`,
-    ).then(r => (r.ok ? r.json() : Promise.reject(r.statusText)));
-    const d = (raw as AnyRecord)?.data ?? raw;
-    const items = asArr((d as AnyRecord)?.entries ?? (d as AnyRecord)?.items ?? d);
-    const hasMore = Boolean((d as AnyRecord)?.has_more ?? items.length === PAGE_SIZE);
-    return { items, hasMore };
-  } catch {
-    const mock = buildMockTenantData(tenantId);
-    return { items: mock.auditLog, hasMore: mock.hasMoreAudit };
-  }
+  const d = await api.admin.kyber.tenantRewardAudit(tenantId, PAGE_SIZE, offset) as AnyRecord;
+  const items = asArr(d.entries ?? d.items ?? d);
+  const hasMore = Boolean(d.has_more ?? items.length === PAGE_SIZE);
+  return { items, hasMore };
 }
 
 // ─── Paginated section hook ───────────────────────────────────────────────────
@@ -298,7 +207,9 @@ function SectionCard({
             message={error}
             onRetry={onRetry}
           />
-        ) : isEmpty && !loading ? (
+        ) : loading && isEmpty ? (
+          <LoadingState lines={3} />
+        ) : isEmpty ? (
           <EmptyState title={emptyTitle} description={emptyDescription} />
         ) : (
           <>
@@ -434,7 +345,8 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
               key: 'fraud_score',
               header: 'Fraud Score',
               render: (r) => {
-                const score = Number(r.fraud_score ?? 0);
+                if (r.fraud_score == null) return <span className="text-xs text-text-muted">—</span>;
+                const score = Number(r.fraud_score);
                 const cls =
                   score > 0.7
                     ? 'text-red-500 font-semibold'
@@ -449,7 +361,7 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
               header: 'Attribution Wt.',
               render: (r) => (
                 <span className="text-xs text-text-secondary">
-                  {Number(r.attribution_weight ?? 0).toFixed(2)}
+                  {r.attribution_weight == null ? '—' : Number(r.attribution_weight).toFixed(2)}
                 </span>
               ),
             },
@@ -509,7 +421,8 @@ function TenantDrilldown({ tenantId }: { readonly tenantId: string }) {
                 key: 'delivery_attempts',
                 header: 'Attempts',
                 render: (r) => {
-                  const n = Number(r.delivery_attempts ?? 0);
+                  if (r.delivery_attempts == null) return <span className="text-xs text-text-muted">—</span>;
+                  const n = Number(r.delivery_attempts);
                   const cls = n > 2 ? 'text-red-500 font-semibold' : n > 0 ? 'text-text-secondary' : 'text-text-muted';
                   return <span className={`text-xs ${cls}`}>{n}</span>;
                 },

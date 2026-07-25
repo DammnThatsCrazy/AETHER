@@ -217,21 +217,18 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
 
       // 2. Delegation records → H2A / A2H / A2A edges
       // GET /v1/delegations returns { delegations: rows, count: N } (list shape).
-      try {
-        const delData = await api.graph.delegations({ limit: 500 });
-        delData.delegations.forEach((d: unknown, i: number) => addEdge(mapDelegationEdge(d, i)));
-      } catch { /* delegation endpoint may be empty or unavailable */ }
+      const delData = await api.graph.delegations({ limit: 500 });
+      delData.delegations.forEach((d: unknown, i: number) => addEdge(mapDelegationEdge(d, i)));
 
       // 3. Identity links for a sample of entities → H2H edges
       const sampleIds = nodes.slice(0, ENTITY_LINK_SAMPLE).map(n => n.id);
-      const linkResults = await Promise.allSettled(
+      const linkResults = await Promise.all(
         sampleIds.map(id => api.graph.links(id, 50)),
       );
-      linkResults.forEach((result, i) => {
-        if (result.status !== 'fulfilled') return;
+      linkResults.forEach((links, i) => {
         const entityId = sampleIds[i];
         if (!entityId) return;
-        result.value.forEach((l, j) => addEdge(mapLinkEdge(l, entityId, j)));
+        links.forEach((l, j) => addEdge(mapLinkEdge(l, entityId, j)));
       });
 
       // 4. Clusters derived from entity-level cluster_id property

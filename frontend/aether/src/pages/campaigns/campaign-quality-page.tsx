@@ -1,6 +1,6 @@
 import {
   Card, CardContent, CardHeader,
-  ErrorState, LoadingState,
+  EmptyState, ErrorState, LoadingState,
   formatCount, useTimeContext,
 } from '@aether/ui';
 import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
@@ -100,6 +100,17 @@ export function CampaignQualityPage() {
       <LoadingState lines={6} />
     </div>
   );
+
+  if (Object.keys(q).length === 0) {
+    return (
+      <div className="p-8">
+        <EmptyState
+          title="No quality metrics available"
+          description="Measurement-quality metrics appear after campaign evidence has been evaluated."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8">

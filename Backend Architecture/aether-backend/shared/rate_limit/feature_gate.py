@@ -44,6 +44,8 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/v1/billing/plans",
     # Email+password login (returns session API key).
     "/v1/auth/login",
+    # Loopback-restricted and mounted only by local/dev backend profiles.
+    "/v1/auth/development-session",
     # SSO via Auth0 (Google, Apple, Microsoft, Twitter/X, Slack).
     "/v1/auth/sso/callback",
     "/v1/auth/sso/providers",

@@ -1,6 +1,4 @@
 export type Environment = 'local' | 'staging' | 'production' | 'test';
-export type RuntimeMode = 'mocked' | 'live';
-
 export type Severity = 'P0' | 'P1' | 'P2' | 'P3' | 'info';
 
 export type ActionClass = 0 | 1 | 2 | 3 | 4 | 5;
@@ -32,7 +30,7 @@ export interface ApiError {
 export interface HealthStatus {
   readonly status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
   readonly message?: string | undefined;
-  readonly lastChecked: string;
+  readonly lastChecked?: string | undefined;
 }
 
 export interface ThroughputMetrics {
