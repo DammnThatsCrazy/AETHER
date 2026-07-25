@@ -47,7 +47,13 @@ Either way the guarantees that matter hold:
   (see :meth:`ConsumerRunner.worker_spec`), so one role's crash is surfaced and
   restarted without disturbing the others. Nothing here is a serial loop.
 - **Drain isolation.** Each consumer drains against its own longest declared
-  ``drain_timeout_s`` and reports its own per-role result.
+  ``drain_timeout_s`` and reports its own per-role result. A drain quiesces the
+  consumer *before* releasing its client, so work that completes mid-shutdown is
+  still acknowledged rather than redelivered.
+- **Dead-letter isolation.** Each consumer binds its own dead-letter queue,
+  resolved by role from ``SQS_ROLE_DLQ_URLS``. A dead letter is never published
+  onto a queue this process consumes from — doing so deletes the event, because
+  nothing subscribes ``Topic.DEAD_LETTER`` and an unhandled message is acked.
 
 In a dedicated deployment the selection collapses to exactly one runner, so
 ``production-scale`` / ``enterprise-isolated`` behaviour is unchanged.
@@ -79,6 +85,14 @@ ROLE_QUEUE_URLS_ENV = "SQS_ROLE_QUEUE_URLS"
 # when the process hosts exactly one queue-bound role.
 DEFAULT_QUEUE_URL_ENV = "SQS_QUEUE_URL"
 
+# The dead-letter mirror of the two variables above. A dead letter must reach a
+# destination this process does not consume from — publishing one back onto the
+# source queue destroys it (see EventConsumer._resolve_dlq_target) — and a
+# consolidated process dead-letters on behalf of several roles that each own a
+# separate dead-letter queue, so one process-wide URL cannot express it.
+ROLE_DLQ_URLS_ENV = "SQS_ROLE_DLQ_URLS"
+DEFAULT_DLQ_URL_ENV = "SQS_DLQ_QUEUE_URL"
+
 # Runner lifecycle states surfaced by ConsumerRunner.status().
 STATE_CREATED = "created"
 STATE_RUNNING = "running"
@@ -104,14 +118,14 @@ class ConsumerLoopExited(RuntimeError):
     """
 
 
-def role_queue_urls(raw: Optional[str] = None) -> dict[str, str]:
-    """Parse ``SQS_ROLE_QUEUE_URLS`` into a ``{key: queue_url}`` mapping.
+def _parse_url_map(env_var: str, raw: Optional[str]) -> dict[str, str]:
+    """Parse a ``{role: url}`` JSON object from ``env_var``.
 
-    Malformed JSON fails closed rather than degrading to the single-queue
+    Malformed JSON fails closed rather than degrading to the single-URL
     fallback: silently binding every role to one queue is precisely the outage
-    this map exists to prevent.
+    these maps exist to prevent.
     """
-    payload = os.getenv(ROLE_QUEUE_URLS_ENV, "") if raw is None else raw
+    payload = os.getenv(env_var, "") if raw is None else raw
     payload = payload.strip()
     if not payload:
         return {}
@@ -119,14 +133,24 @@ def role_queue_urls(raw: Optional[str] = None) -> dict[str, str]:
         parsed = json.loads(payload)
     except json.JSONDecodeError as exc:
         raise RuntimeError(
-            f"{ROLE_QUEUE_URLS_ENV} is not valid JSON: {exc}"
+            f"{env_var} is not valid JSON: {exc}"
         ) from exc
     if not isinstance(parsed, dict):
         raise RuntimeError(
-            f"{ROLE_QUEUE_URLS_ENV} must be a JSON object mapping role -> queue url, "
+            f"{env_var} must be a JSON object mapping role -> queue url, "
             f"got {type(parsed).__name__}"
         )
     return {str(key): str(value) for key, value in parsed.items()}
+
+
+def role_queue_urls(raw: Optional[str] = None) -> dict[str, str]:
+    """Parse ``SQS_ROLE_QUEUE_URLS`` into a ``{role: queue_url}`` mapping."""
+    return _parse_url_map(ROLE_QUEUE_URLS_ENV, raw)
+
+
+def role_dlq_urls(raw: Optional[str] = None) -> dict[str, str]:
+    """Parse ``SQS_ROLE_DLQ_URLS`` into a ``{role: dlq_queue_url}`` mapping."""
+    return _parse_url_map(ROLE_DLQ_URLS_ENV, raw)
 
 
 def resolve_queue_url(role: str, *, mapping: Optional[dict[str, str]] = None) -> str:
@@ -144,6 +168,24 @@ def resolve_queue_url(role: str, *, mapping: Optional[dict[str, str]] = None) ->
     """
     table = role_queue_urls() if mapping is None else mapping
     return table.get(role) or os.getenv(DEFAULT_QUEUE_URL_ENV, "")
+
+
+def resolve_dlq_url(role: str, *, mapping: Optional[dict[str, str]] = None) -> str:
+    """Resolve the dead-letter queue ``role`` publishes poison events to.
+
+    Keyed by role for the same reason as :func:`resolve_queue_url`:
+    ``modules/sqs/main.tf`` already creates one ``aws_sqs_queue.role_dlq`` per
+    entry of ``var.consumer_role_queues``, so a per-role destination genuinely
+    exists — it is simply not yet passed to the process.
+
+    Returns ``""`` when nothing is configured. That is not a silent fallback:
+    :meth:`EventConsumer._resolve_dlq_target` refuses to publish without a
+    target, leaving the poison message unacknowledged so SQS's own redrive
+    policy quarantines it. An unconfigured DLQ costs redeliveries, never the
+    event.
+    """
+    table = role_dlq_urls() if mapping is None else mapping
+    return table.get(role) or os.getenv(DEFAULT_DLQ_URL_ENV, "")
 
 
 class _RegistryConsumerView:
@@ -188,10 +230,20 @@ class ConsumerRunner:
         specs: Sequence[ConsumerSpec],
         registry: Any,
         queue_url: str = "",
+        dlq_queue_url: str = "",
         consumer_factory: Optional[Callable[..., EventConsumer]] = None,
     ) -> None:
         if not specs:
             raise ValueError(f"ConsumerRunner for {role}/{group_id} needs at least one spec")
+        if dlq_queue_url and dlq_queue_url == queue_url:
+            # Fail at construction rather than at the first poison event: a
+            # dead letter published onto its own source queue is consumed as an
+            # unhandled topic and deleted, destroying the event.
+            raise RuntimeError(
+                f"dead-letter queue for role {role} is its own source queue "
+                f"({queue_url}). Give the role a distinct entry in "
+                f"{ROLE_DLQ_URLS_ENV}."
+            )
         self.role = role
         # The group pinned onto the EventConsumer. Under sns_sqs a role's specs
         # may declare several groups; the pin is then cosmetic (SQS has no
@@ -202,9 +254,12 @@ class ConsumerRunner:
             dict.fromkeys(spec.group_id for spec in self.specs)
         )
         self.queue_url = queue_url
+        self.dlq_queue_url = dlq_queue_url
 
         factory = consumer_factory or EventConsumer
-        self._consumer = factory(group_id=group_id, queue_url=queue_url)
+        self._consumer = factory(
+            group_id=group_id, queue_url=queue_url, dlq_queue_url=dlq_queue_url,
+        )
         # Per-group backpressure and retry envelope — never a process-wide max.
         apply_consumer_limits(self._consumer, self.specs)
 
@@ -314,7 +369,27 @@ class ConsumerRunner:
         )
 
     async def drain(self, timeout: Optional[float] = None) -> dict[str, Any]:
-        """Stop acquiring and wait for in-flight handlers, bounded by budget.
+        """Quiesce this consumer, then release its broker client.
+
+        Order is the whole point, and the previous order was backwards. It
+        called ``consumer.stop()`` first — which sets ``_sqs_client = None`` —
+        and only then waited for in-flight handlers. Every handler that
+        completed during that wait had its ``delete_message`` fail with
+        ``AttributeError`` against the ``None`` client, the receive loop
+        swallowed it, and SQS redelivered the message once its visibility
+        timeout expired. Not an edge case: every message in the batch being
+        processed, on every consumer, on every deploy.
+
+        The correct sequence, and the one implemented here:
+
+        1. :meth:`EventConsumer.pause` — stop pulling *new* work. The client
+           stays bound, so acknowledgements still work.
+        2. Wait for the consumer to be genuinely quiesced: no handler running
+           **and** nothing unacknowledged. Waiting on handlers alone is not
+           enough, because ``in_flight`` returns to zero the moment a handler
+           returns, while the delete/commit for that same message is still
+           outstanding — the tear-down would land in exactly that window.
+        3. Only then :meth:`EventConsumer.stop`, releasing the clients.
 
         Returns a per-role drain report. Idempotent. Never raises: a shutdown
         path that fails to stop one role must still drain the rest.
@@ -323,8 +398,24 @@ class ConsumerRunner:
         self._state = STATE_DRAINING
         budget = self._drain_timeout_s if timeout is None else timeout
 
+        # Step 1 — stop acquiring. Handlers already running are unaffected, and
+        # the client they need to acknowledge through is still bound.
+        self._consumer.pause()
+
+        # Step 2 — wait for both quiescence conditions within the budget.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(budget, 0.0)
+        while (
+            self._consumer.in_flight > 0 or self._consumer.unacked > 0
+        ) and loop.time() < deadline:
+            await asyncio.sleep(_DRAIN_POLL_S)
+
+        remaining = self._consumer.in_flight
+        unacked = self._consumer.unacked
+
+        # Step 3 — release the clients. Anything still outstanding at this point
+        # is already reported as an incomplete drain below.
         try:
-            # Stop acquisition first; handlers already running are unaffected.
             await self._consumer.stop()
         except Exception as exc:  # pragma: no cover — defensive
             self._last_error = f"{type(exc).__name__}: {exc}"
@@ -333,29 +424,26 @@ class ConsumerRunner:
                 self.role, self.group_id, self._last_error,
             )
 
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + max(budget, 0.0)
-        while self._consumer.in_flight > 0 and loop.time() < deadline:
-            await asyncio.sleep(_DRAIN_POLL_S)
-
-        remaining = self._consumer.in_flight
         self._state = STATE_STOPPED
         report = {
             "role": self.role,
             "group_id": self.group_id,
             "specs": list(self.spec_names),
-            "drained": remaining == 0,
+            "drained": remaining == 0 and unacked == 0,
             "in_flight_remaining": remaining,
+            "unacked_remaining": unacked,
             "timeout_s": budget,
         }
-        if remaining:
+        if remaining or unacked:
             metrics.increment(
                 "consumer_drain_incomplete",
                 labels={"role": self.role, "group": self.group_id},
             )
             logger.error(
-                "consumer_drain_incomplete role=%s group=%s in_flight=%d timeout_s=%.3f",
-                self.role, self.group_id, remaining, budget,
+                "consumer_drain_incomplete role=%s group=%s in_flight=%d "
+                "unacked=%d timeout_s=%.3f — unacknowledged messages will be "
+                "redelivered",
+                self.role, self.group_id, remaining, unacked, budget,
             )
         else:
             logger.info(
@@ -376,9 +464,15 @@ class ConsumerRunner:
             "specs": list(self.spec_names),
             "mode": self._consumer.mode,
             "queue_url": self._consumer.queue_url or self.queue_url,
+            # Empty means no dead-letter destination is configured for this
+            # role, which is a real operational state worth seeing in status:
+            # poison events will be redelivered until SQS's redrive policy
+            # quarantines them, rather than being published on the first failure.
+            "dlq_queue_url": self.dlq_queue_url,
             "max_concurrent": self._consumer.MAX_CONCURRENT,
             "max_handler_retries": self._consumer.MAX_HANDLER_RETRIES,
             "in_flight": self._consumer.in_flight,
+            "unacked": self._consumer.unacked,
             "dlq_depth": self._consumer.dlq_depth,
             "required": self._required,
             "last_error": self._last_error,
@@ -402,6 +496,7 @@ def build_consumer_runners(
     *,
     broker: Optional[str] = None,
     queue_urls: Optional[dict[str, str]] = None,
+    dlq_urls: Optional[dict[str, str]] = None,
     consumer_factory: Optional[Callable[..., EventConsumer]] = None,
 ) -> list[ConsumerRunner]:
     """Build the consumer runners for ``specs`` under the active broker.
@@ -426,6 +521,7 @@ def build_consumer_runners(
         grouped.setdefault(key, []).append(spec)
 
     mapping = role_queue_urls() if queue_urls is None else queue_urls
+    dlq_mapping = role_dlq_urls() if dlq_urls is None else dlq_urls
     runners: list[ConsumerRunner] = []
     for (role, _key_group), group_specs in grouped.items():
         runners.append(
@@ -440,6 +536,10 @@ def build_consumer_runners(
                 # bootstrap + group, so resolving a queue would be meaningless
                 # (and would make every runner look like it shares one queue).
                 queue_url=resolve_queue_url(role, mapping=mapping) if queue_keyed else "",
+                # Same reasoning: dead-letter queues are an SQS concern. Under
+                # kafka the durable dead-letter destination is the DEAD_LETTER
+                # topic, which needs no per-role binding.
+                dlq_queue_url=resolve_dlq_url(role, mapping=dlq_mapping) if queue_keyed else "",
                 consumer_factory=consumer_factory,
             )
         )

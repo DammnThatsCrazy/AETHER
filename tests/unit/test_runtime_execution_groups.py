@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import signal
 import sys
 import time
 from pathlib import Path
@@ -35,7 +37,9 @@ from services.runtime.consumer_runner import (  # noqa: E402
     build_consumer_runners,
     consumer_runner_status,
     drain_consumer_runners,
+    resolve_dlq_url,
     resolve_queue_url,
+    role_dlq_urls,
     role_queue_urls,
     start_consumer_runners,
 )
@@ -61,6 +65,7 @@ from services.runtime.roles import (  # noqa: E402
 )
 from services.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
 from shared.events.events import (  # noqa: E402
+    ConsumerClientTornDown,
     DLQPublishError,
     Event,
     EventConsumer,
@@ -87,6 +92,7 @@ def _isolated_event_env(monkeypatch):
     monkeypatch.delenv("SQS_QUEUE_URL", raising=False)
     monkeypatch.delenv("SQS_DLQ_QUEUE_URL", raising=False)
     monkeypatch.delenv("SQS_ROLE_QUEUE_URLS", raising=False)
+    monkeypatch.delenv("SQS_ROLE_DLQ_URLS", raising=False)
 
 
 class _FakeRegistry:
@@ -121,16 +127,58 @@ class _MetricsRecorder:
         return [labels for metric, labels in self.calls if metric == name]
 
 
-# The per-role queue map production-lean supplies. Keyed by role and only by
-# role, mirroring modules/sqs/main.tf, which provisions one aws_sqs_queue.role
-# per entry of var.consumer_role_queues.
+# The per-role queue map production-lean actually supplies.
+#
+# This used to carry five entries with a comment claiming it mirrored
+# modules/sqs/main.tf. It did not. Terraform's var.consumer_role_queues default
+# has FOUR entries — semantic-worker is absent — so every test built on the old
+# map asserted a topology that has never been deployed. The map is now the four
+# roles Terraform genuinely provisions a queue for, and
+# ``test_queue_map_mirrors_the_terraform_module_default`` checks that claim
+# against the .tf file instead of restating it in a comment.
 _QUEUE_MAP = {
     "stream-worker": "https://sqs.test/stream",
     "identity-worker": "https://sqs.test/identity",
     "graph-writer": "https://sqs.test/graph",
     "measurement-worker": "https://sqs.test/measurement",
-    "semantic-worker": "https://sqs.test/semantic",
 }
+
+# The shared SNS-subscribed events queue (modules/sqs: aws_sqs_queue.events),
+# which ECS passes as SQS_QUEUE_URL. Any hosted consumer role without a
+# dedicated queue lands here through resolve_queue_url's documented fallback.
+_FALLBACK_QUEUE_URL = "https://sqs.test/events"
+
+# Consumer roles declared in consumer_specs.py that Terraform provisions NO
+# dedicated queue for. Not an accident to be papered over in tests: it is the
+# live topology, and it means semantic-worker consumes the shared events queue.
+_ROLES_WITHOUT_DEDICATED_QUEUE = {"semantic-worker"}
+
+# Per-role dead-letter queues. modules/sqs already creates one
+# aws_sqs_queue.role_dlq per consumer role; it simply does not yet output the
+# URLs or pass them to the task, so nothing sets SQS_ROLE_DLQ_URLS in the real
+# deployment. These are the URLs the runtime expects once it does.
+_DLQ_MAP = {role: f"{url}-dlq" for role, url in _QUEUE_MAP.items()}
+
+_TERRAFORM_SQS_VARIABLES = (
+    Path(__file__).parents[2]
+    / "AWS Deployment" / "aether-aws" / "terraform" / "modules" / "sqs" / "variables.tf"
+)
+
+
+def _terraform_consumer_role_queues() -> dict[str, str]:
+    """Parse ``var.consumer_role_queues``'s committed default out of the module.
+
+    Read rather than duplicated so the "mirrors Terraform" claim is verified.
+    A hand-copied map is exactly how the five-vs-four drift survived.
+    """
+    text = _TERRAFORM_SQS_VARIABLES.read_text(encoding="utf-8")
+    block = re.search(
+        r'variable\s+"consumer_role_queues"\s*\{.*?\bdefault\s*=\s*\{(.*?)\n\s*\}',
+        text,
+        re.DOTALL,
+    )
+    assert block, f"consumer_role_queues default not found in {_TERRAFORM_SQS_VARIABLES}"
+    return dict(re.findall(r'"([^"]+)"\s*=\s*"([^"]+)"', block.group(1)))
 
 
 async def _forever() -> None:
@@ -300,21 +348,52 @@ def test_every_consumer_spec_declares_exactly_what_it_subscribes():
         )
 
 
-def test_sqs_mode_binds_one_consumer_per_role_queue():
+def test_queue_map_mirrors_the_terraform_module_default():
+    """The map used by every SQS test must be what Terraform really provisions.
+
+    The old five-entry ``_QUEUE_MAP`` claimed this in a comment and was wrong,
+    which is why two topology tests asserted a deployment that does not exist.
+    Verify the claim instead of restating it.
+    """
+    terraform = _terraform_consumer_role_queues()
+    assert set(_QUEUE_MAP) == set(terraform), (
+        "_QUEUE_MAP has drifted from modules/sqs/variables.tf "
+        f"(terraform-only: {sorted(set(terraform) - set(_QUEUE_MAP))}, "
+        f"test-only: {sorted(set(_QUEUE_MAP) - set(terraform))}). "
+        "Update _QUEUE_MAP and _ROLES_WITHOUT_DEDICATED_QUEUE together."
+    )
+
+    # And the gap itself, pinned so it cannot widen unnoticed: every consumer
+    # role in the registry either owns a Terraform queue or is a known
+    # fallback-bound role.
+    declared_roles = {s.role for s in consumer_specs_for_role("lean-worker", _FakeSettings())}
+    assert declared_roles - set(terraform) == _ROLES_WITHOUT_DEDICATED_QUEUE
+    # Terraform must not provision a queue for a role no consumer spec claims.
+    assert set(terraform) - declared_roles == set()
+
+
+def test_sqs_mode_binds_one_consumer_per_role_queue(monkeypatch):
+    # Model the real lean-worker task environment: SQS_ROLE_QUEUE_URLS carries
+    # the roles Terraform gave a dedicated queue, SQS_QUEUE_URL carries the
+    # shared events queue that everything else falls back to.
+    monkeypatch.setenv("SQS_QUEUE_URL", _FALLBACK_QUEUE_URL)
     registry = _FakeRegistry()
     specs = consumer_specs_for_role("lean-worker", _FakeSettings())
     runners = build_consumer_runners(
         registry, specs, broker="sns_sqs", queue_urls=_QUEUE_MAP
     )
 
-    # One runner per consumer role — five, matching the five provisioned queues.
+    # One runner per consumer role — five roles are declared in code.
     assert len(runners) == 5
-    assert {r.role for r in runners} == set(_QUEUE_MAP)
+    assert {r.role for r in runners} == set(_QUEUE_MAP) | _ROLES_WITHOUT_DEDICATED_QUEUE
     assert len({id(r.consumer) for r in runners}) == 5
     assert all(r.consumer is not registry.consumer for r in runners)
 
     for runner in runners:
-        assert runner.queue_url == _QUEUE_MAP[runner.role]
+        # Four bind their dedicated Terraform queue; semantic-worker has none,
+        # so it binds the shared events queue via the documented fallback.
+        expected = _QUEUE_MAP.get(runner.role, _FALLBACK_QUEUE_URL)
+        assert runner.queue_url == expected
         # A real group is pinned, never the env-default fallback group.
         assert runner.consumer.group_id == runner.group_id
         assert not runner.consumer.group_id.startswith("aether-backend-")
@@ -326,12 +405,13 @@ def test_sqs_mode_binds_one_consumer_per_role_queue():
         assert set(runner.consumer._handlers) == declared
 
 
-def test_sqs_mode_gives_semantic_worker_one_consumer_carrying_both_groups():
+def test_sqs_mode_gives_semantic_worker_one_consumer_carrying_both_groups(monkeypatch):
     """Regression: two consumers on one SQS queue silently drop messages.
 
     SQS has no consumer groups — the two would compete for the queue, and
     whichever received a message it had no handler for would delete it.
     """
+    monkeypatch.setenv("SQS_QUEUE_URL", _FALLBACK_QUEUE_URL)
     specs = consumer_specs_for_role("semantic-worker", _FakeSettings())
     assert len({s.group_id for s in specs}) == 2
 
@@ -340,7 +420,11 @@ def test_sqs_mode_gives_semantic_worker_one_consumer_carrying_both_groups():
     )
     assert len(runners) == 1
     runner = runners[0]
-    assert runner.queue_url == "https://sqs.test/semantic"
+    # Terraform provisions no semantic-worker queue, so this role really does
+    # bind the shared events queue. Collapsing to one consumer matters more
+    # here, not less: a second consumer on the shared queue would steal and
+    # delete events every other role's queue also needs.
+    assert runner.queue_url == _FALLBACK_QUEUE_URL
     # Both group's handler sets live on the single queue-bound consumer, so
     # every event delivered to the role queue has a handler.
     assert set(runner.consumer._handlers) == {
@@ -376,8 +460,15 @@ def test_kafka_mode_gives_semantic_worker_two_independent_consumers():
     assert all(r.queue_url == "" for r in runners)
 
 
-def test_no_two_consumers_in_a_process_ever_share_a_queue():
-    """The invariant the whole module exists to uphold."""
+def test_no_two_consumers_in_a_process_ever_share_a_queue(monkeypatch):
+    """The invariant the whole module exists to uphold.
+
+    Exercised against the *real* binding, fallback included. Leaving
+    SQS_QUEUE_URL unset would give the fallback-bound role an empty URL, which
+    ``_assert_distinct_queues`` skips — so the test would have passed while
+    checking nothing about the one role whose binding is not explicit.
+    """
+    monkeypatch.setenv("SQS_QUEUE_URL", _FALLBACK_QUEUE_URL)
     for broker in ("sns_sqs", "kafka"):
         runners = build_consumer_runners(
             _FakeRegistry(), consumer_specs_for_role("lean-worker", _FakeSettings()),
@@ -385,6 +476,13 @@ def test_no_two_consumers_in_a_process_ever_share_a_queue():
         )
         bound = [r.queue_url for r in runners if r.queue_url]
         assert len(bound) == len(set(bound)), f"{broker}: consumers share a queue"
+    # Under sns_sqs every role is bound to something — no role silently ends up
+    # with no queue at all.
+    runners = build_consumer_runners(
+        _FakeRegistry(), consumer_specs_for_role("lean-worker", _FakeSettings()),
+        broker="sns_sqs", queue_urls=_QUEUE_MAP,
+    )
+    assert all(r.queue_url for r in runners)
 
 
 def test_colliding_queue_configuration_fails_closed(monkeypatch):
@@ -443,21 +541,28 @@ def test_distinct_roles_do_not_share_topic_handlers():
     assert identity.queue_url != measurement.queue_url
 
 
-def test_queue_url_reaches_the_event_consumer_constructor():
+def test_queue_url_reaches_the_event_consumer_constructor(monkeypatch):
+    monkeypatch.setenv("SQS_QUEUE_URL", _FALLBACK_QUEUE_URL)
     registry = _FakeRegistry()
-    seen: list[tuple[str, str]] = []
+    seen: list[tuple[str, str, str]] = []
 
-    def _recording_factory(*, group_id: str, queue_url: str) -> EventConsumer:
-        seen.append((group_id, queue_url))
-        return EventConsumer(group_id=group_id, queue_url=queue_url)
+    def _recording_factory(*, group_id: str, queue_url: str, dlq_queue_url: str = "") -> EventConsumer:
+        seen.append((group_id, queue_url, dlq_queue_url))
+        return EventConsumer(
+            group_id=group_id, queue_url=queue_url, dlq_queue_url=dlq_queue_url,
+        )
 
     specs = consumer_specs_for_role("lean-worker", _FakeSettings())
     build_consumer_runners(
-        registry, specs, broker="sns_sqs", queue_urls=_QUEUE_MAP,
+        registry, specs, broker="sns_sqs", queue_urls=_QUEUE_MAP, dlq_urls=_DLQ_MAP,
         consumer_factory=_recording_factory,
     )
-    assert ("aether-identity", "https://sqs.test/identity") in seen
-    assert ("aether-semantic", "https://sqs.test/semantic") in seen
+    # Queue AND dead-letter binding both reach the consumer, per role. Without
+    # the dead-letter binding a poison event has nowhere distinct to go.
+    assert ("aether-identity", "https://sqs.test/identity", "https://sqs.test/identity-dlq") in seen
+    # semantic-worker has no Terraform queue and therefore no Terraform DLQ:
+    # it falls back to the shared queue and to no dead-letter destination.
+    assert ("aether-semantic", _FALLBACK_QUEUE_URL, "") in seen
 
 
 def test_semantic_worker_group_no_longer_falls_back_to_the_default_group():
@@ -1308,3 +1413,726 @@ def test_resize_concurrency_rejects_unsafe_values():
     consumer._in_flight = 1
     with pytest.raises(RuntimeError, match="in flight"):
         consumer.resize_concurrency(5)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE REAL RECEIVE LOOPS
+#
+# Everything above drives ``consumer.process()`` directly. That is a fine way to
+# test handler semantics and a useless way to test delivery semantics, because
+# every acknowledgement decision — SQS delete, Kafka commit — lives in the
+# receive loop and never executed in a single test. Three separate data-loss
+# defects lived in that blind spot: dead letters published onto the source
+# queue, drains that tore the client down before acknowledging, and Kafka
+# commits that walked straight past a failed offset.
+#
+# The tests below run the actual ``_sqs_receive_loop`` / ``consume_loop`` and
+# assert on what was acknowledged, not on what was handled.
+# ═════════════════════════════════════════════════════════════════════════════
+
+_SOURCE_QUEUE = _QUEUE_MAP["identity-worker"]
+_ROLE_DLQ = _DLQ_MAP["identity-worker"]
+
+
+class _FakeSQSClient:
+    """A boto3 SQS client stand-in that records acknowledgements.
+
+    Exactly enough API for the real receive loop: each batch is handed out once,
+    after which the queue reads empty. Deletes and sends are what the tests
+    assert on — the handler being *called* was never the thing in doubt.
+    """
+
+    def __init__(self, batches=()) -> None:
+        self._batches = [list(batch) for batch in batches]
+        self.received: list[dict] = []
+        self.deleted: list[str] = []
+        self.sent: list[tuple[str, str]] = []
+        self.closed = False
+
+    def receive_message(self, **kwargs):
+        if self._batches:
+            batch = self._batches.pop(0)
+            self.received.extend(batch)
+            return {"Messages": batch}
+        # Stands in for the 20s long poll: runs on an executor thread, so a
+        # short sleep keeps the loop from spinning without blocking the loop.
+        time.sleep(0.005)
+        return {}
+
+    def delete_message(self, QueueUrl, ReceiptHandle):  # noqa: N803 — boto3 casing
+        self.deleted.append(ReceiptHandle)
+
+    def send_message(self, QueueUrl, MessageBody):  # noqa: N803 — boto3 casing
+        self.sent.append((QueueUrl, MessageBody))
+
+    def close(self):
+        self.closed = True
+
+
+def _sqs_message(event: Event, receipt: str) -> dict:
+    return {"ReceiptHandle": receipt, "Body": event.serialize(), "MessageId": event.event_id}
+
+
+def _bind_sqs(monkeypatch, client: _FakeSQSClient) -> None:
+    """Put the process in the SQS broker mode ``EventConsumer.start`` selects."""
+    monkeypatch.setenv("AETHER_ENV", "production")
+    monkeypatch.setenv("EVENT_BROKER", "sns_sqs")
+
+    class _StubBoto3:
+        @staticmethod
+        def client(name):
+            return client
+
+    monkeypatch.setattr(events_mod, "_boto3_events", _StubBoto3)
+    monkeypatch.setattr(events_mod, "BOTO3_EVENTS_AVAILABLE", True)
+
+
+async def _stop_loop(consumer: EventConsumer, task: asyncio.Task) -> None:
+    consumer.pause()
+    await asyncio.wait_for(task, 5)
+    await consumer.stop()
+
+
+# ── defect 1: a dead letter must never land on the queue it came from ────────
+
+
+async def test_sqs_receive_loop_deletes_only_what_it_successfully_processed(monkeypatch):
+    """Regression: the DLQ target fell back to the SOURCE queue, destroying events.
+
+    With ``SQS_DLQ_QUEUE_URL`` unset — which is every real deployment, because
+    nothing sets it — the poison event's ``aether.dlq`` copy was published onto
+    this consumer's own queue and the original deleted. The copy was then
+    received once, found no ``Topic.DEAD_LETTER`` subscriber, and was deleted as
+    an unhandled message. Redrive never fired (it counts receives *without*
+    deletion) and ``events_dead_lettered`` had already ticked, so the event
+    vanished while the metrics read healthy.
+    """
+    good = _event(Topic.SDK_EVENTS_VALIDATED, ok=True)
+    poison = _event(Topic.SDK_EVENTS_VALIDATED, ok=False)
+    client = _FakeSQSClient([[_sqs_message(good, "rh-good"), _sqs_message(poison, "rh-poison")]])
+    _bind_sqs(monkeypatch, client)
+
+    async def _handler(event):
+        if not event.payload["ok"]:
+            raise ValueError("poison payload")
+
+    consumer = EventConsumer(group_id="aether-identity", queue_url=_SOURCE_QUEUE)
+    consumer.MAX_HANDLER_RETRIES = 0
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _handler)
+    await consumer.start()
+    assert consumer.mode == "sqs"
+
+    task = asyncio.create_task(consumer.receive_loop())
+    # dlq_depth ticks only after the poison message has been fully attempted,
+    # and the good message precedes it in the batch.
+    await _wait_for(lambda: consumer.dlq_depth == 1)
+    await _stop_loop(consumer, task)
+
+    # The one that succeeded is acknowledged; the poison one is NOT, so its
+    # receipt expires and SQS's redrive policy quarantines it after
+    # maxReceiveCount. That is the only recoverable outcome available.
+    assert client.deleted == ["rh-good"]
+    # And nothing was pushed back onto the source queue.
+    assert client.sent == [], "a dead letter was published onto the source queue"
+
+
+async def test_dead_letter_is_never_published_onto_the_source_queue(monkeypatch):
+    """Impossible, not merely discouraged — including when explicitly misconfigured."""
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    client = _FakeSQSClient()
+
+    async def _always_fails(event):
+        raise ValueError("handler boom")
+
+    consumer = EventConsumer(group_id="g", queue_url=_SOURCE_QUEUE)
+    consumer._mode = "sqs"
+    consumer._sqs_client = client
+    consumer._sqs_queue_url = _SOURCE_QUEUE
+    consumer.MAX_HANDLER_RETRIES = 0
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _always_fails)
+
+    # (a) Nothing configured: refuse rather than fall back to the source queue.
+    with pytest.raises(DLQPublishError):
+        await consumer.process(_event())
+    assert client.sent == []
+
+    # (b) Explicitly pointed at the source queue: still refused. An operator
+    # cannot configure their way into destroying events.
+    monkeypatch.setenv("SQS_DLQ_QUEUE_URL", _SOURCE_QUEUE)
+    with pytest.raises(DLQPublishError):
+        await consumer.process(_event())
+    assert client.sent == []
+
+
+async def test_sqs_dead_letter_reaches_the_configured_role_dlq(monkeypatch):
+    """The happy path: a distinct destination, so the source CAN be acknowledged."""
+    poison = _event(Topic.SDK_EVENTS_VALIDATED, ok=False)
+    client = _FakeSQSClient([[_sqs_message(poison, "rh-poison")]])
+    _bind_sqs(monkeypatch, client)
+
+    async def _always_fails(event):
+        raise ValueError("handler boom")
+
+    consumer = EventConsumer(
+        group_id="aether-identity", queue_url=_SOURCE_QUEUE, dlq_queue_url=_ROLE_DLQ,
+    )
+    consumer.MAX_HANDLER_RETRIES = 0
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _always_fails)
+    await consumer.start()
+
+    task = asyncio.create_task(consumer.receive_loop())
+    await _wait_for(lambda: client.deleted == ["rh-poison"])
+    await _stop_loop(consumer, task)
+
+    # Quarantined on a queue this process does not consume, so deleting the
+    # original is now genuinely safe rather than a disguised drop.
+    assert [queue for queue, _ in client.sent] == [_ROLE_DLQ]
+    assert "handler boom" in client.sent[0][1]
+    # Durably published, so nothing was parked in the volatile in-memory list.
+    assert consumer.dlq_depth == 0
+
+
+def test_runner_refuses_a_dead_letter_queue_that_is_its_own_source():
+    async def _handler(event):
+        return None
+
+    spec = _make_spec("x", "identity-worker", "g", (Topic.SDK_EVENTS_VALIDATED,), _handler)
+    with pytest.raises(RuntimeError, match="its own source queue"):
+        ConsumerRunner(
+            role="identity-worker", group_id="g", specs=[spec],
+            registry=_FakeRegistry(),
+            queue_url=_SOURCE_QUEUE, dlq_queue_url=_SOURCE_QUEUE,
+        )
+
+
+def test_dlq_urls_resolve_by_role_then_fall_back(monkeypatch):
+    monkeypatch.setenv("SQS_DLQ_QUEUE_URL", "https://sqs.test/shared-dlq")
+    assert resolve_dlq_url("identity-worker", mapping=_DLQ_MAP) == _ROLE_DLQ
+    assert resolve_dlq_url("semantic-worker", mapping=_DLQ_MAP) == "https://sqs.test/shared-dlq"
+    # Unconfigured is a real state and must not raise here: the consumer refuses
+    # at publish time, leaving the message for SQS redrive.
+    monkeypatch.delenv("SQS_DLQ_QUEUE_URL")
+    assert resolve_dlq_url("semantic-worker", mapping={}) == ""
+
+
+def test_role_dlq_urls_fails_closed_on_malformed_json(monkeypatch):
+    monkeypatch.setenv("SQS_ROLE_DLQ_URLS", "{not json")
+    with pytest.raises(RuntimeError, match="not valid JSON"):
+        role_dlq_urls()
+    monkeypatch.setenv("SQS_ROLE_DLQ_URLS", json.dumps(_DLQ_MAP))
+    assert role_dlq_urls() == _DLQ_MAP
+
+
+# ── defect 3: a drain must acknowledge before it tears the client down ───────
+
+
+async def test_drain_acknowledges_in_flight_work_before_releasing_the_client(monkeypatch):
+    """Regression: ``drain()`` called ``stop()`` first, guaranteeing duplicates.
+
+    ``stop()`` sets ``_sqs_client = None``. Waiting for in-flight handlers only
+    *after* that meant every handler that completed during the drain hit
+    ``AttributeError`` on ``delete_message``, which the receive loop swallowed —
+    so the message reappeared once its visibility timeout expired. Every message
+    in the current batch, times every consumer, on every deploy.
+    """
+    gate = asyncio.Event()
+    event = _event(Topic.SDK_EVENTS_VALIDATED)
+    client = _FakeSQSClient([[_sqs_message(event, "rh-1")]])
+    _bind_sqs(monkeypatch, client)
+
+    async def _handler(_event_):
+        await gate.wait()
+
+    spec = _make_spec(
+        "drainable", "identity-worker", "aether-identity",
+        (Topic.SDK_EVENTS_VALIDATED,), _handler, drain_timeout_s=5.0,
+    )
+    runner = build_consumer_runners(
+        _FakeRegistry(), [spec], broker="sns_sqs",
+        queue_urls={"identity-worker": _SOURCE_QUEUE},
+        dlq_urls={"identity-worker": _ROLE_DLQ},
+    )[0]
+    await runner.start()
+    task = asyncio.create_task(runner.consumer.receive_loop())
+    await _wait_for(lambda: runner.consumer.in_flight == 1)
+
+    drain = asyncio.create_task(runner.drain())
+    await asyncio.sleep(0.05)
+    assert not drain.done(), "drain must wait for the in-flight handler"
+
+    gate.set()
+    report = await asyncio.wait_for(drain, 5)
+    await asyncio.wait_for(task, 5)
+
+    # The message completed during the drain and was acknowledged. Before the
+    # reorder this list was empty and the event was redelivered.
+    assert client.deleted == ["rh-1"], "in-flight work completed but was never acknowledged"
+    assert report["drained"] is True
+    assert report["unacked_remaining"] == 0
+    # And only then was the client released.
+    assert client.closed is True
+
+
+async def test_drain_waits_for_the_acknowledgement_not_just_the_handler():
+    """``in_flight`` alone is not quiescence — the ack outlives the handler.
+
+    ``in_flight`` drops to zero the instant a handler returns, while the delete
+    for that same message is still outstanding. A drain that only watched
+    ``in_flight`` tore the client down inside exactly that window.
+    """
+
+    async def _handler(event):
+        return None
+
+    spec = _make_spec("s", "identity-worker", "g", (Topic.SDK_EVENTS_VALIDATED,), _handler)
+    runner = build_consumer_runners(_FakeRegistry(), [spec], queue_urls={})[0]
+    # The window: handler finished, acknowledgement not yet issued.
+    runner.consumer._unacked = 1
+
+    report = await runner.drain(timeout=0.05)
+    assert report["in_flight_remaining"] == 0
+    assert report["unacked_remaining"] == 1
+    assert report["drained"] is False, "an unacknowledged message is not drained"
+
+
+async def test_a_torn_down_client_is_raised_not_swallowed():
+    """The ``AttributeError`` that used to be silently absorbed one frame up."""
+    consumer = EventConsumer(group_id="g")
+    loop = asyncio.get_running_loop()
+    with pytest.raises(ConsumerClientTornDown):
+        await consumer._delete_message(loop, None, "rh-1")
+
+
+# ── defect 4: Kafka must not commit past a message it could not handle ───────
+
+
+class _FakeKafkaMessage:
+    __slots__ = ("topic", "partition", "offset", "value")
+
+    def __init__(self, topic: str, partition: int, offset: int, value: str) -> None:
+        self.topic = topic
+        self.partition = partition
+        self.offset = offset
+        self.value = value
+
+
+class _FakeKafkaConsumer:
+    """Async-iterable stand-in recording commits, seeks and tear-down."""
+
+    def __init__(self, messages=(), **kwargs) -> None:
+        self._pending = list(messages)
+        self.kwargs = kwargs
+        self.commits = 0
+        self.seeks: list[tuple[str, int, int]] = []
+        self.started = False
+        self.stopped = False
+
+    async def start(self) -> None:
+        self.started = True
+
+    async def stop(self) -> None:
+        self.stopped = True
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._pending:
+            raise StopAsyncIteration
+        return self._pending.pop(0)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    def seek(self, partition, offset) -> None:
+        self.seeks.append((partition.topic, partition.partition, offset))
+
+
+async def test_kafka_loop_never_commits_past_a_message_it_could_not_handle(monkeypatch):
+    """Regression: a per-message failure was logged and the loop carried on.
+
+    ``commit()`` with no arguments commits ``position()`` — where the fetcher
+    has got to, not the message just handled — so the very next success
+    committed straight past the failed offset. The event was gone, permanently,
+    while the code above it documented "redelivery rather than silent loss".
+    """
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    # No bootstrap: the durable DLQ transport is unavailable, which is exactly
+    # when a message genuinely cannot be acknowledged.
+    monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
+    handled: list[int] = []
+
+    async def _handler(event):
+        handled.append(event.payload["n"])
+        if event.payload["n"] == 1:
+            raise ValueError("undeliverable")
+
+    consumer = EventConsumer(group_id="g")
+    consumer.MAX_HANDLER_RETRIES = 0
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _handler)
+    fake = _FakeKafkaConsumer([
+        _FakeKafkaMessage("aether.sdk.events.validated", 0, n, _event(n=n).serialize())
+        for n in range(3)
+    ])
+    consumer._kafka_consumer = fake
+    consumer._mode = "kafka"
+    consumer._running = True
+
+    await consumer.consume_loop()
+
+    # The loop stopped AT the failure rather than stepping over it.
+    assert handled == [0, 1]
+    # Exactly one commit: message 0. Message 1's offset stays uncommitted, so a
+    # restart or rebalance re-delivers it.
+    assert fake.commits == 1
+    if events_mod.TopicPartition is not None:
+        # Rewound in-process too, so redelivery does not depend on a rebalance.
+        assert fake.seeks == [("aether.sdk.events.validated", 0, 1)]
+    assert consumer.is_running is False
+    assert consumer.unacked == 0
+
+
+async def test_kafka_loop_commits_every_message_it_did_handle(monkeypatch):
+    """The other half of the contract: success is acknowledged, one per message."""
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    handled: list[int] = []
+
+    async def _handler(event):
+        handled.append(event.payload["n"])
+
+    consumer = EventConsumer(group_id="g")
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _handler)
+    fake = _FakeKafkaConsumer([
+        _FakeKafkaMessage("aether.sdk.events.validated", 0, n, _event(n=n).serialize())
+        for n in range(3)
+    ])
+    consumer._kafka_consumer = fake
+    consumer._mode = "kafka"
+    consumer._running = True
+
+    await consumer.consume_loop()
+
+    assert handled == [0, 1, 2]
+    assert fake.commits == 3
+    assert fake.seeks == []
+
+
+# ── defect 5: a restart must not leave the previous client alive ─────────────
+
+
+async def test_restart_tears_down_the_previous_kafka_consumer(monkeypatch):
+    """Regression: the zombie kept its group membership and stalled partitions.
+
+    ``consume_loop``'s ``finally`` clears ``_running`` but leaves
+    ``_kafka_consumer`` bound, and the supervised restart re-entered ``start()``
+    on exactly that state, overwriting the attribute. The old consumer kept
+    heartbeating, so the group retained a member that owned partitions it would
+    never fetch from — those partitions stalled indefinitely, because the zombie
+    kept renewing the session that would otherwise have evicted it.
+    """
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka.test:9092")
+    created: list[_FakeKafkaConsumer] = []
+
+    def _factory(*topics, **kwargs):
+        consumer = _FakeKafkaConsumer((), **kwargs)
+        created.append(consumer)
+        return consumer
+
+    monkeypatch.setattr(events_mod, "AIOKafkaConsumer", _factory)
+    monkeypatch.setattr(events_mod, "KAFKA_AVAILABLE", True)
+
+    async def _handler(event):
+        return None
+
+    consumer = EventConsumer(group_id="g")
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _handler)
+    await consumer.start()
+    # The crash shape: the loop returns, leaving the binding in place.
+    await consumer.consume_loop()
+    assert consumer.is_running is False
+    assert created[0].stopped is False
+
+    await consumer.start()  # the supervised restart path
+
+    assert len(created) == 2
+    assert created[0].stopped is True, "previous consumer left holding partitions"
+    assert consumer._kafka_consumer is created[1]
+
+
+async def test_restart_releases_the_previous_sqs_client(monkeypatch):
+    """Same leak in SQS mode: benign, unbounded across restarts, still wrong."""
+    first, second = _FakeSQSClient(), _FakeSQSClient()
+    pending = [first, second]
+    monkeypatch.setenv("AETHER_ENV", "production")
+    monkeypatch.setenv("EVENT_BROKER", "sns_sqs")
+
+    class _StubBoto3:
+        @staticmethod
+        def client(name):
+            return pending.pop(0)
+
+    monkeypatch.setattr(events_mod, "_boto3_events", _StubBoto3)
+    monkeypatch.setattr(events_mod, "BOTO3_EVENTS_AVAILABLE", True)
+
+    async def _handler(event):
+        return None
+
+    consumer = EventConsumer(group_id="g", queue_url=_SOURCE_QUEUE)
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _handler)
+    await consumer.start()
+    await consumer.start()
+
+    assert first.closed is True
+    assert consumer._sqs_client is second
+
+
+async def test_kafka_dlq_producer_is_created_lazily_and_reused(monkeypatch):
+    """``_ensure_dlq_producer`` had no happy-path coverage at all.
+
+    Every DLQ test injected ``_kafka_producer`` directly, so the function that
+    is the actual fix for the original ``AttributeError`` was never executed.
+    """
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka.test:9092")
+    created: list = []
+
+    class _Producer:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.started = False
+            self.sent: list[tuple[str, str]] = []
+            created.append(self)
+
+        async def start(self):
+            self.started = True
+
+        async def stop(self):
+            self.started = False
+
+        async def send_and_wait(self, topic, value):
+            self.sent.append((topic, value))
+
+    monkeypatch.setattr(events_mod, "AIOKafkaProducer", _Producer)
+    monkeypatch.setattr(events_mod, "KAFKA_AVAILABLE", True)
+
+    async def _always_fails(event):
+        raise ValueError("handler boom")
+
+    consumer = EventConsumer(group_id="g")
+    consumer._mode = "kafka"
+    consumer.MAX_HANDLER_RETRIES = 0
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, _always_fails)
+
+    await consumer.process(_event())
+    await consumer.process(_event())
+
+    assert len(created) == 1, "a producer per dead letter would leak connections"
+    producer = created[0]
+    assert producer.started is True
+    # A dead letter that is not durably replicated reads as safely quarantined
+    # while being nothing of the sort.
+    assert producer.kwargs["acks"] == "all"
+    assert [topic for topic, _ in producer.sent] == [Topic.DEAD_LETTER.value] * 2
+    assert consumer.dlq_depth == 0
+
+    await consumer.stop()
+    assert producer.started is False, "buffered dead letters were not flushed"
+
+
+# ── defect 6: the restart budget is a rate limit, not a lifetime quota ───────
+
+
+async def test_restart_budget_resets_after_a_sustained_healthy_run(monkeypatch):
+    """Regression: six transient crashes over weeks failed a role permanently.
+
+    ``attempt`` was a ``_guard`` local that only ever grew, so ``max_restarts``
+    counted crashes across the whole life of the process rather than the life of
+    an incident.
+    """
+    recorder = _MetricsRecorder()
+    monkeypatch.setattr(supervisor_mod, "metrics", recorder)
+    runs = {"n": 0}
+
+    async def _occasionally_flaky():
+        runs["n"] += 1
+        if runs["n"] == 1:
+            raise RuntimeError("transient blip")
+        if runs["n"] == 2:
+            # Recovered and ran normally, then an unrelated failure much later.
+            await asyncio.sleep(0.08)
+            raise RuntimeError("second, unrelated blip")
+        await asyncio.Event().wait()
+
+    supervisor = WorkerSupervisor(environment=Environment.LOCAL)
+    supervisor.register(
+        WorkerSpec(
+            name="flaky_relay", factory=_occasionally_flaky, role="outbox-relay",
+            max_restarts=1, backoff_base_s=0.001, healthy_run_s=0.05,
+        )
+    )
+    await supervisor.start_all()
+    try:
+        await _wait_for(lambda: runs["n"] == 3)
+        await _wait_for(
+            lambda: supervisor.status()["flaky_relay"]["state"] == "running"
+        )
+        info = supervisor.status()["flaky_relay"]
+        # With a lifetime quota the second crash exhausted max_restarts=1 and
+        # the role was marked failed forever.
+        assert info["state"] == "running"
+        assert info["restarts"] == 1, "budget consumed once since the reset"
+        # The reset must not erase the evidence that this worker flaps. Kept off
+        # status(), whose key set is a pinned contract.
+        assert supervisor.restart_totals()["flaky_relay"] == 2
+        assert supervisor.status_by_role()["outbox-relay"]["healthy"] is True
+        assert supervisor.unhealthy_roles() == {}
+        assert {"worker": "flaky_relay", "role": "outbox-relay"} in recorder.labels_for(
+            "worker_supervisor_restart_budget_reset"
+        )
+    finally:
+        await supervisor.stop_all()
+
+
+async def test_budget_reset_does_not_rescue_a_crash_loop(monkeypatch):
+    """The budget still has to stop something — a tight loop never earns it back."""
+    recorder = _MetricsRecorder()
+    monkeypatch.setattr(supervisor_mod, "metrics", recorder)
+
+    async def _always_crashes():
+        raise RuntimeError("hard down")
+
+    supervisor = WorkerSupervisor(environment=Environment.LOCAL)
+    supervisor.register(
+        WorkerSpec(
+            name="doomed_projector", factory=_always_crashes, role="graph-writer",
+            max_restarts=2, backoff_base_s=0.001, healthy_run_s=0.05,
+        )
+    )
+    await supervisor.start_all()
+    try:
+        await _wait_for(
+            lambda: supervisor.status()["doomed_projector"]["state"] == "failed"
+        )
+        assert recorder.labels_for("worker_supervisor_restart_budget_reset") == []
+        # And the degradation is announced the moment it happens, not only at
+        # shutdown — status_by_role() was previously read in exactly one place.
+        assert {"worker": "doomed_projector", "role": "graph-writer"} in recorder.labels_for(
+            "worker_supervisor_role_unhealthy"
+        )
+        assert set(supervisor.unhealthy_roles()) == {"graph-writer"}
+    finally:
+        await supervisor.stop_all()
+
+
+# ── defect 2: the drain path has to be reachable in ECS ──────────────────────
+
+
+async def test_shutdown_signals_release_the_wait():
+    """Regression: nothing ever set the stop event, so ``_shutdown`` was dead code.
+
+    ECS sends SIGTERM then SIGKILL at ``stopTimeout``. With no handler a
+    default-disposition process dies before ``finally``; at PID 1 — the normal
+    container case — the kernel refuses to deliver SIGTERM at all unless a
+    handler is installed. Either way the drain never ran.
+    """
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        stop = asyncio.Event()
+        uninstall = run_role._install_shutdown_signals(stop, "lean-worker")
+        try:
+            signal.raise_signal(sig)
+            await asyncio.wait_for(stop.wait(), 5)
+        finally:
+            uninstall()
+        assert stop.is_set(), f"{sig.name} did not release the shutdown wait"
+        # Uninstalled cleanly: handlers are process-global, and a stale one
+        # bound to a closed loop breaks the next asyncio.run in this process.
+        assert loop.remove_signal_handler(sig) is False
+
+
+async def test_run_workers_drains_and_shuts_down_on_sigterm(monkeypatch):
+    """End-to-end: the signal really does drive ``_shutdown`` to completion."""
+    import dependencies.providers as providers_mod
+    import services.runtime as runtime_pkg
+
+    class _FakeRuntimeRegistry:
+        def __init__(self) -> None:
+            self.started = 0
+            self.stopped = 0
+
+        async def startup(self) -> None:
+            self.started += 1
+
+        async def shutdown(self) -> None:
+            self.stopped += 1
+
+    registry = _FakeRuntimeRegistry()
+    monkeypatch.setattr(providers_mod, "get_registry", lambda: registry)
+    monkeypatch.setattr(runtime_pkg, "build_worker_specs", lambda **kwargs: [])
+    monkeypatch.setattr(runtime_pkg, "specs_for_role", lambda role, specs: [])
+    monkeypatch.setattr(runtime_pkg, "consumer_specs_for_role", lambda role, settings: [])
+
+    # Signalling before the handler is installed would kill the test process, so
+    # wait for the real installer to run rather than guessing at a sleep.
+    installed = asyncio.Event()
+    real_install = run_role._install_shutdown_signals
+
+    def _spy(stop, role):
+        uninstall = real_install(stop, role)
+        installed.set()
+        return uninstall
+
+    monkeypatch.setattr(run_role, "_install_shutdown_signals", _spy)
+
+    task = asyncio.create_task(run_role._run_workers("maintenance"))
+    await asyncio.wait_for(installed.wait(), 5)
+    signal.raise_signal(signal.SIGTERM)
+    rc = await asyncio.wait_for(task, 5)
+
+    assert rc == 0
+    assert registry.started == 1
+    # The ``finally`` ran: registry.shutdown() is the last step of _shutdown, so
+    # reaching it proves the whole drain path executed. Without a signal handler
+    # this await never returns and the process is SIGKILLed instead.
+    assert registry.stopped == 1
+
+
+async def test_health_watch_announces_a_permanently_failed_role(monkeypatch, capsys):
+    """A failed role must be loud while the task is alive, not only at exit."""
+    recorder = _MetricsRecorder()
+    monkeypatch.setattr(supervisor_mod, "metrics", recorder)
+    watch_metrics = _MetricsRecorder()
+    import shared.logger.logger as logger_mod
+
+    async def _always_crashes():
+        raise RuntimeError("hard down")
+
+    supervisor = WorkerSupervisor(environment=Environment.LOCAL)
+    supervisor.register(
+        WorkerSpec(
+            name="doomed", factory=_always_crashes, role="measurement-worker",
+            max_restarts=0,
+        )
+    )
+    await supervisor.start_all()
+    try:
+        await _wait_for(lambda: supervisor.status()["doomed"]["state"] == "failed")
+        monkeypatch.setattr(logger_mod, "metrics", watch_metrics)
+        watch = asyncio.create_task(
+            run_role._watch_role_health(supervisor, "lean-worker", 0.01)
+        )
+        await _wait_for(lambda: watch_metrics.labels_for("runtime_role_unhealthy"))
+        watch.cancel()
+        try:
+            await watch
+        except asyncio.CancelledError:
+            pass
+    finally:
+        await supervisor.stop_all()
+
+    assert {"role": "measurement-worker", "booted_as": "lean-worker"} in (
+        watch_metrics.labels_for("runtime_role_unhealthy")
+    )
+    out = capsys.readouterr().out
+    assert "role=measurement-worker UNHEALTHY" in out

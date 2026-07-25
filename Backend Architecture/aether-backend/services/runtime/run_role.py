@@ -32,11 +32,21 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import dataclasses
 import os
+import signal
 import sys
 
 from services.runtime.roles import ALL_ROLES, is_valid_role
+
+# Signals an orchestrator uses to ask for a graceful stop. ECS sends SIGTERM and
+# then SIGKILL after ``stopTimeout``; SIGINT is the interactive equivalent.
+_SHUTDOWN_SIGNALS = (signal.SIGTERM, signal.SIGINT)
+
+# How often the health watch re-reads per-role supervisor state while the
+# process is otherwise idle waiting for a shutdown signal.
+_HEALTH_WATCH_INTERVAL_S = 30.0
 
 
 def _run_api() -> int:
@@ -126,6 +136,113 @@ def _log_role_topology(role: str, specs: list, runners: list) -> None:
             f"drain_timeout_s={runner.drain_timeout_s}",
             flush=True,
         )
+
+
+def _install_shutdown_signals(stop: asyncio.Event, role: str):
+    """Make SIGTERM/SIGINT set ``stop``. Returns a callable that uninstalls them.
+
+    Without this the whole drain path is unreachable in the real deployment, and
+    every guarantee built on top of it is decorative:
+
+    - ECS sends SIGTERM and then SIGKILL after ``stopTimeout``. With no handler
+      installed, a process with the default disposition dies immediately — the
+      ``finally`` that calls :func:`_shutdown` never runs, so
+      ``drain_consumer_runners`` and every ``drain_timeout_s`` are dead code.
+    - **At PID 1 it is worse.** The kernel refuses to deliver a signal to PID 1
+      unless that process has installed a handler for it, so an unhandled
+      SIGTERM is not merely fatal, it is *ignored* — the container then sits
+      untouched until the SIGKILL, and the drain never happens either way. A
+      container started without an init shim runs the entrypoint as PID 1, which
+      is the normal ECS/Fargate case.
+
+    Installing a handler fixes both: ``loop.add_signal_handler`` registers a real
+    C-level handler (via ``signal.set_wakeup_fd``), which is exactly what makes
+    the signal deliverable to PID 1, and routes it onto the event loop so the
+    coroutine waiting on ``stop`` resumes and runs its ``finally``.
+
+    Uninstalling on the way out matters too: handlers are process-global, so a
+    second ``asyncio.run`` in the same process (tests, and any future embedding)
+    would otherwise be left holding callbacks bound to a closed loop.
+    """
+    loop = asyncio.get_running_loop()
+
+    def _request_stop(signame: str) -> None:
+        if stop.is_set():
+            # A second signal while the drain is already running. Say so rather
+            # than appearing to ignore it; the orchestrator's SIGKILL is the
+            # real escalation path and it is already counting down.
+            print(
+                f"[run_role] role={role} {signame} received again — shutdown "
+                "already in progress",
+                flush=True,
+            )
+            return
+        print(f"[run_role] role={role} {signame} received — draining", flush=True)
+        stop.set()
+
+    installed: list = []
+    for sig in _SHUTDOWN_SIGNALS:
+        try:
+            loop.add_signal_handler(sig, _request_stop, sig.name)
+        except NotImplementedError:
+            # Windows / non-Unix event loops. Fall back to the plain C handler;
+            # ``Event.set`` is not thread-safe against the loop, so hop back
+            # onto it. Never left as "no handler at all".
+            def _threaded(signum, _frame, _sig=sig):
+                loop.call_soon_threadsafe(_request_stop, _sig.name)
+
+            previous = signal.signal(sig, _threaded)
+            installed.append((sig, previous))
+            continue
+        installed.append((sig, None))
+
+    def _uninstall() -> None:
+        for sig, previous in installed:
+            if previous is None:
+                with contextlib.suppress(NotImplementedError, RuntimeError):
+                    loop.remove_signal_handler(sig)
+            else:
+                with contextlib.suppress(ValueError, OSError):
+                    signal.signal(sig, previous)
+
+    return _uninstall
+
+
+async def _watch_role_health(supervisor, role: str, interval_s: float) -> None:
+    """Log and count any logical role whose workers have permanently failed.
+
+    ``status_by_role()`` was otherwise read in exactly one place — inside
+    ``_shutdown`` — so a role that exhausted its restart budget stayed invisible
+    for the entire remaining life of the task. Combined with runtime_service
+    tasks having no ECS health check, a process doing seven-eighths of its job
+    reported as fully healthy indefinitely.
+
+    This does not *fix* that (a container-level health check and a readiness
+    endpoint are infrastructure, not this file); it makes the state continuously
+    observable in logs and metrics instead of only at exit, which is the part
+    that can be fixed from here.
+    """
+    from shared.logger.logger import metrics
+
+    reported: set[str] = set()
+    while True:
+        await asyncio.sleep(interval_s)
+        for member, health in sorted(supervisor.status_by_role().items()):
+            if health["healthy"]:
+                reported.discard(member)
+                continue
+            metrics.increment(
+                "runtime_role_unhealthy",
+                labels={"role": member, "booted_as": role},
+            )
+            if member not in reported:
+                reported.add(member)
+                print(
+                    f"[run_role] role={member} UNHEALTHY (restarts exhausted) "
+                    f"failed={', '.join(health['failed'])} — this process is "
+                    f"booted_as={role} and is no longer doing this role's work",
+                    flush=True,
+                )
 
 
 async def _shutdown(role: str, registry, supervisor, runners: list) -> None:
@@ -221,10 +338,22 @@ async def _run_workers(role: str) -> int:
 
     _log_role_topology(role, specs, runners)
 
+    # Run until the orchestrator asks us to stop. The signal handlers are what
+    # make this wait terminable at all — see _install_shutdown_signals for why a
+    # bare Event.wait() left the entire drain path unreachable in ECS.
     stop = asyncio.Event()
+    uninstall_signals = _install_shutdown_signals(stop, role)
+    health_watch = asyncio.create_task(
+        _watch_role_health(supervisor, role, _HEALTH_WATCH_INTERVAL_S),
+        name=f"aether-health-watch:{role}",
+    )
     try:
-        await stop.wait()  # run until cancelled / signalled
+        await stop.wait()
     finally:
+        uninstall_signals()
+        health_watch.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await health_watch
         await _shutdown(role, registry, supervisor, runners)
     return 0
 
