@@ -176,6 +176,37 @@ _TABLES: dict[str, str] = {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
     """,
+    # Server-side, single-use, TTL-bound challenges. Consuming one deletes it,
+    # which is what makes registration/assertion and device-proof replay fail.
+    # Declared here rather than left to BaseRepository's runtime auto-create so
+    # the migration is the complete schema for a security-bearing table.
+    "kyber_webauthn_challenges": """
+        CREATE TABLE IF NOT EXISTS kyber_webauthn_challenges (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT,
+            operator_id TEXT,
+            device_id TEXT,
+            purpose TEXT,
+            expires_at TIMESTAMPTZ,
+            consumed_at TIMESTAMPTZ,
+            data JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """,
+    "kyber_device_proof_challenges": """
+        CREATE TABLE IF NOT EXISTS kyber_device_proof_challenges (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT,
+            operator_id TEXT,
+            device_id TEXT,
+            expires_at TIMESTAMPTZ,
+            consumed_at TIMESTAMPTZ,
+            data JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """,
     "kyber_device_approval_events": """
         CREATE TABLE IF NOT EXISTS kyber_device_approval_events (
             id TEXT PRIMARY KEY,
@@ -318,6 +349,8 @@ _JSONB_INDEXES: tuple[tuple[str, str, str], ...] = (
     ("kyber_webauthn_credentials", "operator", "operator_id"),
     ("kyber_device_proof_keys", "device", "device_id"),
     ("kyber_device_approval_events", "device", "device_id"),
+    ("kyber_webauthn_challenges", "operator", "operator_id"),
+    ("kyber_device_proof_challenges", "device", "device_id"),
     ("kyber_workforce_sessions", "operator", "operator_id"),
     ("kyber_workforce_sessions", "device", "device_id"),
     ("kyber_step_up_grants", "session", "session_id"),
@@ -401,6 +434,8 @@ _EXPIRY_INDEXES: tuple[tuple[str, str, str], ...] = (
     ("kyber_access_scopes", "ix_kyber_access_scopes_expiry", "(status, expires_at)"),
     ("kyber_trusted_devices", "ix_kyber_trusted_devices_expiry", "(approval_state, expires_at)"),
     ("kyber_authentication_events", "ix_kyber_authentication_events_created", "(created_at)"),
+    ("kyber_webauthn_challenges", "ix_kyber_webauthn_challenges_expiry", "(expires_at)"),
+    ("kyber_device_proof_challenges", "ix_kyber_device_proof_challenges_expiry", "(expires_at)"),
     ("kyber_access_decisions", "ix_kyber_access_decisions_created", "(created_at)"),
 )
 

@@ -109,6 +109,22 @@ def test_tenant_admin_context_is_rejected_by_guard():
     assert type(exc_info.value).__name__ == "ForbiddenError"
 
 
+def test_no_kyber_route_classifies_as_public():
+    """A Kyber route may never be reachable without an operator identity."""
+    import main
+
+    from services.security.route_registry import classify
+
+    public_kyber = []
+    for route in iter_api_routes(main.app):
+        if "/kyber" not in route.path:
+            continue
+        policy = classify(route.path)
+        if policy is None or policy.public or not policy.requires_auth:
+            public_kyber.append(route.path)
+    assert not public_kyber, f"kyber routes must never classify as public: {sorted(set(public_kyber))}"
+
+
 def test_operator_permission_passes_guard():
     """The configured kyber operator permission grants access."""
     from config.settings import get_settings

@@ -555,11 +555,13 @@ class KyberSessionService:
 
     async def apply_step_up(
         self, session_id: str, *, expires_at: str, capability_id: Optional[str] = None
-    ) -> tuple[WorkforceSession, str]:
-        """Promote a session to ``stepped_up`` and rotate its handle.
+    ) -> WorkforceSession:
+        """Promote a session to ``stepped_up`` until ``expires_at``.
 
-        Called by the step-up service after an assertion verifies. The rotation
-        is the point: a handle captured before the elevation cannot ride it.
+        Called by the step-up service after an assertion verifies. Rotation is
+        a separate call so the caller that must hand the new handle back to the
+        browser is the one that mints it — a rotation whose token nobody
+        receives would lock the operator out of their own session.
         """
         session = await self.get(session_id)
         if session is None:
@@ -568,8 +570,7 @@ class KyberSessionService:
         session.metadata["step_up_expires_at"] = expires_at
         if capability_id:
             session.metadata["step_up_capability_id"] = capability_id
-        await self._save(session)
-        return await self.rotate(session_id, reason="step_up")
+        return await self._save(session)
 
     async def clear_step_up(self, session_id: str) -> Optional[WorkforceSession]:
         """Drop a session's elevation without ending the session."""

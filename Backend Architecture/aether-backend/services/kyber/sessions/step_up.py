@@ -220,6 +220,20 @@ class StepUpService:
         )
         return grant
 
+    async def grant_and_rotate(self, **kwargs: Any) -> tuple[StepUpGrant, str]:
+        """Grant an elevation and rotate the session handle.
+
+        Returns ``(grant, raw_token)``. Rotating on elevation is what stops a
+        handle captured before the step-up from riding it; the raw token is
+        returned so the caller can put the new cookie on the response, which is
+        why rotation is not buried inside :meth:`grant`.
+        """
+        grant = await self.grant(**kwargs)
+        _session, raw_token = await session_service.rotate(
+            grant.session_id, reason="step_up"
+        )
+        return grant, raw_token
+
     async def _record_failure(
         self,
         session_id: str,

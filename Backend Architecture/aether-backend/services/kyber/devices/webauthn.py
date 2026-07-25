@@ -433,7 +433,7 @@ class WebAuthnService:
                 action="verify_authentication",
                 outcome="blocked",
                 device_id=stored.device_id if stored else "unknown",
-                metadata={"reason": "credential_not_registered"},
+                metadata={"reason": "unknown_authenticator"},
             )
             metrics.increment(
                 "kyber_device_denied_total", labels={"detail": "webauthn_unknown_credential"}
