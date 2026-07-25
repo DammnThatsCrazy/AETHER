@@ -39,9 +39,24 @@ AGENT_DIR   := Agent Layer
 # seven modules that do not exist and `terraform init` fails there.
 TF_DIR      := AWS Deployment/aether-aws/terraform
 
+# Project virtualenv. The system interpreter resolves /usr/lib/python3/dist-packages,
+# where Debian's cryptography build panics under pyo3 and its PyJWT cannot be replaced
+# by pip. Gates must run against this isolated interpreter, not the system one.
+VENV        := .venv
+VENV_PY     := $(VENV)/bin/python
+
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
+
+bootstrap: ## Create an isolated .venv and install all extras (reproducible toolchain)
+	python3 -m venv $(VENV)
+	$(VENV_PY) -m pip install --upgrade pip setuptools wheel
+	$(VENV_PY) -m pip install -e ".[all]"
+	$(VENV_PY) scripts/validate_toolchain.py
+
+toolchain-check: ## Assert every release-critical dependency imports (fails, never skips)
+	$(VENV_PY) scripts/validate_toolchain.py
 
 setup: ## Install all Python dependencies in editable mode
 	pip install -e ".[all]"
