@@ -22,6 +22,42 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.graph")
 
+# ── Tenant property ──────────────────────────────────────────────────────────
+#
+# The graph has carried two spellings of the same concept. Vertex producers
+# write camelCase ``tenantId`` (services/silver/projectors/silver_graph_projector.py)
+# and every route filters on it; edge producers write snake_case ``tenant_id``
+# (shared/graph/edge_properties.py) and so do ``revoke_edge`` /
+# ``delete_vertex_if_orphaned``.
+#
+# That split was not cosmetic. ``current_graph_digest`` filtered vertices on
+# ``tenant_id``, so it matched nothing a real producer had written: the digest
+# over a populated graph was byte-identical to the digest over an empty one,
+# and the replay-parity check it backs was vacuously green.
+#
+# ``TENANT_PROPERTY`` is the canonical spelling for new writes and for the
+# Neptune predicate. ``tenant_of`` reads either, so existing rows in both
+# spellings resolve correctly and nothing has to be backfilled before the
+# scoped reads become correct.
+
+TENANT_PROPERTY = "tenantId"
+_TENANT_PROPERTY_ALIASES = ("tenantId", "tenant_id")
+
+
+def tenant_of(properties: Optional[dict[str, Any]]) -> Optional[str]:
+    """The tenant a vertex or edge belongs to, in either spelling.
+
+    Returns ``None`` when no tenant property is present, which callers must
+    treat as "not this tenant" rather than as a wildcard.
+    """
+    if not properties:
+        return None
+    for key in _TENANT_PROPERTY_ALIASES:
+        value = properties.get(key)
+        if value is not None and value != "":
+            return str(value)
+    return None
+
 # Optional gremlinpython import
 try:
     from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
@@ -991,6 +1027,26 @@ class _InMemoryGraphBackend:
     async def get_all_vertices(self, limit: int = 1000) -> list["Vertex"]:
         return list(self._vertices.values())[:limit]
 
+    async def get_vertices_for_tenant(
+        self, tenant_id: str, limit: int = 1000, *, vertex_type: Optional[str] = None
+    ) -> list["Vertex"]:
+        """Vertices belonging to one tenant. The cap applies to THAT tenant.
+
+        Filtering before slicing is the whole point: callers used to fetch a
+        global page and filter it afterwards, so a tenant whose vertices sorted
+        past the cap silently received a partial page or none at all.
+        """
+        matched: list[Vertex] = []
+        for vertex in self._vertices.values():
+            if tenant_of(vertex.properties) != tenant_id:
+                continue
+            if vertex_type is not None and vertex.vertex_type != vertex_type:
+                continue
+            matched.append(vertex)
+            if len(matched) >= limit:
+                break
+        return matched
+
     async def query(self, gremlin: str) -> list[dict]:
         logger.debug(f"In-memory graph QUERY (no-op): {gremlin[:80]}...")
         return []
@@ -1323,6 +1379,35 @@ class _NeptuneGraphBackend:
             logger.error(f"Neptune get_all_vertices error: {e}")
         return results
 
+    async def get_vertices_for_tenant(
+        self, tenant_id: str, limit: int = 1000, *, vertex_type: Optional[str] = None
+    ) -> list["Vertex"]:
+        """Vertices for one tenant, with the predicate pushed into the query.
+
+        ``has(...)`` before ``limit(...)`` so the database applies the cap to the
+        tenant's own rows rather than to a global page that is then filtered.
+        """
+        g = await self._ensure_connected()
+        results: list[Vertex] = []
+        try:
+            traversal = g.V()
+            if vertex_type is not None:
+                traversal = traversal.hasLabel(vertex_type)
+            traversal = traversal.has(TENANT_PROPERTY, tenant_id).limit(limit)
+            for v_map in traversal.valueMap(True).toList():
+                results.append(Vertex(
+                    vertex_type=str(v_map.get(T.label, "unknown")),
+                    vertex_id=str(v_map.get(T.id, "")),
+                    properties={
+                        k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                        for k, v in v_map.items()
+                        if k not in (T.id, T.label)
+                    },
+                ))
+        except Exception as e:
+            logger.error(f"Neptune get_vertices_for_tenant error: {e}")
+        return results
+
     async def query(self, gremlin: str) -> list[dict]:
         await self._ensure_connected()
         try:
@@ -1551,9 +1636,38 @@ class GraphClient:
         )
 
     async def get_all_vertices(self, limit: int = 1000) -> list[Vertex]:
+        """Unscoped read across every tenant. Prefer ``get_vertices_for_tenant``.
+
+        This applies ``limit`` to the WHOLE graph. A caller that filters the
+        result by tenant afterwards gets silent truncation — the tenant's rows
+        may sort past the cap and never appear — so service code must not use
+        this to answer a per-tenant question. ``scripts/validate_graph_scoped_reads.py``
+        enforces that.
+        """
         if self._backend is None:
             await self.connect()
         return await self._backend.get_all_vertices(limit)  # type: ignore[union-attr]
+
+    async def get_vertices_for_tenant(
+        self, tenant_id: str, limit: int = 1000, *, vertex_type: Optional[str] = None
+    ) -> list[Vertex]:
+        """Vertices for exactly one tenant, with the cap applied to that tenant.
+
+        The tenant predicate is part of the query, not a filter applied to a
+        global page, so the caller receives up to ``limit`` of the tenant's own
+        rows regardless of how the rest of the graph sorts.
+
+        An empty or missing ``tenant_id`` returns nothing rather than
+        everything: a scoped read that cannot name its tenant must not silently
+        widen into a cross-tenant one.
+        """
+        if not tenant_id:
+            return []
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.get_vertices_for_tenant(  # type: ignore[union-attr]
+            tenant_id, limit, vertex_type=vertex_type
+        )
 
     async def query(self, gremlin: str) -> list[dict]:
         if self._backend is None:

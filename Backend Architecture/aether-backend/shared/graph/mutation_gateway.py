@@ -46,7 +46,14 @@ from shared.graph.edge_properties import (
     make_edge_idempotency_key,
 )
 from shared.graph.generated_mutation_taxonomy import GRAPH_MUTATION_TYPES
-from shared.graph.graph import Edge, Vertex, _InMemoryGraphBackend, get_graph_client
+from shared.graph.graph import (
+    Edge,
+    Vertex,
+    _InMemoryGraphBackend,
+    TENANT_PROPERTY,
+    get_graph_client,
+    tenant_of,
+)
 from shared.graph.mutation_models import MutationRecord
 from shared.graph.write_validator import GraphWriteValidationError, GraphWriteValidator
 from shared.logger.logger import get_logger, metrics
@@ -659,11 +666,27 @@ def _drive(coro: Any) -> Any:
 
 
 def _canonical_props(properties: dict[str, Any]) -> dict[str, str]:
-    return {
-        str(k): str(v)
-        for k, v in properties.items()
-        if k not in _DIGEST_VOLATILE_PROPS
-    }
+    """Canonical property view for digesting.
+
+    The tenant key is normalised to :data:`TENANT_PROPERTY` because the graph
+    carries two spellings of it (``tenantId`` from vertex producers,
+    ``tenant_id`` from edge producers and from the mutation ledger). Without
+    this, replaying a ledger that stored one spelling would digest differently
+    from a live graph holding the other, and parity would fail on two
+    representations of the identical logical state.
+    """
+    canonical: dict[str, str] = {}
+    for key, value in properties.items():
+        if key in _DIGEST_VOLATILE_PROPS:
+            continue
+        if key in ("tenantId", "tenant_id"):
+            # Skip empties so an explicit "" cannot displace a real value.
+            if value in (None, ""):
+                continue
+            canonical[TENANT_PROPERTY] = str(value)
+            continue
+        canonical[str(key)] = str(value)
+    return canonical
 
 
 def _digest_state(vertices: Iterable[Vertex], edges: Iterable[Edge]) -> str:
@@ -778,12 +801,14 @@ async def current_graph_digest(client: Any, tenant_id: str, scope: str = "") -> 
                 if marker not in seen:
                     seen.add(marker)
                     edges.append(edge)
-    vertices = [
-        v for v in vertices if str((v.properties or {}).get("tenant_id", "")) == tenant_id
-    ]
-    edges = [
-        e for e in edges if str((e.properties or {}).get("tenant_id", "")) == tenant_id
-    ]
+    # Resolve the tenant through the canonical helper rather than one spelling.
+    # This filter previously read only ``tenant_id``, while every vertex
+    # producer writes ``tenantId`` — so it matched no vertex a real producer had
+    # written and the digest over a populated graph equalled the digest over an
+    # empty one. The replay-parity check this backs was therefore vacuously
+    # green for its entire life.
+    vertices = [v for v in vertices if tenant_of(v.properties) == tenant_id]
+    edges = [e for e in edges if tenant_of(e.properties) == tenant_id]
     return _digest_state(vertices, edges)
 
 

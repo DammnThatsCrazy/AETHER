@@ -1,13 +1,19 @@
-"""Tenant access scope endpoints.
+"""Tenant access scope and emergency access endpoints.
 
-Entering a tenant is an explicit, reasoned, expiring act. These four routes are
-the whole surface for it: open one scope, see the current one, list history,
-close one. There is no route that widens a scope, changes its tenant, or
-extends it — a different tenant or a longer window means opening a new scope,
+Entering a tenant is an explicit, reasoned, expiring act. The ``/v1/kyber/scopes``
+routes are the whole surface for it: open one scope, see the current one, list
+history, close one. There is no route that widens a scope, changes its tenant,
+or extends it — a different tenant or a longer window means opening a new scope,
 which produces a new audit record.
 
-The router is intentionally **not** mounted in ``main.py``. It is mounted by
-the Kyber console assembly along with the rest of the Kyber plane.
+``emergency_router`` (``/v1/kyber/emergency``) is the operator-facing surface of
+:mod:`services.kyber.access.emergency`: request emergency root, have a *second*
+operator approve it, and see what is live. It is a separate router rather than
+more paths on the scope router because it is a different act with a different
+approval model, and because the console mounts and audits the two separately.
+
+Neither router is mounted in ``main.py``. Both are mounted by the Kyber console
+assembly along with the rest of the Kyber plane.
 """
 from __future__ import annotations
 
@@ -18,9 +24,14 @@ from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 
-from .capabilities import ACTION_CLASS_READ, SELF_CAPABILITY
+from .capabilities import (
+    ACTION_CLASS_FLEET_DESTRUCTIVE,
+    ACTION_CLASS_READ,
+    SELF_CAPABILITY,
+)
 from .dependencies import KyberAccessContext, require_kyber_access
 from .disclosure import DisclosureLevel
+from .emergency import emergency_access_service
 from .scopes import (
     DEFAULT_SCOPE_MINUTES,
     MAX_SCOPE_MINUTES,
@@ -30,6 +41,7 @@ from .scopes import (
 )
 
 router = APIRouter(prefix="/v1/kyber/scopes", tags=["Kyber Access"])
+emergency_router = APIRouter(prefix="/v1/kyber/emergency", tags=["Kyber Emergency Access"])
 
 #: Opening a scope is itself gated on the ability to read a tenant at all, so
 #: an observer or designer cannot open one even though the route is generic.

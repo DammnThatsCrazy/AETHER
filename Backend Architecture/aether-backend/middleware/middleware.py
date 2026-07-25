@@ -290,6 +290,51 @@ def _resolve_plan_tier(context: TenantContext) -> PlanTier:
     return PlanTier.P1_HOBBYIST
 
 
+# ---------------------------------------------------------------------------
+# Security response headers
+#
+# Deliberately a MINIMAL, low-risk subset. The CSP carries `frame-ancestors`
+# only (clickjacking) — `script-src`/`style-src` are NOT set here because a
+# wrong directive silently breaks the frontend bundle in production; that
+# audit is a separate change.
+#
+# Two hard constraints encoded below:
+#   * Permissions-Policy must NOT deny `publickey-credentials-get` — Kyber's
+#     WebAuthn device trust depends on it, and denying it silently breaks
+#     enrollment and step-up.
+#   * No `X-Frame-Options` (redundant with, and able to conflict with,
+#     `frame-ancestors`) and no `Cross-Origin-*` isolation headers (they break
+#     third-party embeds and SDK flows).
+# ---------------------------------------------------------------------------
+
+SECURITY_CSP = "frame-ancestors 'none'"
+SECURITY_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SECURITY_PERMISSIONS_POLICY = (
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+)
+SECURITY_HSTS = "max-age=31536000; includeSubDomains"
+
+
+def _apply_security_headers(response: Response, *, is_production: bool) -> Response:
+    """Attach the baseline security headers to an outgoing response.
+
+    ``is_production`` gates HSTS only: sending Strict-Transport-Security from
+    a local/dev origin would pin developers' browsers to HTTPS for a year.
+
+    An existing ``Content-Security-Policy`` is never overwritten — a route or
+    downstream middleware that sets its own (stricter) policy wins.
+    """
+    headers = response.headers
+    if "Content-Security-Policy" not in headers:
+        headers["Content-Security-Policy"] = SECURITY_CSP
+    headers["X-Content-Type-Options"] = "nosniff"
+    headers["Referrer-Policy"] = SECURITY_REFERRER_POLICY
+    headers["Permissions-Policy"] = SECURITY_PERMISSIONS_POLICY
+    if is_production:
+        headers["Strict-Transport-Security"] = SECURITY_HSTS
+    return response
+
+
 def register_middleware(app: FastAPI) -> None:
     """Register all middleware on the FastAPI app."""
 
@@ -627,6 +672,7 @@ def register_middleware(app: FastAPI) -> None:
             response.headers[name] = value
         if access_tier_header:
             response.headers["X-Access-Tier"] = access_tier_header
+        _apply_security_headers(response, is_production=settings.is_production)
 
         metrics.observe("http_request_duration_ms", elapsed_ms, labels={
             "method": request.method, "status": str(response.status_code),
