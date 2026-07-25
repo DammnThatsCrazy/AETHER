@@ -978,7 +978,7 @@ async def add_alias(campaign_id: str, body: AliasCreate, request: Request):
             tenant_id=tenant.tenant_id,
             campaign_id=campaign_id,
             alias_type=body.alias_type,
-            value=body.alias_value,
+            alias_value=body.alias_value,
             platform=body.platform,
             external_account_id=body.external_account_id,
             source=body.source,

@@ -84,7 +84,7 @@ class TestCanonicalCampaignFlow:
         # Typical Google Ads campaign ID (numeric string)
         google_campaign_id = "12345678901"
         cid = _run(svc.upsert_external_campaign(
-            TENANT, "google_ads", "123-456-7890", google_campaign_id, "Google Camp"
+            TENANT, "google_ads", "123-456-7890", google_campaign_id, external_campaign_name="Google Camp"
         ))
         assert str(cid) != google_campaign_id
         # Must be a UUID-format string, not a numeric provider ID
@@ -92,23 +92,23 @@ class TestCanonicalCampaignFlow:
 
     def test_replay_source_events_no_duplicate_campaigns(self):
         svc = _make_registry()
-        cid1 = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-001", "Camp"))
-        cid2 = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-001", "Camp"))
-        cid3 = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-001", "Camp"))
+        cid1 = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-001", external_campaign_name="Camp"))
+        cid2 = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-001", external_campaign_name="Camp"))
+        cid3 = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-001", external_campaign_name="Camp"))
         assert str(cid1) == str(cid2) == str(cid3)
 
     def test_rename_retains_uuid(self):
         svc = _make_registry()
-        cid_v1 = _run(svc.upsert_external_campaign(TENANT, "meta_ads", "acc", "fb-500", "Original Name"))
-        cid_v2 = _run(svc.upsert_external_campaign(TENANT, "meta_ads", "acc", "fb-500", "Renamed Campaign"))
-        cid_v3 = _run(svc.upsert_external_campaign(TENANT, "meta_ads", "acc", "fb-500", "Renamed Again"))
+        cid_v1 = _run(svc.upsert_external_campaign(TENANT, "meta_ads", "acc", "fb-500", external_campaign_name="Original Name"))
+        cid_v2 = _run(svc.upsert_external_campaign(TENANT, "meta_ads", "acc", "fb-500", external_campaign_name="Renamed Campaign"))
+        cid_v3 = _run(svc.upsert_external_campaign(TENANT, "meta_ads", "acc", "fb-500", external_campaign_name="Renamed Again"))
         assert str(cid_v1) == str(cid_v2) == str(cid_v3)
 
     def test_spend_resolved_to_canonical_uuid(self):
         """Spend records must store canonical UUID, not provider ID."""
         svc = _make_registry()
         resolver = _make_resolver()
-        cid = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc-1", "provider-camp-999", "Spend Camp"))
+        cid = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc-1", "provider-camp-999", external_campaign_name="Spend Camp"))
 
         # Simulate connector enriching a spend row
         result = _run(resolver.resolve_one(
@@ -126,9 +126,9 @@ class TestCanonicalCampaignFlow:
         """SDK landing → UTM alias → same canonical UUID as spend."""
         svc = _make_registry()
         resolver = _make_resolver()
-        cid = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc-1", "g-camp-utm", "UTM Camp"))
+        cid = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc-1", "g-camp-utm", external_campaign_name="UTM Camp"))
         # Connector creates authoritative alias
-        _run(svc.add_alias(TENANT, cid, alias_type="utm_campaign", value="holiday-2026-google"))
+        _run(svc.add_alias(TENANT, cid, alias_type="utm_campaign", alias_value="holiday-2026-google"))
         # SDK touchpoint resolves via UTM
         result = _run(resolver.resolve_one(TENANT, utm_campaign="holiday-2026-google"))
         assert result.status == "resolved"
@@ -137,8 +137,8 @@ class TestCanonicalCampaignFlow:
     def test_utm_id_alias_resolves_at_099_confidence(self):
         svc = _make_registry()
         resolver = _make_resolver()
-        cid = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-utm-id-camp", "Camp"))
-        _run(svc.add_alias(TENANT, cid, alias_type="utm_id", value="utm-abc-789"))
+        cid = _run(svc.upsert_external_campaign(TENANT, "google_ads", "acc", "g-utm-id-camp", external_campaign_name="Camp"))
+        _run(svc.add_alias(TENANT, cid, alias_type="utm_id", alias_value="utm-abc-789"))
         result = _run(resolver.resolve_one(TENANT, utm_id="utm-abc-789"))
         assert result.status == "resolved"
         assert result.confidence == Decimal("0.99")
@@ -147,7 +147,7 @@ class TestCanonicalCampaignFlow:
         """Resolution must never cross tenant boundaries."""
         svc = _make_registry()
         resolver = _make_resolver()
-        cid_a = _run(svc.upsert_external_campaign("tenant-A", "google_ads", "acc", "cross-camp", "Camp A"))
+        cid_a = _run(svc.upsert_external_campaign("tenant-A", "google_ads", "acc", "cross-camp", external_campaign_name="Camp A"))
         # Attempt resolution from a different tenant
         result = _run(resolver.resolve_one("tenant-B", platform="google_ads",
                                            external_account_id="acc", external_campaign_id="cross-camp"))
@@ -178,7 +178,7 @@ class TestAmbiguityFlow:
         # Operator resolves the review
         _run(svc.resolve_review(TENANT, review["review_id"], cid, resolved_by="ops@acme.com", note="Manual match"))
         # Add alias so future SDK events resolve automatically
-        _run(svc.add_alias(TENANT, cid, alias_type="utm_campaign", value="viral-tiktok-q3"))
+        _run(svc.add_alias(TENANT, cid, alias_type="utm_campaign", alias_value="viral-tiktok-q3"))
         # Now the same evidence resolves
         result = _run(resolver.resolve_one(TENANT, utm_campaign="viral-tiktok-q3"))
         assert result.status == "resolved"

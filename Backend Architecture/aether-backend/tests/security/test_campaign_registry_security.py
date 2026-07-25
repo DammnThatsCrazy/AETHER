@@ -72,7 +72,7 @@ class TestCrossTenantForgery:
     def test_cross_tenant_external_ref_not_accessible(self):
         svc = _make_registry()
         resolver = _make_resolver()
-        _run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "shared-ext-id", "Camp A"))
+        _run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "shared-ext-id", external_campaign_name="Camp A"))
         result = _run(resolver.resolve_one("tenant_b", platform="google_ads",
                                            external_account_id="acc", external_campaign_id="shared-ext-id"))
         assert result.status != "resolved"
@@ -81,7 +81,7 @@ class TestCrossTenantForgery:
         svc = _make_registry()
         resolver = _make_resolver()
         cid = _run(svc.create_custom_campaign("tenant_a", name="Camp"))
-        _run(svc.add_alias("tenant_a", cid, alias_type="utm_campaign", value="secret-alias"))
+        _run(svc.add_alias("tenant_a", cid, alias_type="utm_campaign", alias_value="secret-alias"))
         result = _run(resolver.resolve_one("tenant_b", utm_campaign="secret-alias"))
         # Must not resolve to tenant_a's campaign
         assert result.status != "resolved" or str(result.campaign_id) != str(cid)
@@ -183,7 +183,7 @@ class TestDataInvariants:
         svc = _make_registry()
         for i in range(10):
             cid = _run(svc.upsert_external_campaign(
-                "inv-tenant", "google_ads", "acc", f"camp-{i}", f"Camp {i}"
+                "inv-tenant", "google_ads", "acc", f"camp-{i}", external_campaign_name=f"Camp {i}"
             ))
             uuid.UUID(str(cid))  # must be valid UUID, not provider ID
 
@@ -192,7 +192,7 @@ class TestDataInvariants:
         svc = _make_registry()
         provider_ids = ["12345678", "9876543210", "23847119283740001", "act_123456"]
         for pid in provider_ids:
-            cid = _run(svc.upsert_external_campaign("inv-tenant-2", "google_ads", "acc", pid, "Camp"))
+            cid = _run(svc.upsert_external_campaign("inv-tenant-2", "google_ads", "acc", pid, external_campaign_name="Camp"))
             assert str(cid) != pid
             uuid.UUID(str(cid))  # valid UUID format
 

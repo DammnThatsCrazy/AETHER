@@ -166,7 +166,7 @@ class TestCampaignRegistryService:
     def test_add_alias_and_retrieve(self):
         svc = _make_registry()
         cid = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g1", external_campaign_name="Camp"))
-        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", value="summer-sale-2026"))
+        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", alias_value="summer-sale-2026"))
         reviews = _run(svc.list_mapping_reviews("t1", status="open", limit=100))
         # Alias itself doesn't create a review; just verify no error
         assert isinstance(reviews, list)
@@ -254,7 +254,7 @@ class TestCampaignResolver:
         svc = _make_registry()
         resolver = _make_resolver()
         cid = _run(svc.create_custom_campaign("t1", name="UTM Camp"))
-        _run(svc.add_alias("t1", cid, alias_type="utm_id", value="utm-xyz-999"))
+        _run(svc.add_alias("t1", cid, alias_type="utm_id", alias_value="utm-xyz-999"))
         result = _run(resolver.resolve_one("t1", utm_id="utm-xyz-999"))
         assert result.status == "resolved"
         assert str(result.campaign_id) == str(cid)
@@ -265,7 +265,7 @@ class TestCampaignResolver:
         svc = _make_registry()
         resolver = _make_resolver()
         cid = _run(svc.create_custom_campaign("t1", name="UTM Camp"))
-        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", value="summer-promo-2026"))
+        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", alias_value="summer-promo-2026"))
         result = _run(resolver.resolve_one("t1", utm_campaign="summer-promo-2026"))
         assert result.status == "resolved"
         assert result.confidence == Decimal("0.85")
@@ -357,7 +357,7 @@ class TestAliasValidity:
         svc = _make_registry()
         resolver = _make_resolver()
         cid = _run(svc.create_custom_campaign("t1", name="Expiring Camp"))
-        alias_id = _run(svc.add_alias("t1", cid, alias_type="utm_campaign", value="promo-q1"))
+        alias_id = _run(svc.add_alias("t1", cid, alias_type="utm_campaign", alias_value="promo-q1"))
         # Expire the alias
         _run(svc.expire_alias("t1", alias_id))
         # Now resolution must not succeed via this alias
@@ -368,10 +368,10 @@ class TestAliasValidity:
         svc = _make_registry()
         cid_a = _run(svc.create_custom_campaign("t1", name="Camp A"))
         cid_b = _run(svc.create_custom_campaign("t1", name="Camp B"))
-        _run(svc.add_alias("t1", cid_a, alias_type="utm_campaign", value="conflict-value"))
+        _run(svc.add_alias("t1", cid_a, alias_type="utm_campaign", alias_value="conflict-value"))
         # Second add for same value → should not silently overwrite; expect no crash
         try:
-            _run(svc.add_alias("t1", cid_b, alias_type="utm_campaign", value="conflict-value"))
+            _run(svc.add_alias("t1", cid_b, alias_type="utm_campaign", alias_value="conflict-value"))
         except Exception:
             pass  # Conflict error is acceptable
 
