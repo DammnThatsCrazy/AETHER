@@ -40,6 +40,7 @@ export {
   useIncident,
   useIncidents,
   useResumeCards,
+  verifyCommand,
 } from './use-kyber-ops';
 export type {
   ApproveResult,

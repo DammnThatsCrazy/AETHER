@@ -27,7 +27,14 @@
  *     wrong root cause.
  *
  * Counts the backend could not compute arrive as `null` and render as "Unknown" with
- * whatever reason travelled with them. There is no `?? 0` in this file.
+ * whatever reason travelled with them. There is no `?? 0` in this file, and — the part
+ * that is easy to miss — nothing standing in for one: no `?? []` whose length is then
+ * counted or announced, no invented literal filling in for a field the backend did not
+ * send, and no `null` sorted as if it were zero. A `?? []` survives here only where the
+ * empty case renders no claim at all (an optional line that is simply not drawn), never
+ * where it would become a number, a count in a heading, or a statement that there is
+ * nothing there. An absent list is "we could not read it"; an empty list is "we read it
+ * and it was empty"; and only the second one may be shown as none.
  */
 
 import { useState } from 'react';
@@ -161,6 +168,28 @@ function bucketFloorReasons(exception: OperationalException): readonly string[] 
   return reasons;
 }
 
+/**
+ * Order the terms by contribution, descending.
+ *
+ * A term whose contribution the backend did not record is not a term that contributed
+ * zero. Sorting it as `?? 0` buries it at the bottom of the table beside the terms that
+ * genuinely contributed nothing, which is an unrecorded value being ranked as a measured
+ * one. Unrecorded terms are kept as their own trailing group — still visible, still
+ * rendered as Unknown in the contribution column — and ordered by name so the table is
+ * stable rather than arbitrary.
+ */
+function compareByContribution(
+  a: { readonly name: string; readonly contribution: number | null | undefined },
+  b: { readonly name: string; readonly contribution: number | null | undefined },
+): number {
+  const aKnown = a.contribution !== null && a.contribution !== undefined;
+  const bKnown = b.contribution !== null && b.contribution !== undefined;
+  if (aKnown && bKnown) return (b.contribution as number) - (a.contribution as number);
+  if (aKnown) return -1;
+  if (bKnown) return 1;
+  return a.name.localeCompare(b.name);
+}
+
 function PriorityExplanation({
   exception,
 }: {
@@ -170,10 +199,14 @@ function PriorityExplanation({
   const terms = inputs?.terms ?? null;
   const termNames = terms === null ? [] : Object.keys(terms);
   const floors = bucketFloorReasons(exception);
+  const unrecordedContributions = termNames.filter(name => {
+    const contribution = terms?.[name]?.contribution;
+    return contribution === null || contribution === undefined;
+  });
 
   const ordered = termNames
-    .map(name => ({ name, term: terms?.[name] }))
-    .sort((a, b) => (b.term?.contribution ?? 0) - (a.term?.contribution ?? 0));
+    .map(name => ({ name, term: terms?.[name], contribution: terms?.[name]?.contribution }))
+    .sort(compareByContribution);
 
   return (
     <div className="mt-2 rounded border border-border-default bg-surface-raised p-3 space-y-2">
@@ -188,10 +221,15 @@ function PriorityExplanation({
         </div>
       ) : (
         <>
+          {/* The scale is printed only when the backend recorded one. `?? '0-100'`
+              invented a bound no field supports, which turns an unlabelled number into
+              a percentage in the reader's head. */}
           <div className="text-[11px] text-text-muted font-mono">
-            Score <ScoreText value={inputs?.score ?? exception.priority_score} /> on the{' '}
-            {inputs?.scale ?? '0-100'} scale. Raw subtotal{' '}
-            <CountText value={inputs?.raw_subtotal ?? null} /> of{' '}
+            Score <ScoreText value={inputs?.score ?? exception.priority_score} />{' '}
+            {inputs?.scale
+              ? `on the ${inputs.scale} scale`
+              : `on a scale the backend did not record — ${UNKNOWN_LABEL}, so this number has no bound to read it against`}
+            . Raw subtotal <CountText value={inputs?.raw_subtotal ?? null} /> of{' '}
             <CountText value={inputs?.max_raw_score ?? null} />, scaled by a confidence
             factor of <CountText value={inputs?.confidence_factor ?? null} />.
           </div>
@@ -235,6 +273,15 @@ function PriorityExplanation({
               </tbody>
             </table>
           </div>
+
+          {unrecordedContributions.length > 0 && (
+            <div role="status" className="text-[11px] text-warning">
+              The backend recorded no contribution for{' '}
+              {unrecordedContributions.map(name => titleCase(name)).join(', ')}. Those
+              terms are listed last because their contribution is Unknown, not because it
+              was measured as nothing — their place in this ordering is unknown too.
+            </div>
+          )}
         </>
       )}
 
@@ -486,7 +533,8 @@ function QueueBody({
 }) {
   const order = queue.order.length > 0 ? queue.order : [...BUCKET_ORDER];
 
-  if ((queue.items ?? []).length === 0) {
+  // `items` is required by the schema, so there is no absent case to paper over here.
+  if (queue.items.length === 0) {
     return (
       <EmptyState
         title="Nothing in this queue"
@@ -498,7 +546,9 @@ function QueueBody({
   return (
     <div className="space-y-4">
       {order.map(bucket => {
-        const rows = queue.buckets[bucket] ?? [];
+        // A bucket the response never carried is not an empty bucket. `?? []` would
+        // print "Nothing in this bucket." over a bucket nobody sent.
+        const rows = queue.buckets[bucket];
         return (
           <section key={bucket} className="space-y-2">
             <div className="flex items-center gap-2">
@@ -509,7 +559,12 @@ function QueueBody({
                 <CountText value={queue.counts[bucket] ?? null} /> in bucket
               </span>
             </div>
-            {rows.length === 0 ? (
+            {rows === undefined ? (
+              <div role="status" className="text-[11px] text-warning font-mono">
+                This bucket was not returned in the response, so what is in it is{' '}
+                {UNKNOWN_LABEL} — not empty.
+              </div>
+            ) : rows.length === 0 ? (
               <div className="text-[11px] text-text-muted font-mono">
                 Nothing in this bucket.
               </div>
@@ -644,7 +699,11 @@ function IncidentDetailPanel({ detail }: { readonly detail: IncidentDetail }) {
     return <EmptyState title="That incident could not be read" />;
   }
   const incident: Incident = detail.incident;
-  const timeline = detail.timeline ?? [];
+  // Tri-state on purpose. `?? []` rendered a null timeline as "Attached signals (0)"
+  // plus "No signals attached to this incident" — an unread timeline presented as an
+  // incident with nothing behind it, which is exactly the reading that closes an
+  // investigation early.
+  const timeline: readonly IncidentSignal[] | null = detail.timeline ?? null;
   const weakLinks = detail.weak_links ?? [];
 
   return (
@@ -664,9 +723,23 @@ function IncidentDetailPanel({ detail }: { readonly detail: IncidentDetail }) {
 
       <div className="space-y-2">
         <h3 className="text-xs font-mono text-text-primary">
-          Attached signals ({timeline.length})
+          Attached signals ({timeline === null ? UNKNOWN_LABEL : timeline.length})
         </h3>
-        {timeline.length === 0 ? (
+        {timeline === null ? (
+          <div
+            role="status"
+            className="rounded border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning"
+          >
+            <div className="font-semibold font-mono">
+              Timeline {UNKNOWN_LABEL} — no signal list came back with this incident
+            </div>
+            <div className="mt-1 text-text-secondary">
+              How many signals are attached, and which, could not be read. That is not
+              the same as none being attached, and this incident cannot be judged on the
+              evidence shown here.
+            </div>
+          </div>
+        ) : timeline.length === 0 ? (
           <EmptyState title="No signals attached to this incident" />
         ) : (
           timeline.map(signal => <SignalRow key={signal.signal_id} signal={signal} />)

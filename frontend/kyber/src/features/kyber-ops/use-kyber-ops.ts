@@ -841,6 +841,29 @@ export function executeCommand(commandId: string): Promise<CommandDetail> {
     .then(response => response.data);
 }
 
+/**
+ * Re-run the postconditions of a command that already executed.
+ *
+ * This is the ONLY path out of `executed_unverified`, and it is not a way to declare a
+ * command verified: it re-runs the checks and the checks decide. Some postconditions are
+ * answerable only once the platform catches up — a job that was still queued when the
+ * first verification ran may have finished since — so a command that honestly could not
+ * be confirmed at execution time needs a way to be confirmed later.
+ *
+ * Without a call site the status is a dead end, and a dead end is how
+ * `executed_unverified` decays into "probably fine" — precisely the reading the status
+ * exists to prevent. The response is the same `describe` shape `/execute` returns.
+ */
+export function verifyCommand(commandId: string): Promise<CommandDetail> {
+  return restClient
+    .post(
+      `${BASE}/commands/${encodeURIComponent(commandId)}/verify`,
+      wrap(commandDetailSchema),
+      {},
+    )
+    .then(response => response.data);
+}
+
 export function fetchContainment(): Promise<ContainmentState> {
   return restClient
     .get(`${BASE}/containment`, wrap(containmentStateSchema))

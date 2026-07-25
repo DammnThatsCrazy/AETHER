@@ -375,7 +375,14 @@ async def test_render_returns_a_two_keyed_envelope_bound_to_the_contract(gateway
     assert envelope.tenant_id == TENANT
     assert envelope.contract_version == service.contract_version
     assert envelope.parity_comparable is True
-    assert envelope.tenantVisible["entity_counts"] == {"User": 2}
+    # Counts the mirror derived are diagnostics, never tenant-visible: putting
+    # them in `tenantVisible` would place a `len()`/`sum()` this package computed
+    # inside the parity digest, which is exactly what the invariant forbids.
+    assert "entity_counts" not in envelope.tenantVisible
+    assert "entity_count" not in envelope.tenantVisible
+    assert envelope.operatorDiagnostics.quality["rows_read"] == {"User": 2}
+    assert envelope.operatorDiagnostics.quality["rows_read_total"] == 2
+    assert envelope.operatorDiagnostics.quality["rows_read_is_lower_bound"] is False
     assert set(envelope.operatorDiagnostics.sections()) == set(DIAGNOSTIC_SECTIONS)
     assert envelope.operatorDiagnostics.health["state"] == "healthy"
     assert envelope.operatorDiagnostics.lineage["source"].endswith("scoped_gateway")
@@ -466,3 +473,33 @@ def test_the_parity_gate_passes_on_this_tree():
     spec.loader.exec_module(module)
 
     assert module.main() == 0, module.FAILURES
+
+
+async def test_a_truncated_render_is_not_parity_comparable(service):
+    """A prefix of the tenant's data is not the tenant's answer.
+
+    Two failure modes, and the second is the dangerous one. Comparing a
+    truncated read against Aether's full response manufactures a divergence that
+    does not exist. Worse, two genuinely different tenant states that agree on
+    the first ``SURFACE_READ_LIMIT`` rows digest identically — so
+    ``customer_visible_parity`` would report parity across a change it never
+    saw, which is the precise reading the verification stage exists to prevent.
+    """
+    class TruncatingGateway(RecordingGateway):
+        async def query(self, request: Any, **kwargs: Any) -> dict[str, Any]:
+            result = await super().query(request, **kwargs)
+            result["tenantVisible"]["truncated"] = True
+            result["operatorDiagnostics"]["truncated"] = True
+            return result
+
+    set_gateway(TruncatingGateway({"User": [{"vertex_id": "u1", "vertex_type": "User"}]}))
+    try:
+        envelope = await service.render(_request(), tenant_id=TENANT, surface="users")
+    finally:
+        reset_gateway()
+
+    assert envelope.tenantVisible["truncated"] is True
+    assert envelope.parity_comparable is False, (
+        "a truncated read was offered as comparable to the tenant's full result"
+    )
+    assert envelope.operatorDiagnostics.quality["rows_read_is_lower_bound"] is True

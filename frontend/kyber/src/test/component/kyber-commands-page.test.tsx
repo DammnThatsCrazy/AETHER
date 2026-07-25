@@ -10,7 +10,14 @@
  *   · a failed verification names the check that failed, on screen;
  *   · `exposure_known: false` renders Unknown plus the missing inputs, and NO number
  *     appears anywhere in the reach region;
- *   · the execute control is unavailable when the blast radius could not be assessed;
+ *   · the execute control is unavailable when the blast radius could not be assessed AND
+ *     when it was assessed but the reach is not known — there must be no enabled Execute
+ *     anywhere on the page in either case;
+ *   · a reach dimension the assessor did not report renders Unknown, with no `0` and no
+ *     "none in reach" — while a dimension it reported as empty still says none, because
+ *     that zero is measured;
+ *   · `executed_unverified` offers re-verification, the only path off that status, and a
+ *     `verified` command does not;
  *   · a step-up-required response renders as "Step-up required", not as a generic error;
  *   · an approval refusal is rendered in the backend's own words;
  *   · safe mode says on the control that it does not stop ingestion;
@@ -125,6 +132,24 @@ const PARTIAL_REACH = {
   truncated: true,
   confidence: 0.4,
   summary: null,
+};
+
+/**
+ * The assessor ran and answered, and did not report which tenants are in reach. That is
+ * "we do not know which tenants", and `(values ?? []).length` used to draw it as `0` and
+ * "none in reach".
+ */
+const REACH_WITHOUT_TENANT_LIST = {
+  ...KNOWN_REACH,
+  affected_tenants: null,
+  summary: 'checkout-api reaches two services',
+};
+
+/** The one case where a zero is honest: the assessor reported this dimension as empty. */
+const REACH_WITH_NO_TENANTS = {
+  ...KNOWN_REACH,
+  affected_tenants: [],
+  summary: 'checkout-api reaches no tenants',
 };
 
 const UNAVAILABLE_REACH = {
@@ -254,6 +279,26 @@ const UNAVAILABLE_REACH_DETAIL = {
   verification: null,
 };
 
+const UNREPORTED_TENANTS_DETAIL = {
+  ...UNVERIFIED_DETAIL,
+  command: {
+    ...BASE_COMMAND,
+    status: 'approved',
+    blast_radius: REACH_WITHOUT_TENANT_LIST,
+  },
+  execution: null,
+  executions: [],
+  verification: null,
+};
+
+const NO_TENANTS_DETAIL = {
+  ...UNVERIFIED_DETAIL,
+  command: { ...BASE_COMMAND, status: 'approved', blast_radius: REACH_WITH_NO_TENANTS },
+  execution: null,
+  executions: [],
+  verification: null,
+};
+
 const COMMAND_LIST = {
   commands: [BASE_COMMAND],
   count: 1,
@@ -322,6 +367,24 @@ function renderPage(capabilities: readonly string[] = OPERATOR_CAPABILITIES) {
 
 async function openCommand(): Promise<void> {
   await userEvent.click(await screen.findByText('re-queue the stuck settlement job'));
+}
+
+/**
+ * Every Execute control on the page that an operator could actually press. Asserting
+ * this is empty is stronger than asserting one particular button is disabled: the
+ * defect being guarded is "the operator was invited to dispatch", and a second enabled
+ * control anywhere would be that same invitation.
+ */
+function pressableExecuteControls(): readonly HTMLElement[] {
+  return screen
+    .queryAllByRole('button', { name: 'Execute' })
+    .filter(button => !(button as HTMLButtonElement).disabled);
+}
+
+/** One tile of the reach grid, by its label. */
+function reachTile(label: string): HTMLElement {
+  const reach = screen.getByRole('group', { name: 'Blast radius reach' });
+  return within(reach).getByText(label).parentElement as HTMLElement;
 }
 
 beforeEach(() => {
@@ -496,6 +559,76 @@ describe('KyberCommandsPage — reach is shown before execution', () => {
     expect(reach.textContent ?? '').not.toMatch(/\d/);
   });
 
+  it('makes execute unavailable when the reach was assessed but is not known', async () => {
+    mockApi({ detail: PARTIAL_REACH_DETAIL });
+    renderPage();
+    await openCommand();
+
+    // Positive: the panel says the reach is unmeasured.
+    expect(
+      await screen.findByText(
+        /Reach Unknown — this is not a small reach, it is an unmeasured one/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Execute is unavailable: the blast radius was assessed without a complete reach/,
+      ),
+    ).toBeInTheDocument();
+
+    // Negative: `available: true` is NOT enough to dispatch. There is no pressable
+    // Execute anywhere on the page — an operator must not be invited to act on a reach
+    // nobody measured, which is exactly what gating on `available` alone allowed.
+    expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled();
+    expect(pressableExecuteControls()).toHaveLength(0);
+  });
+
+  it('renders a reach dimension the assessor did not report as Unknown, not as none', async () => {
+    mockApi({ detail: UNREPORTED_TENANTS_DETAIL });
+    renderPage();
+    await openCommand();
+
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: 'Blast radius reach' })).toBeInTheDocument(),
+    );
+
+    // Positive: the unreported dimension says Unknown and says why.
+    const tenants = reachTile('Tenants in reach');
+    expect(within(tenants).getByText('Unknown')).toBeInTheDocument();
+    expect(
+      within(tenants).getByText(/The assessment did not report this dimension/),
+    ).toBeInTheDocument();
+
+    // Negative: no count and no "none in reach" — "we do not know which tenants" must
+    // never be rendered as "no tenants are affected".
+    expect(tenants.textContent ?? '').not.toMatch(/\d/);
+    expect(tenants.textContent ?? '').not.toContain('none in reach');
+    expect(
+      screen.getByRole('group', { name: 'Blast radius reach' }).textContent ?? '',
+    ).not.toContain('none in reach');
+
+    // The verdict is per dimension, not global: the services the assessor DID report
+    // still render their count.
+    expect(within(reachTile('Services in reach')).getByText('2')).toBeInTheDocument();
+  });
+
+  it('still says none for a dimension the assessor reported as empty', async () => {
+    mockApi({ detail: NO_TENANTS_DETAIL });
+    renderPage();
+    await openCommand();
+
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: 'Blast radius reach' })).toBeInTheDocument(),
+    );
+
+    // A measured zero is honest and must survive the fix above: this reach was read and
+    // it was empty. Over-correcting into Unknown here would be its own dishonesty.
+    const tenants = reachTile('Tenants in reach');
+    expect(within(tenants).getByText('0')).toBeInTheDocument();
+    expect(within(tenants).getByText('none in reach')).toBeInTheDocument();
+    expect(within(tenants).queryByText('Unknown')).not.toBeInTheDocument();
+  });
+
   it('names the approval gaps that stand between the command and execution', async () => {
     mockApi({ detail: UNAVAILABLE_REACH_DETAIL });
     renderPage();
@@ -507,6 +640,95 @@ describe('KyberCommandsPage — reach is shown before execution', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/a different qualified operator must approve/),
+    ).toBeInTheDocument();
+  });
+});
+
+// ── executed_unverified has a way out ────────────────────────────────────────
+
+describe('KyberCommandsPage — re-verification is offered, and only where it applies', () => {
+  it('offers re-verification on an executed_unverified command', async () => {
+    mockApi({ detail: UNVERIFIED_DETAIL });
+    renderPage();
+    await openCommand();
+
+    const control = await screen.findByRole('button', {
+      name: 'Re-verify postconditions',
+    });
+    expect(control).toBeEnabled();
+    // It is a re-run of the checks, not a declaration. The copy has to say so, because
+    // a control that looks like "mark verified" is worse than no control at all.
+    expect(
+      screen.getByText(/it is not a way to declare the command verified — the checks/),
+    ).toBeInTheDocument();
+  });
+
+  it('does not offer re-verification on a verified command', async () => {
+    mockApi({ detail: VERIFIED_DETAIL });
+    renderPage();
+    await openCommand();
+
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: 'Command status' })).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Re-verify postconditions' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not offer re-verification on a command that never executed', async () => {
+    mockApi({ detail: PARTIAL_REACH_DETAIL });
+    renderPage();
+    await openCommand();
+
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: 'Command status' })).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Re-verify postconditions' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('posts to the verify route and lets the checks decide the status', async () => {
+    mockApi({ detail: UNVERIFIED_DETAIL });
+    restPost.mockResolvedValue({ data: UNVERIFIED_DETAIL });
+    renderPage();
+    await openCommand();
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Re-verify postconditions' }),
+    );
+
+    await waitFor(() =>
+      expect(
+        restPost.mock.calls.some(
+          ([path]) => path === '/v1/kyber/ops/commands/kcm_retry/verify',
+        ),
+      ).toBe(true),
+    );
+
+    // The postconditions still did not hold, so the status is unchanged. Re-verifying
+    // is not a way to declare success, and the page must not draw it as one.
+    const status = screen.getByRole('group', { name: 'Command status' });
+    expect(within(status).getByText('Executed — not verified')).toBeInTheDocument();
+    expect(within(status).queryByText('Verified')).not.toBeInTheDocument();
+  });
+
+  it('renders a refused re-verification in the backend own words', async () => {
+    mockApi({ detail: UNVERIFIED_DETAIL });
+    restPost.mockRejectedValue(
+      new Error("command kcm_retry is 'requested'; only an executed command has postconditions to check"),
+    );
+    renderPage();
+    await openCommand();
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Re-verify postconditions' }),
+    );
+
+    expect(await screen.findByText('Re-verification refused')).toBeInTheDocument();
+    expect(
+      screen.getByText(/only an executed command has postconditions to check/),
     ).toBeInTheDocument();
   });
 });
@@ -618,6 +840,40 @@ describe('KyberCommandsPage — containment', () => {
     expect(
       within(row as HTMLElement).getByText(/Unknown — services.kyber.graph.blast_radius/),
     ).toBeInTheDocument();
+  });
+
+  it('does not report a switch with no reported service reach as reaching zero', async () => {
+    mockApi({
+      containment: {
+        ...CONTAINMENT_STATE,
+        switches: [
+          {
+            ...CONTAINMENT_STATE.switches[0],
+            switch_id: 'ksw_002',
+            control: 'ledger_writes',
+            // The assessment ran and answered; it reported no service list and no
+            // summary. `(affected_services ?? []).length` drew that as "0 service(s)" —
+            // a containment switch claiming it reaches nothing.
+            blast_radius: {
+              ...KNOWN_REACH,
+              summary: null,
+              affected_services: null,
+            },
+          },
+        ],
+      },
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Containment' }));
+
+    const row = await waitFor(() => screen.getByText('ledger_writes').closest('tr'));
+    expect(row).not.toBeNull();
+    expect(
+      within(row as HTMLElement).getByText(/no service reach was reported — Unknown, not none/),
+    ).toBeInTheDocument();
+    expect((row as HTMLElement).textContent ?? '').not.toContain('service(s)');
+    expect((row as HTMLElement).textContent ?? '').not.toContain('0 service');
   });
 
   it('hides the safe-mode controls without the kill-switch capability', async () => {

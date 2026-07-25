@@ -24,7 +24,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from shared.common.common import utc_now
 
@@ -141,9 +141,20 @@ class KyberGraphEdge(BaseModel):
     evidence_reference: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def idempotency_key(self) -> str:
-        """Natural key. A replay of the same relationship must not duplicate."""
+        """Natural key. A replay of the same relationship must not duplicate.
+
+        A ``computed_field`` rather than a plain ``property`` so it appears in
+        ``model_dump()``. ``ux_kyber_graph_edges_key`` indexes
+        ``data->>'idempotency_key'``, and a plain property is omitted from the
+        dump — which made database-side uniqueness depend on every writer
+        remembering to materialise the key by hand. The repository does
+        (``_edge_row``), but a convention that one forgotten call site silently
+        disables is not a constraint. Emitting it from the model makes the index
+        apply to any writer, including one that has not been written yet.
+        """
         return f"{self.source_node_key}|{self.relationship_type}|{self.target_node_key}"
 
 

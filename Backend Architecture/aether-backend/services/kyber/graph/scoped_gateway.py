@@ -46,11 +46,12 @@ from __future__ import annotations
 import hashlib
 import importlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from shared.common.common import ForbiddenError, utc_now
 from shared.graph.graph import tenant_of
+from shared.temporal.instant import try_parse_instant
 from shared.logger.logger import get_logger, metrics
 
 from ..access.disclosure import DisclosureLevel
@@ -225,23 +226,28 @@ def get_tenant_graph() -> Optional[Any]:
 
 
 def parse_iso(value: Optional[str]) -> Optional[datetime]:
-    """Parse an ISO timestamp, tolerating a trailing ``Z`` and naive values.
+    """Parse an exact instant, or return ``None`` — never a guess.
 
-    Shared with :mod:`services.kyber.graph.fleet`, which needs the same
-    tolerance when it ages projection rows. One parser, so a timestamp that is
-    "expired" to the gateway is never "fresh" to the fleet reader.
+    Delegates to :func:`shared.temporal.instant.try_parse_instant`, which
+    refuses a timezone-naive value rather than assuming UTC. An earlier version
+    did assume it, and that assumption is not harmless here: this parser's
+    primary caller is the scope-expiry gate, so silently reading a naive
+    timestamp as UTC could *extend* an operator's access to a tenant by up to a
+    day depending on where the value came from. Guessing a timezone is a policy
+    decision, and the one place it must never be made implicitly is the check
+    deciding whether authority has lapsed.
+
+    ``None`` is the safe answer everywhere it is used: the gateway treats an
+    unparseable expiry as expired (fail closed), and the fleet reader counts an
+    unparseable ``computed_at`` as undated, which forces ``totals_known: false``
+    rather than passing the row off as fresh.
+
+    Shared with :mod:`services.kyber.graph.fleet` so one timestamp cannot be
+    "expired" to the gateway and "fresh" to the fleet reader.
     """
     if not value:
         return None
-    text = str(value).strip()
-    if text.endswith("Z"):
-        text = f"{text[:-1]}+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
+    parsed, _reason = try_parse_instant(str(value))
     return parsed
 
 
@@ -630,9 +636,18 @@ class ScopedTenantGraphGateway:
     ) -> dict[str, Any]:
         """Operator-only metadata. Never compared by the Tenant Mirror parity check."""
         context = resolved.context
+        held = getattr(context, "capabilities", frozenset()) or frozenset()
+        # The capability this read was ACTUALLY authorized by, not the graph one
+        # by default. Since TENANT_READ_CAPABILITIES accepts the mirror
+        # capabilities too, naming the graph capability unconditionally would put
+        # a capability the operator may not hold into the evidence record — and
+        # this record is what an auditor reads to reconstruct who was allowed to
+        # do what. Sorted so the value is stable across runs.
+        authorized_by = sorted(TENANT_READ_CAPABILITIES & set(held))
         return {
             "surface": surface,
-            "capability": TENANT_GRAPH_CAPABILITY,
+            "capability": authorized_by[0] if authorized_by else None,
+            "authorized_by": authorized_by,
             "operator_id": getattr(context, "operator_id", None),
             "session_id": getattr(context, "session_id", None),
             "device_id": getattr(context, "device_id", None),

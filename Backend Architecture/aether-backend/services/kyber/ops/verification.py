@@ -478,6 +478,35 @@ async def kill_switch_engaged(ctx: VerificationContext) -> CheckResult:
             f"the agent runtime reports the kill switch for {tenant_id!r} is not engaged",
             {"tenant_id": tenant_id, "state": state},
         )
+    if tenant_id == FLEET_TENANT:
+        # The sentinel key is engaged — but NOTHING READS IT. Every consumer in
+        # the agent runtime (services/agent/routes.py, mutation_commit.py,
+        # worker_routes.py, briefings.py) calls get_kill_switch(tenant.tenant_id)
+        # with a real tenant id; the runtime has no fleet-wide primitive and does
+        # not interpret "*" as "all tenants".
+        #
+        # So this verifier just re-read the key dispatch itself wrote, one step
+        # earlier, and nothing else in the platform will ever look at it. That is
+        # not a re-read of the world; it is an echo. Returning PASSED here would
+        # tell an operator the fleet is stopped when no agent request is actually
+        # being blocked — the single most dangerous false confirmation in this
+        # plane. INCONCLUSIVE is the honest answer: the write landed, and whether
+        # the fleet is stopped cannot be determined from here.
+        #
+        # Containment is the control that IS real fleet-wide: the global
+        # containment switch is genuinely readable and genuinely consulted, and
+        # `containment_switch_active` covers it. Closing this properly needs a
+        # fleet-scoped kill switch in the agent runtime, or an explicit fan-out
+        # over tenants — both belong to that module's owner.
+        return CheckResult(
+            "kill_switch_engaged",
+            INCONCLUSIVE,
+            "the fleet sentinel kill switch was written, but the agent runtime "
+            "is tenant-keyed and no consumer reads the sentinel — whether the "
+            "fleet is actually stopped cannot be confirmed from here; the global "
+            "containment switch is the control that is verifiable",
+            {"tenant_id": tenant_id, "sentinel": True, "state": state},
+        )
     return CheckResult(
         "kill_switch_engaged",
         PASSED,

@@ -398,6 +398,25 @@ SEAMS: tuple[Seam, ...] = (
         why="Read back from the runtime's own control store; the setter's "
             "return value is not confirmation.",
     ),
+    # ── graph projector → the operator exception queue ────────────────────────
+    # The projector reports its own ill health: a stalled projection, an
+    # exhausted fetch window, a failed topology sync. A frozen projection that
+    # still answers queries is the failure mode an operator most needs told
+    # about, and a log line tells nobody. `optional=True` describes the caller
+    # degrading when the ops plane is absent — it still logs at error level and
+    # counts the dropped signal, and this seam is what proves the symbol exists.
+    Seam(
+        caller="services.kyber.graph.projector.KyberGraphProjector._report",
+        module="services.kyber.ops.exceptions",
+        singleton=None,
+        attribute="report_operational_signal",
+        positional=1,
+        keywords=("title", "dedupe_key", "severity", "probable_cause",
+                  "recommended_action", "data_integrity_exposure"),
+        why="The graph projector reports its own stall, exhausted fetch window "
+            "and topology failures into the operator exception queue.",
+        optional=True,
+    ),
     # ── tenant mirror → the scoped tenant graph gateway ───────────────────────
     # The mirror's only path into a tenant's data. This seam is load-bearing for
     # the parity invariant, not just for imports: the mirror is allowed to add

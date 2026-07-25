@@ -49,7 +49,9 @@ signal (``source="ops_alert"``) rather than re-detected here.
 """
 from __future__ import annotations
 
+import asyncio
 import importlib
+import os
 from datetime import datetime
 from typing import Any, Coroutine, Optional
 
@@ -102,6 +104,14 @@ ATTACHING_BASES: frozenset[str] = frozenset({
 MERGE_ELIGIBLE_BASES: frozenset[str] = frozenset({BASIS_RELEASE})
 
 DEFAULT_CORRELATION_WINDOW_SECONDS = 900
+
+#: How often the supervised sweep runs. Deliberately shorter than
+#: :data:`DEFAULT_CORRELATION_WINDOW_SECONDS`: a signal that arrives loose must
+#: still be inside the correlation window the next time the sweep looks at it,
+#: or the sweep would systematically open separate incidents for things it was
+#: built to join.
+_DEFAULT_SWEEP_INTERVAL_SECONDS = 300
+_MIN_SWEEP_INTERVAL_SECONDS = 30
 
 #: The graph plane's blast-radius module. Resolved lazily and by name because
 #: the graph plane is a separate deployment slice: when it is absent the
@@ -917,18 +927,83 @@ def _incident_priority(incident: Incident) -> float:
     return round(min(100.0, base + reach + volume + exposure), 4)
 
 
-#: Process-wide singleton. Worker O2 and the routes both call this.
+#: Process-wide singleton. ``services/kyber/ops/routes.py`` reads through it,
+#: ``services.kyber.ops.exceptions.report_operational_signal`` ingests through
+#: it, and :class:`IncidentCorrelationWorker` sweeps it.
 incident_correlator = IncidentCorrelator()
 
 
-def build_incident_correlator_coro() -> Coroutine[Any, Any, dict[str, Any]]:
-    """Zero-argument factory for a correlation sweep.
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        logger.warning("kyber correlation: %s=%r is not an int; using %d", name, raw, default)
+        return default
 
-    The background scheduler wants something it can call with no arguments and
-    await. Returning a fresh coroutine each call (rather than a shared one)
-    keeps a retried tick from awaiting an already-consumed coroutine.
+
+def sweep_interval_seconds() -> int:
+    """How often the supervised worker correlates.
+
+    Named for the sweep rather than called ``interval_seconds`` because this
+    module already talks about a *correlation window*, and the two numbers mean
+    opposite things: the window is how far back evidence counts, the interval is
+    how often it is re-examined.
     """
-    return incident_correlator.correlate()
+    return max(
+        _MIN_SWEEP_INTERVAL_SECONDS,
+        _env_int("KYBER_CORRELATION_SWEEP_INTERVAL_S", _DEFAULT_SWEEP_INTERVAL_SECONDS),
+    )
+
+
+class IncidentCorrelationWorker:
+    """Long-running correlation sweep for the ``maintenance`` runtime role.
+
+    Same supervised shape as :class:`services.kyber.retention.KyberRetentionWorker`
+    and :class:`services.kyber.graph.projector.KyberGraphProjectorWorker`: the
+    loop owns its own error handling and survives a raising iteration, because
+    the alternative is a correlator that dies on the first malformed signal and
+    then silently never joins another pair of related failures. ``CancelledError``
+    is re-raised so shutdown stays prompt — swallowing it would make the loop
+    unstoppable.
+    """
+
+    def __init__(self, correlator: Optional[IncidentCorrelator] = None) -> None:
+        self.correlator = correlator or incident_correlator
+        self._running = False
+
+    async def run_forever(self) -> None:
+        self._running = True
+        logger.info("kyber incident correlation worker started")
+        while self._running:
+            try:
+                await self.correlator.correlate()
+            except asyncio.CancelledError:  # pragma: no cover - shutdown path
+                raise
+            except Exception as exc:  # noqa: BLE001 - the loop must survive
+                logger.error("kyber incident correlation sweep failed: %s", exc)
+                metrics.increment("kyber_correlation_sweep_failures_total")
+            await asyncio.sleep(sweep_interval_seconds())
+
+    def stop(self) -> None:  # pragma: no cover - shutdown path
+        self._running = False
+
+
+def build_incident_correlator_coro() -> Coroutine[Any, Any, None]:
+    """Zero-arg factory: a fresh supervised incident-correlation coroutine.
+
+    Returns a *long-running loop*, not a single sweep. The runtime supervisor
+    restarts any spec whose coroutine returns, so handing it one sweep would
+    turn a periodic job into a restart loop with the supervisor's backoff — not
+    this module's interval — deciding the cadence.
+
+    Same shape as ``services.kyber.retention.build_kyber_retention_coro`` so the
+    supervisor registers it as an ordinary ``WorkerSpec`` factory with no
+    special case.
+    """
+    return IncidentCorrelationWorker().run_forever()
 
 
 __all__ = [
@@ -944,7 +1019,9 @@ __all__ = [
     "MERGE_ELIGIBLE_BASES",
     "MISSING_GRAPH_ENTRYPOINT",
     "MISSING_GRAPH_PLANE",
+    "IncidentCorrelationWorker",
     "IncidentCorrelator",
     "build_incident_correlator_coro",
     "incident_correlator",
+    "sweep_interval_seconds",
 ]

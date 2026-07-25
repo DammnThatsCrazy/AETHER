@@ -22,19 +22,28 @@ dependency instead would deny a retry to an operator who legitimately holds only
 ``kyber.command.retry``; declaring the floor and stopping there would be no gate
 at all.
 
+That second call resolves the operator's tenant scope from what the *request*
+names — a path param, a query param, the ``X-Kyber-Tenant`` header or
+``request.state`` — and a command names its targets in its **body**, which that
+resolution never reads. ``tenant_scope="required"`` therefore proves only that
+the caller holds *a* scope for *some* tenant, while ``tenant_ids`` decides what
+the command acts on. :func:`_assert_tenants_within_scope` closes that gap by
+matching every named tenant against the scope the evaluator actually granted,
+on the request *and* again on every later transition of the same command.
+
 The router is deliberately not mounted here. The application assembles it, so
 mounting the Kyber ops plane is one explicit act rather than an import side
 effect.
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from fastapi import APIRouter, Body, Depends, Path, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 
 from ..access.capabilities import (
     ACTION_CLASS_ANNOTATE,
@@ -89,12 +98,125 @@ def _require(capability: str, **kwargs: Any) -> Callable[..., Any]:
     return require_kyber_access(capability, **kwargs)
 
 
-async def _authorize_command(request: Request, command_type: str) -> tuple[Any, Any]:
-    """Authorize against the command's own capability and action class.
+def _assert_tenants_within_scope(
+    context: Any, spec: Any, tenant_ids: Iterable[str]
+) -> None:
+    """Every tenant a tenant-scoped command names must BE the scope's tenant.
+
+    The authority compared against is ``context.scope.tenant_id`` — the tenant
+    the durable :class:`~services.kyber.access.contracts.AccessScope` was
+    granted for — and never ``context.tenant_id``, which is only what the client
+    asserted through a header it controls. A client-provided tenant id may be
+    compared; it must never grant. Fleet visibility is not unrestricted
+    cross-tenant access, and a mismatch is a denial rather than a silent rescope
+    for the same reason it is one in
+    :mod:`services.kyber.graph.scoped_gateway`: answering about tenant A a
+    request that named tenant B would make the audit trail lie about what was
+    asked for.
+
+    Two shapes are refused outright, and both are decisions rather than
+    oversights:
+
+    **Zero tenants.** A tenant-scoped command with an empty ``tenant_ids`` has
+    nothing to check and nothing to contain: ``_containment_refusal`` iterates
+    that list and so checks no tenant, the audit row records no tenant, and the
+    blast radius is assessed over an empty set. There is no scope such a command
+    is inside, so it is refused as ``scope_missing`` — the same answer the
+    scoped graph gateway gives a read that names no tenant.
+
+    **Several tenants.** A session holds at most one active scope
+    (:mod:`services.kyber.access.scopes`), so a command naming two distinct
+    tenants can never be wholly inside the authority its operator actually
+    holds. It is refused rather than executed over the subset that happens to
+    match: a partial execution would leave an operator believing a command ran
+    against tenants it silently skipped, which is worse than a refusal they can
+    see. Note the rule is stated per tenant, not as a count — naming one tenant
+    twice is still one tenant, and the refusal falls out of the comparison.
+
+    A genuinely fleet-wide command is not impossible, it simply needs an
+    authority that does not exist yet: a scope covering several tenants, or a
+    spec that declares itself un-scoped (``tenant_scoped=False``, which this
+    function returns early for). Until one of those exists, refusing is the
+    honest reading of what the operator was granted.
+
+    Raises:
+        shared.common.common.ForbiddenError: With ``denial_reason``
+            ``scope_missing`` or ``scope_tenant_mismatch``.
+    """
+    if not getattr(spec, "tenant_scoped", False):
+        return
+
+    command_type = getattr(spec, "command_type", "?")
+    named = [str(tenant) for tenant in (tenant_ids or ())]
+    if not named:
+        raise _refuse_command(
+            "scope_missing",
+            command_type,
+            f"{command_type!r} is tenant-scoped but named no tenant; a command "
+            f"with no target cannot be matched against an access scope",
+        )
+
+    scope = getattr(context, "scope", None)
+    scope_tenant = str(getattr(scope, "tenant_id", "") or "")
+    if not scope_tenant:
+        raise _refuse_command(
+            "scope_missing",
+            command_type,
+            f"{command_type!r} is tenant-scoped and no tenant access scope was "
+            f"resolved for this session",
+        )
+
+    outside = sorted({tenant for tenant in named if tenant != scope_tenant})
+    if outside:
+        raise _refuse_command(
+            "scope_tenant_mismatch",
+            command_type,
+            f"{command_type!r} names {len(outside)} tenant(s) the active access "
+            f"scope was not granted for; the command is refused rather than run "
+            f"against the tenants that do match",
+            extra={"tenants_outside_scope": outside},
+        )
+
+
+def _refuse_command(
+    reason: str,
+    command_type: str,
+    detail: str,
+    *,
+    extra: Optional[dict[str, Any]] = None,
+) -> ForbiddenError:
+    """Build one command-plane denial, counting and logging it.
+
+    Returned rather than raised so each call site reads as a single ``raise``
+    and the gate stays legible in one function, matching the scoped graph
+    gateway. Counted because this refusal happens *after*
+    ``resolve_access_context`` has already recorded an allow, so without a
+    metric of its own it would leave no trace an operator could aggregate.
+    """
+    metrics.increment(
+        "kyber_command_denied_total", labels={"reason": reason, "command_type": command_type}
+    )
+    logger.warning(f"kyber: command denied reason={reason} command_type={command_type}")
+    return ForbiddenError(detail, details={"denial_reason": reason, **(extra or {})})
+
+
+async def _authorize_command(
+    request: Request, command_type: str, tenant_ids: Iterable[str]
+) -> tuple[Any, Any]:
+    """Authorize against the command's own capability, class and target tenants.
 
     Returns ``(context, spec)``. Deliberately not wrapped in a ``try/except``:
     if the access plane cannot be imported this raises, and a 500 on a command
     route is the correct outcome — an unauthorized state change is not.
+
+    ``tenant_ids`` is a required argument rather than something read off the
+    body here, because the four lifecycle routes source it differently: the
+    request route has the caller's body, and the later transitions must use the
+    tenants **already stored on the command**. A scope can lapse or be reopened
+    on another tenant between requesting a command and executing it, so the
+    match is made again on every transition rather than trusted from the first
+    one — the same reason the scoped graph gateway re-checks a scope the route
+    dependency already resolved.
     """
     from services.kyber.access.dependencies import resolve_access_context
 
@@ -106,6 +228,7 @@ async def _authorize_command(request: Request, command_type: str) -> tuple[Any, 
         action_class=spec.action_class,
         tenant_scope="required" if spec.tenant_scoped else "none",
     )
+    _assert_tenants_within_scope(context, spec, tenant_ids)
     return context, spec
 
 
@@ -582,7 +705,7 @@ async def request_command(
     disclosure and action class — step-up included — and writes its own decision
     row.
     """
-    authorized, spec = await _authorize_command(request, body.command_type)
+    authorized, spec = await _authorize_command(request, body.command_type, body.tenant_ids)
     command = await command_service.request(
         command_type=body.command_type,
         requested_by=getattr(authorized, "operator_id", "unknown"),
@@ -635,7 +758,9 @@ async def dry_run_command(
     containment switch the command will flip.
     """
     command = await command_service.require(command_id)
-    authorized, _spec = await _authorize_command(request, command.command_type)
+    authorized, _spec = await _authorize_command(
+        request, command.command_type, command.tenant_ids
+    )
     plan = await command_service.dry_run(
         command_id, actor_id=getattr(authorized, "operator_id", "unknown")
     )
@@ -661,7 +786,9 @@ async def approve_command(
     see is not evidence.
     """
     command = await command_service.require(command_id)
-    authorized, _spec = await _authorize_command(request, command.command_type)
+    authorized, _spec = await _authorize_command(
+        request, command.command_type, command.tenant_ids
+    )
     updated = await command_service.approve(
         command_id,
         approver_id=getattr(authorized, "operator_id", "unknown"),
@@ -697,7 +824,9 @@ async def execute_command(
     in ``verification.failure_reason``.
     """
     command = await command_service.require(command_id)
-    authorized, _spec = await _authorize_command(request, command.command_type)
+    authorized, _spec = await _authorize_command(
+        request, command.command_type, command.tenant_ids
+    )
     result = await command_service.execute(
         command_id, actor_id=getattr(authorized, "operator_id", "unknown")
     )
@@ -732,7 +861,9 @@ async def verify_command(
     decide.
     """
     command = await command_service.require(command_id)
-    authorized, _spec = await _authorize_command(request, command.command_type)
+    authorized, _spec = await _authorize_command(
+        request, command.command_type, command.tenant_ids
+    )
     result = await command_service.verify(
         command_id, actor_id=getattr(authorized, "operator_id", "unknown")
     )

@@ -13,7 +13,12 @@
  *   · a heuristic `correlation_basis` renders visibly differently from a deterministic
  *     one — the deterministic row must not carry the heuristic caveat and vice versa;
  *   · a resume card carries last action, next action, what is blocking and what is
- *     pending verification, and an incident with no next action says so.
+ *     pending verification, and an incident with no next action says so;
+ *   · a `null` timeline is Unknown — the heading must not say "(0)" and the page must
+ *     not say "No signals attached", because an unread timeline presented as an empty
+ *     one closes an investigation that was never actually looked at;
+ *   · a term whose contribution the backend did not record is not ranked as a
+ *     contribution of zero, and a scale the backend did not record is not invented.
  *
  * Only `restClient` is mocked, so the real feature hooks and the real zod schemas run:
  * a schema that dropped `priority_inputs` or coerced a null count to 0 would fail here.
@@ -120,6 +125,46 @@ const UNEXPLAINED_EXCEPTION = {
   signal_count: null,
 };
 
+/**
+ * The backend scored this one and recorded no contribution for `graph_reach`, and no
+ * scale at all.
+ *
+ * Term insertion order matters here and is the whole point: `graph_reach` (unrecorded)
+ * is declared BEFORE `volume` (a recorded contribution of exactly zero). Sorting with
+ * `(contribution ?? 0)` ties the two and — sort being stable — leaves `graph_reach`
+ * above `volume`, ranking an unrecorded value as a measured zero. Ordering unrecorded
+ * terms as their own trailing group puts `volume` above `graph_reach` instead.
+ */
+const PARTLY_RECORDED_EXCEPTION = {
+  ...SCORED_EXCEPTION,
+  exception_id: 'kex_partial_inputs',
+  title: 'Projector lag on the commerce domain',
+  severity: 'medium',
+  bucket: 'informational',
+  security_exposure: false,
+  data_integrity_exposure: false,
+  reversible: true,
+  time_to_breach_seconds: null,
+  priority_score: 33.5,
+  priority_inputs: {
+    terms: {
+      tenant_reach: { value: 2, normalized: 0.63, weight: 2, contribution: 1.26 },
+      graph_reach: { value: null, normalized: null, weight: 2, contribution: null },
+      volume: { value: 0, normalized: 0, weight: 0.5, contribution: 0 },
+    },
+    weights: { tenant_reach: 2, graph_reach: 2, volume: 0.5 },
+    raw_subtotal: 1.26,
+    max_raw_score: 12,
+    confidence: null,
+    confidence_factor: null,
+    score: 33.5,
+    dominant_terms: ['tenant_reach'],
+    scale: null,
+    scored_at: '2026-07-25T00:00:00Z',
+  },
+  metadata: {},
+};
+
 const SUPPRESSED_EXCEPTION = {
   ...SCORED_EXCEPTION,
   exception_id: 'kex_suppressed',
@@ -145,11 +190,16 @@ const QUEUE = {
     critical_now: [SCORED_EXCEPTION],
     needs_action: [UNEXPLAINED_EXCEPTION],
     watch: [SUPPRESSED_EXCEPTION],
-    informational: [],
+    informational: [PARTLY_RECORDED_EXCEPTION],
   },
-  items: [SCORED_EXCEPTION, UNEXPLAINED_EXCEPTION, SUPPRESSED_EXCEPTION],
-  counts: { critical_now: 1, needs_action: 1, watch: 1, informational: 0 },
-  total: 3,
+  items: [
+    SCORED_EXCEPTION,
+    UNEXPLAINED_EXCEPTION,
+    SUPPRESSED_EXCEPTION,
+    PARTLY_RECORDED_EXCEPTION,
+  ],
+  counts: { critical_now: 1, needs_action: 1, watch: 1, informational: 1 },
+  total: 4,
   status_filter: 'open',
   generated_at: '2026-07-25T00:15:00Z',
 };
@@ -423,6 +473,60 @@ describe('KyberExceptionsPage — the rank can be interrogated', () => {
     expect(within(row).queryByText('Security exposure')).not.toBeInTheDocument();
   });
 
+  it('does not rank a term whose contribution was never recorded as a zero one', async () => {
+    mockApi();
+    renderPage();
+
+    const row = await waitFor(() =>
+      screen.getByRole('group', { name: 'Exception kex_partial_inputs' }),
+    );
+    await userEvent.click(within(row).getByRole('button', { name: 'Why this rank' }));
+
+    // Positive: the unrecorded contribution is Unknown in its own cell, and the table
+    // says why that term sits where it does.
+    const rows = within(row).getAllByRole('row');
+    const cells = within(rows[rows.length - 1] as HTMLElement).getAllByRole('cell');
+    expect(cells[0]?.textContent).toBe('Graph reach');
+    expect(cells[cells.length - 1]?.textContent).toBe('Unknown');
+    expect(
+      within(row).getByText(/The backend recorded no contribution for Graph reach/),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByText(/not because it was measured as nothing/),
+    ).toBeInTheDocument();
+
+    // Negative: the term with a genuinely measured contribution of zero outranks the
+    // unrecorded one. `(contribution ?? 0)` ties them and leaves Graph reach above
+    // Volume, which is an unrecorded value ordered as if it had been measured.
+    const volumeIndex = rows.findIndex(entry =>
+      (entry.textContent ?? '').startsWith('Volume'),
+    );
+    const graphIndex = rows.findIndex(entry =>
+      (entry.textContent ?? '').startsWith('Graph reach'),
+    );
+    expect(volumeIndex).toBeGreaterThan(0);
+    expect(graphIndex).toBeGreaterThan(volumeIndex);
+  });
+
+  it('does not invent a scale the backend never recorded', async () => {
+    mockApi();
+    renderPage();
+
+    const row = await waitFor(() =>
+      screen.getByRole('group', { name: 'Exception kex_partial_inputs' }),
+    );
+    await userEvent.click(within(row).getByRole('button', { name: 'Why this rank' }));
+
+    // Positive: the score is shown with the fact that it has no recorded bound.
+    expect(
+      within(row).getByText(/on a scale the backend did not record/),
+    ).toBeInTheDocument();
+
+    // Negative: no `0-100` anywhere in this row. No backend field supports that bound,
+    // and printing it turns an unlabelled number into a percentage in the reader's head.
+    expect(row.textContent ?? '').not.toContain('0-100');
+  });
+
   it('renders a null signal count as Unknown rather than zero', async () => {
     mockApi();
     renderPage();
@@ -563,6 +667,52 @@ describe('KyberExceptionsPage — deterministic and heuristic correlations diffe
     expect(deterministicBadge.className).not.toContain('text-warning');
     expect(heuristicBadge.className).toContain('text-warning');
     expect(heuristicBadge.className).not.toContain('text-success');
+  });
+
+  it('renders a null timeline as Unknown, never as an incident with no signals', async () => {
+    mockApi({ incidentDetail: { ...INCIDENT_DETAIL, timeline: null } });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Incidents' }));
+    await userEvent.click(
+      await screen.findByText('checkout-api: 500 spike after rel_88'),
+    );
+
+    // Positive: the heading counts nothing it did not read, and the reason is on screen.
+    const heading = await screen.findByRole('heading', { name: /Attached signals/ });
+    expect(heading.textContent).toBe('Attached signals (Unknown)');
+    expect(
+      screen.getByText(/Timeline Unknown — no signal list came back with this incident/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/That is not\s+the same as none being attached/),
+    ).toBeInTheDocument();
+
+    // Negative: neither of the two readings that say "there is nothing here".
+    expect(heading.textContent ?? '').not.toContain('(0)');
+    expect(
+      screen.queryByText('No signals attached to this incident'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /^Signal / })).not.toBeInTheDocument();
+  });
+
+  it('still says no signals are attached when the timeline was read and was empty', async () => {
+    mockApi({ incidentDetail: { ...INCIDENT_DETAIL, timeline: [] } });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Incidents' }));
+    await userEvent.click(
+      await screen.findByText('checkout-api: 500 spike after rel_88'),
+    );
+
+    // A read-and-empty timeline is a measured zero and must keep saying so — the fix
+    // above must not turn every empty list into an Unknown.
+    const heading = await screen.findByRole('heading', { name: /Attached signals/ });
+    expect(heading.textContent).toBe('Attached signals (0)');
+    expect(
+      screen.getByText('No signals attached to this incident'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Timeline Unknown/)).not.toBeInTheDocument();
   });
 
   it('shows declined weak links as coincidences that were not merged', async () => {

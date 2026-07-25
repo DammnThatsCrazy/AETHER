@@ -333,20 +333,29 @@ class TenantMirrorService:
             if rendered_tenant is None:
                 rendered_tenant = visible.get("tenant_id")
 
+        # `entity_counts` and `entity_count` are DELIBERATELY not here. They are
+        # `len()` and `sum()` — computed by this package, not returned by the
+        # gateway — and under truncation they count what this read *saw*, not
+        # what the tenant has. Placing them in `tenantVisible` put them inside
+        # the parity digest, which meant two states differing only past the read
+        # limit digested identically, and a `check_parity` divergence at
+        # `entity_count` blamed Aether for a number Aether never produced. A
+        # value the mirror derives is by definition not a tenant-visible value,
+        # so it belongs in the diagnostics beside the read that produced it.
         tenant_visible: dict[str, Any] = {
             "surface": feature_id,
             "aether_route": entry.get("aether_route"),
             "tenant_id": rendered_tenant if rendered_tenant is not None else tenant_id,
             "vertex_types": list(types),
             "entities": entities,
-            "entity_counts": counts,
-            "entity_count": sum(counts.values()),
             "truncated": truncated,
         }
 
         disclosure = _first(reads, "granted_disclosure")
         masked = bool(_first(reads, "identifiers_masked"))
-        diagnostics = self._diagnostics(entry, types=types, reads=reads, truncated=truncated)
+        diagnostics = self._diagnostics(
+            entry, types=types, reads=reads, truncated=truncated, read_counts=counts
+        )
 
         metrics.increment(
             "kyber_mirror_render_total",
@@ -360,8 +369,14 @@ class TenantMirrorService:
             generated_at=now_iso(),
             disclosure=str(disclosure) if disclosure is not None else None,
             # A masked rendering redacts identifiers by design, so it is not
-            # the tenant's own result and must never be digested as one.
-            parity_comparable=not masked,
+            # the tenant's own result and must never be digested as one. A
+            # TRUNCATED rendering is not the tenant's own result either: it is a
+            # prefix. Digesting a prefix and comparing it against Aether's full
+            # answer manufactures a divergence, and — worse — two different
+            # tenant states that agree on the first SURFACE_READ_LIMIT rows
+            # digest the same, so `customer_visible_parity` would report parity
+            # across a change it never saw.
+            parity_comparable=not masked and not truncated,
             tenantVisible=tenant_visible,
             operatorDiagnostics=diagnostics,
         )
@@ -426,6 +441,7 @@ class TenantMirrorService:
         types: tuple[str, ...],
         reads: dict[str, dict[str, Any]],
         truncated: bool,
+        read_counts: Optional[dict[str, int]] = None,
     ) -> OperatorDiagnostics:
         """Assemble the five augmentation sections from the gateway's own report.
 
@@ -462,6 +478,15 @@ class TenantMirrorService:
                 "truncated": truncated,
                 "missing_inputs": sorted(set(missing)),
                 "reads_issued": len(reads),
+                # Rows this read SAW, per vertex type, and their total. Named
+                # "read" rather than "entity" on purpose: under truncation they
+                # are a lower bound on what the tenant has, not a count of it.
+                # They live here rather than in `tenantVisible` because the
+                # mirror derived them, and a value the mirror derives is not a
+                # tenant-visible value — see `render`.
+                "rows_read": dict(read_counts or {}),
+                "rows_read_total": sum((read_counts or {}).values()),
+                "rows_read_is_lower_bound": truncated,
                 "exposure_known": all(
                     bool(block.get("exposure_known")) for block in reads.values()
                 ) if reads else False,

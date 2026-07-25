@@ -16,8 +16,16 @@
  *    assessment is unavailable, or ran with a missing input, the reach renders as
  *    Unknown with the inputs that were absent, and no number is drawn anywhere in the
  *    reach region. An unknown reach displayed as a small one is how a fleet-wide
- *    action gets waved through. When the assessment is unavailable the execute control
- *    is unavailable with it.
+ *    action gets waved through. The execute control is gated on the reach being
+ *    *known* — `reachIsKnown`, not `available` — because an assessment that ran with a
+ *    missing input measured nothing, and an unmeasured reach must not be dispatchable.
+ *    A reach dimension the assessor did not report is Unknown too: `null` tenants are
+ *    "we do not know which tenants", never "no tenants are affected".
+ *
+ *  · **`executed_unverified` has a way out.** `/verify` re-runs the postconditions and
+ *    is the only path off that status. It is offered only from that status, and it is
+ *    not a way to declare a command verified — the checks decide. Without the control
+ *    the state is a dead end, and a dead end is how it decays into "probably fine".
  *
  *  · **A refusal is shown with its reason.** Self-approval, an unqualified approver and
  *    a duplicate approval are refused and audited by the backend; those refusals are
@@ -77,6 +85,7 @@ import {
   useCommandTypes,
   useCommands,
   useContainment,
+  verifyCommand,
 } from '@kyber/features/kyber-ops';
 import type {
   BlastRadius,
@@ -278,6 +287,19 @@ function StageStrip({ detail }: { readonly detail: CommandDetail }) {
 
 // ── Blast radius, shown before anything can be dispatched ────────────────────
 
+/**
+ * One dimension of the reach.
+ *
+ * Two separate things can be unknown here and both render as Unknown. `known` is the
+ * assessment-level answer — the assessor was unreachable, or it ran with a missing
+ * input. A nullish `values` is the dimension-level one: the assessment ran and did not
+ * report this dimension at all. `(values ?? []).length` would draw that second case as
+ * `0` and "none in reach", which is "no tenants are affected" written over "we do not
+ * know which tenants" — the most dangerous possible reading on a blast-radius panel.
+ *
+ * An empty array is different again, and is the one case a zero is honest: the assessor
+ * reported this dimension and found nothing in it.
+ */
 function ReachTile({
   label,
   values,
@@ -287,20 +309,28 @@ function ReachTile({
   readonly values: readonly string[] | null | undefined;
   readonly known: boolean;
 }) {
+  const reported = values !== null && values !== undefined;
   return (
     <div className="border border-border-default rounded p-2">
       <div className="text-[11px] text-text-muted font-mono">{label}</div>
-      {known ? (
+      {known && reported ? (
         <>
           <div className="text-sm font-mono text-text-primary">
-            <CountText value={(values ?? []).length} />
+            <CountText value={values.length} />
           </div>
           <div className="text-[10px] text-text-secondary break-words">
-            {(values ?? []).length === 0 ? 'none in reach' : (values ?? []).join(', ')}
+            {values.length === 0 ? 'none in reach' : values.join(', ')}
           </div>
         </>
       ) : (
-        <div className="text-sm font-mono text-warning">{UNKNOWN_LABEL}</div>
+        <>
+          <div className="text-sm font-mono text-warning">{UNKNOWN_LABEL}</div>
+          {known && (
+            <div className="text-[10px] text-text-muted break-words">
+              The assessment did not report this dimension. Unknown, not none.
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -522,9 +552,16 @@ function CommandDetailPanel({
   const command = detail.command;
   const spec = detail.spec;
   const radius = command.blast_radius ?? null;
-  // Not a styling decision: an action whose reach could not be assessed must not be
-  // dispatchable from this page, so the assessment gates the control itself.
-  const radiusAvailable = radius !== null && radius.available === true;
+  // Not a styling decision: an action whose reach is not KNOWN must not be dispatchable
+  // from this page. `available === true` is the weaker question — it only says the
+  // assessor answered. `reachIsKnown` also requires `exposure_known`, because an
+  // assessment that ran with a missing input or hit its node budget measured nothing,
+  // and the panel three rows up says so in those words. Gating on `available` alone
+  // printed "this is not a small reach, it is an unmeasured one" beside a live Execute
+  // button.
+  const reachKnown = reachIsKnown(radius);
+  // Which of the two the operator is looking at, so the notice can say which.
+  const assessorAnswered = radius !== null && radius.available === true;
 
   const dryRun = useMutation<string, DryRunPlan>({
     mutationFn: dryRunCommand,
@@ -536,6 +573,10 @@ function CommandDetailPanel({
   });
   const execute = useMutation<string, CommandDetail>({
     mutationFn: executeCommand,
+    onSuccess: onChanged,
+  });
+  const verify = useMutation<string, CommandDetail>({
+    mutationFn: verifyCommand,
     onSuccess: onChanged,
   });
 
@@ -573,6 +614,29 @@ function CommandDetailPanel({
             the system reached the state you asked for is still open. Re-verify before
             acting on it.
           </div>
+        </div>
+      )}
+
+      {command.status === UNVERIFIED_STATUS && (
+        <div className="space-y-1">
+          <PermissionGate capability={spec?.capability_id ?? 'kyber.command.dispatch'}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={verify.isLoading}
+              onClick={() => void verify.mutate(command.command_id)}
+            >
+              Re-verify postconditions
+            </Button>
+          </PermissionGate>
+          <div className="text-[11px] text-text-muted font-mono">
+            Re-verification re-runs the declared postconditions. It is the only way off
+            this status, and it is not a way to declare the command verified — the checks
+            decide. Some of them can only be answered once the platform catches up.
+          </div>
+          {verify.error !== null && (
+            <RefusalNotice title="Re-verification refused" message={verify.error} />
+          )}
         </div>
       )}
 
@@ -629,7 +693,7 @@ function CommandDetailPanel({
             <Button
               size="sm"
               variant="danger"
-              disabled={!radiusAvailable || execute.isLoading}
+              disabled={!reachKnown || execute.isLoading}
               onClick={() => void execute.mutate(command.command_id)}
             >
               Execute
@@ -637,10 +701,11 @@ function CommandDetailPanel({
           </PermissionGate>
         </div>
 
-        {!radiusAvailable && (
+        {!reachKnown && (
           <div role="status" className="text-[11px] text-warning font-mono">
-            Execute is unavailable: the blast radius could not be assessed, and an action
-            whose reach is unknown is not dispatched from this console.
+            {assessorAnswered
+              ? 'Execute is unavailable: the blast radius was assessed without a complete reach, so it is unmeasured rather than small, and an action whose reach is unknown is not dispatched from this console.'
+              : 'Execute is unavailable: the blast radius could not be assessed, and an action whose reach is unknown is not dispatched from this console.'}
           </div>
         )}
 
@@ -1063,9 +1128,25 @@ function SwitchReachCell({ radius }: { readonly radius: BlastRadius | null | und
       </span>
     );
   }
+  // The fallback used to be `(radius?.affected_services ?? []).length` — a switch whose
+  // assessment reported no service list at all rendered as "0 service(s)", which is a
+  // containment switch claiming it reaches nothing.
+  const services = radius?.affected_services;
+  if (radius?.summary) {
+    return (
+      <span className="text-[11px] font-mono text-text-secondary">{radius.summary}</span>
+    );
+  }
+  if (services === null || services === undefined) {
+    return (
+      <span className="text-warning font-mono text-[11px]">
+        Assessed, but no service reach was reported — {UNKNOWN_LABEL}, not none
+      </span>
+    );
+  }
   return (
     <span className="text-[11px] font-mono text-text-secondary">
-      {radius?.summary ?? `${(radius?.affected_services ?? []).length} service(s)`}
+      {services.length} service(s)
     </span>
   );
 }

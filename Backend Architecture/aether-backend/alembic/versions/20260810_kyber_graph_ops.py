@@ -273,6 +273,7 @@ _JSONB_INDEXES = (
     ("kyber_graph_edges", "target", "target_node_key"),
     ("kyber_graph_edges", "rel", "relationship_type"),
     ("kyber_fleet_projections", "projection", "projection"),
+    ("kyber_exceptions", "status", "status"),
     ("kyber_exceptions", "bucket", "bucket"),
     ("kyber_exceptions", "incident", "incident_id"),
     ("kyber_incidents", "status", "status"),
@@ -283,13 +284,43 @@ _JSONB_INDEXES = (
     ("kyber_command_verifications", "command", "command_id"),
 )
 
-# Ranking and sweep scans hit these typed columns.
+# Ranking and sweep scans, indexed on the JSONB expressions the repositories
+# actually query.
+#
+# These were originally declared over the typed columns (`status`,
+# `priority_score`, `computed_at`, `valid_to`) that each table also carries. All
+# five were dead: `BaseRepository.insert` writes only
+# `(id, data, tenant_id, created_at, updated_at)` and no Kyber repository
+# overrides it, so every typed column stayed NULL for every row ever written and
+# the indexes covered nothing. Verified on 5000 rows inserted through the real
+# repository path: 0 populated in all five, and the exception queue's own filter
+# (`WHERE data->>'status' = 'open'`) planned as a sequential scan.
+#
+# `priority_score` is cast to numeric so ordering is numeric rather than
+# lexicographic — otherwise 9 sorts above 10. The cast is IMMUTABLE, unlike the
+# `::timestamptz` cast that made an earlier migration in this repo unindexable;
+# timestamps here stay as ISO-8601 text, which sorts identically.
 _SORT_INDEXES = (
-    ("kyber_exceptions", "ix_kyber_exceptions_priority", "(status, priority_score DESC)"),
-    ("kyber_incidents", "ix_kyber_incidents_open", "(status, priority_score DESC)"),
-    ("kyber_fleet_projections", "ix_kyber_fleet_fresh", "(projection, computed_at)"),
-    ("kyber_command_requests", "ix_kyber_commands_status", "(status, created_at)"),
-    ("kyber_graph_edges", "ix_kyber_graph_edges_valid", "(valid_to)"),
+    # The operator's queue: filter by status, rank by priority.
+    ("kyber_exceptions", "ix_kyber_exceptions_priority",
+     "((data->>'status'), ((data->>'priority_score')::numeric) DESC)"),
+    ("kyber_incidents", "ix_kyber_incidents_open",
+     "((data->>'status'), ((data->>'priority_score')::numeric) DESC)"),
+    ("kyber_fleet_projections", "ix_kyber_fleet_fresh",
+     "((data->>'projection'), (data->>'computed_at'))"),
+    ("kyber_command_requests", "ix_kyber_commands_status",
+     "((data->>'status'), (data->>'created_at'))"),
+    ("kyber_graph_edges", "ix_kyber_graph_edges_valid", "((data->>'valid_to'))"),
+    # `find_many`/`count` always ORDER BY created_at (see repositories/repos.py),
+    # so every listing on every one of these tables sorted without an index.
+    ("kyber_exceptions", "ix_kyber_exceptions_created", "(created_at DESC)"),
+    ("kyber_incidents", "ix_kyber_incidents_created", "(created_at DESC)"),
+    ("kyber_incident_signals", "ix_kyber_incident_signals_created", "(created_at DESC)"),
+    ("kyber_command_requests", "ix_kyber_commands_created", "(created_at DESC)"),
+    ("kyber_containment_switches", "ix_kyber_containment_created", "(created_at DESC)"),
+    ("kyber_fleet_projections", "ix_kyber_fleet_created", "(created_at DESC)"),
+    ("kyber_graph_nodes", "ix_kyber_graph_nodes_created", "(created_at DESC)"),
+    ("kyber_graph_edges", "ix_kyber_graph_edges_created", "(created_at DESC)"),
 )
 
 

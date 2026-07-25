@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -65,6 +66,20 @@ SAFE_MODE_PRESERVED: tuple[str, ...] = ("ingestion",)
 
 #: The control that gates the command plane itself.
 COMMAND_CONTROL = "kyber_commands"
+
+
+def current_environment() -> str:
+    """The environment this process is actually running in.
+
+    Two call sites previously hard-coded ``"local"``, so every containment
+    switch — including safe mode, the broadest control the platform has —
+    recorded a blast radius reading "every service, every tenant and every
+    feature in **local**" while freezing production. An operator reviewing that
+    record afterwards would be reading about a machine that was never involved,
+    and the record is the entire point of computing the radius before flipping
+    the switch.
+    """
+    return os.getenv("AETHER_ENV", "local")
 
 #: Controls a paused platform must still allow, because they are how an operator
 #: contains the incident. Locking these out with everything else would mean the
@@ -508,7 +523,7 @@ class ContainmentService:
         radius = blast_radius or await compute_blast_radius(
             command_type=f"containment:{control}",
             tenant_ids=[target] if scope == "tenant" and target else [],
-            environment="local",
+            environment=current_environment(),
             scope=scope,
             target=target,
         )
@@ -667,7 +682,9 @@ class ContainmentService:
             raise BadRequestError("safe mode requires a reason")
 
         radius = await compute_blast_radius(
-            command_type="containment:safe_mode", environment="local", scope="global"
+            command_type="containment:safe_mode",
+            environment=current_environment(),
+            scope="global",
         )
         switches: list[ContainmentSwitch] = []
         for control in SAFE_MODE_CONTROLS:

@@ -108,6 +108,19 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_kyber_graph_projector_coro()
 
+    def _kyber_incident_correlation() -> Coroutine[Any, Any, None]:
+        """Attach loose incident signals, then merge same-release incidents.
+
+        Rides the existing ``maintenance`` role alongside ``kyber_directory_sync``
+        and ``kyber_retention_sweep``, for the same reason both of those do: one
+        periodic loop does not justify a new runtime role and the deploy-profile,
+        compose, Terraform and topology-validator fan-out that comes with one.
+        Not ``graph-writer`` — this reads no ledger.
+        """
+        from services.kyber.ops.correlation import build_incident_correlator_coro
+
+        return build_incident_correlator_coro()
+
     async def _run_delivery_worker() -> None:
         """Own a DeliveryWorker instance for the lifetime of this coroutine.
 
@@ -253,6 +266,15 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             # Gated on the workforce plane because the Kyber Graph is only
             # readable through it: projecting topology no one can read would
             # burn ledger reads for nothing.
+            enabled=lambda: bool(settings.kyber_workforce.workforce_identity_enabled),
+        ),
+        # Not required=True: a stalled correlator degrades the incident view, it
+        # must not abort startup. Same gate as the projector — the ops plane is
+        # only readable through the workforce plane, so correlating what nobody
+        # can read would burn writes for nothing.
+        WorkerSpec(
+            name="kyber_incident_correlation",
+            factory=_kyber_incident_correlation,
             enabled=lambda: bool(settings.kyber_workforce.workforce_identity_enabled),
         ),
         WorkerSpec(

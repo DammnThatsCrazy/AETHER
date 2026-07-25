@@ -46,9 +46,30 @@ owns them — including the refusal and audit of self-approval, unqualified
 approval and the same operator approving twice — for the same reason
 ``services/security/break_glass`` owns them for emergency access: two
 implementations of a second-actor rule is one implementation and one liability.
+
+Two of this plane's promises are idempotency promises, and an idempotency
+promise is worth exactly what it costs to break it concurrently. A double
+click, a retrying client and two console tabs all produce the same shape: two
+calls in flight at once, each reading state the other is about to change. Both
+promises are therefore held in two layers rather than by a read-then-write:
+
+* ``request()`` serializes on ``(command_type, idempotency_key)`` inside the
+  process, and treats ``ux_kyber_command_idempotency`` refusing an insert as the
+  answer it is — the row the index preserved is the winner, and it is replayed
+  rather than surfaced as a 500 on the retry path the lookup exists to smooth.
+* ``execute()`` serializes on the command id inside the process, and claims the
+  dispatch with a conditional *executable → ``executing``* update that exactly
+  one caller can win.
+
+The in-process lock alone would be a single-worker guarantee, which is no
+guarantee at all for a plane that runs behind more than one worker; the durable
+half is what makes each promise true between processes. See
+:meth:`CommandService._claim_for_dispatch` and
+:meth:`CommandService._persist_new`.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Iterable, Optional
 
 from shared.common.common import BadRequestError, ForbiddenError, NotFoundError
@@ -95,6 +116,57 @@ _TERMINAL_STATUSES: frozenset[str] = frozenset(
 #: A paused plane still runs the commands that *widen* containment — locking
 #: those out would mean the only way to contain further is to first uncontain.
 _COMMAND_CONTROL = COMMAND_CONTROL
+
+#: PostgreSQL's unique-violation SQLSTATE.
+_UNIQUE_VIOLATION_SQLSTATE = "23505"
+
+#: How many per-key locks to keep before evicting the idle ones. Command ids are
+#: unbounded over a process's life, so an unbounded map of them is a slow leak.
+_MAX_TRACKED_LOCKS = 2048
+
+#: In-process locks, keyed by what they serialize. Recreated per event loop:
+#: tests run each coroutine in a fresh ``asyncio.run()`` loop, and a lock bound
+#: to a dead loop raises "is bound to a different event loop" on reuse.
+_LOCKS: dict[str, asyncio.Lock] = {}
+_LOCKS_LOOP: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _serialized_on(key: str) -> asyncio.Lock:
+    """The lock serializing one key within this process.
+
+    Callers must ``async with`` the returned lock immediately: an uncontended
+    acquire does not yield, so no other coroutine can observe the map between
+    the lookup and the acquire, and only idle locks are ever evicted.
+    """
+    global _LOCKS_LOOP
+    loop = asyncio.get_running_loop()
+    if _LOCKS_LOOP is not loop:
+        _LOCKS.clear()
+        _LOCKS_LOOP = loop
+    lock = _LOCKS.get(key)
+    if lock is None:
+        if len(_LOCKS) >= _MAX_TRACKED_LOCKS:
+            # A lock nobody holds and nobody waits on is indistinguishable from
+            # a fresh one, so dropping it is safe; keeping every command id
+            # forever is not.
+            for idle in [k for k, held in _LOCKS.items() if not held.locked()]:
+                del _LOCKS[idle]
+        lock = asyncio.Lock()
+        _LOCKS[key] = lock
+    return lock
+
+
+def _is_unique_violation(exc: BaseException) -> bool:
+    """Whether a write failed because a unique index refused it.
+
+    Matched on SQLSTATE rather than by importing ``asyncpg.exceptions``: the
+    driver is an optional dependency (``repositories.repos`` imports it under a
+    guard), and an ``except ImportError`` that degrades would turn a constraint
+    this plane relies on into one it silently stops recognising. Nothing else is
+    matched — a widened rescue around a write is how a command that did not
+    persist comes to read as one that did.
+    """
+    return getattr(exc, "sqlstate", None) == _UNIQUE_VIOLATION_SQLSTATE
 
 
 class CommandService:
@@ -300,127 +372,129 @@ class CommandService:
                 "request twice is two state changes"
             )
 
-        existing_row = await self._commands.find_by_idempotency(command_type, idempotency_key)
-        if existing_row is not None:
-            existing = CommandRequest(**_strip_row(existing_row))
-            await self._audit(
-                existing,
-                actor_id=requested_by,
-                event_type="kyber.command.idempotent_replay",
-                action="request",
-                metadata={"original_command_id": existing.command_id},
+        # The lookup below and the write at the bottom of this method are two
+        # halves of one decision with six awaits between them. Serializing the
+        # key closes that window inside this process; `_persist_new` closes it
+        # between processes.
+        async with _serialized_on(f"request:{command_type}:{idempotency_key}"):
+            existing_row = await self._commands.find_by_idempotency(
+                command_type, idempotency_key
             )
-            metrics.increment(
-                "kyber_command_idempotent_replay_total", labels={"command_type": command_type}
-            )
-            logger.info(
-                f"kyber: command request for {command_type} idempotency_key="
-                f"{idempotency_key} returned existing {existing.command_id}"
-            )
-            return existing
+            if existing_row is not None:
+                return await self._replay(
+                    CommandRequest(**_strip_row(existing_row)),
+                    requested_by=requested_by,
+                    idempotency_key=idempotency_key,
+                )
 
-        self._assert_capability(spec, capabilities)
+            self._assert_capability(spec, capabilities)
 
-        command = CommandRequest(
-            command_type=command_type,
-            requested_by=requested_by,
-            session_id=session_id,
-            device_id=device_id,
-            environment=environment,
-            tenant_ids=list(tenant_ids or ()),
-            resource_ids=list(resource_ids or ()),
-            reason=reason.strip(),
-            action_class=spec.action_class,
-            dry_run=dry_run,
-            idempotency_key=idempotency_key,
-            rollback_plan=rollback_plan,
-            verification_plan=list(spec.verification_checks),
-            approval_mode=approval_mode,
-            incident_id=incident_id,
-            policy_decision_id=policy_decision_id,
-            metadata=dict(metadata or {}),
-        )
-
-        stepped_up = await self._assert_step_up(spec, session_id)
-        command.step_up_verified = stepped_up
-
-        # Assessed BEFORE anything is approved, and an unavailable assessment is
-        # a refusal. A command whose reach nobody measured is precisely the one
-        # an approver cannot meaningfully approve.
-        target = dispatch.containment_target(command, spec)
-        radius = await compute_blast_radius(
-            command_type=command_type,
-            tenant_ids=list(command.tenant_ids),
-            resource_ids=list(command.resource_ids),
-            environment=environment,
-            scope=target[0] if target else None,
-            target=target[1] if target else None,
-        )
-        if radius.get("available") is False:
-            await self._audit(
-                command,
-                actor_id=requested_by,
-                event_type="kyber.command.blast_radius_unavailable",
-                action="request",
-                outcome="blocked",
-                metadata={"reason": radius.get("reason")},
-            )
-            raise BadRequestError(
-                "the blast radius for this command could not be assessed "
-                f"({radius.get('reason')}); a command whose reach is unknown is "
-                f"refused rather than assumed small",
-                details={"blast_radius": radius},
-            )
-        command.blast_radius = radius
-
-        if spec.requires_rollback_plan and not (command.rollback_plan or "").strip():
-            await self._audit(
-                command,
-                actor_id=requested_by,
-                event_type="kyber.command.rollback_plan_missing",
-                action="request",
-                outcome="blocked",
-            )
-            raise BadRequestError(
-                f"{command_type!r} requires a written rollback plan before it may "
-                f"be requested",
-                details={"gap": "rollback_plan"},
+            command = CommandRequest(
+                command_type=command_type,
+                requested_by=requested_by,
+                session_id=session_id,
+                device_id=device_id,
+                environment=environment,
+                tenant_ids=list(tenant_ids or ()),
+                resource_ids=list(resource_ids or ()),
+                reason=reason.strip(),
+                action_class=spec.action_class,
+                dry_run=dry_run,
+                idempotency_key=idempotency_key,
+                rollback_plan=rollback_plan,
+                verification_plan=list(spec.verification_checks),
+                approval_mode=approval_mode,
+                incident_id=incident_id,
+                policy_decision_id=policy_decision_id,
+                metadata=dict(metadata or {}),
             )
 
-        templates = list(role_template_ids or ())
-        command.metadata.setdefault("founder_authority", approval_policy.is_founder(templates))
-        command.metadata.setdefault("role_template_ids", templates)
-        if typed_confirmation is not None:
-            command.metadata["typed_confirmation"] = typed_confirmation
+            stepped_up = await self._assert_step_up(spec, session_id)
+            command.step_up_verified = stepped_up
 
-        command.required_approvals = approval_policy.required_approvals(
-            spec, mode=approval_mode, qualified_operators=qualified_operators
-        )
-        if approval_policy.fallback_to_solo(
-            spec, mode=approval_mode, qualified_operators=qualified_operators
-        ):
-            # Visible rather than convenient: a fallback nobody can see is
-            # indistinguishable from a policy that never required a second actor.
-            command.metadata["approval_fallback_to_solo"] = True
-            command.approval_mode = "solo"
-
-        blocked = await self._containment_refusal(command, spec)
-        if blocked is not None:
-            await self._audit(
-                command,
-                actor_id=requested_by,
-                event_type="kyber.command.containment_blocked",
-                action="request",
-                outcome="blocked",
-                metadata={"reason": blocked},
+            # Assessed BEFORE anything is approved, and an unavailable assessment
+            # is a refusal. A command whose reach nobody measured is precisely
+            # the one an approver cannot meaningfully approve.
+            target = dispatch.containment_target(command, spec)
+            radius = await compute_blast_radius(
+                command_type=command_type,
+                tenant_ids=list(command.tenant_ids),
+                resource_ids=list(command.resource_ids),
+                environment=environment,
+                scope=target[0] if target else None,
+                target=target[1] if target else None,
             )
-            raise BadRequestError(blocked, details={"gap": "containment"})
+            if radius.get("available") is False:
+                await self._audit(
+                    command,
+                    actor_id=requested_by,
+                    event_type="kyber.command.blast_radius_unavailable",
+                    action="request",
+                    outcome="blocked",
+                    metadata={"reason": radius.get("reason")},
+                )
+                raise BadRequestError(
+                    "the blast radius for this command could not be assessed "
+                    f"({radius.get('reason')}); a command whose reach is unknown is "
+                    f"refused rather than assumed small",
+                    details={"blast_radius": radius},
+                )
+            command.blast_radius = radius
 
-        gaps = approval_policy.approval_gaps(command, spec)
-        command.metadata["approval_gaps"] = gaps
-        command.status = "awaiting_approval" if gaps else "approved"
+            if spec.requires_rollback_plan and not (command.rollback_plan or "").strip():
+                await self._audit(
+                    command,
+                    actor_id=requested_by,
+                    event_type="kyber.command.rollback_plan_missing",
+                    action="request",
+                    outcome="blocked",
+                )
+                raise BadRequestError(
+                    f"{command_type!r} requires a written rollback plan before it may "
+                    f"be requested",
+                    details={"gap": "rollback_plan"},
+                )
 
-        await self._persist(command)
+            templates = list(role_template_ids or ())
+            command.metadata.setdefault("founder_authority", approval_policy.is_founder(templates))
+            command.metadata.setdefault("role_template_ids", templates)
+            if typed_confirmation is not None:
+                command.metadata["typed_confirmation"] = typed_confirmation
+
+            command.required_approvals = approval_policy.required_approvals(
+                spec, mode=approval_mode, qualified_operators=qualified_operators
+            )
+            if approval_policy.fallback_to_solo(
+                spec, mode=approval_mode, qualified_operators=qualified_operators
+            ):
+                # Visible rather than convenient: a fallback nobody can see is
+                # indistinguishable from a policy that never required a second
+                # actor.
+                command.metadata["approval_fallback_to_solo"] = True
+                command.approval_mode = "solo"
+
+            blocked = await self._containment_refusal(command, spec)
+            if blocked is not None:
+                await self._audit(
+                    command,
+                    actor_id=requested_by,
+                    event_type="kyber.command.containment_blocked",
+                    action="request",
+                    outcome="blocked",
+                    metadata={"reason": blocked},
+                )
+                raise BadRequestError(blocked, details={"gap": "containment"})
+
+            gaps = approval_policy.approval_gaps(command, spec)
+            command.metadata["approval_gaps"] = gaps
+            command.status = "awaiting_approval" if gaps else "approved"
+
+            winner = await self._persist_new(command)
+            if winner is not None:
+                return await self._replay(
+                    winner, requested_by=requested_by, idempotency_key=idempotency_key
+                )
+
         metrics.increment(
             "kyber_command_requested_total",
             labels={"command_type": command_type, "action_class": str(spec.action_class)},
@@ -441,6 +515,65 @@ class CommandService:
             f"{requested_by} status={command.status} gaps={gaps}"
         )
         return command
+
+    async def _replay(
+        self, existing: CommandRequest, *, requested_by: str, idempotency_key: str
+    ) -> CommandRequest:
+        """Record that a repeated key returned the first command, and return it.
+
+        Reached from both halves of the idempotency guard — the lookup that
+        found the earlier command, and the unique index that refused a
+        concurrent second one — because they are the same event observed at
+        different moments and must leave the same evidence.
+        """
+        await self._audit(
+            existing,
+            actor_id=requested_by,
+            event_type="kyber.command.idempotent_replay",
+            action="request",
+            metadata={"original_command_id": existing.command_id},
+        )
+        metrics.increment(
+            "kyber_command_idempotent_replay_total",
+            labels={"command_type": existing.command_type},
+        )
+        logger.info(
+            f"kyber: command request for {existing.command_type} idempotency_key="
+            f"{idempotency_key} returned existing {existing.command_id}"
+        )
+        return existing
+
+    async def _persist_new(self, command: CommandRequest) -> Optional[CommandRequest]:
+        """Write a command for the first time, yielding to whoever won its key.
+
+        Returns:
+            ``None`` when this call wrote the command, or the **winning**
+            command when the unique index refused the insert.
+
+        ``ux_kyber_command_idempotency`` is unique on ``(command_type,
+        idempotency_key)``, so when two workers both pass the lookup PostgreSQL
+        refuses the second insert. That refusal is not a failure to surface — it
+        is the index answering the same question the lookup asked, a moment
+        later — and turning it into a 500 would break exactly the retry path the
+        lookup exists to smooth. Only SQLSTATE 23505 is caught; see
+        :func:`_is_unique_violation` for why nothing wider is.
+
+        On the in-memory backend there is no index, and no second process either
+        — the store is a dict in this one — so the lock the caller holds is the
+        whole guarantee and this always returns ``None``.
+        """
+        try:
+            await self._persist(command)
+        except Exception as exc:
+            if not _is_unique_violation(exc):
+                raise
+            row = await self._commands.find_by_idempotency(
+                command.command_type, command.idempotency_key
+            )
+            if row is None:  # pragma: no cover - index refused an insert with no winner
+                raise
+            return CommandRequest(**_strip_row(row))
+        return None
 
     # ── Reads ────────────────────────────────────────────────────────────────
 
@@ -575,13 +708,27 @@ class CommandService:
         Raises:
             shared.common.common.BadRequestError: An approval gate, dry run,
                 rollback plan or containment switch still stands in the way.
+
+        Concurrent calls for one command are serialized on its id and only one
+        of them dispatches; the others observe the claim and return the recorded
+        outcome. The lock is held across the dispatch deliberately: a caller
+        that waited gets the settled command rather than a snapshot of one
+        mid-flight, and commands with different ids never wait on each other.
         """
+        async with _serialized_on(f"execute:{command_id}"):
+            return await self._execute_claimed(command_id, actor_id=actor_id)
+
+    async def _execute_claimed(self, command_id: str, *, actor_id: str) -> dict[str, Any]:
+        """The body of :meth:`execute`, run with the command's lock held."""
         command = await self.require(command_id)
         spec = require_command_spec(command.command_type)
 
         # Idempotent on the command as well as on the key: a second execute call
-        # must not become a second side effect.
-        if await self._executions.attempt_count(command_id) > 0:
+        # must not become a second side effect. ``executing`` counts as
+        # dispatched even before an execution row exists — it is the claim
+        # another worker took, and the gap between that claim and its row is
+        # exactly where the duplicate dispatch used to fit.
+        if command.status == "executing" or await self._executions.attempt_count(command_id) > 0:
             logger.info(
                 f"kyber: command {command_id} has already been dispatched; returning "
                 f"the recorded outcome instead of executing again"
@@ -626,8 +773,12 @@ class CommandService:
         # pre-execution tenant-visible state afterwards.
         digest_before = await verification.capture_digest(command, spec)
 
-        command.status = "executing"
-        await self._persist(command)
+        if not await self._claim_for_dispatch(command):
+            logger.info(
+                f"kyber: command {command_id} was claimed for dispatch by another "
+                f"worker; returning the recorded outcome instead of executing again"
+            )
+            return await self.describe(command_id)
         await self._audit(
             command, actor_id=actor_id, event_type="kyber.command.executing", action="execute"
         )
@@ -676,6 +827,46 @@ class CommandService:
             tenant_id=command.tenant_ids[0] if command.tenant_ids else "",
         )
         return await self._settle(command, result, actor_id=actor_id)
+
+    async def _claim_for_dispatch(self, command: CommandRequest) -> bool:
+        """Take the exclusive right to dispatch this command.
+
+        Returns:
+            ``True`` when this call won the claim and must dispatch, ``False``
+            when someone else already holds it.
+
+        The move from an executable status to ``executing`` is the instant a
+        command becomes a side effect, so it is a compare-and-set rather than a
+        write. On PostgreSQL the ``UPDATE ... WHERE data->>'status' = ANY(...)``
+        matches no row for every caller but the first, whatever order their
+        reads happened in; a lock would order the callers inside one worker and
+        say nothing at all about the second worker.
+
+        On the in-memory backend there is no second worker — the store is a dict
+        in this process — so the per-command lock the caller already holds *is*
+        the compare-and-set and the write is unconditional. Both backends end
+        with exactly one caller dispatching.
+        """
+        pool = await self._commands._ensure_pool()
+        if pool is None:
+            command.status = "executing"
+            await self._persist(command)
+            return True
+
+        await self._commands._ensure_table()
+        result = await pool.execute(
+            f"""UPDATE {self._commands.table_name}
+                   SET data = jsonb_set(data, '{{status}}', '"executing"'::jsonb),
+                       updated_at = NOW()
+                 WHERE id = $1 AND data->>'status' = ANY($2::text[])""",
+            command.command_id,
+            sorted(_EXECUTABLE_STATUSES),
+        )
+        # asyncpg returns the command tag, e.g. "UPDATE 1" / "UPDATE 0".
+        claimed = str(result).rsplit(" ", 1)[-1] == "1"
+        if claimed:
+            command.status = "executing"
+        return claimed
 
     async def _settle(
         self, command: CommandRequest, result: CommandVerification, *, actor_id: str

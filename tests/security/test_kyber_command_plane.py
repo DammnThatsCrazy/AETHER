@@ -29,6 +29,7 @@ the real handler.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -46,6 +47,8 @@ from shared.common.common import BadRequestError, ForbiddenError  # noqa: E402
 
 from services.kyber.ops import dispatch, verification  # noqa: E402
 from services.kyber.ops.command_repository import (  # noqa: E402
+    CommandExecutionRepository,
+    CommandRepository,
     command_execution_repository,
     command_repository,
 )
@@ -699,3 +702,293 @@ async def test_record_approval_recomputes_gaps_instead_of_filtering_a_snapshot()
         "the approval count was met but a real gap remains, so the command must "
         f"not be marked approved — status was {command.status!r}"
     )
+
+
+# ── A command's target tenants against the operator's scope ──────────────────
+#
+# `resolve_access_context` resolves the tenant scope from what the REQUEST names
+# — path param, query param, `X-Kyber-Tenant` header, `request.state` — and
+# `POST /v1/kyber/ops/commands` has no tenant path or query param. So the scope
+# is resolved against a header the client controls while `body.tenant_ids`
+# decides what the command acts on. These tests pin the match that closes that,
+# at request time and again at execute time.
+#
+# The evaluator itself is substituted, not the gate: exercising the real
+# dependency needs live session, principal and device providers, and the claim
+# under test is what the command plane does with a context it was HANDED, not
+# how that context is derived. `tests/security/test_kyber_gate_consolidation.py`
+# covers the derivation.
+
+
+class FakeAccessScope:
+    """The durable half of a tenant access scope: the tenant it was granted for."""
+
+    def __init__(self, tenant_id: str) -> None:
+        self.tenant_id = tenant_id
+        self.scope_id = f"scope_{tenant_id}"
+        self.purpose = "incident_response"
+
+
+class FakeAccessContext:
+    """A `KyberAccessContext` reduced to the two tenant fields that matter.
+
+    `tenant_id` is what the client asserted (the header); `scope.tenant_id` is
+    what the access plane actually granted. They are deliberately allowed to
+    disagree here, because that disagreement is the defect.
+    """
+
+    def __init__(self, *, asserted_tenant: Optional[str], scope_tenant: Optional[str]) -> None:
+        self.tenant_id = asserted_tenant
+        self.scope = FakeAccessScope(scope_tenant) if scope_tenant else None
+        self.operator_id = REQUESTER
+        self.capabilities = frozenset({"kyber.command.retry", "kyber.command.rollback"})
+        self.granted_disclosure = 4
+        self.environment = "local"
+        self.decision = None
+        self.role_template_ids = list(FOUNDER_TEMPLATES)
+
+
+class FakeRequest:
+    """Stands in for the ASGI request. The evaluator that reads it is patched out."""
+
+    def __init__(self, *, header_tenant: Optional[str] = None) -> None:
+        self.headers = {"X-Kyber-Tenant": header_tenant} if header_tenant else {}
+        self.method = "POST"
+
+
+@pytest.fixture
+def granted_scope(monkeypatch):
+    """Install an access evaluator that grants a scope on exactly one tenant.
+
+    Returns a callable taking the tenant the scope was granted for and the
+    tenant the client asserted through the header, and yielding the list of
+    calls the command plane made — so a test can prove the evaluator was
+    consulted rather than bypassed.
+    """
+    from services.kyber.access import dependencies
+
+    def _install(scope_tenant: Optional[str], asserted_tenant: Optional[str] = None):
+        calls: list[dict[str, Any]] = []
+
+        async def _fake_resolve(request, capability=None, **kwargs):
+            calls.append({"capability": capability, **kwargs})
+            return FakeAccessContext(
+                asserted_tenant=asserted_tenant or scope_tenant, scope_tenant=scope_tenant
+            )
+
+        monkeypatch.setattr(dependencies, "resolve_access_context", _fake_resolve)
+        return calls
+
+    return _install
+
+
+async def test_a_command_may_not_target_a_tenant_outside_the_operators_scope(granted_scope):
+    """Header names tenant A, body names the victim. The body decides; deny.
+
+    The scope resolves against the header because that is the only tenant the
+    evaluator can see, and the command then acts on `tenant_ids`. Without the
+    match, holding any scope on any tenant is authority over every tenant.
+    """
+    from services.kyber.ops import routes
+
+    calls = granted_scope("tenant-A")
+
+    with _refuses("ForbiddenError") as excinfo:
+        await routes._authorize_command(
+            FakeRequest(header_tenant="tenant-A"), "retry_job", ["tenant-VICTIM"]
+        )
+
+    assert calls, "the access evaluator must actually have been consulted"
+    assert excinfo.value.details["denial_reason"] == "scope_tenant_mismatch"
+    assert excinfo.value.details["tenants_outside_scope"] == ["tenant-VICTIM"]
+
+
+async def test_a_command_inside_the_scope_is_still_authorized(granted_scope):
+    """The control. A gate that denies everything is not a gate, it is an outage."""
+    from services.kyber.ops import routes
+
+    granted_scope(TENANT)
+    context, spec = await routes._authorize_command(
+        FakeRequest(header_tenant=TENANT), "retry_job", [TENANT, TENANT]
+    )
+    assert spec.command_type == "retry_job"
+    assert context.scope.tenant_id == TENANT
+
+
+async def test_a_tenant_scoped_command_naming_no_tenant_is_refused(granted_scope):
+    """Zero targets is not "the whole fleet"; it is a reach nothing can check.
+
+    `_containment_refusal` iterates `tenant_ids`, so an empty list is checked
+    against no containment switch at all, and the audit row records no tenant.
+    """
+    from services.kyber.ops import routes
+
+    granted_scope(TENANT)
+    with _refuses("ForbiddenError") as excinfo:
+        await routes._authorize_command(FakeRequest(header_tenant=TENANT), "retry_job", [])
+    assert excinfo.value.details["denial_reason"] == "scope_missing"
+
+
+async def test_a_command_naming_two_tenants_is_refused_not_partly_run(granted_scope):
+    """One live scope cannot cover two tenants, and a subset is not an answer."""
+    from services.kyber.ops import routes
+
+    granted_scope(TENANT)
+    with _refuses("ForbiddenError") as excinfo:
+        await routes._authorize_command(
+            FakeRequest(header_tenant=TENANT), "retry_job", [TENANT, "tenant-VICTIM"]
+        )
+    assert excinfo.value.details["denial_reason"] == "scope_tenant_mismatch"
+    assert excinfo.value.details["tenants_outside_scope"] == ["tenant-VICTIM"], (
+        "refusing over the whole command is the point: executing the half that "
+        "matches would leave the operator believing it ran against both"
+    )
+
+
+async def test_a_fleet_command_is_not_forced_through_the_tenant_match(granted_scope):
+    """`tenant_scoped=False` commands are fleet-wide by declaration, not by omission."""
+    from services.kyber.ops import routes
+
+    granted_scope(None)
+    _context, spec = await routes._authorize_command(
+        FakeRequest(), "rollback_release", []
+    )
+    assert spec.tenant_scoped is False
+
+
+async def test_execute_rechecks_the_tenants_stored_on_the_command(
+    granted_scope, jobs: FakeJobs
+):
+    """A scope can change between requesting a command and executing it.
+
+    So the stored `tenant_ids` are matched again at execute time. This drives the
+    real route handler, because the defect was that `/execute` re-authorized
+    "the same way" — i.e. against a header — and never looked at what the
+    command it was about to dispatch actually targets.
+    """
+    from services.kyber.ops import routes
+
+    install(jobs=jobs)
+    svc = service()
+    command = await svc.request(
+        command_type="retry_job",
+        requested_by=REQUESTER,
+        reason="retry after connector fix",
+        idempotency_key="retry-scope-recheck",
+        tenant_ids=["tenant-VICTIM"],
+        resource_ids=["job_scope"],
+        session_id=SESSION,
+    )
+
+    granted_scope(TENANT)  # the live scope names a different tenant by now
+    with _refuses("ForbiddenError") as excinfo:
+        await routes.execute_command(
+            FakeRequest(header_tenant=TENANT), command_id=command.command_id, context=None
+        )
+
+    assert excinfo.value.details["denial_reason"] == "scope_tenant_mismatch"
+    assert jobs.retry_calls == [], "a refused command must never reach its handler"
+    assert await command_execution_repository.attempt_count(command.command_id) == 0
+
+
+# ── Concurrency ──────────────────────────────────────────────────────────────
+#
+# Both races below are read-then-write windows that only open under real I/O
+# latency, so both fakes below cost 10 ms on the repository read the service
+# consults — which is what a database costs and what an in-memory dict does not.
+# Without the delay the coroutines never interleave and both tests pass against
+# the broken code, which is worse than not having them.
+#
+# The delay goes AFTER the read, not before it, and that ordering is the whole
+# point: a real query snapshots when it starts and hands back its answer a
+# round-trip later, so what the caller acts on is what was true 10 ms ago. A
+# sleep placed before the read models nothing — the caller still sees the
+# freshest possible state, and the race the fake exists to reproduce closes.
+
+
+class SlowCommandRepository(CommandRepository):
+    """A command store whose idempotency lookup answers as late as a real one."""
+
+    async def find_by_idempotency(self, command_type: str, idempotency_key: str):
+        row = await super().find_by_idempotency(command_type, idempotency_key)
+        await asyncio.sleep(0.01)
+        return row
+
+
+class SlowExecutionRepository(CommandExecutionRepository):
+    """An execution store whose attempt lookup answers as late as a real one."""
+
+    async def list_for_command(self, command_id: str, *, limit: int = 50):
+        rows = await super().list_for_command(command_id, limit=limit)
+        await asyncio.sleep(0.01)
+        return rows
+
+
+async def test_concurrent_executes_dispatch_the_command_exactly_once(jobs: FakeJobs):
+    """Three simultaneous `/execute` calls are one side effect, not three.
+
+    The claim the plane makes is that "a second execute call must not become a
+    second side effect". Reading `attempt_count` and writing the execution row
+    six awaits later made that true only sequentially: with a real repository
+    read, three concurrent executes of one `retry_job` each saw zero attempts
+    and each dispatched.
+    """
+    install(jobs=jobs)
+    svc = CommandService(executions=SlowExecutionRepository())
+
+    command = await svc.request(
+        command_type="retry_job",
+        requested_by=REQUESTER,
+        reason="transient connector timeout",
+        idempotency_key="retry-concurrent-execute",
+        tenant_ids=[TENANT],
+        resource_ids=["job_race"],
+        session_id=SESSION,
+    )
+
+    results = await asyncio.gather(
+        *(svc.execute(command.command_id, actor_id=REQUESTER) for _ in range(3))
+    )
+
+    assert jobs.retry_calls == [(TENANT, "job_race")], (
+        f"the handler ran {len(jobs.retry_calls)} times for one command"
+    )
+    assert await command_execution_repository.attempt_count(command.command_id) == 1
+    assert len(results) == 3, "every caller must still get an answer, not an error"
+    assert {row["command"]["command_id"] for row in results} == {command.command_id}
+
+
+async def test_concurrent_requests_with_one_idempotency_key_mint_one_command(
+    jobs: FakeJobs,
+):
+    """Same key twice at once is one command id, not two.
+
+    The lookup and the write are separated by `_assert_step_up`,
+    `compute_blast_radius`, `_audit` and `_containment_refusal`. Concurrently,
+    both callers passed the lookup and both wrote: under PostgreSQL the loser
+    hits `ux_kyber_command_idempotency` and 500s on precisely the retry path the
+    lookup exists to smooth, and with no index both rows simply persist.
+    """
+    install(jobs=jobs)
+    svc = CommandService(commands=SlowCommandRepository())
+
+    async def _request() -> CommandRequest:
+        return await svc.request(
+            command_type="retry_job",
+            requested_by=REQUESTER,
+            reason="transient connector timeout",
+            idempotency_key="retry-concurrent-request",
+            tenant_ids=[TENANT],
+            resource_ids=["job_key_race"],
+            session_id=SESSION,
+        )
+
+    first, second = await asyncio.gather(_request(), _request())
+
+    assert first.command_id == second.command_id, (
+        "one idempotency key named two commands; the retry the key exists for "
+        "became a second command to approve, execute and verify"
+    )
+    rows = await command_repository.list_by_status(None, limit=100)
+    minted = [row for row in rows if row["idempotency_key"] == "retry-concurrent-request"]
+    assert len(minted) == 1, f"{len(minted)} rows persisted for one key"

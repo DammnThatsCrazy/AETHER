@@ -146,6 +146,28 @@ def reset_in_memory_stores() -> None:
         store.clear()
 
 
+def _jsonb_text(value: Any) -> str:
+    """Render a filter value the way PostgreSQL's ``->>`` operator renders it.
+
+    ``data->>'k'`` returns the JSON value as text using *JSON* spelling, not
+    Python's. ``str(True)`` is ``'True'``; jsonb yields ``'true'``. Binding the
+    Python spelling meant a boolean filter matched **nothing** — and it failed
+    silently, because an empty result set is indistinguishable from "there are
+    no such rows".
+
+    That is not hypothetical. Every boolean filter in this repository was
+    affected: ``kyber_containment_switches`` (so a frozen platform reported
+    itself unfrozen and no containment switch was ever readable), the stablecoin
+    registry, the notification delivery router, and the commerce active-record
+    lookup. All four returned ``[]`` forever on PostgreSQL, and all four passed
+    their tests, because the in-memory backend compares Python objects directly
+    and ``True == True`` holds there. The two backends silently disagreed.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def _matches_filters(row: dict, filters: dict) -> bool:
     """In-memory equivalent of the SQL find_many predicate.
 
@@ -277,8 +299,14 @@ class BaseRepository(ABC):
                 else:
                     if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
                         raise ValueError(f"Invalid filter key: {key!r}")
+                    if value is None:
+                        # `data->>'k'` is SQL NULL both when the key is absent
+                        # and when it holds JSON null, and NULL equals nothing —
+                        # so `= $n` could never have matched either.
+                        conditions.append(f"data->>'{key}' IS NULL")
+                        continue
                     conditions.append(f"data->>'{key}' = ${idx}")
-                params.append(str(value))
+                params.append(_jsonb_text(value))
                 idx += 1
 
         direction = "DESC" if sort_order == "desc" else "ASC"
@@ -316,8 +344,14 @@ class BaseRepository(ABC):
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
                 else:
+                    if value is None:
+                        # `data->>'k'` is SQL NULL both when the key is absent
+                        # and when it holds JSON null, and NULL equals nothing —
+                        # so `= $n` could never have matched either.
+                        conditions.append(f"data->>'{key}' IS NULL")
+                        continue
                     conditions.append(f"data->>'{key}' = ${idx}")
-                params.append(str(value))
+                params.append(_jsonb_text(value))
                 idx += 1
 
         row = await pool.fetchrow(

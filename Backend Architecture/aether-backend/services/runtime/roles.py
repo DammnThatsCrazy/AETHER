@@ -86,6 +86,11 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # challenges) are plain JSONB rows the storage-plane retention
             # sweep cannot reach. Same role, same cadence, same master switch.
             "kyber_retention_sweep",
+            # Correlates loose incident signals and merges same-release
+            # incidents. One periodic loop, so it rides maintenance like the two
+            # above rather than justifying a runtime role of its own. Not
+            # graph-writer: it reads no ledger.
+            "kyber_incident_correlation",
         }
     ),
 }

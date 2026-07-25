@@ -29,6 +29,34 @@ records a condition, the right move is to ingest that alert as an incident
 signal (see :mod:`.correlation`) and raise one exception — not to emit a second
 alert. This service adds prioritisation, state and audit over conditions the
 platform already detects; it is not a second detector.
+
+Producers — read this before trusting an empty queue
+----------------------------------------------------
+:func:`report_operational_signal` is the single ingestion entry point a signal
+source calls. It correlates the observation into an incident and raises the
+compressed exception in one step, so a producer never has to know about both
+planes.
+
+As of this release the **only** production callers are the Kyber Graph
+projector's own health conditions:
+
+* ``kyber_graph_projection_stalled`` — a tenant's projection failed
+  :data:`~services.kyber.graph.projector.PROJECTION_STALL_FAILURE_THRESHOLD`
+  times in a row and the graph is now serving a frozen snapshot;
+* ``kyber_graph_projection_window_exhausted`` — the resume window can no longer
+  reach unconsumed ledger rows, so no retry will make progress;
+* ``kyber_graph_topology_sync_failed`` — the D0 platform surface's node types
+  could not be re-derived;
+* ``kyber_graph_topology_missing_inputs`` — a topology input that is normally
+  derivable (today: the surface capability registry) was unreadable.
+
+Everything else on the platform — the job platform, connectors, billing, the
+stream consumers, ``services/agent/ops_alerts``, ``services/reliability`` — has
+**no producer here yet**. An operator reading ``GET /v1/kyber/ops/exceptions``
+is therefore reading "the graph projector is healthy", not "the platform is
+healthy". That is stated here rather than left to be inferred, because a queue
+that looks comprehensive and is not is worse than no queue: the first is trusted.
+Wiring a new source is one call to :func:`report_operational_signal`.
 """
 from __future__ import annotations
 
@@ -37,7 +65,15 @@ from typing import Any, Optional
 from shared.common.common import BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
-from .contracts import ExceptionBucket, ExceptionStatus, OperationalException, now_iso
+from .contracts import (
+    ExceptionBucket,
+    ExceptionStatus,
+    IncidentSignal,
+    OperationalException,
+    Severity,
+    now_iso,
+)
+from .correlation import IncidentCorrelator, incident_correlator
 from .repository import OPEN_EXCEPTION_STATUSES, ExceptionRepository
 from .severity import BUCKET_ORDER, apply_priority, bucket_rank, escalate_severity
 
@@ -456,12 +492,114 @@ def _union(current: list[str], incoming: list[str]) -> list[str]:
     return merged
 
 
-#: Process-wide singleton. Worker O2 and the routes both call this.
+#: Process-wide singleton. ``services/kyber/ops/routes.py`` reads and transitions
+#: through it; every write comes through :func:`report_operational_signal`.
 exception_service = ExceptionService()
+
+
+async def report_operational_signal(
+    signal: IncidentSignal,
+    *,
+    title: str,
+    dedupe_key: str,
+    severity: Severity = "medium",
+    probable_cause: Optional[str] = None,
+    recommended_action: Optional[str] = None,
+    confidence: float = 0.8,
+    customer_visible: bool = False,
+    security_exposure: bool = False,
+    financial_exposure: bool = False,
+    data_integrity_exposure: bool = False,
+    sla_impact: bool = False,
+    reversible: bool = True,
+    time_to_breach_seconds: Optional[int] = None,
+    correlate: bool = True,
+    exceptions: Optional[ExceptionService] = None,
+    correlator: Optional[IncidentCorrelator] = None,
+) -> OperationalException:
+    """The ingestion entry point: one observation in, one queued exception out.
+
+    A producer has one observation and should not have to know that Kyber keeps
+    two planes for it. This does both halves in the right order: correlate the
+    signal into an incident (so related failures share one investigation), then
+    raise the exception carrying that incident id (so the operator queue links
+    to it).
+
+    The signal is the source of reach. ``service``, ``feature`` and
+    ``tenant_id`` become the exception's ``affected_*`` lists rather than being
+    passed twice, which is what stops the two planes from disagreeing about who
+    is affected. ``severity`` is likewise stamped into ``signal.payload`` before
+    correlation, because :func:`~.correlation._signal_severity` reads it from
+    there and a signal that disagreed with its own exception would rank two ways.
+
+    Args:
+        signal: The observation. ``source`` names the producer, ``signal_type``
+            the condition; both end up on the exception's metadata.
+        title: What is wrong, in operator language.
+        dedupe_key: The compression key. Repeats of the same condition must
+            reuse it exactly — that is what turns a storm into one row with a
+            count. Include the environment and the narrowest affected subject.
+        severity: Kyber severity; drives both the incident and the ranking.
+        correlate: Set False for a condition that is definitionally standalone.
+            Correlation failure is never fatal: the exception is the durable
+            operator signal and is raised either way, matching the fail-open
+            reasoning in :meth:`ExceptionService._audit`.
+        exceptions: Service override, for tests.
+        correlator: Correlator override, for tests.
+
+    Returns:
+        The stored exception — the pre-existing row when compression applied.
+    """
+    signal.payload = {**(signal.payload or {}), "severity": severity}
+
+    incident_id: Optional[str] = None
+    if correlate:
+        try:
+            incident, _created = await (correlator or incident_correlator).ingest_signal(signal)
+            incident_id = incident.incident_id
+        except Exception as exc:  # noqa: BLE001 - the queue must not depend on correlation
+            logger.warning(
+                "kyber signal correlation failed (exception still raised): "
+                "source=%s type=%s error=%s",
+                signal.source, signal.signal_type, exc,
+            )
+
+    candidate = OperationalException(
+        title=title,
+        severity=severity,
+        dedupe_key=dedupe_key,
+        confidence=confidence,
+        affected_services=[signal.service] if signal.service else [],
+        affected_features=[signal.feature] if signal.feature else [],
+        affected_tenants=[signal.tenant_id] if signal.tenant_id else [],
+        customer_visible=customer_visible,
+        security_exposure=security_exposure,
+        financial_exposure=financial_exposure,
+        data_integrity_exposure=data_integrity_exposure,
+        sla_impact=sla_impact,
+        reversible=reversible,
+        time_to_breach_seconds=time_to_breach_seconds,
+        probable_cause=probable_cause,
+        recommended_action=recommended_action,
+        incident_id=incident_id,
+        metadata={
+            "source": signal.source,
+            "signal_type": signal.signal_type,
+            "signal_id": signal.signal_id,
+            "payload": dict(signal.payload or {}),
+        },
+    )
+    metrics.increment(
+        "kyber_operational_signal_reported_total",
+        labels={"source": signal.source, "signal_type": signal.signal_type},
+    )
+    return await (exceptions or exception_service).raise_exception(candidate)
+
 
 __all__ = [
     "OPEN_EXCEPTION_STATUSES",
     "TERMINAL_STATUSES",
     "ExceptionService",
     "exception_service",
+    "report_operational_signal",
 ]
