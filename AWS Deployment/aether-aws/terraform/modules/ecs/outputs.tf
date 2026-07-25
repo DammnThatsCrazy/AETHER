@@ -34,8 +34,8 @@ output "backend_task_definition_arn" {
 }
 
 output "runtime_role_service_names" {
-  description = "ECS service name for every dedicated non-API runtime role"
-  value       = { for role, service in aws_ecs_service.runtime_role : role => service.name }
+  description = "AETHER_ROLE token -> ECS service name for every non-API runtime service (one key per service, so a consolidated profile has one entry hosting several roles)"
+  value       = { for key, service in aws_ecs_service.runtime_service : key => service.name }
 }
 
 output "ml_task_definition_arn" {
@@ -60,11 +60,50 @@ output "dedicated_ml_target_group_arns" {
 }
 
 output "runtime_service_names" {
-  description = "ECS service names for the dedicated non-API runtime roles, in role-name order"
-  value       = [for role, service in aws_ecs_service.runtime_role : service.name]
+  description = "ECS service names for the non-API runtime services, in service-key order"
+  value       = [for key, service in aws_ecs_service.runtime_service : service.name]
 }
 
 output "backend_service_desired_count" {
   description = "Desired task count configured on the aether-backend service"
   value       = aws_ecs_service.backend.desired_count
+}
+
+# --------------------------------------------------------------------------
+# Runtime topology surface
+#
+# Configuration-derived (never a computed attribute) so a provider-mocked plan
+# can assert on the shape the matrix produced rather than on the locals that
+# produced it.
+# --------------------------------------------------------------------------
+
+output "runtime_service_desired_counts" {
+  description = "Service key -> planned desired task count. Every entry is 0 in an asleep environment."
+  value       = { for key, service in aws_ecs_service.runtime_service : key => service.desired_count }
+}
+
+output "runtime_service_queue_roles" {
+  description = "Service key -> the roles it hosts that own a dedicated SQS queue, i.e. the exact keys of that task's SQS_ROLE_QUEUE_URLS object"
+  value       = { for key, queues in local.runtime_service_role_queues : key => sort(keys(queues)) }
+}
+
+output "runtime_service_capacity_providers" {
+  description = "Service key -> the capacity providers its ECS strategy names, sorted"
+  value = {
+    for key, service in aws_ecs_service.runtime_service :
+    key => sort([for strategy in service.capacity_provider_strategy : strategy.capacity_provider])
+  }
+}
+
+output "backend_capacity_providers" {
+  description = "Capacity providers named by the aether-backend service's strategy, sorted"
+  value       = sort([for strategy in aws_ecs_service.backend.capacity_provider_strategy : strategy.capacity_provider])
+}
+
+output "backend_autoscaling_bounds" {
+  description = "Autoscaling floor and ceiling applied to the aether-backend service; both 0 in an asleep environment"
+  value = {
+    min = aws_appautoscaling_target.backend.min_capacity
+    max = aws_appautoscaling_target.backend.max_capacity
+  }
 }

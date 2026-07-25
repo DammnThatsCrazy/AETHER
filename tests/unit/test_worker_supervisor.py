@@ -256,7 +256,10 @@ async def test_status_shape():
     try:
         status = supervisor.status()
         for name, info in status.items():
-            assert set(info.keys()) == {"state", "restarts", "last_error", "required"}
+            # "role" carries the owning logical worker role so a consolidated
+            # execution group stays per-role observable; "" when unattributed.
+            assert set(info.keys()) == {"state", "restarts", "last_error", "required", "role"}
+            assert isinstance(info["role"], str)
             assert info["state"] in {"running", "failed", "disabled", "stopped", "restarting"}
             assert isinstance(info["restarts"], int)
             assert info["last_error"] is None or isinstance(info["last_error"], str)

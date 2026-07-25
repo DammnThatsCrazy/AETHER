@@ -11,6 +11,8 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // VITE_DEMO_ENV has no default, so tests declare it explicitly too.
+    env: { VITE_DEMO_ENV: 'local-mocked' },
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],

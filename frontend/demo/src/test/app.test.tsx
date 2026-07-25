@@ -12,6 +12,13 @@ describe('Aether Demo App', () => {
     expect(screen.getByText(/Outcomes & ledger/)).toBeInTheDocument();
   });
 
+  it('always shows a persistent synthetic-data label', () => {
+    render(<App />);
+    const banner = screen.getByTestId('synthetic-data-banner');
+    expect(banner).toHaveTextContent('Synthetic demo data — not a production tenant');
+    expect(banner).toHaveTextContent('local-mocked');
+  });
+
   it('switches to the operator (Kyber) view', () => {
     render(<App />);
     fireEvent.click(screen.getByText('Operator (Kyber)'));

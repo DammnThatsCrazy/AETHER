@@ -44,6 +44,33 @@ variable "environment" {
   }
 }
 
+# The staging wake/sleep switch. Deliberately a root variable rather than a
+# tfvars constant: the whole point is that an operator or a schedule flips it
+# between applies without editing reviewed configuration.
+variable "staging_state" {
+  type        = string
+  description = <<-EOT
+    Lifecycle state for a profile that declares one, resolved against
+    `profiles.<profile>.staging_state.states` in
+    config/runtime_deployment.yaml. `asleep` multiplies every declared
+    desired_count and autoscaling bound by zero, so a sleeping environment owns
+    exactly the same services and the same roles as an awake one and wakes by
+    flipping this single input rather than by planning a differently-shaped
+    topology. Profiles that declare no `staging_state` block (today: everything
+    except staging) ignore it entirely — the multiplier falls back to 1.
+  EOT
+  default     = "awake"
+
+  validation {
+    # The two states config/runtime_deployment.yaml declares. Restricting them
+    # here fails on a typo at plan time; without it `try(...)` in profiles.tf
+    # would silently fall back to the multiplier 1 and an operator who typed
+    # "sleep" would be told the environment is asleep while it kept running.
+    condition     = contains(["awake", "asleep"], var.staging_state)
+    error_message = "staging_state must be one of: awake, asleep."
+  }
+}
+
 variable "aws_region" {
   type        = string
   description = "AWS region to deploy resources into"
@@ -194,17 +221,17 @@ variable "msk_broker_volume_size" {
 # ECS / Compute
 # --------------------------------------------------------------------------
 
-variable "ecs_backend_cpu" {
-  type        = number
-  description = "CPU units (1024 = 1 vCPU) for the aether-backend task"
-  default     = 1024
-}
-
-variable "ecs_backend_memory" {
-  type        = number
-  description = "Memory in MiB for the aether-backend task"
-  default     = 2048
-}
+# The aether-backend (api) task's sizing, baseline and autoscaling envelope are
+# NOT variables. They are read from the api service in
+# config/runtime_deployment.yaml by profiles.tf (local.api_cpu, local.api_memory,
+# local.api_desired_count, local.api_min_capacity, local.api_max_capacity) and
+# passed to modules/ecs from there. The former ecs_backend_cpu /
+# ecs_backend_memory / ecs_backend_min_capacity / ecs_backend_max_capacity
+# variables were a second, silently divergent source of truth for the same four
+# numbers: their defaults (1024/2048/1/10) disagreed with the matrix's
+# production-scale api (2048/4096/3/12) and no tfvars file set them, so a scale
+# apply quietly ran the reviewed capacity of a lean one. Only the ML serving
+# task, which the matrix does not describe, is still sized by variable.
 
 variable "ecs_ml_cpu" {
   type        = number
@@ -216,18 +243,6 @@ variable "ecs_ml_memory" {
   type        = number
   description = "Memory in MiB for the aether-ml-serving task"
   default     = 4096
-}
-
-variable "ecs_backend_min_capacity" {
-  type        = number
-  description = "Minimum number of aether-backend tasks"
-  default     = 1
-}
-
-variable "ecs_backend_max_capacity" {
-  type        = number
-  description = "Maximum number of aether-backend tasks for auto-scaling"
-  default     = 10
 }
 
 variable "ecs_ml_min_capacity" {

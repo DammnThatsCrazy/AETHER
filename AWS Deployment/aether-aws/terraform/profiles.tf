@@ -128,22 +128,108 @@ locals {
   # Runtime topology
   # --------------------------------------------------------------------------
 
-  # Per-role runtime sizing from the canonical deployment matrix, so
-  # production-scale / enterprise-isolated actually scale. The api role is
-  # excluded: the -backend service is sized by the ecs_backend_* variables.
+  # Runtime topology comes from the canonical deployment matrix (schema v2),
+  # whose unit is the ECS SERVICE, not the logical role. A consolidated profile
+  # packs eight worker roles into one `lean-worker` service; a dedicated profile
+  # keeps one service per role. Terraform only needs the service shape — which
+  # roles a service hosts is the runtime's concern, resolved in-process by
+  # services/runtime/roles.py::roles_in from the AETHER_ROLE token.
   runtime_deployment = yamldecode(file("${path.module}/../../../config/runtime_deployment.yaml"))
-  runtime_role_settings = {
-    for role, cfg in local.runtime_deployment.profiles[var.deployment_profile].roles :
-    role => {
+  runtime_profile    = local.runtime_deployment.profiles[var.deployment_profile]
+
+  # Staging can be driven to zero desired tasks without changing the topology:
+  # an asleep environment owns exactly the same services as an awake one, so
+  # waking is an input flip rather than a differently-shaped plan. Profiles that
+  # declare no `staging_state` block are always at full capacity.
+  staging_state_multiplier = try(
+    local.runtime_profile.staging_state.states[var.staging_state].desired_count_multiplier,
+    1,
+  )
+
+  # WHAT THE MULTIPLIER SCALES, and why each one is load-bearing:
+  #
+  #   desired_count — the obvious one, and on its own not enough.
+  #   autoscaling min_capacity — the one that actually makes sleep stick.
+  #     Application Auto Scaling clamps a service up to its floor, so a floor of
+  #     1 against a desired count of 0 revives the task within a cooldown and
+  #     staging never sleeps at all: the saving evaporates and the "no always-on
+  #     staging compute" guarantee becomes false while looking satisfied.
+  #   capacity_provider base_count — the guaranteed on-demand floor. Leaving it
+  #     at 1 would declare a guaranteed task under a desired count of 0, which
+  #     is also what check_delivery_topology.py::capacity_errors rejects as
+  #     CAPACITY_BASE_EXCEEDS_DESIRED.
+  #
+  # max_capacity is deliberately NOT scaled. The ceiling is a static safety
+  # bound on the shape, not a statement of current capacity; collapsing it too
+  # would make waking a two-attribute change and would erase the reviewed
+  # envelope from a sleeping plan. Floor 0 with the declared ceiling is what
+  # the staging lifecycle's sleep-plan verification reads back out of
+  # reviewed.tfplan.json and compares against this matrix × the multiplier.
+  #
+  # An awake environment multiplies by 1 and is therefore unchanged.
+
+  # Non-api services become the ecs module's for_each. The service KEY is the
+  # AETHER_ROLE token the container boots with, which is why the consolidated
+  # service is keyed `lean-worker` and not `workers`. The api service is
+  # excluded here: it is served by the -backend service, the one load-bearing
+  # naming exception in the matrix.
+  runtime_service_settings = {
+    for name, cfg in local.runtime_profile.services :
+    name => {
+      # The logical roles this ONE task hosts. Terraform carries them for a
+      # single load-bearing reason: a consolidated task must bind one SQS queue
+      # per hosted role, which one SQS_QUEUE_URL cannot express. Everything else
+      # about a role (consumer group, DLQ, retry policy, metrics label) is
+      # resolved in-process by services/runtime/roles.py::roles_in.
+      roles         = cfg.roles
       cpu           = cfg.cpu
       memory        = cfg.memory
-      desired_count = cfg.desired_count
-    } if role != "api"
+      desired_count = cfg.desired_count * local.staging_state_multiplier
+      capacity_provider = {
+        base       = cfg.capacity_provider.base
+        base_count = cfg.capacity_provider.base_count * local.staging_state_multiplier
+        surge      = cfg.capacity_provider.surge
+      }
+      autoscaling = {
+        min_capacity     = cfg.autoscaling.min_capacity * local.staging_state_multiplier
+        max_capacity     = cfg.autoscaling.max_capacity
+        metric           = cfg.autoscaling.metric
+        cooldown_seconds = cfg.autoscaling.cooldown_seconds
+        # Exactly one threshold is declared per metric (the matrix pairs
+        # sqs-queue-depth with queue_depth_target and
+        # alb-request-count-per-target with request_count_target). Both keys are
+        # projected on every entry, null when absent, so the map stays a single
+        # object type instead of a union Terraform cannot unify.
+        queue_depth_target   = try(cfg.autoscaling.queue_depth_target, null)
+        request_count_target = try(cfg.autoscaling.request_count_target, null)
+      }
+    } if name != "api"
   }
 
-  # Declared now, consumed by the runtime-topology commit that follows. A
-  # profile is `dedicated` when the canonical matrix gives it at least one
-  # non-api role of its own, and `consolidated` when every role collapses into
-  # the API task. All four deployable profiles are `dedicated` today.
-  runtime_execution_mode = length(local.runtime_role_settings) > 0 ? "dedicated" : "consolidated"
+  # The API service's own baseline, from the same matrix rather than a
+  # separate variable, so `production-lean: 1` is expressed in exactly one
+  # place and staging_state drives the API to zero along with the workers.
+  api_service       = local.runtime_profile.services["api"]
+  api_desired_count = local.api_service.desired_count * local.staging_state_multiplier
+  api_min_capacity  = local.api_service.autoscaling.min_capacity * local.staging_state_multiplier
+  api_max_capacity  = local.api_service.autoscaling.max_capacity
+  api_cpu           = local.api_service.cpu
+  api_memory        = local.api_service.memory
+
+  # The api service's capacity providers come from the matrix too, which is a
+  # correctness fix and not only a tidy-up: this root previously passed
+  # `use_fargate_spot = true`, running the PUBLIC API at a 4:1 Spot:on-demand
+  # ratio. The v2 matrix pins api to `{base: FARGATE, surge: FARGATE}` and
+  # check_delivery_topology.py::SPOT_FORBIDDEN_ROLES forbids Spot on api and
+  # outbox-relay outright, so the declared policy and the plan now agree.
+  api_capacity_provider = {
+    base       = local.api_service.capacity_provider.base
+    base_count = local.api_service.capacity_provider.base_count * local.staging_state_multiplier
+    surge      = local.api_service.capacity_provider.surge
+  }
+
+  # Declared by the matrix, not inferred from how many services happen to
+  # exist — inferring it would report `dedicated` for any profile that simply
+  # had more than one service, which is exactly what a consolidated profile has.
+  runtime_execution_mode = local.runtime_profile.execution_mode
 }

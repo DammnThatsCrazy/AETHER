@@ -9,9 +9,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ROOT / "deploy/integration/docker-compose.durable.yml"
+# All nine canonical runtime roles (services/runtime/roles.py::WORKER_ROLES
+# plus api). semantic-worker owns two ConsumerSpecs and is deployed in every
+# profile, so the durable stack must run it too.
 REQUIRED_ROLES = {
     "api", "outbox-relay", "stream-worker", "identity-worker", "graph-writer",
-    "measurement-worker", "materializer", "maintenance",
+    "measurement-worker", "semantic-worker", "materializer", "maintenance",
 }
 
 

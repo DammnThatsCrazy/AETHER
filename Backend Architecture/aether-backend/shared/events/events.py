@@ -64,6 +64,20 @@ def _sns_topic_arn() -> str:
     return os.getenv("SNS_TOPIC_ARN", "")
 
 
+def _sqs_dlq_queue_url() -> str:
+    """Dedicated dead-letter queue, when one is provisioned separately."""
+    return os.getenv("SQS_DLQ_QUEUE_URL", "")
+
+
+class DLQPublishError(RuntimeError):
+    """A durable dead-letter publish could not be completed.
+
+    Raised rather than swallowed so the caller leaves the source message
+    unacknowledged: redelivery is recoverable, a silently dropped poison event
+    is not.
+    """
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # EVENT TOPICS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -753,7 +767,7 @@ class EventConsumer:
     MAX_CONCURRENT = 10
     MAX_HANDLER_RETRIES = 2
 
-    def __init__(self, group_id: str = "") -> None:
+    def __init__(self, group_id: str = "", queue_url: str = "") -> None:
         # Include AETHER_ENV in the group_id so staging/production consumer groups
         # never interfere with each other.
         _env = os.getenv("AETHER_ENV", "local")
@@ -762,15 +776,45 @@ class EventConsumer:
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
         self._dlq: list[Event] = []
         self._kafka_consumer: Optional[Any] = None
+        # Durable-DLQ producer, created lazily on the first dead-letter in Kafka
+        # mode. Declared here because _send_to_dlq reads it: when the attribute
+        # did not exist the read raised AttributeError inside the DLQ try block
+        # and the event silently degraded to the in-memory list.
+        self._kafka_producer: Optional[Any] = None
         self._sqs_client: Optional[Any] = None
         self._sqs_queue_url: str = ""
+        # Explicit queue binding. A process hosting several logical roles needs
+        # one consumer per role queue, which the single SQS_QUEUE_URL env var
+        # cannot express; when set, this wins over the environment.
+        self._explicit_queue_url: str = queue_url
         self._group_id = group_id
         self._running = False
         self._mode = "uninitialized"
+        # Handlers currently executing. Drives bounded drain on shutdown: a
+        # consumer that has stopped acquiring is not yet quiesced.
+        self._in_flight = 0
 
     def subscribe(self, topic: Topic, handler: EventHandler) -> None:
         self._handlers.setdefault(topic, []).append(handler)
         logger.info(f"Subscribed handler to {topic.value}")
+
+    def resize_concurrency(self, max_concurrent: int) -> None:
+        """Resize the backpressure semaphore to ``max_concurrent``.
+
+        ``MAX_CONCURRENT`` is read once in ``__init__`` to size the semaphore,
+        so callers that tune it afterwards (per-group backpressure) must resize
+        the semaphore too or the enforced limit silently stays at the class
+        default. Refuses to resize once events are in flight, where swapping the
+        semaphore would lose the outstanding permits.
+        """
+        if max_concurrent < 1:
+            raise ValueError(f"max_concurrent must be >= 1, got {max_concurrent}")
+        if self._in_flight:
+            raise RuntimeError(
+                f"cannot resize concurrency with {self._in_flight} event(s) in flight"
+            )
+        self.MAX_CONCURRENT = max_concurrent
+        self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def start(self) -> None:
         """Start consuming from Kafka, SQS, or stay in in-memory mode."""
@@ -781,12 +825,34 @@ class EventConsumer:
             logger.info("EventConsumer: no subscriptions, in-memory mode")
             return
 
-        if _event_broker() == "sns_sqs" and BOTO3_EVENTS_AVAILABLE and _sqs_queue_url():
+        # An explicit binding always wins over the process-wide env var: it is
+        # how a consolidated process gives each logical role its own queue.
+        queue_url = self._explicit_queue_url or _sqs_queue_url()
+        broker = _event_broker()
+
+        if broker == "sns_sqs" and not _is_local_env() and not (
+            BOTO3_EVENTS_AVAILABLE and queue_url
+        ):
+            # EVENT_BROKER was explicitly set to sns_sqs but the endpoint or the
+            # client library is missing. Falling through to the Kafka branch
+            # here would silently switch backends: the process would come up
+            # "healthy" against a different bus (or in-memory) while every
+            # event routed to the SQS queue went unconsumed. Fail closed and
+            # say which half is missing. Local/dev keeps the permissive path.
+            missing = "boto3" if not BOTO3_EVENTS_AVAILABLE else "SQS queue URL"
+            raise RuntimeError(
+                f"EVENT_BROKER=sns_sqs but {missing} is unavailable "
+                f"(group_id={self._group_id}). Refusing to fall back to another "
+                "broker in a non-local environment; set SQS_QUEUE_URL / "
+                "SQS_ROLE_QUEUE_URLS or install boto3."
+            )
+
+        if broker == "sns_sqs" and BOTO3_EVENTS_AVAILABLE and queue_url:
             loop = asyncio.get_event_loop()
             self._sqs_client = await loop.run_in_executor(
                 None, lambda: _boto3_events.client("sqs")  # type: ignore[union-attr]
             )
-            self._sqs_queue_url = _sqs_queue_url()
+            self._sqs_queue_url = queue_url
             self._mode = "sqs"
             self._running = True
             logger.info(f"EventConsumer started (SQS: {self._sqs_queue_url})")
@@ -816,6 +882,19 @@ class EventConsumer:
         else:
             self._mode = "in-memory"
             logger.info("EventConsumer started (in-memory mode)")
+
+    async def receive_loop(self) -> None:
+        """Run the receive loop matching the mode chosen by :meth:`start`.
+
+        Returns immediately in in-memory mode, where events arrive through
+        direct :meth:`process` calls rather than a broker poll. Callers that
+        supervise this coroutine should treat an early return in a broker mode
+        as an abnormal exit, not as completion.
+        """
+        if self._mode == "kafka":
+            await self.consume_loop()
+        elif self._mode == "sqs":
+            await self._sqs_receive_loop()
 
     async def consume_loop(self) -> None:
         """Main consume loop for Kafka mode. Run as asyncio task."""
@@ -873,23 +952,33 @@ class EventConsumer:
     async def process(self, event: Event) -> None:
         """Process an event with concurrency limiting and retry."""
         async with self._semaphore:
-            handlers = self._handlers.get(event.topic, [])
-            for handler in handlers:
-                success = False
-                while not success:
-                    try:
-                        await handler(event)
-                        metrics.increment("events_processed", labels={"topic": event.topic.value})
-                        success = True
-                    except Exception as e:
-                        logger.error(f"Handler failed for event {event.event_id}: {e}")
-                        metrics.increment("events_handler_failed", labels={"topic": event.topic.value})
-                        if event.retry_count < self.MAX_HANDLER_RETRIES:
-                            event.retry_count += 1
-                            logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
-                        else:
-                            await self._send_to_dlq(event, str(e))
-                            break
+            # Counted inside the semaphore so ``in_flight`` reflects handlers
+            # actually executing, which is what a bounded drain must wait on.
+            self._in_flight += 1
+            try:
+                await self._dispatch(event)
+            finally:
+                self._in_flight -= 1
+
+    async def _dispatch(self, event: Event) -> None:
+        """Run every subscribed handler for ``event`` with bounded retry."""
+        handlers = self._handlers.get(event.topic, [])
+        for handler in handlers:
+            success = False
+            while not success:
+                try:
+                    await handler(event)
+                    metrics.increment("events_processed", labels={"topic": event.topic.value})
+                    success = True
+                except Exception as e:
+                    logger.error(f"Handler failed for event {event.event_id}: {e}")
+                    metrics.increment("events_handler_failed", labels={"topic": event.topic.value})
+                    if event.retry_count < self.MAX_HANDLER_RETRIES:
+                        event.retry_count += 1
+                        logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
+                    else:
+                        await self._send_to_dlq(event, str(e))
+                        break
 
     async def _send_to_dlq(self, event: Event, error: str) -> None:
         """Send failed events to dead-letter queue.
@@ -923,41 +1012,100 @@ class EventConsumer:
             self._dlq.append(dlq_event)
             return
 
-        # Production/staging: publish to durable DLQ topic on Kafka/SQS
+        # Production/staging: publish to the durable DLQ topic on Kafka/SQS.
+        #
+        # This publish either succeeds or raises. It must never degrade to the
+        # in-memory list: that list dies with the process, so a "handled" DLQ
+        # event would be indistinguishable from a lost one. Raising propagates
+        # out of process() into the receive loop, which then does NOT commit the
+        # Kafka offset / delete the SQS receipt — the event is redelivered
+        # instead of being acknowledged as safely dead-lettered.
         try:
-            if self._kafka_producer:
-                await self._kafka_producer.send_and_wait(
-                    Topic.DEAD_LETTER.value, dlq_event.serialize()
-                )
-            elif self._sqs_client:
-                import asyncio as _asyncio
-                loop = _asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    None,
-                    lambda: self._sqs_client.send_message(  # type: ignore[union-attr]
-                        QueueUrl=self._sqs_queue_url,
-                        MessageBody=dlq_event.serialize(),
-                    ),
-                )
-            else:
-                # Fallback: log with full payload for manual recovery
-                logger.error(
-                    "DLQ publish unavailable — dead-lettered event: %s",
-                    dlq_event.serialize(),
-                )
-                self._dlq.append(dlq_event)
+            await self._publish_dlq_event(dlq_event)
         except Exception as exc:
+            metrics.increment(
+                "events_dlq_publish_failed", labels={"topic": event.topic.value},
+            )
+            # Full payload in the log is the last-resort recovery channel; it is
+            # in addition to the raise below, never instead of it.
             logger.error(
-                "Failed to publish DLQ event %s: %s — logging for manual recovery",
-                event.event_id, exc,
+                "Durable DLQ publish FAILED for event %s (%s: %s) — "
+                "event will be redelivered, not acknowledged. Payload: %s",
+                event.event_id, type(exc).__name__, exc, dlq_event.serialize(),
             )
             self._dlq.append(dlq_event)
+            raise DLQPublishError(
+                f"durable DLQ publish failed for event {event.event_id}: {exc}"
+            ) from exc
+
+    async def _publish_dlq_event(self, dlq_event: Event) -> None:
+        """Publish ``dlq_event`` to the durable dead-letter destination.
+
+        Raises on any failure — see :meth:`_send_to_dlq` for why degrading is
+        not an option here.
+        """
+        if self._mode == "kafka":
+            producer = await self._ensure_dlq_producer()
+            await producer.send_and_wait(Topic.DEAD_LETTER.value, dlq_event.serialize())
+            return
+        if self._mode == "sqs" and self._sqs_client:
+            # NOTE: with no dedicated DLQ queue configured this re-enqueues onto
+            # the source queue, which re-poisons this consumer. SQS_DLQ_QUEUE_URL
+            # is the escape hatch; the redrive policy on the queue itself is the
+            # intended long-term owner of this path.
+            target = _sqs_dlq_queue_url() or self._sqs_queue_url
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self._sqs_client.send_message(  # type: ignore[union-attr]
+                    QueueUrl=target,
+                    MessageBody=dlq_event.serialize(),
+                ),
+            )
+            return
+        raise RuntimeError(
+            f"no durable DLQ transport available (mode={self._mode})"
+        )
+
+    async def _ensure_dlq_producer(self) -> Any:
+        """Lazily create the Kafka producer used for durable dead-lettering.
+
+        ``EventConsumer`` has no producer of its own — the original code read a
+        ``self._kafka_producer`` that ``__init__`` never assigned, so in Kafka
+        mode every durable DLQ publish raised AttributeError, got swallowed by
+        the enclosing except, and quietly fell back to the in-memory list. The
+        consumer now owns a real producer bound to the same bootstrap servers.
+        """
+        if self._kafka_producer is not None:
+            return self._kafka_producer
+        if not KAFKA_AVAILABLE:
+            raise RuntimeError("aiokafka unavailable — cannot publish durable DLQ events")
+        bootstrap = _kafka_bootstrap()
+        if not bootstrap:
+            raise RuntimeError("KAFKA_BOOTSTRAP_SERVERS unset — cannot publish durable DLQ events")
+        producer = AIOKafkaProducer(
+            bootstrap_servers=bootstrap,
+            value_serializer=lambda v: v.encode("utf-8"),
+            # acks=all: a dead-letter that is not durably replicated is worse
+            # than useless, because it reads as successfully quarantined.
+            acks="all",
+            retries=3,
+            request_timeout_ms=30000,
+        )
+        await producer.start()
+        self._kafka_producer = producer
+        logger.info("EventConsumer DLQ producer started (Kafka: %s)", bootstrap)
+        return producer
 
     async def stop(self) -> None:
         self._running = False
         if self._kafka_consumer:
             await self._kafka_consumer.stop()
             self._kafka_consumer = None
+        if self._kafka_producer:
+            # Flushes buffered dead-letters before the process exits.
+            await self._kafka_producer.stop()
+            self._kafka_producer = None
         self._sqs_client = None
         logger.info("EventConsumer stopped")
 
@@ -968,3 +1116,23 @@ class EventConsumer:
     @property
     def mode(self) -> str:
         return self._mode
+
+    @property
+    def is_running(self) -> bool:
+        """True while a broker receive loop is expected to be pulling."""
+        return self._running
+
+    @property
+    def in_flight(self) -> int:
+        """Handlers currently executing; 0 means fully quiesced."""
+        return self._in_flight
+
+    @property
+    def group_id(self) -> str:
+        """The consumer group this instance is bound to."""
+        return self._group_id
+
+    @property
+    def queue_url(self) -> str:
+        """The bound SQS queue URL ('' outside SQS mode)."""
+        return self._sqs_queue_url

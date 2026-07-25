@@ -86,6 +86,13 @@ services:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: measurement-worker}
     command: python -m services.runtime.run_role measurement-worker
+  # Owns the semantic classification + identity-restatement consumers
+  # (services/runtime/consumer_specs.py). Present here so the durable
+  # integration stack covers all nine canonical roles, not eight.
+  semantic-worker:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: semantic-worker}
+    command: python -m services.runtime.run_role semantic-worker
   materializer:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: materializer}

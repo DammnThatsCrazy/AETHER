@@ -41,6 +41,11 @@ class WorkerSpec:
 
     ``factory`` must return a *fresh* coroutine object on every call — the
     supervisor invokes it once per (re)start attempt.
+
+    ``role`` names the *logical* worker role that owns this worker, which is
+    not always the role the process was booted as: a consolidated execution
+    group hosts several roles in one process, and per-role health, metrics and
+    logs must stay derivable there. Empty means unattributed.
     """
 
     name: str
@@ -49,6 +54,7 @@ class WorkerSpec:
     enabled: Callable[[], bool] = lambda: True
     max_restarts: int = 5
     backoff_base_s: float = 2.0
+    role: str = ""
 
 
 class _WorkerRecord:
@@ -215,32 +221,30 @@ class WorkerSupervisor:
                 self._resolve_first_start(record, None)
                 raise
             except Exception as exc:
+                # Every crash/restart/failure signal carries the owning role so
+                # a consolidated process (one task, many logical roles) stays
+                # per-role attributable in metrics and logs.
+                labels = {"worker": spec.name, "role": spec.role or "unattributed"}
                 record.last_error = f"{type(exc).__name__}: {exc}"
                 logger.error(
-                    "worker_crashed name=%s attempt=%d error=%s",
-                    spec.name, attempt + 1, record.last_error,
+                    "worker_crashed name=%s role=%s attempt=%d error=%s",
+                    spec.name, spec.role or "unattributed", attempt + 1, record.last_error,
                 )
-                metrics.increment(
-                    "worker_supervisor_crash", labels={"worker": spec.name},
-                )
+                metrics.increment("worker_supervisor_crash", labels=labels)
                 if attempt == 0:
                     self._resolve_first_start(record, exc)
                 if attempt >= spec.max_restarts:
                     record.state = STATE_FAILED
-                    metrics.increment(
-                        "worker_supervisor_failed", labels={"worker": spec.name},
-                    )
+                    metrics.increment("worker_supervisor_failed", labels=labels)
                     logger.error(
-                        "worker_failed name=%s restarts_exhausted=%d",
-                        spec.name, spec.max_restarts,
+                        "worker_failed name=%s role=%s restarts_exhausted=%d",
+                        spec.name, spec.role or "unattributed", spec.max_restarts,
                     )
                     return
                 attempt += 1
                 record.restarts = attempt
                 record.state = STATE_RESTARTING
-                metrics.increment(
-                    "worker_supervisor_restart", labels={"worker": spec.name},
-                )
+                metrics.increment("worker_supervisor_restart", labels=labels)
                 delay = spec.backoff_base_s * (2 ** (attempt - 1))
                 try:
                     await asyncio.sleep(delay)
@@ -259,13 +263,41 @@ class WorkerSupervisor:
     # ── introspection ─────────────────────────────────────────────────────
 
     def status(self) -> dict[str, dict[str, Any]]:
-        """Per-worker state map used by /v1/ready and diagnostics."""
+        """Per-worker state map used by /v1/ready and diagnostics.
+
+        ``role`` is the logical worker role owning each entry, so callers can
+        fold this map into per-role health even when one process hosts several
+        roles (see :func:`status_by_role`).
+        """
         return {
             name: {
                 "state": record.state,
                 "restarts": record.restarts,
                 "last_error": record.last_error,
                 "required": record.spec.required,
+                "role": record.spec.role,
             }
             for name, record in self._records.items()
         }
+
+    def status_by_role(self) -> dict[str, dict[str, Any]]:
+        """Fold :meth:`status` into one health entry per logical role.
+
+        A role is healthy only when none of its workers is ``failed``. This is
+        what makes a consolidated deployment observable at the same granularity
+        as the dedicated deployment it replaces: one crashed logical role shows
+        up as that role being unhealthy, not as the whole process degrading.
+        """
+        by_role: dict[str, dict[str, Any]] = {}
+        for name, info in self.status().items():
+            role = info.get("role") or "unattributed"
+            entry = by_role.setdefault(
+                role, {"healthy": True, "workers": {}, "failed": []},
+            )
+            entry["workers"][name] = info
+            if info.get("state") == STATE_FAILED:
+                entry["healthy"] = False
+                entry["failed"].append(name)
+        for entry in by_role.values():
+            entry["failed"].sort()
+        return by_role

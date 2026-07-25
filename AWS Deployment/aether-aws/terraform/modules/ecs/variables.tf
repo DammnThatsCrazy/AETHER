@@ -37,21 +37,57 @@ variable "backend_image_digest" {
   }
 }
 
-variable "runtime_roles" {
+variable "runtime_services" {
   type = map(object({
+    roles         = list(string)
     cpu           = number
     memory        = number
     desired_count = number
+    capacity_provider = object({
+      base       = string
+      base_count = number
+      surge      = string
+    })
+    autoscaling = object({
+      min_capacity         = number
+      max_capacity         = number
+      metric               = string
+      cooldown_seconds     = number
+      queue_depth_target   = optional(number)
+      request_count_target = optional(number)
+    })
   }))
   description = <<-EOT
-    Dedicated non-API runtime roles with per-role sizing, derived from the
-    selected profile in config/runtime_deployment.yaml (see root profiles.tf).
-    The api role is served by the -backend service; the local-only role all is
-    forbidden.
+    Non-API runtime SERVICES, derived from the selected profile's schema-v2
+    `services:` map in config/runtime_deployment.yaml (see root profiles.tf).
+
+    The unit here is one ECS service + one task definition, NOT one logical
+    role: `roles` names the logical roles that single task hosts, which is one
+    role in a `dedicated` profile and eight in a `consolidated` one. The map
+    KEY is the AETHER_ROLE token the container boots with, so a consolidated
+    entry is keyed `lean-worker` (an execution group in
+    services/runtime/roles.py) rather than by any role it contains.
+
+    The api service is absent by construction: it is served by the -backend
+    service, the one load-bearing naming exception in the matrix.
   EOT
   validation {
-    condition     = !contains(keys(var.runtime_roles), "api") && !contains(keys(var.runtime_roles), "all")
-    error_message = "runtime_roles must contain dedicated workers only; api/all are forbidden."
+    condition     = !contains(keys(var.runtime_services), "api") && !contains(keys(var.runtime_services), "all")
+    error_message = "runtime_services must contain non-api runtime services only; api is served by the -backend service and `all` is the local single-process token, never deployable."
+  }
+  validation {
+    # A service hosting no role would boot a task with an AETHER_ROLE that
+    # expands to nothing: it would start, pass no work, and consume nothing.
+    condition     = alltrue([for cfg in var.runtime_services : length(cfg.roles) > 0])
+    error_message = "every runtime service must declare at least one logical role in `roles`."
+  }
+  validation {
+    # `alb-request-count-per-target` needs a target group to measure, and no
+    # non-api runtime service registers with the ALB — only the -backend
+    # service does. Rejecting it here fails the plan loudly instead of
+    # provisioning a scaling target that silently never scales.
+    condition     = alltrue([for cfg in var.runtime_services : cfg.autoscaling.metric == "sqs-queue-depth"])
+    error_message = "a non-api runtime service registers with no load balancer, so its autoscaling metric must be sqs-queue-depth."
   }
 }
 
@@ -95,16 +131,35 @@ variable "companion_secret_arns" {
   default     = {}
 }
 
+# The backend (api) task's sizing, baseline and autoscaling envelope carry no
+# defaults on purpose. They come from the api service in the schema-v2runtime
+# matrix via the root's local.api_* values, and a default here would be a
+# second source of truth for a number the matrix already states — exactly the
+# divergence that let a production-scale plan run a lean-sized API.
+
 variable "backend_cpu" {
   type        = number
-  description = "CPU units for the backend task"
-  default     = 1024
+  description = "CPU units for the backend task (config/runtime_deployment.yaml -> profiles.<p>.services.api.cpu)"
 }
 
 variable "backend_memory" {
   type        = number
-  description = "Memory in MiB for the backend task"
-  default     = 2048
+  description = "Memory in MiB for the backend task (…services.api.memory)"
+}
+
+variable "backend_capacity_provider" {
+  type = object({
+    base       = string
+    base_count = number
+    surge      = string
+  })
+  description = <<-EOT
+    Capacity providers for the backend service: `base_count` guaranteed tasks on
+    `base`, everything above that floor on `surge`
+    (…services.api.capacity_provider). The matrix pins api to FARGATE for both,
+    because a Spot reclaim on the public request path is not worth the discount;
+    scripts/release/check_delivery_topology.py enforces that as policy.
+  EOT
 }
 
 variable "ml_cpu" {
@@ -119,16 +174,25 @@ variable "ml_memory" {
   default     = 4096
 }
 
+variable "backend_desired_count" {
+  type        = number
+  description = <<-EOT
+    Baseline task count for the backend service (…services.api.desired_count,
+    already multiplied by the staging wake/sleep state). Distinct from
+    backend_min_capacity, which is the autoscaling floor: the matrix declares
+    both and they are equal today, but conflating them would silently redefine
+    one of them the first time they diverge.
+  EOT
+}
+
 variable "backend_min_capacity" {
   type        = number
-  description = "Minimum running tasks for the backend service"
-  default     = 1
+  description = "Autoscaling floor for the backend service (…services.api.autoscaling.min_capacity)"
 }
 
 variable "backend_max_capacity" {
   type        = number
-  description = "Maximum running tasks for the backend service"
-  default     = 10
+  description = "Autoscaling ceiling for the backend service (…services.api.autoscaling.max_capacity)"
 }
 
 variable "ml_min_capacity" {
@@ -219,12 +283,6 @@ variable "ml_serving_url" {
   type        = string
   description = "Internal URL for the ML serving service (empty string = unreachable fallback)"
   default     = ""
-}
-
-variable "use_fargate_spot" {
-  type        = bool
-  description = "Use Fargate Spot capacity for the backend service (E2). 4:1 Spot:on-demand ratio; base on-demand task ensures one guaranteed task survives Spot reclamation."
-  default     = false
 }
 
 variable "ml_serving_inline" {

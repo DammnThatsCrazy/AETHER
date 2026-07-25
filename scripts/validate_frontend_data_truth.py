@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Enforce Aether and Kyber frontend data-truth boundaries.
+"""Enforce Aether, Kyber, and Demo frontend data-truth boundaries.
 
 The default check is source-only and does not require Node dependencies.
 ``--build-bundles`` additionally creates explicit production builds and scans
 their emitted JavaScript, HTML, and CSS. Missing bundle directories are a
 failure when ``--bundles`` is requested; the bundle gate must never silently
 skip itself.
+
+Aether and Kyber are production tenant/operator apps: ``src/mocks`` and
+``src/fixtures`` are prohibited outright. The demo app has a different
+contract — synthetic data is its purpose, so those directories are permitted in
+its source — but ``VITE_DEMO_ENV`` must stay explicit (no default), and the
+fixture and MSW modules must be statically unreachable from any build whose
+canonical deployment profile forbids compiled-in synthetic data.
 """
 from __future__ import annotations
 
@@ -67,6 +74,57 @@ BUNDLE_TOKENS = (
     "imp_customers_001",
 )
 
+# --- Demo app -------------------------------------------------------------
+# frontend/demo is the closed synthetic demo SPA. Its source may hold mocks and
+# fixtures; what it may not do is default to them or emit them where the
+# canonical deployment profile forbids it.
+DEMO_APP_ROOT = ROOT / "frontend" / "demo"
+DEMO_ENV_VAR = "VITE_DEMO_ENV"
+# Canonical profile names the demo SPA can legitimately run as, per
+# config/deployment_profiles.yaml (local-mocked runs demo-spa + mock-data-msw,
+# demo-static runs synthetic-precomputed-data, demo-live runs a synthetic
+# tenant against a shared non-production backend).
+CANONICAL_DEMO_ENVIRONMENTS = ("local-mocked", "demo-static", "demo-live")
+# Profiles allowed to ship compiled-in synthetic fixture data.
+DEMO_SYNTHETIC_DATASET_ENVIRONMENTS = ("local-mocked", "demo-static")
+DEMO_BUNDLE_PROFILE_STAMP = "aether-demo-env"
+# Only local-mocked may emit the MSW worker; nothing else may.
+DEMO_MOCK_BUNDLE_TOKENS = (
+    "mockServiceWorker",
+    "msw/browser",
+    "setupWorker",
+    "onUnhandledRequest",
+    "Mock Service Worker",
+)
+# Fixture literals that must never reach a bundle built for a profile whose
+# data comes from a backend rather than from src/data/fixtures.ts.
+DEMO_FIXTURE_BUNDLE_TOKENS = (
+    "data/fixtures",
+    "tenant_demo_orbit",
+    "Orbit Commerce",
+    "Maya Chen",
+    "Cart Abandonment Recovery",
+)
+DEMO_ENV_DEFAULT_RES = (
+    # `import.meta.env.VITE_DEMO_ENV ?? '<anything>'`
+    re.compile(rf"{DEMO_ENV_VAR}[^\n;]*?(?:\?\?|\|\|)\s*['\"]"),
+    # Any fallback to a profile literal, however the value was read first.
+    re.compile(
+        r"(?:\?\?|\|\|)\s*['\"](?:local-mocked|demo-static|demo-live)['\"]"
+    ),
+)
+DEMO_ENVIRONMENT_LIST_RE = re.compile(
+    r"DEMO_ENVIRONMENTS\s*(?::[^=\n]*)?=\s*\[(?P<items>[^\]]*)\]"
+)
+DEMO_QUOTED_VALUE_RE = re.compile(r"['\"]([^'\"]+)['\"]")
+DEMO_STATIC_WORKER_GUARD_RE = re.compile(
+    rf"import\.meta\.env\.{DEMO_ENV_VAR}\s*===\s*['\"]local-mocked['\"]"
+)
+DEMO_WORKER_IMPORT_RE = re.compile(r"""import\s*\(\s*['\"][^'\"]*mocks/""")
+DEMO_BUNDLE_STAMP_RE = re.compile(
+    rf"""<meta[^>]*name=['\"]{DEMO_BUNDLE_PROFILE_STAMP}['\"][^>]*content=['\"](?P<value>[^'\"]*)['\"]"""
+)
+
 IMPORT_SPECIFIER_RE = re.compile(
     r"""
     (?:
@@ -89,12 +147,15 @@ PRODUCTION_BUILD_ENV = {
     "VITE_OIDC_AUTHORITY": "https://identity.invalid",
     "VITE_OIDC_CLIENT_ID": "frontend-data-truth-build",
     "VITE_OIDC_REDIRECT_URI": "https://app.invalid/callback",
+    # The demo SPA is built under its strictest profile: demo-live must contain
+    # neither the MSW worker nor the fixture module.
+    DEMO_ENV_VAR: "demo-live",
 }
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate Aether/Kyber production source and bundle data-truth boundaries"
+        description="Validate Aether/Kyber/Demo frontend source and bundle data-truth boundaries"
     )
     bundle_mode = parser.add_mutually_exclusive_group()
     bundle_mode.add_argument(
@@ -238,6 +299,154 @@ def scan_source(
     )
 
 
+def _demo_source_files(app_root: Path) -> list[Path]:
+    """Yield demo source and runtime-affecting configuration files."""
+    files: list[Path] = []
+    runtime_root = app_root / "src"
+    if runtime_root.is_dir():
+        files.extend(
+            path
+            for path in runtime_root.rglob("*")
+            if path.is_file() and path.suffix in SOURCE_SUFFIXES
+        )
+    for pattern in ("vite.config.*", "vitest.config.*", ".env", ".env.*", "index.html"):
+        files.extend(path for path in app_root.glob(pattern) if path.is_file())
+    return sorted(set(files))
+
+
+def _declared_demo_environments(text: str) -> tuple[str, ...] | None:
+    match = DEMO_ENVIRONMENT_LIST_RE.search(text)
+    if match is None:
+        return None
+    return tuple(DEMO_QUOTED_VALUE_RE.findall(match.group("items")))
+
+
+def _check_demo_profile_declaration(
+    path: Path, root: Path, *, label: str
+) -> list[dict[str, object]]:
+    """Require a fail-closed, canonical ``VITE_DEMO_ENV`` declaration."""
+    if not path.is_file():
+        return [_finding(path, 0, f"demo {label} is missing; {DEMO_ENV_VAR} is unenforced", root)]
+
+    findings: list[dict[str, object]] = []
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if "throw" not in text:
+        findings.append(
+            _finding(
+                path,
+                1,
+                f"demo {label} must fail closed on an unset or unknown {DEMO_ENV_VAR}",
+                root,
+            )
+        )
+    declared = _declared_demo_environments(text)
+    if declared is None:
+        findings.append(
+            _finding(path, 1, f"demo {label} declares no DEMO_ENVIRONMENTS list", root)
+        )
+    elif tuple(declared) != CANONICAL_DEMO_ENVIRONMENTS:
+        findings.append(
+            _finding(
+                path,
+                1,
+                "demo profile list drifted from the canonical deployment profiles "
+                + f"({', '.join(CANONICAL_DEMO_ENVIRONMENTS)})",
+                root,
+            )
+        )
+    return findings
+
+
+def scan_demo_source(
+    *, root: Path = ROOT, app_root: Path | None = None
+) -> list[dict[str, object]]:
+    """Scan the demo SPA under its own contract.
+
+    ``mocks`` and ``fixtures`` directories are permitted here — they are the
+    demo app's purpose — but the environment variable that selects them must be
+    explicit, and the mock entrypoint must be statically eliminable.
+    """
+    app_root = app_root or DEMO_APP_ROOT
+    if not app_root.is_dir():
+        return [
+            _finding(
+                app_root,
+                0,
+                "demo frontend directory is missing; demo data-truth scan was not executed",
+                root,
+            )
+        ]
+
+    findings: list[dict[str, object]] = []
+    for path in _demo_source_files(app_root):
+        if is_test_path(path, root):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        seen_lines: set[int] = set()
+        for pattern in DEMO_ENV_DEFAULT_RES:
+            for match in pattern.finditer(text):
+                line = _line_number(text, match.start())
+                if line in seen_lines:
+                    continue
+                seen_lines.add(line)
+                findings.append(
+                    _finding(
+                        path,
+                        line,
+                        f"{DEMO_ENV_VAR} must be explicit and must not have an implicit default",
+                        root,
+                    )
+                )
+
+    findings.extend(
+        _check_demo_profile_declaration(
+            app_root / "src" / "lib" / "env.ts", root, label="environment module"
+        )
+    )
+    findings.extend(
+        _check_demo_profile_declaration(
+            app_root / "vite.config.ts", root, label="vite config"
+        )
+    )
+
+    entrypoint = app_root / "src" / "main.tsx"
+    if not entrypoint.is_file():
+        findings.append(_finding(entrypoint, 0, "demo entrypoint is missing", root))
+    else:
+        text = entrypoint.read_text(encoding="utf-8", errors="ignore")
+        match = DEMO_WORKER_IMPORT_RE.search(text)
+        if match and not DEMO_STATIC_WORKER_GUARD_RE.search(text):
+            findings.append(
+                _finding(
+                    entrypoint,
+                    _line_number(text, match.start()),
+                    "demo mock worker import must be guarded by a statically eliminable "
+                    + f"import.meta.env.{DEMO_ENV_VAR} === 'local-mocked' comparison",
+                    root,
+                )
+            )
+
+    index_html = app_root / "index.html"
+    if not index_html.is_file():
+        findings.append(_finding(index_html, 0, "demo index.html is missing", root))
+    elif DEMO_BUNDLE_PROFILE_STAMP not in index_html.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        findings.append(
+            _finding(
+                index_html,
+                1,
+                f"demo index.html must stamp the resolved profile as "
+                f"<meta name=\"{DEMO_BUNDLE_PROFILE_STAMP}\"> so the bundle gate cannot be blinded",
+                root,
+            )
+        )
+
+    return sorted(
+        findings, key=lambda item: (str(item["path"]), int(item["line"]), str(item["reason"]))
+    )
+
+
 class PureImportPath:
     """Normalize slash-delimited module specifiers without filesystem access."""
 
@@ -300,10 +509,101 @@ def scan_bundles(
     )
 
 
+def scan_demo_bundle(
+    *,
+    root: Path = ROOT,
+    bundle_root: Path | None = None,
+    require_bundles: bool = True,
+) -> list[dict[str, object]]:
+    """Scan an emitted demo bundle against the profile it was built for.
+
+    The profile is read from the build-time ``index.html`` stamp. An unstamped
+    or unknown bundle is a finding and is then scanned under the strictest
+    profile, so the gate can never be skipped by dropping the stamp.
+    """
+    bundle_root = bundle_root or (DEMO_APP_ROOT / "dist")
+    findings: list[dict[str, object]] = []
+    if not bundle_root.is_dir():
+        if require_bundles:
+            findings.append(
+                _finding(
+                    bundle_root,
+                    0,
+                    "demo bundle directory is missing; build scan was not executed",
+                    root,
+                )
+            )
+        return findings
+
+    bundle_files = [
+        path
+        for path in sorted(bundle_root.rglob("*"))
+        if path.is_file() and path.suffix in BUNDLE_SUFFIXES
+    ]
+    if not bundle_files:
+        if require_bundles:
+            findings.append(
+                _finding(
+                    bundle_root,
+                    0,
+                    "demo bundle contains no scannable JavaScript, HTML, or CSS",
+                    root,
+                )
+            )
+        return findings
+
+    index_html = bundle_root / "index.html"
+    profile: str | None = None
+    if index_html.is_file():
+        stamp = DEMO_BUNDLE_STAMP_RE.search(
+            index_html.read_text(encoding="utf-8", errors="ignore")
+        )
+        if stamp is not None:
+            profile = stamp.group("value").strip()
+    if profile not in CANONICAL_DEMO_ENVIRONMENTS:
+        findings.append(
+            _finding(
+                index_html,
+                1,
+                f"demo bundle does not declare a resolved {DEMO_ENV_VAR} profile stamp; "
+                "scanned under the strictest profile",
+                root,
+            )
+        )
+        profile = "demo-live"
+
+    banned: list[str] = []
+    if profile != "local-mocked":
+        banned.extend(DEMO_MOCK_BUNDLE_TOKENS)
+    if profile not in DEMO_SYNTHETIC_DATASET_ENVIRONMENTS:
+        banned.extend(DEMO_FIXTURE_BUNDLE_TOKENS)
+
+    for path in bundle_files:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for token in banned:
+            if token in text:
+                findings.append(
+                    _finding(
+                        path,
+                        1,
+                        f"banned demo bundle token for profile {profile}: {token}",
+                        root,
+                    )
+                )
+    return sorted(
+        findings, key=lambda item: (str(item["path"]), int(item["line"]), str(item["reason"]))
+    )
+
+
 def build_production_bundles(root: Path = ROOT) -> int:
     env = os.environ.copy()
     env.update(PRODUCTION_BUILD_ENV)
-    workspaces = ["packages/shared", "packages/web", *(f"frontend/{app}" for app in APP_NAMES)]
+    workspaces = [
+        "packages/shared",
+        "packages/web",
+        *(f"frontend/{app}" for app in APP_NAMES),
+        "frontend/demo",
+    ]
     for workspace in workspaces:
         proc = subprocess.run(
             ["npm", "run", "build", f"--workspace={workspace}"],
@@ -318,6 +618,7 @@ def build_production_bundles(root: Path = ROOT) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     findings = scan_source()
+    findings.extend(scan_demo_source())
 
     build_status = 0
     if args.build_bundles:
@@ -332,8 +633,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         else:
             findings.extend(scan_bundles())
+            findings.extend(scan_demo_bundle())
     elif args.bundles:
         findings.extend(scan_bundles())
+        findings.extend(scan_demo_bundle())
 
     findings = sorted(
         findings, key=lambda item: (str(item["path"]), int(item["line"]), str(item["reason"]))
@@ -342,6 +645,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "status": "pass" if not findings else "fail",
         "checks": {
             "source": True,
+            "demo_source": True,
             "bundles": bool(args.bundles or args.build_bundles),
             "bundles_built": bool(args.build_bundles and build_status == 0),
         },

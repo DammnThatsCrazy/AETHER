@@ -168,6 +168,102 @@ run "staging_profile_plan" {
     )
     error_message = "The staging backend selectors no longer match the deployment policy."
   }
+
+  # Staging rehearses production-lean's packing, so it must show the same
+  # consolidated shape: ONE non-api runtime service, keyed by the execution
+  # group token the container boots as AETHER_ROLE.
+  assert {
+    condition = alltrue([
+      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
+      length(local.runtime_service_settings) == 1,
+      join(",", keys(local.runtime_service_settings)) == "lean-worker",
+      contains(module.ecs.runtime_service_names, "AETHER-staging-lean-worker"),
+      local.runtime_execution_mode == "consolidated",
+    ])
+    error_message = "The staging plan does not provision exactly one consolidated lean-worker service."
+  }
+
+  # Awake is the declared default, so nothing is scaled to zero here. This is
+  # the counterpart of the asleep run below: without it, a multiplier stuck at
+  # 0 would satisfy the sleep assertions and never be noticed.
+  assert {
+    condition = alltrue([
+      var.staging_state == "awake",
+      local.staging_state_multiplier == 1,
+      module.ecs.backend_service_desired_count == 1,
+      module.ecs.runtime_service_desired_counts["lean-worker"] == 1,
+      module.ecs.backend_autoscaling_bounds.max == 2,
+    ])
+    error_message = "An awake staging plan no longer runs the reviewed baseline capacity."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# staging, asleep — the same topology at zero capacity.
+#
+# The point of the lifecycle state is that sleeping is a capacity change and
+# not a shape change: the plan must own exactly the same services and the same
+# roles as the awake run above, with every count at zero.
+# ---------------------------------------------------------------------------
+
+run "staging_asleep_profile_plan" {
+  command = plan
+
+  variables {
+    deployment_profile  = "staging"
+    environment         = "staging"
+    staging_state       = "asleep"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    log_retention_days  = 3
+  }
+
+  assert {
+    condition = alltrue([
+      local.staging_state_multiplier == 0,
+      module.ecs.backend_service_desired_count == 0,
+      module.ecs.runtime_service_desired_counts["lean-worker"] == 0,
+    ])
+    error_message = "An asleep staging plan still runs tasks."
+  }
+
+  # The floor is what makes sleep stick. Application Auto Scaling clamps a
+  # service UP to min_capacity, so a floor left at 1 revives the task within a
+  # cooldown and the environment never sleeps — while a plan that only zeroed
+  # desired_count would look entirely correct. It matters most for the api
+  # service, whose desired_count is ignore_changes'd and therefore reaches an
+  # applied workspace through nothing but this envelope.
+  assert {
+    condition = alltrue([
+      module.ecs.backend_autoscaling_bounds.min == 0,
+      local.runtime_service_settings["lean-worker"].autoscaling.min_capacity == 0,
+    ])
+    error_message = "An asleep staging plan leaves an autoscaling floor above zero, so Application Auto Scaling revives the service and staging never sleeps."
+  }
+
+  # Only the floor collapses. max_capacity is a static bound on the shape, not
+  # a statement of current capacity, so it must survive sleeping untouched —
+  # otherwise waking becomes a two-attribute change and a sleeping plan no
+  # longer records the reviewed envelope. Both ceilings are the awake values.
+  assert {
+    condition = alltrue([
+      module.ecs.backend_autoscaling_bounds.max == 2,
+      local.runtime_service_settings["lean-worker"].autoscaling.max_capacity == 2,
+    ])
+    error_message = "An asleep staging plan also collapsed the autoscaling ceiling; only the floor should."
+  }
+
+  # Sleeping must not change the topology, only its capacity: the same one
+  # service, hosting the same eight roles, with the same queue bindings.
+  assert {
+    condition = alltrue([
+      join(",", keys(local.runtime_service_settings)) == "lean-worker",
+      length(local.runtime_service_settings["lean-worker"].roles) == 8,
+      length(module.ecs.runtime_service_queue_roles["lean-worker"]) == 4,
+    ])
+    error_message = "An asleep staging plan owns a different topology from an awake one."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -299,17 +395,65 @@ run "production_lean_profile_plan" {
     error_message = "The production-lean plan does not provision both static SPA origins and their SSM pointers."
   }
 
-  # required_resources: explicit_runtime_role_services — one dedicated service
-  # per non-api role in config/runtime_deployment.yaml, never collapsed.
+  # required_resources: explicit_runtime_role_services — one ECS service per
+  # entry of the profile's `services:` map. production-lean is
+  # execution_mode: consolidated, so that is exactly ONE non-api service, the
+  # `lean-worker` execution group: eight roles in one task, not eight tasks.
+  # The invariant is ownership (asserted below and enforced across the whole
+  # matrix by check_delivery_topology.py), not one-service-per-role.
   assert {
     condition = alltrue([
-      length(module.ecs.runtime_service_names) == length(local.runtime_role_settings),
-      length(local.runtime_role_settings) >= 8,
-      !contains(keys(local.runtime_role_settings), "api"),
-      local.runtime_execution_mode == "dedicated",
+      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
+      length(local.runtime_service_settings) == 1,
+      join(",", keys(local.runtime_service_settings)) == "lean-worker",
+      contains(module.ecs.runtime_service_names, "AETHER-production-lean-worker"),
+      !contains(keys(local.runtime_service_settings), "api"),
+      local.runtime_execution_mode == "consolidated",
       module.ecs.backend_service_desired_count > 0,
     ])
-    error_message = "The production-lean plan does not provision one dedicated ECS service per non-api runtime role."
+    error_message = "The production-lean plan does not provision exactly one consolidated lean-worker service plus the api-serving backend service."
+  }
+
+  # The consolidation-critical property: the single lean-worker task hosts all
+  # eight worker roles and is handed one queue binding per role that owns a
+  # queue. `queue_roles` are the literal keys of that task's
+  # SQS_ROLE_QUEUE_URLS object, so a regression to a single SQS_QUEUE_URL —
+  # seven roles silently consuming nothing — fails here rather than in
+  # production. Four, not eight: modules/sqs provisions a dedicated queue for
+  # the four roles in its consumer_role_queues map, and the rest fall back to
+  # the shared events queue through SQS_QUEUE_URL by design.
+  assert {
+    condition = alltrue([
+      length(local.runtime_service_settings["lean-worker"].roles) == 8,
+      contains(local.runtime_service_settings["lean-worker"].roles, "outbox-relay"),
+      contains(local.runtime_service_settings["lean-worker"].roles, "semantic-worker"),
+      join(",", module.ecs.runtime_service_queue_roles["lean-worker"]) == "graph-writer,identity-worker,measurement-worker,stream-worker",
+    ])
+    error_message = "The lean-worker task does not bind one queue per hosted role; a consolidated task with one queue URL leaves seven roles consuming nothing."
+  }
+
+  # No Spot anywhere in a consolidated profile: the one worker task hosts
+  # outbox-relay, so its surge capacity carries the at-least-once delivery
+  # path, and the api service is never interruptible in any profile.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.runtime_service_capacity_providers["lean-worker"]) == "FARGATE",
+      join(",", module.ecs.backend_capacity_providers) == "FARGATE",
+    ])
+    error_message = "The production-lean plan puts the public API or the outbox-relay-hosting worker on FARGATE_SPOT."
+  }
+
+  # The api service's sizing and envelope come from the runtime matrix, not
+  # from a variable default that can drift away from it.
+  assert {
+    condition = alltrue([
+      module.ecs.backend_service_desired_count == 1,
+      module.ecs.backend_autoscaling_bounds.min == 1,
+      module.ecs.backend_autoscaling_bounds.max == 4,
+      local.api_cpu == 1024,
+      local.api_memory == 2048,
+    ])
+    error_message = "The production-lean api service no longer matches the reviewed baseline in config/runtime_deployment.yaml."
   }
 
   assert {
@@ -417,6 +561,45 @@ run "production_scale_profile_plan" {
     )
     error_message = "The production-scale backend selectors no longer match the deployment policy."
   }
+
+  # dedicated, not consolidated: eight non-api services, one per worker role,
+  # each hosting exactly the role it is named after. This is the assertion that
+  # stops the lean packing being applied to a profile that pays for isolation.
+  assert {
+    condition = alltrue([
+      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
+      length(local.runtime_service_settings) == 8,
+      local.runtime_execution_mode == "dedicated",
+      !contains(keys(local.runtime_service_settings), "lean-worker"),
+      alltrue([
+        for key, cfg in local.runtime_service_settings : join(",", cfg.roles) == key
+      ]),
+    ])
+    error_message = "The production-scale plan does not provision one dedicated ECS service per worker role."
+  }
+
+  # Spot policy, per the matrix: backlog-draining workers surge onto Spot,
+  # while the public API and the at-least-once delivery path never do.
+  assert {
+    condition = alltrue([
+      contains(module.ecs.runtime_service_capacity_providers["stream-worker"], "FARGATE_SPOT"),
+      join(",", module.ecs.runtime_service_capacity_providers["outbox-relay"]) == "FARGATE",
+      join(",", module.ecs.backend_capacity_providers) == "FARGATE",
+    ])
+    error_message = "The production-scale capacity providers no longer match the matrix Spot policy (never api, never outbox-relay)."
+  }
+
+  # A dedicated consumer service binds exactly its own queue; a dedicated
+  # non-consumer service binds none and falls back to SQS_QUEUE_URL.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.runtime_service_queue_roles["stream-worker"]) == "stream-worker",
+      length(module.ecs.runtime_service_queue_roles["maintenance"]) == 0,
+      module.ecs.backend_service_desired_count == 3,
+      module.ecs.backend_autoscaling_bounds.max == 12,
+    ])
+    error_message = "The production-scale plan does not bind each dedicated service to its own role queue at the reviewed api capacity."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -493,5 +676,29 @@ run "enterprise_isolated_profile_plan" {
       local.analytics_backend == "clickhouse"
     )
     error_message = "The enterprise-isolated backend selectors no longer match the deployment policy."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
+      length(local.runtime_service_settings) == 8,
+      local.runtime_execution_mode == "dedicated",
+      !contains(keys(local.runtime_service_settings), "lean-worker"),
+    ])
+    error_message = "The enterprise-isolated plan does not provision one dedicated ECS service per worker role."
+  }
+
+  # The one deliberate difference from production-scale: NO Spot anywhere. A
+  # single-tenant isolation contract prices predictable capacity above the
+  # discount, so even the surge tail of an interruption-tolerant worker stays
+  # on-demand. Asserted on the service the scale profile DOES put on Spot, so
+  # this cannot pass by accident.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.runtime_service_capacity_providers["stream-worker"]) == "FARGATE",
+      join(",", module.ecs.runtime_service_capacity_providers["materializer"]) == "FARGATE",
+      join(",", module.ecs.backend_capacity_providers) == "FARGATE",
+    ])
+    error_message = "The enterprise-isolated plan places a service on FARGATE_SPOT; this profile pays for non-interruptible capacity at every tier."
   }
 }

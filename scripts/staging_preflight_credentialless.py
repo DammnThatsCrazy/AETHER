@@ -31,6 +31,7 @@ Exit 0 iff no check FAILs.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import shutil
@@ -43,10 +44,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
 SCRIPTS = ROOT / "scripts"
-for p in (str(ROOT), str(SCRIPTS), str(BACKEND_ROOT)):
+for p in (str(ROOT), str(SCRIPTS), str(SCRIPTS / "release"), str(BACKEND_ROOT)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from check_delivery_topology import runtime_constants  # noqa: E402
 from scripts.lib.preflight_results import (  # noqa: E402
     CheckResult, all_passed, count_by_status, failed, passed, render_results, skipped,
 )
@@ -111,23 +113,56 @@ def check_routers_mounted() -> CheckResult:
     return passed("routers-mounted", f"all {len(routes)} founding routes are known registry prefixes")
 
 
+def _role_to_spec_names_keys(path: Path) -> set[str]:
+    """Top-level ROLE_TO_SPEC_NAMES keys, read from the AST.
+
+    check_delivery_topology.runtime_constants covers the role SETS but not this
+    mapping, so it is read here — still by AST, never by regex, for the same
+    reason: roles.py's module docstring names every one of these constants, and
+    a pattern anchored on the identifier matches the prose first.
+    """
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target, value = node.target.id, node.value
+        elif (isinstance(node, ast.Assign) and len(node.targets) == 1
+              and isinstance(node.targets[0], ast.Name)):
+            target, value = node.targets[0].id, node.value
+        else:
+            continue
+        if target == "ROLE_TO_SPEC_NAMES" and isinstance(value, ast.Dict):
+            return {k.value for k in value.keys if isinstance(k, ast.Constant)}
+    return set()
+
+
 def check_workers_register() -> CheckResult:
-    import re
-    text = (BACKEND_ROOT / "services/runtime/roles.py").read_text(encoding="utf-8")
-    wblock = re.search(r"WORKER_ROLES[^{]*\{([^}]*)\}", text, re.DOTALL)
-    worker_roles = set(re.findall(r'"([a-z-]+)"', wblock.group(1))) if wblock else set()
-    rmap = re.search(r"ROLE_TO_SPEC_NAMES[^=]*=\s*\{(.*?)\n\}", text, re.DOTALL)
-    mapped = set(re.findall(r'"([a-z-]+)":', rmap.group(1))) if rmap else set()
+    """Every worker role is spec-mapped and owned by exactly one service.
+
+    Schema v2 of the runtime matrix removed `profiles.<p>.roles`, so ownership
+    is now derived from the `services:` map: a service declares the logical
+    roles its one task hosts, which is one role in a dedicated profile and
+    eight in a consolidated one. Reading the removed key returned an empty set
+    and turned this into an unconditional failure.
+    """
+    roles_py = BACKEND_ROOT / "services/runtime/roles.py"
+    worker_roles = set(runtime_constants(roles_py)["WORKER_ROLES"])
+    mapped = _role_to_spec_names_keys(roles_py)
     if not worker_roles or worker_roles - mapped:
         return failed("workers-register", f"worker roles not fully mapped: {sorted(worker_roles - mapped)}")
     deploy = yaml.safe_load(RUNTIME_DEPLOY.read_text(encoding="utf-8")) or {}
     deployable = worker_roles | {"api"}
     for prof in ("staging", "production-lean"):
-        roles = set(((deploy.get("profiles") or {}).get(prof) or {}).get("roles", {}).keys())
-        if roles != deployable:
+        services = ((deploy.get("profiles") or {}).get(prof) or {}).get("services") or {}
+        owned = [role for cfg in services.values() for role in ((cfg or {}).get("roles") or [])]
+        # Set equality alone would accept a role claimed by two services, which
+        # under SQS means two consumers competing for one queue.
+        duplicates = sorted({r for r in owned if owned.count(r) > 1})
+        if duplicates:
+            return failed("workers-register", f"{prof} roles claimed by more than one service: {duplicates}")
+        if set(owned) != deployable:
             return failed("workers-register",
-                          f"{prof} roles {sorted(roles)} != deployable {sorted(deployable)}")
-    return passed("workers-register", f"{len(worker_roles)} worker roles mapped + owned in every profile")
+                          f"{prof} roles {sorted(set(owned))} != deployable {sorted(deployable)}")
+    return passed("workers-register",
+                  f"{len(worker_roles)} worker roles mapped + owned exactly once in every profile")
 
 
 def check_single_alembic_head() -> CheckResult:

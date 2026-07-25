@@ -5,13 +5,23 @@
 role entrypoint (``services/runtime/run_role.py``):
 
 - :data:`WORKER_ROLES` — the worker classes split out of the request lifecycle.
-- :data:`ALL_ROLES` — every valid ``AETHER_ROLE`` token (workers + ``api`` + ``all``).
+- :data:`EXECUTION_GROUPS` — consolidated *deployment* tokens that co-host
+  several logical worker roles inside one process (cost-driven packing).
+- :data:`ALL_ROLES` — every valid ``AETHER_ROLE`` token (workers + ``api`` +
+  ``all`` + the execution groups).
 - :func:`should_start_workers` / :func:`should_start_consumers` — lifespan gates.
 - :data:`ROLE_TO_SPEC_NAMES` + :func:`specs_for_role` — map a role onto the
   supervised :class:`WorkerSpec` subset it owns.
+- :func:`roles_in` / :func:`owning_role` — the two directions of the
+  deployment-token ⇄ logical-role mapping that keeps a consolidated process
+  per-role observable.
 
 Deliberately dependency-free (no settings/registry imports) so it is trivially
 importable and unit-testable regardless of suite ordering.
+
+``scripts/release/check_delivery_topology.py`` AST-parses this module rather
+than importing it, so ``WORKER_ROLES`` must stay a literal ``frozenset({...})``
+call and ``ALL_ROLES`` a top-level annotated assignment.
 """
 
 from __future__ import annotations
@@ -33,9 +43,25 @@ WORKER_ROLES: frozenset[str] = frozenset(
     }
 )
 
-# Every valid AETHER_ROLE token: the worker roles plus the pure API server and
-# the single-process "all" default. Kept in sync with config.settings.RUNTIME_ROLES.
-ALL_ROLES: frozenset[str] = WORKER_ROLES | {"api", "all"}
+# Execution groups: deployment tokens that co-host several *logical* worker
+# roles in one process. They are a packing decision, not a new kind of work —
+# every member role keeps its own queue, consumer group, DLQ, retry policy,
+# metrics label and independent failure/restart behaviour; only the process
+# boundary is shared. ``production-lean`` trades 8 dedicated worker tasks for
+# one "lean-worker" task without collapsing the logical topology, which is why
+# this maps to a *set* of roles rather than to a merged pseudo-role.
+#
+# Distinct from "all": "all" is the local single-process default and is
+# explicitly rejected by Settings in staging/production, whereas an execution
+# group is a deployable token with real per-role isolation behind it.
+EXECUTION_GROUPS: dict[str, frozenset[str]] = {
+    "lean-worker": WORKER_ROLES,
+}
+
+# Every valid AETHER_ROLE token: the worker roles plus the pure API server, the
+# single-process "all" default, and the execution groups. Kept in sync with
+# config.settings.RUNTIME_ROLES.
+ALL_ROLES: frozenset[str] = WORKER_ROLES | {"api", "all"} | frozenset(EXECUTION_GROUPS)
 
 # Worker roles whose process also attaches the shared stream (Kafka) consumers.
 # A pure "api" process attaches none; "all" attaches everything.
@@ -96,6 +122,29 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
 }
 
 
+# Reverse index: supervised spec name → the single worker role that owns it.
+# Built once at import so ``owning_role`` is an O(1) lookup on the hot path
+# (every spec is stamped with its owner at boot and on every restart log line).
+# A spec claimed by two roles would be a topology bug, so the last writer would
+# hide it — assert single ownership while building instead.
+def _build_spec_owner_index() -> dict[str, str]:
+    # A function (not a module-level loop) so no loop variables leak into the
+    # module namespace this file deliberately keeps small and inspectable.
+    index: dict[str, str] = {}
+    for role, spec_names in ROLE_TO_SPEC_NAMES.items():
+        for spec_name in spec_names:
+            if spec_name in index:  # pragma: no cover — topology guard
+                raise ValueError(
+                    f"spec {spec_name!r} is claimed by both "
+                    f"{index[spec_name]!r} and {role!r}"
+                )
+            index[spec_name] = role
+    return index
+
+
+_SPEC_NAME_TO_ROLE: dict[str, str] = _build_spec_owner_index()
+
+
 def is_valid_role(role: str) -> bool:
     """Return True if ``role`` is a recognised AETHER_ROLE token."""
     return role in ALL_ROLES
@@ -106,11 +155,47 @@ def is_worker_role(role: str) -> bool:
     return role in WORKER_ROLES
 
 
+def is_execution_group(role: str) -> bool:
+    """Return True if ``role`` names a consolidated execution group."""
+    return role in EXECUTION_GROUPS
+
+
+def roles_in(role: str) -> frozenset[str]:
+    """Expand an AETHER_ROLE token into the logical worker roles it runs.
+
+    - a plain worker role → just itself (dedicated deployment).
+    - an execution group  → its member roles (consolidated deployment).
+    - ``all``             → every worker role (local single-process default).
+    - ``api`` / unknown   → empty (the pure HTTP server runs no worker role).
+
+    This is the single expansion point every other consolidation-aware helper
+    routes through, so dedicated and consolidated deployments cannot drift.
+    """
+    if role in EXECUTION_GROUPS:
+        return EXECUTION_GROUPS[role]
+    if role == "all":
+        return WORKER_ROLES
+    if role in WORKER_ROLES:
+        return frozenset({role})
+    return frozenset()
+
+
+def owning_role(spec_name: str) -> str | None:
+    """Return the worker role that owns supervised spec ``spec_name``.
+
+    Reverse lookup through :data:`ROLE_TO_SPEC_NAMES`. Returns None for a spec
+    no role claims, so callers can label it explicitly rather than silently
+    attributing it to the deployment token it happens to be running under.
+    """
+    return _SPEC_NAME_TO_ROLE.get(spec_name)
+
+
 def should_start_workers(role: str) -> bool:
     """Return True when a process in ``role`` runs supervised workers.
 
-    ``all`` runs everything and every worker role runs its own class, so both
-    return True. Only the pure ``api`` server returns False.
+    ``all`` runs everything, every worker role runs its own class, and an
+    execution group runs its members' classes, so all three return True. Only
+    the pure ``api`` server returns False.
     """
     return role != "api"
 
@@ -118,11 +203,13 @@ def should_start_workers(role: str) -> bool:
 def should_start_consumers(role: str) -> bool:
     """Return True when a process in ``role`` attaches stream consumers.
 
-    ``all`` and the stream-oriented worker roles attach the shared consumer; a
-    pure ``api`` process and non-stream worker roles (outbox-relay, materializer,
-    maintenance) do not.
+    ``all`` and the stream-oriented worker roles attach consumers; a pure
+    ``api`` process and non-stream worker roles (outbox-relay, materializer,
+    maintenance) do not. An execution group attaches consumers when *any*
+    member role is consumer-attached — the group hosts each member's consumer
+    independently, so one stream member is enough to need the machinery.
     """
-    return role == "all" or role in CONSUMER_ROLES
+    return bool(roles_in(role) & CONSUMER_ROLES)
 
 
 _S = TypeVar("_S")
@@ -139,12 +226,18 @@ def specs_for_role(role: str, specs: Iterable[_S]) -> list[_S]:
     - ``all`` → every spec (unchanged order).
     - ``api`` → none.
     - a worker role → the specs whose name is in ROLE_TO_SPEC_NAMES[role].
+    - an execution group → the union over its member roles, in ``specs`` order.
     - anything else → none.
     """
     spec_list = list(specs)
     if role == "all":
+        # "all" is the local single-process aggregate: return every spec,
+        # including any ROLE_TO_SPEC_NAMES does not yet claim, so a newly added
+        # spec can never silently vanish from local/dev before it is given a
+        # role owner. Deployable tokens go through the union path below, where
+        # an unclaimed spec *should* be visibly missing.
         return spec_list
-    if role == "api":
-        return []
-    wanted = ROLE_TO_SPEC_NAMES.get(role, frozenset())
+    wanted: set[str] = set()
+    for member in roles_in(role):
+        wanted |= ROLE_TO_SPEC_NAMES.get(member, frozenset())
     return [s for s in spec_list if _spec_name(s) in wanted]

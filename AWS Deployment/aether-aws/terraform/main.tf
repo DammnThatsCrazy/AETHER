@@ -333,12 +333,18 @@ module "ecs" {
 
   # SNS→SQS fanout and the DynamoDB cache table are provisioned in every
   # profile; they are the lean backends and the scale rollback target.
-  sqs_queue_url            = module.sqs.queue_url
-  sqs_queue_arn            = module.sqs.queue_arn
-  sqs_role_queue_urls      = module.sqs.role_queue_urls
-  sqs_role_queue_arns      = module.sqs.role_queue_arns
-  sns_topic_arn            = module.sqs.fanout_topic_arn
-  runtime_roles            = local.runtime_role_settings
+  sqs_queue_url       = module.sqs.queue_url
+  sqs_queue_arn       = module.sqs.queue_arn
+  sqs_role_queue_urls = module.sqs.role_queue_urls
+  sqs_role_queue_arns = module.sqs.role_queue_arns
+  sns_topic_arn       = module.sqs.fanout_topic_arn
+
+  # The non-api half of the schema-v2 runtime matrix: one entry per deployable
+  # ECS SERVICE, keyed by the AETHER_ROLE token its task boots with. A
+  # consolidated profile passes one `lean-worker` entry hosting eight roles; a
+  # dedicated profile passes eight single-role entries.
+  runtime_services = local.runtime_service_settings
+
   dynamodb_cache_table     = module.dynamodb_cache.table_name
   dynamodb_cache_table_arn = module.dynamodb_cache.table_arn
 
@@ -356,15 +362,23 @@ module "ecs" {
   # is driven by enable_dedicated_ml above.
   ml_serving_inline = !local.enable_dedicated_ml
 
-  use_fargate_spot     = true
-  backend_cpu          = var.ecs_backend_cpu
-  backend_memory       = var.ecs_backend_memory
-  ml_cpu               = var.ecs_ml_cpu
-  ml_memory            = var.ecs_ml_memory
-  backend_min_capacity = var.ecs_backend_min_capacity
-  backend_max_capacity = var.ecs_backend_max_capacity
-  ml_min_capacity      = var.ecs_ml_min_capacity
-  ml_max_capacity      = var.ecs_ml_max_capacity
+  # The api service, straight from the runtime matrix (profiles.tf). There is
+  # no ecs_backend_* variable to disagree with it any more, and no
+  # use_fargate_spot flag: the matrix pins api to on-demand at every capacity,
+  # which is what the previous `use_fargate_spot = true` was quietly violating.
+  backend_cpu               = local.api_cpu
+  backend_memory            = local.api_memory
+  backend_desired_count     = local.api_desired_count
+  backend_min_capacity      = local.api_min_capacity
+  backend_max_capacity      = local.api_max_capacity
+  backend_capacity_provider = local.api_capacity_provider
+
+  # ML serving is not described by the runtime matrix (it is a service, not a
+  # runtime role), so it keeps its own variables.
+  ml_cpu          = var.ecs_ml_cpu
+  ml_memory       = var.ecs_ml_memory
+  ml_min_capacity = var.ecs_ml_min_capacity
+  ml_max_capacity = var.ecs_ml_max_capacity
 
   log_retention_days = var.log_retention_days
 }
