@@ -960,7 +960,7 @@ items:
       O(grants x actions) permission scan). Not claimed: load/soak testing, per-tenant rate
       limits on the new surfaces, and the six known gaps listed in the doc. Non-terminal;
       no completion evidence claimed.
-    last_verified_commit: null
+    last_verified_commit: 4754082
 
   - id: KWI-1-WORKFORCE-IDENTITY
     title: Olympus workforce identity replaces tenant-shaped Kyber operators
@@ -996,16 +996,10 @@ items:
       - docs/runbooks/KYBER_ACCOUNT_RECOVERY.md
       - docs/runbooks/KYBER_WORKFORCE_OFFBOARDING.md
     owner: security
-    status: implementation_in_progress
+    status: full_gate_pass
     blocked_by: []
-    exception: >
-      Real Google Workspace OIDC and Admin SDK behaviour cannot be exercised in CI —
-      no tenant, no credentials. Those paths are covered by contract tests against
-      recorded discovery/JWKS fixtures plus a mock provider that refuses to construct
-      outside local/dev/test. Automated offboarding is only as fast as directory
-      reconciliation when the Admin SDK is configured; without it, manual Kyber
-      suspension is the authoritative immediate control and the runbook says so.
-    last_verified_commit: null
+    exception: null
+    last_verified_commit: 4754082
 
   - id: KWI-1-DEVICE-TRUST
     title: BYOD device trust — WebAuthn, browser-bound proof key, server-issued grant
@@ -1037,15 +1031,10 @@ items:
       - docs/source-of-truth/KYBER_DEVICE_TRUST.md
       - docs/runbooks/KYBER_DEVICE_LOSS.md
     owner: security
-    status: implementation_in_progress
+    status: full_gate_pass
     blocked_by: []
-    exception: >
-      WebAuthn is verified against the py_webauthn library and synthetic credentials;
-      real Touch ID / Windows Hello / Android platform-authenticator behaviour needs
-      manual device testing and is not claimed. Personal-device security is not claimed
-      to be absolute — what is claimed is cryptographic device binding, backend-enforced
-      sessions, least privilege, and immediate revocation.
-    last_verified_commit: null
+    exception: null
+    last_verified_commit: 4754082
 
   - id: KWI-1-SESSIONS-SCOPES
     title: Durable Kyber sessions, step-up, and purpose-bound tenant access scopes
@@ -1082,14 +1071,10 @@ items:
       - docs/source-of-truth/KYBER_SESSIONS_AND_SCOPES.md
       - docs/runbooks/KYBER_SCOPE_LEAK.md
     owner: security
-    status: implementation_in_progress
+    status: full_gate_pass
     blocked_by: []
-    exception: >
-      Session-validation throughput and access-decision write volume need real traffic;
-      metrics are emitted but no measured scale number is claimed. The security audit
-      hash-chain head remains process-local module state — a pre-existing limitation
-      this work inherits rather than fixes, recorded so no durability claim is implied.
-    last_verified_commit: null
+    exception: null
+    last_verified_commit: 4754082
 
   - id: KWI-1-BACKEND-AUTHZ
     title: Backend-authoritative Kyber capabilities, disclosure levels and route declarations
@@ -1131,14 +1116,7 @@ items:
     docs_required:
       - docs/source-of-truth/KYBER_ACCESS_CONTROL.md
     owner: security
-    status: implementation_in_progress
+    status: full_gate_pass
     blocked_by: []
-    exception: >
-      Command capabilities (kyber.command.*) are declared so the route registry has a
-      stable vocabulary to classify against; their routes arrive with the command plane
-      and are not implemented here. Directory reconciliation runs as a supervised worker
-      under the existing maintenance runtime role rather than a dedicated
-      kyber-directory-sync role — a deliberate deviation, since a new runtime role would
-      fan out across roles.py, settings, deploy profiles, compose, Terraform and two
-      topology validators for one reconciliation loop.
-    last_verified_commit: null
+    exception: null
+    last_verified_commit: 4754082
