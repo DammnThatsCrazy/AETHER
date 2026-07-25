@@ -19,6 +19,7 @@ from typing import Any, Optional, TypeVar
 from pydantic import BaseModel
 
 from repositories.repos import BaseRepository
+from shared.temporal.instant import try_parse_instant
 from shared.common.common import utc_now
 
 from ..access.contracts import (
@@ -53,13 +54,12 @@ def parse_ts(value: Any) -> Optional[datetime]:
     """
     if not isinstance(value, str) or not value:
         return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    # The canonical parser, not a local one. It rejects timezone-naive input
+    # rather than assuming UTC, which is the behaviour we want here: a device
+    # or credential expiry whose zone is unknown must read as unusable, not as
+    # a moment we guessed.
+    instant, _reason = try_parse_instant(value)
+    return instant
 
 
 def is_expired(value: Any, *, missing_is_expired: bool = True) -> bool:

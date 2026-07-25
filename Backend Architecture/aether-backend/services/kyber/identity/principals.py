@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
+from shared.temporal.instant import try_parse_instant
 from services.kyber.access.contracts import (
     AuthenticationEvent,
     AuthenticationEventType,
@@ -70,16 +71,11 @@ def parse_timestamp(value: Optional[str]) -> Optional[datetime]:
     """
     if not value:
         return None
-    text = str(value).strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    # The canonical parser, not a local one. It rejects timezone-naive input
+    # rather than assuming UTC — an invitation or binding expiry whose zone is
+    # unknown must read as unusable, not as a moment we guessed.
+    instant, _reason = try_parse_instant(str(value).strip())
+    return instant
 
 
 def is_expired(expires_at: Optional[str], *, at: Optional[datetime] = None) -> bool:
