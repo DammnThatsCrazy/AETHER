@@ -68,6 +68,12 @@ const Campaign360Page = lazy(() => import('@kyber/pages/measurement/campaign-360
 const DeliveryOpsPage = lazy(() => import('@kyber/pages/delivery').then(m => ({ default: m.DeliveryOpsPage })));
 const AgentTelemetryPage = lazy(() => import('@kyber/pages/agent-telemetry').then(m => ({ default: m.AgentTelemetryPage })));
 const AgentAccessPage = lazy(() => import('@kyber/pages/agent-access').then(m => ({ default: m.AgentAccessPage })));
+// Kyber's own operating plane: platform topology, the tenant's own view, the
+// prioritised exception queue, and the governed command plane.
+const KyberGraphPage = lazy(() => import('@kyber/pages/kyber-graph').then(m => ({ default: m.KyberGraphPage })));
+const TenantMirrorPage = lazy(() => import('@kyber/pages/tenant-mirror').then(m => ({ default: m.TenantMirrorPage })));
+const KyberExceptionsPage = lazy(() => import('@kyber/pages/kyber-exceptions').then(m => ({ default: m.KyberExceptionsPage })));
+const KyberCommandsPage = lazy(() => import('@kyber/pages/kyber-commands').then(m => ({ default: m.KyberCommandsPage })));
 const PaymentRailsPage = lazy(() => import('@kyber/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
 const AiEfficiencyPage = lazy(() => import('@kyber/pages/ai-efficiency').then(m => ({ default: m.AiEfficiencyPage })));
 const TargetingIntelligencePage = lazy(() => import('@kyber/pages/targeting').then(m => ({ default: m.TargetingIntelligencePage })));
@@ -124,6 +130,10 @@ export function AppRouter() {
                 <Route path="/packages" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/packages/:packageId" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/deployment-readiness" element={<PageSuspense><DeploymentReadinessPage /></PageSuspense>} />
+                <Route path="/kyber-graph" element={<PageSuspense><KyberGraphPage /></PageSuspense>} />
+                <Route path="/tenant-mirror" element={<PageSuspense><TenantMirrorPage /></PageSuspense>} />
+                <Route path="/kyber-exceptions" element={<PageSuspense><KyberExceptionsPage /></PageSuspense>} />
+                <Route path="/kyber-commands" element={<PageSuspense><KyberCommandsPage /></PageSuspense>} />
                 <Route path="/reliability" element={<PageSuspense><ReliabilityPage /></PageSuspense>} />
                 <Route path="/journey-health" element={<PageSuspense><JourneyHealthPage /></PageSuspense>} />
                 <Route path="/reliability/incidents/:incidentId" element={<PageSuspense><ReliabilityPage /></PageSuspense>} />

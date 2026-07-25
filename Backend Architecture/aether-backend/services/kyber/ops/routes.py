@@ -704,6 +704,41 @@ async def execute_command(
     return APIResponse(data=result, meta=_meta(authorized)).to_dict()
 
 
+@router.post("/commands/{command_id}/verify")
+async def verify_command(
+    request: Request,
+    command_id: str = Path(min_length=1, max_length=128),
+    context: Any = Depends(
+        _require(
+            COMMAND_FLOOR_CAPABILITY,
+            disclosure=DisclosureLevel.D0_PLATFORM_TOPOLOGY,
+            action_class=ACTION_CLASS_READ,
+        )
+    ),
+) -> dict[str, Any]:
+    """Re-run the postconditions of a command that already executed.
+
+    This is the ONLY route out of ``executed_unverified``. Some checks are
+    answerable only once the platform catches up — a job that was queued when
+    the first verification ran may have succeeded since — so a command that
+    honestly could not be confirmed at execution time needs a way to be
+    confirmed later.
+
+    Without this route the state would be a dead end, and a dead end is how
+    ``executed_unverified`` degrades into decoration: an operator who cannot
+    ever resolve it learns to read it as "probably fine", which is precisely the
+    reading the status exists to prevent. Note what this route still is not — a
+    way to *declare* a command verified. It re-runs the checks; the checks
+    decide.
+    """
+    command = await command_service.require(command_id)
+    authorized, _spec = await _authorize_command(request, command.command_type)
+    result = await command_service.verify(
+        command_id, actor_id=getattr(authorized, "operator_id", "unknown")
+    )
+    return APIResponse(data=result, meta=_meta(authorized)).to_dict()
+
+
 # ── Containment ──────────────────────────────────────────────────────────────
 
 

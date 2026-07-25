@@ -873,6 +873,12 @@ kyber_routes:
     capability: kyber.workforce.self.read
     disclosure: D0
     action_class: 0
+  # The only route out of executed_unverified. It re-runs the checks; it is not
+  # a way to declare a command verified.
+  - route: "POST /v1/kyber/ops/commands/{command_id}/verify"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
   - route: "GET /v1/kyber/ops/containment"
     capability: kyber.incident.read
     disclosure: D1

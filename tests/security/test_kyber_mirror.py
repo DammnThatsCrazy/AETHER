@@ -52,6 +52,41 @@ from services.kyber.mirror import (  # noqa: E402
 )
 from services.kyber.mirror.parity import MAX_REPORTED_DIVERGENCES  # noqa: E402
 
+# ── Refusals, matched by name at call time ───────────────────────────────────
+
+
+class _RefusalMatcher:
+    """Assert a call refuses with a named exception, resolved at call time.
+
+    `_refuses("NotFoundError")` with the class imported at module scope binds
+    one class OBJECT. Sibling suites in `tests/security` purge `shared.*` from
+    `sys.modules`, so the service may raise a freshly re-imported error that is
+    a different object with the same name, and `pytest.raises` would then let a
+    genuine refusal escape as an unrelated error — the security assertion stops
+    being made without anything going red. Matching on the name is immune, and
+    costs nothing.
+    """
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+        self.value = None
+
+    def __enter__(self) -> "_RefusalMatcher":
+        return self
+
+    def __exit__(self, exc_type, exc, _tb) -> bool:
+        assert exc_type is not None, f"expected a {self._name}, but the call returned"
+        assert exc_type.__name__ == self._name, (
+            f"expected {self._name}, got {exc_type.__name__}: {exc}"
+        )
+        self.value = exc
+        return True
+
+
+def _refuses(name: str) -> _RefusalMatcher:
+    return _RefusalMatcher(name)
+
+
 TENANT = "tenant-mirror-alpha"
 CONTRACT = "1.0.0"
 
@@ -297,13 +332,13 @@ def test_the_divergence_list_is_capped_and_says_when_it_truncated():
 
 
 def test_an_unknown_surface_is_refused(service):
-    with pytest.raises(NotFoundError):
+    with _refuses("NotFoundError"):
         service.resolve("not-a-real-surface")
 
 
 def test_a_parity_exempt_surface_is_refused_with_its_manifest_reason(service):
     """Opting out is allowed; opting out silently, or forgetting why, is not."""
-    with pytest.raises(BadRequestError) as caught:
+    with _refuses("BadRequestError") as caught:
         service.resolve("billing")
 
     details = getattr(caught.value, "details", {}) or {}
@@ -322,7 +357,7 @@ def test_every_parity_required_manifest_surface_has_a_resolver(service):
 
 def test_a_surface_without_a_resolver_refuses_rather_than_rendering_empty(service):
     """A coverage hole must not look like a tenant with no data."""
-    with pytest.raises(NotFoundError):
+    with _refuses("NotFoundError"):
         service.vertex_types("campaign-intelligence-registry-typo")
 
 
@@ -403,7 +438,7 @@ async def test_a_masked_rendering_is_not_offered_as_parity(service):
         assert envelope.parity_comparable is False
         assert envelope.disclosure == "D2"
 
-        with pytest.raises(BadRequestError):
+        with _refuses("BadRequestError"):
             await service.check_parity(
                 _request(), tenant_id=TENANT, surface="users", aether_payload={}
             )

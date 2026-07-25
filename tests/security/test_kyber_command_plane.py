@@ -58,6 +58,43 @@ from services.kyber.ops.containment import (  # noqa: E402
 from services.kyber.ops.contracts import CommandRequest, CommandSpec  # noqa: E402
 from services.kyber.ops.registry import COMMAND_REGISTRY, register_command  # noqa: E402
 
+# ── Refusals, matched by name at call time ───────────────────────────────────
+
+
+class _RefusalMatcher:
+    """Assert a call refuses with a named exception, resolved at call time.
+
+    `pytest.raises(BadRequestError)` with the class imported at module scope
+    binds one class OBJECT. Sibling suites in `tests/security` purge `shared.*`
+    from `sys.modules`, so `approvals.py` may raise a freshly re-imported
+    `BadRequestError` that is a different object with the same name — and
+    `pytest.raises` then lets a genuine refusal escape as an unrelated error.
+    The security assertion silently stops being made, which is the worst
+    possible outcome for a test whose entire job is proving that a refusal
+    happens.
+
+    Matching on `type(exc).__name__` is immune to that, and costs nothing.
+    """
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+        self.value: Optional[BaseException] = None
+
+    def __enter__(self) -> "_RefusalMatcher":
+        return self
+
+    def __exit__(self, exc_type, exc, _tb) -> bool:
+        assert exc_type is not None, f"expected a {self._name}, but the call returned"
+        assert exc_type.__name__ == self._name, (
+            f"expected {self._name}, got {exc_type.__name__}: {exc}"
+        )
+        self.value = exc
+        return True
+
+
+def _refuses(name: str) -> _RefusalMatcher:
+    return _RefusalMatcher(name)
+
 JOBS_CLASS = "services.jobs.service.JobsService"
 
 REQUESTER = "op_requester"
@@ -262,7 +299,7 @@ async def test_self_approval_is_refused():
     svc = service()
     command = await request_kill_switch(svc)
 
-    with pytest.raises(BadRequestError) as excinfo:
+    with _refuses("BadRequestError") as excinfo:
         await svc.approve(
             command.command_id, approver_id=REQUESTER, role_template_ids=FOUNDER_TEMPLATES
         )
@@ -280,7 +317,7 @@ async def test_unqualified_approver_is_refused():
     svc = service()
     command = await request_kill_switch(svc, idempotency_key="ks-unqualified")
 
-    with pytest.raises(BadRequestError) as excinfo:
+    with _refuses("BadRequestError") as excinfo:
         await svc.approve(
             command.command_id,
             approver_id=APPROVER_A,
@@ -304,7 +341,7 @@ async def test_the_same_approver_cannot_approve_twice():
         command.command_id, approver_id=APPROVER_A, role_template_ids=FOUNDER_TEMPLATES
     )
 
-    with pytest.raises(BadRequestError) as excinfo:
+    with _refuses("BadRequestError") as excinfo:
         await svc.approve(
             command.command_id, approver_id=APPROVER_A, role_template_ids=FOUNDER_TEMPLATES
         )
@@ -410,7 +447,7 @@ async def test_class_five_command_without_live_step_up_is_denied():
     step_up = install(step_up_fresh=False)
     svc = service()
 
-    with pytest.raises(ForbiddenError) as excinfo:
+    with _refuses("ForbiddenError") as excinfo:
         await request_kill_switch(svc, idempotency_key="ks-no-step-up")
 
     assert step_up.calls, "the step-up service must actually have been consulted"
@@ -424,7 +461,7 @@ async def test_unavailable_blast_radius_refuses_rather_than_assuming_a_small_one
     install(blast_radius=None)
     svc = service()
 
-    with pytest.raises(BadRequestError) as excinfo:
+    with _refuses("BadRequestError") as excinfo:
         await svc.request(
             command_type="retry_job",
             requested_by=REQUESTER,
@@ -516,7 +553,7 @@ async def test_a_spec_requiring_a_dry_run_cannot_execute_without_one(jobs: FakeJ
     )
     assert "dry_run" in command.metadata["approval_gaps"]
 
-    with pytest.raises(BadRequestError) as excinfo:
+    with _refuses("BadRequestError") as excinfo:
         await svc.execute(command.command_id, actor_id=REQUESTER)
     assert "dry_run" in str(excinfo.value)
     assert jobs.enqueue_calls == [], "a blocked command must not reach its handler"
@@ -535,7 +572,7 @@ async def test_a_spec_requiring_a_rollback_plan_cannot_execute_without_one(jobs:
     install(jobs=jobs)
     svc = service()
 
-    with pytest.raises(BadRequestError) as excinfo:
+    with _refuses("BadRequestError") as excinfo:
         await svc.request(
             command_type="pause_connector",
             requested_by=REQUESTER,
@@ -567,7 +604,7 @@ async def test_a_spec_requiring_a_rollback_plan_cannot_execute_without_one(jobs:
     )
     await command_repository.save(smuggled.model_dump())
 
-    with pytest.raises(BadRequestError) as excinfo:
+    with _refuses("BadRequestError") as excinfo:
         await svc.execute(smuggled.command_id, actor_id=REQUESTER)
     assert "rollback_plan" in str(excinfo.value)
     assert await command_execution_repository.attempt_count(smuggled.command_id) == 0

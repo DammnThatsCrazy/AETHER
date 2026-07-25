@@ -46,6 +46,7 @@ NESTED_HANDLERS: tuple[str, ...] = (
     "dry_run_command",
     "approve_command",
     "execute_command",
+    "verify_command",
 )
 
 #: The floor the route registry declares for them. Held by every authenticated
