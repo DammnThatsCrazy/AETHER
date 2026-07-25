@@ -27,31 +27,35 @@ output "ecr_urls" {
 
 # --------------------------------------------------------------------------
 # Data stores
+#
+# Every output for a profile-gated store reads the normalized locals from
+# main.tf section 4z, so it resolves to "" instead of failing to index an
+# absent module.
 # --------------------------------------------------------------------------
 
 output "rds_endpoint" {
-  description = "RDS Postgres endpoint address"
-  value       = module.rds.endpoint
+  description = "Legacy RDS Postgres endpoint address (empty string — RDS is not provisioned by any profile)"
+  value       = local.legacy_rds_endpoint
 }
 
 output "rds_port" {
-  description = "RDS Postgres port"
-  value       = module.rds.port
+  description = "Legacy RDS Postgres port (0 when not provisioned)"
+  value       = local.legacy_rds_port
 }
 
 output "rds_db_name" {
-  description = "RDS initial database name"
-  value       = module.rds.db_name
+  description = "Legacy RDS initial database name (empty string when not provisioned)"
+  value       = local.legacy_rds_db_name
 }
 
 output "redis_endpoint" {
-  description = "ElastiCache Redis primary endpoint"
-  value       = module.elasticache.primary_endpoint
+  description = "ElastiCache Redis primary endpoint host:port (empty string when the profile caches in DynamoDB)"
+  value       = local.redis_host == "" ? "" : "${local.redis_host}:${local.redis_port}"
 }
 
 output "kafka_brokers" {
-  description = "MSK TLS bootstrap broker endpoints"
-  value       = module.msk.bootstrap_brokers_tls
+  description = "MSK TLS bootstrap broker endpoints (empty string when the profile uses SNS/SQS)"
+  value       = local.kafka_bootstrap_servers
 }
 
 output "sqs_events_queue_url" {
@@ -70,13 +74,18 @@ output "dynamodb_cache_table_name" {
 }
 
 output "neptune_endpoint" {
-  description = "Neptune cluster writer endpoint"
-  value       = module.neptune.cluster_endpoint
+  description = "Neptune cluster writer endpoint (empty string when the profile keeps the graph in Aurora Postgres)"
+  value       = local.neptune_endpoint
 }
 
 output "neptune_reader_endpoint" {
-  description = "Neptune cluster reader endpoint"
-  value       = module.neptune.reader_endpoint
+  description = "Neptune cluster reader endpoint (empty string when not provisioned)"
+  value       = try(module.neptune[0].reader_endpoint, "")
+}
+
+output "neptune_cluster_id" {
+  description = "Neptune cluster identifier (empty string when not provisioned)"
+  value       = local.neptune_cluster_id
 }
 
 # --------------------------------------------------------------------------

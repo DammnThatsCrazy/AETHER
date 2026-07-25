@@ -1,0 +1,407 @@
+# =============================================================================
+# Aether — Terraform Resource Contracts
+#
+# Maps every canonical cost-policy key in config/deployment_profiles.yaml
+# (profiles.production-lean.cost_policy.required_resources — 11 keys — and
+# .forbidden_resources — 10 keys) onto the Terraform addresses and resource
+# types that realise it, plus the cardinality a conforming plan must show.
+#
+# This file is DATA. It contains no logic and no conditionals. A validator
+# reads `terraform show -json <planfile>`, walks
+# planned_values.root_module.child_modules, counts the resources whose
+# `type` matches a rule's `resource_types` under the rule's `module_address`,
+# and compares that count against `cardinality`.
+#
+# Cardinality grammar:
+#   zero          -> the matched count MUST be 0
+#   at_least_one  -> the matched count MUST be >= 1
+#   exactly:N     -> the matched count MUST equal N
+#
+# Address grammar:
+#   module_address is the plan-JSON module address WITHOUT the count index
+#   (e.g. "module.msk"). A counted module appears as "module.msk[0]" in the
+#   plan; a validator matches on the un-indexed prefix. `root` means the root
+#   module's own resources.
+#
+# `evidence` names the specific resource whose presence or absence is the
+# decisive signal, so a failure message can point at one thing.
+# `terraform_gate` names the profiles.tf local that drives the cardinality, so
+# a drifted local and a drifted plan are distinguishable failures.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/deployment_profiles.yaml
+
+# The profile whose cost_policy this file encodes. Other profiles are described
+# by `also_applies_to` on individual rules.
+profile: production-lean
+
+# Root module of the plan these contracts are written against.
+terraform_root: AWS Deployment/aether-aws/terraform
+
+# ----------------------------------------------------------------------------
+# required_resources — production-lean MUST provision each of these.
+# ----------------------------------------------------------------------------
+required_resources:
+
+  cloudfront_s3_frontends:
+    description: >-
+      Immutable static SPA origins for the aether and kyber bundles, plus the
+      SSM parameters the deploy workflow resolves bucket names from. CDN
+      distribution is provisioned outside this root; the S3 origins and their
+      SSM pointers are the Terraform-owned half of the contract.
+    module_address: root
+    resource_types:
+      - aws_s3_bucket
+      - aws_s3_bucket_public_access_block
+      - aws_s3_bucket_server_side_encryption_configuration
+      - aws_ssm_parameter
+    name_prefixes:
+      - static_frontend
+    cardinality: exactly:8
+    evidence: aws_s3_bucket.static_frontend
+    terraform_gate: local.enable_static_frontends
+
+  alb:
+    description: Internet-facing Application Load Balancer with HTTPS listener and target groups.
+    module_address: module.alb
+    resource_types:
+      - aws_lb
+      - aws_lb_listener
+      - aws_lb_target_group
+    cardinality: at_least_one
+    evidence: aws_lb.this
+    terraform_gate: null
+
+  explicit_runtime_role_services:
+    description: >-
+      One dedicated ECS service per non-api runtime role from
+      config/runtime_deployment.yaml, plus the aether-backend service that
+      serves the api role. Roles are never collapsed into an implicit worker.
+    module_address: module.ecs
+    resource_types:
+      - aws_ecs_service
+    cardinality: at_least_one
+    evidence: aws_ecs_service.runtime_role
+    terraform_gate: local.runtime_role_settings
+    cross_reference: config/runtime_deployment.yaml
+
+  aurora_serverless_v2:
+    description: Aurora Serverless v2 Postgres cluster — the database of record.
+    module_address: module.aurora
+    resource_types:
+      - aws_rds_cluster
+      - aws_rds_cluster_instance
+    cardinality: at_least_one
+    evidence: aws_rds_cluster.this
+    terraform_gate: local.enable_aurora
+
+  sqs_sns:
+    description: >-
+      SNS fanout topic with per-role SQS subscriber queues and dead-letter
+      queues — the event broker for every cost-capped profile.
+    module_address: module.sqs
+    resource_types:
+      - aws_sns_topic
+      - aws_sns_topic_subscription
+      - aws_sqs_queue
+    cardinality: at_least_one
+    evidence: aws_sns_topic.fanout
+    terraform_gate: local.enable_sqs_sns
+    selector: local.event_broker == "sns_sqs"
+
+  dynamodb:
+    description: DynamoDB cache table with read/write autoscaling — the lean cache backend.
+    module_address: module.dynamodb_cache
+    resource_types:
+      - aws_dynamodb_table
+    cardinality: exactly:1
+    evidence: aws_dynamodb_table.cache
+    terraform_gate: local.enable_dynamodb_cache
+    selector: local.cache_backend == "dynamodb"
+
+  s3_object_lake:
+    description: >-
+      Durable S3 storage for the long-term log/observability archive and the
+      drift reference data the nightly ML drift Lambda reads.
+    module_address: module.monitoring
+    resource_types:
+      - aws_s3_bucket
+    name_prefixes:
+      - log_archive
+    cardinality: at_least_one
+    evidence: aws_s3_bucket.log_archive
+    terraform_gate: null
+
+  secrets_kms:
+    description: >-
+      Customer-managed KMS key plus the Secrets Manager stubs and their
+      rotation wiring. No secret value is ever in the plan.
+    module_address: module.secrets
+    resource_types:
+      - aws_kms_key
+      - aws_secretsmanager_secret
+      - aws_secretsmanager_secret_rotation
+    cardinality: at_least_one
+    evidence: aws_secretsmanager_secret.this
+    terraform_gate: null
+
+  cloudwatch_alarms:
+    description: >-
+      CloudWatch alarms and the dashboard, delivered to the SNS alert topic.
+      Alarms for absent backends are gated off rather than left in
+      INSUFFICIENT_DATA — but every backend the lean profile SUBSTITUTES must
+      carry its own alarms, or cost reduction has silently bought an
+      observability gap.
+    module_address: module.monitoring
+    resource_types:
+      - aws_cloudwatch_metric_alarm
+      - aws_cloudwatch_dashboard
+      - aws_sns_topic
+    cardinality: at_least_one
+    evidence: aws_cloudwatch_metric_alarm.alb_5xx
+    terraform_gate: null
+    # Replacement-service alarms that a lean plan must contain, named so their
+    # absence is a distinct failure from "no alarms at all".
+    required_alarm_names:
+      - alb_5xx
+      - aurora_max_acu
+      - ml_drift
+      - dynamodb_cache_throttled
+      - sqs_queue_depth
+      - sqs_oldest_message_age
+      - sqs_dlq_depth
+    # Gated alarms that must be ABSENT from a lean plan, because their
+    # dimensions would point at a resource the profile does not provision.
+    forbidden_alarm_names:
+      - elasticache_memory
+      - msk_offline_partitions
+      - neptune_cpu
+
+  inline_ml:
+    description: >-
+      ML inference runs in-process inside the backend task. The contract is the
+      ABSENCE of a dedicated ML service combined with the presence of the
+      backend service that hosts inference; see forbidden_resources.dedicated_ml_service.
+    module_address: module.ecs
+    resource_types:
+      - aws_ecs_service
+    name_prefixes:
+      - backend
+    cardinality: exactly:1
+    evidence: aws_ecs_service.backend
+    terraform_gate: local.enable_dedicated_ml
+    expected_gate_value: false
+    paired_with: forbidden_resources.dedicated_ml_service
+
+  postgres_graph:
+    description: >-
+      The graph is stored in the Aurora Postgres cluster. The contract is the
+      absence of a Neptune cluster plus an Aurora cluster to hold it; there is
+      no separate graph resource to count.
+    module_address: module.aurora
+    resource_types:
+      - aws_rds_cluster
+    cardinality: at_least_one
+    evidence: aws_rds_cluster.this
+    terraform_gate: local.enable_postgres_graph
+    selector: local.graph_backend == "postgres"
+    paired_with: forbidden_resources.neptune
+
+# ----------------------------------------------------------------------------
+# forbidden_resources — production-lean MUST NOT provision any of these.
+# Every rule below is `zero`.
+# ----------------------------------------------------------------------------
+forbidden_resources:
+
+  msk:
+    description: MSK Kafka cluster, its configuration, KMS key and broker log group.
+    module_address: module.msk
+    resource_types:
+      - aws_msk_cluster
+      - aws_msk_configuration
+    cardinality: zero
+    evidence: aws_msk_cluster.this
+    terraform_gate: local.enable_msk
+    also_applies_to: [staging]
+    permitted_in: [production-scale, enterprise-isolated]
+
+  elasticache:
+    description: ElastiCache Redis replication group, subnet/parameter groups and AUTH secret.
+    module_address: module.elasticache
+    resource_types:
+      - aws_elasticache_replication_group
+      - aws_elasticache_subnet_group
+      - aws_elasticache_parameter_group
+    cardinality: zero
+    evidence: aws_elasticache_replication_group.this
+    terraform_gate: local.enable_elasticache
+    also_applies_to: [staging]
+    permitted_in: [production-scale, enterprise-isolated]
+
+  neptune:
+    description: Neptune graph cluster and its instances.
+    module_address: module.neptune
+    resource_types:
+      - aws_neptune_cluster
+      - aws_neptune_cluster_instance
+      - aws_neptune_subnet_group
+    cardinality: zero
+    evidence: aws_neptune_cluster.this
+    terraform_gate: local.enable_neptune
+    also_applies_to: [staging]
+    permitted_in: [production-scale, enterprise-isolated]
+
+  clickhouse:
+    description: >-
+      Self-managed or managed ClickHouse for analytics. No ClickHouse resource
+      exists in this root at any profile today; scale/enterprise express the
+      intent through local.analytics_backend only. The rule is declared so the
+      contract stays complete and a future ClickHouse module cannot appear in a
+      lean plan unnoticed.
+    module_address: any
+    resource_types:
+      - aws_instance
+      - aws_ecs_service
+    name_prefixes:
+      - clickhouse
+    cardinality: zero
+    evidence: null
+    terraform_gate: local.enable_clickhouse
+    also_applies_to: [staging]
+    permitted_in: [production-scale, enterprise-isolated]
+    currently_unimplemented: true
+
+  dedicated_ml_service:
+    description: >-
+      Standalone aether-ml-serving ECS service, its task definition, log group
+      and autoscaling, plus the ALB target group and /v1/ml/* listener rule it
+      registers with. Lean serves ML inline inside the backend task, so
+      /v1/ml/* falls through to the HTTPS listener default action.
+    module_address: module.ecs
+    resource_types:
+      - aws_ecs_service
+      - aws_ecs_task_definition
+      - aws_appautoscaling_target
+      - aws_appautoscaling_policy
+    name_prefixes:
+      - ml
+      - ml_cpu
+    cardinality: zero
+    evidence: aws_ecs_service.ml
+    terraform_gate: local.enable_dedicated_ml
+    also_applies_to: [staging]
+    permitted_in: [production-scale, enterprise-isolated]
+    plan_outputs:
+      - module.ecs.dedicated_ml_service_arns
+      - module.ecs.dedicated_ml_target_group_arns
+      - module.alb.ml_target_group_arn
+    # The load-balancer half of the same resource. Counted separately because
+    # it lives in a different module address.
+    additional_rules:
+      - module_address: module.alb
+        resource_types:
+          - aws_lb_target_group
+          - aws_lb_listener_rule
+        name_prefixes:
+          - ml
+          - ml_serving
+        cardinality: zero
+        evidence: aws_lb_target_group.ml
+        terraform_gate: local.enable_dedicated_ml
+
+  frontend_ecs_services:
+    description: >-
+      ECS-hosted frontend containers. Aether serves every SPA from immutable S3
+      origins in every profile, so this is zero at all four — the gate is a
+      literal false, not a profile expression.
+    module_address: module.ecs
+    resource_types:
+      - aws_ecs_service
+    name_prefixes:
+      - frontend
+      - spa
+    cardinality: zero
+    evidence: null
+    terraform_gate: local.enable_frontend_ecs
+    also_applies_to: [staging, production-scale, enterprise-isolated]
+    permitted_in: []
+
+  legacy_rds:
+    description: >-
+      Standalone RDS Postgres instance superseded by Aurora Serverless v2. Zero
+      at all four profiles. The module block is retained only so an
+      already-applied instance can be adopted and retired through
+      DECOMMISSION.md instead of being destroyed by a profile flip.
+    module_address: module.rds
+    resource_types:
+      - aws_db_instance
+      - aws_db_parameter_group
+      - aws_db_subnet_group
+    cardinality: zero
+    evidence: aws_db_instance.this
+    terraform_gate: local.enable_legacy_rds
+    also_applies_to: [staging, production-scale, enterprise-isolated]
+    permitted_in: []
+
+  nat_gateway_unless_explicit:
+    description: >-
+      NAT Gateways and their Elastic IPs. Forbidden unless an operator sets
+      var.network_egress_mode to single_nat or ha_nat, which is the explicit
+      opt-in the policy name refers to. With the profile default
+      (network_egress_mode = public_ip) the count is zero.
+    module_address: module.vpc
+    resource_types:
+      - aws_nat_gateway
+      - aws_eip
+    cardinality: zero
+    evidence: aws_nat_gateway.this
+    terraform_gate: local.enable_nat_gateway
+    explicit_override: var.network_egress_mode
+    override_values: [single_nat, ha_nat]
+    also_applies_to: [staging]
+    permitted_in: [production-scale, enterprise-isolated]
+    plan_outputs:
+      - module.vpc.nat_gateway_ids
+      - module.vpc.nat_eip_ids
+      - module.vpc.nat_mode
+    expected_by_profile:
+      staging: zero
+      production-lean: zero
+      production-scale: exactly:1
+      enterprise-isolated: exactly:3
+
+  always_on_staging_compute:
+    description: >-
+      Staging compute that never sleeps. This is a lifecycle property of the
+      staging workspace, not a resource type in a production-lean plan, so
+      there is nothing to count here — a production-lean plan provisions no
+      staging-environment resources at all. Enforcement lives in the staging
+      wake/sleep automation and in check_cost_policy.py.
+    module_address: null
+    resource_types: []
+    cardinality: zero
+    evidence: null
+    terraform_gate: null
+    not_plan_checkable: true
+    enforced_by: scripts/release/check_cost_policy.py
+
+  prometheus_grafana_servers:
+    description: >-
+      Self-managed Prometheus/Grafana compute. Observability is CloudWatch
+      native at every profile, so this is zero at all four and the gate is a
+      literal false.
+    module_address: any
+    resource_types:
+      - aws_instance
+      - aws_ecs_service
+      - aws_grafana_workspace
+      - aws_prometheus_workspace
+    name_prefixes:
+      - prometheus
+      - grafana
+    cardinality: zero
+    evidence: null
+    terraform_gate: local.enable_prometheus_grafana
+    also_applies_to: [staging, production-scale, enterprise-isolated]
+    permitted_in: []

@@ -66,10 +66,28 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
-variable "enable_nat_gateway_ha" {
-  type        = bool
-  description = "When true, provision one NAT Gateway per AZ; when false, use a single shared NAT (lower cost)"
-  default     = false
+# Replaces the former enable_nat_gateway_ha bool, which could only choose
+# between one NAT and three and had no way to express "no NAT at all" — the
+# posture every cost-capped profile actually wants.
+variable "network_egress_mode" {
+  type        = string
+  description = <<-EOT
+    Outbound egress topology for ECS tasks. null = use the deployment profile
+    default (staging and production-lean: public_ip; production-scale:
+    single_nat; enterprise-isolated: ha_nat). Setting this to a NAT mode on a
+    cost-capped profile is the explicit opt-in that the
+    `nat_gateway_unless_explicit` policy in config/deployment_profiles.yaml
+    requires. vpc_endpoints and none both provision zero NAT Gateways.
+  EOT
+  default     = null
+
+  validation {
+    condition = var.network_egress_mode == null ? true : contains(
+      ["public_ip", "single_nat", "ha_nat", "vpc_endpoints", "none"],
+      var.network_egress_mode,
+    )
+    error_message = "network_egress_mode must be one of: public_ip, single_nat, ha_nat, vpc_endpoints, none."
+  }
 }
 
 # --------------------------------------------------------------------------

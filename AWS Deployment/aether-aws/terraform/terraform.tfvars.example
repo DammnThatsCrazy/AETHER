@@ -21,7 +21,7 @@ alert_email = "ops@yourcompany.com"
 
 # Network
 vpc_cidr              = "10.0.0.0/16"
-enable_nat_gateway_ha = false   # set true in production if budget allows
+network_egress_mode = "public_ip"   # public_ip | single_nat | ha_nat | vpc_endpoints | none; omit to take the profile default
 
 # RDS
 db_instance_class        = "db.t3.medium"

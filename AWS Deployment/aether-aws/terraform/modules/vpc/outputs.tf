@@ -33,6 +33,22 @@ output "vpc_cidr" {
   value       = aws_vpc.this.cidr_block
 }
 
+# NAT egress — all empty when nat_mode is "none"
+output "nat_gateway_ids" {
+  description = "IDs of the NAT Gateways (empty when nat_mode is \"none\")"
+  value       = aws_nat_gateway.this[*].id
+}
+
+output "nat_eip_ids" {
+  description = "IDs of the Elastic IPs attached to the NAT Gateways"
+  value       = aws_eip.nat[*].id
+}
+
+output "nat_mode" {
+  description = "NAT topology this VPC was built with (none, single, or ha)"
+  value       = var.nat_mode
+}
+
 # Security group IDs
 output "alb_sg_id" {
   description = "Security group ID for the Application Load Balancer"
@@ -50,16 +66,16 @@ output "rds_sg_id" {
 }
 
 output "redis_sg_id" {
-  description = "Security group ID for ElastiCache Redis"
-  value       = aws_security_group.redis.id
+  description = "Security group ID for ElastiCache Redis (empty when not enabled)"
+  value       = try(aws_security_group.redis[0].id, "")
 }
 
 output "neptune_sg_id" {
-  description = "Security group ID for Neptune"
-  value       = aws_security_group.neptune.id
+  description = "Security group ID for Neptune (empty when not enabled)"
+  value       = try(aws_security_group.neptune[0].id, "")
 }
 
 output "msk_sg_id" {
-  description = "Security group ID for MSK Kafka"
-  value       = aws_security_group.msk.id
+  description = "Security group ID for MSK Kafka (empty when not enabled)"
+  value       = try(aws_security_group.msk[0].id, "")
 }

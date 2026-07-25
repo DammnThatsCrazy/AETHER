@@ -5,10 +5,14 @@
 #   - ECS cluster (Fargate + Fargate Spot capacity providers)
 #   - Task execution IAM role (ECR pull, Secrets Manager, CloudWatch)
 #   - Task role (application permissions)
-#   - Task definitions for: aether-backend, aether-ml-serving
+#   - Task definitions for: aether-backend, the dedicated runtime roles, and
+#     aether-ml-serving (only when enable_dedicated_ml)
 #   - ECS services with ALB target group registration
 #   - Application Auto Scaling (CPU-based, 70% threshold)
 #   - CloudWatch log groups per service
+#
+# Backend selection (event broker, cache, graph) is an explicit profile input;
+# see the "Deployment profile gating" section of variables.tf.
 # ============================================================================
 
 data "aws_region" "current" {}
@@ -29,6 +33,7 @@ resource "aws_cloudwatch_log_group" "backend" {
 }
 
 resource "aws_cloudwatch_log_group" "ml" {
+  count             = var.enable_dedicated_ml ? 1 : 0
   name              = "/ecs/${var.project}-${var.environment}/aether-ml-serving"
   retention_in_days = var.log_retention_days
 
@@ -42,7 +47,7 @@ resource "aws_cloudwatch_log_group" "runtime_role" {
   for_each          = var.runtime_roles
   name              = "/ecs/${var.project}-${var.environment}/${each.key}"
   retention_in_days = var.log_retention_days
-  tags = { Service = each.key }
+  tags              = { Service = each.key }
 }
 
 # --------------------------------------------------------------------------
@@ -115,10 +120,7 @@ resource "aws_iam_role_policy" "execution_secrets" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret",
         ]
-        Resource = concat(
-          [for arn in values(var.secret_arns) : arn],
-          [for arn in values(var.companion_secret_arns) : arn],
-        )
+        Resource = local.readable_secret_arns
       },
       {
         Sid    = "KMSDecrypt"
@@ -208,6 +210,20 @@ locals {
       Resource = var.dynamodb_cache_table_arn
     }
   ] : []
+
+  # Neptune IAM auth follows the same conditional-statement pattern as the
+  # queue/cache statements: profiles without a Neptune cluster must not carry
+  # a neptune-db grant at all.
+  neptune_statements = var.enable_neptune ? [
+    {
+      Sid    = "NeptuneIAMAuth"
+      Effect = "Allow"
+      Action = [
+        "neptune-db:*",
+      ]
+      Resource = "arn:aws:neptune-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*/*"
+    }
+  ] : []
 }
 
 resource "aws_iam_role_policy" "task" {
@@ -238,23 +254,13 @@ resource "aws_iam_role_policy" "task" {
           Action = [
             "secretsmanager:GetSecretValue",
           ]
-          Resource = concat(
-            [for arn in values(var.secret_arns) : arn],
-            [for arn in values(var.companion_secret_arns) : arn],
-          )
-        },
-        {
-          Sid    = "NeptuneIAMAuth"
-          Effect = "Allow"
-          Action = [
-            "neptune-db:*",
-          ]
-          Resource = "arn:aws:neptune-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*/*"
+          Resource = local.readable_secret_arns
         },
       ])),
       jsondecode(jsonencode(local.sqs_statements)),
       jsondecode(jsonencode(local.sns_statements)),
       jsondecode(jsonencode(local.dynamodb_statements)),
+      jsondecode(jsonencode(local.neptune_statements)),
     )
   })
 }
@@ -264,6 +270,17 @@ resource "aws_iam_role_policy" "task" {
 # --------------------------------------------------------------------------
 
 locals {
+  # Secrets the tasks are allowed to read. The Redis AUTH token is only
+  # reachable when ElastiCache is part of the profile, so lean tasks hold no
+  # permission for a secret they never mount.
+  readable_secret_arns = concat(
+    [
+      for name, arn in var.secret_arns : arn
+      if var.enable_elasticache || name != "redis-auth-token"
+    ],
+    [for arn in values(var.companion_secret_arns) : arn],
+  )
+
   # Secret name → container env var name mapping for backend
   backend_secrets = merge(
     {
@@ -275,9 +292,14 @@ locals {
       ORACLE_SIGNER_PRIVATE_KEY = var.secret_arns["oracle-signer-private-key"]
       WATERMARK_SECRET_KEY      = var.secret_arns["watermark-secret-key"]
       CANARY_SECRET_SEED        = var.secret_arns["canary-secret-seed"]
-      # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD
-      REDIS_PASSWORD            = var.secret_arns["redis-auth-token"]
     },
+    # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
+    # Only mounted when ElastiCache exists; every task (API and workers)
+    # shares this block, so an unconditional mapping would pin the
+    # ElastiCache module in place for the whole fleet.
+    var.enable_elasticache ? {
+      REDIS_PASSWORD = var.secret_arns["redis-auth-token"]
+    } : {},
     # Companion secrets for zero-downtime rotation window.
     # Populated by the rotation Lambda in setSecret phase; empty until first rotation.
     lookup(var.companion_secret_arns, "jwt-secret-previous", null) != null ? {
@@ -329,18 +351,29 @@ resource "aws_ecs_task_definition" "backend" {
 
       environment = concat(
         [
-          { name = "APP_ENV",           value = var.environment },
-          { name = "AETHER_ENV",        value = var.environment },
-          { name = "PORT",              value = "8000" },
-          { name = "LOG_LEVEL",         value = var.environment == "production" ? "INFO" : "DEBUG" },
-          { name = "NEPTUNE_ENDPOINT",  value = var.neptune_endpoint },
-          { name = "ML_SERVING_URL",    value = var.ml_serving_url },
+          { name = "APP_ENV", value = var.environment },
+          { name = "AETHER_ENV", value = var.environment },
+          { name = "PORT", value = "8000" },
+          { name = "LOG_LEVEL", value = var.environment == "production" ? "INFO" : "DEBUG" },
+          { name = "CACHE_BACKEND", value = var.cache_backend },
+          { name = "GRAPH_BACKEND", value = var.graph_backend },
+          { name = "ANALYTICS_BACKEND", value = var.analytics_backend },
+          { name = "ML_SERVING_URL", value = var.ml_serving_url },
           { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
         ],
-        # SQS event broker — set when sqs_queue_url is provided; otherwise Kafka.
-        # SNS_TOPIC_ARN makes the producer publish through the fanout topic so
-        # every per-role consumer queue receives the event.
-        var.sqs_queue_url != "" ? concat(
+        # Graph backend — the Neptune endpoint is only injected when the
+        # profile actually selects Neptune; postgres profiles never see it.
+        var.graph_backend == "neptune" ? [
+          { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },
+        ] : [],
+        # Event broker selected explicitly by the profile, not inferred from
+        # whether sqs_queue_url happens to be set. SNS_TOPIC_ARN makes the
+        # producer publish through the fanout topic so every per-role consumer
+        # queue receives the event.
+        var.event_broker == "kafka" ? [
+          { name = "EVENT_BROKER", value = "kafka" },
+          { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
+          ] : concat(
           [
             { name = "EVENT_BROKER", value = "sns_sqs" },
             { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
@@ -348,16 +381,13 @@ resource "aws_ecs_task_definition" "backend" {
           var.sns_topic_arn != "" ? [
             { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
           ] : [],
-        ) : [
-          { name = "EVENT_BROKER",            value = "kafka" },
-          { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
-        ],
-        # DynamoDB cache — set when dynamodb_cache_table is provided; otherwise Redis
-        var.dynamodb_cache_table != "" ? [
-          { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
-        ] : [
+        ),
+        # Cache backend selected explicitly by the profile.
+        var.cache_backend == "redis" ? [
           { name = "REDIS_HOST", value = var.redis_host },
           { name = "REDIS_PORT", value = tostring(var.redis_port) },
+          ] : [
+          { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
         ],
       )
 
@@ -414,12 +444,22 @@ resource "aws_ecs_task_definition" "runtime_role" {
         { name = "APP_ENV", value = var.environment },
         { name = "AETHER_ENV", value = var.environment },
         { name = "AETHER_ROLE", value = each.key },
+        { name = "CACHE_BACKEND", value = var.cache_backend },
+        { name = "GRAPH_BACKEND", value = var.graph_backend },
+        { name = "ANALYTICS_BACKEND", value = var.analytics_backend },
         { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
       ],
-      # Same conditional broker selection as the API task: without it workers
+      # Neptune endpoint only on the Neptune graph backend (mirrors the API task).
+      var.graph_backend == "neptune" ? [
+        { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },
+      ] : [],
+      # Same explicit broker selection as the API task: without it workers
       # default to kafka and never consume SQS. Consumer roles receive their
       # dedicated SNS-subscribed queue; other roles use the shared events queue.
-      var.sqs_queue_url != "" ? concat(
+      var.event_broker == "kafka" ? [
+        { name = "EVENT_BROKER", value = "kafka" },
+        { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
+        ] : concat(
         [
           { name = "EVENT_BROKER", value = "sns_sqs" },
           { name = "SQS_QUEUE_URL", value = lookup(var.sqs_role_queue_urls, each.key, var.sqs_queue_url) },
@@ -427,16 +467,13 @@ resource "aws_ecs_task_definition" "runtime_role" {
         var.sns_topic_arn != "" ? [
           { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
         ] : [],
-      ) : [
-        { name = "EVENT_BROKER",            value = "kafka" },
-        { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
-      ],
-      # DynamoDB cache when provided; otherwise Redis (mirrors the API task).
-      var.dynamodb_cache_table != "" ? [
-        { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
-      ] : [
+      ),
+      # Cache backend selected explicitly by the profile (mirrors the API task).
+      var.cache_backend == "redis" ? [
         { name = "REDIS_HOST", value = var.redis_host },
         { name = "REDIS_PORT", value = tostring(var.redis_port) },
+        ] : [
+        { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
       ],
     )
     secrets = local.backend_secrets_block
@@ -468,21 +505,23 @@ resource "aws_ecs_service" "runtime_role" {
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [var.ecs_sg_id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
   deployment_circuit_breaker {
     enable   = true
     rollback = true
   }
   enable_execute_command = false
-  tags = { Service = each.key }
+  tags                   = { Service = each.key }
 }
 
 # --------------------------------------------------------------------------
 # Task Definition — aether-ml-serving
+# Only exists in profiles that run dedicated ML (enable_dedicated_ml).
 # --------------------------------------------------------------------------
 
 resource "aws_ecs_task_definition" "ml" {
+  count                    = var.enable_dedicated_ml ? 1 : 0
   family                   = "${var.project}-${var.environment}-ml-serving"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -515,7 +554,7 @@ resource "aws_ecs_task_definition" "ml" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ml.name
+          "awslogs-group"         = aws_cloudwatch_log_group.ml[0].name
           "awslogs-region"        = data.aws_region.current.name
           "awslogs-stream-prefix" = "ecs"
         }
@@ -582,7 +621,7 @@ resource "aws_ecs_service" "backend" {
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [var.ecs_sg_id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   load_balancer {
@@ -616,15 +655,16 @@ resource "aws_ecs_service" "backend" {
 
 # --------------------------------------------------------------------------
 # ECS Service — aether-ml-serving
+# Only exists in profiles that run dedicated ML (enable_dedicated_ml); lean
+# profiles serve ML predictions in-process inside aether-backend instead.
 # --------------------------------------------------------------------------
 
 resource "aws_ecs_service" "ml" {
+  count           = var.enable_dedicated_ml ? 1 : 0
   name            = "${var.project}-${var.environment}-ml-serving"
   cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.ml.arn
-  # Zero tasks when ML serving is inlined into the backend (E2).
-  # Set ml_serving_inline = false to restore the dedicated ML service.
-  desired_count   = var.ml_serving_inline ? 0 : var.ml_min_capacity
+  task_definition = aws_ecs_task_definition.ml[0].arn
+  desired_count   = var.ml_min_capacity
 
   capacity_provider_strategy {
     capacity_provider = "FARGATE"
@@ -635,7 +675,7 @@ resource "aws_ecs_service" "ml" {
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [var.ecs_sg_id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   load_balancer {
@@ -715,20 +755,20 @@ resource "aws_appautoscaling_policy" "backend_memory" {
 
 # --------------------------------------------------------------------------
 # Application Auto Scaling — ML Serving
-# Disabled when ML serving is inlined into the backend (ml_serving_inline=true).
+# Absent unless the profile runs dedicated ML (enable_dedicated_ml).
 # --------------------------------------------------------------------------
 
 resource "aws_appautoscaling_target" "ml" {
-  count              = var.ml_serving_inline ? 0 : 1
+  count              = var.enable_dedicated_ml ? 1 : 0
   max_capacity       = var.ml_max_capacity
   min_capacity       = var.ml_min_capacity
-  resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.ml.name}"
+  resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.ml[0].name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }
 
 resource "aws_appautoscaling_policy" "ml_cpu" {
-  count              = var.ml_serving_inline ? 0 : 1
+  count              = var.enable_dedicated_ml ? 1 : 0
   name               = "${var.project}-${var.environment}-ml-cpu-scaling"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ml[0].resource_id

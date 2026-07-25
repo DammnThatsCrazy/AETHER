@@ -5,10 +5,19 @@
 #   - CloudWatch log groups (3-day retention; longer retention → S3 archive)
 #   - S3 log archive bucket (IT storage class; Glacier IR after 90 days)
 #   - SNS topic for alarm notifications
-#   - CloudWatch alarms (3 critical alarms only):
+#   - CloudWatch alarms (always on):
 #       1. ALB 5xx error rate > 1%
 #       2. Aurora at max ACU for > 10 min (capacity ceiling alert)
 #       3. ML accuracy drift PSI breach (custom metric from nightly drift Lambda)
+#     Lean-profile backends (created once the caller passes the identifier):
+#       4. DynamoDB cache table throttling
+#       5. SQS backlog depth
+#       6. SQS oldest-message age
+#       7. SQS dead-letter queue depth
+#     Cost-gated components (created only when their enable_* toggle is on):
+#       8. ElastiCache memory pressure
+#       9. MSK offline partitions
+#      10. Neptune CPU saturation
 #   - CloudWatch Dashboard "AETHER-<env>" with ECS, Aurora, SageMaker,
 #     DynamoDB, and ALB widgets
 # ============================================================================
@@ -182,7 +191,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_max_acu" {
   count               = var.aurora_cluster_id == "" ? 0 : 1
   alarm_name          = "${var.project}-${var.environment}-aurora-max-acu"
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = 2   # 2 × 5-min periods = 10 min sustained
+  evaluation_periods  = 2 # 2 × 5-min periods = 10 min sustained
   metric_name         = "ServerlessDatabaseCapacity"
   namespace           = "AWS/RDS"
   period              = 300
@@ -217,7 +226,7 @@ resource "aws_cloudwatch_metric_alarm" "ml_drift" {
   evaluation_periods  = 1
   metric_name         = "PSI"
   namespace           = "Aether/MLDrift"
-  period              = 86400  # nightly Lambda publishes once per 24 h
+  period              = 86400 # nightly Lambda publishes once per 24 h
   statistic           = "Maximum"
   threshold           = 0.2
 
@@ -229,6 +238,240 @@ resource "aws_cloudwatch_metric_alarm" "ml_drift" {
 
   tags = {
     Name = "${var.project}-${var.environment}-ml-drift-alarm"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Alarm 4: DynamoDB cache throttling
+# The lean profile replaces ElastiCache with the DynamoDB cache table, so
+# throttles on that table are the cache-degradation signal.
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "dynamodb_cache_throttled" {
+  count               = var.dynamodb_cache_table_name == "" ? 0 : 1
+  alarm_name          = "${var.project}-${var.environment}-dynamodb-cache-throttled"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_description = "DynamoDB cache table ${var.dynamodb_cache_table_name} is throttling requests — the cache backend is degraded"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  metric_query {
+    id          = "throttled"
+    expression  = "reads + writes"
+    label       = "Throttled cache requests"
+    return_data = true
+  }
+
+  metric_query {
+    id = "reads"
+    metric {
+      metric_name = "ReadThrottleEvents"
+      namespace   = "AWS/DynamoDB"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        TableName = var.dynamodb_cache_table_name
+      }
+    }
+  }
+
+  metric_query {
+    id = "writes"
+    metric {
+      metric_name = "WriteThrottleEvents"
+      namespace   = "AWS/DynamoDB"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        TableName = var.dynamodb_cache_table_name
+      }
+    }
+  }
+
+  tags = {
+    Name = "${var.project}-${var.environment}-dynamodb-cache-throttled-alarm"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Alarm 5: SQS backlog depth
+# The lean profile replaces MSK with SQS, so a growing visible-message count
+# is the consumer-capacity signal Kafka lag used to provide.
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "sqs_queue_depth" {
+  count               = var.sqs_queue_name == "" ? 0 : 1
+  alarm_name          = "${var.project}-${var.environment}-sqs-queue-depth"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.sqs_queue_depth_threshold
+
+  dimensions = {
+    QueueName = var.sqs_queue_name
+  }
+
+  alarm_description = "SQS events queue backlog exceeded ${var.sqs_queue_depth_threshold} visible messages — consumers are falling behind"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-sqs-queue-depth-alarm"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Alarm 6: SQS oldest-message age
+# Depth alone misses a small-but-stuck queue; age catches a stalled consumer.
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "sqs_oldest_message_age" {
+  count               = var.sqs_queue_name == "" ? 0 : 1
+  alarm_name          = "${var.project}-${var.environment}-sqs-oldest-message-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.sqs_oldest_message_age_threshold
+
+  dimensions = {
+    QueueName = var.sqs_queue_name
+  }
+
+  alarm_description = "Oldest SQS message is older than ${var.sqs_oldest_message_age_threshold}s — a consumer role is stalled or crash-looping"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-sqs-oldest-message-age-alarm"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Alarm 7: SQS dead-letter queue depth
+# Any message on the DLQ means events were dropped after every retry.
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "sqs_dlq_depth" {
+  count               = var.sqs_dlq_name == "" ? 0 : 1
+  alarm_name          = "${var.project}-${var.environment}-sqs-dlq-depth"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 0
+
+  dimensions = {
+    QueueName = var.sqs_dlq_name
+  }
+
+  alarm_description = "Messages landed on the SQS dead-letter queue — events were dropped after exhausting retries"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-sqs-dlq-depth-alarm"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Alarms 8-10: cost-gated components
+# These only exist in profiles that provision the component, so a lean plan
+# never creates an alarm pointing at a resource that was never created.
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "elasticache_memory" {
+  count               = var.enable_elasticache && var.elasticache_replication_group_id != "" ? 1 : 0
+  alarm_name          = "${var.project}-${var.environment}-elasticache-memory-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "DatabaseMemoryUsagePercentage"
+  namespace           = "AWS/ElastiCache"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 90
+
+  dimensions = {
+    ReplicationGroupId = var.elasticache_replication_group_id
+  }
+
+  alarm_description = "ElastiCache Redis memory usage above 90% — evictions are imminent"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-elasticache-memory-alarm"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "msk_offline_partitions" {
+  count               = var.enable_msk && var.msk_cluster_name != "" ? 1 : 0
+  alarm_name          = "${var.project}-${var.environment}-msk-offline-partitions"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "OfflinePartitionsCount"
+  namespace           = "AWS/Kafka"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 0
+
+  dimensions = {
+    "Cluster Name" = var.msk_cluster_name
+  }
+
+  alarm_description = "MSK has offline partitions — Kafka topics are unavailable for produce/consume"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-msk-offline-partitions-alarm"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "neptune_cpu" {
+  count               = var.enable_neptune && var.neptune_cluster_id != "" ? 1 : 0
+  alarm_name          = "${var.project}-${var.environment}-neptune-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/Neptune"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+
+  dimensions = {
+    DBClusterIdentifier = var.neptune_cluster_id
+  }
+
+  alarm_description = "Neptune cluster CPU above 80% for 15 min — graph queries are saturating the writer"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-neptune-cpu-alarm"
   }
 }
 
@@ -278,6 +521,31 @@ locals {
         ]]
       }
     } if var.aurora_cluster_id != ""
+  ]
+
+  # The dedicated aether-ml ECS service only exists when the profile enables
+  # it; iterating a conditionally-empty list keeps the result a homogeneous
+  # list type, the same idiom used by aurora_widgets above.
+  ml_service_widgets = [
+    for service_name in(var.enable_dedicated_ml ? [var.ml_service_name] : []) : {
+      type   = "metric"
+      x      = 6
+      y      = 0
+      width  = 6
+      height = 6
+      properties = {
+        title  = "aether-ml CPU %"
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [[
+          "AWS/ECS", "CPUUtilization",
+          "ClusterName", var.ecs_cluster_name,
+          "ServiceName", service_name,
+          { stat = "Average" }
+        ]]
+        yAxis = { left = { min = 0, max = 100 } }
+      }
+    }
   ]
 
   sm_endpoint_widgets = [
@@ -362,9 +630,9 @@ locals {
         region = data.aws_region.current.name
         metrics = [[
           { expression = "SUM(SEARCH('{AWS/DynamoDB,TableName} MetricName=\"ReadThrottleEvents\"', 'Sum', 300))"
-            id    = "read_throttles"
-            label = "Read Throttles"
-            color = "#d62728" }
+            id         = "read_throttles"
+            label      = "Read Throttles"
+          color = "#d62728" }
         ]]
       }
     },
@@ -380,9 +648,9 @@ locals {
         region = data.aws_region.current.name
         metrics = [[
           { expression = "SUM(SEARCH('{AWS/DynamoDB,TableName} MetricName=\"WriteThrottleEvents\"', 'Sum', 300))"
-            id    = "write_throttles"
-            label = "Write Throttles"
-            color = "#d62728" }
+            id         = "write_throttles"
+            label      = "Write Throttles"
+          color = "#d62728" }
         ]]
       }
     },
@@ -395,8 +663,8 @@ locals {
   # trips tuple-element type unification under Terraform 1.7+.
   dynamo_widgets = (
     length(var.dynamodb_table_names) > 0
-      ? jsondecode(jsonencode(local._dynamo_per_table_widgets))
-      : jsondecode(jsonencode(local._dynamo_aggregate_widgets))
+    ? jsondecode(jsonencode(local._dynamo_per_table_widgets))
+    : jsondecode(jsonencode(local._dynamo_aggregate_widgets))
   )
 }
 
@@ -421,25 +689,6 @@ resource "aws_cloudwatch_dashboard" "main" {
               "AWS/ECS", "CPUUtilization",
               "ClusterName", var.ecs_cluster_name,
               "ServiceName", var.backend_service_name,
-              { stat = "Average" }
-            ]]
-            yAxis = { left = { min = 0, max = 100 } }
-          }
-        },
-        {
-          type   = "metric"
-          x      = 6
-          y      = 0
-          width  = 6
-          height = 6
-          properties = {
-            title  = "aether-ml CPU %"
-            view   = "timeSeries"
-            region = data.aws_region.current.name
-            metrics = [[
-              "AWS/ECS", "CPUUtilization",
-              "ClusterName", var.ecs_cluster_name,
-              "ServiceName", var.ml_service_name,
               { stat = "Average" }
             ]]
             yAxis = { left = { min = 0, max = 100 } }
@@ -504,6 +753,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         },
       ],
+      local.ml_service_widgets,
       local.dynamo_widgets,
       local.aurora_widgets,
       local.sm_endpoint_widgets

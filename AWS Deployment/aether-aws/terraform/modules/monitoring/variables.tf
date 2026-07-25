@@ -20,7 +20,8 @@ variable "backend_service_name" {
 
 variable "ml_service_name" {
   type        = string
-  description = "ECS aether-ml service name"
+  description = "ECS aether-ml service name (empty string when enable_dedicated_ml = false)"
+  default     = ""
 }
 
 # Replaces rds_identifier — Aurora Serverless v2 uses cluster-level metrics.
@@ -81,4 +82,87 @@ variable "dynamodb_table_names" {
   type        = list(string)
   description = "Optional list of DynamoDB table names to chart per-table throttle widgets for. Empty list = aggregate via SEARCH."
   default     = []
+}
+
+# --------------------------------------------------------------------------
+# Deployment profile gating
+#
+# Mirrors the toggles in modules/ecs. Alarms for a cost-gated component only
+# exist when the profile actually provisions that component, and alarms for
+# the lean replacements (DynamoDB cache, SQS) only exist once the caller
+# passes the corresponding identifier. Everything defaults to the lean
+# profile, so an un-wired caller never creates an alarm for a resource that
+# does not exist.
+# --------------------------------------------------------------------------
+
+variable "enable_elasticache" {
+  type        = bool
+  description = "ElastiCache Redis is part of the profile. Gates the Redis memory-pressure alarm."
+  default     = false
+}
+
+variable "enable_msk" {
+  type        = bool
+  description = "MSK is part of the profile. Gates the Kafka offline-partitions alarm."
+  default     = false
+}
+
+variable "enable_neptune" {
+  type        = bool
+  description = "Neptune is part of the profile. Gates the Neptune CPU alarm."
+  default     = false
+}
+
+variable "enable_dedicated_ml" {
+  type        = bool
+  description = "The dedicated aether-ml-serving ECS service exists. Gates its dashboard widget; the ML drift alarm is independent of it because drift is published by the nightly Lambda in every profile."
+  default     = false
+}
+
+variable "elasticache_replication_group_id" {
+  type        = string
+  description = "ElastiCache replication group ID for the Redis alarm. Empty string skips the alarm even when enable_elasticache is true."
+  default     = ""
+}
+
+variable "msk_cluster_name" {
+  type        = string
+  description = "MSK cluster name for the Kafka alarm. Empty string skips the alarm even when enable_msk is true."
+  default     = ""
+}
+
+variable "neptune_cluster_id" {
+  type        = string
+  description = "Neptune cluster identifier for the Neptune alarm. Empty string skips the alarm even when enable_neptune is true."
+  default     = ""
+}
+
+variable "dynamodb_cache_table_name" {
+  type        = string
+  description = "DynamoDB cache table name (the lean profile's ElastiCache replacement). Empty string disables the cache throttle alarm."
+  default     = ""
+}
+
+variable "sqs_queue_name" {
+  type        = string
+  description = "Primary SQS events queue NAME (not URL/ARN — CloudWatch uses the QueueName dimension). Empty string disables the queue depth and oldest-message-age alarms."
+  default     = ""
+}
+
+variable "sqs_dlq_name" {
+  type        = string
+  description = "SQS dead-letter queue NAME. Empty string disables the DLQ depth alarm."
+  default     = ""
+}
+
+variable "sqs_queue_depth_threshold" {
+  type        = number
+  description = "Visible-message count above which the SQS backlog alarm fires"
+  default     = 1000
+}
+
+variable "sqs_oldest_message_age_threshold" {
+  type        = number
+  description = "Age in seconds of the oldest queued message above which the SQS staleness alarm fires"
+  default     = 900
 }

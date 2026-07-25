@@ -57,14 +57,18 @@ variable "runtime_roles" {
 
 variable "ecr_ml_url" {
   type        = string
-  description = "ECR repository URL for aether-ml-serving"
+  description = "ECR repository URL for aether-ml-serving (unused when enable_dedicated_ml = false)"
+  default     = ""
 }
 
 variable "ml_image_digest" {
   type        = string
-  description = "Immutable sha256 digest for the optional ML serving image"
+  description = "Immutable sha256 digest for the optional ML serving image (empty string when enable_dedicated_ml = false)"
+  default     = ""
+  # Profiles without dedicated ML have no ML image to pin, so the empty string
+  # is accepted; any non-empty value must still be an immutable digest.
   validation {
-    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
+    condition     = var.ml_image_digest == "" || can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
     error_message = "ml_image_digest must be an immutable sha256 digest."
   }
 }
@@ -76,7 +80,8 @@ variable "alb_backend_tg_arn" {
 
 variable "alb_ml_tg_arn" {
   type        = string
-  description = "ARN of the ALB target group for ml-serving"
+  description = "ARN of the ALB target group for ml-serving (empty string when enable_dedicated_ml = false)"
+  default     = ""
 }
 
 variable "secret_arns" {
@@ -224,6 +229,85 @@ variable "use_fargate_spot" {
 
 variable "ml_serving_inline" {
   type        = bool
-  description = "When true, ML serving is handled in-process by the backend (ML_SERVING_INLINE=true). Sets the aether-ml-serving ECS service desired_count to 0 and disables its autoscaling. Flip to false to roll back to the dedicated ML service."
+  description = "When true, ML serving is handled in-process by the backend (ML_SERVING_INLINE=true). Advertises the runtime mode to the application only; whether the dedicated aether-ml-serving resources exist is controlled by enable_dedicated_ml."
+  default     = false
+}
+
+# --------------------------------------------------------------------------
+# Deployment profile gating
+#
+# Resource toggles and backend selectors derived from var.deployment_profile
+# in the root module (see profiles.tf and config/deployment_profiles.yaml).
+# Everything defaults to the lean profile so an un-wired caller never
+# provisions a cost-gated component by accident.
+# --------------------------------------------------------------------------
+
+variable "enable_elasticache" {
+  type        = bool
+  description = "ElastiCache Redis is part of the profile. Gates the REDIS_PASSWORD secret mapping and the Redis AUTH token read permission; without it the ElastiCache module can be deleted outright."
+  default     = false
+}
+
+variable "enable_msk" {
+  type        = bool
+  description = "MSK is part of the profile. Kafka broker configuration is only injected into tasks when this is true and event_broker = kafka."
+  default     = false
+}
+
+variable "enable_neptune" {
+  type        = bool
+  description = "Neptune is part of the profile. Gates the neptune-db IAM statement on the task role."
+  default     = false
+}
+
+variable "enable_dedicated_ml" {
+  type        = bool
+  description = "Create the dedicated aether-ml-serving log group, task definition, service and autoscaling. When false those resources do not exist at all (they are not merely scaled to zero)."
+  default     = false
+}
+
+variable "event_broker" {
+  type        = string
+  description = "Explicit event broker selection (EVENT_BROKER). Replaces the previous 'sqs_queue_url is non-empty' sentinel."
+  default     = "sns_sqs"
+  validation {
+    condition     = contains(["sns_sqs", "kafka"], var.event_broker)
+    error_message = "event_broker must be one of: sns_sqs, kafka."
+  }
+}
+
+variable "cache_backend" {
+  type        = string
+  description = "Explicit cache backend selection (CACHE_BACKEND). Replaces the previous 'dynamodb_cache_table is non-empty' sentinel."
+  default     = "dynamodb"
+  validation {
+    condition     = contains(["dynamodb", "redis"], var.cache_backend)
+    error_message = "cache_backend must be one of: dynamodb, redis."
+  }
+}
+
+variable "graph_backend" {
+  type        = string
+  description = "Explicit graph backend selection (GRAPH_BACKEND). NEPTUNE_ENDPOINT is only injected when this is neptune."
+  default     = "postgres"
+  validation {
+    condition     = contains(["postgres", "neptune"], var.graph_backend)
+    error_message = "graph_backend must be one of: postgres, neptune."
+  }
+}
+
+variable "analytics_backend" {
+  type        = string
+  description = "Explicit analytics backend selection (ANALYTICS_BACKEND)."
+  default     = "postgres"
+  validation {
+    condition     = contains(["postgres", "clickhouse"], var.analytics_backend)
+    error_message = "analytics_backend must be one of: postgres, clickhouse."
+  }
+}
+
+variable "assign_public_ip" {
+  type        = bool
+  description = "Assign a public IP to every task ENI. Required when tasks run in public subnets with no NAT gateway; false for private subnets reaching AWS through NAT or VPC endpoints."
   default     = false
 }

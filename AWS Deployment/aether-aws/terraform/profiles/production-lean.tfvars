@@ -10,8 +10,10 @@
 
 deployment_profile = "production-lean"
 
-# Network — single shared NAT, no HA (NAT is forbidden-unless-explicit).
-enable_nat_gateway_ha = false
+# Network — no NAT Gateway. NAT is forbidden-unless-explicit for this profile;
+# changing this value to single_nat or ha_nat IS the explicit opt-in, and must
+# be reviewed as a cost-policy exception.
+network_egress_mode = "public_ip"
 
 # Aurora Serverless v2 — always warm at a small floor.
 aurora_min_acu = 0.5
