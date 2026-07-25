@@ -71,8 +71,9 @@ setup-minimal: ## Install minimal dependencies (security module only)
 # Testing
 # ---------------------------------------------------------------------------
 
-test: ## Run ALL tests across all subsystems (suites run separately to avoid conftest collision)
+test: ## Run every Python test subsystem: root tests/, full backend tree, and ML tests/ (suites run separately to avoid conftest collision; TypeScript and Smart Contracts have their own gates -- see ci-check)
 	python -m pytest tests/ -v
+	python -m pytest "$(BACKEND_DIR)/tests/" -v
 	python -m pytest "$(ML_DIR)/tests/" -v
 
 test-security: ## Run extraction defense tests only
@@ -122,14 +123,19 @@ ml-container-build: ## Build all ML Docker stages (requires Docker daemon)
 	docker build --target features   -t aether-ml-features:dev   "$(ML_DIR)"
 	docker build --target monitoring -t aether-ml-monitoring:dev "$(ML_DIR)"
 
-ml-container-smoke: ## Health/ready/predict smoke against built serving container (requires Docker)
+ml-container-smoke: ## Health/ready/predict smoke against built serving container (requires Docker; fails closed on a non-200 /ready)
 	@echo "Building serving image for smoke test..."
 	docker build --target serving -t aether-ml-serving:smoke "$(ML_DIR)" -q
 	docker run --rm -d --name aether-ml-smoke -p 8765:8000 -e AETHER_ENV=local aether-ml-serving:smoke
 	sleep 4
-	curl -sf http://localhost:8765/health | python -m json.tool | grep '"status"'
-	-curl -sf http://localhost:8765/ready
-	docker stop aether-ml-smoke
+	@status=0; \
+	curl -sf http://localhost:8765/health | python -m json.tool | grep '"status"' || status=1; \
+	ready_code=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8765/ready || echo 000); \
+	if [ "$$ready_code" != "200" ]; then \
+	  echo "ERROR: /ready returned HTTP $$ready_code (expected 200)"; status=1; \
+	fi; \
+	docker stop aether-ml-smoke >/dev/null 2>&1; \
+	exit $$status
 	@echo "Container smoke test complete."
 
 ml-staging-smoke: ## Staging-like integration run (AETHER_ENV=staging, no stubs, expects local services)
@@ -675,11 +681,11 @@ load-baselines: ## Record staging load baselines via Locust (requires STAGING_UR
 ml-artifacts: ## Publish staged ML model artifacts to S3 and mark promoted (requires ML_ARTIFACT_BUCKET + ML_SERVING_URL)
 	python scripts/publish_ml_artifacts.py
 
-load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (exits 2 if backend unreachable)
+load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (fails closed: unreachable backend, no traffic, and threshold breaches are all failures)
 	python scripts/load_smoke.py
 
-load-smoke-ci: ## Load smoke in CI — exits 0 when backend unreachable (non-blocking), fails on threshold breach
-	python scripts/load_smoke.py || [ $$? -eq 2 ]
+load-smoke-ci: ## Load smoke gate for CI pipelines (same fail-closed contract as load-smoke; distinct name for workflow wiring)
+	python scripts/load_smoke.py
 
 
 # ---------------------------------------------------------------------------

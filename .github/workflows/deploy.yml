@@ -30,8 +30,69 @@ env:
   AWS_REGION: us-east-1
 
 jobs:
+  require-ci-green:
+    # Deploy must not run against untested code. This job blocks the staging
+    # build (the only path that can reach a live rollout without an explicit,
+    # already-verified production promotion -- see acquire-release below,
+    # which only ever consumes an artifact from a staging build that already
+    # passed through this same gate) until the test workflows for this exact
+    # commit SHA have completed successfully. repo-health.yml triggers
+    # unconditionally on every push (including main) and its `validate` job
+    # is the aggregate required-status check for the whole Python/TypeScript/
+    # ML/e2e test matrix, so it is the concrete signal polled here.
+    #
+    # This is deliberately independent of GitHub branch protection: a direct
+    # push to main (bypassing a PR) or an admin override would otherwise
+    # reach `build` with no verification at all. Polling the Checks API for
+    # the pushed SHA closes that gap regardless of how the commit landed.
+    name: Verify tests are green for this commit before building
+    if: github.event_name == 'push' || inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - name: Poll required check-runs for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          required_checks=(validate)
+          deadline=$((SECONDS + 1500))
+          while true; do
+            all_done=true
+            runs_json=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+            for name in "${required_checks[@]}"; do
+              status=$(jq -r --arg n "$name" '[.check_runs[] | select(.name == $n)] | sort_by(.started_at) | last | .status // "missing"' <<<"$runs_json")
+              conclusion=$(jq -r --arg n "$name" '[.check_runs[] | select(.name == $n)] | sort_by(.started_at) | last | .conclusion // "missing"' <<<"$runs_json")
+              if [ "$status" != "completed" ]; then
+                echo "check '$name' is '$status' for $SHA -- waiting"
+                all_done=false
+                continue
+              fi
+              if [ "$conclusion" != "success" ]; then
+                echo "::error::required check '$name' concluded '$conclusion' for $SHA -- refusing to deploy untested code"
+                exit 1
+              fi
+              echo "check '$name' is green for $SHA"
+            done
+            if [ "$all_done" = "true" ]; then
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::timed out waiting for required checks (${required_checks[*]}) to complete for $SHA"
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "All required checks are green for $SHA."
+
   build:
     name: Build immutable release once
+    needs: [require-ci-green]
     if: github.event_name == 'push' || inputs.environment == 'staging'
     runs-on: ubuntu-latest
     timeout-minutes: 60

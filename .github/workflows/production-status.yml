@@ -35,10 +35,11 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'pyproject.toml'
 
-      - name: Install Python dependencies (dev only)
-        run: |
-          pip install uv
-          uv pip install --system -e ".[dev]"
+      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
+        run: make bootstrap
+
+      - name: Add project virtualenv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run production status routine (strict)
         run: python scripts/production_status.py --strict --json production-status.json
