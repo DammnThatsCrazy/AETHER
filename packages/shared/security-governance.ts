@@ -20,7 +20,13 @@ export type AccessRole =
   | 'olympus_admin'
   | 'olympus_security'
   | 'olympus_revops'
-  | 'auditor';
+  | 'auditor'
+  // Olympus workforce roles (Kyber workforce identity). Bound to a workforce
+  // principal via olympus_role_bindings — never to an Aether tenant.
+  | 'olympus_founder'
+  | 'olympus_engineering'
+  | 'olympus_product'
+  | 'olympus_observer';
 
 export type GovernanceDomain =
   | 'profile'
@@ -38,7 +44,17 @@ export type GovernanceDomain =
   | 'customer_success'
   | 'kyber_admin'
   | 'security'
-  | 'governance';
+  | 'governance'
+  | 'reliability'
+  | 'data_quality'
+  // Kyber operating-plane domains. `kyber_workforce` covers operator identity,
+  // devices and role administration; `kyber_tenant` covers scoped tenant
+  // inspection (Tenant Mirror + raw tenant reads); `kyber_command` covers the
+  // governed command plane. Kept distinct from `kyber_admin` (fleet/platform
+  // aggregates) so read authority never implies workforce or command authority.
+  | 'kyber_workforce'
+  | 'kyber_tenant'
+  | 'kyber_command';
 
 export type PermissionAction =
   | 'read'

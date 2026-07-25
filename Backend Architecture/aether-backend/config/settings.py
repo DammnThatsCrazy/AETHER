@@ -531,6 +531,77 @@ class RouteRegistryConfig:
 
 
 # ---------------------------------------------------------------------------
+# Kyber workforce identity plane.
+#
+# Kyber operators are Olympus WORKFORCE principals (Google SSO + a trusted
+# device + role templates + purpose-bound tenant access scopes), not Aether
+# tenants carrying a `kyber:operator` permission. The legacy tenant-permission
+# path remains available in local/dev via
+# KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED so existing local flows and the current
+# test suite keep working; staging/production reject that combination during
+# validation (see Settings.__post_init__ →
+# KYBER_WORKFORCE_ENFORCEMENT_REQUIRED).
+#
+# Every flag is independently overridable so the migration can be rolled out and
+# rolled BACK per environment without a code change.
+# ---------------------------------------------------------------------------
+
+# Default-ON for deploy targets; local/dev default OFF. Explicit env var wins.
+_KYBER_DEFAULT_ON = _env("AETHER_ENV", "local") not in ("local", "dev")
+
+
+@dataclass(frozen=True)
+class KyberWorkforceConfig:
+    """Workforce identity, device trust, backend authorization and bootstrap."""
+
+    # ── Plane switches ────────────────────────────────────────────────────────
+    #: Master switch: resolve Kyber callers as workforce principals.
+    workforce_identity_enabled: bool = _env_bool(
+        "KYBER_WORKFORCE_IDENTITY_ENABLED", _KYBER_DEFAULT_ON
+    )
+    #: A Kyber session must be bound to an approved, non-revoked device.
+    device_trust_required: bool = _env_bool("KYBER_DEVICE_TRUST_REQUIRED", _KYBER_DEFAULT_ON)
+    #: Enforce declared route capabilities at the authorization boundary.
+    #: False is an explicit observe mode (warn + metric, no denial).
+    backend_authz_enforced: bool = _env_bool("KYBER_BACKEND_AUTHZ_ENFORCED", _KYBER_DEFAULT_ON)
+    #: Purpose-bound, expiring tenant access scopes (scope v2).
+    scope_v2_enabled: bool = _env_bool("KYBER_SCOPE_V2_ENABLED", True)
+    #: Require fresh step-up for high-disclosure / high-impact actions.
+    step_up_required: bool = _env_bool("KYBER_STEP_UP_REQUIRED", _KYBER_DEFAULT_ON)
+    #: Keep honouring the legacy tenant-permission / tenant-id operator path.
+    legacy_operator_identity_allowed: bool = _env_bool(
+        "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED", not _KYBER_DEFAULT_ON
+    )
+
+    # ── Google Workspace SSO (OIDC) ───────────────────────────────────────────
+    google_client_id: str = _env("KYBER_GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = _env("KYBER_GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri: str = _env("KYBER_GOOGLE_REDIRECT_URI", "")
+    google_hosted_domain: str = _env("KYBER_GOOGLE_HOSTED_DOMAIN", "")
+    google_discovery_url: str = _env(
+        "KYBER_GOOGLE_DISCOVERY_URL",
+        "https://accounts.google.com/.well-known/openid-configuration",
+    )
+
+    # ── WebAuthn device binding / step-up ─────────────────────────────────────
+    webauthn_rp_id: str = _env("KYBER_WEBAUTHN_RP_ID", "")
+    webauthn_rp_name: str = _env("KYBER_WEBAUTHN_RP_NAME", "Kyber")
+    webauthn_origin: str = _env("KYBER_WEBAUTHN_ORIGIN", "")
+
+    # ── Founder bootstrap (a break-glass first-principal path) ────────────────
+    bootstrap_enabled: bool = _env_bool("KYBER_BOOTSTRAP_ENABLED", False)
+    bootstrap_founder_email: str = _env("KYBER_BOOTSTRAP_FOUNDER_EMAIL", "")
+    bootstrap_founder_google_subject: str = _env("KYBER_BOOTSTRAP_FOUNDER_GOOGLE_SUBJECT", "")
+
+    # ── Directory sync ────────────────────────────────────────────────────────
+    directory_sync_enabled: bool = _env_bool("KYBER_DIRECTORY_SYNC_ENABLED", False)
+    directory_max_stale_hours: int = _env_int("KYBER_DIRECTORY_MAX_STALE_HOURS", 24)
+
+    # ── Session cookie ────────────────────────────────────────────────────────
+    session_cookie_secure: bool = _env_bool("KYBER_SESSION_COOKIE_SECURE", _KYBER_DEFAULT_ON)
+
+
+# ---------------------------------------------------------------------------
 # Runtime roles, deployment profile & backend selectors (PR 4 / FT-4).
 #
 # AETHER_ROLE selects which slice of the process runs: the HTTP API server, a
@@ -1245,6 +1316,7 @@ class Settings:
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     trust_plane: TrustPlaneConfig = field(default_factory=TrustPlaneConfig)
     route_registry: RouteRegistryConfig = field(default_factory=RouteRegistryConfig)
+    kyber_workforce: KyberWorkforceConfig = field(default_factory=KyberWorkforceConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
     semantic: SemanticIntelligenceConfig = field(default_factory=SemanticIntelligenceConfig)
@@ -1412,6 +1484,43 @@ class Settings:
                 "ROUTE_POLICY_ENFORCEMENT_REQUIRED: POLICY_ENFORCEMENT_ENABLED, "
                 "ROUTE_REGISTRY_ENFORCED, and KYBER_OPERATOR_GATE_ENFORCED must be true"
             )
+
+        # ── Kyber workforce identity plane ────────────────────────────────────
+        # Mirrors the route-policy precedent above: the workforce plane is a
+        # runtime boundary, so a deploy target may never boot with it disabled,
+        # in observe mode, without device trust, with legacy operator identity
+        # still accepted alongside it, with the founder bootstrap path open, or
+        # with its SSO / WebAuthn anchors unset. Dev/integration keep explicit
+        # flag control.
+        kw = self.kyber_workforce
+        if _is_deploy_target:
+            _kyber_problems: list[str] = []
+            if not kw.workforce_identity_enabled:
+                _kyber_problems.append("KYBER_WORKFORCE_IDENTITY_ENABLED must be true")
+            if not kw.backend_authz_enforced:
+                _kyber_problems.append("KYBER_BACKEND_AUTHZ_ENFORCED must be true")
+            if not kw.device_trust_required:
+                _kyber_problems.append("KYBER_DEVICE_TRUST_REQUIRED must be true")
+            if kw.legacy_operator_identity_allowed and kw.workforce_identity_enabled:
+                _kyber_problems.append(
+                    "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED must be false when "
+                    "workforce identity is enabled"
+                )
+            if kw.bootstrap_enabled:
+                _kyber_problems.append("KYBER_BOOTSTRAP_ENABLED must be false")
+            if kw.workforce_identity_enabled:
+                for _var, _value in (
+                    ("KYBER_GOOGLE_CLIENT_ID", kw.google_client_id),
+                    ("KYBER_GOOGLE_REDIRECT_URI", kw.google_redirect_uri),
+                    ("KYBER_WEBAUTHN_RP_ID", kw.webauthn_rp_id),
+                    ("KYBER_WEBAUTHN_ORIGIN", kw.webauthn_origin),
+                ):
+                    if not _value:
+                        _kyber_problems.append(f"{_var} must be set")
+            if _kyber_problems:
+                raise RuntimeError(
+                    "KYBER_WORKFORCE_ENFORCEMENT_REQUIRED: " + "; ".join(_kyber_problems)
+                )
 
         # ── BYOK encryption key ────────────────────────────────────────────────
         # Required in production so the BYOK vault is always encrypted at rest,

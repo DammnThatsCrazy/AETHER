@@ -1,5 +1,4 @@
 import { log } from '@kyber/lib/logging';
-import { getAccessToken } from '@kyber/features/auth';
 import { env, getEnvironment } from '@kyber/lib/env';
 
 export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -28,9 +27,10 @@ export class WebSocketClient {
   connect(): void {
     this.intentionallyClosed = false;
     const baseUrl = env.VITE_WS_BASE_URL;
-    const token = getAccessToken();
-    const sep = this.options.path.includes('?') ? '&' : '?';
-    const url = `${baseUrl}${this.options.path}${token ? `${sep}token=${token}` : ''}`;
+    // No token in the query string: the browser holds none. Same-origin
+    // WebSocket handshakes carry the `__Host-kyber_session` cookie
+    // automatically, and the backend authenticates the upgrade from it.
+    const url = `${baseUrl}${this.options.path}`;
 
     this.options.onStatusChange('connecting');
     log.info(`[WS] Connecting to ${this.options.path}`);

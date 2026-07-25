@@ -74,6 +74,11 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             "job_worker",
             "job_lease_sweeper",
             "job_scheduler",
+            # Kyber workforce directory reconciliation. A single periodic loop,
+            # so it rides the existing maintenance role rather than justifying a
+            # dedicated runtime role and the deploy-profile/compose/Terraform
+            # topology fan-out that would come with one.
+            "kyber_directory_sync",
         }
     ),
 }

@@ -66,6 +66,20 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return retention_sweep_loop()
 
+    def _kyber_directory_sync() -> Coroutine[Any, Any, None]:
+        """Reconcile Kyber workforce principals against Google Workspace.
+
+        Runs under the existing ``maintenance`` role rather than a dedicated
+        runtime role: it is a single periodic loop, and a new role would fan out
+        across roles.py, RUNTIME_ROLES, deploy profiles, compose, Terraform and
+        two topology validators for no operational benefit. Staleness is what
+        matters here, not throughput — a principal whose directory state is
+        older than the configured window fails closed for privileged access.
+        """
+        from services.kyber.identity.directory_sync import build_directory_sync_coro
+
+        return build_directory_sync_coro()
+
     async def _run_delivery_worker() -> None:
         """Own a DeliveryWorker instance for the lifetime of this coroutine.
 
@@ -188,6 +202,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="retention_sweep",
             factory=_retention_sweep,
             required=True,
+        ),
+        WorkerSpec(
+            name="kyber_directory_sync",
+            factory=_kyber_directory_sync,
+            enabled=lambda: bool(settings.kyber_workforce.directory_sync_enabled),
         ),
         WorkerSpec(
             name="delivery_worker",

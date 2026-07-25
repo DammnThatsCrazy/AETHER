@@ -15,7 +15,7 @@ interface ApprovalModalProps {
 
 export function ApprovalModal({ open, onClose, onConfirm, action, itemTitle }: ApprovalModalProps) {
   const [reason, setReason] = useState('');
-  const { user } = useAuth();
+  const { principal } = useAuth();
 
   const actionLabels: Record<string, { label: string; variant: string }> = {
     approved: { label: 'Approve', variant: 'text-success' },
@@ -27,12 +27,12 @@ export function ApprovalModal({ open, onClose, onConfirm, action, itemTitle }: A
   const { label, variant } = actionLabels[action] ?? { label: action, variant: 'text-text-primary' };
 
   function handleConfirm() {
-    if (!reason.trim() || !user) return;
+    if (!reason.trim() || !principal) return;
     const attribution: ActionAttribution = {
-      userId: user.id,
-      displayName: user.displayName,
-      email: user.email,
-      role: user.role,
+      userId: principal.operator_id,
+      displayName: principal.display_name ?? principal.email,
+      email: principal.email,
+      role: principal.role_template_ids[0] ?? '',
       timestamp: new Date().toISOString(),
       environment: getEnvironment(),
       reason: reason.trim(),
@@ -53,7 +53,7 @@ export function ApprovalModal({ open, onClose, onConfirm, action, itemTitle }: A
       <ModalBody>
         <div className="space-y-3">
           <div className="text-xs text-text-secondary">
-            Acting as: <span className="text-text-primary">{user?.displayName}</span> ({user?.role.replace('kyber_', '')})
+            Acting as: <span className="text-text-primary">{principal?.display_name ?? principal?.email}</span> ({principal?.role_template_ids[0] ?? 'no role'})
           </div>
           <div>
             <label className="text-xs text-text-secondary block mb-1">Reason (required)</label>

@@ -341,6 +341,14 @@ from services.data_quality import (
 )
 
 from services.kyber_operator.routes import router as kyber_operator_router
+
+# Kyber workforce plane — Olympus operator identity, BYOD device trust, durable
+# sessions and purpose-bound tenant access scopes. Each router carries its own
+# /v1/kyber prefix; do not add another here.
+from services.kyber.identity.routes import router as kyber_identity_router
+from services.kyber.devices.routes import router as kyber_devices_router
+from services.kyber.sessions.routes import router as kyber_sessions_router
+from services.kyber.access.routes import router as kyber_scopes_router
 from services.cluster.routes import router as cluster_router
 
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
@@ -659,6 +667,13 @@ def create_app() -> FastAPI:
     app.include_router(intelligence_router)
     app.include_router(kyber_admin_router)
     app.include_router(kyber_operator_router)
+    # Kyber workforce plane. Mounted before the remaining operator surfaces so a
+    # Kyber session can be established and inspected even when a downstream
+    # operator router is disabled by its own feature flag.
+    app.include_router(kyber_identity_router)
+    app.include_router(kyber_devices_router)
+    app.include_router(kyber_sessions_router)
+    app.include_router(kyber_scopes_router)
     app.include_router(customer_success_admin_router)
     app.include_router(value_review_router)
     app.include_router(extraction_intel_router)

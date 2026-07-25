@@ -23,7 +23,12 @@ logger = get_logger("aether.service.kyber_operator")
 
 router = APIRouter(prefix="/v1/kyber", tags=["Kyber Operator"])
 
-# In-memory session store (stateless; production would use Redis with TTL)
+# Retained only so an in-flight session_id issued before this deployment still
+# resolves on exit. New entries are NEVER written here — they go to the durable
+# kyber_access_scopes table via access_scope_service. The previous behaviour
+# (this dict as the only store) meant a scope vanished on restart, was invisible
+# to every other replica, and was read by nothing, so the "all subsequent
+# queries are operator-scoped" guarantee below was never actually enforced.
 _active_sessions: dict[str, dict] = {}
 
 ACCESS_PURPOSES = frozenset({
@@ -73,39 +78,46 @@ class TenantEntryRequest(BaseModel):
 async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
     """Request privileged scoped access to a specific tenant's data.
 
-    Creates an immutable audit record. All subsequent graph queries with the
-    returned session_id are recorded as operator-scoped. Access is revoked by
-    calling DELETE on this endpoint.
+    Compatibility shim over the durable scope plane. The response shape is
+    unchanged — the existing Kyber frontend calls this endpoint — but the scope
+    is now a row in ``kyber_access_scopes``: session- and device-bound,
+    expiring, revocable, audited, and actually consulted by
+    ``require_kyber_access`` when a route reaches tenant data.
 
-    Requires: kyber:operator permission (is_platform_admin).
+    Prefer ``POST /v1/kyber/scopes`` for new work.
     """
-    _require_kyber_operator(request)
+    context = _require_kyber_operator(request)
 
-    operator_id = getattr(request.state.tenant, "tenant_id", "unknown")
-    session_id = str(uuid.uuid4())
-    entered_at = _utc_now()
+    from services.kyber.access.dependencies import current_kyber_context
+    from services.kyber.access.scopes import access_scope_service
 
-    expires_dt = datetime.now(tz=timezone.utc) + timedelta(minutes=body.duration_minutes)
-    expires_at = expires_dt.isoformat().replace("+00:00", "Z")
+    kyber_context = current_kyber_context(request)
+    if kyber_context is None or not getattr(kyber_context, "session", None):
+        # A durable scope is bound to a session and a device. Without a Kyber
+        # workforce session there is nothing to bind to, and issuing an
+        # unbindable scope id would recreate exactly the non-enforcement this
+        # shim exists to remove.
+        raise ForbiddenError(
+            "a Kyber workforce session is required to enter a tenant; "
+            "authenticate through /v1/kyber/auth/login"
+        )
 
-    session = {
-        "session_id": session_id,
-        "operator_id": operator_id,
-        "tenant_id": body.tenant_id,
-        "purpose": body.purpose,
-        "access_reason": body.access_reason,
-        "entered_at": entered_at,
-        "expires_at": expires_at,
-        "duration_minutes": body.duration_minutes,
-        "active": True,
-    }
-    _active_sessions[session_id] = session
+    scope = await access_scope_service.open_scope(
+        operator_id=kyber_context.operator_id,
+        session_id=kyber_context.session.session_id,
+        device_id=getattr(kyber_context, "device_id", None),
+        environment=getattr(kyber_context, "environment", "unknown"),
+        tenant_id=body.tenant_id,
+        purpose=body.purpose,
+        reason=body.access_reason,
+        ttl_minutes=body.duration_minutes,
+    )
 
     logger.info(
         "kyber_operator_tenant_entry",
         extra={
-            "session_id": session_id,
-            "operator_id": operator_id,
+            "session_id": scope.scope_id,
+            "operator_id": kyber_context.operator_id,
             "tenant_id": body.tenant_id,
             "purpose": body.purpose,
         },
@@ -113,11 +125,13 @@ async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
 
     return APIResponse(
         data={
-            "session_id": session_id,
-            "tenant_id": body.tenant_id,
-            "purpose": body.purpose,
-            "entered_at": entered_at,
-            "expires_at": expires_at,
+            # The legacy field name is preserved for the existing client; it now
+            # carries the durable scope id.
+            "session_id": scope.scope_id,
+            "tenant_id": scope.tenant_id,
+            "purpose": scope.purpose,
+            "entered_at": scope.entered_at,
+            "expires_at": scope.expires_at,
             "message": f"Entering tenant {body.tenant_id} as operator — all actions audited",
         }
     ).to_dict()
@@ -125,42 +139,49 @@ async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
 
 @router.delete("/operator/tenant-entry")
 async def exit_tenant(session_id: str, request: Request) -> dict:
-    """Revoke an active operator tenant-entry session and record exit event."""
-    _require_kyber_operator(request)
+    """Close an operator tenant scope. Idempotent.
 
+    Resolves the durable scope first. The legacy in-process entry is still
+    honoured so a session_id issued before this deployment can still be exited
+    cleanly, but nothing new is ever written there.
+    """
+    context = _require_kyber_operator(request)
+
+    from services.kyber.access.dependencies import current_kyber_context
+    from services.kyber.access.scopes import access_scope_service
+
+    kyber_context = current_kyber_context(request)
+    actor_id = getattr(kyber_context, "operator_id", None) or getattr(
+        request.state.tenant, "tenant_id", "unknown"
+    )
+
+    scope = await access_scope_service.get(session_id)
+    if scope is not None:
+        if scope.status != "active":
+            return APIResponse(
+                data={"status": "already_expired", "session_id": session_id}
+            ).to_dict()
+        # An operator may only close their own scope. Without this, any operator
+        # could close another's scope mid-investigation.
+        if kyber_context is not None and scope.operator_id != actor_id:
+            raise ForbiddenError("a tenant scope may only be exited by the operator that opened it")
+        await access_scope_service.exit_scope(session_id, actor_id=actor_id)
+        return APIResponse(data={"status": "exited", "session_id": session_id}).to_dict()
+
+    # ── Legacy pre-deployment entry ──────────────────────────────────────────
     session = _active_sessions.get(session_id)
-    if not session:
-        return APIResponse(data={"status": "already_expired"}).to_dict()
-
-    # Idempotent exit: already-exited sessions (concurrent or duplicate calls) return early
-    # so we never overwrite the original exited_at audit timestamp.
-    if session.get("exited_at") or not session.get("active"):
+    if not session or session.get("exited_at") or not session.get("active"):
         return APIResponse(data={"status": "already_expired", "session_id": session_id}).to_dict()
-
-    # Enforce expiry — treat expired sessions as already exited
-    expires_at_str = session.get("expires_at")
-    if expires_at_str:
-        try:
-            exp = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
-            if datetime.now(tz=timezone.utc) >= exp:
-                session["active"] = False
-                return APIResponse(data={"status": "already_expired", "session_id": session_id}).to_dict()
-        except (ValueError, TypeError):
-            pass
-
     session["active"] = False
     session["exited_at"] = _utc_now()
-    operator_id = getattr(request.state.tenant, "tenant_id", "unknown")
-
     logger.info(
         "kyber_operator_tenant_exit",
         extra={
             "session_id": session_id,
-            "operator_id": operator_id,
+            "operator_id": actor_id,
             "tenant_id": session.get("tenant_id"),
         },
     )
-
     return APIResponse(data={"status": "exited", "session_id": session_id}).to_dict()
 
 

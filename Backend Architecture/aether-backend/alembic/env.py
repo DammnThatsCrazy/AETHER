@@ -29,9 +29,30 @@ if config.config_file_name is not None:
 target_metadata = None
 
 
+def _x_arguments() -> dict[str, str]:
+    """Return the ``-x key=value`` overrides, across Alembic versions.
+
+    Alembic removed ``Config.get_x_argument`` in 1.18; the parsed CLI namespace
+    still carries the raw ``-x`` values. ``pyproject.toml`` allows
+    ``alembic>=1.13``, so both shapes are live and the caller must not care —
+    without this, ``alembic upgrade head`` raises ``AttributeError`` on a fresh
+    install, which also breaks ``RUN_MIGRATIONS=1`` and the ``/v1/ready``
+    migrations-head check.
+    """
+    getter = getattr(config, "get_x_argument", None)
+    if getter is not None:
+        return dict(getter(as_dictionary=True))
+    raw = getattr(getattr(config, "cmd_opts", None), "x", None) or []
+    parsed: dict[str, str] = {}
+    for item in raw:
+        key, _, value = str(item).partition("=")
+        parsed[key] = value
+    return parsed
+
+
 def _get_url() -> str:
     """Resolve the database URL from env or -x db_url= CLI override."""
-    url = config.get_x_argument(as_dictionary=True).get("db_url") or os.getenv("DATABASE_URL", "")
+    url = _x_arguments().get("db_url") or os.getenv("DATABASE_URL", "")
     if not url:
         raise RuntimeError(
             "DATABASE_URL environment variable is required to run migrations. "

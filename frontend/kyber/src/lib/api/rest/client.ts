@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { parseProblemDetails, type ProblemDetails } from '@aether/ui';
-import { getAccessToken } from '@kyber/features/auth';
+import { CSRF_HEADER, readCsrfToken } from '@kyber/lib/auth';
 import { env, getEnvironment, getRuntimeMode } from '@kyber/lib/env';
 import { log } from '@kyber/lib/logging';
 
@@ -75,9 +75,11 @@ async function request<T>(
     ...options?.headers,
   };
 
-  const token = getAccessToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Cookie-authenticated: the `__Host-kyber_session` cookie is HttpOnly and
+  // never readable here, so there is no Authorization header. Mutations carry
+  // the CSRF token from the paired readable cookie instead.
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) {
+    headers[CSRF_HEADER] = readCsrfToken() ?? '';
   }
 
   const controller = new AbortController();
@@ -90,6 +92,7 @@ async function request<T>(
     const response = await fetch(url, {
       method,
       headers,
+      credentials: 'include',
       body: body ? JSON.stringify(body) : null,
       signal: options?.signal ?? controller.signal,
     });

@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
-from shared.auth.auth import Role, TenantContext
+from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, ForbiddenError, RateLimitedError, ServiceUnavailableError, utc_now
 from shared.graph.graph import GraphClient, Vertex
 from shared.logger.logger import get_logger, metrics
@@ -58,6 +58,14 @@ class Scope:
     effective_tenant_id: str
     cross_tenant: bool
     debug_allowed: bool
+
+
+#: Explicit fleet-wide request tokens. Fleet mode is opted into through the
+#: request's ``tenant_id`` field, never inferred from the message text.
+_ALL_TENANTS_TOKENS = frozenset({"*", "all", "all-tenants", "all_tenants"})
+
+#: Capability required to read cross-tenant Kyber aggregates through Noesis.
+_NOESIS_AGGREGATE_CAPABILITY = "kyber.graph.fleet.read"
 
 
 class NoesisService:
@@ -376,21 +384,64 @@ class NoesisService:
             metrics.increment("noesis_rejected", labels={"reason": entry.rejection_reason or "unknown"})
 
     def _resolve_scope(self, body: NoesisQueryRequest, tenant: TenantContext) -> Scope:
+        """Resolve the tenant boundary a Noesis query may read across.
+
+        Authorization here used to accept ``tenant.role == Role.ADMIN`` (or the
+        ``admin`` / ``kyber:read`` permissions), which is the very Aether tenant
+        the canonical Kyber gate rejects — a role-admin tenant could read other
+        tenants' Kyber data. It also entered fleet-wide "all tenants" mode by
+        substring-matching the user's natural-language message, so the caller's
+        prose selected the blast radius. Both are replaced:
+
+        * operator status comes from the canonical Kyber gate;
+        * reading one *other* tenant requires an active Kyber access scope for
+          that tenant;
+        * fleet-wide mode must be requested EXPLICITLY (``tenant_id`` = ``*``)
+          and requires the aggregate capability. Message text selects nothing.
+
+        The returned :class:`Scope` — and therefore the Noesis response
+        contract — is unchanged.
+        """
+        from services.security.request_context import (
+            current_request,
+            has_kyber_capability,
+            is_kyber_operator,
+            require_kyber_tenant_scope,
+        )
+
         tenant.require_permission("read")
         requested = (body.tenant_id or "").strip()
-        is_operator = tenant.role == Role.ADMIN or tenant.has_permission("admin") or tenant.has_permission("kyber:read")
         if body.surface == "aether":
             if requested and requested != tenant.tenant_id:
                 raise ForbiddenError("Aether Noesis cannot query another tenant")
             return Scope(body.surface, tenant.tenant_id, False, False)
         if body.surface == "kyber":
-            if requested and requested != tenant.tenant_id and not is_operator:
-                raise ForbiddenError("Kyber cross-tenant Noesis requires operator permission")
-            if not requested and not is_operator:
+            request = current_request()
+            is_operator = is_kyber_operator(tenant, request=request)
+            wants_all_tenants = requested in _ALL_TENANTS_TOKENS
+            if wants_all_tenants:
+                requested = ""
+            if not is_operator:
+                if requested and requested != tenant.tenant_id:
+                    raise ForbiddenError("Kyber cross-tenant Noesis requires operator permission")
+                if wants_all_tenants:
+                    raise ForbiddenError("Kyber fleet-wide Noesis requires operator permission")
                 return Scope(body.surface, tenant.tenant_id, False, False)
-            low_msg = body.message.lower()
-            wants_all_tenants = not requested and any(token in low_msg for token in ("all tenants", "across tenants", "across all tenants", "tenants with", "show tenants", "list tenants"))
-            return Scope(body.surface, requested or ("" if wants_all_tenants else tenant.tenant_id), wants_all_tenants or bool(requested and requested != tenant.tenant_id), is_operator and self.flags.debug_enabled)
+
+            debug_allowed = self.flags.debug_enabled
+            if wants_all_tenants:
+                if not has_kyber_capability(
+                    _NOESIS_AGGREGATE_CAPABILITY, request, tenant=tenant
+                ):
+                    raise ForbiddenError(
+                        "Kyber fleet-wide Noesis requires the "
+                        f"{_NOESIS_AGGREGATE_CAPABILITY} capability"
+                    )
+                return Scope(body.surface, "", True, debug_allowed)
+            if requested and requested != tenant.tenant_id:
+                require_kyber_tenant_scope(requested, request, tenant=tenant)
+                return Scope(body.surface, requested, True, debug_allowed)
+            return Scope(body.surface, requested or tenant.tenant_id, False, debug_allowed)
         raise BadRequestError("Unsupported Noesis surface")
 
     def _classify(

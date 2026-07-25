@@ -5,7 +5,6 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SemanticReviewQueuePage } from '@kyber/pages/semantic';
-import type { KyberRole } from '@kyber/types';
 
 // Pin the runtime to the explicit live local environment so requests hit the
 // absolute base URL that the MSW server intercepts. (vi.hoisted: the vi.mock factories below are
@@ -22,25 +21,55 @@ vi.mock('@kyber/lib/env', async (importOriginal) => {
   };
 });
 
-const authState = vi.hoisted(() => ({ role: 'kyber_executive_operator' as string }));
+// Backend-shaped principal: capabilities and ceilings come from the server,
+// never from a decoded token.
+const authState = vi.hoisted(() => ({
+  capabilities: [
+    'kyber.approvals.decide',
+    'kyber.controller.intervene',
+    'kyber.command.dispatch',
+    'kyber.diagnostics.run',
+    'kyber.diagnostics.read',
+    'kyber.action.revert',
+    'kyber.notes.write',
+    'kyber.export.create',
+  ] as string[],
+}));
 
 vi.mock('@kyber/features/auth', () => ({
   useAuth: () => ({
+    status: 'authenticated' as const,
     isAuthenticated: true,
-    user: {
-      id: 'op_001',
-      email: 'operator@aether.dev',
-      displayName: 'Operator',
-      role: authState.role as KyberRole,
-      groups: [],
-    },
     isLoading: false,
     error: null,
+    session: null,
+    lastSyncedAt: Date.now(),
+    principal: {
+      operator_id: 'op_001',
+      email: 'operator@aether.dev',
+      display_name: 'Operator',
+      employment_status: 'active',
+      environment: 'local',
+      session_id: 'sess_001',
+      session_status: 'active',
+      authentication_strength: 'device_bound',
+      device_id: 'dev_001',
+      device_approval_state: 'approved',
+      role_template_ids: ['kyber.role.engineering'],
+      capabilities: authState.capabilities,
+      max_disclosure: 5,
+      max_action_class: 5,
+      presence_expires_at: null,
+      authority_expires_at: null,
+      idle_expires_at: null,
+      step_up_expires_at: null,
+      active_scope: null,
+      may_approve_devices: true,
+    },
     login: vi.fn(),
     logout: vi.fn(),
-    switchMockUser: vi.fn(),
+    refresh: vi.fn(),
   }),
-  getAccessToken: () => 'test-operator-token',
 }));
 
 const FLEET_HEALTH_FIXTURE = {
@@ -115,7 +144,16 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 beforeEach(() => {
-  authState.role = 'kyber_executive_operator';
+  authState.capabilities = [
+    'kyber.approvals.decide',
+    'kyber.controller.intervene',
+    'kyber.command.dispatch',
+    'kyber.diagnostics.run',
+    'kyber.diagnostics.read',
+    'kyber.action.revert',
+    'kyber.notes.write',
+    'kyber.export.create',
+  ];
   requestLog.fleetHealth = 0;
   requestLog.reviewQueue = 0;
 });
@@ -206,7 +244,7 @@ describe('Kyber Semantic Operations page', () => {
   });
 
   it('gates the page behind operator approval permissions and never fetches when denied', async () => {
-    authState.role = 'kyber_observer';
+    authState.capabilities = [];
     renderPage();
     await waitFor(() =>
       expect(screen.getByText('Operator approval permissions required')).toBeInTheDocument(),

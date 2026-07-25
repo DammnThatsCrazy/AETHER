@@ -31,7 +31,7 @@ const JourneyContext = createContext<JourneyContextValue>({
 });
 
 export function JourneyProvider({ children }: { readonly children: ReactNode }) {
-  const { user } = useAuth();
+  const { principal } = useAuth();
   const [resumedFrom, setResumedFrom] = useState<ResolvedIdentity | null>(null);
   const initialized = useRef(false);
   const wasAuthenticated = useRef(false);
@@ -68,7 +68,7 @@ export function JourneyProvider({ children }: { readonly children: ReactNode }) 
   // identity so post-logout events are not attributed to the previous account.
   // Guard against mount with null user so anonymous session IDs are preserved.
   useEffect(() => {
-    if (!user) {
+    if (!principal) {
       if (wasAuthenticated.current) {
         Aether.reset();
         wasAuthenticated.current = false;
@@ -77,13 +77,13 @@ export function JourneyProvider({ children }: { readonly children: ReactNode }) 
     }
     wasAuthenticated.current = true;
     Aether.hydrateIdentity({
-      userId: user.id,
+      userId: principal.operator_id,
       traits: {
-        email: user.email,
-        displayName: user.displayName,
+        email: principal.email,
+        displayName: principal.display_name ?? principal.email,
       },
     });
-  }, [user?.id]);
+  }, [principal?.operator_id]);
 
   const setJourneyTrait = (key: string, value: unknown) => {
     Aether.hydrateIdentity({ traits: { [key]: value } });

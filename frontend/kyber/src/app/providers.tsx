@@ -3,7 +3,6 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@kyber/features/auth';
 import { NotificationProvider } from '@kyber/features/notifications';
 import { CapabilityProvider, ThemeProvider, TimeProvider } from '@aether/ui';
-import { AetherAuth0Provider } from '@kyber/lib/auth/auth0-provider';
 import { JourneyProvider } from '@kyber/features/journey';
 import { fetchOperatorCapabilities } from '@kyber/lib/api/capabilities';
 import { BUILD_INFO } from '@kyber/lib/build-info';
@@ -30,23 +29,21 @@ function CapabilityGate({ children }: { readonly children: ReactNode }) {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
-      <AetherAuth0Provider>
-        <BrowserRouter>
-          <ThemeProvider storageKey="kyber-theme">
-            <TimeProvider>
-              <AuthProvider>
-                <CapabilityGate>
-                  <JourneyProvider>
-                    <NotificationProvider>
-                      {children}
-                    </NotificationProvider>
-                  </JourneyProvider>
-                </CapabilityGate>
-              </AuthProvider>
-            </TimeProvider>
-          </ThemeProvider>
-        </BrowserRouter>
-      </AetherAuth0Provider>
+      <BrowserRouter>
+        <ThemeProvider storageKey="kyber-theme">
+          <TimeProvider>
+            <AuthProvider>
+              <CapabilityGate>
+                <JourneyProvider>
+                  <NotificationProvider>
+                    {children}
+                  </NotificationProvider>
+                </JourneyProvider>
+              </CapabilityGate>
+            </AuthProvider>
+          </TimeProvider>
+        </ThemeProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }

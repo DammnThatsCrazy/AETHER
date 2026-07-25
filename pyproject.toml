@@ -72,6 +72,11 @@ backend = [
     "croniter>=2",   # jobs platform cron schedules (services/jobs/scheduler.py)
     "tzdata",        # IANA tz database for zoneinfo on slim images
     "alembic>=1.13", # migrations + /v1/ready migrations-head check + RUN_MIGRATIONS
+    # Kyber workforce device trust: server-side WebAuthn registration/assertion
+    # verification (services/kyber/devices/webauthn.py). Hand-rolling COSE/CBOR
+    # attestation parsing and counter checks is a needless security risk, so the
+    # maintained library is a declared backend dependency rather than optional.
+    "webauthn>=2.0",
 ]
 
 # Backend with Stripe Billing integration

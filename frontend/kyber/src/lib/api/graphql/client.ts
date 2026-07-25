@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getAccessToken } from '@kyber/features/auth';
+import { CSRF_HEADER, readCsrfToken } from '@kyber/lib/auth';
 import { env, getEnvironment } from '@kyber/lib/env';
 import { log } from '@kyber/lib/logging';
 
@@ -46,10 +46,9 @@ export async function graphqlQuery<T>(
     'X-Kyber-Environment': getEnvironment(),
   };
 
-  const token = getAccessToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  // Cookie-authenticated; GraphQL is always POST so the CSRF header is
+  // mandatory. The session cookie itself is HttpOnly and unreadable here.
+  headers[CSRF_HEADER] = readCsrfToken() ?? '';
 
   const startTime = performance.now();
 
@@ -57,6 +56,7 @@ export async function graphqlQuery<T>(
     const response = await fetch(url, {
       method: 'POST',
       headers,
+      credentials: 'include',
       body: JSON.stringify({ query, variables, operationName }),
     });
 

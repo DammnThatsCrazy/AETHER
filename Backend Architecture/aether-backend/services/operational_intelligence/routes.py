@@ -93,6 +93,24 @@ def _require_read(request: Request, tenant_id: str) -> None:
         raise ForbiddenError("tenantId does not match authenticated tenant")
 
 
+def _require_kyber_scope(request: Request, tenant_id: str) -> None:
+    """Gate an operator-only, tenant-targeting graph route.
+
+    Replaces the previous ``getattr(tenant, "is_platform_admin", False)`` check.
+    ``TenantContext`` has no ``is_platform_admin`` field, so that branch was
+    permanently False: the documented operator path could not work, and the
+    route was effectively closed to everyone. This applies the canonical Kyber
+    gate and then requires an active access scope for the tenant being reached.
+    """
+    from services.security.request_context import (
+        require_kyber_operator,
+        require_kyber_tenant_scope,
+    )
+
+    require_kyber_operator(request)
+    require_kyber_tenant_scope(tenant_id, request)
+
+
 def _vertex_to_node(v: Vertex) -> GraphNode:
     return GraphNode(
         id=v.vertex_id,
@@ -2049,12 +2067,10 @@ async def trigger_graph_reconciliation(
 ) -> dict:
     """Operator-only read-only graph reconciliation report.
 
-    Requires the 'admin' permission. Never mutates the graph.
+    Requires a Kyber operator identity plus an active access scope for the
+    target tenant. Never mutates the graph.
     """
-    tenant = request.state.tenant
-    if not getattr(tenant, "is_platform_admin", False):
-        raise ForbiddenError("graph reconciliation requires admin capability")
-    _require_read(request, tenant_id)
+    _require_kyber_scope(request, tenant_id)
 
     from services.silver.reconciliation import SilverReconciliationWorker
     worker = SilverReconciliationWorker(graph)
@@ -2092,10 +2108,11 @@ async def graph_health(
 
     # Kyber operators may pass tenantId to inspect a specific tenant's graph.
     # Regular tenants are always scoped to their own ID.
-    effective_tenant_id = tenantId if tenantId and getattr(tenant, "is_platform_admin", False) else tenant.tenant_id
-    if tenantId and tenantId != tenant.tenant_id and not getattr(tenant, "is_platform_admin", False):
-        from shared.common.common import ForbiddenError
-        raise ForbiddenError("tenantId does not match authenticated tenant")
+    if tenantId and tenantId != tenant.tenant_id:
+        _require_kyber_scope(request, tenantId)
+        effective_tenant_id = tenantId
+    else:
+        effective_tenant_id = tenant.tenant_id
 
     all_verts = await graph.get_all_vertices(limit=10000)
     all_verts = [v for v in all_verts if v.properties.get("tenantId") == effective_tenant_id]
