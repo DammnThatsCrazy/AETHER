@@ -95,6 +95,32 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_kyber_retention_coro()
 
+    def _kyber_graph_projector() -> Coroutine[Any, Any, None]:
+        """Project the graph mutation ledger into Kyber Graph topology.
+
+        Rides the existing ``graph-writer`` role, which owns no loop specs today
+        and is otherwise consumer-attached. A projection whose only input is the
+        graph mutation ledger belongs with the graph writers by definition, and
+        a new runtime role would fan out across roles.py, RUNTIME_ROLES, deploy
+        profiles, compose, Terraform and two topology validators for one loop.
+        """
+        from services.kyber.graph.projector import build_kyber_graph_projector_coro
+
+        return build_kyber_graph_projector_coro()
+
+    def _kyber_incident_correlation() -> Coroutine[Any, Any, None]:
+        """Attach loose incident signals, then merge same-release incidents.
+
+        Rides the existing ``maintenance`` role alongside ``kyber_directory_sync``
+        and ``kyber_retention_sweep``, for the same reason both of those do: one
+        periodic loop does not justify a new runtime role and the deploy-profile,
+        compose, Terraform and topology-validator fan-out that comes with one.
+        Not ``graph-writer`` — this reads no ledger.
+        """
+        from services.kyber.ops.correlation import build_incident_correlator_coro
+
+        return build_incident_correlator_coro()
+
     async def _run_delivery_worker() -> None:
         """Own a DeliveryWorker instance for the lifetime of this coroutine.
 
@@ -229,6 +255,27 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="kyber_retention_sweep",
             factory=_kyber_retention_sweep,
             enabled=lambda: bool(settings.storage_plane.lifecycle_retention_enabled),
+        ),
+        # The Kyber Graph is a projection: if this loop stops, the operational
+        # graph freezes at whatever it had already built and keeps answering.
+        # `required=False` is deliberate — a frozen graph must degrade the Kyber
+        # console, not take the API process down with it.
+        WorkerSpec(
+            name="kyber_graph_projector",
+            factory=_kyber_graph_projector,
+            # Gated on the workforce plane because the Kyber Graph is only
+            # readable through it: projecting topology no one can read would
+            # burn ledger reads for nothing.
+            enabled=lambda: bool(settings.kyber_workforce.workforce_identity_enabled),
+        ),
+        # Not required=True: a stalled correlator degrades the incident view, it
+        # must not abort startup. Same gate as the projector — the ops plane is
+        # only readable through the workforce plane, so correlating what nobody
+        # can read would burn writes for nothing.
+        WorkerSpec(
+            name="kyber_incident_correlation",
+            factory=_kyber_incident_correlation,
+            enabled=lambda: bool(settings.kyber_workforce.workforce_identity_enabled),
         ),
         WorkerSpec(
             name="delivery_worker",

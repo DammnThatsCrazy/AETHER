@@ -706,3 +706,196 @@ kyber_routes:
     capability: kyber.audit.read
     disclosure: D4
     action_class: 0
+
+  # ── Kyber Graph ───────────────────────────────────────────────────────────
+  #
+  # services/kyber/graph/routes.py. Three disclosure tiers, and the split is the
+  # design: platform topology (D0) holds no tenant data at all, fleet surfaces
+  # (D1) are aggregates over projections, and only the two /tenants/{tenant_id}
+  # routes reach a tenant's own graph — those additionally require an active,
+  # purpose-bound access scope whose tenant matches the path, enforced again
+  # inside the gateway because a scope can expire between authorization and read.
+  #
+  # Cohorts are saved queries over fleet aggregates rather than platform state,
+  # so defining one stays at the read action class for the same reason
+  # kyber.export.create does: it derives an artifact and changes nothing. Its
+  # risk lives in the disclosure ceiling and the minimum-cohort-size suppression,
+  # not in the action class.
+  - route: "GET /v1/kyber/graph/platform"
+    capability: kyber.graph.platform.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/graph/blast-radius"
+    capability: kyber.graph.platform.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/graph/fleet"
+    capability: kyber.graph.fleet.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/graph/fleet/{projection}"
+    capability: kyber.graph.fleet.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/graph/cohorts"
+    capability: kyber.graph.cohort.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/graph/cohorts/{cohort_id}"
+    capability: kyber.graph.cohort.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/graph/tenants/{tenant_id}"
+    capability: kyber.graph.tenant.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/graph/tenants/{tenant_id}/entities/{vertex_id}"
+    capability: kyber.graph.tenant.read
+    disclosure: D3
+    action_class: 0
+
+  # ── Kyber Tenant Mirror ───────────────────────────────────────────────────
+  #
+  # services/kyber/mirror/routes.py. The mirror shows an operator exactly what
+  # the tenant sees, plus operator-only diagnostics. It reads tenant data only
+  # through the scoped graph gateway and owns no calculations of its own, which
+  # is what makes parity structural rather than aspirational — enforced by
+  # scripts/validate_tenant_mirror_parity.py.
+  #
+  # All three require an active, purpose-bound scope matching {tenant_id}. The
+  # masked variant sits at D2 because the gateway redacts at that level; it
+  # carries parity_comparable: false, since digesting redacted identifiers would
+  # manufacture a divergence that does not exist.
+  - route: "GET /v1/kyber/tenants/{tenant_id}/mirror/{surface}"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/tenants/{tenant_id}/mirror/{surface}/parity"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/tenants/{tenant_id}/mirror/{surface}/masked"
+    capability: kyber.tenant.mirror.read_masked
+    disclosure: D2
+    action_class: 0
+
+  # ── Kyber operations: exceptions, incidents, commands, containment ────────
+  #
+  # services/kyber/ops/routes.py.
+  #
+  # The four command-lifecycle rows are declared at a FLOOR, not at the
+  # capability actually enforced, and that is deliberate rather than a gap. A
+  # command's capability and action class come from its own CommandSpec, which
+  # is not known until the request body has been read: activate_kill_switch is
+  # class 5, retry_job is class 2, and one route dependency cannot declare both.
+  # Declaring the ceiling would deny a retry to an operator who legitimately
+  # holds only kyber.command.retry — a control that blocks the routine case is
+  # a control operators route around.
+  #
+  # So the dependency declares kyber.workforce.self.read (held by every
+  # authenticated principal; it grants nothing on its own), and the handler then
+  # calls resolve_access_context with the spec's real capability, its real
+  # action class, D4, and tenant_scope=required where the spec is tenant-scoped.
+  # That is the full evaluator — step-up for class 4/5 included — and it writes
+  # its own decision row. UNDECLARED IS NOT UNGUARDED applies twice over here:
+  # the floor is not the gate, and the gate is exercised by
+  # tests/security/test_kyber_command_plane.py.
+  - route: "GET /v1/kyber/ops/exceptions"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/exceptions/{exception_id}"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/ops/exceptions/{exception_id}/acknowledge"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/ops/exceptions/{exception_id}/resolve"
+    capability: kyber.incident.close
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/ops/exceptions/{exception_id}/suppress"
+    capability: kyber.incident.close
+    disclosure: D4
+    action_class: 1
+  - route: "GET /v1/kyber/ops/incidents"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/incidents/resume-cards"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/incidents/{incident_id}"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/incidents/{incident_id}/signals"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "PATCH /v1/kyber/ops/incidents/{incident_id}"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/ops/incidents/{incident_id}/resolve"
+    capability: kyber.incident.close
+    disclosure: D4
+    action_class: 1
+  - route: "GET /v1/kyber/ops/commands/types"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/ops/commands"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/kyber/ops/commands/{command_id}"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  # Floor only — the spec's own capability is enforced inside the handler.
+  - route: "POST /v1/kyber/ops/commands"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/ops/commands/{command_id}/dry-run"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/ops/commands/{command_id}/approve"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/ops/commands/{command_id}/execute"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  # The only route out of executed_unverified. It re-runs the checks; it is not
+  # a way to declare a command verified.
+  - route: "POST /v1/kyber/ops/commands/{command_id}/verify"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/ops/containment"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/ops/containment/activate"
+    capability: kyber.command.pause
+    disclosure: D4
+    action_class: 4
+  - route: "POST /v1/kyber/ops/containment/deactivate"
+    capability: kyber.command.pause
+    disclosure: D4
+    action_class: 4
+  - route: "POST /v1/kyber/ops/containment/safe-mode"
+    capability: kyber.command.kill_switch
+    disclosure: D4
+    action_class: 5
+  - route: "DELETE /v1/kyber/ops/containment/safe-mode"
+    capability: kyber.command.kill_switch
+    disclosure: D4
+    action_class: 5

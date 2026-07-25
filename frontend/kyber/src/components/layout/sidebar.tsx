@@ -22,6 +22,18 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { path: '/mission',         label: 'Mission',         glyph: '◈' },
+  // Kyber's own operating plane. Deliberately carries no `requirement`:
+  // CapabilityRequirement expresses `{ domain }` or `{ flag }`, and the real
+  // gate on all four is a backend capability string plus — for the tenant
+  // surfaces — an active, purpose-bound access scope that is per tenant and
+  // therefore unknowable at nav time. Inventing a domain to hide the entry
+  // would be a guess dressed as a permission; each page renders its own
+  // forbidden state from what the backend actually returns instead. Routing is
+  // not a grant.
+  { path: '/kyber-graph',     label: 'Kyber Graph',     glyph: '⬡' },
+  { path: '/tenant-mirror',   label: 'Tenant Mirror',   glyph: '⧉' },
+  { path: '/kyber-exceptions', label: 'Exceptions',     glyph: '⚑' },
+  { path: '/kyber-commands',  label: 'Commands',        glyph: '⌁' },
   { path: '/live',            label: 'Live',            glyph: '◉' },
   { path: '/command',         label: 'Command',         glyph: '⌘' },
   { path: '/review',          label: 'Review',          glyph: '✓' },

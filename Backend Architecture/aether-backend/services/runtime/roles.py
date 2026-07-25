@@ -56,7 +56,10 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "outbox-relay": frozenset({"notification_outbox", "event_outbox_relay"}),
     "stream-worker": frozenset({"event_replay", "dune_polling"}),
     "identity-worker": frozenset(),
-    "graph-writer": frozenset(),
+    # The Kyber Graph projector consumes the graph mutation ledger into platform
+    # topology. It is the first loop spec this role owns; the role was otherwise
+    # consumer-attached only.
+    "graph-writer": frozenset({"kyber_graph_projector"}),
     "measurement-worker": frozenset(),
     # Stream consumer is owned by consumer_specs.py; Phase B adds replay/reconciler
     # supervised loop specs here.
@@ -83,6 +86,11 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # challenges) are plain JSONB rows the storage-plane retention
             # sweep cannot reach. Same role, same cadence, same master switch.
             "kyber_retention_sweep",
+            # Correlates loose incident signals and merges same-release
+            # incidents. One periodic loop, so it rides maintenance like the two
+            # above rather than justifying a runtime role of its own. Not
+            # graph-writer: it reads no ledger.
+            "kyber_incident_correlation",
         }
     ),
 }

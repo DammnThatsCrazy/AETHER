@@ -138,7 +138,7 @@ SEAMS: tuple[Seam, ...] = (
     ),
     # ── routes → the canonical authorization gate ────────────────────────────
     Seam(
-        caller="services.kyber.identity.routes / services.kyber.devices.routes",
+        caller="services.kyber.{identity,devices,graph,mirror,ops}.routes",
         module="services.kyber.access.dependencies",
         singleton=None,
         attribute="require_kyber_access",
@@ -301,6 +301,178 @@ SEAMS: tuple[Seam, ...] = (
         attribute="get",
         positional=1,
         why="Exit resolves the durable scope before falling back to legacy state.",
+    ),
+    # ── command routes → the real authorization evaluator ─────────────────────
+    # The highest-consequence seam in the plane. The four command lifecycle
+    # routes cannot declare their capability as a dependency: it comes from the
+    # command's own spec, which is not known until the body has been read
+    # (`activate_kill_switch` is class 5, `retry_job` is class 2). So the
+    # dependency declares a floor that grants nothing, and THIS call is the
+    # actual gate. If it drifted — renamed, or its `action_class`/`tenant_scope`
+    # keywords changed — a class-5 fleet-destructive command would silently
+    # execute under a class-0 evaluation, and the route registry would still
+    # look correctly declared.
+    Seam(
+        caller="services.kyber.ops.routes._authorize_command",
+        module="services.kyber.access.dependencies",
+        singleton=None,
+        attribute="resolve_access_context",
+        positional=2,
+        keywords=("disclosure", "action_class", "tenant_scope"),
+        why="A command authorizes against its own spec's capability and action "
+            "class after the body is read; this call is the gate, not the "
+            "route dependency.",
+    ),
+    # ── command dispatch → the platform work it wraps ─────────────────────────
+    # A command adds authority, evidence and verification over a call the
+    # platform already knows how to make. Nothing below is reimplemented here,
+    # which is exactly why each one has to be pinned: a governed wrapper whose
+    # target moved is a governed wrapper around nothing.
+    Seam(
+        caller="services.kyber.ops.dispatch.execute",
+        module="services.jobs.service",
+        singleton="JobsService",
+        attribute="retry",
+        positional=2,
+        why="retry_job goes through the jobs platform's own retry path so "
+            "attempt accounting and max_attempts still apply.",
+    ),
+    Seam(
+        caller="services.kyber.ops.dispatch.execute",
+        module="services.jobs.service",
+        singleton="JobsService",
+        attribute="enqueue",
+        positional=3,
+        keywords=("idempotency_key", "correlation_id", "requested_by"),
+        why="Six command types requeue, replay, recompute, rebuild and roll "
+            "back through the durable jobs platform; the command's idempotency "
+            "key becomes the job's.",
+    ),
+    Seam(
+        caller="services.kyber.ops.dispatch.execute",
+        module="services.agent.runtime_repository",
+        singleton="AgentRuntimeRepository",
+        attribute="set_kill_switch",
+        positional=5,
+        why="The broadest action Kyber can take, and therefore the most "
+            "heavily gated.",
+    ),
+    Seam(
+        caller="services.kyber.ops.dispatch.execute",
+        module="services.kyber.ops.containment",
+        singleton="containment_service",
+        attribute="activate",
+        keywords=("scope", "target", "control", "actor_id", "reason", "blast_radius"),
+        why="pause_connector and pause_tenant_ingestion flip a scoped switch "
+            "rather than reimplementing a pause.",
+    ),
+    # ── verification → re-reading the world, not trusting a return value ──────
+    # Every one of these re-reads state from the owning service. That is the
+    # whole point of the verification stage: an HTTP 200 and a returned dict are
+    # what the handler *said*, not what the system *is*.
+    Seam(
+        caller="services.kyber.ops.verification.job_enqueued",
+        module="services.jobs.service",
+        singleton="JobsService",
+        attribute="get_job",
+        positional=2,
+        why="Verification re-reads the job instead of trusting the enqueue "
+            "call's return value.",
+    ),
+    Seam(
+        caller="services.kyber.ops.verification.job_not_duplicated",
+        module="services.jobs.service",
+        singleton="JobsService",
+        attribute="list_jobs",
+        positional=1,
+        keywords=("job_type", "limit"),
+        why="Two live jobs carrying one command's correlation id is a "
+            "double-submit, which only a re-read can detect.",
+    ),
+    Seam(
+        caller="services.kyber.ops.verification.kill_switch_engaged",
+        module="services.agent.runtime_repository",
+        singleton="AgentRuntimeRepository",
+        attribute="get_kill_switch",
+        positional=1,
+        why="Read back from the runtime's own control store; the setter's "
+            "return value is not confirmation.",
+    ),
+    # ── graph projector → the operator exception queue ────────────────────────
+    # The projector reports its own ill health: a stalled projection, an
+    # exhausted fetch window, a failed topology sync. A frozen projection that
+    # still answers queries is the failure mode an operator most needs told
+    # about, and a log line tells nobody. `optional=True` describes the caller
+    # degrading when the ops plane is absent — it still logs at error level and
+    # counts the dropped signal, and this seam is what proves the symbol exists.
+    Seam(
+        caller="services.kyber.graph.projector.KyberGraphProjector._report",
+        module="services.kyber.ops.exceptions",
+        singleton=None,
+        attribute="report_operational_signal",
+        positional=1,
+        keywords=("title", "dedupe_key", "severity", "probable_cause",
+                  "recommended_action", "data_integrity_exposure"),
+        why="The graph projector reports its own stall, exhausted fetch window "
+            "and topology failures into the operator exception queue.",
+        optional=True,
+    ),
+    # ── tenant mirror → the scoped tenant graph gateway ───────────────────────
+    # The mirror's only path into a tenant's data. This seam is load-bearing for
+    # the parity invariant, not just for imports: the mirror is allowed to add
+    # operator diagnostics and forbidden to recompute a tenant-visible value, and
+    # the way that is enforced is that it reads through the same gate the tenant's
+    # own data flows through and calculates nothing itself. If this read drifted,
+    # the mirror would either stop working or — far worse — someone would route
+    # around it, and a mirror with its own read path is no longer a mirror.
+    Seam(
+        caller="services.kyber.mirror.service.TenantMirrorService",
+        module="services.kyber.graph.scoped_gateway",
+        singleton="scoped_tenant_graph_gateway",
+        attribute="query",
+        positional=1,
+        keywords=("tenant_id", "vertex_type", "limit"),
+        why="The Tenant Mirror reads tenant data only through the scoped "
+            "gateway; that is what makes parity structural rather than "
+            "aspirational.",
+    ),
+    # ── ops plane → step-up ───────────────────────────────────────────────────
+    # The ops plane resolves step-up once and hands it to the command lifecycle,
+    # which gates action classes 4 and 5 on a live grant. If this read drifted,
+    # the gate would resolve to a provider that answers nothing and every
+    # high-impact command would either refuse forever or — depending on how the
+    # caller reads a missing answer — stop being gated at all. Neither failure
+    # announces itself, which is why the seam is declared rather than trusted.
+    Seam(
+        caller="services.kyber.ops.containment._resolve_ops_providers",
+        module="services.kyber.sessions.step_up",
+        singleton="step_up_service",
+        attribute="active_grant",
+        positional=1,
+        why="Class 4/5 commands require a live step-up grant; this is the read "
+            "that decides whether one exists.",
+    ),
+    # ── graph projector → the append-only mutation ledger ─────────────────────
+    # The Kyber Graph is a projection with exactly one input. If this read
+    # drifted — renamed, or its `limit`/`aggregate_id` keywords changed — the
+    # projector would keep running, keep advancing nothing, and keep reporting
+    # healthy empty batches, while the operational graph quietly froze at
+    # whatever it had already built. A frozen graph that still answers is the
+    # worst outcome available here, so the seam is declared even though the
+    # target lives outside services.* and is not covered by the import scan.
+    Seam(
+        caller="services.kyber.graph.projector.KyberGraphProjector._fetch",
+        module="repositories.graph_mutation_ledger",
+        singleton="GraphMutationLedgerRepository",
+        attribute="list_records",
+        positional=1,
+        keywords=("aggregate_id", "limit", "since_offset"),
+        why="The graph projector's only input is the tenant's mutation ledger, "
+            "read in ledger order so the offset it stores means something. "
+            "`since_offset` is pinned because without it the projector must "
+            "re-read every consumed row to reach one fresh one, and a consumer "
+            "past its read window stalls permanently while still reporting "
+            "healthy empty batches.",
     ),
 )
 

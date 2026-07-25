@@ -5385,3 +5385,246 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: true
+
+  # ── Kyber Graph, fleet projections and cohorts ────────────────────────────
+  #
+  # The Kyber Graph is a PROJECTION of the graph mutation ledger, not a source
+  # of record: every node and edge is rebuildable from the ledger by replaying
+  # from offset zero. That is why these carry `standard` rather than `legal` and
+  # `hard_delete` rather than `preserve` — preserving a derivable row buys no
+  # evidence and costs storage forever. The evidence lives in the ledger and in
+  # the audit trail, both of which are already `legal`.
+  #
+  # None of them requires consent invalidation: the graph stores platform
+  # topology and REFERENCES into tenant data, never tenant record contents.
+  - resource_type: kyber_graph_nodes
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  - resource_type: kyber_graph_edges
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # Per-tenant consumption offsets. Deleting one silently rewinds a projection
+  # to zero and replays the whole ledger, so this is `preserve`: the row is
+  # tiny, and losing it is an incident rather than a cleanup.
+  - resource_type: kyber_graph_projection_offsets
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Precomputed fleet facts. Recomputable by definition, and a stale row is
+  # worse than no row — it converts "we do not know" into "it is fine".
+  - resource_type: kyber_fleet_projections
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # Saved cross-tenant queries. An operator artifact, not tenant data; the
+  # minimum-size suppression that stops a cohort singling out one tenant is
+  # applied at evaluation time, not stored here.
+  - resource_type: kyber_cohort_definitions
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # ── Kyber operations: exceptions, incidents, commands, containment ────────
+  #
+  # The split here is the point. Exceptions are a working queue and age out.
+  # Everything that records a DECISION or a STATE CHANGE is `legal` and
+  # `preserve`, because "no privileged access or command without durable
+  # evidence" is worth nothing if the evidence is on a 365-day clock while the
+  # blast radius it justified is permanent.
+
+  # The operator's working queue. Resolved and suppressed items age out.
+  - resource_type: kyber_exceptions
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # What happened to customers and what was done about it. Preserved.
+  - resource_type: kyber_incidents
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # The observations an incident was built from, each carrying WHY it was
+  # attributed. Deleting these leaves a conclusion with no derivation.
+  - resource_type: kyber_incident_signals
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # Who asked to change platform state, why, under what authority, and who
+  # approved. This is the evidence the whole command plane exists to produce.
+  - resource_type: kyber_command_requests
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # What actually ran, and what it touched.
+  - resource_type: kyber_command_executions
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # Whether the intended state was actually reached. Separated from the
+  # execution on purpose — "the call returned" and "the system is in the state
+  # we wanted" are different questions, and only this row answers the second.
+  - resource_type: kyber_command_verifications
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  # Every scoped pause, including safe mode. A pause an operator cannot later
+  # account for is indistinguishable from an unexplained outage.
+  - resource_type: kyber_containment_switches
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
