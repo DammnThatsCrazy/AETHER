@@ -3,6 +3,18 @@ output "alb_dns_name" {
   value       = aws_lb.this.dns_name
 }
 
+# Configuration-derived, so it is known at plan time — provider-mocked plan
+# tests can assert the ALB exists without waiting for an apply.
+output "alb_name" {
+  description = "Name of the ALB"
+  value       = aws_lb.this.name
+}
+
+output "backend_target_group_name" {
+  description = "Name of the backend target group"
+  value       = aws_lb_target_group.backend.name
+}
+
 output "alb_arn" {
   description = "ARN of the ALB"
   value       = aws_lb.this.arn
@@ -24,8 +36,13 @@ output "backend_target_group_arn" {
 }
 
 output "ml_target_group_arn" {
-  description = "ARN of the ML serving target group"
-  value       = aws_lb_target_group.ml.arn
+  description = "ARN of the ML serving target group (empty string when enable_dedicated_ml = false)"
+  value       = try(aws_lb_target_group.ml[0].arn, "")
+}
+
+output "ml_target_group_arns" {
+  description = "ML serving target group ARNs as a list; empty when enable_dedicated_ml = false"
+  value       = aws_lb_target_group.ml[*].arn
 }
 
 output "backend_tg_arn_suffix" {
@@ -34,6 +51,6 @@ output "backend_tg_arn_suffix" {
 }
 
 output "ml_tg_arn_suffix" {
-  description = "ARN suffix of the ML target group (CloudWatch metrics)"
-  value       = aws_lb_target_group.ml.arn_suffix
+  description = "ARN suffix of the ML target group (empty string when enable_dedicated_ml = false)"
+  value       = try(aws_lb_target_group.ml[0].arn_suffix, "")
 }

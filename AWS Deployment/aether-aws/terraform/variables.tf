@@ -44,6 +44,33 @@ variable "environment" {
   }
 }
 
+# The staging wake/sleep switch. Deliberately a root variable rather than a
+# tfvars constant: the whole point is that an operator or a schedule flips it
+# between applies without editing reviewed configuration.
+variable "staging_state" {
+  type        = string
+  description = <<-EOT
+    Lifecycle state for a profile that declares one, resolved against
+    `profiles.<profile>.staging_state.states` in
+    config/runtime_deployment.yaml. `asleep` multiplies every declared
+    desired_count and autoscaling bound by zero, so a sleeping environment owns
+    exactly the same services and the same roles as an awake one and wakes by
+    flipping this single input rather than by planning a differently-shaped
+    topology. Profiles that declare no `staging_state` block (today: everything
+    except staging) ignore it entirely — the multiplier falls back to 1.
+  EOT
+  default     = "awake"
+
+  validation {
+    # The two states config/runtime_deployment.yaml declares. Restricting them
+    # here fails on a typo at plan time; without it `try(...)` in profiles.tf
+    # would silently fall back to the multiplier 1 and an operator who typed
+    # "sleep" would be told the environment is asleep while it kept running.
+    condition     = contains(["awake", "asleep"], var.staging_state)
+    error_message = "staging_state must be one of: awake, asleep."
+  }
+}
+
 variable "aws_region" {
   type        = string
   description = "AWS region to deploy resources into"
@@ -66,10 +93,52 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
-variable "enable_nat_gateway_ha" {
-  type        = bool
-  description = "When true, provision one NAT Gateway per AZ; when false, use a single shared NAT (lower cost)"
-  default     = false
+# Replaces the former enable_nat_gateway_ha bool, which could only choose
+# between one NAT and three and had no way to express "no NAT at all" — the
+# posture every cost-capped profile actually wants.
+variable "network_egress_mode" {
+  type        = string
+  description = <<-EOT
+    Outbound egress topology for ECS tasks. null = use the deployment profile
+    default (staging and production-lean: public_ip; production-scale:
+    single_nat; enterprise-isolated: ha_nat). Setting this to a NAT mode on a
+    cost-capped profile is the explicit opt-in that the
+    `nat_gateway_unless_explicit` policy in config/deployment_profiles.yaml
+    requires. vpc_endpoints and none both provision zero NAT Gateways.
+  EOT
+  default     = null
+
+  validation {
+    condition = var.network_egress_mode == null ? true : contains(
+      ["public_ip", "single_nat", "ha_nat", "vpc_endpoints", "none"],
+      var.network_egress_mode,
+    )
+    error_message = "network_egress_mode must be one of: public_ip, single_nat, ha_nat, vpc_endpoints, none."
+  }
+
+  # `vpc_endpoints` is a declared mode with no implementation: modules/vpc_endpoints
+  # exists but the root never instantiates it, and this mode provisions no NAT and
+  # assigns no public IP. Selecting it would therefore put tasks in private subnets
+  # with no route to anywhere — ECR pulls fail with CannotPullContainerError, the
+  # deployment circuit-breaker rolls back, and the service never reaches steady
+  # state. That is precisely the defect this egress work was written to fix, so the
+  # mode fails at plan time rather than silently degrading to `none`.
+  #
+  # To implement it: instantiate modules/vpc_endpoints for the interface endpoints
+  # the runtime actually needs (ecr.api, ecr.dkr, s3 gateway, secretsmanager, logs,
+  # sqs, sns, dynamodb gateway), price them in config/aws_price_book.yaml — interface
+  # endpoints are ~$7.30/endpoint/month each, so this is NOT automatically cheaper
+  # than a NAT Gateway and needs the comparison written down — then delete this block.
+  validation {
+    condition     = var.network_egress_mode != "vpc_endpoints"
+    error_message = <<-EOT
+      network_egress_mode = "vpc_endpoints" is declared but not implemented: the
+      root never instantiates modules/vpc_endpoints, so this mode would leave ECS
+      tasks in private subnets with no egress and no endpoints. Use public_ip
+      (zero NAT cost) or single_nat/ha_nat. See variables.tf for what implementing
+      it requires.
+    EOT
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -176,17 +245,17 @@ variable "msk_broker_volume_size" {
 # ECS / Compute
 # --------------------------------------------------------------------------
 
-variable "ecs_backend_cpu" {
-  type        = number
-  description = "CPU units (1024 = 1 vCPU) for the aether-backend task"
-  default     = 1024
-}
-
-variable "ecs_backend_memory" {
-  type        = number
-  description = "Memory in MiB for the aether-backend task"
-  default     = 2048
-}
+# The aether-backend (api) task's sizing, baseline and autoscaling envelope are
+# NOT variables. They are read from the api service in
+# config/runtime_deployment.yaml by profiles.tf (local.api_cpu, local.api_memory,
+# local.api_desired_count, local.api_min_capacity, local.api_max_capacity) and
+# passed to modules/ecs from there. The former ecs_backend_cpu /
+# ecs_backend_memory / ecs_backend_min_capacity / ecs_backend_max_capacity
+# variables were a second, silently divergent source of truth for the same four
+# numbers: their defaults (1024/2048/1/10) disagreed with the matrix's
+# production-scale api (2048/4096/3/12) and no tfvars file set them, so a scale
+# apply quietly ran the reviewed capacity of a lean one. Only the ML serving
+# task, which the matrix does not describe, is still sized by variable.
 
 variable "ecs_ml_cpu" {
   type        = number
@@ -198,18 +267,6 @@ variable "ecs_ml_memory" {
   type        = number
   description = "Memory in MiB for the aether-ml-serving task"
   default     = 4096
-}
-
-variable "ecs_backend_min_capacity" {
-  type        = number
-  description = "Minimum number of aether-backend tasks"
-  default     = 1
-}
-
-variable "ecs_backend_max_capacity" {
-  type        = number
-  description = "Maximum number of aether-backend tasks for auto-scaling"
-  default     = 10
 }
 
 variable "ecs_ml_min_capacity" {
@@ -273,22 +330,16 @@ variable "log_retention_days" {
 # Auth0
 # --------------------------------------------------------------------------
 
-variable "auth0_domain" {
-  type        = string
-  description = "Auth0 tenant domain (e.g. your-tenant.auth0.com)"
-}
-
-variable "auth0_management_client_id" {
-  type        = string
-  description = "Client ID of the Terraform M2M application in Auth0"
-  sensitive   = true
-}
-
-variable "auth0_management_client_secret" {
-  type        = string
-  description = "Client secret of the Terraform M2M application in Auth0"
-  sensitive   = true
-}
+# The Auth0 tenant domain and the Terraform M2M application's client id and
+# secret are NOT declared here, on purpose. A root variable is reproduced in
+# full in `terraform show -json` output regardless of `sensitive = true`, so
+# declaring the secret here put it in clear text in every plan artifact. The
+# auth0 provider takes AUTH0_DOMAIN / AUTH0_CLIENT_ID / AUTH0_CLIENT_SECRET
+# from its own environment, which the CI runner exports; TF_VAR_auth0_* names
+# are no longer read by anything. See modules/auth0/main.tf.
+#
+# Do not "restore for convenience": there is no way to declare a root variable
+# that a plan JSON will not contain.
 
 variable "auth0_api_audience" {
   type        = string

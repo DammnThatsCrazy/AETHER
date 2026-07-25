@@ -618,7 +618,15 @@ class KyberWorkforceConfig:
 
 # Canonical set of runtime roles accepted by AETHER_ROLE / run_role. "all" is
 # the single-process default (local/dev); "api" is the pure HTTP server; the
-# remainder are worker classes split out of the request lifecycle.
+# worker classes are split out of the request lifecycle; and "lean-worker" is
+# the consolidated execution group that packs every worker role into a single
+# task for the cost-capped profiles (see services/runtime/roles.py::
+# EXECUTION_GROUPS). Packing is a deployment decision only — each hosted role
+# keeps its own queue, consumer group, DLQ and metrics label.
+#
+# tests/unit/test_runtime_roles.py asserts this set equals roles.ALL_ROLES.
+# That is not busywork: this is the set AETHER_ROLE is validated against, so a
+# role present in roles.py but missing here is a task that refuses to boot.
 RUNTIME_ROLES: frozenset[str] = frozenset(
     {
         "api",
@@ -630,6 +638,7 @@ RUNTIME_ROLES: frozenset[str] = frozenset(
         "semantic-worker",
         "materializer",
         "maintenance",
+        "lean-worker",
         "all",
     }
 )

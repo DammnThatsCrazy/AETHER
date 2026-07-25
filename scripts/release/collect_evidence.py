@@ -18,7 +18,12 @@ The bundle is derived, never asserted by hand. It contains:
   scripts/release/sdk_conformance.py from SDK sources and test manifests;
 * the latest `make ci-check` gate summary when a log is provided via
   --ci-log; otherwise the bundle records that the summary was not captured
-  (it is never fabricated).
+  (it is never fabricated);
+* the release-evidence/ bundle layout, when materialized: manifest.json and
+  manifest.sha256 alongside one subdirectory per evidence class. A declared
+  subdirectory containing no files is reported ABSENT, never as an empty pass,
+  because "we collected no rollback evidence" and "rollback evidence was fine"
+  must not be the same line in a manifest.
 
 This is an INDEX, not a gate — it always exits 0. The individual
 `make validate-*` targets and `make ci-check` are the gates.
@@ -29,6 +34,8 @@ Usage:
   python scripts/release/collect_evidence.py --ci-log FILE  # parse a saved
                                                             # ci-check log for
                                                             # the Gates line
+  python scripts/release/collect_evidence.py --bundle-dir   # materialize
+                                                            # release-evidence/
 """
 
 from __future__ import annotations
@@ -45,6 +52,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import load_yaml, repo_root  # noqa: E402
+from release_manifest import canonical  # noqa: E402 - one canonicalisation, reused
 
 import yaml  # noqa: E402
 
@@ -63,7 +71,96 @@ EVIDENCE_CHECKS = [
     # permission surface then reports no scope violations for it — a false all-clear,
     # which is exactly the class of thing an evidence bundle exists to rule out.
     ("agent_access_reference_packs", "scripts/validate_reference_packs.py"),
+    # Deployment/cost spine. These four already gate `make release-gate` but
+    # never reached the bundle, so the bundle could report a clean sweep while
+    # the checks that decide whether the infrastructure is affordable and
+    # correctly shaped were not represented in it at all.
+    ("cost_policy_terraform", "scripts/release/check_cost_policy_terraform.py"),
+    ("delivery_topology", "scripts/release/check_delivery_topology.py"),
+    ("terraform_plan_policy", "scripts/release/check_terraform_plan_policy.py"),
+    ("cost_model", "scripts/release/check_cost_model.py"),
 ]
+
+# Extra CLI arguments for checks that need them. Kept out of EVIDENCE_CHECKS so
+# that stays a list of (name, script) pairs — callers and tests unpack it.
+EVIDENCE_CHECK_ARGS: dict[str, list[str]] = {
+    # Scored against the plan a credentialed promotion writes, NOT against the
+    # committed test fixture. Pointing this at the fixture would make the
+    # bundle report a passing profile-policy check on a plan that never came
+    # from AWS, which is the precise confusion the bundle exists to prevent.
+    # With no real plan present the check fails, and that is the honest result.
+    "terraform_plan_policy": [
+        "--profile", "production-lean",
+        "--plan-json", "artifacts/reviewed.tfplan.json",
+    ],
+    # Scored against the inventory a credentialed plan produced. The path is the
+    # same one `make validate-cost-model` writes the FIXTURE-derived inventory
+    # to, so the path alone proves nothing -- the guard below reads the
+    # inventory's own provenance and refuses to run the gate at all when its
+    # input was a committed test fixture. A cost PASS next to
+    # "terraform_plan_policy exit 2 (no real plan)" is the exact confusion the
+    # bundle exists to prevent, and it was reachable because only the plan gate
+    # was pointed at a path a fixture never occupies.
+    "cost_model": [
+        "--profile", "production-lean",
+        "--inventory", "artifacts/profile-resource-inventory.json",
+    ],
+}
+
+COST_INVENTORY = "artifacts/profile-resource-inventory.json"
+
+
+def synthetic_inventory_reason(inventory_rel: str = COST_INVENTORY) -> str | None:
+    """Why the cost gate must not be run against this inventory, or None.
+
+    check_terraform_plan_policy.py stamps every inventory with the plan it was
+    built from and, when that plan was a fixture/scratch/sample file, the marker
+    that made it synthetic. A cost verdict derived from one is a statement about
+    a committed JSON file, not about anything AWS would bill for, and it must
+    never appear in an evidence bundle as a PASS.
+
+    (A real plan file that someone copied a fixture into is beyond what a path
+    can detect; that is what the credentialed-provenance checks in
+    check_deployment_readiness.py are for. This guard closes the accidental
+    case, which is the one that actually happened.)
+    """
+    path = repo_root() / inventory_rel
+    if not path.is_file():
+        return (f"{inventory_rel} is absent; no plan inventory exists to price, "
+                f"and a cost gate with no input has not passed")
+    try:
+        inventory = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return f"{inventory_rel} is not readable JSON ({exc})"
+    if not isinstance(inventory, dict):
+        return f"{inventory_rel} is not a JSON object"
+    marker = inventory.get("synthetic_input")
+    if marker:
+        return (
+            f"{inventory_rel} was generated from "
+            f"{inventory.get('generated_from')!r}, a {marker} source. A cost "
+            f"verdict derived from a test fixture is not evidence about any "
+            f"real deployment and is not reported as a pass."
+        )
+    return None
+
+
+# Checks whose input must be proven before the check is allowed to produce a
+# verdict at all. A guard returning a reason means the check is recorded as
+# unverifiable — non-zero, counted against the summary — rather than run.
+EVIDENCE_CHECK_GUARDS = {"cost_model": synthetic_inventory_reason}
+
+# Where the materialised bundle lives, and the subdirectories it always
+# declares. A subdirectory with no files is reported ABSENT rather than as an
+# empty pass — "we produced no load evidence" and "load evidence passed with
+# nothing to report" must never render identically.
+BUNDLE_ROOT = "release-evidence"
+BUNDLE_SUBDIRS = (
+    "profile", "terraform", "cost", "migrations", "smoke", "security",
+    "isolation", "load", "rollback", "lifecycle", "observability", "scorecard",
+)
+BUNDLE_MANIFEST = "manifest.json"
+BUNDLE_CHECKSUM = "manifest.sha256"
 
 EXTERNAL_ATTESTATION_ID = "FT-EXT-ATTESTATION"
 
@@ -76,6 +173,13 @@ def _now_iso() -> str:
 
 def _run(script: str, extra_args: list[str] | None = None) -> dict:
     start = datetime.datetime.now(datetime.timezone.utc)
+    # A validator that is not on disk has not passed. It is recorded as absent
+    # with a non-zero exit code, so it counts against the bundle summary and
+    # blocks --release-mode exactly as a failing check would. Silently omitting
+    # it would turn "we never checked" into "nothing was wrong".
+    if not (repo_root() / script).is_file():
+        return {"script": script, "exit_code": 127, "status": "absent",
+                "error": "validator script is not present in the repository"}
     cmd = [sys.executable, script] + (extra_args or [])
     try:
         proc = subprocess.run(
@@ -420,12 +524,233 @@ def hosted_checks_section(path_value: str | None, expected_sha: str,
             "checks": normalized}
 
 
+def scan_bundle_layout(bundle_dir: Path) -> dict:
+    """Describe the release-evidence/ layout exactly as it is on disk.
+
+    Every declared subdirectory appears in the result, but one that does not
+    exist — or exists with no files in it — is marked ``present: false``. The
+    distinction matters more than it looks: an absent load-test directory and a
+    load test that produced nothing are the same bytes on disk and must not be
+    the same claim in the manifest.
+    """
+    subdirs: dict[str, dict] = {}
+    total = 0
+    for name in BUNDLE_SUBDIRS:
+        target = bundle_dir / name
+        files: list[dict] = []
+        if target.is_dir():
+            for path in sorted(p for p in target.rglob("*") if p.is_file()):
+                data = path.read_bytes()
+                files.append({
+                    "path": path.relative_to(bundle_dir).as_posix(),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "bytes": len(data),
+                })
+        total += len(files)
+        subdirs[name] = {
+            "present": bool(files),
+            "exists": target.is_dir(),
+            "file_count": len(files),
+            "files": files,
+        }
+    return {"subdirectories": subdirs, "file_count": total}
+
+
+def write_bundle_layout(bundle_dir: Path, git: dict) -> dict:
+    """Materialise release-evidence/ and write its manifest + checksum.
+
+    The manifest is canonicalised and digested with release_manifest.py's
+    helpers so the bundle hashes identically wherever it is produced, and so
+    there is exactly one canonicalisation in the repository rather than two
+    that agree until they don't.
+    """
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    for name in BUNDLE_SUBDIRS:
+        (bundle_dir / name).mkdir(exist_ok=True)
+
+    layout = scan_bundle_layout(bundle_dir)
+    manifest = {
+        "schema_version": 1,
+        "generated_at": _now_iso(),
+        "root": BUNDLE_ROOT,
+        "commit": git.get("commit"),
+        "branch": git.get("branch"),
+        "dirty": git.get("dirty"),
+        "file_count": layout["file_count"],
+        "subdirectories": layout["subdirectories"],
+    }
+    payload = canonical(manifest)
+    (bundle_dir / BUNDLE_MANIFEST).write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+    (bundle_dir / BUNDLE_CHECKSUM).write_text(digest + "\n", encoding="utf-8")
+    return {"manifest": manifest, "sha256": digest}
+
+
+def verify_bundle(bundle_dir: Path) -> dict:
+    """Re-derive the bundle's digests from disk and compare them to the manifest.
+
+    Writing per-file digests into a manifest and then reading them back is not
+    verification, it is transcription: swapping a file under
+    release-evidence/<class>/ leaves the manifest and its checksum in perfect
+    agreement with each other and in complete disagreement with the bundle.
+    Nothing re-derived either until this function existed, so `manifest.sha256`
+    sealed the manifest and nothing sealed the evidence.
+
+    Three tampers are caught, because each is separately possible:
+      * the manifest was edited            -> its canonical digest moves;
+      * a listed file was edited/removed   -> that file's digest moves;
+      * an unlisted file was added         -> it is in the bundle and vouched
+                                              for by nothing.
+    """
+    manifest_path = bundle_dir / BUNDLE_MANIFEST
+    checksum_path = bundle_dir / BUNDLE_CHECKSUM
+    out = {"verified": False, "reason": "", "files_checked": 0,
+           "recorded_sha256": None, "computed_sha256": None}
+    if not bundle_dir.is_dir():
+        out["reason"] = f"{BUNDLE_ROOT}/ is not materialized"
+        return out
+    if not manifest_path.is_file() or not checksum_path.is_file():
+        out["reason"] = f"{BUNDLE_MANIFEST} or {BUNDLE_CHECKSUM} is missing"
+        return out
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        recorded = checksum_path.read_text(encoding="utf-8").strip().split()[0]
+    except (OSError, json.JSONDecodeError, IndexError) as exc:
+        out["reason"] = f"manifest or checksum is unreadable ({exc})"
+        return out
+    if not isinstance(manifest, dict):
+        out["reason"] = f"{BUNDLE_MANIFEST} is not a JSON object"
+        return out
+
+    computed = hashlib.sha256(canonical(manifest)).hexdigest()
+    out["recorded_sha256"], out["computed_sha256"] = recorded, computed
+    if computed != recorded:
+        out["reason"] = (f"{BUNDLE_MANIFEST} hashes to {computed[:12]}… but "
+                         f"{BUNDLE_CHECKSUM} records {recorded[:12]}…")
+        return out
+
+    listed: set[str] = set()
+    checked = 0
+    for section in (manifest.get("subdirectories") or {}).values():
+        for row in (section or {}).get("files") or []:
+            rel = str(row.get("path", ""))
+            listed.add(rel)
+            target = bundle_dir / rel
+            if not target.is_file():
+                out["reason"] = f"{rel} is listed in the manifest but absent from disk"
+                out["files_checked"] = checked
+                return out
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            if digest != str(row.get("sha256", "")):
+                out["reason"] = (f"{rel} does not match its recorded digest "
+                                 f"(recorded {str(row.get('sha256'))[:12]}…, "
+                                 f"found {digest[:12]}…)")
+                out["files_checked"] = checked
+                return out
+            checked += 1
+
+    on_disk = {
+        path.relative_to(bundle_dir).as_posix()
+        for name in BUNDLE_SUBDIRS
+        for path in (bundle_dir / name).rglob("*")
+        if (bundle_dir / name).is_dir() and path.is_file()
+    }
+    unlisted = sorted(on_disk - listed)
+    if unlisted:
+        out["reason"] = (f"{len(unlisted)} file(s) in the bundle are not listed in "
+                         f"the manifest and are vouched for by nothing: "
+                         f"{', '.join(unlisted[:4])}")
+        out["files_checked"] = checked
+        return out
+
+    out.update({"verified": True, "files_checked": checked})
+    return out
+
+
+def evidence_bundle_section(bundle_dir: Path, written: dict | None) -> dict:
+    """Report the bundle layout without ever inventing a directory.
+
+    When nothing has been materialised the section says so plainly. There is no
+    representation here for "the bundle is fine, it is just empty".
+    """
+    if not bundle_dir.is_dir():
+        return {
+            "root": BUNDLE_ROOT,
+            "materialized": False,
+            "manifest": None,
+            "sha256": None,
+            "verification": verify_bundle(bundle_dir),
+            "file_count": 0,
+            "declared_subdirectories": list(BUNDLE_SUBDIRS),
+            "subdirectories": {n: {"present": False, "exists": False,
+                                   "file_count": 0, "files": []}
+                               for n in BUNDLE_SUBDIRS},
+            "note": (f"{BUNDLE_ROOT}/ has not been materialized; every "
+                     "subdirectory is reported absent, not empty-passing."),
+        }
+    layout = scan_bundle_layout(bundle_dir)
+    manifest_path = bundle_dir / BUNDLE_MANIFEST
+    checksum_path = bundle_dir / BUNDLE_CHECKSUM
+    recorded = None
+    if checksum_path.is_file():
+        text = checksum_path.read_text(encoding="utf-8").strip().split()
+        recorded = text[0] if text else None
+    return {
+        "root": BUNDLE_ROOT,
+        "materialized": True,
+        "manifest": BUNDLE_MANIFEST if manifest_path.is_file() else None,
+        # `sha256` is what the bundle CLAIMS. `verification` is what re-hashing
+        # the manifest and every file it lists actually found. They are reported
+        # as two different things because reading a recorded digest back is not
+        # a check of anything.
+        "sha256": (written or {}).get("sha256", recorded),
+        "recorded_sha256": recorded,
+        "verification": verify_bundle(bundle_dir),
+        "file_count": layout["file_count"],
+        "declared_subdirectories": list(BUNDLE_SUBDIRS),
+        "subdirectories": layout["subdirectories"],
+        "absent_subdirectories": sorted(
+            name for name, row in layout["subdirectories"].items() if not row["present"]
+        ),
+    }
+
+
+def run_evidence_checks() -> dict:
+    """Run every evidence check, refusing to run one whose input is unprovable.
+
+    A guarded check that cannot be given trustworthy input is recorded as
+    `unverifiable_input` with a non-zero exit code, so it counts against the
+    bundle summary and blocks --release-mode. It is NOT run and then reported as
+    a pass: a green line derived from a fixture is worse than a red one, because
+    it reads as an answer.
+    """
+    results: dict[str, dict] = {}
+    for name, script in EVIDENCE_CHECKS:
+        guard = EVIDENCE_CHECK_GUARDS.get(name)
+        reason = guard() if guard else None
+        if reason:
+            results[name] = {
+                "script": script,
+                "exit_code": 2,
+                "status": "unverifiable_input",
+                "error": reason,
+            }
+            continue
+        results[name] = _run(script, EVIDENCE_CHECK_ARGS.get(name))
+    return results
+
+
 def build_bundle(ci_log: str | None = None, github_checks: str | None = None,
-                 github_repo: str | None = None) -> dict:
-    results = {name: _run(script) for name, script in EVIDENCE_CHECKS}
+                 github_repo: str | None = None,
+                 bundle_dir: str | None = None) -> dict:
+    results = run_evidence_checks()
     passed = sum(1 for v in results.values() if v.get("exit_code") == 0)
 
     git = git_state()
+    target = Path(bundle_dir) if bundle_dir else repo_root() / BUNDLE_ROOT
+    if not target.is_absolute():
+        target = repo_root() / target
+    written = write_bundle_layout(target, git) if bundle_dir else None
     return {
         "timestamp": _now_iso(),
         "release_train": "FOUNDING_TENANT_PRODUCTION",
@@ -438,8 +763,11 @@ def build_bundle(ci_log: str | None = None, github_checks: str | None = None,
         "ci_check": ci_check_section(ci_log),
         "github_checks": hosted_checks_section(github_checks, git["commit"],
                                                repo=github_repo),
+        "evidence_bundle": evidence_bundle_section(target, written),
         "summary": {"total": len(results), "passed": passed,
-                    "failed": len(results) - passed},
+                    "failed": len(results) - passed,
+                    "absent": sum(1 for v in results.values()
+                                  if v.get("status") == "absent")},
         "docs": [
             "docs/FOUNDING-TENANT-PRODUCTION.md",
             "docs/DEPLOYMENT-PROFILES.md",
@@ -462,10 +790,14 @@ def main() -> int:
                          "(default: GITHUB_REPOSITORY)")
     ap.add_argument("--release-mode", action="store_true",
                     help="fail closed unless local and hosted evidence are authoritative")
+    ap.add_argument("--bundle-dir", nargs="?", const=BUNDLE_ROOT, default=None,
+                    help=f"materialize the {BUNDLE_ROOT}/ layout (manifest.json + "
+                         "manifest.sha256 + evidence subdirectories) at this path")
     args = ap.parse_args()
 
     bundle = build_bundle(ci_log=args.ci_log, github_checks=args.github_checks,
-                          github_repo=args.github_repo)
+                          github_repo=args.github_repo,
+                          bundle_dir=args.bundle_dir)
     text = yaml.safe_dump(bundle, sort_keys=False, width=100)
     print(text)
     if args.out:
@@ -474,9 +806,17 @@ def main() -> int:
     if args.release_mode:
         ci = bundle["ci_check"]
         hosted = bundle["github_checks"]
+        evidence = bundle["evidence_bundle"]
+        verification = evidence.get("verification") or {}
         if (not ci.get("captured") or ci.get("gates_failed") != 0
                 or not hosted.get("passed") or bundle["summary"]["failed"]):
             print("Release evidence is incomplete or failed; refusing a release claim.", file=sys.stderr)
+            return 1
+        # A materialized bundle whose files no longer hash to what its manifest
+        # records is a tampered bundle, whatever the manifest says about itself.
+        if evidence.get("materialized") and not verification.get("verified"):
+            print(f"Release evidence bundle failed verification: "
+                  f"{verification.get('reason')}", file=sys.stderr)
             return 1
     return 0
 

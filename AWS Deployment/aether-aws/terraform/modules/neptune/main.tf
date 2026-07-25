@@ -25,6 +25,21 @@ resource "aws_kms_key" "neptune" {
   tags = {
     Name = "${var.project}-${var.environment}-neptune-kms"
   }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
+  }
 }
 
 resource "aws_kms_alias" "neptune" {
@@ -128,6 +143,21 @@ resource "aws_neptune_cluster" "this" {
   tags = {
     Name = "${var.project}-${var.environment}-neptune"
   }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -148,5 +178,20 @@ resource "aws_neptune_cluster_instance" "this" {
 
   tags = {
     Name = "${var.project}-${var.environment}-neptune-${count.index == 0 ? "writer" : "reader-${count.index}"}"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+
+    # DECOMMISSION.md's central rule, implemented rather than only asserted:
+    # "Flipping a deployment-profile toggle must never auto-destroy applied
+    # stateful infrastructure." This module is instantiated with `count`, so a
+    # one-word edit to var.deployment_profile takes that count to 0 and plans a
+    # DESTROY of everything below. prevent_destroy turns that into a hard plan
+    # error — the stop-the-line event the document calls for — instead of a diff
+    # someone skims. Removing this resource for real goes through DECOMMISSION.md:
+    # release it from state first (`terraform state rm`, or a `removed` block with
+    # `lifecycle { destroy = false }`), then decommission it as a separate,
+    # explicitly approved change.
   }
 }

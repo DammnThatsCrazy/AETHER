@@ -1,0 +1,105 @@
+# =============================================================================
+# Aether — Cost Budget Exceptions (time-bounded, reviewed, expiring)
+#
+# The ONLY mechanism by which a deployment profile may exceed the hard ceiling
+# declared in config/deployment_profiles.yaml → <profile>.budget. Enforced by
+# scripts/release/check_cost_model.py.
+#
+# DESIGN INTENT
+# -------------
+# Cost exceptions rot. An exception granted for "one sprint" becomes the
+# permanent shape of the bill because nothing ever forces the conversation
+# again. This file is built so that cannot happen:
+#
+#   1. `expires` is REQUIRED and must be a real future date. An exception whose
+#      expiry has passed does not quietly stop applying — it FAILS the build.
+#      The overage becomes a hard error the day the clock runs out, so the only
+#      way to keep shipping is to renew it deliberately or fix the cost.
+#   2. There is no "permanent", "indefinite" or "until further notice" state to
+#      write down. The schema has no field for it.
+#   3. `max_duration_days` caps how long any single grant may run, and
+#      production-lean's cap is shorter than everyone else's.
+#   4. A production-lean exception may not be blanket-scoped: it must name the
+#      resources it covers and put a number on the overage it authorises. An
+#      entry with `affected_resources: [all]` (or empty) is REJECTED. This is
+#      the structural block on "production-lean is just expensive now".
+#
+# All four rules are enforced in code, not by review convention.
+#
+# HOW A GRANT IS APPLIED
+# ----------------------
+# An active, unexpired exception raises the effective hard ceiling for its
+# profile by `estimated_amount` — and only by that amount. It does not disable
+# the gate. If actual modelled cost exceeds ceiling + estimated_amount, the
+# build still fails, so an under-stated estimate buys nothing.
+#
+# ADDING ONE
+# ----------
+# Every field below is required. `owner` and `approver` must be different
+# people: the person who needs the overage cannot be the person who signs it
+# off. `follow_up_issue` must point at the tracked work that removes the need.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/cost_exceptions.yaml
+
+# --- Structural policy. check_cost_model.py reads these; it does not hardcode
+# --- them, so tightening the policy is a data change with a visible diff.
+policy:
+  # Hard cap on the lifetime of any single exception, by profile class.
+  max_duration_days:
+    default: 90
+    # production-lean is the founding-tenant production budget and the one that
+    # actually constrains the business. Its grants expire in a single quarter's
+    # worth of sprints, not a quarter.
+    production-lean: 30
+
+  # Profiles that may never hold a blanket exception. For these, an entry must
+  # name concrete resources and a concrete amount.
+  no_blanket_exception_profiles:
+    - production-lean
+
+  # Tokens that would make an exception blanket-scoped. Rejected outright for
+  # the profiles listed above. Present as data so the check cannot drift from
+  # the documented intent.
+  blanket_scope_tokens:
+    - all
+    - "*"
+    - any
+    - everything
+    - all_resources
+
+  # An exception must authorise a bounded amount. Zero or negative is a
+  # malformed grant, and an unbounded one cannot be expressed at all.
+  max_estimated_amount:
+    default: 500.0
+    production-lean: 100.0
+
+  # owner and approver must differ — no self-approval.
+  require_distinct_approver: true
+
+# --- Active exceptions -------------------------------------------------------
+#
+# EMPTY BY DESIGN. Aether's production-lean plan is expected to sit inside its
+# $200/month hard ceiling on the fixed baseline with room to spare. If this list
+# is not empty, the platform is knowingly over budget and the entries below say
+# exactly by how much, until when, and who agreed to it.
+#
+# Template — copy, fill every field, delete nothing:
+#
+#   - id: COST-EX-0001                 # unique, stable, referenced in the report
+#     profile: production-lean         # must be a profile in deployment_profiles.yaml
+#     reason: >-                       # why the overage is unavoidable right now
+#       One-sentence justification a finance reviewer would accept.
+#     estimated_amount: 35.00          # USD/month of headroom this grant adds
+#     owner: platform@aether           # who is carrying the overage
+#     approver: cto@aether             # who signed it off; must differ from owner
+#     created: 2026-07-25              # ISO date, not in the future
+#     expires: 2026-08-24              # ISO date, future, within max_duration_days
+#     affected_resources:              # concrete; never [all] for production-lean
+#       - module.aurora.aws_rds_cluster.this
+#     mitigation: >-                   # what makes the exception unnecessary
+#       The concrete change that removes this cost, not "we will monitor it".
+#     follow_up_issue: FT-9-TERRAFORM-PROFILES   # tracked work item or issue URL
+#
+exceptions: []

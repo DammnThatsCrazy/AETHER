@@ -297,6 +297,21 @@ services:
     command: ["python", "-m", "services.runtime.run_role", "measurement-worker"]
     restart: unless-stopped
 
+  # Semantic classification runs in-process here (never over HTTP): this role
+  # owns the semantic-classification and semantic-identity-restatement
+  # consumers in services/runtime/consumer_specs.py.
+  semantic-worker:
+    build: *backend-build
+    profiles: ["workers", "full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: semantic-worker
+    command: ["python", "-m", "services.runtime.run_role", "semantic-worker"]
+    restart: unless-stopped
+
   materializer:
     build: *backend-build
     profiles: ["workers", "full"]

@@ -175,7 +175,8 @@ def test_runtime_config_defaults():
         assert rc.is_all_role is True
         assert rc.is_api_role is False
         assert rc.allowed_roles == settings_mod.RUNTIME_ROLES
-        assert len(settings_mod.RUNTIME_ROLES) == 10
+        # api + 8 worker roles + "all" + the "lean-worker" execution group.
+        assert len(settings_mod.RUNTIME_ROLES) == 11
 
 
 # ---------------------------------------------------------------------------

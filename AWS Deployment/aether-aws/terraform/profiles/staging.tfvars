@@ -9,8 +9,9 @@ deployment_profile = "staging"
 # Root default is production — staging must say so explicitly.
 environment = "staging"
 
-# Network — single shared NAT, no HA (cost).
-enable_nat_gateway_ha = false
+# Network — no NAT Gateway at all. Rehearsal traffic egresses via a public IP
+# on the task ENI, so staging pays nothing for NAT while it is awake.
+network_egress_mode = "public_ip"
 
 # Aurora Serverless v2 — auto-pause when idle (min ACU 0).
 aurora_min_acu = 0

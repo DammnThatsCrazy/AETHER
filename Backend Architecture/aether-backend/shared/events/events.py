@@ -28,11 +28,12 @@ EventHandler = Callable[["Event"], Awaitable[None]]
 
 # Optional aiokafka import
 try:
-    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition
     KAFKA_AVAILABLE = True
 except ImportError:
     AIOKafkaProducer = None  # type: ignore[misc, assignment]
     AIOKafkaConsumer = None  # type: ignore[misc, assignment]
+    TopicPartition = None  # type: ignore[misc, assignment]
     KAFKA_AVAILABLE = False
 
 # Optional boto3 import (used for SQS backend)
@@ -62,6 +63,43 @@ def _sqs_queue_url() -> str:
 
 def _sns_topic_arn() -> str:
     return os.getenv("SNS_TOPIC_ARN", "")
+
+
+def _sqs_dlq_queue_url() -> str:
+    """Process-wide dead-letter queue URL.
+
+    The single-queue fallback, matching ``SQS_QUEUE_URL``: correct for a
+    dedicated task hosting one queue-bound role. A consolidated process hosting
+    several roles needs one dead-letter destination per role and passes it
+    explicitly to :class:`EventConsumer` instead (see ``dlq_queue_url``).
+    """
+    return os.getenv("SQS_DLQ_QUEUE_URL", "")
+
+
+class DLQPublishError(RuntimeError):
+    """A durable dead-letter publish could not be completed.
+
+    Raised rather than swallowed so the caller leaves the source message
+    unacknowledged: redelivery is recoverable, a silently dropped poison event
+    is not.
+    """
+
+
+class ConsumerClientTornDown(RuntimeError):
+    """A broker client vanished while messages were still unacknowledged.
+
+    Kept distinct from the generic per-message failure because the two need
+    opposite responses. A transient broker or handler error is worth logging and
+    moving past — the message stays unacknowledged and redelivers. A torn-down
+    client means the acknowledgement itself (SQS ``delete_message`` / Kafka
+    ``commit``) can no longer be issued *for work that already succeeded*, so
+    every message the loop is holding will redeliver and be applied twice.
+
+    It used to surface as ``AttributeError: 'NoneType' object has no attribute
+    'delete_message'``, get swallowed by the per-message ``except Exception``,
+    and turn every shutdown into a batch of duplicates. Raising a named type
+    makes that condition impossible to mistake for a routine error.
+    """
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -753,7 +791,9 @@ class EventConsumer:
     MAX_CONCURRENT = 10
     MAX_HANDLER_RETRIES = 2
 
-    def __init__(self, group_id: str = "") -> None:
+    def __init__(
+        self, group_id: str = "", queue_url: str = "", dlq_queue_url: str = "",
+    ) -> None:
         # Include AETHER_ENV in the group_id so staging/production consumer groups
         # never interfere with each other.
         _env = os.getenv("AETHER_ENV", "local")
@@ -762,18 +802,74 @@ class EventConsumer:
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
         self._dlq: list[Event] = []
         self._kafka_consumer: Optional[Any] = None
+        # Durable-DLQ producer, created lazily on the first dead-letter in Kafka
+        # mode. Declared here because _send_to_dlq reads it: when the attribute
+        # did not exist the read raised AttributeError inside the DLQ try block
+        # and the event silently degraded to the in-memory list.
+        self._kafka_producer: Optional[Any] = None
         self._sqs_client: Optional[Any] = None
         self._sqs_queue_url: str = ""
+        # Explicit queue binding. A process hosting several logical roles needs
+        # one consumer per role queue, which the single SQS_QUEUE_URL env var
+        # cannot express; when set, this wins over the environment.
+        self._explicit_queue_url: str = queue_url
+        # Explicit dead-letter binding, resolved per role by the consumer runner
+        # for exactly the same reason: SQS_DLQ_QUEUE_URL names one queue, and a
+        # consolidated process dead-letters on behalf of several roles that each
+        # own a separate dead-letter queue.
+        self._explicit_dlq_url: str = dlq_queue_url
         self._group_id = group_id
         self._running = False
         self._mode = "uninitialized"
+        # Handlers currently executing. Drives bounded drain on shutdown: a
+        # consumer that has stopped acquiring is not yet quiesced.
+        self._in_flight = 0
+        # Messages pulled off the broker but not yet acknowledged (SQS delete /
+        # Kafka commit). Deliberately separate from ``_in_flight``, which drops
+        # back to zero the instant a handler returns — i.e. *before* the
+        # acknowledgement is issued. A drain that waits only on ``_in_flight``
+        # tears the client down inside that window and converts the whole batch
+        # into duplicates, so the drain waits on both.
+        self._unacked = 0
 
     def subscribe(self, topic: Topic, handler: EventHandler) -> None:
         self._handlers.setdefault(topic, []).append(handler)
         logger.info(f"Subscribed handler to {topic.value}")
 
+    def resize_concurrency(self, max_concurrent: int) -> None:
+        """Resize the backpressure semaphore to ``max_concurrent``.
+
+        ``MAX_CONCURRENT`` is read once in ``__init__`` to size the semaphore,
+        so callers that tune it afterwards (per-group backpressure) must resize
+        the semaphore too or the enforced limit silently stays at the class
+        default. Refuses to resize once events are in flight, where swapping the
+        semaphore would lose the outstanding permits.
+        """
+        if max_concurrent < 1:
+            raise ValueError(f"max_concurrent must be >= 1, got {max_concurrent}")
+        if self._in_flight:
+            raise RuntimeError(
+                f"cannot resize concurrency with {self._in_flight} event(s) in flight"
+            )
+        self.MAX_CONCURRENT = max_concurrent
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+
     async def start(self) -> None:
-        """Start consuming from Kafka, SQS, or stay in in-memory mode."""
+        """Start consuming from Kafka, SQS, or stay in in-memory mode.
+
+        Rebinding is safe: any client left over from a previous run is torn down
+        first. That is not hygiene, it is correctness. ``consume_loop``'s
+        ``finally`` clears ``_running`` but leaves ``_kafka_consumer`` bound, and
+        the supervised restart path re-enters ``start()`` on exactly that state.
+        Overwriting the attribute without stopping the old consumer leaves it
+        heartbeating: the group keeps a member that still owns partitions and
+        never fetches from them, so those partitions stall until the session
+        times out — or forever, since the zombie keeps the session alive. The
+        SQS equivalent only leaks a boto3 client (harmless but unbounded across
+        restarts), and is released on the same path.
+        """
+        await self._release_consumer_clients()
+
         bootstrap = _kafka_bootstrap()
         topics = [t.value for t in self._handlers.keys()]
         if not topics:
@@ -781,12 +877,34 @@ class EventConsumer:
             logger.info("EventConsumer: no subscriptions, in-memory mode")
             return
 
-        if _event_broker() == "sns_sqs" and BOTO3_EVENTS_AVAILABLE and _sqs_queue_url():
+        # An explicit binding always wins over the process-wide env var: it is
+        # how a consolidated process gives each logical role its own queue.
+        queue_url = self._explicit_queue_url or _sqs_queue_url()
+        broker = _event_broker()
+
+        if broker == "sns_sqs" and not _is_local_env() and not (
+            BOTO3_EVENTS_AVAILABLE and queue_url
+        ):
+            # EVENT_BROKER was explicitly set to sns_sqs but the endpoint or the
+            # client library is missing. Falling through to the Kafka branch
+            # here would silently switch backends: the process would come up
+            # "healthy" against a different bus (or in-memory) while every
+            # event routed to the SQS queue went unconsumed. Fail closed and
+            # say which half is missing. Local/dev keeps the permissive path.
+            missing = "boto3" if not BOTO3_EVENTS_AVAILABLE else "SQS queue URL"
+            raise RuntimeError(
+                f"EVENT_BROKER=sns_sqs but {missing} is unavailable "
+                f"(group_id={self._group_id}). Refusing to fall back to another "
+                "broker in a non-local environment; set SQS_QUEUE_URL / "
+                "SQS_ROLE_QUEUE_URLS or install boto3."
+            )
+
+        if broker == "sns_sqs" and BOTO3_EVENTS_AVAILABLE and queue_url:
             loop = asyncio.get_event_loop()
             self._sqs_client = await loop.run_in_executor(
                 None, lambda: _boto3_events.client("sqs")  # type: ignore[union-attr]
             )
-            self._sqs_queue_url = _sqs_queue_url()
+            self._sqs_queue_url = queue_url
             self._mode = "sqs"
             self._running = True
             logger.info(f"EventConsumer started (SQS: {self._sqs_queue_url})")
@@ -817,34 +935,125 @@ class EventConsumer:
             self._mode = "in-memory"
             logger.info("EventConsumer started (in-memory mode)")
 
+    async def receive_loop(self) -> None:
+        """Run the receive loop matching the mode chosen by :meth:`start`.
+
+        Returns immediately in in-memory mode, where events arrive through
+        direct :meth:`process` calls rather than a broker poll. Callers that
+        supervise this coroutine should treat an early return in a broker mode
+        as an abnormal exit, not as completion.
+        """
+        if self._mode == "kafka":
+            await self.consume_loop()
+        elif self._mode == "sqs":
+            await self._sqs_receive_loop()
+
     async def consume_loop(self) -> None:
-        """Main consume loop for Kafka mode. Run as asyncio task."""
+        """Main consume loop for Kafka mode. Run as asyncio task.
+
+        Commit semantics, stated exactly because the previous shape contradicted
+        the promise made at :meth:`start` (``enable_auto_commit=False`` so that
+        "a crash before that point deliberately causes redelivery rather than
+        silent loss"):
+
+        ``AIOKafkaConsumer.commit()`` with no arguments commits ``position()``,
+        which is the offset the *fetcher* has advanced to — not the offset of the
+        message just handled. Catching a per-message exception and continuing
+        therefore committed straight past the failed message on the next
+        success, permanently. The failure was logged, the event was gone, and
+        nothing else in the system knew.
+
+        A message this loop cannot acknowledge now ends the loop instead. The
+        offset is not committed, the consumer is rewound to it, and the
+        supervised restart re-fetches from the last committed offset — the
+        redelivery the design comment always claimed. Poison messages do not
+        spin here: :meth:`_dispatch` exhausts its retries and dead-letters, and
+        only a failure of *that* path (a dead DLQ transport) reaches this
+        handler, where stalling the partition is strictly better than dropping.
+        """
         if not self._kafka_consumer:
             return
         try:
             async for msg in self._kafka_consumer:
+                # Held across the commit, not just the handler: a message whose
+                # handler has returned but whose offset is not committed is
+                # still unacknowledged, and a drain must wait for it.
+                self._unacked += 1
                 try:
-                    event = Event.deserialize(msg.value)
-                    await self.process(event)
+                    try:
+                        event = Event.deserialize(msg.value)
+                        await self.process(event)
+                    except Exception as exc:
+                        metrics.increment(
+                            "events_consume_failed", labels={"group": self._group_id},
+                        )
+                        logger.error(
+                            "Kafka message NOT acknowledged and loop stopping "
+                            "(topic=%s partition=%s offset=%s group=%s): %s: %s",
+                            getattr(msg, "topic", "?"), getattr(msg, "partition", "?"),
+                            getattr(msg, "offset", "?"), self._group_id,
+                            type(exc).__name__, exc,
+                        )
+                        self._rewind_to(msg)
+                        return
                     await self._kafka_consumer.commit()
-                except Exception as e:
-                    logger.error(f"Error processing Kafka message: {e}")
+                finally:
+                    self._unacked -= 1
         except Exception as e:
             logger.error(f"Kafka consume loop error: {e}")
         finally:
             self._running = False
 
+    def _rewind_to(self, msg: Any) -> None:
+        """Seek this consumer back to ``msg`` so the next fetch re-reads it.
+
+        Best-effort and deliberately non-fatal. Not committing is what actually
+        guarantees redelivery after a rebalance or restart; the seek is what
+        makes the redelivery happen in *this* process too, because the fetcher's
+        in-memory position has already moved past the failed offset.
+        """
+        consumer = self._kafka_consumer
+        if consumer is None or TopicPartition is None:
+            return
+        try:
+            consumer.seek(
+                TopicPartition(msg.topic, msg.partition), msg.offset,
+            )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning(
+                "Kafka rewind to offset %s failed (%s: %s); redelivery now "
+                "depends on the uncommitted offset alone",
+                getattr(msg, "offset", "?"), type(exc).__name__, exc,
+            )
+
     async def _sqs_receive_loop(self) -> None:
-        """Long-poll SQS receive loop. Run as asyncio task."""
+        """Long-poll SQS receive loop. Run as asyncio task.
+
+        A message is deleted only after :meth:`process` returns successfully.
+        Anything else — handler exhaustion that could not be dead-lettered, a
+        malformed body, a torn-down client — leaves the receipt untouched so the
+        message becomes visible again and, after ``maxReceiveCount`` receives,
+        is moved to the queue's redrive target by SQS itself.
+        """
         if not self._sqs_client:
             return
         loop = asyncio.get_event_loop()
         try:
             while self._running:
+                # Bind the client once per poll. Every call in this iteration
+                # then uses the same object even if a concurrent shutdown clears
+                # the attribute, so an acknowledgement can never fail merely
+                # because tear-down raced it.
+                client = self._sqs_client
+                if client is None:
+                    raise ConsumerClientTornDown(
+                        f"SQS client released while the receive loop was still "
+                        f"running (group={self._group_id})"
+                    )
                 try:
                     response = await loop.run_in_executor(
                         None,
-                        lambda: self._sqs_client.receive_message(  # type: ignore[union-attr]
+                        lambda: client.receive_message(
                             QueueUrl=self._sqs_queue_url,
                             MaxNumberOfMessages=10,
                             WaitTimeSeconds=20,
@@ -853,43 +1062,99 @@ class EventConsumer:
                     messages = response.get("Messages", [])
                     for msg in messages:
                         receipt_handle = msg["ReceiptHandle"]
+                        # Held across the delete, not just the handler: between
+                        # process() returning and the receipt being deleted the
+                        # message is still unacknowledged, and that window is
+                        # exactly where a drain used to tear the client down.
+                        self._unacked += 1
                         try:
-                            event = Event.deserialize(msg["Body"])
-                            await self.process(event)
-                            await loop.run_in_executor(
-                                None,
-                                lambda rh=receipt_handle: self._sqs_client.delete_message(  # type: ignore[union-attr]
-                                    QueueUrl=self._sqs_queue_url,
-                                    ReceiptHandle=rh,
-                                ),
-                            )
-                        except Exception as e:
-                            logger.error(f"Error processing SQS message: {e}")
+                            try:
+                                event = Event.deserialize(msg["Body"])
+                                await self.process(event)
+                            except Exception as e:
+                                # Not deleted: the receipt expires, SQS
+                                # redelivers, and the queue's redrive policy
+                                # quarantines it once maxReceiveCount is
+                                # reached. Losing it here would be the one
+                                # unrecoverable outcome.
+                                logger.error(f"Error processing SQS message: {e}")
+                                continue
+                            await self._delete_message(loop, client, receipt_handle)
+                        finally:
+                            self._unacked -= 1
+                except ConsumerClientTornDown:
+                    # Never folded into the generic handler below: this is the
+                    # duplicate-generating failure, not a retryable one.
+                    raise
                 except Exception as e:
                     logger.error(f"SQS receive loop error: {e}")
         finally:
             self._running = False
 
+    async def _delete_message(self, loop: Any, client: Any, receipt_handle: str) -> None:
+        """Acknowledge one successfully processed message.
+
+        Separated out so a failure *here* is never mistaken for a handler
+        failure: the work is already done, so a lost acknowledgement means the
+        event is applied a second time on redelivery, not that it was skipped.
+        """
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: client.delete_message(
+                    QueueUrl=self._sqs_queue_url,
+                    ReceiptHandle=receipt_handle,
+                ),
+            )
+        except AttributeError as exc:
+            # The client was torn down under us. Previously swallowed one frame
+            # up, which is precisely how a drain produced a full batch of
+            # duplicates on every deploy.
+            raise ConsumerClientTornDown(
+                f"SQS client torn down before the message could be deleted "
+                f"(group={self._group_id}): {exc}"
+            ) from exc
+        except Exception as exc:
+            metrics.increment(
+                "events_ack_failed", labels={"group": self._group_id},
+            )
+            logger.error(
+                "SQS delete_message FAILED after successful processing "
+                "(group=%s): %s: %s — the event will be redelivered and "
+                "reprocessed; handlers must stay idempotent",
+                self._group_id, type(exc).__name__, exc,
+            )
+
     async def process(self, event: Event) -> None:
         """Process an event with concurrency limiting and retry."""
         async with self._semaphore:
-            handlers = self._handlers.get(event.topic, [])
-            for handler in handlers:
-                success = False
-                while not success:
-                    try:
-                        await handler(event)
-                        metrics.increment("events_processed", labels={"topic": event.topic.value})
-                        success = True
-                    except Exception as e:
-                        logger.error(f"Handler failed for event {event.event_id}: {e}")
-                        metrics.increment("events_handler_failed", labels={"topic": event.topic.value})
-                        if event.retry_count < self.MAX_HANDLER_RETRIES:
-                            event.retry_count += 1
-                            logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
-                        else:
-                            await self._send_to_dlq(event, str(e))
-                            break
+            # Counted inside the semaphore so ``in_flight`` reflects handlers
+            # actually executing, which is what a bounded drain must wait on.
+            self._in_flight += 1
+            try:
+                await self._dispatch(event)
+            finally:
+                self._in_flight -= 1
+
+    async def _dispatch(self, event: Event) -> None:
+        """Run every subscribed handler for ``event`` with bounded retry."""
+        handlers = self._handlers.get(event.topic, [])
+        for handler in handlers:
+            success = False
+            while not success:
+                try:
+                    await handler(event)
+                    metrics.increment("events_processed", labels={"topic": event.topic.value})
+                    success = True
+                except Exception as e:
+                    logger.error(f"Handler failed for event {event.event_id}: {e}")
+                    metrics.increment("events_handler_failed", labels={"topic": event.topic.value})
+                    if event.retry_count < self.MAX_HANDLER_RETRIES:
+                        event.retry_count += 1
+                        logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
+                    else:
+                        await self._send_to_dlq(event, str(e))
+                        break
 
     async def _send_to_dlq(self, event: Event, error: str) -> None:
         """Send failed events to dead-letter queue.
@@ -923,42 +1188,194 @@ class EventConsumer:
             self._dlq.append(dlq_event)
             return
 
-        # Production/staging: publish to durable DLQ topic on Kafka/SQS
+        # Production/staging: publish to the durable DLQ topic on Kafka/SQS.
+        #
+        # This publish either succeeds or raises. It must never degrade to the
+        # in-memory list: that list dies with the process, so a "handled" DLQ
+        # event would be indistinguishable from a lost one. Raising propagates
+        # out of process() into the receive loop, which then does NOT commit the
+        # Kafka offset / delete the SQS receipt — the event is redelivered
+        # instead of being acknowledged as safely dead-lettered.
         try:
-            if self._kafka_producer:
-                await self._kafka_producer.send_and_wait(
-                    Topic.DEAD_LETTER.value, dlq_event.serialize()
-                )
-            elif self._sqs_client:
-                import asyncio as _asyncio
-                loop = _asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    None,
-                    lambda: self._sqs_client.send_message(  # type: ignore[union-attr]
-                        QueueUrl=self._sqs_queue_url,
-                        MessageBody=dlq_event.serialize(),
-                    ),
-                )
-            else:
-                # Fallback: log with full payload for manual recovery
-                logger.error(
-                    "DLQ publish unavailable — dead-lettered event: %s",
-                    dlq_event.serialize(),
-                )
-                self._dlq.append(dlq_event)
+            await self._publish_dlq_event(dlq_event)
         except Exception as exc:
+            metrics.increment(
+                "events_dlq_publish_failed", labels={"topic": event.topic.value},
+            )
+            # Full payload in the log is the last-resort recovery channel; it is
+            # in addition to the raise below, never instead of it.
             logger.error(
-                "Failed to publish DLQ event %s: %s — logging for manual recovery",
-                event.event_id, exc,
+                "Durable DLQ publish FAILED for event %s (%s: %s) — "
+                "event will be redelivered, not acknowledged. Payload: %s",
+                event.event_id, type(exc).__name__, exc, dlq_event.serialize(),
             )
             self._dlq.append(dlq_event)
+            raise DLQPublishError(
+                f"durable DLQ publish failed for event {event.event_id}: {exc}"
+            ) from exc
+
+    async def _publish_dlq_event(self, dlq_event: Event) -> None:
+        """Publish ``dlq_event`` to the durable dead-letter destination.
+
+        Raises on any failure — see :meth:`_send_to_dlq` for why degrading is
+        not an option here.
+        """
+        if self._mode == "kafka":
+            producer = await self._ensure_dlq_producer()
+            await producer.send_and_wait(Topic.DEAD_LETTER.value, dlq_event.serialize())
+            return
+        if self._mode == "sqs" and self._sqs_client:
+            target = self._resolve_dlq_target()
+            loop = asyncio.get_event_loop()
+            client = self._sqs_client
+            await loop.run_in_executor(
+                None,
+                lambda: client.send_message(
+                    QueueUrl=target,
+                    MessageBody=dlq_event.serialize(),
+                ),
+            )
+            return
+        raise RuntimeError(
+            f"no durable DLQ transport available (mode={self._mode})"
+        )
+
+    def _resolve_dlq_target(self) -> str:
+        """Resolve the SQS dead-letter destination, or refuse to publish.
+
+        There is exactly one rule here and it is absolute: **a dead letter is
+        never sent to the queue it came from.** The previous fallback
+        (``_sqs_dlq_queue_url() or self._sqs_queue_url``) did precisely that
+        whenever ``SQS_DLQ_QUEUE_URL`` was unset — which was always, because
+        nothing in the deployment set it. The result was total silent loss, not
+        merely a re-poisoning:
+
+        1. the ``aether.dlq`` copy is published onto the *source role queue*;
+        2. the original is deleted, because the DLQ publish "succeeded";
+        3. the next poll receives the ``aether.dlq`` message. No handler
+           subscribes ``Topic.DEAD_LETTER``, so ``_dispatch`` iterates an empty
+           handler list, returns, and the loop deletes it;
+        4. the queue's redrive policy never fires, because redrive counts
+           *receives without deletion* and this message was received once and
+           deleted. ``events_dead_lettered`` had already been incremented, so
+           the dashboards read healthy while the event ceased to exist.
+
+        Refusing instead is strictly recoverable: the raise propagates through
+        :meth:`_send_to_dlq` as :class:`DLQPublishError`, the source message is
+        never deleted, and SQS's own redrive policy moves it to the queue's
+        dead-letter target after ``maxReceiveCount`` receives. Terraform already
+        provisions that per-role dead-letter queue; what it does not yet do is
+        tell the process its URL.
+        """
+        target = self._explicit_dlq_url or _sqs_dlq_queue_url()
+        if not target:
+            raise RuntimeError(
+                "no dead-letter queue configured for SQS mode "
+                f"(group={self._group_id}, queue={self._sqs_queue_url}). "
+                "Set SQS_DLQ_QUEUE_URL, or pass dlq_queue_url= per role via "
+                "SQS_ROLE_DLQ_URLS. Refusing to publish a dead letter onto the "
+                "source queue: the copy would be received once, dropped as an "
+                "unhandled topic, and deleted — the original is already gone."
+            )
+        if target == self._sqs_queue_url:
+            raise RuntimeError(
+                "dead-letter target is the source queue "
+                f"({target}, group={self._group_id}). This is never a valid "
+                "configuration: the dead letter would be re-consumed as an "
+                "unhandled topic and deleted, destroying the event."
+            )
+        return target
+
+    async def _ensure_dlq_producer(self) -> Any:
+        """Lazily create the Kafka producer used for durable dead-lettering.
+
+        ``EventConsumer`` has no producer of its own — the original code read a
+        ``self._kafka_producer`` that ``__init__`` never assigned, so in Kafka
+        mode every durable DLQ publish raised AttributeError, got swallowed by
+        the enclosing except, and quietly fell back to the in-memory list. The
+        consumer now owns a real producer bound to the same bootstrap servers.
+        """
+        if self._kafka_producer is not None:
+            return self._kafka_producer
+        if not KAFKA_AVAILABLE:
+            raise RuntimeError("aiokafka unavailable — cannot publish durable DLQ events")
+        bootstrap = _kafka_bootstrap()
+        if not bootstrap:
+            raise RuntimeError("KAFKA_BOOTSTRAP_SERVERS unset — cannot publish durable DLQ events")
+        producer = AIOKafkaProducer(
+            bootstrap_servers=bootstrap,
+            value_serializer=lambda v: v.encode("utf-8"),
+            # acks=all: a dead-letter that is not durably replicated is worse
+            # than useless, because it reads as successfully quarantined.
+            acks="all",
+            retries=3,
+            request_timeout_ms=30000,
+        )
+        await producer.start()
+        self._kafka_producer = producer
+        logger.info("EventConsumer DLQ producer started (Kafka: %s)", bootstrap)
+        return producer
+
+    def pause(self) -> None:
+        """Stop pulling new work, keeping the broker client bound.
+
+        The first half of a correct drain. ``stop()`` cannot serve this purpose
+        because it releases the client, and the client is what acknowledges the
+        work already in flight — calling it first is what made every drain emit
+        a batch of duplicates. Handlers already running are untouched; the
+        receive loop exits after the poll it is currently blocked on.
+        """
+        self._running = False
+
+    async def _release_consumer_clients(self) -> None:
+        """Release the broker clients this consumer *reads* through.
+
+        Deliberately does not touch ``_kafka_producer``: that is the durable DLQ
+        producer, it is not a consumer binding, and re-creating it per restart
+        would add a connection churn that buys nothing. Failures are logged, not
+        raised — this runs on both the restart and the shutdown path, and a
+        client that cannot be closed cleanly must not block either.
+        """
+        if self._kafka_consumer is not None:
+            consumer, self._kafka_consumer = self._kafka_consumer, None
+            try:
+                await consumer.stop()
+            except Exception as exc:
+                logger.warning(
+                    "Kafka consumer stop failed during release (group=%s) %s: %s",
+                    self._group_id, type(exc).__name__, exc,
+                )
+        if self._sqs_client is not None:
+            client, self._sqs_client = self._sqs_client, None
+            close = getattr(client, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception as exc:
+                    logger.warning(
+                        "SQS client close failed during release (group=%s) %s: %s",
+                        self._group_id, type(exc).__name__, exc,
+                    )
 
     async def stop(self) -> None:
+        """Release every client. Callers with in-flight work must drain first.
+
+        Anything still unacknowledged when this returns *will* be redelivered:
+        the acknowledgement path is gone. :meth:`pause` plus a wait on
+        :attr:`unacked` is the graceful sequence; see ``ConsumerRunner.drain``.
+        """
         self._running = False
-        if self._kafka_consumer:
-            await self._kafka_consumer.stop()
-            self._kafka_consumer = None
-        self._sqs_client = None
+        if self._unacked:
+            logger.warning(
+                "EventConsumer stopping with %d unacknowledged message(s) "
+                "(group=%s) — they will be redelivered",
+                self._unacked, self._group_id,
+            )
+        await self._release_consumer_clients()
+        if self._kafka_producer:
+            # Flushes buffered dead-letters before the process exits.
+            await self._kafka_producer.stop()
+            self._kafka_producer = None
         logger.info("EventConsumer stopped")
 
     @property
@@ -968,3 +1385,38 @@ class EventConsumer:
     @property
     def mode(self) -> str:
         return self._mode
+
+    @property
+    def is_running(self) -> bool:
+        """True while a broker receive loop is expected to be pulling."""
+        return self._running
+
+    @property
+    def in_flight(self) -> int:
+        """Handlers currently executing; 0 means no handler is running."""
+        return self._in_flight
+
+    @property
+    def unacked(self) -> int:
+        """Messages received but not yet deleted/committed.
+
+        Fully quiesced means ``in_flight == 0 and unacked == 0``. ``in_flight``
+        alone is not sufficient — it returns to zero while the acknowledgement
+        for that same message is still outstanding.
+        """
+        return self._unacked
+
+    @property
+    def dlq_queue_url(self) -> str:
+        """The dead-letter destination this consumer will publish to ('' if none)."""
+        return self._explicit_dlq_url or _sqs_dlq_queue_url()
+
+    @property
+    def group_id(self) -> str:
+        """The consumer group this instance is bound to."""
+        return self._group_id
+
+    @property
+    def queue_url(self) -> str:
+        """The bound SQS queue URL ('' outside SQS mode)."""
+        return self._sqs_queue_url

@@ -40,6 +40,32 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | measurement integrity plane changed | metric registry contract (TS/Py/doc mirrors), `MEASUREMENT_RESTATEMENT.md`, measurement tests |
 | workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
 | Aether/Kyber production data source changed | `scripts/validate_frontend_data_truth.py` source guardrail and explicit production-bundle scan |
+| deployment profile / Terraform topology changed | per-profile plan tests, plan-policy and cost-model gates, plan fixtures, delivery-topology validator, profile docs |
+
+## Deployment profile ownership
+
+A change under `AWS Deployment/aether-aws/terraform/**`, or to
+`config/deployment_profiles.yaml`, `config/runtime_deployment.yaml`,
+`config/terraform_resource_contracts.yaml` or `config/aws_price_book.yaml`, is a
+change to the **shape of the plan that would be applied**. The profile selector
+drives real Terraform module cardinality, so editing any of these can silently
+add a forbidden resource, change ECS service cardinality, or move the fixed
+monthly cost past its ceiling.
+
+The `deployment_profiles` category therefore requires these commands to move
+with the source:
+
+| Command | What it protects |
+| --- | --- |
+| `make test-terraform-profiles` | `terraform validate` plus the provider-mocked per-profile plan tests, asserting the planned module graph rather than the locals that produced it |
+| `make validate-terraform-profile-policy` | a real `terraform show -json` checked against `config/terraform_resource_contracts.yaml` — forbidden resources at zero, required resources present, cardinality and network mode matching the profile |
+| `make validate-cost-model` | the numeric budget: fixed baseline against the profile's target and hard ceiling, priced from the pinned `config/aws_price_book.yaml`, fail-closed on any unpriceable fixed resource |
+| `make validate-delivery-topology` | every worker role owned by exactly one service in every profile, immutable image digests, no mutable `latest`, no default-to-production |
+| `make test-runtime-topology` | execution-group packing — the consolidated lean/staging task and the dedicated scale/enterprise services |
+
+Regenerate a stale plan fixture under `tests/fixtures/terraform_plans/` rather
+than relaxing an assertion; those fixtures are the only evidence these gates
+have in the absence of AWS credentials.
 
 ## Single-owner generated docs rule
 

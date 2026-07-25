@@ -6,7 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5177",
-    "build": "tsc --noEmit && vite build",
+    "build": "VITE_DEMO_ENV=local-mocked npm run build:profile",
+    "build:profile": "tsc --noEmit && vite build",
+    "build:local-mocked": "VITE_DEMO_ENV=local-mocked npm run build:profile",
+    "build:demo-static": "VITE_DEMO_ENV=demo-static npm run build:profile",
+    "build:demo-live": "VITE_DEMO_ENV=demo-live npm run build:profile",
     "preview": "vite preview --port 5177",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",

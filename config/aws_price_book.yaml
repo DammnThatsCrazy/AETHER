@@ -1,0 +1,801 @@
+# =============================================================================
+# Aether — AWS Price Book (pinned, deterministic, region-scoped)
+#
+# The numeric input to scripts/release/check_cost_model.py. Given a resource
+# inventory derived from a Terraform plan, this table decides what each resource
+# costs per month so a release can be gated on a currency figure rather than on
+# a prose estimate.
+#
+# WHY A PINNED TABLE AND NOT A PRICING API
+# ----------------------------------------
+# A cost gate must be deterministic: the same plan must score the same on every
+# CI run, and a price change upstream must arrive as a reviewed diff to this
+# file, not as a surprise red build. Infracost is the natural second opinion but
+# it requires an API key and network egress, so it can only ever run as a
+# credential-gated advisory job. THIS FILE IS THE GATE.
+#
+# PRECISION — READ THIS BEFORE TRUSTING A NUMBER
+# ----------------------------------------------
+# This is a release gate, not a billing system. It answers "is this plan roughly
+# a $120/month plan or roughly a $900/month plan", which is the only question
+# that matters when the ceiling is $200. It is deliberately NOT accurate to the
+# cent, and the generated report says so. Specifically it does not model:
+#   - Savings Plans, Reserved Instances, Compute Savings Plans, or Spot.
+#   - The 12-month new-account free tier. Every price here is the post-free-tier
+#     on-demand rate, so the model OVER-estimates a new account. Over-estimating
+#     is the safe direction for a ceiling.
+#     The ONLY exception is the handful of always-free allowances written down
+#     explicitly as `free_allowance` below (10 CloudWatch alarms, 3 dashboards).
+#     Those are permanent account-level allowances rather than a new-account
+#     grant, so ignoring them would over-state a steady-state bill instead of a
+#     first-month one. They are declared per entry precisely so "no free tier"
+#     never has to be read as a blanket claim the table does not keep.
+#   - Tiered volume discounts (S3, CloudFront, data transfer all step down with
+#     volume). Rates below are the FIRST, most expensive tier.
+#   - Cross-AZ / cross-region data transfer, which depends on runtime traffic
+#     shape rather than on plan shape.
+#   - Marketplace, support plans, or taxes.
+# Where a figure is an approximation rather than a published list price it is
+# flagged inline with `approximate: true` and a note.
+#
+# COST CLASSES
+# ------------
+#   fixed           — accrues on the clock whether or not a request arrives.
+#                     Fully determined by the plan, therefore gate-able. An
+#                     unpriceable fixed resource is a HARD ERROR in the model;
+#                     it is never silently treated as costing zero.
+#   usage_variable  — driven by tenant traffic. Modelled as low/expected/high
+#                     scenarios and reported, but never used as a pass/fail
+#                     ceiling because the plan cannot determine it.
+#   zero            — genuinely free control-plane objects (IAM, security
+#                     groups, listeners). Enumerated explicitly so that an
+#                     unrecognised type stays an error instead of a $0 guess.
+#
+# ACCRUAL
+# -------
+#   hourly  — billed per hour of existence. The model multiplies by the profile's
+#             effective hours: pricing_hours_per_month for always-on profiles, or
+#             maximum_scheduled_awake_hours_per_month for wake/sleep profiles.
+#   monthly — billed as a flat monthly amount regardless of uptime (KMS keys,
+#             Secrets Manager secrets, alarms). Never prorated by awake hours,
+#             because AWS does not prorate them either.
+#
+# MAINTENANCE
+# -----------
+# Re-capture from the AWS public price list pages, bump `captured`, and diff the
+# generated cost-report.json for the reference plan before merging.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/aws_price_book.yaml
+
+# Region scoping is mandatory: us-east-1 is the cheapest US region and every
+# figure below is specific to it. A profile whose budget declares a different
+# region will FAIL the model rather than be priced against the wrong table.
+region: us-east-1
+currency: USD
+
+pricing_source: >-
+  AWS public on-demand price list pages (aws.amazon.com/*/pricing), us-east-1,
+  Linux/x86 or Graviton as noted, no Savings Plan or Reserved Instance applied.
+captured: "2026-07-25"
+capture_method: manual transcription, reviewed in PR
+precision: >-
+  Order-of-magnitude release gate. Accurate enough to separate a compliant lean
+  plan from a non-compliant one; NOT a billing forecast and not authoritative
+  for finance. Post-free-tier rates, first (most expensive) volume tier.
+
+# Default month length. A profile's budget.pricing_hours_per_month overrides it.
+default_hours_per_month: 730
+
+# ---------------------------------------------------------------------------
+# Zero-cost resource types.
+#
+# Enumerated deliberately. The model fails closed on any type it does not
+# recognise, so this list is what keeps that failure signal-bearing instead of
+# noise. Entries may be exact type names or fnmatch globs. Adding a glob here is
+# a cost decision and needs the same review as adding a price.
+# ---------------------------------------------------------------------------
+zero_cost_types:
+  # Identity and policy objects — free; the cost lives in what they permit.
+  - aws_iam_*
+  # Networking control plane. NOTE: aws_nat_gateway, aws_eip and interface
+  # aws_vpc_endpoint are NOT free and are priced as fixed resources below.
+  - aws_vpc
+  - aws_subnet
+  - aws_route_table
+  - aws_route_table_association
+  - aws_route
+  - aws_internet_gateway
+  - aws_security_group
+  - aws_security_group_rule
+  - aws_network_acl*
+  - aws_default_*
+  # Load balancer sub-objects. The billable unit is aws_lb itself.
+  - aws_lb_listener
+  - aws_lb_listener_rule
+  - aws_lb_target_group
+  - aws_lb_target_group_attachment
+  # ECS control plane. The billable unit is the Fargate task (aws_ecs_service).
+  - aws_ecs_cluster
+  - aws_ecs_cluster_capacity_providers
+  - aws_ecs_task_definition
+  # Storage/queue attachments and policies — the parent resource carries cost.
+  - aws_s3_bucket_policy
+  - aws_s3_bucket_versioning
+  - aws_s3_bucket_public_access_block
+  - aws_s3_bucket_server_side_encryption_configuration
+  - aws_s3_bucket_lifecycle_configuration
+  - aws_s3_bucket_ownership_controls
+  - aws_s3_bucket_cors_configuration
+  - aws_s3_bucket_notification
+  - aws_sqs_queue_policy
+  - aws_sns_topic_policy
+  - aws_sns_topic_subscription
+  - aws_secretsmanager_secret_version
+  # Rotation is configuration attached to a secret, not a billable object. The
+  # secret itself is priced below at $0.40/secret-month, and the rotation
+  # Lambda's invocations bill as Lambda (usage-variable). Listing it here is a
+  # deliberate assertion that it is free, not an omission — an unlisted type is
+  # a hard failure by design, which is how this gap was found.
+  - aws_secretsmanager_secret_rotation
+  - aws_kms_alias
+  - aws_db_subnet_group
+  - aws_elasticache_subnet_group
+  - aws_rds_cluster_parameter_group
+  - aws_db_parameter_group
+  # Certificates and DNS records. ACM public certs are free; hosted zones are
+  # priced below. Alias records to AWS targets are free.
+  - aws_acm_certificate
+  - aws_acm_certificate_validation
+  - aws_route53_record
+  # Application Auto Scaling is free; you pay for the capacity it adds, which
+  # is already priced through aws_ecs_service's Fargate model.
+  - aws_appautoscaling_target
+  - aws_appautoscaling_policy
+  # EventBridge rules and targets are free. Scheduled rules matching AWS events
+  # carry no charge; the invoked Lambda bills as Lambda below.
+  - aws_cloudwatch_event_rule
+  - aws_cloudwatch_event_target
+  # Lambda permission is an IAM-shaped grant, not a billable object.
+  - aws_lambda_permission
+  # Repository policy attaches to aws_ecr_repository, which is priced by storage.
+  - aws_ecr_repository_policy
+  # Free-tier-by-nature and provider-local objects.
+  - aws_ssm_parameter          # Standard tier only; Advanced is $0.05/param/mo.
+  - aws_cloudwatch_log_stream
+  - aws_ecr_lifecycle_policy
+  - aws_cloudfront_origin_access_control
+  - aws_cloudfront_origin_access_identity
+  - aws_caller_identity
+  - aws_region
+  - aws_availability_zones
+  - aws_partition
+  - random_*
+  - null_resource
+  - local_file
+  - terraform_data
+  - time_*
+
+# ---------------------------------------------------------------------------
+# FIXED-COST RESOURCES
+#
+# Each entry declares a `pricing_model` telling the cost model how to derive the
+# monthly figure from the resource's plan `values`:
+#
+#   flat            — one `unit_price`, no sizing input.
+#   by_attribute    — `attribute` names a key in `values`; `prices` maps its
+#                     value to an hourly/monthly rate. A value absent from
+#                     `prices` is an ERROR, not a default. `count_attribute`
+#                     optionally multiplies by a node/instance/replica count.
+#   fargate         — derived from cpu (vCPU units), memory (MiB) and
+#                     desired_count. Models the task, not the service object.
+#   aurora_serverless_v2 — the min_capacity ACU floor is fixed; anything above
+#                     it is usage-variable and reported separately.
+#
+# `free_allowance` is subtracted from the counted quantity before pricing where
+# AWS grants an always-free tier that a lean plan realistically stays inside.
+# ---------------------------------------------------------------------------
+fixed_resources:
+
+  # --- Networking ---------------------------------------------------------
+  aws_nat_gateway:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: flat
+    unit_price: 0.045
+    unit: gateway-hour
+    # $0.045/h = ~$32.85/month per gateway, per AZ. Data processing is a further
+    # $0.045/GB and is modelled as usage-variable under `nat_gateway_processing`.
+    # This single line is why `nat_gateway_unless_explicit` is a forbidden
+    # resource for production-lean: two AZs of NAT is a third of the budget.
+    notes: Hourly charge only; per-GB processing is priced separately.
+
+  aws_eip:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: flat
+    unit_price: 0.005
+    unit: address-hour
+    # Since Feb 2024 every public IPv4 address is charged, attached or not.
+    # ~$3.65/month each.
+    notes: All public IPv4 addresses are billed, including in-use ones.
+
+  aws_vpc_endpoint:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: vpc_endpoint_type
+    prices:
+      Interface: 0.010      # per endpoint per AZ; ~$7.30/mo/AZ
+      GatewayLoadBalancer: 0.010
+      Gateway: 0.0          # S3/DynamoDB gateway endpoints are free
+    # AZ multiplication is not derivable from the plan reliably (subnet_ids may
+    # be unknown at plan time), so this prices ONE AZ and under-states multi-AZ
+    # interface endpoints. Flagged rather than silently wrong.
+    approximate: true
+    notes: Priced per single AZ; multi-AZ interface endpoints cost proportionally more.
+
+  aws_lb:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: load_balancer_type
+    prices:
+      application: 0.0225   # ~$16.43/month
+      network: 0.0225
+      gateway: 0.0125
+    # LCU charges ($0.008/LCU-hour) are traffic-driven and modelled as
+    # usage-variable under `alb_lcu`. A quiet ALB bills close to the hourly
+    # charge alone, which is what the fixed baseline should reflect.
+    notes: Hourly charge only; LCU consumption is usage-variable.
+
+  aws_route53_zone:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 0.50
+    unit: hosted-zone-month
+    notes: First 25 zones $0.50/mo each; queries are usage-variable.
+
+  # --- Compute ------------------------------------------------------------
+  aws_ecs_service:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: fargate
+    vcpu_hour: 0.04048
+    gb_hour: 0.004445
+    # Fargate bills per vCPU-hour and per GB-hour, so a task's monthly cost is
+    # fully derivable from cpu/memory/desired_count in the plan:
+    #   monthly = (cpu/1024 * vcpu_hour + memory/1024 * gb_hour) * hours * count
+    # A 0.5 vCPU / 1GB task running 24/7 is ~$17.98/month. `desired_count` is
+    # the FIXED floor — autoscaling above it is usage-variable and out of scope
+    # for the ceiling, which is the honest reading: you are committing to the
+    # floor, not to the peak.
+    cpu_attribute: cpu
+    memory_attribute: memory
+    count_attribute: desired_count
+    default_count: 1
+    # x86 rates. ARM/Graviton Fargate is ~20% cheaper; using x86 over-estimates,
+    # which is the safe direction.
+    approximate: true
+    notes: x86 on-demand rates; desired_count is the fixed floor, not the peak.
+
+  aws_instance:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: instance_type
+    # Only the small general-purpose types a self-managed Prometheus/Grafana or
+    # ClickHouse box would plausibly use. An unlisted type is an ERROR — that is
+    # intentional: an unrecognised EC2 instance type is exactly the case where a
+    # silent $0 would hide the largest line item on the bill.
+    prices:
+      t3.micro: 0.0104
+      t3.small: 0.0208
+      t3.medium: 0.0416
+      t3.large: 0.0832
+      t4g.micro: 0.0084
+      t4g.small: 0.0168
+      t4g.medium: 0.0336
+      m6i.large: 0.0960
+      m6g.large: 0.0770
+      r6i.large: 0.1260
+      c6i.large: 0.0850
+    notes: Linux on-demand, us-east-1. EBS volumes are priced separately.
+
+  aws_ebs_volume:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: by_attribute
+    attribute: type
+    count_attribute: size
+    prices:
+      gp3: 0.08          # per GB-month
+      gp2: 0.10
+      io2: 0.125
+      st1: 0.045
+      sc1: 0.015
+    default_count: 8
+    notes: Per GB-month; provisioned IOPS/throughput surcharges not modelled.
+
+  # --- Databases ----------------------------------------------------------
+  aws_rds_cluster:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: aurora_serverless_v2
+    acu_hour: 0.12
+    min_capacity_path: [serverlessv2_scaling_configuration, min_capacity]
+    # Aurora Serverless v2 bills per ACU-hour. The configured MINIMUM capacity is
+    # a true fixed floor — it accrues at idle — so it belongs in the baseline.
+    # Capacity consumed above the floor is usage-variable. Since late 2024 a
+    # min_capacity of 0 permits scale-to-zero, giving a $0 floor; the model
+    # honours that rather than assuming 0.5 ACU.
+    #   0.5 ACU floor 24/7 = ~$43.80/month. 2 ACU floor = ~$175/month, which on
+    #   its own breaches the lean ceiling — precisely the regression to catch.
+    # Aurora storage ($0.10/GB-mo) and I/O ($0.20/M requests) are usage-variable.
+    default_min_capacity: 0.5
+    notes: Prices the min-ACU floor only; burst capacity is usage-variable.
+
+  aws_rds_cluster_instance:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: instance_class
+    prices:
+      # db.serverless instances carry no separate charge — the ACU consumption
+      # is billed on the cluster (aws_rds_cluster above). Priced at 0 here so
+      # the resource is explicitly accounted for rather than unrecognised.
+      db.serverless: 0.0
+      db.t4g.medium: 0.082
+      db.t3.medium: 0.082
+      db.t4g.large: 0.164
+      db.r6g.large: 0.2560
+      db.r6i.large: 0.2900
+      db.r5.large: 0.2900
+    notes: Provisioned Aurora instances; db.serverless bills via the cluster.
+
+  aws_db_instance:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: instance_class
+    # Legacy RDS. Forbidden in every profile, but priced anyway: the model must
+    # be able to put a number on a violation, not just flag it.
+    prices:
+      db.t4g.micro: 0.016
+      db.t4g.small: 0.032
+      db.t4g.medium: 0.065
+      db.t4g.large: 0.129
+      db.t3.micro: 0.018
+      db.t3.small: 0.036
+      db.t3.medium: 0.072
+      db.m6g.large: 0.1710
+      db.m5.large: 0.1780
+      db.r6g.large: 0.2560
+    approximate: true
+    notes: Single-AZ PostgreSQL rates; Multi-AZ roughly doubles and is not detected.
+
+  aws_neptune_cluster_instance:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: instance_class
+    prices:
+      db.t4g.medium: 0.0928
+      db.t3.medium: 0.0900
+      db.r6g.large: 0.2784
+      db.r5.large: 0.3480
+      db.r6i.large: 0.3480
+    approximate: true
+    notes: Per-instance hourly; Neptune storage and I/O are usage-variable.
+
+  aws_elasticache_cluster:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: node_type
+    count_attribute: num_cache_nodes
+    default_count: 1
+    prices:
+      cache.t4g.micro: 0.0160
+      cache.t4g.small: 0.0320
+      cache.t4g.medium: 0.0640
+      cache.t3.micro: 0.0170
+      cache.t3.small: 0.0340
+      cache.m7g.large: 0.1632
+      cache.m6g.large: 0.1560
+      cache.r7g.large: 0.2016
+      cache.r6g.large: 0.2050
+    notes: Per node-hour; multiply by node count.
+
+  aws_elasticache_replication_group:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: node_type
+    count_attribute: num_cache_clusters
+    default_count: 2
+    prices:
+      cache.t4g.micro: 0.0160
+      cache.t4g.small: 0.0320
+      cache.t4g.medium: 0.0640
+      cache.m7g.large: 0.1632
+      cache.m6g.large: 0.1560
+      cache.r7g.large: 0.2016
+      cache.r6g.large: 0.2050
+    notes: Per node-hour across the replication group's clusters.
+
+  aws_msk_cluster:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: by_attribute
+    attribute: instance_type
+    count_attribute: number_of_broker_nodes
+    default_count: 3
+    prices:
+      kafka.t3.small: 0.0456
+      kafka.m5.large: 0.2100
+      kafka.m7g.large: 0.1890
+    # A 3-broker m5.large cluster is ~$460/month before storage — more than
+    # twice the entire lean ceiling. This is the single most expensive thing a
+    # misconfigured plan can add, hence `msk` being forbidden outright.
+    notes: Per broker-hour; broker EBS storage ($0.10/GB-mo) not included.
+
+  aws_msk_serverless_cluster:
+    cost_class: fixed
+    accrual: hourly
+    pricing_model: flat
+    unit_price: 0.75
+    unit: cluster-hour
+    # $0.75/h base per cluster (~$547/month) before partition and throughput
+    # charges. Serverless does not make MSK cheap at this scale.
+    notes: Base cluster-hour only; partition-hours and throughput are extra.
+
+  # --- Security and observability ----------------------------------------
+  aws_kms_key:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 1.00
+    unit: key-month
+    notes: Customer-managed keys; API requests ($0.03/10k) are usage-variable.
+
+  aws_secretsmanager_secret:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 0.40
+    unit: secret-month
+    notes: Per secret; API calls ($0.05/10k) are usage-variable.
+
+  aws_cloudwatch_metric_alarm:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 0.10
+    unit: alarm-month
+    free_allowance: 10
+    # Standard-resolution alarms. High-resolution alarms are $0.30. The free
+    # allowance is the always-free tier, which a lean alarm set stays inside.
+    notes: Standard resolution; high-resolution alarms cost 3x and are not detected.
+
+  aws_cloudwatch_dashboard:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 3.00
+    unit: dashboard-month
+    free_allowance: 3
+    notes: First 3 dashboards free, then $3/month each.
+
+  aws_wafv2_web_acl:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 5.00
+    unit: web-acl-month
+    # Plus $1/rule/month and $0.60 per million requests. Rule count is derivable
+    # in principle but the plan shape varies too much to price reliably.
+    approximate: true
+    notes: Base ACL charge only; per-rule and per-request charges not modelled.
+
+  aws_prometheus_workspace:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 0.0
+    unit: workspace-month
+    # Managed Prometheus has no workspace charge — cost is ingestion/storage,
+    # which is usage-variable. Priced at 0 so the resource is accounted for.
+    # Self-managed Prometheus on EC2 is priced via aws_instance and is what the
+    # `prometheus_grafana_servers` prohibition actually targets.
+    notes: No fixed workspace charge; ingestion and query are usage-variable.
+
+  aws_grafana_workspace:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 9.00
+    unit: workspace-month
+    approximate: true
+    notes: Priced as one editor licence at $9/mo; per-user cost scales with team size.
+
+  aws_ecr_repository:
+    cost_class: fixed
+    accrual: monthly
+    pricing_model: flat
+    unit_price: 0.50
+    unit: repository-month
+    # $0.10/GB-month storage; assumes ~5GB of retained image layers per repo.
+    approximate: true
+    notes: Storage-based estimate at ~5GB/repo; actual depends on retention policy.
+
+# ---------------------------------------------------------------------------
+# USAGE-VARIABLE RESOURCES
+#
+# Cost that only exists once traffic does. Each type declares `drivers`: named
+# quantities with a unit price. The scenario block below supplies the quantity
+# PER RESOURCE INSTANCE for each driver, so the model can produce a low /
+# expected / high band instead of one fake number.
+#
+# These NEVER contribute to the pass/fail comparison for a fixed-baseline
+# budget. They are reported so nobody mistakes the fixed baseline for the bill.
+# ---------------------------------------------------------------------------
+usage_variable_resources:
+
+  # Aether's only Lambda is the nightly ML drift (PSI) job, so real spend here
+  # is cents — but it is genuinely usage-driven, not free, and pricing it as
+  # zero would be the kind of convenient assumption this model exists to avoid.
+  aws_lambda_function:
+    cost_class: usage_variable
+    drivers:
+      requests: {unit_price: 0.0000002, unit: request}
+      gb_seconds: {unit_price: 0.0000166667, unit: GB-second}
+    notes: >-
+      x86 on-demand rates, no free tier assumed. Provisioned concurrency is not
+      modelled because no Aether function uses it.
+
+  # VPC flow logs bill on CloudWatch Logs ingestion, and volume scales with
+  # traffic. Relevant to the egress-mode decision: public_ip and NAT topologies
+  # generate materially different flow-log volume.
+  aws_flow_log:
+    cost_class: usage_variable
+    drivers:
+      ingested_gb: {unit_price: 0.50, unit: GB}
+    notes: CloudWatch Logs ingestion for VPC flow logs; storage accrues separately.
+
+  aws_s3_bucket:
+    cost_class: usage_variable
+    drivers:
+      storage_gb_month: {unit_price: 0.023, unit: GB-month}
+      put_requests: {unit_price: 0.000005, unit: request}
+      get_requests: {unit_price: 0.0000004, unit: request}
+    notes: S3 Standard first tier; Intelligent-Tiering and Glacier not modelled.
+
+  aws_dynamodb_table:
+    cost_class: usage_variable
+    drivers:
+      write_request_units: {unit_price: 0.00000125, unit: WRU}
+      read_request_units: {unit_price: 0.00000025, unit: RRU}
+      storage_gb_month: {unit_price: 0.25, unit: GB-month}
+    # A table in PROVISIONED mode is not usage-variable at all: reserved
+    # capacity accrues on the clock whether or not a request arrives, which is
+    # the definition of fixed cost. `fixed_when` re-classes exactly those tables
+    # and prices the reserved capacity, because a detected-but-unpriced fixed
+    # cost is worse than an undetected one -- it looks handled. 4000 RCU + 4000
+    # WCU is ~$2,277/month, more than ten times the lean ceiling, and it must
+    # fail the gate rather than raise a warning nothing reads.
+    # A table whose capacity the plan does not carry is UNPRICEABLE, not free.
+    fixed_when:
+      attribute: billing_mode
+      value: PROVISIONED
+      pricing_model: capacity_units
+      accrual: hourly
+      units:
+        write_capacity: {unit_price: 0.00065, unit: WCU-hour}
+        read_capacity: {unit_price: 0.00013, unit: RCU-hour}
+      # Storage is charged identically in both billing modes, so it stays
+      # usage-variable; only the throughput drivers become fixed.
+      variable_drivers: [storage_gb_month]
+      notes: >-
+        Provisioned capacity, us-east-1: $0.00065 per WCU-hour and $0.00013 per
+        RCU-hour. Auto-scaling above the provisioned floor is not modelled; the
+        floor is what the plan commits to.
+    notes: On-demand rates by default; PROVISIONED capacity is priced as fixed via fixed_when.
+
+  aws_sqs_queue:
+    cost_class: usage_variable
+    drivers:
+      requests: {unit_price: 0.0000004, unit: request}
+    notes: Standard queue $0.40/M requests; FIFO is $0.50/M and is not distinguished.
+
+  aws_sns_topic:
+    cost_class: usage_variable
+    drivers:
+      publishes: {unit_price: 0.0000005, unit: publish}
+    notes: $0.50/M publishes; SMS and mobile push delivery are far higher and excluded.
+
+  aws_cloudwatch_log_group:
+    cost_class: usage_variable
+    drivers:
+      ingested_gb: {unit_price: 0.50, unit: GB}
+      stored_gb_month: {unit_price: 0.03, unit: GB-month}
+    # Log ingestion is the most commonly under-estimated line on an AWS bill;
+    # a chatty debug logger can rival the ALB. Modelled per log group.
+    notes: Standard log class; Infrequent Access class is roughly half.
+
+  aws_cloudfront_distribution:
+    cost_class: usage_variable
+    drivers:
+      data_transfer_out_gb: {unit_price: 0.085, unit: GB}
+      https_requests: {unit_price: 0.00000075, unit: request}
+    notes: North America/Europe first tier; other regions cost more.
+
+  aws_lb_data:
+    cost_class: usage_variable
+    synthetic: true
+    drivers:
+      lcu_hours: {unit_price: 0.008, unit: LCU-hour}
+    # Synthetic: attributed to each aws_lb in the inventory rather than to a
+    # resource type of its own, since LCU is a property of the load balancer.
+    notes: Attributed per aws_lb; LCU is the max of the four ALB dimensions.
+
+  nat_gateway_processing:
+    cost_class: usage_variable
+    synthetic: true
+    drivers:
+      processed_gb: {unit_price: 0.045, unit: GB}
+    notes: Attributed per aws_nat_gateway; charged on top of the hourly rate.
+
+  data_transfer_out:
+    cost_class: usage_variable
+    synthetic: true
+    global: true
+    drivers:
+      internet_egress_gb: {unit_price: 0.09, unit: GB}
+    # Applied ONCE per plan, not per resource, since egress is an account-level
+    # aggregate. First 100GB/month is free and is not deducted (over-estimates).
+    notes: Applied once per plan; first tier rate, free 100GB not deducted.
+
+# ---------------------------------------------------------------------------
+# USAGE SCENARIOS
+#
+# Quantities PER RESOURCE INSTANCE per month, except for drivers on a resource
+# marked `global: true`, which are applied once per plan.
+#
+# These are deliberately coarse founding-tenant assumptions, not measurements.
+# `low` is a single quiet pilot tenant; `expected` is the founding tenant at the
+# traffic the commercial plan assumes; `high` is a 10x surprise that should
+# prompt a re-forecast, not an outage. They exist so the report shows a BAND —
+# a single variable number would be false precision.
+# ---------------------------------------------------------------------------
+usage_scenarios:
+
+  low:
+    description: Single quiet pilot tenant; demo-level traffic.
+    storage_gb_month: 5
+    put_requests: 20000
+    get_requests: 200000
+    write_request_units: 500000
+    read_request_units: 2000000
+    requests: 500000
+    publishes: 200000
+    ingested_gb: 2
+    stored_gb_month: 4
+    data_transfer_out_gb: 10
+    https_requests: 500000
+    lcu_hours: 730
+    processed_gb: 20
+    internet_egress_gb: 20
+
+  expected:
+    description: Founding tenant at the traffic the commercial plan assumes.
+    storage_gb_month: 50
+    put_requests: 200000
+    get_requests: 2000000
+    write_request_units: 5000000
+    read_request_units: 20000000
+    requests: 5000000
+    publishes: 2000000
+    ingested_gb: 20
+    stored_gb_month: 40
+    data_transfer_out_gb: 100
+    https_requests: 5000000
+    lcu_hours: 2190
+    processed_gb: 200
+    internet_egress_gb: 150
+
+  high:
+    description: 10x surprise. Should trigger a re-forecast, not an incident.
+    storage_gb_month: 500
+    put_requests: 2000000
+    get_requests: 20000000
+    write_request_units: 50000000
+    read_request_units: 200000000
+    requests: 50000000
+    publishes: 20000000
+    ingested_gb: 200
+    stored_gb_month: 400
+    data_transfer_out_gb: 1000
+    https_requests: 50000000
+    lcu_hours: 7300
+    processed_gb: 2000
+    internet_egress_gb: 1500
+
+# ---------------------------------------------------------------------------
+# PER-PROFILE USAGE SCENARIOS
+#
+# `usage_scenarios` above is calibrated for a founding tenant in continuous
+# production. Applying it to a wake/sleep rehearsal environment is not
+# conservative, it is wrong: it prices a month of customer traffic against an
+# environment that is awake for forty hours and never serves a customer at all.
+# That is how the staging budget came to be unsatisfiable in both directions —
+# awake and asleep both landed at ~$117 against a $50 ceiling, entirely from
+# production-calibrated variable cost, so the ceiling could not be met by any
+# plan and therefore measured nothing.
+#
+# A profile named here overrides `usage_scenarios` WHOLESALE for that profile.
+# check_cost_model.py fails closed if a wake/sleep profile budgeted on total
+# spend has no entry here, so deleting one is a build failure rather than a
+# silent return to production quantities.
+# ---------------------------------------------------------------------------
+profile_usage_scenarios:
+
+  staging:
+    # Staging serves no tenant. Its traffic is exactly what a rehearsal makes:
+    # a migration run, a smoke suite, a bounded load test and the log volume
+    # those produce, inside the 40 awake hours the profile budgets for. The
+    # `expected` column is one full rehearsal month (roughly two rehearsals);
+    # `high` is a 10x overrun that should prompt a conversation about the
+    # rehearsal, not an outage.
+    low:
+      description: One short smoke-only rehearsal.
+      storage_gb_month: 1
+      put_requests: 5000
+      get_requests: 20000
+      write_request_units: 50000
+      read_request_units: 200000
+      requests: 50000
+      publishes: 20000
+      ingested_gb: 1
+      stored_gb_month: 1
+      data_transfer_out_gb: 1
+      https_requests: 20000
+      lcu_hours: 20
+      processed_gb: 2
+      internet_egress_gb: 2
+    expected:
+      description: Two complete rehearsals inside the 40 awake hours/month budget.
+      storage_gb_month: 2
+      put_requests: 20000
+      get_requests: 100000
+      write_request_units: 200000
+      read_request_units: 800000
+      requests: 200000
+      publishes: 80000
+      ingested_gb: 2
+      stored_gb_month: 2
+      data_transfer_out_gb: 3
+      https_requests: 100000
+      # An ALB only consumes LCUs while it is serving, and staging is awake for
+      # 40 hours a month by budget.
+      lcu_hours: 40
+      processed_gb: 5
+      internet_egress_gb: 5
+    high:
+      description: 10x rehearsal overrun — re-examine the load profile, not the ceiling.
+      storage_gb_month: 20
+      put_requests: 200000
+      get_requests: 1000000
+      write_request_units: 2000000
+      read_request_units: 8000000
+      requests: 2000000
+      publishes: 800000
+      ingested_gb: 20
+      stored_gb_month: 20
+      data_transfer_out_gb: 30
+      https_requests: 1000000
+      lcu_hours: 400
+      processed_gb: 50
+      internet_egress_gb: 50

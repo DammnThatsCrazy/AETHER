@@ -288,7 +288,25 @@
       ],
       "status": "stable",
       "since_version": "8.8.0",
-      "estimated_read_minutes": 14,
+      "estimated_read_minutes": 18,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/AWS-LEAN-PRODUCTION.md",
+      "title": "AWS Lean Production",
+      "slug": "operations/aws-lean-production",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 20,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -459,7 +477,7 @@
       ],
       "status": "stable",
       "since_version": "8.8.0",
-      "estimated_read_minutes": 12,
+      "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -590,6 +608,23 @@
       "status": "stable",
       "since_version": "8.9.0",
       "estimated_read_minutes": 3,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/COST-OPTIMIZATION.md",
+      "title": "Cost Optimization",
+      "slug": "operations/cost-optimization",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 16,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -949,7 +984,7 @@
         "architect"
       ],
       "status": "stable",
-      "estimated_read_minutes": 6,
+      "estimated_read_minutes": 22,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -980,7 +1015,7 @@
       ],
       "status": "beta",
       "since_version": "8.9.0",
-      "estimated_read_minutes": 6,
+      "estimated_read_minutes": 10,
       "canonical_owner": "platform@aether"
     },
     {
@@ -1248,7 +1283,7 @@
         "security"
       ],
       "status": "stable",
-      "estimated_read_minutes": 7,
+      "estimated_read_minutes": 11,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2291,7 +2326,7 @@
       ],
       "status": "beta",
       "since_version": "8.9.0",
-      "estimated_read_minutes": 6,
+      "estimated_read_minutes": 9,
       "canonical_owner": "platform@aether"
     },
     {
@@ -2458,7 +2493,7 @@
         "security"
       ],
       "status": "stable",
-      "estimated_read_minutes": 4,
+      "estimated_read_minutes": 9,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -3069,6 +3104,23 @@
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/STAGING-WAKE-SLEEP.md",
+      "title": "Staging Wake / Sleep",
+      "slug": "operations/staging-wake-sleep",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 18,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/STRESS-TEST-SCENARIOS.md",

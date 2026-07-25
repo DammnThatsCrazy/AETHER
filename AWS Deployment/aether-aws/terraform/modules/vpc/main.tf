@@ -48,6 +48,14 @@ locals {
   public_subnets   = [for i in range(local.az_count) : cidrsubnet(var.vpc_cidr, 4, i)]
   private_subnets  = [for i in range(local.az_count) : cidrsubnet(var.vpc_cidr, 4, i + local.az_count)]
   isolated_subnets = [for i in range(local.az_count) : cidrsubnet(var.vpc_cidr, 4, i + local.az_count * 2)]
+
+  # NAT topology. "none" provisions no NAT Gateway at all, so zero-egress
+  # profiles carry no fixed hourly NAT cost.
+  nat_count = var.nat_mode == "ha" ? local.az_count : (var.nat_mode == "single" ? 1 : 0)
+
+  # Distinct private routing domains: one per AZ only when each AZ has its own
+  # NAT, otherwise a single shared table (which may carry no default route).
+  private_route_table_count = var.nat_mode == "ha" ? local.az_count : 1
 }
 
 # --------------------------------------------------------------------------
@@ -107,7 +115,7 @@ resource "aws_subnet" "isolated" {
 # --------------------------------------------------------------------------
 
 resource "aws_eip" "nat" {
-  count  = var.enable_nat_gateway_ha ? local.az_count : 1
+  count  = local.nat_count
   domain = "vpc"
 
   tags = {
@@ -119,12 +127,13 @@ resource "aws_eip" "nat" {
 
 # --------------------------------------------------------------------------
 # NAT Gateways
-# HA mode: one per AZ (placed in each public subnet).
+# HA mode:     one per AZ (placed in each public subnet).
 # Single mode: one NAT in the first public subnet (lower cost).
+# None mode:   no NAT Gateway; private subnets get no default route.
 # --------------------------------------------------------------------------
 
 resource "aws_nat_gateway" "this" {
-  count = var.enable_nat_gateway_ha ? local.az_count : 1
+  count = local.nat_count
 
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
@@ -162,27 +171,34 @@ resource "aws_route_table_association" "public" {
 
 # --------------------------------------------------------------------------
 # Route Tables — Private (one per AZ when HA, else shared)
+# The tables exist in every NAT mode; the default route is attached
+# separately so a table can validly carry no egress path at all.
 # --------------------------------------------------------------------------
 
 resource "aws_route_table" "private" {
-  count  = var.enable_nat_gateway_ha ? local.az_count : 1
+  count  = local.private_route_table_count
   vpc_id = aws_vpc.this.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.this[count.index].id
-  }
 
   tags = {
     Name = "${var.project}-${var.environment}-rt-private-${count.index}"
   }
 }
 
+# Default route to NAT — one per NAT Gateway, so it disappears entirely when
+# nat_mode is "none". In HA mode table N pairs with the NAT in the same AZ.
+resource "aws_route" "private_nat" {
+  count = local.nat_count
+
+  route_table_id         = var.nat_mode == "ha" ? aws_route_table.private[count.index].id : aws_route_table.private[0].id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.this[count.index].id
+}
+
 resource "aws_route_table_association" "private" {
   count = local.az_count
 
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = var.enable_nat_gateway_ha ? aws_route_table.private[count.index].id : aws_route_table.private[0].id
+  route_table_id = var.nat_mode == "ha" ? aws_route_table.private[count.index].id : aws_route_table.private[0].id
 }
 
 # --------------------------------------------------------------------------
@@ -309,25 +325,51 @@ resource "aws_security_group" "alb" {
 }
 
 # ECS Security Group — accepts traffic from ALB only
+#
+# The rules are declared as DATA in local.ecs_ingress_rules rather than as
+# hand-written inline blocks, and the same list is published as
+# `ecs_sg_ingress` so a provider-mocked plan can assert on it. That matters
+# because ECS tasks run in the PUBLIC subnets with a public IP whenever
+# network_egress_mode is "public_ip" (see the task-placement comment in the
+# root main.tf): the only thing keeping port 8000/8080 off the internet at that
+# point is this security group admitting nothing but the ALB's. The planned
+# `ingress` attribute cannot carry the assertion itself — it contains the ALB
+# security group ID, which is unknown until apply, so the whole set reads as
+# unknown at plan time and any condition over it errors out.
+locals {
+  ecs_ingress_rules = [
+    {
+      description = "Backend port from ALB"
+      port        = 8000
+      # No CIDR ingress, ever. A public IP on the task ENI makes any CIDR here
+      # an internet-reachable application port.
+      cidr_blocks = []
+      from_alb    = true
+    },
+    {
+      description = "ML serving port from ALB"
+      port        = 8080
+      cidr_blocks = []
+      from_alb    = true
+    },
+  ]
+}
+
 resource "aws_security_group" "ecs" {
   name_prefix = "${var.project}-${var.environment}-ecs-"
   description = "ECS tasks: accept traffic from ALB"
   vpc_id      = aws_vpc.this.id
 
-  ingress {
-    description     = "Backend port from ALB"
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  ingress {
-    description     = "ML serving port from ALB"
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+  dynamic "ingress" {
+    for_each = local.ecs_ingress_rules
+    content {
+      description     = ingress.value.description
+      from_port       = ingress.value.port
+      to_port         = ingress.value.port
+      protocol        = "tcp"
+      cidr_blocks     = ingress.value.cidr_blocks
+      security_groups = ingress.value.from_alb ? [aws_security_group.alb.id] : []
+    }
   }
 
   egress {
@@ -378,8 +420,10 @@ resource "aws_security_group" "rds" {
   }
 }
 
-# Redis Security Group
+# Redis Security Group — only when the profile provisions ElastiCache
 resource "aws_security_group" "redis" {
+  count = var.enable_redis_sg ? 1 : 0
+
   name_prefix = "${var.project}-${var.environment}-redis-"
   description = "ElastiCache Redis: accept connections from ECS"
   vpc_id      = aws_vpc.this.id
@@ -409,8 +453,10 @@ resource "aws_security_group" "redis" {
   }
 }
 
-# Neptune Security Group
+# Neptune Security Group — only when the profile provisions Neptune
 resource "aws_security_group" "neptune" {
+  count = var.enable_neptune_sg ? 1 : 0
+
   name_prefix = "${var.project}-${var.environment}-neptune-"
   description = "Neptune graph DB: accept connections from ECS"
   vpc_id      = aws_vpc.this.id
@@ -440,8 +486,10 @@ resource "aws_security_group" "neptune" {
   }
 }
 
-# MSK Security Group
+# MSK Security Group — only when the profile provisions MSK
 resource "aws_security_group" "msk" {
+  count = var.enable_msk_sg ? 1 : 0
+
   name_prefix = "${var.project}-${var.environment}-msk-"
   description = "MSK Kafka: accept TLS connections from ECS"
   vpc_id      = aws_vpc.this.id

@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -33,6 +32,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / "config" / "deploy_profile.yaml"
 ROLES_PY = ROOT / "Backend Architecture" / "aether-backend" / "services" / "runtime" / "roles.py"
+
+# The canonical role constants are extracted by the release gate's AST reader,
+# not re-parsed here. See _runtime_roles for why that matters.
+sys.path.insert(0, str(ROOT / "scripts" / "release"))
+from check_delivery_topology import runtime_constants  # noqa: E402
 
 
 def _compose_services() -> set[str]:
@@ -46,13 +50,21 @@ def _terraform_modules(modules_dir: str) -> set[str]:
 
 
 def _runtime_roles() -> set[str]:
-    """Parse WORKER_ROLES + {'api','all'} from roles.py without importing it."""
-    text = ROLES_PY.read_text(encoding="utf-8")
-    roles: set[str] = set()
-    block = re.search(r"WORKER_ROLES[^{]*\{([^}]*)\}", text, re.DOTALL)
-    if block:
-        roles |= set(re.findall(r'"([a-z-]+)"', block.group(1)))
-    return roles | {"api", "all"}
+    """Every valid AETHER_ROLE token, read from roles.py without importing it.
+
+    Delegates to check_delivery_topology.runtime_constants, which parses the
+    module's AST. The regex this replaced (``WORKER_ROLES[^{]*\\{([^}]*)\\}``)
+    matched the FIRST brace group after the first literal "WORKER_ROLES" in the
+    file — and since roles.py grew a module docstring that names WORKER_ROLES,
+    that was a prose paragraph rather than the frozenset. It yielded zero worker
+    roles, so this check silently accepted a matrix declaring any role at all
+    while reporting `roles=2`. An AST read cannot be fooled by prose.
+
+    ALL_ROLES rather than WORKER_ROLES | {api, all}: it is the canonical token
+    set (workers + api + all + the execution groups), so a capability may
+    legitimately declare a consolidated token such as `lean-worker`.
+    """
+    return set(runtime_constants(ROLES_PY)["ALL_ROLES"])
 
 
 def _local_services(cap: dict) -> list[str]:

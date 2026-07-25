@@ -75,6 +75,7 @@ jobs:
           KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL }}
           KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL }}
         run: |
+          set -euo pipefail
           npm ci
           VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
@@ -94,7 +95,7 @@ jobs:
           BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
-          digest() { printf 'sha256:%s' "$(sha256sum "$1" | cut -d' ' -f1)"; }
+          set -euo pipefail
           python - <<'PY'
           import json, os, hashlib
           from pathlib import Path
@@ -216,6 +217,7 @@ jobs:
           name: ${{ needs.acquire-release.result == 'success' && 'approved-release' || format('release-{0}', github.sha) }}
       - name: Verify release immediately before mutation
         run: |
+          set -euo pipefail
           CHECKSUM=$(cat release.json.sha256)
           SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
           python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum "$CHECKSUM"
@@ -224,7 +226,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Apply packaged migrations, then register exact task revision for every required role
+      - name: Apply packaged migrations, then register exact task revision for every profile service
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
         run: |
@@ -232,15 +234,25 @@ jobs:
           PROFILE=$([ "$TARGET_ENV" = production ] && echo production-lean || echo staging)
           CLUSTER="AETHER-${TARGET_ENV}"
           IMAGE=$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['uri'])")
-          mapfile -t ROLES < <(python -c "import yaml; print(*yaml.safe_load(open('runtime_deployment.yaml'))['profiles']['$PROFILE']['roles'], sep='\n')")
+          # Roll out SERVICES, not logical roles. Since runtime_deployment.yaml
+          # schema v2 a service may host several roles (an execution group), so
+          # the services map — not the role list — is the set of ECS services
+          # that exist. Each service key IS the AETHER_ROLE token that service
+          # runs (`api`, a dedicated worker role, or a group like lean-worker
+          # that services/runtime/run_role.py expands into its members), which
+          # is why the loop variable below stays named `role`.
+          mapfile -t SERVICES < <(python -c "import yaml; print(*yaml.safe_load(open('runtime_deployment.yaml'))['profiles']['$PROFILE']['services'], sep='\n')")
+          test "${#SERVICES[@]}" -gt 0 || { echo "::error::profile $PROFILE declares no services"; exit 1; }
+          printf '%s\n' "${SERVICES[@]}" | grep -qx api || { echo "::error::profile $PROFILE declares no api service"; exit 1; }
           # api first: the packaged migrations must land before any service
           # adopts the new image (expand-before-rollout).
           ORDERED=(api)
-          for r in "${ROLES[@]}"; do [ "$r" = api ] || ORDERED+=("$r"); done
+          for s in "${SERVICES[@]}"; do [ "$s" = api ] || ORDERED+=("$s"); done
           aws ecs describe-clusters --clusters "$CLUSTER" --query 'failures' --output text | grep -q '^None$\|^$'
           for role in "${ORDERED[@]}"; do
-            # Canonical role -> ECS service mapping: the api role is served by the
-            # Terraform-provisioned "-backend" service; every worker role maps 1:1.
+            # Canonical service-key -> ECS service mapping: the api service is
+            # served by the Terraform-provisioned "-backend" service; every
+            # other service key maps 1:1 to "AETHER-<env>-<key>".
             # Documented in config/runtime_deployment.yaml.
             service="AETHER-${TARGET_ENV}-$([ "$role" = api ] && echo backend || echo "$role")"
             current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
@@ -298,6 +310,9 @@ jobs:
           ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
         run: |
+          set -euo pipefail
+          test -n "${ALB_DNS_NAME:-}" || { echo '::error::ALB_DNS_NAME is required for the smoke test'; exit 1; }
+          test -n "${SMOKE_API_KEY:-}" || { echo '::error::SMOKE_API_KEY is required for the smoke test'; exit 1; }
           python scripts/smoke_test.py \
             --base-url "https://${ALB_DNS_NAME}" \
             --api-key "${SMOKE_API_KEY}" \

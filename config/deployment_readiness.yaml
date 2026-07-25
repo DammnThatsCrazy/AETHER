@@ -1,0 +1,1111 @@
+# =============================================================================
+# Aether — Deployment Readiness Control Table
+#
+# The evidence contract behind every deployment-readiness percentage Aether is
+# allowed to state. Enforced by scripts/release/check_deployment_readiness.py.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# A readiness score is worth exactly as much as the evidence underneath it. The
+# failure mode this file is built against is not dishonesty, it is drift: a
+# number that starts as "we think we're about 90% there", gets copied into a
+# status doc, and is then defended as a measurement. Once that happens the
+# score stops describing the system and starts describing the narrative.
+#
+# So nothing here is a judgement. Every control names the concrete artifact
+# that proves it, and the checker awards the control's weight ONLY when that
+# artifact exists on disk and validates. There is no field in this schema for
+# "we believe this is done". `status` is a record, not an input to the score —
+# writing `verified_complete` on a control with no evidence file scores zero,
+# exactly as if it said `not_started`.
+#
+# THE THREE NUMBERS
+# -----------------
+# The checker reports three figures and never merges them:
+#
+#   code-complete score       what is built and validating IN THIS REPO
+#   externally-verified score what has been proven against real infrastructure
+#   evidence gap              the difference — work that is written but unproven
+#
+# The gap is the honest part. Aether's Terraform can be correct, its cost model
+# can be arithmetically sound and its rollback procedure can be well written,
+# and none of that is evidence that a plan applied, a bill arrived, or a
+# rollback restored service. Those require an AWS account, and an AWS account
+# is precisely what a repository does not have. Controls that depend on one
+# carry `external_dependency.required: true` and can never contribute to the
+# externally-verified score from inside CI, no matter what `status` says.
+#
+# SCHEMA — every control carries all of these, no exceptions
+# ----------------------------------------------------------
+#   id                     unique, stable, referenced in reports
+#   profile                overall | production-lean | staging
+#   description            what the control actually asserts
+#   weight                 points within its scorecard (each totals 100)
+#   required_evidence      the concrete artifacts that earn the weight
+#   status                 implementation-ledger vocabulary (see below)
+#   last_verified_commit   null, or 7-40 hex — required by verified_complete
+#   last_verified_at       null, or an ISO-8601 timestamp with timezone
+#   evidence_path          where this control's evidence lands in the bundle
+#   external_dependency    {required: bool, what: <what is needed>}
+#   exception              null, or a time-bounded grant (required by
+#                          externally_blocked; an expired one FAILS the run)
+#
+# `status` vocabulary is the implementation ledger's, unchanged, so a control
+# and its ledger item cannot describe the same work in two different languages:
+#   not_started | reproduced | test_added | implementation_in_progress
+#   implemented | targeted_tests_pass | subsystem_tests_pass | full_gate_pass
+#   externally_blocked | verified_complete
+#
+# EVIDENCE KINDS
+# --------------
+#   check_script           a validator that must exist AND exit 0 when run
+#   repo_file              a non-empty repo file, optionally containing a token
+#   json_artifact          a JSON file that must exist and satisfy require_keys
+#   credentialed_artifact  a JSON file that must exist, satisfy require_keys,
+#                          AND carry credentialed provenance — a real AWS
+#                          account id, a real region, a captured_at timestamp,
+#                          a commit sha, and a source path outside any temp or
+#                          scratchpad directory. This kind is unsatisfiable
+#                          without credentials BY CONSTRUCTION. It is the lock
+#                          that stops a synthetic plan or a hand-written JSON
+#                          file from buying external-verification credit.
+#
+# Entries marked `external: true` are excluded from the code-complete score and
+# required for the externally-verified score.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/deployment_readiness.yaml
+release_train: FOUNDING_TENANT_PRODUCTION
+
+# --- Evidence bundle root ----------------------------------------------------
+# scripts/release/collect_evidence.py materialises this layout. A subdirectory
+# with no files is reported ABSENT, never as an empty pass.
+evidence_bundle:
+  root: release-evidence
+  manifest: manifest.json
+  checksum: manifest.sha256
+  subdirectories:
+    - profile
+    - terraform
+    - cost
+    - migrations
+    - smoke
+    - security
+    - isolation
+    - load
+    - rollback
+    - lifecycle
+    - observability
+    - scorecard
+
+# --- Scorecards --------------------------------------------------------------
+# Each scorecard's control weights must sum to `total`, and the checker fails
+# the run if they do not. `gate` is the externally-verified score required to
+# call that profile deployable — not the code-complete score.
+scorecards:
+
+  overall:
+    title: Aether deployment readiness (all profiles)
+    total: 100
+    gate: 90
+    gate_basis: externally_verified
+    note: >-
+      The headline number. It is gated on externally-verified evidence because
+      "the code is written" has never been the question anyone was asking when
+      they asked whether Aether can be deployed.
+
+  production-lean:
+    title: production-lean profile readiness (founding-tenant target)
+    total: 100
+    gate: 92
+    gate_basis: externally_verified
+    note: >-
+      Held to a higher bar than overall: this is the profile a paying customer
+      would actually run on, and its whole value proposition is a bounded bill.
+      A cost control that has never seen a real invoice is not a cost control.
+
+  staging:
+    title: staging rehearsal lifecycle readiness
+    total: 100
+    gate: 95
+    gate_basis: externally_verified
+    note: >-
+      The strictest gate in the file. Staging exists to be the rehearsal, so a
+      partially-rehearsed staging is worse than none — it produces confidence
+      without producing evidence. Nothing short of a complete wake → deploy →
+      migrate → smoke → load → rollback → sleep cycle counts.
+
+# --- Global conditions that gate a 100% result -------------------------------
+# These are evaluated from artifacts on disk by the checker, INDEPENDENTLY of
+# the control table below, and every one of them must hold before Aether may
+# report full deployment readiness. They are listed here as data so the bar is
+# reviewable in a diff rather than buried in code. `blocks_controls` records
+# which control weights a condition holds hostage; the checker uses it to
+# compute the maximum verified score still attainable.
+gate_conditions:
+
+  - id: COND-STAGING-WAKE-APPLIED
+    description: A credentialed `terraform apply` woke the staging environment successfully.
+    evidence: release-evidence/lifecycle/staging-wake.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-WAKE, OVR-STAGING-LIFECYCLE]
+
+  - id: COND-STAGING-TWO-REHEARSALS
+    description: >-
+      Two CONSECUTIVE complete staging rehearsals, each covering the full
+      lifecycle, with no failed or partial run between them. One green run is
+      an anecdote; two consecutive ones are the weakest form of a trend.
+    evidence: release-evidence/lifecycle/rehearsal-history.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-EVIDENCE-COMPLETE, OVR-STAGING-LIFECYCLE]
+
+  - id: COND-LEAN-PLAN-CREDENTIALED
+    description: >-
+      A credentialed `terraform plan` for production-lean against the real
+      backend and state key, not a local plan with a fake provider.
+    evidence: release-evidence/terraform/lean-plan-provenance.json
+    kind: credentialed_artifact
+    blocks_controls: [OVR-TERRAFORM-ENFORCEMENT, LEAN-FORBIDDEN-EXCLUSION, LEAN-REQUIRED-PRESENCE]
+
+  - id: COND-COST-OBSERVED-7D
+    description: >-
+      At least seven consecutive days of observed AWS cost for the profile.
+      Seven days is the minimum that spans a weekend, which is where a lean
+      always-on baseline and a usage-driven one first look different.
+    evidence: release-evidence/cost/observed-cost.json
+    minimum_days: 7
+    kind: credentialed_artifact
+    blocks_controls: [OVR-COST-ENFORCEMENT, LEAN-COST-CEILING]
+
+  - id: COND-COST-RECONCILED
+    description: >-
+      Projected cost reconciled against observed cost within the declared
+      tolerance. The price book is an order-of-magnitude model; until it has
+      been checked against a real invoice it is an estimate wearing a gate.
+    evidence: release-evidence/cost/reconciliation.json
+    tolerance_percent: 25
+    kind: credentialed_artifact
+    blocks_controls: [OVR-COST-ENFORCEMENT, LEAN-COST-CEILING]
+
+  - id: COND-LOAD-VALIDATED
+    description: Load validation executed against staging with recorded latency and error budgets.
+    evidence: release-evidence/load/load-result.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-LOAD]
+
+  - id: COND-ROLLBACK-VALIDATED
+    description: >-
+      A rollback was actually executed and service was restored — not a
+      documented procedure, an executed one with a recovery timestamp.
+    evidence: release-evidence/rollback/rollback-result.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-ROLLBACK, OVR-PROMOTION-ROLLBACK, LEAN-OBSERVABILITY-ROLLBACK]
+
+  - id: COND-NO-UNRESOLVED-P0
+    description: No P0 item in config/implementation_ledger.yaml is outstanding.
+    evidence: config/implementation_ledger.yaml
+    kind: ledger_severity
+    severity: P0
+    blocks_controls: []
+
+  - id: COND-NO-UNRESOLVED-P1
+    description: No P1 item in config/implementation_ledger.yaml is outstanding.
+    evidence: config/implementation_ledger.yaml
+    kind: ledger_severity
+    severity: P1
+    blocks_controls: []
+
+  - id: COND-NO-EXPIRED-EXCEPTIONS
+    description: >-
+      No exception in this file or in config/cost_exceptions.yaml has passed
+      its expiry. An expired exception is a hard failure, never a silent lapse.
+    evidence: config/deployment_readiness.yaml
+    kind: exception_expiry
+    blocks_controls: []
+
+  - id: COND-BUNDLE-CHECKSUM
+    description: >-
+      release-evidence/manifest.json validates against manifest.sha256 and
+      every file it lists still hashes to its recorded digest.
+    evidence: release-evidence/manifest.sha256
+    kind: bundle_checksum
+    blocks_controls: [STG-EVIDENCE-COMPLETE, LEAN-DOCS-EVIDENCE, OVR-DOCS-RUNBOOKS]
+
+  - id: COND-MIGRATION-REHEARSED
+    description: Forward migration and its rollback were both rehearsed against a real database.
+    evidence: release-evidence/migrations/migration-result.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-MIGRATIONS]
+
+  - id: COND-SMOKE-PASSED
+    description: The functional smoke suite ran against the deployed staging environment and passed.
+    evidence: release-evidence/smoke/smoke-result.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-SMOKE]
+
+  - id: COND-SECURITY-VALIDATED
+    description: Security, privacy and tenant-isolation probes ran against the deployed environment.
+    evidence: release-evidence/security/security-result.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-SECURITY-ISOLATION]
+
+  - id: COND-SLEEP-RESIDUAL
+    description: >-
+      Staging slept on schedule and its residual cost while asleep was measured
+      and sits under the declared residual ceiling.
+    evidence: release-evidence/lifecycle/sleep-residual.json
+    kind: credentialed_artifact
+    blocks_controls: [STG-SLEEP-RESIDUAL]
+
+  - id: COND-OBSERVABILITY-LIVE
+    description: >-
+      Alarms exist in the deployed account and at least one has been observed
+      firing and resolving. An alarm that has never fired is untested wiring.
+    evidence: release-evidence/observability/alarm-evidence.json
+    kind: credentialed_artifact
+    blocks_controls: [LEAN-OBSERVABILITY-ROLLBACK, OVR-PROMOTION-ROLLBACK]
+
+  - id: COND-PROMOTION-INTEGRITY
+    description: >-
+      A reviewed promotion completed with intact provenance — the applied plan
+      matched the reviewed plan by digest, within its expiry window, on the
+      recorded lockfile, terraform version and state key.
+    evidence: release-evidence/terraform/promotion-provenance.json
+    kind: credentialed_artifact
+    blocks_controls: [LEAN-PROMOTION-INTEGRITY, OVR-PROMOTION-ROLLBACK, OVR-PLAN-CI-CORRECTNESS]
+
+# --- Shared exception grants -------------------------------------------------
+# Every `externally_blocked` control below references one of these by id. The
+# grants expire; when they do, the checker fails rather than quietly dropping
+# them. owner and approver must differ.
+exceptions:
+
+  - id: DR-EX-NO-CLOUD-ACCOUNT
+    reason: >-
+      No AWS account, credentials, applied infrastructure or billing history is
+      reachable from this repository or its CI. Every control that requires
+      observing real infrastructure is therefore blocked on an action that
+      cannot be performed in-repo, and is recorded as blocked rather than
+      counted as done.
+    owner: platform@aether
+    approver: cto@aether
+    created: 2026-07-25
+    expires: 2026-10-23
+    mitigation: >-
+      Provision the founding-tenant AWS account, run the staging rehearsal
+      through .github/workflows/terraform-promote.yml with credentials, and
+      commit the resulting release-evidence/ artifacts. Each control's weight
+      is then earned by the artifact, not by this grant.
+    follow_up: FT-9-TERRAFORM-PROFILES
+
+  - id: DR-EX-NO-BILLING-HISTORY
+    reason: >-
+      Cost reconciliation compares a modelled bill to an observed one. No
+      observed one exists, and none can be synthesised without inventing the
+      number the control is supposed to check.
+    owner: platform@aether
+    approver: finance@aether
+    created: 2026-07-25
+    expires: 2026-10-23
+    mitigation: >-
+      After seven consecutive days of real spend, export Cost Explorer daily
+      totals to release-evidence/cost/observed-cost.json and reconcile against
+      reports/cost/cost-report.json.
+    follow_up: FT-COST-POLICY-DATA
+
+# =============================================================================
+# CONTROLS
+# =============================================================================
+controls:
+
+  # ---------------------------------------------------------------------------
+  # OVERALL — 25 + 15 + 15 + 15 + 10 + 10 + 5 + 5 = 100
+  # ---------------------------------------------------------------------------
+
+  - id: OVR-TERRAFORM-ENFORCEMENT
+    profile: overall
+    description: >-
+      Real Terraform profile enforcement — the plan for a profile provably
+      excludes every forbidden resource and provisions every required one,
+      checked against an actual plan rather than against the tfvars that were
+      supposed to produce it.
+    weight: 25
+    required_evidence:
+      - id: policy-validator
+        kind: check_script
+        path: scripts/release/check_cost_policy_terraform.py
+        external: false
+        description: Terraform encodes the profile cost policy declared in deployment_profiles.yaml.
+      - id: profile-tests
+        kind: repo_file
+        path: AWS Deployment/aether-aws/terraform/tests/profile_plan.tftest.hcl
+        contains: run
+        external: false
+        description: Native terraform test coverage over per-profile planning.
+      - id: plan-policy-result
+        kind: json_artifact
+        path: artifacts/profile-policy-result.json
+        require_keys: [profile, passed, violations, checks_total]
+        require_true: [passed]
+        external: false
+        description: check_terraform_plan_policy.py verdict over a plan inventory.
+      - id: credentialed-plan
+        kind: credentialed_artifact
+        path: release-evidence/terraform/lean-plan-provenance.json
+        require_keys: [profile, plan_sha256, state_key, provenance]
+        external: true
+        description: The plan was produced with credentials against the real remote state.
+    status: implementation_in_progress
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/terraform/
+    external_dependency:
+      required: true
+      what: AWS credentials and a real Terraform remote-state backend to plan against.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: OVR-LEAN-TOPOLOGY
+    profile: overall
+    description: >-
+      Lean runtime topology — services run under explicit runtime roles with no
+      always-on heavyweight compute, and the declared topology matches the code
+      that implements it.
+    weight: 15
+    required_evidence:
+      - id: topology-validator
+        kind: check_script
+        path: scripts/release/check_delivery_topology.py
+        external: false
+        description: Declared delivery topology agrees with the runtime role registry.
+      - id: runtime-config
+        kind: repo_file
+        path: config/runtime_deployment.yaml
+        external: false
+        description: Canonical runtime/service topology declaration.
+    status: implementation_in_progress
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/profile/
+    external_dependency:
+      required: false
+      what: null
+    exception: null
+
+  - id: OVR-PLAN-CI-CORRECTNESS
+    profile: overall
+    description: >-
+      Plan and CI correctness — the promotion workflow plans, records the plan
+      it reviewed, and refuses to apply anything else; required release checks
+      are declared and enforced.
+    weight: 15
+    required_evidence:
+      - id: required-checks
+        kind: check_script
+        path: scripts/release/check_required_checks.py
+        external: false
+        description: The required-check catalog is well-formed and complete.
+      - id: promote-workflow
+        kind: repo_file
+        path: .github/workflows/terraform-promote.yml
+        contains: reviewed.tfplan.sha256
+        external: false
+        description: The promotion workflow binds an apply to a reviewed plan digest.
+      - id: promotion-provenance
+        kind: credentialed_artifact
+        path: release-evidence/terraform/promotion-provenance.json
+        require_keys: [reviewed_plan_sha256, applied_plan_sha256, provenance]
+        external: true
+        description: A real promotion ran and the applied plan matched the reviewed one.
+    status: implemented
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/terraform/
+    external_dependency:
+      required: true
+      what: A credentialed promotion run that actually applied a reviewed plan.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: OVR-COST-ENFORCEMENT
+    profile: overall
+    description: >-
+      Cost enforcement — a numeric ceiling is enforced against a plan inventory,
+      and the projection has been reconciled against a real bill.
+    weight: 15
+    required_evidence:
+      - id: cost-policy
+        kind: check_script
+        path: scripts/release/check_cost_policy.py
+        external: false
+        description: Profile cost policy shape is well-formed.
+      - id: price-book
+        kind: repo_file
+        path: config/aws_price_book.yaml
+        external: false
+        description: The price book the cost model prices a plan against.
+      - id: cost-report
+        kind: json_artifact
+        path: reports/cost/cost-report.json
+        require_keys: [profile, gated_amount, effective_ceiling, passed]
+        external: false
+        description: check_cost_model.py priced a concrete inventory against the ceiling.
+      - id: observed-cost
+        kind: credentialed_artifact
+        path: release-evidence/cost/observed-cost.json
+        require_keys: [profile, days, daily_usd, provenance]
+        external: true
+        description: At least seven days of real observed AWS spend.
+      - id: reconciliation
+        kind: credentialed_artifact
+        path: release-evidence/cost/reconciliation.json
+        require_keys: [projected_usd, observed_usd, variance_percent, provenance]
+        external: true
+        description: Projected cost reconciled against the observed bill.
+    status: implementation_in_progress
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/cost/
+    external_dependency:
+      required: true
+      what: Seven days of real AWS billing data for the profile.
+    exception: DR-EX-NO-BILLING-HISTORY
+
+  - id: OVR-PROMOTION-ROLLBACK
+    profile: overall
+    description: >-
+      Safe promotion and rollback — promotion is gated and reversible, and the
+      reversal has been demonstrated rather than described.
+    weight: 10
+    required_evidence:
+      - id: rollback-runbook
+        kind: repo_file
+        path: docs/ROLLBACK-RUNBOOK.md
+        external: false
+        description: The documented rollback procedure.
+      - id: manifest-tool
+        kind: repo_file
+        path: scripts/release/release_manifest.py
+        contains: commit does not match approved commit
+        external: false
+        description: Deployment manifests are commit-bound and digest-verified.
+      - id: rollback-result
+        kind: credentialed_artifact
+        path: release-evidence/rollback/rollback-result.json
+        require_keys: [executed_at, restored_at, provenance]
+        external: true
+        description: A rollback was executed and service restoration was timed.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/rollback/
+    external_dependency:
+      required: true
+      what: A deployed environment to roll back and observe recovering.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: OVR-STAGING-LIFECYCLE
+    profile: overall
+    description: >-
+      Staging lifecycle evidence — the wake → deploy → validate → sleep cycle
+      has run end to end and produced artifacts.
+    weight: 10
+    required_evidence:
+      - id: staging-profile
+        kind: repo_file
+        path: AWS Deployment/aether-aws/terraform/profiles/staging.tfvars
+        external: false
+        description: The staging profile the lifecycle runs against.
+      - id: wake-evidence
+        kind: credentialed_artifact
+        path: release-evidence/lifecycle/staging-wake.json
+        require_keys: [woke_at, apply_result, provenance]
+        external: true
+        description: Staging was actually woken with credentials.
+      - id: rehearsal-history
+        kind: credentialed_artifact
+        path: release-evidence/lifecycle/rehearsal-history.json
+        require_keys: [rehearsals, provenance]
+        external: true
+        description: Two consecutive complete rehearsals.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/lifecycle/
+    external_dependency:
+      required: true
+      what: A real staging environment that can be woken and slept.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: OVR-CROSS-PROFILE-PARITY
+    profile: overall
+    description: >-
+      Cross-profile parity — every declared profile exists in Terraform, in the
+      profile config, and in the resource contracts, with no profile defined in
+      one place and missing from another.
+    weight: 5
+    required_evidence:
+      - id: profile-config
+        kind: check_script
+        path: scripts/release/check_profile_config.py
+        external: false
+        description: Declared profiles are internally consistent.
+      - id: resource-contracts
+        kind: repo_file
+        path: config/terraform_resource_contracts.yaml
+        external: false
+        description: The resource-class contracts each profile is scored against.
+      - id: profiles-tf
+        kind: repo_file
+        path: AWS Deployment/aether-aws/terraform/profiles.tf
+        external: false
+        description: The Terraform-side profile definitions.
+    status: subsystem_tests_pass
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/profile/
+    external_dependency:
+      required: false
+      what: null
+    exception: null
+
+  - id: OVR-DOCS-RUNBOOKS
+    profile: overall
+    description: >-
+      Documentation and runbooks — deployment, migration and rollback are
+      written down at operator level, and the evidence bundle they reference
+      validates against its checksum.
+    weight: 5
+    required_evidence:
+      - id: deployment-runbook
+        kind: repo_file
+        path: docs/DEPLOYMENT-RUNBOOK.md
+        external: false
+        description: Operator-level deployment procedure.
+      - id: migration-runbook
+        kind: repo_file
+        path: docs/MIGRATION-RUNBOOK.md
+        external: false
+        description: Operator-level migration procedure.
+      - id: profiles-doc
+        kind: repo_file
+        path: docs/DEPLOYMENT-PROFILES.md
+        external: false
+        description: The profile matrix operators choose from.
+      - id: bundle-checksum
+        kind: repo_file
+        path: release-evidence/manifest.sha256
+        external: true
+        description: The published evidence bundle checksum.
+    status: implemented
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/scorecard/
+    external_dependency:
+      required: true
+      what: A published evidence bundle to checksum.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  # ---------------------------------------------------------------------------
+  # PRODUCTION-LEAN — 25 + 10 + 20 + 20 + 10 + 5 + 10 = 100
+  # ---------------------------------------------------------------------------
+
+  - id: LEAN-FORBIDDEN-EXCLUSION
+    profile: production-lean
+    description: >-
+      Forbidden-resource exclusion — the production-lean plan contains no MSK,
+      ElastiCache, Neptune, ClickHouse, dedicated ML service, frontend ECS
+      service, legacy RDS, unexplained NAT gateway or self-managed monitoring.
+    weight: 25
+    required_evidence:
+      - id: policy-declared
+        kind: repo_file
+        path: config/deployment_profiles.yaml
+        contains: forbidden_resources
+        external: false
+        description: The forbidden list the plan is scored against.
+      - id: terraform-encodes
+        kind: check_script
+        path: scripts/release/check_cost_policy_terraform.py
+        external: false
+        description: Terraform encodes the exclusions.
+      - id: plan-policy-result
+        kind: json_artifact
+        path: artifacts/profile-policy-result.json
+        require_keys: [profile, passed, violations, checks_total]
+        require_true: [passed]
+        external: false
+        description: A plan inventory was scored and no forbidden resource appeared.
+      - id: credentialed-plan
+        kind: credentialed_artifact
+        path: release-evidence/terraform/lean-plan-provenance.json
+        require_keys: [profile, plan_sha256, provenance]
+        external: true
+        description: The scored plan came from a credentialed run.
+    status: implementation_in_progress
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/terraform/
+    external_dependency:
+      required: true
+      what: A credentialed production-lean plan.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: LEAN-REQUIRED-PRESENCE
+    profile: production-lean
+    description: >-
+      Required-resource presence — the plan provisions the full lean stack
+      (CloudFront/S3 frontends, ALB, Aurora Serverless v2, SQS/SNS, DynamoDB,
+      S3 lake, Secrets/KMS, alarms, inline ML, Postgres graph).
+    weight: 10
+    required_evidence:
+      - id: required-declared
+        kind: repo_file
+        path: config/deployment_profiles.yaml
+        contains: required_resources
+        external: false
+        description: The required list the plan is scored against.
+      - id: plan-policy-result
+        kind: json_artifact
+        path: artifacts/profile-policy-result.json
+        require_keys: [profile, passed, violations, checks_total]
+        require_true: [passed]
+        external: false
+        description: A plan inventory was scored and every required class was present.
+      - id: credentialed-plan
+        kind: credentialed_artifact
+        path: release-evidence/terraform/lean-plan-provenance.json
+        require_keys: [profile, plan_sha256, provenance]
+        external: true
+        description: The scored plan came from a credentialed run.
+    status: implementation_in_progress
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/terraform/
+    external_dependency:
+      required: true
+      what: A credentialed production-lean plan.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: LEAN-RUNTIME-TOPOLOGY
+    profile: production-lean
+    description: >-
+      Lean runtime topology — one shared runtime fleet under explicit roles,
+      with no per-service always-on containers and no frontend compute.
+    weight: 20
+    required_evidence:
+      - id: topology-validator
+        kind: check_script
+        path: scripts/release/check_delivery_topology.py
+        external: false
+        description: Declared topology agrees with the runtime role registry.
+      - id: runtime-config
+        kind: repo_file
+        path: config/runtime_deployment.yaml
+        external: false
+        description: Canonical runtime/service topology declaration.
+      - id: lean-tfvars
+        kind: repo_file
+        path: AWS Deployment/aether-aws/terraform/profiles/production-lean.tfvars
+        external: false
+        description: The profile inputs that produce the lean topology.
+    status: implementation_in_progress
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/profile/
+    external_dependency:
+      required: false
+      what: null
+    exception: null
+
+  - id: LEAN-COST-CEILING
+    profile: production-lean
+    description: >-
+      Cost model and hard ceiling — the fixed monthly baseline is priced from
+      the plan, sits under the hard ceiling, and has been reconciled against a
+      real bill.
+    weight: 20
+    required_evidence:
+      - id: budget-declared
+        kind: repo_file
+        path: config/deployment_profiles.yaml
+        contains: hard_fixed_monthly
+        external: false
+        description: The ceiling the model is compared against.
+      - id: cost-report
+        kind: json_artifact
+        path: reports/cost/cost-report.json
+        require_keys: [profile, gated_amount, effective_ceiling, passed]
+        require_true: [passed]
+        external: false
+        description: A priced inventory came in under the effective ceiling.
+      - id: observed-cost
+        kind: credentialed_artifact
+        path: release-evidence/cost/observed-cost.json
+        require_keys: [profile, days, daily_usd, provenance]
+        external: true
+        description: Seven days of real spend for production-lean.
+      - id: reconciliation
+        kind: credentialed_artifact
+        path: release-evidence/cost/reconciliation.json
+        require_keys: [projected_usd, observed_usd, variance_percent, provenance]
+        external: true
+        description: Projection reconciled against the observed bill.
+    status: implementation_in_progress
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/cost/
+    external_dependency:
+      required: true
+      what: Real AWS billing data for the production-lean profile.
+    exception: DR-EX-NO-BILLING-HISTORY
+
+  - id: LEAN-PROMOTION-INTEGRITY
+    profile: production-lean
+    description: >-
+      Reviewed promotion integrity — an apply is bound to the exact reviewed
+      plan by digest, inside its expiry window, on the recorded lockfile,
+      terraform version and state key.
+    weight: 10
+    required_evidence:
+      - id: promote-workflow
+        kind: repo_file
+        path: .github/workflows/terraform-promote.yml
+        contains: reviewed.expires-utc
+        external: false
+        description: The workflow records and enforces plan provenance.
+      - id: promotion-provenance
+        kind: credentialed_artifact
+        path: release-evidence/terraform/promotion-provenance.json
+        require_keys: [reviewed_plan_sha256, applied_plan_sha256, lock_sha256, state_key, provenance]
+        external: true
+        description: A real promotion preserved plan provenance end to end.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/terraform/
+    external_dependency:
+      required: true
+      what: A credentialed promotion run.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: LEAN-OBSERVABILITY-ROLLBACK
+    profile: production-lean
+    description: >-
+      Observability and rollback — alarms exist and have been seen firing, and
+      a rollback has been executed against the deployed profile.
+    weight: 5
+    required_evidence:
+      - id: monitoring-module
+        kind: repo_file
+        path: AWS Deployment/aether-aws/terraform/modules/monitoring/main.tf
+        external: false
+        description: The alarms the profile provisions.
+      - id: alarm-evidence
+        kind: credentialed_artifact
+        path: release-evidence/observability/alarm-evidence.json
+        require_keys: [alarms, observed_transitions, provenance]
+        external: true
+        description: An alarm was observed firing and resolving.
+      - id: rollback-result
+        kind: credentialed_artifact
+        path: release-evidence/rollback/rollback-result.json
+        require_keys: [executed_at, restored_at, provenance]
+        external: true
+        description: A rollback was executed against the deployed profile.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/observability/
+    external_dependency:
+      required: true
+      what: A deployed profile emitting real alarm state transitions.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: LEAN-DOCS-EVIDENCE
+    profile: production-lean
+    description: >-
+      Documentation and evidence — the lean profile is documented for operators
+      and its evidence bundle validates against its published checksum.
+    weight: 10
+    required_evidence:
+      - id: profiles-doc
+        kind: repo_file
+        path: docs/DEPLOYMENT-PROFILES.md
+        contains: production-lean
+        external: false
+        description: The lean profile is documented.
+      - id: evidence-doc
+        kind: repo_file
+        path: docs/RELEASE-EVIDENCE.md
+        external: false
+        description: How the evidence bundle is produced and read.
+      - id: bundle-manifest
+        kind: repo_file
+        path: release-evidence/manifest.json
+        external: true
+        description: A published evidence bundle manifest.
+      - id: bundle-checksum
+        kind: repo_file
+        path: release-evidence/manifest.sha256
+        external: true
+        description: The manifest's published checksum.
+    status: implemented
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/scorecard/
+    external_dependency:
+      required: true
+      what: A published, checksummed evidence bundle from a real release run.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  # ---------------------------------------------------------------------------
+  # STAGING — 10 + 10 + 15 + 15 + 15 + 10 + 10 + 10 + 5 = 100
+  # ---------------------------------------------------------------------------
+
+  - id: STG-WAKE
+    profile: staging
+    description: Wake — the staging environment was woken from sleep by a credentialed apply.
+    weight: 10
+    required_evidence:
+      - id: staging-tfvars
+        kind: repo_file
+        path: AWS Deployment/aether-aws/terraform/profiles/staging.tfvars
+        external: false
+        description: The staging profile inputs.
+      - id: wake-evidence
+        kind: credentialed_artifact
+        path: release-evidence/lifecycle/staging-wake.json
+        require_keys: [woke_at, apply_result, provenance]
+        external: true
+        description: A credentialed wake apply completed.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/lifecycle/
+    external_dependency:
+      required: true
+      what: AWS credentials and a sleeping staging environment to wake.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-EXACT-ARTIFACT
+    profile: staging
+    description: >-
+      Exact-artifact deployment — the artifacts deployed to staging are the
+      same digests recorded in the release manifest, not a rebuild.
+    weight: 10
+    required_evidence:
+      - id: manifest-tool
+        kind: repo_file
+        path: scripts/release/release_manifest.py
+        contains: invalid digest
+        external: false
+        description: Manifests bind each artifact to a sha256 digest.
+      - id: deployed-artifacts
+        kind: credentialed_artifact
+        path: release-evidence/lifecycle/deployed-artifacts.json
+        require_keys: [manifest_sha256, deployed_digests, provenance]
+        external: true
+        description: The deployed digests matched the manifest.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/lifecycle/
+    external_dependency:
+      required: true
+      what: A real deployment to compare digests against.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-MIGRATIONS
+    profile: staging
+    description: >-
+      Migration rehearsal — the forward migration and its rollback both ran
+      against a real database with recorded timings and row counts.
+    weight: 15
+    required_evidence:
+      - id: migration-runbook
+        kind: repo_file
+        path: docs/MIGRATION-RUNBOOK.md
+        external: false
+        description: The documented migration procedure.
+      - id: migration-result
+        kind: credentialed_artifact
+        path: release-evidence/migrations/migration-result.json
+        require_keys: [forward, rollback, provenance]
+        external: true
+        description: Forward and rollback migrations both executed.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/migrations/
+    external_dependency:
+      required: true
+      what: A real staging database to migrate and roll back.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-SMOKE
+    profile: staging
+    description: Functional smoke — the smoke suite ran against deployed staging and passed.
+    weight: 15
+    required_evidence:
+      - id: smoke-result
+        kind: credentialed_artifact
+        path: release-evidence/smoke/smoke-result.json
+        require_keys: [suite, passed, failed, provenance]
+        external: true
+        description: The smoke suite executed against the deployed environment.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/smoke/
+    external_dependency:
+      required: true
+      what: A deployed staging environment to smoke test.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-SECURITY-ISOLATION
+    profile: staging
+    description: >-
+      Security, privacy and tenant isolation — probes ran against the deployed
+      environment and no cross-tenant read, unconsented purpose or unauthorised
+      route reached data.
+    weight: 15
+    required_evidence:
+      - id: storage-policies
+        kind: check_script
+        path: scripts/release/check_storage_policies.py
+        external: false
+        description: Storage/privacy policy declarations are enforced in-repo.
+      - id: route-registry
+        kind: check_script
+        path: scripts/release/check_route_registry.py
+        external: false
+        description: Route classification defaults to deny.
+      - id: security-result
+        kind: credentialed_artifact
+        path: release-evidence/security/security-result.json
+        require_keys: [probes, findings, provenance]
+        external: true
+        description: Security and privacy probes ran against the deployment.
+      - id: isolation-result
+        kind: credentialed_artifact
+        path: release-evidence/isolation/isolation-result.json
+        require_keys: [tenants, cross_tenant_reads, provenance]
+        external: true
+        description: Cross-tenant isolation was probed with real tenants.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/security/
+    external_dependency:
+      required: true
+      what: A deployed multi-tenant environment to probe.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-LOAD
+    profile: staging
+    description: >-
+      Load validation — sustained load was applied and latency plus error rate
+      stayed within the declared budgets.
+    weight: 10
+    required_evidence:
+      - id: load-result
+        kind: credentialed_artifact
+        path: release-evidence/load/load-result.json
+        require_keys: [duration_s, rps, p95_ms, error_rate, provenance]
+        external: true
+        description: A load run produced real latency and error measurements.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/load/
+    external_dependency:
+      required: true
+      what: A deployed environment to load.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-ROLLBACK
+    profile: staging
+    description: >-
+      Rollback validation — a rollback was executed against staging and service
+      was observed recovering, with the recovery time recorded.
+    weight: 10
+    required_evidence:
+      - id: rollback-runbook
+        kind: repo_file
+        path: docs/ROLLBACK-RUNBOOK.md
+        external: false
+        description: The documented rollback procedure.
+      - id: rollback-result
+        kind: credentialed_artifact
+        path: release-evidence/rollback/rollback-result.json
+        require_keys: [executed_at, restored_at, provenance]
+        external: true
+        description: A rollback was executed and recovery timed.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/rollback/
+    external_dependency:
+      required: true
+      what: A deployed environment to roll back.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-SLEEP-RESIDUAL
+    profile: staging
+    description: >-
+      Sleep and residual cost — staging slept on schedule and its residual
+      spend while asleep was measured against the declared residual ceiling.
+    weight: 10
+    required_evidence:
+      - id: wake-sleep-declared
+        kind: repo_file
+        path: config/deployment_profiles.yaml
+        contains: maximum_scheduled_awake_hours_per_month
+        external: false
+        description: The awake-hours budget that makes sleep meaningful.
+      - id: sleep-residual
+        kind: credentialed_artifact
+        path: release-evidence/lifecycle/sleep-residual.json
+        require_keys: [slept_at, residual_daily_usd, provenance]
+        external: true
+        description: Residual cost while asleep was measured.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/lifecycle/
+    external_dependency:
+      required: true
+      what: A real sleep cycle with billing data covering it.
+    exception: DR-EX-NO-CLOUD-ACCOUNT
+
+  - id: STG-EVIDENCE-COMPLETE
+    profile: staging
+    description: >-
+      Evidence completeness — two consecutive complete rehearsals are recorded
+      and the bundle validates against its checksum.
+    weight: 5
+    required_evidence:
+      - id: evidence-doc
+        kind: repo_file
+        path: docs/RELEASE-EVIDENCE.md
+        external: false
+        description: How the bundle is produced and read.
+      - id: rehearsal-history
+        kind: credentialed_artifact
+        path: release-evidence/lifecycle/rehearsal-history.json
+        require_keys: [rehearsals, provenance]
+        external: true
+        description: Two consecutive complete rehearsals.
+      - id: bundle-checksum
+        kind: repo_file
+        path: release-evidence/manifest.sha256
+        external: true
+        description: The published bundle checksum.
+    status: externally_blocked
+    last_verified_commit: null
+    last_verified_at: null
+    evidence_path: release-evidence/scorecard/
+    external_dependency:
+      required: true
+      what: Two completed credentialed rehearsals and a published bundle.
+    exception: DR-EX-NO-CLOUD-ACCOUNT

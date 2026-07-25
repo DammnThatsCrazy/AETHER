@@ -1,0 +1,522 @@
+name: Staging TTL guard
+
+# Fail-safe against staging being left awake. staging-lifecycle.yml writes an
+# absolute UTC awake lease to SSM when it wakes the environment; this workflow
+# runs on a timer, compares the lease against the clock, and returns staging to
+# zero when the lease has expired.
+#
+# FAIL-CLOSED IN BOTH DIRECTIONS. Two independent unknowns can arise, and
+# neither may read as "staging is asleep":
+#
+#   1. THE LEASE. A missing, unparseable or over-long lease is treated as
+#      EXPIRED. An environment nobody can account for is exactly the case that
+#      must not be allowed to keep running.
+#   2. LIVE ECS STATE. Every `aws ecs` call here has its exit status checked.
+#      A throttle, an API error or an expired credential makes the awake-task
+#      count UNKNOWN, and unknown ends the run red rather than reporting zero
+#      tasks and "staging is asleep". `mapfile -t x < <(aws ...)` does not
+#      observe the AWS exit status -- `pipefail` does not reach into a process
+#      substitution -- which is why no AWS call in this file is invoked that way.
+#
+# THE ENFORCED TTL IS THE LEASE'S OWN WINDOW. staging-lifecycle.yml chooses it
+# (1-8h, default 4) at wake time and writes `awake_since`/`awake_until` into the
+# lease; this guard enforces that window, refuses a window wider than
+# MAX_AWAKE_HOURS_CAP, and measures the MAX_TOTAL_AWAKE_HOURS ceiling from
+# `awake_since` so repeated extensions cannot accumulate unbounded awake time.
+# There is deliberately no second TTL knob on this workflow: one that did not
+# reach the expiry decision would be a control in name only.
+#
+# Deliberately does NOT run terraform, and never dispatches a reviewed apply:
+# `.github/workflows/terraform-promote.yml` is workflow_dispatch-only precisely so
+# that no timer can reach an apply. The enforcement action here is an ECS
+# scale-to-zero, which can only ever REDUCE running compute, plus a blocking
+# alert telling operators to run `staging-lifecycle.yml` with `action: apply-sleep`
+# so Terraform state is reconciled through the reviewed path.
+
+on:
+  schedule:
+    # Hourly: the tightest useful granularity against a 4-hour default TTL.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: enforce (scale to zero on expiry) | report-only | extend
+        type: choice
+        options: [enforce, report-only, extend]
+        default: report-only
+        required: true
+      extend_hours:
+        description: For mode=extend, how much longer the rehearsal may stay awake (1-4)
+        type: string
+        default: "2"
+        required: false
+      extend_reason:
+        description: For mode=extend, why the rehearsal needs more time (recorded on the lease)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-ttl-guard
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  STAGING_PROFILE: staging
+  STAGING_ENV: staging
+  STAGING_CLUSTER: AETHER-staging
+  AWAKE_LEASE_PARAM: /aether/staging/lifecycle/awake-until
+  # Conservative fallback TTL, applied to a LEGACY lease that carries only a
+  # deadline and no `awake_since` to anchor a window to. Such a lease may not
+  # claim more than this much time from now.
+  DEFAULT_MAX_AWAKE_HOURS: "4"
+  # Hard ceilings, all three of which reach an enforcement decision:
+  #   MAX_AWAKE_HOURS_CAP   widest INITIAL awake window this guard will honour.
+  #   MAX_EXTENSION_HOURS   most a single `mode: extend` dispatch may add.
+  #   MAX_TOTAL_AWAKE_HOURS widest window from `awake_since`, extensions
+  #                         included. This is what stops N sequential extends.
+  MAX_AWAKE_HOURS_CAP: "8"
+  MAX_EXTENSION_HOURS: "4"
+  MAX_TOTAL_AWAKE_HOURS: "12"
+
+jobs:
+  guard:
+    name: Enforce the staging awake TTL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install guard dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Resolve the guard mode and the TTL bounds
+        id: config
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_EXTEND_HOURS: ${{ inputs.extend_hours }}
+        run: |
+          set -euo pipefail
+          # A scheduled run always enforces: the guard is the fail-safe, so the
+          # timer path is never allowed to degrade into report-only.
+          if [ "$EVENT_NAME" = schedule ]; then
+            mode=enforce
+          else
+            mode="${INPUT_MODE:-report-only}"
+          fi
+          case "$mode" in
+            enforce|report-only|extend) ;;
+            *) echo "::error::unknown guard mode '${mode}'"; exit 1 ;;
+          esac
+
+          extend="${INPUT_EXTEND_HOURS:-0}"
+          if [ "$mode" = extend ]; then
+            case "$extend" in
+              ''|*[!0-9]*) echo '::error::extend_hours must be a whole number of hours'; exit 1 ;;
+            esac
+            if [ "$extend" -lt 1 ] || [ "$extend" -gt "$MAX_EXTENSION_HOURS" ]; then
+              echo "::error::extend_hours ${extend} is outside 1..${MAX_EXTENSION_HOURS}"
+              exit 1
+            fi
+          fi
+
+          {
+            printf 'mode=%s\n' "$mode"
+            printf 'extend_hours=%s\n' "$extend"
+          } >> "$GITHUB_OUTPUT"
+          echo "mode=${mode} extend_hours=${extend}"
+
+      - name: Read the awake lease and the live staging state
+        id: state
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ttl-guard
+          # Live truth first: how much staging compute is actually running.
+          # FAIL CLOSED. The exit status of every AWS call is checked, and stderr
+          # is kept. A broken, throttled or unauthorised call used to produce an
+          # empty service list, awake_tasks=0 and a green "staging is asleep" on
+          # a staging environment that was in fact still running.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo 'state_known=false' >> "$GITHUB_OUTPUT"
+            echo '::error::could not enumerate staging ECS services; live staging state is UNKNOWN and will not be reported as asleep'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          if [ "${#services[@]}" -eq 0 ]; then
+            echo '[]' > artifacts/ttl-guard/services.json
+          elif ! aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+              --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
+              --output json > artifacts/ttl-guard/services.json; then
+            echo 'state_known=false' >> "$GITHUB_OUTPUT"
+            echo '::error::could not describe staging ECS services; live staging state is UNKNOWN and will not be reported as asleep'
+            exit 1
+          fi
+          awake_tasks="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
+
+          # A missing lease reads as an empty string, which is treated as expired
+          # below. `|| true` covers ParameterNotFound only; the value itself is
+          # then validated, so an unreadable lease can never look live.
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" \
+            --query Parameter.Value --output text 2>/dev/null || echo '')"
+          if [ "$lease" = None ]; then
+            lease=''
+          fi
+          # A step output is a single line; a lease that somehow carries newlines
+          # must not be able to forge additional outputs.
+          lease="$(printf '%s' "$lease" | tr -d '\n\r')"
+
+          # The lease is a JSON object carrying the ORIGINAL wake (`awake_since`),
+          # the current deadline (`awake_until`) and how many extensions have been
+          # granted. A bare RFC3339 timestamp is accepted as a legacy lease with
+          # no anchor, and is bounded by the conservative default instead.
+          #
+          # Every path that clears `ttl_expired` is inside this one script: an
+          # unparseable lease, a past deadline, a window wider than this guard
+          # will honour, or a total awake span past the ceiling measured from
+          # `awake_since`, all leave it true.
+          lease_state="$(LEASE="$lease" python - <<'PY'
+          import datetime, json, os
+
+          CAP = int(os.environ["MAX_AWAKE_HOURS_CAP"]) * 3600
+          TOTAL = int(os.environ["MAX_TOTAL_AWAKE_HOURS"]) * 3600
+          LEGACY = int(os.environ["DEFAULT_MAX_AWAKE_HOURS"]) * 3600
+
+          def epoch(text):
+              value = datetime.datetime.strptime(str(text), "%Y-%m-%dT%H:%M:%SZ")
+              return int(value.replace(tzinfo=datetime.timezone.utc).timestamp())
+
+          now = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+          raw = (os.environ.get("LEASE") or "").strip()
+          out = {"valid": False, "expired": True, "remaining": 0,
+                 "since": "", "until": "", "extensions": 0, "reason": ""}
+
+          if not raw:
+              out["reason"] = "no awake lease is recorded"
+              print(json.dumps(out)); raise SystemExit(0)
+
+          since = until = None
+          extensions = 0
+          try:
+              document = json.loads(raw)
+          except ValueError:
+              document = None
+          if isinstance(document, dict):
+              try:
+                  until = epoch(document.get("awake_until"))
+                  since = epoch(document["awake_since"]) if document.get("awake_since") else None
+                  extensions = int(document.get("extensions") or 0)
+              except (ValueError, TypeError):
+                  until = None
+          else:
+              try:
+                  until = epoch(raw)
+              except (ValueError, TypeError):
+                  until = None
+
+          if until is None:
+              out["reason"] = f"awake lease {raw!r} is not a parseable UTC lease"
+              print(json.dumps(out)); raise SystemExit(0)
+
+          out.update({
+              "valid": True,
+              "until": datetime.datetime.fromtimestamp(until, datetime.timezone.utc)
+                                        .strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "extensions": extensions,
+              "remaining": max(0, (until - now) // 60),
+          })
+          if since is not None:
+              out["since"] = datetime.datetime.fromtimestamp(since, datetime.timezone.utc) \
+                                              .strftime("%Y-%m-%dT%H:%M:%SZ")
+
+          if now >= until:
+              out["reason"] = "the awake lease has expired"
+          elif since is None:
+              # Legacy lease: nothing anchors a window, so the conservative
+              # default is the only bound available.
+              if (until - now) > LEGACY:
+                  out["reason"] = (f"legacy awake lease claims more than the "
+                                   f"{LEGACY // 3600}h default TTL")
+              else:
+                  out["expired"] = False
+          elif since > now:
+              out["reason"] = "awake lease claims a wake time in the future"
+          else:
+              window = until - since
+              limit = TOTAL if extensions > 0 else CAP
+              if window > limit:
+                  out["reason"] = (f"awake window of {window // 3600}h exceeds the "
+                                   f"{limit // 3600}h ceiling for a lease with "
+                                   f"{extensions} extension(s)")
+              elif (now - since) > TOTAL:
+                  out["reason"] = (f"staging has been awake longer than the "
+                                   f"{TOTAL // 3600}h total ceiling")
+              else:
+                  out["expired"] = False
+          print(json.dumps(out))
+          PY
+          )"
+          read_field() { printf '%s' "$lease_state" | python -c "import json,sys;print(json.load(sys.stdin)['$1'])"; }
+          lease_valid="$(read_field valid | tr 'TF' 'tf')"
+          ttl_expired="$(read_field expired | tr 'TF' 'tf')"
+          lease_reason="$(read_field reason)"
+          if [ "$ttl_expired" = true ] && [ -n "$lease_reason" ]; then
+            echo "::warning::treating staging as past its TTL: ${lease_reason}"
+          fi
+
+          {
+            printf 'state_known=true\n'
+            printf 'awake_tasks=%s\n' "$awake_tasks"
+            printf 'lease=%s\n' "${lease:-none}"
+            printf 'lease_valid=%s\n' "$lease_valid"
+            printf 'lease_since=%s\n' "$(read_field since)"
+            printf 'lease_until=%s\n' "$(read_field until)"
+            printf 'lease_extensions=%s\n' "$(read_field extensions)"
+            printf 'lease_reason=%s\n' "${lease_reason:-none}"
+            printf 'ttl_expired=%s\n' "$ttl_expired"
+            printf 'remaining_minutes=%s\n' "$(read_field remaining)"
+          } >> "$GITHUB_OUTPUT"
+          echo "awake_tasks=${awake_tasks} lease=${lease:-none} ttl_expired=${ttl_expired}"
+
+      # A time-bounded extension. It is written as an ABSOLUTE UTC deadline, so it
+      # expires by the passage of time — there is no state to clean up and no way
+      # for a forgotten extension to persist. An extension is only granted while
+      # staging is actually awake, so it cannot pre-authorise a future rehearsal.
+      #
+      # THE CEILING IS MEASURED FROM `awake_since`, NOT FROM NOW. An extension
+      # REPLACES the deadline, so a ceiling of `now + MAX_TOTAL_AWAKE_HOURS` can
+      # never be exceeded by an extension of at most MAX_EXTENSION_HOURS, and N
+      # sequential dispatches would each restart the clock and grant unbounded
+      # awake time. Anchoring to the original wake is what actually bounds the
+      # total, and it is why the extension preserves `awake_since` untouched.
+      - name: Grant a time-bounded extension
+        if: steps.config.outputs.mode == 'extend'
+        env:
+          EXTEND_HOURS: ${{ steps.config.outputs.extend_hours }}
+          EXTEND_REASON: ${{ inputs.extend_reason }}
+          AWAKE_TASKS: ${{ steps.state.outputs.awake_tasks }}
+          LEASE_SINCE: ${{ steps.state.outputs.lease_since }}
+          LEASE_VALID: ${{ steps.state.outputs.lease_valid }}
+          LEASE_EXTENSIONS: ${{ steps.state.outputs.lease_extensions }}
+        run: |
+          set -euo pipefail
+          if [ "${AWAKE_TASKS:-0}" -eq 0 ]; then
+            echo '::error::refusing to extend a lease while staging is already asleep'
+            exit 1
+          fi
+          test -n "${EXTEND_REASON:-}" \
+            || { echo '::error::extend_reason is required so every extension is accountable'; exit 1; }
+          # Without a live lease there is no original wake to anchor the total
+          # ceiling to, so an extension would be unbounded by construction.
+          test "${LEASE_VALID:-false}" = true \
+            || { echo '::error::refusing to extend: there is no parseable awake lease to extend'; exit 1; }
+          test -n "${LEASE_SINCE:-}" \
+            || { echo '::error::refusing to extend a lease that records no awake_since to bound the total against'; exit 1; }
+          new_deadline="$(date -u -d "+${EXTEND_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
+          ceiling="$(date -u -d "${LEASE_SINCE} +${MAX_TOTAL_AWAKE_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
+          if [ "$(date -u -d "$new_deadline" +%s)" -gt "$(date -u -d "$ceiling" +%s)" ]; then
+            echo "::error::extension to ${new_deadline} would take staging past the ${MAX_TOTAL_AWAKE_HOURS}h total awake ceiling of ${ceiling} (awake since ${LEASE_SINCE})"
+            exit 1
+          fi
+          extensions="$(( ${LEASE_EXTENSIONS:-0} + 1 ))"
+          lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":%s}' \
+            "$LEASE_SINCE" "$new_deadline" "$extensions")"
+          aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" --type String --overwrite \
+            --value "$lease" \
+            --description "staging awake extended by ${GITHUB_ACTOR}: ${EXTEND_REASON}"
+          echo "::notice::staging awake lease extended to ${new_deadline} (extension ${extensions}; ceiling ${ceiling}; expires automatically)"
+          printf 'extended_to=%s\nawake_since=%s\nextensions=%s\nceiling=%s\nreason=%s\nactor=%s\n' \
+            "$new_deadline" "$LEASE_SINCE" "$extensions" "$ceiling" "$EXTEND_REASON" "$GITHUB_ACTOR" \
+            >> artifacts/ttl-guard/actions.log
+
+      - name: Return staging to sleep (TTL exceeded)
+        id: enforce
+        if: >-
+          steps.config.outputs.mode == 'enforce'
+          && steps.state.outputs.ttl_expired == 'true'
+          && steps.state.outputs.awake_tasks != '0'
+        env:
+          LEASE: ${{ steps.state.outputs.lease }}
+          AWAKE_TASKS: ${{ steps.state.outputs.awake_tasks }}
+        run: |
+          set -euo pipefail
+          test "$STAGING_CLUSTER" = "AETHER-staging" \
+            || { echo '::error::TTL enforcement refused outside the staging cluster'; exit 1; }
+          # Fail closed: enforcement that could not read the service list did not
+          # enforce anything, and must not exit green claiming it did.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; TTL enforcement did not run'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          scaled=0
+          for service in "${services[@]:-}"; do
+            test -n "$service" || continue
+            aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
+              --desired-count 0 >/dev/null
+            scaled=$((scaled + 1))
+            printf 'scaled_to_zero=%s lease=%s at=%s\n' \
+              "$service" "$LEASE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
+            echo "::warning::scaled ${service} to desired-count 0 (awake TTL exceeded)"
+          done
+          # Drop autoscaling floors so nothing scales the group straight back up.
+          # The ECS autoscaling namespace is ACCOUNT-WIDE and its ResourceId has
+          # the form `service/<cluster>/<service>`. `contains()` would match any
+          # cluster whose name merely contains "AETHER-staging" — including a
+          # production-adjacent one — and this hourly cron would zero its
+          # autoscaling floor. Match the cluster segment exactly.
+          if ! targets_raw="$(aws application-autoscaling describe-scalable-targets \
+            --service-namespace ecs \
+            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].ResourceId" \
+            --output text)"; then
+            echo '::error::could not read staging autoscaling targets; an autoscaling floor may revive staging'
+            exit 1
+          fi
+          mapfile -t targets < <(printf '%s' "$targets_raw" | tr '\t' '\n' | sed '/^$/d')
+          for target in "${targets[@]:-}"; do
+            test -n "$target" || continue
+            aws application-autoscaling register-scalable-target --service-namespace ecs \
+              --scalable-dimension ecs:service:DesiredCount --resource-id "$target" \
+              --min-capacity 0 >/dev/null
+            printf 'autoscaling_floor_zeroed=%s at=%s\n' \
+              "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
+          done
+          aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >/dev/null 2>&1 \
+            || echo 'no awake lease to close'
+          printf 'scaled=%s\n' "$scaled" >> "$GITHUB_OUTPUT"
+
+      - name: Verify staging is back at zero
+        id: verify
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ttl-guard
+          echo '[]' > artifacts/ttl-guard/services-after.json
+          # FAIL CLOSED. This step exists to PROVE staging came back to zero. An
+          # AWS call it could not make proves nothing, so the residual count is
+          # reported as `unknown`, which the alert below treats as requiring
+          # manual intervention. It must not exit early: the alert runs after it
+          # and is what carries the disclosure.
+          residual=unknown
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; residual staging compute is UNKNOWN'
+          else
+            mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+            if [ "${#services[@]}" -eq 0 ]; then
+              residual=0
+            elif aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+              --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
+              --output json > artifacts/ttl-guard/services-after.json; then
+              residual="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services-after.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
+            else
+              echo '[]' > artifacts/ttl-guard/services-after.json
+              echo '::error::could not describe staging ECS services; residual staging compute is UNKNOWN'
+            fi
+          fi
+          printf 'residual_tasks=%s\n' "$residual" >> "$GITHUB_OUTPUT"
+          echo "residual staging tasks after the guard: ${residual}"
+
+      # A blocking alert. When the guard had to act, or could not bring staging
+      # back to zero, the run ends red so the failure is visible rather than
+      # buried in a log.
+      - name: Blocking alert on an unaccountable staging environment
+        if: always()
+        env:
+          MODE: ${{ steps.config.outputs.mode }}
+          STATE_KNOWN: ${{ steps.state.outputs.state_known }}
+          LEASE: ${{ steps.state.outputs.lease }}
+          LEASE_VALID: ${{ steps.state.outputs.lease_valid }}
+          LEASE_SINCE: ${{ steps.state.outputs.lease_since }}
+          LEASE_UNTIL: ${{ steps.state.outputs.lease_until }}
+          LEASE_EXTENSIONS: ${{ steps.state.outputs.lease_extensions }}
+          LEASE_REASON: ${{ steps.state.outputs.lease_reason }}
+          TTL_EXPIRED: ${{ steps.state.outputs.ttl_expired }}
+          REMAINING_MINUTES: ${{ steps.state.outputs.remaining_minutes }}
+          AWAKE_TASKS: ${{ steps.state.outputs.awake_tasks }}
+          SCALED: ${{ steps.enforce.outputs.scaled }}
+          RESIDUAL_TASKS: ${{ steps.verify.outputs.residual_tasks }}
+        run: |
+          set -euo pipefail
+          enforced=false
+          if [ -n "${SCALED:-}" ] && [ "${SCALED:-0}" -gt 0 ]; then
+            enforced=true
+          fi
+          # UNKNOWN IS NOT ZERO. A non-numeric awake or residual count means an
+          # AWS call failed; the guard cannot say staging is asleep, so it says
+          # a human must look. Same for a state step that never published a
+          # reading at all.
+          manual=false
+          state_known="${STATE_KNOWN:-false}"
+          if [ "$state_known" != true ]; then
+            manual=true
+            echo '::error::live staging state could not be read; the guard cannot prove staging is asleep'
+          fi
+          case "${AWAKE_TASKS:-unknown}" in
+            ''|*[!0-9]*) awake_known=false; manual=true ;;
+            *) awake_known=true ;;
+          esac
+          case "${RESIDUAL_TASKS:-unknown}" in
+            ''|*[!0-9]*) residual_known=false; manual=true ;;
+            *) residual_known=true ;;
+          esac
+          if [ "$residual_known" = true ] \
+            && [ "${RESIDUAL_TASKS}" -gt 0 ] && [ "${TTL_EXPIRED:-true}" = true ]; then
+            manual=true
+          fi
+          {
+            echo '### Staging TTL guard'
+            echo
+            echo '| field | value |'
+            echo '| --- | --- |'
+            echo "| mode | ${MODE:-unknown} |"
+            echo "| live staging state readable | ${state_known} |"
+            echo "| awake lease (UTC) | ${LEASE:-none} |"
+            echo "| lease parseable | ${LEASE_VALID:-false} |"
+            echo "| awake since (UTC) | ${LEASE_SINCE:-unknown} |"
+            echo "| awake until (UTC) | ${LEASE_UNTIL:-unknown} |"
+            echo "| extensions granted | ${LEASE_EXTENSIONS:-unknown} |"
+            echo "| TTL expired | ${TTL_EXPIRED:-true} |"
+            echo "| expiry reason | ${LEASE_REASON:-none} |"
+            echo "| lease remaining | ${REMAINING_MINUTES:-0} min |"
+            echo "| awake tasks before | ${AWAKE_TASKS:-unknown} |"
+            echo "| services scaled to zero | ${SCALED:-0} |"
+            echo "| residual tasks after | ${RESIDUAL_TASKS:-unknown} |"
+            echo "| manual intervention required | ${manual} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$manual" = true ]; then
+            echo "::error::staging is awake past its TTL, or its state could not be read, and the guard could not bring it to zero (awake_tasks=${AWAKE_TASKS:-unknown}, residual_tasks=${RESIDUAL_TASKS:-unknown}); intervene manually"
+            exit 1
+          fi
+          if [ "$enforced" = true ]; then
+            echo "::error::staging was awake past the TTL recorded on its lease and was force-scaled to zero; run staging-lifecycle.yml with action: apply-sleep to reconcile Terraform state"
+            exit 1
+          fi
+          if [ "$awake_known" = true ] && [ "${AWAKE_TASKS}" -gt 0 ]; then
+            echo "::notice::staging is awake with ${REMAINING_MINUTES:-0} min of lease remaining"
+          else
+            echo '::notice::staging is asleep'
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-ttl-guard-${{ github.run_id }}
+          path: artifacts/ttl-guard
+          if-no-files-found: warn
+          retention-days: 30

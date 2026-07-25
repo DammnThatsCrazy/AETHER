@@ -7,8 +7,8 @@
 
 deployment_profile = "enterprise-isolated"
 
-# Network — NAT per AZ; private connectivity assumed.
-enable_nat_gateway_ha = true
+# Network — one NAT Gateway per AZ; private connectivity assumed.
+network_egress_mode = "ha_nat"
 
 # Aurora Serverless v2 — larger dedicated capacity.
 aurora_min_acu = 2

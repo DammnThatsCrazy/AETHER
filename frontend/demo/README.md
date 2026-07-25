@@ -7,6 +7,15 @@ operator view of the same demo tenant.
 
 - Runs entirely on MSW fixtures in `local-mocked` mode — **no backend required**.
 - Port `5177`. Built with Vite + React 19 + `@aether/ui` (matches aether/kyber).
+- `VITE_DEMO_ENV` is **required and has no default** — an unset or unknown value
+  fails the build. Valid values are the canonical deployment profiles the demo
+  SPA may run as: `local-mocked`, `demo-static`, `demo-live`.
+- Fixtures are reachable only where policy allows: `demo-live` builds alias
+  `@demo/data/dataset` to `src/data/dataset.live.ts` and statically eliminate the
+  MSW worker import, so neither fixtures nor MSW are emitted into that bundle.
+  `scripts/validate_frontend_data_truth.py` enforces this (`make
+  frontend-data-truth`, `make frontend-data-truth-bundles`).
+- A persistent banner states the profile and data source on every screen.
 
 ```bash
 cp .env.example .env        # VITE_DEMO_ENV=local-mocked

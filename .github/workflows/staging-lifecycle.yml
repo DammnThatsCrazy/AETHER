@@ -1,0 +1,1795 @@
+name: Staging lifecycle (wake / validate / sleep)
+
+# Staging is a wake-for-validation environment: it exists only for the duration
+# of a rehearsal and must return to `asleep` afterwards, even when the rehearsal
+# fails. See config/deployment_profiles.yaml -> profiles.staging.behavior.
+#
+# THIS WORKFLOW NEVER RUNS `terraform apply` ITSELF.
+# .github/workflows/terraform-promote.yml is the sole sanctioned apply path. Every
+# infrastructure mutation here is a `workflow_dispatch` of that workflow, so the
+# immutable reviewed-plan guarantees (plan -> checksum -> verify -> apply the exact
+# stored plan, per-profile environment approval, distinct plan/apply AWS roles,
+# 24h expiry, apply never re-plans) are inherited rather than re-implemented.
+# This workflow independently re-verifies the reviewed plan before it dispatches
+# an apply, so a compromised or stale plan cannot be promoted through here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Lifecycle action
+        type: choice
+        options:
+          - plan-wake
+          - apply-wake
+          - validate
+          - plan-sleep
+          - apply-sleep
+          - full-rehearsal
+        default: validate
+        required: true
+      ml_image_digest:
+        description: Immutable ML serving image digest (sha256:...) — required for any wake or sleep plan
+        type: string
+        required: false
+      backend_image_digest:
+        description: Immutable backend image digest (sha256:...) — ignored when release_run_id is supplied
+        type: string
+        required: false
+      release_run_id:
+        description: Successful `Immutable delivery` run holding release.json (required for full-rehearsal)
+        type: string
+        required: false
+      release_manifest_checksum:
+        description: Approved sha256 of release.json (required for full-rehearsal)
+        type: string
+        required: false
+      plan_run_id:
+        description: Reviewed-plan run ID (required for a standalone validate / apply-wake / apply-sleep)
+        type: string
+        required: false
+      plan_checksum:
+        description: Approved reviewed.tfplan sha256 (required for a standalone apply-wake / apply-sleep)
+        type: string
+        required: false
+      max_awake_hours:
+        description: Awake lease written at wake, in hours (1-8). The TTL guard enforces it.
+        type: string
+        default: "4"
+        required: false
+      promote_timeout_minutes:
+        description: How long to wait for a dispatched reviewed-promotion run, including its approval
+        type: string
+        default: "180"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-lifecycle
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  STAGING_PROFILE: staging
+  STAGING_ENV: staging
+  STAGING_CLUSTER: AETHER-staging
+  PROMOTE_WORKFLOW: terraform-promote.yml
+  PROMOTE_WORKFLOW_PATH: .github/workflows/terraform-promote.yml
+  DELIVERY_WORKFLOW_PATH: .github/workflows/deploy.yml
+  AWAKE_LEASE_PARAM: /aether/staging/lifecycle/awake-until
+  MAX_AWAKE_HOURS_CAP: "8"
+  TF_DIR: AWS Deployment/aether-aws/terraform
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Phase 1 — select the staging profile and route the requested action.
+  # ---------------------------------------------------------------------------
+  select-profile:
+    name: Select the staging profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      profile: ${{ steps.route.outputs.profile }}
+      plan_wake: ${{ steps.route.outputs.plan_wake }}
+      apply_wake: ${{ steps.route.outputs.apply_wake }}
+      do_validate: ${{ steps.route.outputs.do_validate }}
+      plan_sleep: ${{ steps.route.outputs.plan_sleep }}
+      apply_sleep: ${{ steps.route.outputs.apply_sleep }}
+      rehearse: ${{ steps.route.outputs.rehearse }}
+      awake_hours: ${{ steps.route.outputs.awake_hours }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install lifecycle Python dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
+
+      - name: Resolve the staging profile from canonical configuration
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          test -f "${TF_DIR}/profiles/${STAGING_PROFILE}.tfvars" \
+            || { echo "::error::no tfvars for profile ${STAGING_PROFILE}"; exit 1; }
+          python - <<'PY'
+          import os, sys, yaml
+          profile = os.environ["STAGING_PROFILE"]
+          deploy = (yaml.safe_load(open("config/deployment_profiles.yaml")) or {}).get("profiles") or {}
+          cfg = deploy.get(profile)
+          if not cfg:
+              sys.exit(f"::error::config/deployment_profiles.yaml declares no {profile} profile")
+          if cfg.get("class") != "staging":
+              sys.exit(f"::error::{profile} is not a staging-class profile")
+          if not cfg.get("wake_sleep"):
+              sys.exit(f"::error::{profile} does not declare wake_sleep: true")
+          if not (cfg.get("budget") or {}).get("hard_monthly_spend"):
+              sys.exit(f"::error::{profile} declares no hard_monthly_spend budget ceiling")
+          runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          state = ((runtime.get(profile) or {}).get("staging_state") or {}).get("states") or {}
+          for required in ("awake", "asleep"):
+              if required not in state:
+                  sys.exit(f"::error::runtime_deployment.yaml declares no staging_state.{required}")
+          print(f"staging profile resolved: {profile}")
+          PY
+
+      - name: Route the lifecycle action
+        id: route
+        env:
+          ACTION: ${{ inputs.action }}
+          MAX_AWAKE_HOURS: ${{ inputs.max_awake_hours }}
+          PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+          PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
+          ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+        run: |
+          set -euo pipefail
+          plan_wake=false
+          apply_wake=false
+          do_validate=false
+          plan_sleep=false
+          apply_sleep=false
+          rehearse=false
+          case "$ACTION" in
+            plan-wake)      plan_wake=true ;;
+            validate)       do_validate=true ;;
+            apply-wake)     do_validate=true; apply_wake=true ;;
+            plan-sleep)     plan_sleep=true ;;
+            apply-sleep)    plan_sleep=true; apply_sleep=true ;;
+            full-rehearsal) plan_wake=true; do_validate=true; apply_wake=true
+                            rehearse=true; plan_sleep=true; apply_sleep=true ;;
+            *) echo "::error::unknown lifecycle action '${ACTION}'"; exit 1 ;;
+          esac
+
+          # A plan needs the immutable ML digest; terraform-promote refuses without it.
+          if [ "$plan_wake" = true ] || [ "$plan_sleep" = true ]; then
+            test -n "$ML_IMAGE_DIGEST" \
+              || { echo '::error::ml_image_digest is required for any wake or sleep plan'; exit 1; }
+          fi
+          # Validating or applying without producing a plan here means an existing
+          # reviewed plan must be named explicitly.
+          if [ "$do_validate" = true ] && [ "$plan_wake" = false ]; then
+            test -n "$PLAN_RUN_ID" \
+              || { echo '::error::plan_run_id is required when no wake plan is produced in this run'; exit 1; }
+          fi
+          if [ "$apply_wake" = true ] && [ "$plan_wake" = false ]; then
+            test -n "$PLAN_CHECKSUM" \
+              || { echo '::error::plan_checksum is required for a standalone apply-wake'; exit 1; }
+          fi
+          if [ "$rehearse" = true ]; then
+            test -n "$RELEASE_RUN_ID" \
+              || { echo '::error::release_run_id is required for full-rehearsal'; exit 1; }
+            test -n "$RELEASE_MANIFEST_CHECKSUM" \
+              || { echo '::error::release_manifest_checksum is required for full-rehearsal'; exit 1; }
+          fi
+
+          case "$MAX_AWAKE_HOURS" in
+            ''|*[!0-9]*) echo "::error::max_awake_hours must be a whole number of hours"; exit 1 ;;
+          esac
+          if [ "$MAX_AWAKE_HOURS" -lt 1 ] || [ "$MAX_AWAKE_HOURS" -gt "$MAX_AWAKE_HOURS_CAP" ]; then
+            echo "::error::max_awake_hours ${MAX_AWAKE_HOURS} is outside 1..${MAX_AWAKE_HOURS_CAP}"
+            exit 1
+          fi
+          case "$PROMOTE_TIMEOUT_MINUTES" in
+            ''|*[!0-9]*) echo "::error::promote_timeout_minutes must be a whole number of minutes"; exit 1 ;;
+          esac
+
+          {
+            printf 'profile=%s\n' "$STAGING_PROFILE"
+            printf 'plan_wake=%s\n' "$plan_wake"
+            printf 'apply_wake=%s\n' "$apply_wake"
+            printf 'do_validate=%s\n' "$do_validate"
+            printf 'plan_sleep=%s\n' "$plan_sleep"
+            printf 'apply_sleep=%s\n' "$apply_sleep"
+            printf 'rehearse=%s\n' "$rehearse"
+            printf 'awake_hours=%s\n' "$MAX_AWAKE_HOURS"
+          } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Phase 2 — credentialed wake plan, produced by the reviewed promotion workflow.
+  # ---------------------------------------------------------------------------
+  wake-plan:
+    name: Credentialed wake plan (reviewed promotion)
+    needs: [select-profile]
+    if: needs.select-profile.outputs.plan_wake == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      plan_run_id: ${{ steps.dispatch.outputs.plan_run_id }}
+      plan_checksum: ${{ steps.verify.outputs.plan_checksum }}
+      reviewed_commit: ${{ steps.verify.outputs.reviewed_commit }}
+      backend_image_digest: ${{ steps.release.outputs.backend_image_digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The wake plan must pin the SAME backend image digest the approved release
+      # manifest binds, so applying the plan is itself the delivery of the exact
+      # immutable artifact rather than of whatever tag happens to be current.
+      - uses: actions/download-artifact@v4
+        if: inputs.release_run_id != ''
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.release_run_id }}
+          pattern: release-*
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+      - name: Resolve the backend image digest from the approved release manifest
+        id: release
+        env:
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_RUN_ID" ]; then
+            test -n "$BACKEND_IMAGE_DIGEST" \
+              || { echo '::error::supply release_run_id or backend_image_digest'; exit 1; }
+            printf 'backend_image_digest=%s\n' "$BACKEND_IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_RUN_ID}")"
+          run_path="$(jq -r '.path' <<<"$run_json")"
+          run_conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+          if [ "$run_path" != "$DELIVERY_WORKFLOW_PATH" ]; then
+            echo "::error::release run ${RELEASE_RUN_ID} belongs to ${run_path}, not the delivery workflow"
+            exit 1
+          fi
+          if [ "$run_conclusion" != success ]; then
+            echo "::error::release run ${RELEASE_RUN_ID} concluded ${run_conclusion}, not success"
+            exit 1
+          fi
+          cd "${RUNNER_TEMP}/release"
+          test -s release.json || { echo '::error::release run produced no release.json'; exit 1; }
+          sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
+          python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
+            --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
+          digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
+          case "$digest" in
+            sha256:*) ;;
+            *) echo "::error::release manifest backend digest is not a sha256 digest"; exit 1 ;;
+          esac
+          if [ -n "$BACKEND_IMAGE_DIGEST" ] && [ "$BACKEND_IMAGE_DIGEST" != "$digest" ]; then
+            echo "::error::backend_image_digest input does not match the approved release manifest"
+            exit 1
+          fi
+          printf 'backend_image_digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch the reviewed wake plan and wait for it
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          STAGING_STATE: awake
+          BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
+          ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+          PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" \
+            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+          # Run IDs increase monotonically per repository, so anything created
+          # after this watermark and on our ref is a candidate for our dispatch.
+          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
+            --jq '.workflow_runs[0].id // 0')"
+          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+            -f profile="$STAGING_PROFILE" \
+            -f action=plan \
+            -f staging_state="$STAGING_STATE" \
+            -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
+            -f ml_image_digest="$ML_IMAGE_DIGEST"
+          run_id=''
+          discover_deadline="$(( $(date -u +%s) + 300 ))"
+          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
+            mapfile -t candidates < <(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
+              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
+            if [ "${#candidates[@]}" -gt 1 ]; then
+              echo "::error::ambiguous reviewed-plan runs (${candidates[*]}); refusing to guess"
+              exit 1
+            fi
+            if [ "${#candidates[@]}" -eq 1 ]; then
+              run_id="${candidates[0]}"
+              break
+            fi
+            sleep 10
+          done
+          test -n "$run_id" || { echo '::error::dispatched reviewed plan never appeared'; exit 1; }
+          echo "reviewed plan run: ${run_id}"
+          wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+          conclusion=''
+          while :; do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            if [ "$status" = completed ]; then
+              conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
+              break
+            fi
+            if [ "$(date -u +%s)" -ge "$wait_deadline" ]; then
+              echo "::error::reviewed plan run ${run_id} did not finish within ${PROMOTE_TIMEOUT_MINUTES}m"
+              exit 1
+            fi
+            sleep 20
+          done
+          if [ "$conclusion" != success ]; then
+            echo "::error::reviewed plan run ${run_id} concluded ${conclusion}"
+            exit 1
+          fi
+          printf 'plan_run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.dispatch.outputs.plan_run_id }}
+          pattern: terraform-plan-${{ needs.select-profile.outputs.profile }}-*
+          path: ${{ runner.temp }}/reviewed-plan
+          merge-multiple: true
+
+      - name: Verify the reviewed wake plan and publish its checksum
+        id: verify
+        env:
+          PROFILE: ${{ needs.select-profile.outputs.profile }}
+          EXPECTED_STATE: awake
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/reviewed-plan"
+          for artefact in \
+            reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
+            reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
+          do
+            test -s "$artefact" || { echo "::error::reviewed plan is missing ${artefact}"; exit 1; }
+          done
+          test "$(cat reviewed.profile)" = "$PROFILE"
+          test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          # The shape this run asked terraform-promote to plan. The authoritative
+          # check is the desired-count assertion against the plan JSON in
+          # wake-validate; this refuses a plan that was not even requested for
+          # the state we are about to wake into.
+          test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
+            || { echo "::error::reviewed plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
+          sha256sum --check --status reviewed.tfplan.sha256
+          reviewed_commit="$(cat reviewed.commit)"
+          printf '%s' "$reviewed_commit" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo '::error::reviewed.commit is not a 40-character commit sha'; exit 1; }
+          checksum="$(sha256sum reviewed.tfplan | cut -d' ' -f1)"
+          {
+            printf 'plan_checksum=%s\n' "$checksum"
+            printf 'reviewed_commit=%s\n' "$reviewed_commit"
+          } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Phase 3 — independently validate the reviewed plan: policy, budget, and the
+  # pinned awake shape. Nothing is applied until this job is green.
+  # ---------------------------------------------------------------------------
+  wake-validate:
+    name: Validate the reviewed wake plan (policy + budget + awake shape)
+    needs: [select-profile, wake-plan]
+    if: >-
+      !cancelled()
+      && needs.select-profile.result == 'success'
+      && needs.select-profile.outputs.do_validate == 'true'
+      && needs.wake-plan.result != 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      plan_run_id: ${{ steps.identity.outputs.plan_run_id }}
+      plan_checksum: ${{ steps.reviewed.outputs.plan_checksum }}
+      reviewed_commit: ${{ steps.reviewed.outputs.reviewed_commit }}
+    steps:
+      - name: Resolve which reviewed plan is under validation
+        id: identity
+        env:
+          PRODUCED_RUN_ID: ${{ needs.wake-plan.outputs.plan_run_id }}
+          INPUT_RUN_ID: ${{ inputs.plan_run_id }}
+        run: |
+          set -euo pipefail
+          run_id="${PRODUCED_RUN_ID:-$INPUT_RUN_ID}"
+          test -n "$run_id" || { echo '::error::no reviewed plan run to validate'; exit 1; }
+          printf 'plan_run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.wake-plan.outputs.reviewed_commit || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install plan-validation dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.identity.outputs.plan_run_id }}
+          pattern: terraform-plan-${{ needs.select-profile.outputs.profile }}-*
+          path: ${{ runner.temp }}/reviewed-plan
+          merge-multiple: true
+
+      # Reproduces terraform-promote's apply-time provenance verification so this
+      # workflow never hands an unverified plan identity to an apply dispatch.
+      - name: Verify reviewed plan provenance, profile and 24h expiry
+        id: reviewed
+        env:
+          PROFILE: ${{ needs.select-profile.outputs.profile }}
+          EXPECTED_CHECKSUM: ${{ needs.wake-plan.outputs.plan_checksum || inputs.plan_checksum }}
+          EXPECTED_STATE: awake
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/reviewed-plan"
+          for artefact in \
+            reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
+            reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
+          do
+            test -s "$artefact" || { echo "::error::reviewed plan is missing ${artefact}"; exit 1; }
+          done
+          test "$(cat reviewed.profile)" = "$PROFILE"
+          test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
+            || { echo "::error::reviewed plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
+          sha256sum --check --status reviewed.tfplan.sha256
+          checksum="$(sha256sum reviewed.tfplan | cut -d' ' -f1)"
+          if [ -n "$EXPECTED_CHECKSUM" ] && [ "$checksum" != "$EXPECTED_CHECKSUM" ]; then
+            echo '::error::reviewed.tfplan does not match the approved plan_checksum'
+            exit 1
+          fi
+          reviewed_commit="$(cat reviewed.commit)"
+          printf '%s' "$reviewed_commit" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo '::error::reviewed.commit is not a 40-character commit sha'; exit 1; }
+          printf '%s' "$(cat reviewed.terraform-version)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            || { echo '::error::reviewed.terraform-version is not a concrete version'; exit 1; }
+          created_epoch="$(date -u -d "$(cat reviewed.created-utc)" +%s)"
+          expires_epoch="$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
+          now_epoch="$(date -u +%s)"
+          if [ "$expires_epoch" -le "$created_epoch" ]; then
+            echo '::error::reviewed plan expiry precedes its creation timestamp'
+            exit 1
+          fi
+          if [ "$((expires_epoch - created_epoch))" -gt 86400 ]; then
+            echo '::error::reviewed plan claims a validity window longer than 24 hours'
+            exit 1
+          fi
+          if [ "$now_epoch" -ge "$expires_epoch" ]; then
+            echo "::error::reviewed plan expired at $(cat reviewed.expires-utc); create a fresh plan"
+            exit 1
+          fi
+          {
+            printf 'plan_checksum=%s\n' "$checksum"
+            printf 'reviewed_commit=%s\n' "$reviewed_commit"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate the reviewed plan against policy
+        env:
+          PROFILE: ${{ needs.select-profile.outputs.profile }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python scripts/release/check_terraform_plan_policy.py \
+            --profile "$PROFILE" \
+            --plan-json "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" \
+            | tee artifacts/wake-plan-policy.txt
+          test -s artifacts/profile-resource-inventory.json
+
+      - name: Validate the staging budget
+        env:
+          PROFILE: ${{ needs.select-profile.outputs.profile }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, sys, yaml
+          profile = os.environ["PROFILE"]
+          cfg = ((yaml.safe_load(open("config/deployment_profiles.yaml")) or {}).get("profiles") or {}).get(profile) or {}
+          budget = cfg.get("budget") or {}
+          for key in ("hard_monthly_spend", "target_monthly_spend", "maximum_scheduled_awake_hours_per_month"):
+              if not budget.get(key):
+                  sys.exit(f"::error::{profile} budget is missing {key}; the cost ceiling is unenforceable")
+          print(f"{profile} budget ceiling: {budget['hard_monthly_spend']} {budget.get('currency', 'USD')}/month")
+          PY
+          python scripts/release/check_cost_model.py \
+            --profile "$PROFILE" \
+            --inventory artifacts/profile-resource-inventory.json \
+            --out-dir "artifacts/cost-${PROFILE}" \
+            | tee artifacts/wake-plan-cost.txt
+
+      # The pinned Terraform interface: `awake` gives 1 API task and 1 lean-worker
+      # task. This reads the plan itself, so it holds regardless of what any
+      # evidence file claims.
+      - name: Assert the reviewed plan encodes the awake desired counts
+        env:
+          PROFILE: ${{ needs.select-profile.outputs.profile }}
+          EXPECTED_STATE: awake
+        run: |
+          set -euo pipefail
+          PLAN_JSON="${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" python - <<'PY'
+          import json, os, sys, yaml
+
+          profile = os.environ["PROFILE"]
+          state = os.environ["EXPECTED_STATE"]
+          env = os.environ["STAGING_ENV"]
+          runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          pcfg = runtime.get(profile) or {}
+          services = pcfg.get("services") or {}
+          states = (pcfg.get("staging_state") or {}).get("states") or {}
+          multiplier = (states.get(state) or {}).get("desired_count_multiplier")
+          if multiplier is None:
+              sys.exit(f"::error::runtime_deployment.yaml declares no desired_count_multiplier for {state}")
+
+          # deploy.yml's canonical service-key -> ECS service mapping.
+          def ecs_name(key: str) -> str:
+              return f"AETHER-{env}-{'backend' if key == 'api' else key}"
+
+          expected = {ecs_name(k): int(v.get("desired_count", 0)) * int(multiplier)
+                      for k, v in services.items()}
+
+          plan = json.load(open(os.environ["PLAN_JSON"]))
+
+          def walk(module):
+              for res in module.get("resources") or []:
+                  yield res
+              for child in module.get("child_modules") or []:
+                  yield from walk(child)
+
+          root = (plan.get("planned_values") or {}).get("root_module") or {}
+          actual, autoscaling = {}, {}
+          for res in walk(root):
+              values = res.get("values") or {}
+              if res.get("type") == "aws_ecs_service":
+                  actual[values.get("name")] = values.get("desired_count")
+              if res.get("type") == "aws_appautoscaling_target":
+                  autoscaling[values.get("resource_id")] = values.get("min_capacity")
+
+          if actual != expected:
+              sys.exit(f"::error::planned ECS desired counts {actual} != pinned {state} shape {expected}")
+          if state == "asleep":
+              for target, minimum in autoscaling.items():
+                  if minimum not in (0, None):
+                      sys.exit(f"::error::asleep plan leaves autoscaling floor {minimum} on {target}")
+          print(f"{state} shape confirmed: {actual}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-wake-plan-validation-${{ github.run_id }}
+          path: |
+            artifacts/wake-plan-policy.txt
+            artifacts/wake-plan-cost.txt
+            artifacts/profile-resource-inventory.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Phase 4 — apply the exact reviewed wake plan (via the reviewed promotion
+  # workflow, which re-verifies everything and never re-plans), then wait for
+  # infrastructure readiness and open the awake lease.
+  # ---------------------------------------------------------------------------
+  wake-apply:
+    name: Apply the exact reviewed wake plan
+    needs: [select-profile, wake-plan, wake-validate]
+    if: >-
+      !cancelled()
+      && needs.select-profile.outputs.apply_wake == 'true'
+      && needs.wake-plan.result != 'failure'
+      && needs.wake-validate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Dispatch the reviewed apply for the verified wake plan
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
+          PLAN_CHECKSUM: ${{ needs.wake-validate.outputs.plan_checksum }}
+          PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" \
+            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+          # Both values come from the verification job, never straight from a
+          # dispatch input: an apply here can only promote a plan this workflow
+          # has already downloaded, checksummed and policy-validated.
+          test -n "$PLAN_RUN_ID" || { echo '::error::no verified plan_run_id'; exit 1; }
+          test -n "$PLAN_CHECKSUM" || { echo '::error::no verified plan_checksum'; exit 1; }
+          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
+            --jq '.workflow_runs[0].id // 0')"
+          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+            -f profile="$STAGING_PROFILE" \
+            -f action=apply \
+            -f plan_run_id="$PLAN_RUN_ID" \
+            -f plan_checksum="$PLAN_CHECKSUM"
+          run_id=''
+          discover_deadline="$(( $(date -u +%s) + 300 ))"
+          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
+            mapfile -t candidates < <(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
+              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
+            if [ "${#candidates[@]}" -gt 1 ]; then
+              echo "::error::ambiguous reviewed-apply runs (${candidates[*]}); refusing to guess"
+              exit 1
+            fi
+            if [ "${#candidates[@]}" -eq 1 ]; then
+              run_id="${candidates[0]}"
+              break
+            fi
+            sleep 10
+          done
+          test -n "$run_id" || { echo '::error::dispatched reviewed apply never appeared'; exit 1; }
+          echo "reviewed apply run: ${run_id}"
+          wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+          conclusion=''
+          while :; do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            if [ "$status" = completed ]; then
+              conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
+              break
+            fi
+            if [ "$(date -u +%s)" -ge "$wait_deadline" ]; then
+              echo "::error::reviewed apply run ${run_id} did not finish within ${PROMOTE_TIMEOUT_MINUTES}m (approval pending?)"
+              exit 1
+            fi
+            sleep 20
+          done
+          if [ "$conclusion" != success ]; then
+            echo "::error::reviewed apply run ${run_id} concluded ${conclusion}"
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Wait for staging infrastructure readiness
+        run: |
+          set -euo pipefail
+          aws ecs describe-clusters --cluster "$STAGING_CLUSTER" --query 'failures' --output text \
+            | grep -q '^None$\|^$'
+          # The AWS call is made on its own so its exit status is observed: a
+          # process substitution would hand `mapfile` an empty array on failure.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services after wake'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          test "${#services[@]}" -gt 0 || { echo '::error::staging cluster exposes no services after wake'; exit 1; }
+          aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "${services[@]}"
+          aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+            --query 'services[].[serviceName,desiredCount,runningCount]' --output text
+
+      # The awake lease is what staging-ttl-guard.yml enforces. It is written only
+      # after a successful wake, and it always carries absolute UTC timestamps.
+      #
+      # `awake_since` is the ORIGINAL wake. Extensions granted by the TTL guard
+      # move `awake_until` but never `awake_since`, so the guard's total awake
+      # ceiling is measured from the moment staging actually came up rather than
+      # from the most recent extension. Without it, N sequential extensions buy
+      # unbounded awake time.
+      - name: Open the awake lease
+        env:
+          AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
+        run: |
+          set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          deadline="$(date -u -d "+${AWAKE_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
+          lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":0}' "$now" "$deadline")"
+          aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" \
+            --type String --overwrite --value "$lease" \
+            --description "staging awake window (UTC); enforced by staging-ttl-guard"
+          echo "staging awake lease: since ${now}, expires ${deadline}"
+
+  # ---------------------------------------------------------------------------
+  # Phase 5 — the rehearsal itself.
+  # ---------------------------------------------------------------------------
+  rehearse:
+    name: Full staging rehearsal
+    needs: [select-profile, wake-plan, wake-validate, wake-apply]
+    if: >-
+      !cancelled()
+      && needs.select-profile.outputs.rehearse == 'true'
+      && needs.wake-apply.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+      BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install rehearsal dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.release_run_id }}
+          pattern: release-*
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+
+      - name: Verify the exact immutable application artifact is what staging runs
+        env:
+          RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/release"
+          sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
+          python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
+            --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
+          python - <<'PY'
+          import hashlib, json, pathlib, sys
+          manifest = json.load(open("release.json"))
+          for key in ("aether_spa", "kyber_spa", "migration_package", "configuration"):
+              artefact = manifest["artifacts"][key]
+              actual = "sha256:" + hashlib.sha256(pathlib.Path(artefact["file"]).read_bytes()).hexdigest()
+              if actual != artefact["digest"]:
+                  sys.exit(f"::error::{key} artifact digest mismatch")
+          print("release artifact digests verified")
+          PY
+          image_uri="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['uri'])")"
+          digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
+          test "$digest" = "$BACKEND_IMAGE_DIGEST" \
+            || { echo '::error::the applied wake plan does not pin the approved release digest'; exit 1; }
+          # Every running staging service must carry exactly that image. The
+          # enumeration fails closed: an empty service list would otherwise skip
+          # the loop below and report the image as verified without checking it.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; the running image is unverified'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          test "${#services[@]}" -gt 0 \
+            || { echo '::error::staging exposes no services; the approved image is unverified'; exit 1; }
+          for service in "${services[@]}"; do
+            task_def="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
+              --query 'services[0].taskDefinition' --output text)"
+            running_image="$(aws ecs describe-task-definition --task-definition "$task_def" \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text)"
+            if [ "$running_image" != "$image_uri" ]; then
+              echo "::error::${service} runs ${running_image}, not the approved ${image_uri}"
+              exit 1
+            fi
+          done
+          echo "staging runs the approved immutable release"
+
+      - name: Run migrations and verify the resulting revision
+        run: |
+          set -euo pipefail
+          service="AETHER-${STAGING_ENV}-backend"
+          task_def="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
+            --query 'services[0].taskDefinition' --output text)"
+          test "$task_def" != None || { echo "::error::required service missing: ${service}"; exit 1; }
+          container="$(aws ecs describe-task-definition --task-definition "$task_def" \
+            --query 'taskDefinition.containerDefinitions[0].name' --output text)"
+          netcfg="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
+            --query 'services[0].networkConfiguration' --output json)"
+          # RUN_MIGRATIONS=1 makes the release entrypoint run `alembic upgrade head`.
+          task_arn="$(aws ecs run-task --cluster "$STAGING_CLUSTER" --task-definition "$task_def" \
+            --launch-type FARGATE --network-configuration "$netcfg" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${container}\",\"environment\":[{\"name\":\"RUN_MIGRATIONS\",\"value\":\"1\"}]}]}" \
+            --query 'tasks[0].taskArn' --output text)"
+          aws ecs wait tasks-stopped --cluster "$STAGING_CLUSTER" --tasks "$task_arn"
+          exit_code="$(aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "$task_arn" \
+            --query 'tasks[0].containers[0].exitCode' --output text)"
+          test "$exit_code" = 0 || { echo "::error::migration task failed (exit ${exit_code})"; exit 1; }
+          mkdir -p artifacts/rehearsal
+          printf 'migration_task=%s\nexit_code=%s\n' "$task_arn" "$exit_code" \
+            > artifacts/rehearsal/migrations.txt
+          # /v1/ready fails unless the database alembic revision equals the
+          # packaged head, so it is the authoritative revision verification.
+          status="$(curl -sS -o artifacts/rehearsal/ready.json -w '%{http_code}' \
+            "https://${ALB_DNS_NAME}/v1/ready")"
+          test "$status" = 200 \
+            || { echo "::error::/v1/ready returned ${status} after migrations"; exit 1; }
+          python - <<'PY'
+          import json, sys
+          body = json.load(open("artifacts/rehearsal/ready.json"))
+          blob = json.dumps(body)
+          if "alembic" not in blob and "migration" not in blob:
+              sys.exit("::error::/v1/ready does not report a migration revision")
+          print("migration revision verified by /v1/ready")
+          PY
+
+      - name: Backend readiness and frontend availability
+        run: |
+          set -euo pipefail
+          test -n "${ALB_DNS_NAME:-}" || { echo '::error::ALB_DNS_NAME is required'; exit 1; }
+          for path in /v1/health /v1/ready; do
+            status="$(curl -sS -o /dev/null -w '%{http_code}' "https://${ALB_DNS_NAME}${path}")"
+            test "$status" = 200 || { echo "::error::${path} returned ${status}"; exit 1; }
+          done
+          for app in aether kyber; do
+            bucket_var="$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')"
+            bucket="$(aws ssm get-parameter --name "/aether/${STAGING_ENV}/${bucket_var}" \
+              --query Parameter.Value --output text)"
+            aws s3api head-object --bucket "$bucket" --key index.html >/dev/null \
+              || { echo "::error::${app} SPA origin has no index.html"; exit 1; }
+          done
+
+      - name: Create the isolated rehearsal tenant and verify tenant isolation
+        env:
+          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
+          ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${REHEARSAL_TENANT_API_KEY:-}" \
+            || { echo '::error::STAGING_REHEARSAL_TENANT_API_KEY is required'; exit 1; }
+          test -n "${ISOLATION_PEER_API_KEY:-}" \
+            || { echo '::error::STAGING_ISOLATION_PEER_API_KEY is required'; exit 1; }
+          mkdir -p artifacts/rehearsal
+          python - <<'PY'
+          import json, os, sys, urllib.error, urllib.request, uuid
+
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+
+          def call(method, path, key=None, body=None, expect=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(base + path, data=data, method=method)
+              req.add_header("Accept", "application/json")
+              if data:
+                  req.add_header("Content-Type", "application/json")
+              if key:
+                  req.add_header("X-API-Key", key)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      status, payload = resp.status, resp.read()
+              except urllib.error.HTTPError as exc:
+                  status, payload = exc.code, exc.read()
+              if expect is not None and status not in expect:
+                  sys.exit(f"::error::{method} {path} returned {status}, expected one of {expect}")
+              try:
+                  return status, json.loads(payload or b"{}")
+              except ValueError:
+                  return status, {}
+
+          # The registration path is exercised end to end; the tenant it creates is
+          # only activated by an emailed OTP, so the data-plane tenant is the
+          # dedicated rehearsal credential below.
+          call("POST", "/v1/auth/register", body={
+              "name": "Aether staging rehearsal",
+              "email": f"rehearsal-{uuid.uuid4().hex}@staging.invalid",
+              "password": uuid.uuid4().hex + "Aa1!",
+              "plan_tier": "P1",
+          }, expect={200, 201})
+
+          _, mine = call("GET", "/v1/me", key=os.environ["REHEARSAL_TENANT_API_KEY"], expect={200})
+          _, peer = call("GET", "/v1/me", key=os.environ["ISOLATION_PEER_API_KEY"], expect={200})
+
+          def tenant_id(payload):
+              node = payload.get("data", payload)
+              value = node.get("tenant_id") or node.get("tenant", {}).get("tenant_id")
+              if not value:
+                  sys.exit("::error::/v1/me does not expose a tenant_id")
+              return value
+
+          mine_id, peer_id = tenant_id(mine), tenant_id(peer)
+          if mine_id == peer_id:
+              sys.exit("::error::the rehearsal tenant and the isolation peer are the same tenant")
+
+          # Cross-tenant read must be refused, not silently empty.
+          status, _ = call("GET", f"/v1/consent/records/{peer_id}", key=os.environ["REHEARSAL_TENANT_API_KEY"])
+          if status == 200:
+              sys.exit("::error::tenant isolation breach: peer tenant records are readable")
+          if status not in (401, 403, 404):
+              sys.exit(f"::error::cross-tenant read returned an unexpected {status}")
+
+          # Unauthenticated access is refused (fail-closed).
+          call("GET", "/v1/me", expect={401, 403})
+
+          json.dump({"tenant_id": mine_id, "peer_tenant_id": peer_id},
+                    open("artifacts/rehearsal/tenant.json", "w"))
+          print(f"isolated rehearsal tenant {mine_id}, peer {peer_id}")
+          PY
+
+      - name: Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)
+        env:
+          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
+        run: |
+          set -euo pipefail
+          python scripts/staging_capability_matrix.py --json > artifacts/rehearsal/capability-matrix.json
+          python scripts/smoke_test.py \
+            --base-url "https://${ALB_DNS_NAME}" \
+            --api-key "$REHEARSAL_TENANT_API_KEY" \
+            --timeout 20 \
+            | tee artifacts/rehearsal/smoke.txt
+          python - <<'PY'
+          import json, os, sys, time, urllib.error, urllib.request, uuid
+
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+          key = os.environ["REHEARSAL_TENANT_API_KEY"]
+          results = {}
+
+          def call(method, path, body=None, expect=None, key_override=...):
+              api_key = key if key_override is ... else key_override
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(base + path, data=data, method=method)
+              req.add_header("Accept", "application/json")
+              if data:
+                  req.add_header("Content-Type", "application/json")
+              if api_key:
+                  req.add_header("X-API-Key", api_key)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      status, payload = resp.status, resp.read()
+              except urllib.error.HTTPError as exc:
+                  status, payload = exc.code, exc.read()
+              if expect is not None and status not in expect:
+                  sys.exit(f"::error::{method} {path} returned {status}, expected one of {expect}")
+              try:
+                  return status, json.loads(payload or b"{}")
+              except ValueError:
+                  return status, {}
+
+          # auth — an authenticated identity resolves, an anonymous one does not.
+          call("GET", "/v1/me", expect={200})
+          call("GET", "/v1/me", expect={401, 403}, key_override=None)
+          results["auth"] = "ok"
+
+          # consent / privacy — a consent record round-trips and the retention
+          # manifest is served.
+          subject = f"rehearsal-{uuid.uuid4().hex}"
+          call("POST", "/v1/consent/records", body={
+              "user_id": subject, "purpose": "analytics", "granted": True,
+              "source": "staging-rehearsal",
+          }, expect={200, 201})
+          call("GET", f"/v1/consent/records/{subject}", expect={200})
+          call("GET", "/v1/consent/retention-manifest", expect={200})
+          call("POST", "/v1/consent/dsr", body={"user_id": subject, "request_type": "access"},
+               expect={200, 201, 202})
+          results["consent_privacy"] = "ok"
+
+          # ingestion — the feed accepts a well-formed event.
+          event_id = str(uuid.uuid4())
+          call("POST", "/v1/ingest/feed", body={
+              "events": [{"event_id": event_id, "event_type": "rehearsal.ping",
+                          "user_id": subject, "properties": {"run": os.environ["GITHUB_RUN_ID"]}}],
+          }, expect={200, 201, 202})
+          results["ingestion"] = "ok"
+
+          # queue / worker — the consolidated lean-worker must drain the event the
+          # ingestion call enqueued, so it becomes queryable within the window.
+          deadline = time.time() + 300
+          drained = False
+          while time.time() < deadline:
+              status, payload = call("POST", "/v1/analytics/events/query",
+                                     body={"filters": {"event_id": event_id}, "limit": 1})
+              if status == 200 and json.dumps(payload).count(event_id):
+                  drained = True
+                  break
+              time.sleep(15)
+          if not drained:
+              sys.exit("::error::the lean-worker execution group did not drain the ingested event")
+          results["queue_worker"] = "ok"
+
+          # graph write and read.
+          call("POST", "/v1/graph/observations", body={
+              "entity_id": subject, "observation_type": "rehearsal",
+              "payload": {"run": os.environ["GITHUB_RUN_ID"]},
+          }, expect={200, 201, 202})
+          call("GET", "/v1/graph/capabilities", expect={200})
+          call("POST", "/v1/graph/query", body={"entity_id": subject, "limit": 10}, expect={200})
+          results["graph"] = "ok"
+
+          # analytics / materialisation.
+          call("GET", "/v1/analytics/dashboard/summary", expect={200})
+          results["analytics"] = "ok"
+
+          # inline ML — staging runs remote_ml: false, so serving is in-process.
+          call("GET", "/v1/ml/models", expect={200})
+          results["inline_ml"] = "ok"
+
+          json.dump(results, open("artifacts/rehearsal/capabilities.json", "w"), indent=2)
+          print(json.dumps(results, indent=2))
+          PY
+
+      - name: Synthetic-seed exclusion and empty-state checks
+        env:
+          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
+          ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
+        run: |
+          set -euo pipefail
+          # The staging profile must ship no compiled-in synthetic dataset.
+          python scripts/validate_frontend_data_truth.py | tee artifacts/rehearsal/data-truth.txt
+          python - <<'PY'
+          import json, os, sys, urllib.error, urllib.request, uuid
+
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+
+          def get(path, key):
+              req = urllib.request.Request(base + path, method="GET")
+              req.add_header("Accept", "application/json")
+              req.add_header("X-API-Key", key)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      return resp.status, json.loads(resp.read() or b"{}")
+              except urllib.error.HTTPError as exc:
+                  return exc.code, {}
+              except ValueError:
+                  return 200, {}
+
+          # A subject this environment has never seen must come back empty, not
+          # seeded: a demo/synthetic seed in staging would answer with data.
+          unknown = uuid.uuid4().hex
+          status, payload = get(f"/v1/consent/records/{unknown}",
+                                os.environ["REHEARSAL_TENANT_API_KEY"])
+          if status == 200:
+              node = payload.get("data", payload)
+              records = node if isinstance(node, list) else node.get("records") or []
+              if records:
+                  sys.exit("::error::empty-state violated: an unknown subject returned records")
+          elif status not in (204, 404):
+              sys.exit(f"::error::empty-state probe returned {status}")
+
+          blob = json.dumps(payload).lower()
+          for marker in ("demo", "synthetic", "sample-tenant", "lorem"):
+              if marker in blob:
+                  sys.exit(f"::error::staging response carries a synthetic-seed marker: {marker}")
+          print("synthetic-seed exclusion and empty-state confirmed")
+          PY
+
+      - name: Baseline load test
+        env:
+          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
+        run: |
+          set -euo pipefail
+          python scripts/load_smoke.py \
+            --host "https://${ALB_DNS_NAME}" \
+            --users 10 \
+            --duration 60 \
+            --json-out artifacts/rehearsal/load.json \
+            | tee artifacts/rehearsal/load.txt
+
+      - name: Failure and retry checks
+        env:
+          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, sys, urllib.error, urllib.request, uuid
+
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+          key = os.environ["REHEARSAL_TENANT_API_KEY"]
+
+          def call(method, path, body=None, headers=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(base + path, data=data, method=method)
+              req.add_header("Accept", "application/json")
+              req.add_header("X-API-Key", key)
+              if data:
+                  req.add_header("Content-Type", "application/json")
+              for name, value in (headers or {}).items():
+                  req.add_header(name, value)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      return resp.status
+              except urllib.error.HTTPError as exc:
+                  return exc.code
+
+          # A malformed payload must be rejected as a client error, never as a 5xx.
+          status = call("POST", "/v1/ingest/feed", body={"events": "not-a-list"})
+          if status >= 500:
+              sys.exit(f"::error::malformed ingest produced a server error ({status})")
+          if status < 400:
+              sys.exit(f"::error::malformed ingest was accepted ({status})")
+
+          # A retried write with the same event id must be idempotent, not doubled.
+          event_id = str(uuid.uuid4())
+          payload = {"events": [{"event_id": event_id, "event_type": "rehearsal.retry",
+                                 "user_id": f"retry-{event_id}", "properties": {}}]}
+          first = call("POST", "/v1/ingest/feed", body=payload)
+          second = call("POST", "/v1/ingest/feed", body=payload)
+          if first >= 400:
+              sys.exit(f"::error::first retry-probe write failed ({first})")
+          if second >= 500:
+              sys.exit(f"::error::retried write produced a server error ({second})")
+          print(f"failure/retry checks passed (malformed={status}, retry={first}/{second})")
+          PY
+
+      - name: Rollback rehearsal
+        run: |
+          set -euo pipefail
+          # Guard hard: this step mutates a running service, and only the staging
+          # cluster may ever be touched by it.
+          test "$STAGING_CLUSTER" = "AETHER-staging" \
+            || { echo '::error::rollback rehearsal refused outside the staging cluster'; exit 1; }
+          service="AETHER-${STAGING_ENV}-backend"
+          current="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
+            --query 'services[0].taskDefinition' --output text)"
+          family="${current%:*}"
+          revision="${current##*:}"
+          if [ "$revision" -le 1 ]; then
+            echo '::error::no earlier task revision exists to roll back to'
+            exit 1
+          fi
+          previous="${family}:$((revision - 1))"
+          aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
+            --task-definition "$previous" >/dev/null
+          aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "$service"
+          rolled="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
+            --query 'services[0].taskDefinition' --output text)"
+          test "$rolled" = "$previous" || { echo "::error::rollback did not take effect"; exit 1; }
+          status="$(curl -sS -o /dev/null -w '%{http_code}' "https://${ALB_DNS_NAME}/v1/health")"
+          test "$status" = 200 || { echo "::error::rolled-back revision is unhealthy (${status})"; exit 1; }
+          # Roll forward to the reviewed release revision and prove it is restored.
+          aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
+            --task-definition "$current" >/dev/null
+          aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "$service"
+          restored="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
+            --query 'services[0].taskDefinition' --output text)"
+          test "$restored" = "$current" || { echo "::error::roll-forward did not restore ${current}"; exit 1; }
+          printf 'rolled_back_to=%s\nrestored=%s\n' "$previous" "$restored" \
+            > artifacts/rehearsal/rollback.txt
+
+      - name: Collect logs, metrics, plans, test output and cost
+        if: always()
+        env:
+          PROFILE: ${{ needs.select-profile.outputs.profile }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/rehearsal
+          aws ecs describe-services --cluster "$STAGING_CLUSTER" \
+            --services $(aws ecs list-services --cluster "$STAGING_CLUSTER" --query 'serviceArns[]' --output text) \
+            > artifacts/rehearsal/ecs-services.json 2>/dev/null || true
+          aws logs describe-log-groups --log-group-name-prefix "/aether/${STAGING_ENV}" \
+            > artifacts/rehearsal/log-groups.json 2>/dev/null || true
+          aws cloudwatch list-metrics --namespace AETHER \
+            > artifacts/rehearsal/metrics.json 2>/dev/null || true
+          cp -f "${RUNNER_TEMP}/release/release.json" artifacts/rehearsal/release.json 2>/dev/null || true
+          python scripts/release/check_cost_model.py \
+            --profile "$PROFILE" \
+            --inventory artifacts/profile-resource-inventory.json \
+            --out-dir "artifacts/rehearsal/cost" \
+            > artifacts/rehearsal/cost.txt 2>&1 || true
+
+      - name: Delete or expire the rehearsal tenant
+        if: always()
+        env:
+          ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ ! -s artifacts/rehearsal/tenant.json ]; then
+            echo 'no rehearsal tenant was created; nothing to remove'
+            exit 0
+          fi
+          test -n "${ADMIN_API_KEY:-}" \
+            || { echo '::error::STAGING_ADMIN_API_KEY is required to remove the rehearsal tenant'; exit 1; }
+          tenant_id="$(python -c "import json; print(json.load(open('artifacts/rehearsal/tenant.json'))['tenant_id'])")"
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+            -H "X-API-Key: ${ADMIN_API_KEY}" \
+            "https://${ALB_DNS_NAME}/v1/admin/tenants/${tenant_id}")"
+          if [ "$status" = 200 ] || [ "$status" = 204 ]; then
+            echo "rehearsal tenant ${tenant_id} deleted"
+            exit 0
+          fi
+          echo "delete returned ${status}; falling back to deactivation"
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H "X-API-Key: ${ADMIN_API_KEY}" \
+            "https://${ALB_DNS_NAME}/v1/admin/tenants/${tenant_id}/deactivate")"
+          test "$status" = 200 || test "$status" = 204 \
+            || { echo "::error::rehearsal tenant ${tenant_id} was neither deleted nor expired (${status})"; exit 1; }
+          echo "rehearsal tenant ${tenant_id} expired"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-rehearsal-${{ github.run_id }}
+          path: artifacts/rehearsal
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Phase 6 — FAIL-SAFE SLEEP. Runs under always(): staging returns to `asleep`
+  # even when the wake, migrations, smoke, load, rollback or evidence phases
+  # failed. It reports, but never repairs, the original failure: the `outcome`
+  # job below re-raises it so the run still ends red.
+  # ---------------------------------------------------------------------------
+  sleep:
+    name: Fail-safe sleep (always)
+    needs: [select-profile, wake-plan, wake-validate, wake-apply, rehearse]
+    if: always() && needs.select-profile.outputs.plan_sleep == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    outputs:
+      cleanup_result: ${{ steps.report.outputs.cleanup_result }}
+      residual_tasks: ${{ steps.residual.outputs.residual_tasks }}
+      residual_cost_usd_per_hour: ${{ steps.residual.outputs.residual_cost_usd_per_hour }}
+      manual_intervention_required: ${{ steps.report.outputs.manual_intervention_required }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install sleep-phase dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Record the validation result being cleaned up after
+        id: upstream
+        env:
+          WAKE_PLAN_RESULT: ${{ needs.wake-plan.result }}
+          WAKE_VALIDATE_RESULT: ${{ needs.wake-validate.result }}
+          WAKE_APPLY_RESULT: ${{ needs.wake-apply.result }}
+          REHEARSE_RESULT: ${{ needs.rehearse.result }}
+        run: |
+          set -euo pipefail
+          validation_result=success
+          for result in "$WAKE_PLAN_RESULT" "$WAKE_VALIDATE_RESULT" "$WAKE_APPLY_RESULT" "$REHEARSE_RESULT"; do
+            case "$result" in
+              failure|cancelled|timed_out) validation_result=failure ;;
+            esac
+          done
+          echo "validation_result=${validation_result}" >> "$GITHUB_OUTPUT"
+          echo "cleaning up after validation_result=${validation_result}"
+
+      - name: Skip the reviewed sleep plan only when staging is provably at zero
+        id: already
+        run: |
+          set -euo pipefail
+          # FAIL CLOSED. `mapfile -t x < <(cmd)` does not observe cmd's exit
+          # status -- `pipefail` does not reach into a process substitution --
+          # so an API error, a throttle or an expired credential used to yield an
+          # empty array that read as "already asleep", skipping the reviewed
+          # sleep plan, the sleep apply AND the last-resort cost stop. The step
+          # is called "provably at zero": unprovable must never be proven. The
+          # AWS call is therefore run on its own, its status checked, and its
+          # stderr kept.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          if [ "${#services[@]}" -eq 0 ]; then
+            echo 'asleep=true' >> "$GITHUB_OUTPUT"
+            echo 'staging exposes no ECS services; already at zero'
+            exit 0
+          fi
+          if ! nonzero="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+            --query 'length(services[?desiredCount>`0`])' --output text)"; then
+            echo '::error::could not describe staging ECS services; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          case "$nonzero" in
+            ''|*[!0-9]*)
+              echo "::error::staging desired-count query returned '${nonzero}', not a count; treating staging state as UNKNOWN"
+              echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+              exit 1 ;;
+          esac
+          if [ "$nonzero" = 0 ]; then
+            echo 'asleep=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'asleep=false' >> "$GITHUB_OUTPUT"
+          fi
+          echo "services with a non-zero desired count: ${nonzero}"
+
+      - name: Generate the reviewed sleep plan
+        id: sleep-plan
+        if: steps.already.outputs.asleep != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+          BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
+          PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" \
+            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
+            --jq '.workflow_runs[0].id // 0')"
+          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+            -f profile="$STAGING_PROFILE" \
+            -f action=plan \
+            -f staging_state=asleep \
+            -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
+            -f ml_image_digest="$ML_IMAGE_DIGEST"
+          run_id=''
+          discover_deadline="$(( $(date -u +%s) + 300 ))"
+          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
+            mapfile -t candidates < <(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
+              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
+            if [ "${#candidates[@]}" -gt 1 ]; then
+              echo "::error::ambiguous reviewed sleep-plan runs (${candidates[*]}); refusing to guess"
+              exit 1
+            fi
+            if [ "${#candidates[@]}" -eq 1 ]; then
+              run_id="${candidates[0]}"
+              break
+            fi
+            sleep 10
+          done
+          test -n "$run_id" || { echo '::error::dispatched reviewed sleep plan never appeared'; exit 1; }
+          wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+          conclusion=''
+          while :; do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            if [ "$status" = completed ]; then
+              conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
+              break
+            fi
+            if [ "$(date -u +%s)" -ge "$wait_deadline" ]; then
+              echo "::error::reviewed sleep plan ${run_id} did not finish within ${PROMOTE_TIMEOUT_MINUTES}m"
+              exit 1
+            fi
+            sleep 20
+          done
+          if [ "$conclusion" != success ]; then
+            echo "::error::reviewed sleep plan ${run_id} concluded ${conclusion}"
+            exit 1
+          fi
+          printf 'plan_run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        if: steps.sleep-plan.outputs.plan_run_id != ''
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.sleep-plan.outputs.plan_run_id }}
+          pattern: terraform-plan-${{ needs.select-profile.outputs.profile }}-*
+          path: ${{ runner.temp }}/reviewed-sleep-plan
+          merge-multiple: true
+
+      - name: Verify the reviewed sleep plan and assert the asleep shape
+        id: sleep-verify
+        if: steps.sleep-plan.outputs.plan_run_id != ''
+        env:
+          PROFILE: ${{ needs.select-profile.outputs.profile }}
+          EXPECTED_STATE: asleep
+        run: |
+          set -euo pipefail
+          plan_dir="${RUNNER_TEMP}/reviewed-sleep-plan"
+          cd "$plan_dir"
+          for artefact in \
+            reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
+            reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
+          do
+            test -s "$artefact" || { echo "::error::reviewed sleep plan is missing ${artefact}"; exit 1; }
+          done
+          test "$(cat reviewed.profile)" = "$PROFILE"
+          test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
+            || { echo "::error::reviewed sleep plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
+          sha256sum --check --status reviewed.tfplan.sha256
+          printf '%s' "$(cat reviewed.commit)" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo '::error::reviewed.commit is not a 40-character commit sha'; exit 1; }
+          created_epoch="$(date -u -d "$(cat reviewed.created-utc)" +%s)"
+          expires_epoch="$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
+          if [ "$((expires_epoch - created_epoch))" -gt 86400 ]; then
+            echo '::error::reviewed sleep plan claims a validity window longer than 24 hours'
+            exit 1
+          fi
+          if [ "$(date -u +%s)" -ge "$expires_epoch" ]; then
+            echo '::error::reviewed sleep plan has already expired'
+            exit 1
+          fi
+          checksum="$(sha256sum reviewed.tfplan | cut -d' ' -f1)"
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p artifacts
+          python scripts/release/check_terraform_plan_policy.py \
+            --profile "$PROFILE" \
+            --plan-json "${plan_dir}/reviewed.tfplan.json" \
+            | tee artifacts/sleep-plan-policy.txt
+          PLAN_JSON="${plan_dir}/reviewed.tfplan.json" python - <<'PY'
+          import json, os, sys, yaml
+
+          profile = os.environ["PROFILE"]
+          state = os.environ["EXPECTED_STATE"]
+          env = os.environ["STAGING_ENV"]
+          runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          pcfg = runtime.get(profile) or {}
+          services = pcfg.get("services") or {}
+          states = (pcfg.get("staging_state") or {}).get("states") or {}
+          multiplier = (states.get(state) or {}).get("desired_count_multiplier")
+          if multiplier is None:
+              sys.exit(f"::error::runtime_deployment.yaml declares no desired_count_multiplier for {state}")
+
+          def ecs_name(key: str) -> str:
+              return f"AETHER-{env}-{'backend' if key == 'api' else key}"
+
+          expected = {ecs_name(k): int(v.get("desired_count", 0)) * int(multiplier)
+                      for k, v in services.items()}
+          if any(expected.values()):
+              sys.exit(f"::error::the asleep shape is not all-zero: {expected}")
+
+          plan = json.load(open(os.environ["PLAN_JSON"]))
+
+          def walk(module):
+              for res in module.get("resources") or []:
+                  yield res
+              for child in module.get("child_modules") or []:
+                  yield from walk(child)
+
+          root = (plan.get("planned_values") or {}).get("root_module") or {}
+          actual, autoscaling, scheduled = {}, {}, []
+          for res in walk(root):
+              values = res.get("values") or {}
+              if res.get("type") == "aws_ecs_service":
+                  actual[values.get("name")] = values.get("desired_count")
+              if res.get("type") == "aws_appautoscaling_target":
+                  autoscaling[values.get("resource_id")] = values.get("min_capacity")
+              if res.get("type") in ("aws_scheduler_schedule", "aws_cloudwatch_event_rule"):
+                  if values.get("state") not in ("DISABLED",) and values.get("is_enabled") is not False:
+                      scheduled.append(values.get("name"))
+
+          if actual != expected:
+              sys.exit(f"::error::planned ECS desired counts {actual} != pinned {state} shape {expected}")
+          for target, minimum in autoscaling.items():
+              if minimum not in (0, None):
+                  sys.exit(f"::error::asleep plan leaves an autoscaling floor of {minimum} on {target}")
+          print(f"asleep shape confirmed: {actual}; scheduled rules still enabled: {scheduled}")
+          PY
+          printf 'plan_checksum=%s\n' "$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: Apply the exact reviewed sleep plan
+        id: sleep-apply
+        if: needs.select-profile.outputs.apply_sleep == 'true' && steps.sleep-verify.outputs.plan_checksum != ''
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          PLAN_RUN_ID: ${{ steps.sleep-plan.outputs.plan_run_id }}
+          PLAN_CHECKSUM: ${{ steps.sleep-verify.outputs.plan_checksum }}
+          PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" \
+            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+          test -n "$PLAN_RUN_ID" || { echo '::error::no verified sleep plan_run_id'; exit 1; }
+          test -n "$PLAN_CHECKSUM" || { echo '::error::no verified sleep plan_checksum'; exit 1; }
+          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
+            --jq '.workflow_runs[0].id // 0')"
+          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+            -f profile="$STAGING_PROFILE" \
+            -f action=apply \
+            -f plan_run_id="$PLAN_RUN_ID" \
+            -f plan_checksum="$PLAN_CHECKSUM"
+          run_id=''
+          discover_deadline="$(( $(date -u +%s) + 300 ))"
+          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
+            mapfile -t candidates < <(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
+              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
+            if [ "${#candidates[@]}" -gt 1 ]; then
+              echo "::error::ambiguous reviewed sleep-apply runs (${candidates[*]}); refusing to guess"
+              exit 1
+            fi
+            if [ "${#candidates[@]}" -eq 1 ]; then
+              run_id="${candidates[0]}"
+              break
+            fi
+            sleep 10
+          done
+          test -n "$run_id" || { echo '::error::dispatched reviewed sleep apply never appeared'; exit 1; }
+          wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+          conclusion=''
+          while :; do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            if [ "$status" = completed ]; then
+              conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
+              break
+            fi
+            if [ "$(date -u +%s)" -ge "$wait_deadline" ]; then
+              echo "::error::reviewed sleep apply ${run_id} did not finish within ${PROMOTE_TIMEOUT_MINUTES}m"
+              exit 1
+            fi
+            sleep 20
+          done
+          printf 'conclusion=%s\n' "$conclusion" >> "$GITHUB_OUTPUT"
+          if [ "$conclusion" != success ]; then
+            echo "::warning::reviewed sleep apply ${run_id} concluded ${conclusion}; the last-resort cost stop will run"
+          fi
+
+      # Last resort, and only when the reviewed sleep did not land: scale the
+      # staging services to zero directly so cost stops now. This is a reduction
+      # only — it can never provision anything — and the next reviewed sleep plan
+      # reconciles Terraform state to the same zero.
+      - name: Last-resort cost stop (scale staging to zero)
+        id: last-resort
+        if: always() && steps.already.outputs.asleep != 'true' && steps.sleep-apply.outputs.conclusion != 'success'
+        run: |
+          set -euo pipefail
+          test "$STAGING_CLUSTER" = "AETHER-staging" \
+            || { echo '::error::last-resort cost stop refused outside the staging cluster'; exit 1; }
+          # Fail closed: an unreadable service list means the cost stop did not
+          # happen, and a green step here would claim it did.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS services; the last-resort cost stop did not run'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          stopped=0
+          for service in "${services[@]:-}"; do
+            test -n "$service" || continue
+            aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
+              --desired-count 0 >/dev/null
+            stopped=$((stopped + 1))
+            echo "::warning::scaled ${service} to 0 outside Terraform; state must be reconciled"
+          done
+          printf 'scaled_to_zero=%s\n' "$stopped" >> "$GITHUB_OUTPUT"
+
+      - name: Verify zero desired counts and no residual staging compute
+        id: residual
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/sleep
+          echo '[]' > artifacts/sleep/desired-counts.json
+          residual_tasks=unknown
+          zero_ok=true
+          # FAIL CLOSED, twice over. This step reports whether staging is at
+          # zero; an AWS call it could not make proves nothing, and used to be
+          # swallowed into `zero_ok=true`. Neither the service enumeration nor
+          # the autoscaling query may fail silently. This step does NOT exit
+          # early: it must reach the report step so the run ends red with the
+          # reason on the summary, rather than red with no disclosure.
+          if services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+            residual_tasks=0
+            if [ "${#services[@]}" -gt 0 ]; then
+              if aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+                --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
+                --output json > artifacts/sleep/desired-counts.json; then
+                nonzero="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(1 for s in d if s['desired'] or s['running'] or s['pending']))")"
+                residual_tasks="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(s['running']+s['pending'] for s in d))")"
+                if [ "$nonzero" != 0 ]; then
+                  zero_ok=false
+                  echo "::error::${nonzero} staging service(s) are still non-zero after sleep"
+                fi
+              else
+                zero_ok=false
+                residual_tasks=unknown
+                echo '[]' > artifacts/sleep/desired-counts.json
+                echo '::error::could not describe staging ECS services; residual staging compute is UNKNOWN and must not be reported as zero'
+              fi
+            fi
+          else
+            zero_ok=false
+            echo '::error::could not enumerate staging ECS services; residual staging compute is UNKNOWN and must not be reported as zero'
+          fi
+          # Nothing may be left scheduled or autoscaled back up either. The
+          # ResourceId is matched on the EXACT cluster: `contains()` would match
+          # any cluster in the account-wide ECS autoscaling namespace whose name
+          # merely contains this one.
+          if aws application-autoscaling describe-scalable-targets --service-namespace ecs \
+            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity}" \
+            --output json > artifacts/sleep/autoscaling.json; then
+            floors="$(python -c "import json;d=json.load(open('artifacts/sleep/autoscaling.json'));print(sum(1 for t in d if t.get('min',0)))")"
+            if [ "$floors" != 0 ]; then
+              zero_ok=false
+              echo "::error::${floors} staging autoscaling target(s) still hold a non-zero floor"
+            fi
+          else
+            zero_ok=false
+            echo '[]' > artifacts/sleep/autoscaling.json
+            echo '::error::could not read staging autoscaling targets; an autoscaling floor could revive staging and cannot be ruled out'
+          fi
+          # Residual cost, priced from the canonical price book rather than a guess.
+          RESIDUAL_JSON=artifacts/sleep/desired-counts.json python - <<'PY'
+          import json, os, yaml
+          book = (yaml.safe_load(open("config/aws_price_book.yaml")) or {})
+          ecs = ((book.get("usage_variable_resources") or {}).get("aws_ecs_service")
+                 or (book.get("fixed_resources") or {}).get("aws_ecs_service") or {})
+          vcpu_hour = float(ecs.get("vcpu_hour", 0.04048))
+          gb_hour = float(ecs.get("gb_hour", 0.004445))
+          runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          services = (runtime.get(os.environ["STAGING_PROFILE"]) or {}).get("services") or {}
+          sizes = {f"AETHER-{os.environ['STAGING_ENV']}-{'backend' if k == 'api' else k}":
+                   (float(v.get("cpu", 1024)), float(v.get("memory", 2048)))
+                   for k, v in services.items()}
+          hourly = 0.0
+          for svc in json.load(open(os.environ["RESIDUAL_JSON"])):
+              cpu, memory = sizes.get(svc["name"], (1024.0, 2048.0))
+              tasks = max(svc["desired"], svc["running"] + svc["pending"])
+              hourly += tasks * (cpu / 1024.0 * vcpu_hour + memory / 1024.0 * gb_hour)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"residual_cost_usd_per_hour={hourly:.4f}\n")
+          print(f"estimated residual staging compute cost: ${hourly:.4f}/hour")
+          PY
+          {
+            printf 'residual_tasks=%s\n' "$residual_tasks"
+            printf 'zero_ok=%s\n' "$zero_ok"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Close the awake lease
+        if: always()
+        run: |
+          set -euo pipefail
+          aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >/dev/null 2>&1 \
+            || echo 'no awake lease to close'
+
+      - name: Report cleanup outcome
+        id: report
+        if: always()
+        env:
+          VALIDATION_RESULT: ${{ steps.upstream.outputs.validation_result }}
+          ALREADY_ASLEEP: ${{ steps.already.outputs.asleep }}
+          SLEEP_APPLY_CONCLUSION: ${{ steps.sleep-apply.outputs.conclusion }}
+          SCALED_TO_ZERO: ${{ steps.last-resort.outputs.scaled_to_zero }}
+          RESIDUAL_TASKS: ${{ steps.residual.outputs.residual_tasks }}
+          RESIDUAL_COST: ${{ steps.residual.outputs.residual_cost_usd_per_hour }}
+          ZERO_OK: ${{ steps.residual.outputs.zero_ok }}
+        run: |
+          set -euo pipefail
+          cleanup_result=success
+          manual=false
+          # `zero_ok` is only true when an AWS call actually PROVED staging is at
+          # zero. An absent or false value (a skipped step, a failed step, an
+          # unreadable API) is a failure, never a pass.
+          if [ "${ZERO_OK:-false}" != true ]; then
+            cleanup_result=failure
+            manual=true
+          fi
+          # The same rule for the pre-sleep state probe: `unknown` is not `true`.
+          if [ "${ALREADY_ASLEEP:-unknown}" = unknown ]; then
+            cleanup_result=failure
+            manual=true
+            echo '::error::staging was never proven to be at zero before the sleep phase ran'
+          fi
+          if [ "${ALREADY_ASLEEP:-false}" != true ] && [ "${SLEEP_APPLY_CONCLUSION:-}" != success ]; then
+            cleanup_result=degraded
+            manual=true
+          fi
+          if [ -n "${SCALED_TO_ZERO:-}" ] && [ "${SCALED_TO_ZERO:-0}" -gt 0 ]; then
+            manual=true
+          fi
+          {
+            echo '### Staging lifecycle cleanup'
+            echo
+            echo '| field | value |'
+            echo '| --- | --- |'
+            echo "| validation result | ${VALIDATION_RESULT:-unknown} |"
+            echo "| cleanup result | ${cleanup_result} |"
+            echo "| staging state before sleep | ${ALREADY_ASLEEP:-unknown} |"
+            echo "| staging proven at zero after sleep | ${ZERO_OK:-false} |"
+            echo "| reviewed sleep apply | ${SLEEP_APPLY_CONCLUSION:-not-dispatched} |"
+            echo "| services force-scaled to zero | ${SCALED_TO_ZERO:-0} |"
+            echo "| residual running/pending tasks | ${RESIDUAL_TASKS:-unknown} |"
+            echo "| estimated residual cost | \$${RESIDUAL_COST:-unknown}/hour |"
+            echo "| manual intervention required | ${manual} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf 'cleanup_result=%s\n' "$cleanup_result"
+            printf 'manual_intervention_required=%s\n' "$manual"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$manual" = true ]; then
+            echo "::error::staging cleanup needs manual intervention (cleanup_result=${cleanup_result}, residual_tasks=${RESIDUAL_TASKS:-unknown})"
+            exit 1
+          fi
+
+      - name: Build the checksummed evidence bundle
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/sleep
+          (cd artifacts && find . -type f ! -name 'evidence.sha256' -print0 \
+            | sort -z | xargs -0 sha256sum > evidence.sha256)
+          sha256sum artifacts/evidence.sha256 > artifacts/evidence.sha256.sha256
+          cat artifacts/evidence.sha256
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-lifecycle-evidence-${{ github.run_id }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Phase 7 — re-raise the original failure. The fail-safe sleep above must never
+  # turn a failed rehearsal green, so this gate fails whenever ANY phase failed,
+  # including the cleanup itself.
+  # ---------------------------------------------------------------------------
+  outcome:
+    name: Lifecycle outcome (never masks a failure)
+    needs: [select-profile, wake-plan, wake-validate, wake-apply, rehearse, sleep]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Re-raise any phase failure
+        env:
+          SELECT_RESULT: ${{ needs.select-profile.result }}
+          WAKE_PLAN_RESULT: ${{ needs.wake-plan.result }}
+          WAKE_VALIDATE_RESULT: ${{ needs.wake-validate.result }}
+          WAKE_APPLY_RESULT: ${{ needs.wake-apply.result }}
+          REHEARSE_RESULT: ${{ needs.rehearse.result }}
+          SLEEP_RESULT: ${{ needs.sleep.result }}
+          CLEANUP_RESULT: ${{ needs.sleep.outputs.cleanup_result }}
+          RESIDUAL_TASKS: ${{ needs.sleep.outputs.residual_tasks }}
+          RESIDUAL_COST: ${{ needs.sleep.outputs.residual_cost_usd_per_hour }}
+          MANUAL_INTERVENTION: ${{ needs.sleep.outputs.manual_intervention_required }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for phase in select-profile:"$SELECT_RESULT" wake-plan:"$WAKE_PLAN_RESULT" \
+                       wake-validate:"$WAKE_VALIDATE_RESULT" wake-apply:"$WAKE_APPLY_RESULT" \
+                       rehearse:"$REHEARSE_RESULT" sleep:"$SLEEP_RESULT"
+          do
+            case "${phase##*:}" in
+              failure|cancelled|timed_out) failed+=("$phase") ;;
+            esac
+          done
+          {
+            echo '### Staging lifecycle outcome'
+            echo
+            echo "- cleanup result: ${CLEANUP_RESULT:-not-run}"
+            echo "- residual running tasks: ${RESIDUAL_TASKS:-unknown}"
+            echo "- estimated residual cost: \$${RESIDUAL_COST:-unknown}/hour"
+            echo "- manual intervention required: ${MANUAL_INTERVENTION:-unknown}"
+            echo "- failed phases: ${failed[*]:-none}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${#failed[@]}" -ne 0 ]; then
+            echo "::error::staging lifecycle failed in: ${failed[*]}"
+            exit 1
+          fi
+          echo 'staging lifecycle completed and staging is asleep'

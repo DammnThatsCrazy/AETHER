@@ -1,5 +1,10 @@
 name: Infrastructure Profiles
 
+# Validate-and-plan only. This workflow NEVER applies Terraform.
+# The single production apply path is .github/workflows/terraform-promote.yml,
+# which is workflow_dispatch-only, environment-gated, and consumes a reviewed,
+# checksum-bound binary plan.
+
 on:
   pull_request:
     paths:
@@ -49,6 +54,7 @@ jobs:
           TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
           TF_ML_IMAGE_DIGEST: ${{ secrets.TF_ML_IMAGE_DIGEST }}
         run: |
+          set -euo pipefail
           missing=()
           for name in \
             AWS_INFRA_ROLE_ARN \
@@ -65,7 +71,9 @@ jobs:
             TF_BACKEND_IMAGE_DIGEST \
             TF_ML_IMAGE_DIGEST
           do
-            if [ -z "${!name}" ]; then
+            # `${!name-}` is indirect expansion with an empty default, so an
+            # entirely unset secret does not abort the loop under `set -u`.
+            if [ -z "${!name-}" ]; then
               missing+=("$name")
             fi
           done
@@ -106,6 +114,7 @@ jobs:
         env:
           PROFILE: ${{ matrix.profile }}
         run: |
+          set -euo pipefail
           cp "profiles/${PROFILE}.tfvars" profile.auto.tfvars
           # backend/ml digests: provider-mocked configuration plans never touch
           # infrastructure, so a syntactically valid placeholder digest is fine
@@ -115,9 +124,6 @@ jobs:
             "acm_certificate_arn": "arn:aws:acm:us-east-1:111122223333:certificate/00000000-0000-0000-0000-000000000000",
             "domain_name": "api.ci.aether.invalid",
             "alert_email": "terraform-ci@aether.invalid",
-            "auth0_domain": "ci.aether.invalid",
-            "auth0_management_client_id": "terraform-ci",
-            "auth0_management_client_secret": "not-a-production-secret",
             "aether_app_url": "https://app.ci.aether.invalid",
             "kyber_app_url": "https://kyber.ci.aether.invalid",
             "backend_image_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -135,16 +141,22 @@ jobs:
         env:
           PROFILE: ${{ matrix.profile }}
         run: |
+          set -euo pipefail
+          # `pipefail` is mandatory here: without it the step exit status is
+          # tee's, and a failing `terraform test` would report a green job.
           terraform test \
             -filter=tests/profile_plan.tftest.hcl \
             -verbose \
             -no-color | tee "plan-${PROFILE}.txt"
+          sha256sum "plan-${PROFILE}.txt" > "plan-${PROFILE}.txt.sha256"
 
       - name: Upload immutable configuration-plan evidence
         uses: actions/upload-artifact@v4
         with:
           name: terraform-configuration-plan-${{ matrix.profile }}-${{ github.sha }}
-          path: ${{ env.TF_DIR }}/plan-${{ matrix.profile }}.txt
+          path: |
+            ${{ env.TF_DIR }}/plan-${{ matrix.profile }}.txt
+            ${{ env.TF_DIR }}/plan-${{ matrix.profile }}.txt.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -172,13 +184,17 @@ jobs:
       TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
       TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
       TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
-      TF_VAR_auth0_domain: ${{ secrets.TF_AUTH0_DOMAIN }}
-      TF_VAR_auth0_management_client_id: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
-      TF_VAR_auth0_management_client_secret: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+      # The auth0 provider reads these from its own environment, so the
+      # credentials never become Terraform root variables and therefore never
+      # enter the plan file. This is the structural fix for the plan-artifact
+      # secret leak; the sanitiser downstream is defence in depth, not the cure.
+      AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+      AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+      AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
       # Immutable image digests are required root variables (no defaults):
-      # remote plans/applies must pin the currently approved release digests.
+      # remote plans must pin the currently approved release digests.
       TF_VAR_backend_image_digest: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
       TF_VAR_ml_image_digest: ${{ secrets.TF_ML_IMAGE_DIGEST }}
     steps:
@@ -188,6 +204,16 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '~1.7'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install plan-validation dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -201,6 +227,7 @@ jobs:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
+          set -euo pipefail
           terraform init \
             -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
@@ -215,24 +242,95 @@ jobs:
         env:
           PROFILE: ${{ matrix.profile }}
         run: |
+          set -euo pipefail
           terraform plan \
             -input=false \
             -lock-timeout=5m \
             -var-file="profiles/${PROFILE}.tfvars" \
             -out="tfplan-${PROFILE}"
+          # The human-readable rendering redacts sensitive values itself and
+          # never prints root variables at all.
           terraform show -no-color "tfplan-${PROFILE}" > "remote-plan-${PROFILE}.txt"
+          # SECRET HYGIENE: `terraform show -json` does NOT redact `sensitive = true`
+          # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
+          # verbatim in the top-level `variables` block of the artifact uploaded
+          # below, on every push to main and every same-repo pull request that
+          # touches `AWS Deployment/**`. The raw document is written to a name
+          # that is never uploaded, sanitised, and deleted.
+          terraform show -json "tfplan-${PROFILE}" > plan-raw.json
+          python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \
+            plan-raw.json "remote-plan-${PROFILE}.json"
+          rm -f plan-raw.json
+          # The binary plan is NOT uploaded by this workflow: it embeds every
+          # root variable value and nothing here consumes it. Only the reviewed
+          # promotion workflow ships a binary plan, and only because its apply
+          # must replay that exact plan.
+          sha256sum \
+            "remote-plan-${PROFILE}.txt" \
+            "remote-plan-${PROFILE}.json" > "remote-plan-${PROFILE}.sha256"
+
+      # check_terraform_plan_policy.py reads the plan JSON and emits the
+      # canonical artifacts/profile-resource-inventory.json; check_cost_model.py
+      # consumes that inventory. Neither exit status is swallowed.
+      - name: Validate plan JSON against policy and cost model
+        working-directory: ${{ github.workspace }}
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          set -euo pipefail
+          plan_json="${TF_DIR}/remote-plan-${PROFILE}.json"
+          test -s "${plan_json}"
+          mkdir -p artifacts
+          python scripts/release/check_terraform_plan_policy.py \
+            --profile "${PROFILE}" \
+            --plan-json "${plan_json}" \
+            | tee "artifacts/plan-policy-report-${PROFILE}.txt"
+          test -s artifacts/profile-resource-inventory.json
+          # The numeric cost ceiling only exists for profiles that declare a
+          # `budget` in the canonical policy data; asking for one where none is
+          # declared is a usage error, not a cost failure.
+          if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
+            python scripts/release/check_cost_model.py \
+              --profile "${PROFILE}" \
+              --inventory artifacts/profile-resource-inventory.json \
+              --out-dir "artifacts/cost-${PROFILE}" \
+              | tee "artifacts/cost-model-report-${PROFILE}.txt"
+          else
+            echo "::notice title=No cost budget::${PROFILE} declares no budget in config/deployment_profiles.yaml; no numeric ceiling to enforce." \
+              | tee "artifacts/cost-model-report-${PROFILE}.txt"
+          fi
+          sha256sum \
+            artifacts/profile-resource-inventory.json \
+            "artifacts/plan-policy-report-${PROFILE}.txt" \
+            "artifacts/cost-model-report-${PROFILE}.txt" \
+            > "artifacts/plan-validation-${PROFILE}.sha256"
 
       - name: Upload immutable remote-plan evidence
         uses: actions/upload-artifact@v4
         with:
           name: terraform-remote-plan-${{ matrix.profile }}-${{ github.sha }}
-          path: ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.txt
+          path: |
+            ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.txt
+            ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.json
+            ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.sha256
+            artifacts/profile-resource-inventory.json
+            artifacts/plan-policy-report-${{ matrix.profile }}.txt
+            artifacts/cost-model-report-${{ matrix.profile }}.txt
+            artifacts/plan-validation-${{ matrix.profile }}.sha256
+            artifacts/cost-${{ matrix.profile }}/
           if-no-files-found: error
           retention-days: 30
 
+  # Retained deliberately after the automatic apply was deleted. It no longer
+  # gates an apply — it gates PROMOTABILITY. terraform-promote.yml can only
+  # build a reviewed plan for a commit whose main-branch run proved that the
+  # complete remote-plan credential set exists and that all four profiles
+  # produced a credentialed, policy- and cost-validated remote plan. Without
+  # this job a commit could land on main with every remote plan silently
+  # skipped, and still be dispatched for promotion.
   require-production-credentials:
-    name: Require Remote Plans Before Production
-    needs: [remote-plan-readiness, remote-plan]
+    name: Require Reviewed Remote Plans Before Promotion
+    needs: [remote-plan-readiness, plan, remote-plan]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -240,74 +338,20 @@ jobs:
       - name: Enforce credentialed remote plans
         env:
           CONFIGURED: ${{ needs.remote-plan-readiness.outputs.configured }}
+          PLAN_RESULT: ${{ needs.plan.result }}
           REMOTE_PLAN_RESULT: ${{ needs.remote-plan.result }}
         run: |
+          set -euo pipefail
           if [ "$CONFIGURED" != 'true' ]; then
             echo '::error::Production promotion requires the complete remote Terraform planning credential set.'
+            exit 1
+          fi
+          if [ "$PLAN_RESULT" != 'success' ]; then
+            echo "::error::Terraform configuration plan matrix did not pass (result: $PLAN_RESULT)."
             exit 1
           fi
           if [ "$REMOTE_PLAN_RESULT" != 'success' ]; then
             echo "::error::Remote Terraform plan matrix did not pass (result: $REMOTE_PLAN_RESULT)."
             exit 1
           fi
-
-  apply-production-lean:
-    name: Terraform Apply (production-lean)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [remote-plan, require-production-credentials]
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    environment: production
-    permissions:
-      id-token: write
-      contents: read
-    defaults:
-      run:
-        working-directory: AWS Deployment/aether-aws/terraform
-    env:
-      TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
-      TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
-      TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
-      TF_VAR_auth0_domain: ${{ secrets.TF_AUTH0_DOMAIN }}
-      TF_VAR_auth0_management_client_id: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
-      TF_VAR_auth0_management_client_secret: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
-      TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
-      TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
-      # Immutable image digests are required root variables (no defaults):
-      # remote plans/applies must pin the currently approved release digests.
-      TF_VAR_backend_image_digest: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
-      TF_VAR_ml_image_digest: ${{ secrets.TF_ML_IMAGE_DIGEST }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '~1.7'
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Terraform Init
-        env:
-          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
-          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
-        run: |
-          terraform init \
-            -input=false \
-            -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
-            -backend-config="key=profiles/production-lean/terraform.tfstate" \
-            -backend-config="region=${AWS_REGION}"
-
-      - name: Plan and apply reviewed profile
-        run: |
-          terraform plan \
-            -input=false \
-            -lock-timeout=5m \
-            -var-file=profiles/production-lean.tfvars \
-            -out=tfplan
-          terraform apply -input=false -auto-approve tfplan
+          echo 'This commit is promotable via .github/workflows/terraform-promote.yml.'

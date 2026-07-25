@@ -27,3 +27,13 @@ variable "acm_certificate_arn" {
   type        = string
   description = "ACM certificate ARN for HTTPS listener"
 }
+
+# Profile gating: the dedicated aether-ml-serving target group and its listener
+# rule only exist for profiles that run the dedicated ML service. Cost-capped
+# profiles serve ML inline inside the backend task, so an ML target group there
+# would be a permanently empty forbidden resource.
+variable "enable_dedicated_ml" {
+  type        = bool
+  description = "Create the aether-ml-serving target group and the /v1/ml/* listener rule"
+  default     = false
+}

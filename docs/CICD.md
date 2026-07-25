@@ -13,18 +13,30 @@ source_files:
   - cicd/aether-cicd/quality_gates/
   - .github/workflows/
 canonical_owner: platform@aether
-estimated_read_minutes: 12
+estimated_read_minutes: 15
 toc_depth: 3
 last_synced_commit: e8d95a8
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
 
-Internal reference for Aether's automated delivery pipeline. The CI/CD system is
-a Python orchestrator (`cicd/aether-cicd/`) that wraps GitHub Actions workflows
-and enforces quality gates before any artefact reaches a deployment target.
+Internal reference for Aether's delivery pipeline.
 
-## Branch strategy
+## Scope — two different things
+
+`cicd/aether-cicd/` is a **Python demo runner**, not the pipeline. `main.py`
+prints a CI → CD → SDK-release model from constants in
+`config/pipeline_config.py`; it does not drive GitHub Actions, and
+`.github/workflows/ci.yml` does not exist. The branch strategy, six-account
+table and eight-stage CI/CD model below come from that reference model and are
+labelled as such.
+
+**The workflows in `.github/workflows/` are what actually runs.** Anything that
+promotes, deploys or applies is described in
+[Delivery workflows](#delivery-workflows--what-actually-runs), and that section
+is authoritative wherever the two disagree.
+
+## Reference model — branch strategy
 
 Aether uses GitFlow with six permanent branch types:
 
@@ -38,9 +50,9 @@ Aether uses GitFlow with six permanent branch types:
 | `hotfix/*` | Emergency patches off `main`; merged back to both `main` and `develop` |
 | `release/*` | Release preparation off `develop`; merged to `main` and `develop` on ship |
 
-## AWS accounts
+## Reference model — AWS accounts
 
-The pipeline operates across six isolated AWS accounts:
+The reference model describes six isolated AWS accounts with placeholder IDs:
 
 | Account | ID | Purpose |
 |---------|-----|---------|
@@ -51,10 +63,17 @@ The pipeline operates across six isolated AWS accounts:
 | security | `555555555555` | Security tooling and audit log aggregation |
 | demo | `666666666666` | Demo environment; deployed from `demo` branch |
 
-## CI stages
+**No such account structure is provisioned.** The live Terraform root targets a
+single account and region per workspace, and the three production-class
+deployment profiles collide on resource names and therefore *do* require
+separate accounts — which have not been provisioned. See
+[AWS Deployment](AWS-DEPLOYMENT.md).
 
-Each pull request runs eight sequential stages. A failure at any stage stops the
-pipeline and blocks the merge.
+## Reference model — CI stages
+
+The eight sequential stages below are the reference model's. Stages 1–3 name
+commands the real workflows do run; stages 4–8 and their thresholds are not
+enforced by any workflow in `.github/workflows/`.
 
 ### 1. Lint / static checks
 
@@ -106,14 +125,16 @@ pipeline and blocks the merge.
 - k6 load test against the ingestion endpoint (1 000 RPS for 60 s)
 - Gate: **P99 latency < 200 ms, error rate < 0.1%**
 
-## CD stages
+## Reference model — CD stages
 
-Merges to `main` (from `release/*` or `hotfix/*`) trigger the CD pipeline.
+The canary and progressive-rollout model below is **not implemented by any
+workflow in this repository**. No workflow shifts weighted traffic, and no
+workflow applies Terraform as part of a deploy. The real promotion path is
+[Delivery workflows](#delivery-workflows--what-actually-runs).
 
 ### 1. Staging deploy
 
 ECS service update rolled out to the `staging` account using the commit-SHA image.
-Terraform plan is applied for any infrastructure changes.
 
 ### 2. Staging smoke tests
 
@@ -142,6 +163,91 @@ with the same alarm guard. Automatic rollback on breach at any step.
 - Deployment record written to the audit log
 - Slack notification sent to `#deploys`
 
+## Delivery workflows — what actually runs
+
+Two things get promoted, on two separate paths that must never be conflated: the
+**application** (an immutable release bound in `release.json`) and the
+**infrastructure** (a reviewed Terraform plan).
+
+| Workflow | Trigger | What it does | Applies Terraform |
+|---|---|---|---|
+| `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. | no |
+| `infrastructure.yml` | PR / push to `main` / dispatch on `AWS Deployment/**` | Provider-mocked configuration plan for all four profiles; OIDC remote plan per profile when the full credential set exists; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
+| `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. | **yes — the only path** |
+| `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. | no (delegates) |
+| `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; its only action is an ECS scale-to-zero, which can only reduce running compute. | no |
+| `repo-consistency.yml` | PR / push to `main` | `make ci-check`. | no |
+| `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
+
+### Infrastructure planning is not applying
+
+`infrastructure.yml` **never applies Terraform.** The `apply-production-lean`
+job that auto-applied on every push to `main` has been **deleted**. What is left
+on the `main` branch path is `require-production-credentials`, which gates
+**promotability**: a commit is only dispatchable for promotion if its
+main-branch run proved the complete remote-plan credential set exists and all
+four profiles produced a credentialed, policy- and cost-validated remote plan.
+Without that job a commit could land on `main` with every remote plan silently
+skipped and still be dispatched for promotion.
+
+The two evidence layers it publishes are not interchangeable:
+
+1. every PR runs a provider-mocked configuration plan against the real root
+   module, provider schemas and checked-in `profiles/*.tfvars`, publishing an
+   immutable `terraform-configuration-plan-*` artifact — no remote state, no
+   live provider API;
+2. with the complete secret set, a separate OIDC job runs an
+   environment-authoritative plan against an isolated remote-state key,
+   publishing `terraform-remote-plan-*` plus the plan-policy report, the
+   canonical resource inventory and the cost-model report.
+
+Reviewers must distinguish the two and read the second before promotion.
+Neither proves that an environment has been applied.
+
+### Reviewed Terraform promotion
+
+`terraform-promote.yml` is `workflow_dispatch`-only, so no push, tag, schedule
+or path trigger can reach an apply. Apply consumes the exact binary plan the
+plan job produced and **never re-plans**. It refuses unless all of the following
+hold: the plan digest matches the dispatched checksum and its recorded
+`sha256sum` manifest; the reviewed profile matches the dispatched profile; the
+state key is `profiles/<profile>/terraform.tfstate`; the checked-out `HEAD` is
+the plan's **own recorded commit** rather than the dispatch ref; the installed
+Terraform version equals the recorded one; `sha256(.terraform.lock.hcl)` equals
+the digest captured before `init`; and the plan is inside its **24-hour**
+validity window. The policy and cost validators are re-run at the reviewed
+commit, because the reports in the artifact are evidence, not proof.
+
+Approval is per profile: the apply job binds to `staging-terraform`,
+`production-lean-terraform`, `production-scale-terraform` or
+`enterprise-terraform`, so staging cannot borrow production's reviewers.
+
+`staging_state` (`awake` | `asleep`) is a **plan-time** input, recorded next to
+the plan so a reviewer sees which shape was approved; an apply cannot reshape
+the stored plan.
+
+### Deployment gates
+
+```bash
+make deployment-profile-gate      # every profile gate that needs no AWS credentials
+make deployment-readiness-score   # three-column readiness scorecard
+make collect-deployment-evidence  # materialise release-evidence/ + checksum
+```
+
+`deployment-profile-gate` chains `validate-profile-config`,
+`validate-cost-policy`, `validate-cost-policy-terraform`,
+`validate-delivery-topology`, `validate-terraform-profile-policy`,
+`validate-cost-model`, `test-plan-policy`, `test-runtime-topology`,
+`test-workflow-controls`, `test-cost-model`, `test-staging-lifecycle` and
+`deployment-readiness-score`, in that order — the two plan targets write the
+artifacts the scorecard later reads. `make test-terraform-profiles` runs
+`terraform validate` plus the provider-mocked per-profile plan tests and needs a
+local Terraform binary.
+
+`make test-workflow-controls`
+(`tests/unit/test_release_workflow_controls.py`) is the structural guard on all
+of the above: no automatic apply, no false-green, reviewed-plan integrity.
+
 ## Quality gates reference
 
 | Gate | Threshold | Stage |
@@ -155,8 +261,12 @@ with the same alarm guard. Automatic rollback on breach at any step.
 | Error rate | < 0.1% | Performance / Canary |
 | Image size | < 500 MB | Build |
 
-Thresholds are enforced in `cicd/aether-cicd/quality_gates/`. Editing them
-requires a separate review from `platform@aether`.
+These thresholds live in `cicd/aether-cicd/quality_gates/`, which is part of the
+reference model — they are not enforced by any workflow in
+`.github/workflows/`. The gates that actually block a merge are
+`repo-consistency.yml` (`make ci-check`) and the required-check catalog in
+`config/required_release_checks.yaml`, validated by
+`make validate-required-release-checks`.
 
 ## SDK release
 
@@ -219,14 +329,17 @@ external services. The same routine runs locally via
 
 `.github/workflows/smart-contract-analysis.yml` runs Slither static analysis on every push and PR that touches `Smart Contracts/`. Requires Slither to be installed (CI installs it via pip). Results are uploaded as an artifact. The pre-audit checklist at `scripts/smart_contract_audit_prep.py` runs 9 checks (oracle role, reward enforcement, nonce protection, etc.) and must pass 9/9 before external audit.
 
-## Adding a new CI stage
+## Adding a real gate
 
-1. Add a stage class in `cicd/aether-cicd/stages/` implementing the `Stage`
-   protocol.
-2. Register it in `cicd/aether-cicd/main.py`'s `STAGES` list at the correct
-   position.
-3. Add a matching quality gate in `cicd/aether-cicd/quality_gates/` if it
-   produces a measurable threshold.
-4. Update the GitHub Actions workflow (`.github/workflows/ci.yml`) to invoke the
-   new stage.
-5. Document the gate threshold in this page.
+1. Add the check as a script under `scripts/` (or `scripts/release/` if it is
+   release evidence) and give it a `make` target.
+2. Wire the target into the appropriate aggregate: `make ci-check` for repo
+   consistency, `make deployment-profile-gate` for deployment-profile
+   enforcement, `make release-gate` / `make founding-tenant-release-gate` for
+   release readiness.
+3. Invoke it from the workflow that must block on it, and add it to
+   `config/required_release_checks.yaml` if it is a required check.
+4. Document it here and in the relevant operations page.
+
+Adding a stage class under `cicd/aether-cicd/stages/` changes the reference
+model's printed output and gates nothing.

@@ -41,6 +41,14 @@ class WorkerSpec:
 
     ``factory`` must return a *fresh* coroutine object on every call — the
     supervisor invokes it once per (re)start attempt.
+
+    ``role`` names the *logical* worker role that owns this worker, which is
+    not always the role the process was booted as: a consolidated execution
+    group hosts several roles in one process, and per-role health, metrics and
+    logs must stay derivable there. Empty means unattributed.
+
+    ``healthy_run_s`` is how long one run must last before the restart budget is
+    considered earned back — see :meth:`WorkerSupervisor._guard`.
     """
 
     name: str
@@ -49,17 +57,28 @@ class WorkerSpec:
     enabled: Callable[[], bool] = lambda: True
     max_restarts: int = 5
     backoff_base_s: float = 2.0
+    role: str = ""
+    healthy_run_s: float = 300.0
 
 
 class _WorkerRecord:
     """Mutable per-worker runtime state (internal)."""
 
-    __slots__ = ("spec", "state", "restarts", "last_error", "first_start")
+    __slots__ = (
+        "spec", "state", "restarts", "total_restarts", "last_error", "first_start",
+    )
 
     def __init__(self, spec: WorkerSpec) -> None:
         self.spec = spec
         self.state: str = STATE_STOPPED
+        # Restart budget consumed since the last sustained healthy run. Reset
+        # when the worker proves it recovered, so the number always answers
+        # "how close is this worker to being given up on?".
         self.restarts: int = 0
+        # Every restart this worker has ever had. Never reset, so a worker that
+        # flaps once a week is still distinguishable from one that has never
+        # crashed — the budget reset must not erase that evidence.
+        self.total_restarts: int = 0
         self.last_error: Optional[str] = None
         # Resolved with the exception on a first-attempt crash, with None on
         # clean completion/cancellation. Never resolved while the first run
@@ -199,9 +218,26 @@ class WorkerSupervisor:
     # ── guard task ────────────────────────────────────────────────────────
 
     async def _guard(self, spec: WorkerSpec, record: _WorkerRecord) -> None:
-        """Run the worker coroutine; on crash, backoff-restart up to max_restarts."""
-        attempt = 0  # crashes observed so far (== restarts already consumed)
+        """Run the worker coroutine; on crash, backoff-restart up to max_restarts.
+
+        The restart budget is a *rate* limit, not a lifetime quota. ``attempt``
+        used to only ever grow, so ``max_restarts`` counted crashes across the
+        entire life of the process: six unrelated transient failures spread over
+        weeks — a broker blip in week one, another in week three — permanently
+        marked the role ``failed``, and it stayed that way while the task
+        happily reported itself alive. That is the opposite of what a supervisor
+        is for; the budget exists to stop a *crash loop*, and a worker that ran
+        healthily for ``healthy_run_s`` between two crashes is not in one.
+
+        So a run that lasted at least ``spec.healthy_run_s`` returns the budget
+        to full before the crash is counted. Crash-looping is unaffected: those
+        runs are far shorter than the threshold, so the budget still drains and
+        the worker still reaches ``failed``.
+        """
+        loop = asyncio.get_running_loop()
+        attempt = 0  # restart budget consumed (reset by a sustained healthy run)
         while True:
+            started_at = loop.time()
             try:
                 record.state = STATE_RUNNING
                 await spec.factory()
@@ -215,32 +251,56 @@ class WorkerSupervisor:
                 self._resolve_first_start(record, None)
                 raise
             except Exception as exc:
+                # Every crash/restart/failure signal carries the owning role so
+                # a consolidated process (one task, many logical roles) stays
+                # per-role attributable in metrics and logs.
+                labels = {"worker": spec.name, "role": spec.role or "unattributed"}
                 record.last_error = f"{type(exc).__name__}: {exc}"
+                uptime_s = loop.time() - started_at
+                if attempt and uptime_s >= spec.healthy_run_s:
+                    # The worker demonstrably recovered from the previous crash
+                    # and ran normally for a sustained period. This crash starts
+                    # a new incident, not a continuation of the old one.
+                    logger.info(
+                        "worker_restart_budget_reset name=%s role=%s "
+                        "healthy_uptime_s=%.1f budget_returned=%d",
+                        spec.name, spec.role or "unattributed", uptime_s, attempt,
+                    )
+                    metrics.increment(
+                        "worker_supervisor_restart_budget_reset", labels=labels,
+                    )
+                    attempt = 0
+                    record.restarts = 0
                 logger.error(
-                    "worker_crashed name=%s attempt=%d error=%s",
-                    spec.name, attempt + 1, record.last_error,
+                    "worker_crashed name=%s role=%s attempt=%d uptime_s=%.1f error=%s",
+                    spec.name, spec.role or "unattributed", attempt + 1, uptime_s,
+                    record.last_error,
                 )
-                metrics.increment(
-                    "worker_supervisor_crash", labels={"worker": spec.name},
-                )
+                metrics.increment("worker_supervisor_crash", labels=labels)
                 if attempt == 0:
                     self._resolve_first_start(record, exc)
                 if attempt >= spec.max_restarts:
                     record.state = STATE_FAILED
-                    metrics.increment(
-                        "worker_supervisor_failed", labels={"worker": spec.name},
-                    )
+                    metrics.increment("worker_supervisor_failed", labels=labels)
+                    # Emitted with the role as well, because this is the moment a
+                    # logical role stops doing its job for the rest of the
+                    # process's life. status_by_role() is only read at shutdown,
+                    # so without this signal the degradation is invisible until
+                    # the task happens to stop.
+                    metrics.increment("worker_supervisor_role_unhealthy", labels=labels)
                     logger.error(
-                        "worker_failed name=%s restarts_exhausted=%d",
-                        spec.name, spec.max_restarts,
+                        "worker_failed name=%s role=%s restarts_exhausted=%d "
+                        "total_restarts=%d last_error=%s — this role is now "
+                        "permanently inactive in this process",
+                        spec.name, spec.role or "unattributed", spec.max_restarts,
+                        record.total_restarts, record.last_error,
                     )
                     return
                 attempt += 1
                 record.restarts = attempt
+                record.total_restarts += 1
                 record.state = STATE_RESTARTING
-                metrics.increment(
-                    "worker_supervisor_restart", labels={"worker": spec.name},
-                )
+                metrics.increment("worker_supervisor_restart", labels=labels)
                 delay = spec.backoff_base_s * (2 ** (attempt - 1))
                 try:
                     await asyncio.sleep(delay)
@@ -259,13 +319,70 @@ class WorkerSupervisor:
     # ── introspection ─────────────────────────────────────────────────────
 
     def status(self) -> dict[str, dict[str, Any]]:
-        """Per-worker state map used by /v1/ready and diagnostics."""
+        """Per-worker state map used by /v1/ready and diagnostics.
+
+        ``role`` is the logical worker role owning each entry, so callers can
+        fold this map into per-role health even when one process hosts several
+        roles (see :func:`status_by_role`).
+        """
         return {
             name: {
                 "state": record.state,
+                # Budget consumed since the last sustained healthy run — i.e.
+                # how close this worker is to being given up on. Deliberately
+                # NOT the lifetime count; see :meth:`restart_totals`.
                 "restarts": record.restarts,
                 "last_error": record.last_error,
                 "required": record.spec.required,
+                "role": record.spec.role,
             }
             for name, record in self._records.items()
         }
+
+    def restart_totals(self) -> dict[str, int]:
+        """Lifetime restart count per worker, never reset by a budget reset.
+
+        Kept out of :meth:`status` on purpose. That map's key set is a pinned
+        contract (``/v1/ready`` and its own shape test), and the two numbers
+        answer different questions: ``status()['restarts']`` is "how much budget
+        is left", this is "has this worker been flapping for months". Erasing
+        the second when the first resets would trade one blind spot for another.
+        """
+        return {
+            name: record.total_restarts for name, record in self._records.items()
+        }
+
+    def unhealthy_roles(self) -> dict[str, dict[str, Any]]:
+        """Just the roles with at least one permanently failed worker.
+
+        The signal a health check or readiness probe needs. Kept as its own
+        accessor because ``status_by_role()`` returns every role and a caller
+        that only wants "is anything broken?" should not have to filter it.
+        """
+        return {
+            role: health
+            for role, health in self.status_by_role().items()
+            if not health["healthy"]
+        }
+
+    def status_by_role(self) -> dict[str, dict[str, Any]]:
+        """Fold :meth:`status` into one health entry per logical role.
+
+        A role is healthy only when none of its workers is ``failed``. This is
+        what makes a consolidated deployment observable at the same granularity
+        as the dedicated deployment it replaces: one crashed logical role shows
+        up as that role being unhealthy, not as the whole process degrading.
+        """
+        by_role: dict[str, dict[str, Any]] = {}
+        for name, info in self.status().items():
+            role = info.get("role") or "unattributed"
+            entry = by_role.setdefault(
+                role, {"healthy": True, "workers": {}, "failed": []},
+            )
+            entry["workers"][name] = info
+            if info.get("state") == STATE_FAILED:
+                entry["healthy"] = False
+                entry["failed"].append(name)
+        for entry in by_role.values():
+            entry["failed"].sort()
+        return by_role

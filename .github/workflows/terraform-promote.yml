@@ -1,4 +1,10 @@
 name: Reviewed Terraform promotion
+
+# The ONLY path that applies Terraform. workflow_dispatch-only: no push, tag,
+# schedule or path trigger can reach an apply. Apply consumes the exact binary
+# plan produced by the plan job, at the exact commit that produced it, and
+# never re-plans.
+
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +26,17 @@ on:
         description: Immutable ML serving image digest from the approved release manifest (sha256:...) — required for plan
         type: string
         required: false
+      staging_state:
+        description: >-
+          Staging wake/sleep shape for the plan. `asleep` drives every ECS
+          desired count and autoscaling floor to zero. Ignored by the three
+          production-class profiles, which have no staging_state block in
+          config/runtime_deployment.yaml. Plan-time only — an apply consumes
+          the stored plan and cannot reshape it.
+        type: choice
+        options: [awake, asleep]
+        default: awake
+        required: false
       plan_run_id:
         description: Plan workflow run ID (required for apply)
         type: string
@@ -35,6 +52,7 @@ concurrency:
   cancel-in-progress: false
 env:
   AWS_REGION: us-east-1
+  TF_DIR: AWS Deployment/aether-aws/terraform
 jobs:
   plan:
     if: inputs.action == 'plan'
@@ -45,14 +63,69 @@ jobs:
       TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
       TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
       TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
-      TF_VAR_auth0_domain: ${{ secrets.TF_AUTH0_DOMAIN }}
-      TF_VAR_auth0_management_client_id: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
-      TF_VAR_auth0_management_client_secret: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+      # The auth0 provider reads these from its own environment, so the
+      # credentials never become Terraform root variables and therefore never
+      # enter the plan file. This is the structural fix for the plan-artifact
+      # secret leak; the sanitiser downstream is defence in depth, not the cure.
+      AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+      AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+      AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install plan-validation dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
+      # Fail closed when the remote-plan credential set is incomplete. This is
+      # the same set that gates infrastructure.yml's remote-plan job: if those
+      # remote plans were skipped for missing credentials, no reviewed plan can
+      # be produced here either, so promotion cannot proceed.
+      - name: Require the complete remote-plan credential set
+        env:
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL }}
+          TF_AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in \
+            AWS_TERRAFORM_PLAN_ROLE_ARN \
+            TF_STATE_BUCKET \
+            TF_LOCK_TABLE \
+            TF_ACM_CERTIFICATE_ARN \
+            TF_DOMAIN_NAME \
+            TF_ALERT_EMAIL \
+            TF_AUTH0_DOMAIN \
+            TF_AUTH0_MANAGEMENT_CLIENT_ID \
+            TF_AUTH0_MANAGEMENT_CLIENT_SECRET \
+            TF_AETHER_APP_URL \
+            TF_KYBER_APP_URL
+          do
+            # `${!name-}` is indirect expansion with an empty default, so an
+            # entirely unset secret does not abort the loop under `set -u`.
+            if [ -z "${!name-}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf -v missing_list '%s, ' "${missing[@]}"
+            echo "::error::Reviewed Terraform promotion requires the complete remote-plan credential set. Missing ${missing_list%, }."
+            exit 1
+          fi
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
@@ -71,11 +144,17 @@ jobs:
           PROFILE: ${{ inputs.profile }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+          STAGING_STATE: ${{ inputs.staging_state }}
           COMMIT_SHA: ${{ github.sha }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
+          # Lockfile digest is taken from the checked-out tree BEFORE init, so
+          # apply can compare it against the same git content at the same
+          # commit without racing terraform's own lockfile maintenance.
+          sha256sum .terraform.lock.hcl | cut -d' ' -f1 > reviewed.lock.sha256
+          printf '%s\n' "profiles/${PROFILE}/terraform.tfstate" > reviewed.state-key
           terraform init -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
@@ -83,63 +162,329 @@ jobs:
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
           terraform validate
+          # staging_state is recorded alongside the plan so a reviewer can see
+          # which shape was approved. It is load-bearing, not decorative: apply
+          # below refuses a plan whose recorded state is not one of the two legal
+          # tokens, and staging-lifecycle.yml asserts it equals the shape it
+          # asked for before it dispatches an apply. The AUTHORITATIVE control on
+          # the applied shape is still the plan-JSON desired-count assertion in
+          # that workflow; this file is the cheap cross-check that the plan under
+          # review is the one that was requested. It is a plan-time input only:
+          # apply consumes the stored plan and cannot reshape it.
+          printf '%s\n' "${STAGING_STATE}" > reviewed.staging-state
           terraform plan -input=false -lock-timeout=5m \
             -var-file="profiles/${PROFILE}.tfvars" \
             -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
             -var "ml_image_digest=${ML_IMAGE_DIGEST}" \
+            -var "staging_state=${STAGING_STATE}" \
             -out=reviewed.tfplan
-          terraform show -json reviewed.tfplan > reviewed.tfplan.json
+          # SECRET HYGIENE: `terraform show -json` does NOT redact `sensitive = true`
+          # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
+          # verbatim in the top-level `variables` block of an uploaded artifact.
+          # The raw document is written to a name outside the uploaded
+          # `reviewed.*` glob, sanitised into reviewed.tfplan.json, and deleted.
+          terraform show -json reviewed.tfplan > plan-raw.json
+          python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \
+            plan-raw.json reviewed.tfplan.json
+          rm -f plan-raw.json
+          # The human-readable rendering redacts sensitive values itself and
+          # never prints root variables at all.
           terraform show -no-color reviewed.tfplan > reviewed.tfplan.txt
           sha256sum reviewed.tfplan > reviewed.tfplan.sha256
           printf '%s\n' "$COMMIT_SHA" > reviewed.commit
           printf '%s\n' "$PROFILE" > reviewed.profile
+          terraform version -json | jq -r '.terraform_version' > reviewed.terraform-version
+          # A reviewed plan is valid for 24 hours. Apply refuses an expired plan.
+          date -u +%Y-%m-%dT%H:%M:%SZ > reviewed.created-utc
+          date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%SZ > reviewed.expires-utc
+      - name: Validate reviewed plan against policy and cost model
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python scripts/release/check_terraform_plan_policy.py \
+            --profile "$PROFILE" \
+            --plan-json "${TF_DIR}/reviewed.tfplan.json" \
+            | tee "${TF_DIR}/reviewed.policy.txt"
+          # The canonical resource inventory the policy validator emits travels
+          # with the plan, so apply reviews the same resource set.
+          cp artifacts/profile-resource-inventory.json "${TF_DIR}/reviewed.resources.json"
+          if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
+            python scripts/release/check_cost_model.py \
+              --profile "$PROFILE" \
+              --inventory "${TF_DIR}/reviewed.resources.json" \
+              --out-dir "artifacts/cost-${PROFILE}" \
+              | tee "${TF_DIR}/reviewed.cost.txt"
+          else
+            echo "${PROFILE} declares no budget in config/deployment_profiles.yaml; no numeric ceiling to enforce." \
+              | tee "${TF_DIR}/reviewed.cost.txt"
+          fi
+      - name: Summarise the reviewed plan identity
+        working-directory: AWS Deployment/aether-aws/terraform
+        run: |
+          set -euo pipefail
+          {
+            echo '### Reviewed Terraform plan'
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| profile | $(cat reviewed.profile) |"
+            echo "| commit | $(cat reviewed.commit) |"
+            echo "| state key | $(cat reviewed.state-key) |"
+            echo "| terraform version | $(cat reviewed.terraform-version) |"
+            echo "| lockfile sha256 | $(cat reviewed.lock.sha256) |"
+            echo "| plan sha256 | $(sha256sum reviewed.tfplan | cut -d' ' -f1) |"
+            echo "| created (UTC) | $(cat reviewed.created-utc) |"
+            echo "| expires (UTC) | $(cat reviewed.expires-utc) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      # Reviewable evidence. Every `reviewed.*` file EXCEPT the binary plan:
+      # reviewed.tfplan.json is sanitised above, and the remaining files are
+      # checksums, timestamps and rendered reports that carry no secret value.
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ inputs.profile }}-${{ github.sha }}
-          path: AWS Deployment/aether-aws/terraform/reviewed.*
+          path: |
+            AWS Deployment/aether-aws/terraform/reviewed.*
+            !AWS Deployment/aether-aws/terraform/reviewed.tfplan
           if-no-files-found: error
           retention-days: 14
+      # SECRET-BEARING ARTIFACT. The binary plan embeds every root variable value
+      # Terraform was given, including the `sensitive = true` Auth0 management
+      # credentials; nothing can strip them without destroying the exact-plan
+      # apply guarantee. It cannot be dropped because `terraform apply
+      # reviewed.tfplan` is the whole point of this workflow, so instead it is
+      # split out with the SHORTEST retention the apply path can use: a reviewed
+      # plan expires 24h after it is created (reviewed.expires-utc, enforced
+      # below), so one day of retention outlives every plan that is still legal
+      # to apply and nothing beyond it. GitHub artifacts have no per-artifact
+      # ACL, so retention is the only lever here; narrowing readership further
+      # would mean encrypting this file under a repository secret.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.profile }}-binary-${{ github.sha }}
+          path: AWS Deployment/aether-aws/terraform/reviewed.tfplan
+          if-no-files-found: error
+          retention-days: 1
+
   apply:
     if: inputs.action == 'apply'
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    environment: production-terraform
+    # Per-profile environments: each profile carries its own reviewers and
+    # protection rules. staging cannot borrow production's approvals, and
+    # production cannot be applied behind staging's.
+    environment:
+      name: >-
+        ${{ inputs.profile == 'staging' && 'staging-terraform'
+        || inputs.profile == 'production-lean' && 'production-lean-terraform'
+        || inputs.profile == 'production-scale' && 'production-scale-terraform'
+        || inputs.profile == 'enterprise-isolated' && 'enterprise-terraform'
+        || 'enterprise-terraform' }}
     permissions: {contents: read, actions: read, id-token: write}
     steps:
-      - uses: actions/checkout@v4
       - name: Require explicit reviewed plan identity
         env:
           PLAN_RUN_ID: ${{ inputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
+          PROFILE: ${{ inputs.profile }}
         run: |
           set -euo pipefail
           test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id required'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::plan_checksum required'; exit 1; }
+          case "$PROFILE" in
+            staging|production-lean|production-scale|enterprise-isolated) ;;
+            *) echo "::error::unknown profile ${PROFILE}"; exit 1 ;;
+          esac
+      - name: Require the complete apply credential set
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          test -n "$AWS_TERRAFORM_APPLY_ROLE_ARN" || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN required'; exit 1; }
+          test -n "$TF_STATE_BUCKET" || { echo '::error::TF_STATE_BUCKET required'; exit 1; }
+          test -n "$TF_LOCK_TABLE" || { echo '::error::TF_LOCK_TABLE required'; exit 1; }
+      # The artifact NAME pattern below constrains what is downloaded, but not
+      # which workflow produced it: any run that uploaded an artifact called
+      # `terraform-plan-<profile>-*` would satisfy it. Bind the run itself to
+      # this workflow file, and require it to have succeeded, before trusting a
+      # single byte of its output. Mirrors the release-run identity check in
+      # staging-lifecycle.yml.
+      - name: Verify the plan run belongs to this workflow and succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PLAN_RUN_ID}")"
+          run_path="$(jq -r '.path' <<<"$run_json")"
+          run_conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+          if [ "$run_path" != '.github/workflows/terraform-promote.yml' ]; then
+            echo "::error::plan run ${PLAN_RUN_ID} belongs to ${run_path}, not the reviewed promotion workflow"
+            exit 1
+          fi
+          if [ "$run_conclusion" != success ]; then
+            echo "::error::plan run ${PLAN_RUN_ID} concluded ${run_conclusion}, not success"
+            exit 1
+          fi
+      # Downloaded outside the workspace: the reviewed-commit checkout below
+      # cleans the workspace and would otherwise delete the plan.
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.plan_run_id }}
           pattern: terraform-plan-${{ inputs.profile }}-*
-          path: AWS Deployment/aether-aws/terraform
+          path: ${{ runner.temp }}/reviewed-plan
           merge-multiple: true
+      - name: Verify reviewed plan metadata, profile and 24h expiry
+        id: reviewed
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/reviewed-plan"
+          for artefact in \
+            reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
+            reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
+            reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
+          do
+            if [ ! -s "$artefact" ]; then
+              echo "::error::reviewed plan is missing required evidence: ${artefact}"
+              exit 1
+            fi
+          done
+
+          # The recorded wake/sleep shape must be one of the two legal tokens.
+          # A plan whose staging_state cannot be named is a plan nobody reviewed
+          # the shape of.
+          reviewed_staging_state="$(cat reviewed.staging-state)"
+          case "$reviewed_staging_state" in
+            awake|asleep) ;;
+            *) echo "::error::reviewed.staging-state is '${reviewed_staging_state}', not awake or asleep"; exit 1 ;;
+          esac
+
+          reviewed_profile="$(cat reviewed.profile)"
+          if [ "$reviewed_profile" != "$PROFILE" ]; then
+            echo "::error::plan was reviewed for ${reviewed_profile}, dispatched for ${PROFILE}"
+            exit 1
+          fi
+
+          reviewed_state_key="$(cat reviewed.state-key)"
+          if [ "$reviewed_state_key" != "profiles/${PROFILE}/terraform.tfstate" ]; then
+            echo "::error::plan records backend state key ${reviewed_state_key}, not this profile's"
+            exit 1
+          fi
+
+          reviewed_commit="$(cat reviewed.commit)"
+          if ! printf '%s' "$reviewed_commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo '::error::reviewed.commit is not a 40-character commit sha'
+            exit 1
+          fi
+
+          reviewed_tf_version="$(cat reviewed.terraform-version)"
+          if ! printf '%s' "$reviewed_tf_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo '::error::reviewed.terraform-version is not a concrete version'
+            exit 1
+          fi
+
+          created_epoch="$(date -u -d "$(cat reviewed.created-utc)" +%s)"
+          expires_epoch="$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
+          now_epoch="$(date -u +%s)"
+          if [ "$expires_epoch" -le "$created_epoch" ]; then
+            echo '::error::reviewed plan expiry precedes its creation timestamp'
+            exit 1
+          fi
+          if [ "$((expires_epoch - created_epoch))" -gt 86400 ]; then
+            echo '::error::reviewed plan claims a validity window longer than 24 hours'
+            exit 1
+          fi
+          if [ "$now_epoch" -ge "$expires_epoch" ]; then
+            echo "::error::reviewed plan expired at $(cat reviewed.expires-utc); create a fresh plan"
+            exit 1
+          fi
+
+          {
+            printf 'commit=%s\n' "$reviewed_commit"
+            printf 'terraform_version=%s\n' "$reviewed_tf_version"
+          } >> "$GITHUB_OUTPUT"
+      # Bind the apply to the plan's OWN commit, not the dispatch ref. The ref
+      # may have moved since review; github.sha says nothing about which code
+      # the reviewed plan was built from.
+      - name: Check out the exact commit the plan was reviewed at
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.reviewed.outputs.commit }}
+          fetch-depth: 1
+      - name: Verify the checkout is the reviewed commit
+        env:
+          REVIEWED_COMMIT: ${{ steps.reviewed.outputs.commit }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$head_sha" != "$REVIEWED_COMMIT" ]; then
+            echo "::error::checked out ${head_sha}, expected reviewed commit ${REVIEWED_COMMIT}"
+            exit 1
+          fi
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ steps.reviewed.outputs.terraform_version }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install plan-validation dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Stage the reviewed plan into the reviewed working tree
+        working-directory: AWS Deployment/aether-aws/terraform
+        run: |
+          set -euo pipefail
+          cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
+      # Re-run at the reviewed commit: the reports in the artifact are evidence,
+      # not proof. The policy and cost rules that ship with the reviewed code
+      # must still pass against the reviewed plan at apply time.
+      - name: Re-validate the reviewed plan against policy and cost model
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python scripts/release/check_terraform_plan_policy.py \
+            --profile "$PROFILE" \
+            --plan-json "${TF_DIR}/reviewed.tfplan.json"
+          if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
+            python scripts/release/check_cost_model.py \
+              --profile "$PROFILE" \
+              --inventory "${TF_DIR}/reviewed.resources.json" \
+              --out-dir "artifacts/cost-${PROFILE}"
+          fi
       - name: Apply the exact approved plan (never re-plan)
         working-directory: AWS Deployment/aether-aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
-          COMMIT_SHA: ${{ github.sha }}
+          REVIEWED_COMMIT: ${{ steps.reviewed.outputs.commit }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
           test "$(cat reviewed.profile)" = "$PROFILE"
-          test "$(cat reviewed.commit)" = "$COMMIT_SHA"
+          test "$(cat reviewed.commit)" = "$REVIEWED_COMMIT"
+          test "$(cat reviewed.commit)" = "$(git rev-parse HEAD)"
+          test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           test "$(sha256sum reviewed.tfplan | cut -d' ' -f1)" = "$PLAN_CHECKSUM"
+          sha256sum --check --status reviewed.tfplan.sha256
+          test "$(cat reviewed.lock.sha256)" = "$(sha256sum .terraform.lock.hcl | cut -d' ' -f1)"
+          test "$(cat reviewed.terraform-version)" = "$(terraform version -json | jq -r '.terraform_version')"
+          test "$(date -u +%s)" -lt "$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
           terraform init -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \

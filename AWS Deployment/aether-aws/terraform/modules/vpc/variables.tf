@@ -19,8 +19,34 @@ variable "availability_zones" {
   description = "List of availability zone names to deploy into (exactly 3 required)"
 }
 
-variable "enable_nat_gateway_ha" {
+variable "nat_mode" {
+  type        = string
+  description = "NAT topology: \"none\" (no NAT Gateway), \"single\" (one shared NAT), or \"ha\" (one NAT per AZ)"
+  default     = "single"
+
+  validation {
+    condition     = contains(["none", "single", "ha"], var.nat_mode)
+    error_message = "nat_mode must be one of: none, single, ha."
+  }
+}
+
+# Data-store security groups are only created for profiles that provision the
+# matching backend, so lean profiles carry no unused network policy.
+
+variable "enable_redis_sg" {
   type        = bool
-  description = "Deploy one NAT Gateway per AZ (true) or a single shared NAT (false)"
+  description = "Create the ElastiCache Redis security group"
+  default     = false
+}
+
+variable "enable_msk_sg" {
+  type        = bool
+  description = "Create the MSK Kafka security group"
+  default     = false
+}
+
+variable "enable_neptune_sg" {
+  type        = bool
+  description = "Create the Neptune security group"
   default     = false
 }

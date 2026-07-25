@@ -113,6 +113,14 @@
       "required_changed_globs": ["Makefile", ".github/workflows/**", "docs/AUTOMATION.md", "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md", "tests/**"],
       "required_commands": ["make docs-check", "make repo-doctor", "make ci-check", "python scripts/validate_frontend_data_truth.py", "python -m pytest tests/unit/test_repo_doctor_cli.py tests/unit/test_validate_frontend_data_truth.py -q"],
       "remediation": "Keep Makefile, workflows, docs, repo_doctor, and parser tests synchronized."
+    },
+    {
+      "id": "deployment_profiles",
+      "name": "deployment profile / Terraform topology changed",
+      "source_globs": ["AWS Deployment/aether-aws/terraform/**", "config/deployment_profiles.yaml", "config/runtime_deployment.yaml", "config/terraform_resource_contracts.yaml", "config/aws_price_book.yaml"],
+      "required_changed_globs": ["AWS Deployment/aether-aws/terraform/tests/**", "tests/fixtures/terraform_plans/**", "tests/unit/test_terraform_plan_policy.py", "tests/unit/test_terraform_resource_contracts.py", "tests/unit/test_cost_model.py", "tests/unit/test_runtime_topology.py", "tests/unit/test_runtime_execution_groups.py", "scripts/release/check_terraform_plan_policy.py", "scripts/release/check_cost_model.py", "scripts/release/check_delivery_topology.py", "docs/DEPLOYMENT-PROFILES.md", "docs/AWS-LEAN-PRODUCTION.md", "docs/COST-OPTIMIZATION.md"],
+      "required_commands": ["make test-terraform-profiles", "make validate-terraform-profile-policy", "make validate-cost-model", "make validate-delivery-topology", "make test-runtime-topology"],
+      "remediation": "A profile change is a plan-shape change. Re-run the provider-mocked plan tests for all four profiles, re-check the plan against config/terraform_resource_contracts.yaml and the numeric budget in config/aws_price_book.yaml, re-validate the delivery/role topology, and update the profile docs. Regenerate any stale plan fixture under tests/fixtures/terraform_plans/ rather than relaxing an assertion."
     }
   ]
 }

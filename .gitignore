@@ -99,3 +99,16 @@ ML%20Models/
 
 # Generated SBOM artifacts (supply-chain gate output)
 reports/sbom/
+
+# Generated cost model reports (check_cost_model.py output)
+reports/cost/
+
+# Terraform plan-policy inventory and policy reports
+# (scripts/release/check_terraform_plan_policy.py --out-dir, and the
+# infrastructure / terraform-promote workflows write here)
+artifacts/
+
+# Release evidence bundle (scripts/release/collect_evidence.py --bundle-dir).
+# Only created on an explicit flag, but never a committed artifact: it is
+# per-run evidence, and a stale committed copy would be worse than none.
+release-evidence/

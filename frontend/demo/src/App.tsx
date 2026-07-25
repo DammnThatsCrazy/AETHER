@@ -3,10 +3,25 @@ import { Badge, Card, CardContent, CardHeader, CardTitle } from '@aether/ui';
 import {
   DATA_QUALITY, DECISIONS, DEMO_TENANT, DISPATCHES, INGESTION_PATHS, KYBER_VIEW,
   OODA, OUTCOMES, PLAYBOOKS, PROFILE360, RECOMMENDATIONS, VALUE_REVIEW,
-} from '@demo/data/fixtures';
-import { getDemoEnv } from '@demo/lib/env';
+} from '@demo/data/dataset';
+import { DEMO_DATA_SOURCE_LABEL, getDemoEnv, type DemoEnv } from '@demo/lib/env';
 
 type View = 'tenant' | 'operator';
+
+// Every demo profile serves synthetic data. The label is persistent and
+// visible so the app can never be mistaken for a production tenant.
+function SyntheticDataBanner({ env }: { readonly env: DemoEnv }) {
+  return (
+    <div
+      role="status"
+      data-testid="synthetic-data-banner"
+      className="sticky top-0 z-50 -mx-6 -mt-6 mb-1 border-b border-warning bg-surface-raised px-6 py-2 text-xs font-medium text-warning"
+    >
+      Synthetic demo data — not a production tenant. Profile{' '}
+      <span className="font-mono">{env}</span> · {DEMO_DATA_SOURCE_LABEL[env]}.
+    </div>
+  );
+}
 
 function Step({ n, title, children }: { readonly n: number; readonly title: string; readonly children: React.ReactNode }) {
   return (
@@ -55,6 +70,7 @@ export function App() {
 
   return (
     <div className="min-h-screen p-6 space-y-5">
+      <SyntheticDataBanner env={env} />
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-default pb-4">
         <div>
           <h1 className="text-xl font-mono font-bold">Aether — Demo</h1>

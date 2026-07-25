@@ -315,31 +315,511 @@ items:
     exception: null
     last_verified_commit: null
 
+  # ---- FT-9 — Deployment profile programme ---------------------------------
+  #
+  # Eight items. Nothing here is `verified_complete` and nothing here can be:
+  # this repository has no AWS credentials, no applied infrastructure, no
+  # billing history and no staging environment, so no credentialed plan, no
+  # apply, no rehearsal and no observed bill exists or can exist. Items whose
+  # remaining work is purely external carry `externally_blocked` plus an
+  # exception naming exactly what is missing; items that are code-complete and
+  # locally proven carry a terminal-but-unverified status naming the suite that
+  # proved them. `last_verified_commit` is null throughout — a SHA here would
+  # assert a verification that has not happened, and part of this programme is
+  # still uncommitted in the working tree.
+
   - id: FT-9-TERRAFORM-PROFILES
-    title: Terraform deployment profiles, static frontends, cost policy enforcement, immutable promotion
+    title: Deployment profile drives the Terraform resource graph, not just documentation
     domain: cost
     severity: P0
     release_class: founding_tenant_release_blocker
-    customer_impact: Makes cost reduction real and enforceable; static frontends replace ECS UI services in lean mode.
-    current_behavior: Single flat root Terraform with a single `environment` var; deploy pushes mutable :latest and auto-applies to production on push to main; UI intended as ECS.
-    required_behavior: deployment_profile variable + profiles/*.tfvars; production-lean plan excludes forbidden resources; static S3/CloudFront frontends; immutable artifact promotion.
+    customer_impact: A production-lean plan structurally cannot contain the resources its own cost policy forbids; the saving is a property of the graph rather than a claim in a doc.
+    current_behavior: >
+      Implemented in 318eea8. profiles.tf previously defined nine `enable_*`
+      locals referenced by nothing outside the test file while main.tf
+      instantiated module.rds / module.elasticache / module.msk /
+      module.neptune unconditionally, so a production-lean plan provisioned
+      every resource the policy forbids and local.lean / local.staging were
+      dead. Those locals are now wired into module `count` and module inputs:
+      normalized locals were introduced first, every consumer of
+      module.msk.bootstrap_brokers_tls / module.elasticache.primary_endpoint /
+      module.neptune.cluster_endpoint repointed at them, and only then was
+      `count` added — which is what the deferred TODO claimed was impossible.
+      network_egress_mode (public_ip|single_nat|ha_nat|vpc_endpoints|none)
+      derives nat_mode and assign_public_ip, so lean and staging provision zero
+      NAT gateways; the private default route moved out of the inline `route`
+      block into a counted aws_route.private_nat so a private route table stays
+      valid with no NAT at all. Backend selectors are real ECS inputs. Every
+      dedicated-ML resource is count-gated rather than scaled to zero. A latent
+      plan-breaking bug was fixed en route — passing module.elasticache[0].cluster_id
+      into monitoring made `count` depend on an apply-time attribute and failed
+      `terraform plan` outright on scale and enterprise. moved.tf covers all
+      fourteen changed state addresses so an applied scale/enterprise workspace
+      migrates instead of being destroyed, and DECOMMISSION.md documents the
+      destroy-safety procedure and the one-time private-route migration hazard
+      that `moved` cannot express.
+    required_behavior: >
+      `deployment_profile` selects real module cardinality. production-lean and
+      staging plan zero NAT gateways and none of MSK, ElastiCache, Neptune,
+      legacy RDS, dedicated ML or frontend ECS. Assertions read the planned
+      module graph (`length(module.msk) == 0` and friends), never the locals
+      that produced it, so a local that stops being wired into `count` fails
+      rather than passes.
     affected_paths:
-      - AWS Deployment/aether-aws/terraform/
-      - .github/workflows/
-    tests_required: [terraform profile validation, cost policy terraform-plan gate]
-    evidence_required: [terraform validation output]
-    docs_required: [docs/DEPLOYMENT-PROFILES.md, docs/PRODUCTION-DEPLOYMENT.md]
+      - AWS Deployment/aether-aws/terraform/profiles.tf
+      - AWS Deployment/aether-aws/terraform/main.tf
+      - AWS Deployment/aether-aws/terraform/variables.tf
+      - AWS Deployment/aether-aws/terraform/moved.tf
+      - AWS Deployment/aether-aws/terraform/profiles/
+      - AWS Deployment/aether-aws/terraform/modules/vpc/main.tf
+      - AWS Deployment/aether-aws/terraform/modules/ecs/main.tf
+      - AWS Deployment/aether-aws/terraform/modules/alb/main.tf
+      - AWS Deployment/aether-aws/terraform/modules/monitoring/main.tf
+      - AWS Deployment/aether-aws/terraform/tests/profile_plan.tftest.hcl
+      - AWS Deployment/aether-aws/terraform/DECOMMISSION.md
+      - config/terraform_resource_contracts.yaml
+    tests_required:
+      - "make test-terraform-profiles (terraform validate + terraform test over tests/profile_plan.tftest.hcl)"
+      - tests/unit/test_terraform_resource_contracts.py
+    evidence_required:
+      - "terraform validate: Success, configuration is valid"
+      - "terraform test: 5 run blocks over 4 profiles (staging, staging_asleep, production-lean, production-scale, enterprise-isolated) — 5 passed, 0 failed"
+      - "mutation proof: forcing count = 1 fails with 'module.msk is tuple with 1 element'"
+    docs_required:
+      - docs/DEPLOYMENT-PROFILES.md
+      - docs/AWS-LEAN-PRODUCTION.md
+      - AWS Deployment/aether-aws/terraform/DECOMMISSION.md
+    owner: platform
+    status: subsystem_tests_pass
+    blocked_by: [FT-COST-POLICY-DATA]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-9-PLAN-POLICY
+    title: Plan-shaped policy enforcement — a real terraform show -json checked against the profile contract
+    domain: cost
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: The compliance claim is now made against the plan that would be applied, not against the source that produced it.
+    current_behavior: >
+      Implemented in 2c290c8. check_cost_policy_terraform.py regex-parses
+      profiles.tf and asserts local booleans are false — it never sees a plan,
+      so it can only confirm that the source says the right thing.
+      check_terraform_plan_policy.py maps a real `terraform show -json` onto the
+      canonical policy keys in config/deployment_profiles.yaml via
+      config/terraform_resource_contracts.yaml and asserts that forbidden
+      resources have zero actively-planned instances, that required resources
+      are present, and that ECS service cardinality, network mode and static
+      frontend origins match the profile. It fails closed on an expensive
+      resource type no matcher claims and on any canonical key without a
+      matcher, so silence never reads as success; a resource being destroyed is
+      correctly not a violation. Both gates are kept: the source gate and the
+      plan gate fail differently and a drifted local is distinguishable from a
+      drifted plan. Fifteen committed plan fixtures pin the behaviour — one
+      valid lean plan, one valid scale plan, awake and asleep staging, and
+      eleven mutations (msk, elasticache, neptune, legacy rds, dedicated ml,
+      frontend ecs, nat gateway, missing aurora, eight worker services, unsized
+      ECS service, unmatched expensive type, destroying msk). Fixing this
+      surfaced a real gap at source: frontend_ecs_services was declared
+      forbidden in the contracts file with `permitted_in: []` but absent from
+      the scale and enterprise forbidden lists, so those plans were never
+      actually checked for it.
+    required_behavior: >
+      A plan JSON, not a source file, is the input to the policy gate; every
+      canonical required and forbidden key resolves to a matcher with a declared
+      cardinality; an unmapped expensive resource type is a hard failure.
+    affected_paths:
+      - scripts/release/check_terraform_plan_policy.py
+      - config/terraform_resource_contracts.yaml
+      - tests/fixtures/terraform_plans/
+      - tests/unit/test_terraform_plan_policy.py
+      - tests/unit/test_terraform_resource_contracts.py
+      - Makefile
+    tests_required:
+      - "make test-plan-policy (tests/unit/test_terraform_plan_policy.py + tests/unit/test_terraform_resource_contracts.py)"
+      - "make validate-terraform-profile-policy against the committed lean fixture"
+    evidence_required:
+      - "check_terraform_plan_policy.py --profile production-lean: PASS — 54 checks passed"
+      - "artifacts/profile-resource-inventory.json + profile-policy-result.json emitted from the plan"
+      - "eleven mutation fixtures, each of which the gate rejects"
+    docs_required:
+      - docs/DEPLOYMENT-PROFILES.md
+      - docs/AWS-LEAN-PRODUCTION.md
+    owner: platform
+    status: targeted_tests_pass
+    blocked_by: [FT-9-TERRAFORM-PROFILES, FT-COST-POLICY-DATA]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-9-LEAN-RUNTIME
+    title: Consolidated lean execution groups — 2 always-on tasks instead of 10
+    domain: execution
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: The largest single line of the lean bill (Fargate) drops by roughly two thirds without giving up per-role queues, DLQs or restart isolation.
+    current_behavior: >
+      Implemented in 367f93a. production-lean and staging ran 10 always-on
+      Fargate tasks (api x2 plus eight dedicated worker services); they now run
+      2 — one api task and one lean-worker task hosting all eight logical roles.
+      production-scale and enterprise-isolated stay dedicated. Consolidation
+      moves the process boundary and nothing else: inside the packed task every
+      role keeps its own queue, consumer group, DLQ, retry policy, backpressure
+      budget, metrics label and restart behaviour, and each receive loop
+      registers as a WorkerSpec on the existing supervisor so crash to metric to
+      backoff-restart isolation is inherited rather than reimplemented.
+      config/runtime_deployment.yaml moved to schema v2, whose unit is the ECS
+      service rather than the role, and whose service key IS the AETHER_ROLE
+      token. `staging_state: asleep` multiplies desired_count, the autoscaling
+      min_capacity floor AND the capacity-provider base_count by zero — scaling
+      desired count alone would have let Application Auto Scaling clamp the
+      service back up within a cooldown, so staging would never actually have
+      slept while appearing to. Seven defects were found and fixed that would
+      each have shipped silently: keying consumers by (role, group_id) loses
+      messages under SQS so keying is now broker-aware with a hard assertion
+      that no two consumers in a process resolve to the same queue; a
+      consolidated task needs eight queue URLs but the task definition passed
+      one, so Terraform now emits the SQS_ROLE_QUEUE_URLS map the runtime
+      already expected; EventConsumer._send_to_dlq referenced an undefined
+      _kafka_producer so a durable DLQ publish silently degraded to an in-memory
+      list; an explicitly selected sns_sqs broker with a missing queue fell
+      through to Kafka and now fails closed; ConsumerSpec.topics under-declared
+      what its factory subscribed to (1 vs 16); lean-worker was absent from
+      settings.RUNTIME_ROLES so the new task would have been rejected at boot;
+      and semantic-worker was missing from both compose files and the
+      runtime-readiness role set.
+    required_behavior: >
+      Every worker role in roles.py::WORKER_ROLES is hosted by exactly one
+      service in every profile — never orphaned, never claimed twice — with
+      execution_mode declared by the matrix rather than inferred from service
+      count, and FARGATE_SPOT forbidden on api and on any service hosting
+      outbox-relay.
+    affected_paths:
+      - config/runtime_deployment.yaml
+      - AWS Deployment/aether-aws/terraform/profiles.tf
+      - AWS Deployment/aether-aws/terraform/modules/ecs/main.tf
+      - Backend Architecture/aether-backend/services/runtime/roles.py
+      - Backend Architecture/aether-backend/services/runtime/consumer_runner.py
+      - Backend Architecture/aether-backend/services/runtime/consumer_specs.py
+      - Backend Architecture/aether-backend/services/runtime/run_role.py
+      - Backend Architecture/aether-backend/shared/events/events.py
+      - Backend Architecture/aether-backend/config/settings.py
+      - scripts/release/check_delivery_topology.py
+      - tests/unit/test_runtime_execution_groups.py
+      - tests/unit/test_runtime_topology.py
+    tests_required:
+      - "make test-runtime-topology (tests/unit/test_runtime_topology.py + tests/unit/test_runtime_execution_groups.py)"
+      - "make validate-delivery-topology"
+    evidence_required:
+      - "make test-runtime-topology: 100 passed"
+      - "check_delivery_topology.py: PASS — 27 checks passed"
+      - "terraform test run block staging_asleep_profile_plan: pass (desired counts and autoscaling floors both zero)"
+    docs_required:
+      - docs/BACKEND-EXECUTION-MODEL.md
+      - docs/AWS-LEAN-PRODUCTION.md
+    owner: platform
+    status: subsystem_tests_pass
+    blocked_by: [FT-9-TERRAFORM-PROFILES, FT-4-RUNTIME-ROLES]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-9-COST-ENFORCEMENT
+    title: Numeric cost ceiling enforced from a pinned, repo-owned price book
+    domain: cost
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: The lean profile is gated on a currency figure rather than on a prose estimate, and the figure is reproducible offline.
+    current_behavior: >
+      Implemented in 2c290c8. Cost policy previously enforced SHAPE only
+      (which resource classes may exist); a plan could satisfy the shape and
+      still blow the budget through an oversized instance class inside an
+      allowed type. check_cost_model.py prices the inventory emitted by the plan
+      policy gate against config/aws_price_book.yaml — a pinned, region-scoped,
+      repo-owned table, deliberately not a pricing API, so the same plan scores
+      the same on every run and an upstream price change arrives as a reviewed
+      diff rather than a surprise red build. Fixed cost (accrues on the clock,
+      determined by the plan) is separated from usage-variable cost (driven by
+      tenant traffic, modelled as scenarios and reported but never used as a
+      ceiling). An unpriceable FIXED resource is a hard error and never a silent
+      zero — which is how the rule proved itself, since secret rotation was
+      unpriceable and the gate refused to pass until the book covered it, along
+      with seven other types a real lean plan contains.
+      MEASURED PRODUCTION-LEAN FIXED BASELINE: USD 184.13/month (Fargate
+      121.10, Aurora 0.5-ACU floor 43.80, ALB 16.43, KMS 2.00, Secrets 0.80).
+      That is USD 34.13 OVER the USD 150 design target and inside the USD 200
+      hard ceiling. The gate therefore warns and passes. The overage is a
+      deviation the user explicitly accepted and it is documented in
+      docs/COST-OPTIMIZATION.md rather than silently absorbed by re-targeting;
+      config/cost_exceptions.yaml declares no active exception because none is
+      needed under the hard ceiling.
+    required_behavior: >
+      A deterministic, offline, fail-closed estimator scores each cost-capped
+      profile's fixed baseline against its declared target and hard ceiling;
+      exceeding the ceiling fails the release unless an active, time-bounded
+      entry in config/cost_exceptions.yaml covers it; usage-variable cost is
+      always reported alongside so the total is never presented as just the
+      fixed baseline.
+    affected_paths:
+      - config/aws_price_book.yaml
+      - config/cost_exceptions.yaml
+      - config/deployment_profiles.yaml
+      - scripts/release/check_cost_model.py
+      - tests/unit/test_cost_model.py
+    tests_required:
+      - "make test-cost-model (tests/unit/test_cost_model.py)"
+      - "make validate-cost-model against the committed lean plan fixture"
+    evidence_required:
+      - "check_cost_model.py --profile production-lean: PASS — 6 checks passed"
+      - "fixed USD 184.13/mo separated from usage-variable USD 107.22/mo (expected scenario); 17 fixed, 15 usage-variable, 29 zero-cost resources all resolved"
+      - "warning recorded: fixed cost exceeds the USD 150.00 target, under the USD 200.00 ceiling"
+      - reports/cost/cost-report.json
+    docs_required:
+      - docs/COST-OPTIMIZATION.md
+      - docs/DEPLOYMENT-PROFILES.md
+    owner: platform
+    status: targeted_tests_pass
+    blocked_by: [FT-9-PLAN-POLICY, FT-COST-POLICY-DATA]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-9-REVIEWED-PROMOTION
+    title: Reviewed promotion is the only apply path — automatic production apply deleted
+    domain: release-governance
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: No push, schedule or path trigger can change production infrastructure; an apply consumes a specific reviewed plan or it does not run.
+    current_behavior: >
+      Implemented in 2c290c8. infrastructure.yml previously carried an
+      apply-production-lean job that applied production on every push to main
+      and re-planned with -auto-approve rather than consuming the reviewed
+      artifact. That job is deleted; infrastructure.yml is plan-and-validate
+      only, and terraform-promote.yml is the sole apply path. A reviewed plan
+      records and apply verifies the Terraform version, the .terraform.lock.hcl
+      sha256, the backend state key (rejected unless it is
+      profiles/<profile>/terraform.tfstate), a 24-hour expiry, the plan's own
+      sha256, and the policy/cost/inventory reports; apply consumes the stored
+      binary plan and never re-plans. Apply binds to the commit the plan was
+      REVIEWED at rather than the dispatch ref — the previous binding could
+      block a valid apply while proving nothing about the checked-out code —
+      and per-profile GitHub environments replace the single
+      production-terraform environment. A separate false-green defect was fixed
+      at the same time: infrastructure.yml piped `terraform test` through tee
+      with no pipefail and the file set none anywhere, so under GitHub's default
+      shell the step's status was tee's and a failing Terraform test reported
+      green. Every multi-line run block in both Terraform workflows now begins
+      with `set -euo pipefail`, and because a comment merely containing the word
+      "pipefail" once satisfied the test, the assertion now matches a real
+      `set -...pipefail` directive.
+    required_behavior: >
+      No workflow applies infrastructure without an explicitly dispatched,
+      reviewed, unexpired, checksum-matched plan for the named profile; the
+      delivery path carries immutable image digests and exact task revisions,
+      never a mutable :latest, and never defaults an absent input to production.
+    affected_paths:
+      - .github/workflows/terraform-promote.yml
+      - .github/workflows/infrastructure.yml
+      - .github/workflows/deploy.yml
+      - tests/unit/test_release_workflow_controls.py
+      - scripts/release/check_delivery_topology.py
+    tests_required:
+      - "make test-workflow-controls (tests/unit/test_release_workflow_controls.py)"
+      - "make validate-delivery-topology"
+    evidence_required:
+      - "check_delivery_topology.py: PASS — 27 checks passed, including no mutable latest reference, exact task revisions, and no default-to-production"
+      - "workflow-control assertions are mutation-verified (a comment containing the word pipefail no longer satisfies the pipefail test)"
+    docs_required:
+      - docs/CICD.md
+      - docs/PRODUCTION-DEPLOYMENT.md
+    owner: platform
+    status: targeted_tests_pass
+    blocked_by: [FT-9-PLAN-POLICY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-9-STAGING-LIFECYCLE
+    title: Staging wake / validate / sleep with a TTL-guarded awake lease
+    domain: release-governance
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: Staging can rehearse a release without becoming a second always-on production bill.
+    current_behavior: >
+      staging-lifecycle.yml drives the full wake to rehearse to sleep cycle
+      through the reviewed-promotion path, with a fail-safe sleep phase under
+      always() so staging returns to `asleep` even when the rehearsal fails,
+      and it refuses to run against a profile that does not declare
+      wake_sleep: true and both staging_state.states.awake and .asleep.
+      staging-ttl-guard.yml enforces the awake lease on a schedule and treats a
+      missing or unparseable lease as expired, so an unaccountable environment
+      is driven to zero rather than left running. The asleep shape is verified
+      out of the reviewed plan JSON rather than assumed, including the rule that
+      an asleep plan may leave no autoscaling floor above zero.
+    required_behavior: >
+      Waking is a single input flip against an identically-shaped plan;
+      sleeping drives desired counts, autoscaling floors and capacity-provider
+      base counts to zero; the awake lease expires on its own and residual
+      spend after sleep is measured, not assumed.
+    affected_paths:
+      - .github/workflows/staging-lifecycle.yml
+      - .github/workflows/staging-ttl-guard.yml
+      - config/runtime_deployment.yaml
+      - AWS Deployment/aether-aws/terraform/profiles.tf
+      - tests/unit/test_staging_lifecycle_controls.py
+    tests_required:
+      - "make test-staging-lifecycle (tests/unit/test_staging_lifecycle_controls.py)"
+      - "terraform test run block staging_asleep_profile_plan"
+    evidence_required:
+      - release-evidence/lifecycle/staging-wake.json (credentialed wake — ABSENT)
+      - release-evidence/lifecycle/sleep-residual.json (observed residual spend after a real sleep — ABSENT)
+      - release-evidence/lifecycle/rehearsal-history.json (two completed rehearsals — ABSENT)
+    docs_required:
+      - docs/STAGING-WAKE-SLEEP.md
+      - docs/DEPLOYMENT-PROFILES.md
+    owner: platform
+    status: externally_blocked
+    blocked_by: [FT-9-LEAN-RUNTIME, FT-9-REVIEWED-PROMOTION]
+    exception: >
+      Externally blocked on things this repository cannot contain. The workflows
+      and their structural controls are written and pass tests/unit/test_staging_lifecycle_controls.py,
+      but NO staging environment exists: there are no AWS credentials, no
+      remote-state backend, no ECS services to wake or sleep, and no billing
+      data covering a sleep window. Specifically missing and unobtainable here —
+      (1) a credentialed `terraform apply` that actually woke staging
+      (COND-STAGING-WAKE-APPLIED); (2) two completed rehearsals with recorded
+      migration, smoke, security-isolation and load results
+      (COND-STAGING-TWO-REHEARSALS, STG-MIGRATIONS, STG-SMOKE, STG-LOAD,
+      STG-SECURITY-ISOLATION); (3) a real sleep cycle with billing data proving
+      residual spend is what the model predicts (COND-SLEEP-RESIDUAL). Until an
+      AWS account is attached, every one of those controls scores zero on the
+      externally-verified scorecard no matter what this ledger says, and the
+      staging scorecard's externally-verified score is 0/100 today.
+    last_verified_commit: null
+
+  - id: FT-9-EPHEMERAL-PROFILES
+    title: Ephemeral profiles (demo-static, demo-live, preview) — declared policy, no infrastructure realisation
+    domain: cost
+    severity: P2
+    release_class: general_availability_blocker
+    customer_impact: Sales demos and PR preview environments are described by the profile matrix but cannot yet be provisioned from it.
+    current_behavior: >
+      PARTIAL, and deliberately recorded as such. config/deployment_profiles.yaml
+      declares three ephemeral profiles — demo-static (class demo, cost_capped),
+      demo-live (ttl_cleanup_required: true) and preview (ttl_cleanup_required:
+      true, must auto-expire, forbids dedicated VPC/ALB/Aurora/Neptune and
+      run-forever) — and check_profile_config.py validates their schema. The
+      build-time half is real: scripts/validate_frontend_data_truth.py and
+      frontend/demo enforce that a demo bundle declares which profile's data it
+      carries, VITE_DEMO_ENV no longer defaults to local-mocked (an unset
+      variable used to ship MSW), and mockServiceWorker.js is no longer copied
+      into every bundle. The infrastructure half does not exist. The Terraform
+      root's `deployment_profile` variable validation accepts exactly four
+      values — staging, production-lean, production-scale, enterprise-isolated —
+      so a plan for demo-live or preview is rejected outright, there are no
+      profiles/demo-*.tfvars or profiles/preview.tfvars, and no TTL cleanup or
+      auto-expiry automation exists for either. The one TTL mechanism that does
+      exist (.github/workflows/staging-ttl-guard.yml) is staging-only and keyed
+      to the staging awake lease.
+    required_behavior: >
+      demo-live and preview become provisionable from the same profile
+      selector as the cloud profiles, on shared foundation rather than dedicated
+      infrastructure, with auto-expiry and TTL cleanup enforced by automation
+      rather than by convention.
+    affected_paths:
+      - config/deployment_profiles.yaml
+      - AWS Deployment/aether-aws/terraform/variables.tf
+      - AWS Deployment/aether-aws/terraform/profiles/
+      - scripts/validate_frontend_data_truth.py
+      - frontend/demo/src/lib/env.ts
+      - tests/unit/test_frontend_data_truth.py
+    tests_required:
+      - tests/unit/test_frontend_data_truth.py
+      - tests/unit/test_validate_frontend_data_truth.py
+      - "make validate-profile-config"
+    evidence_required:
+      - "check_profile_config.py accepts the three ephemeral profiles as policy data"
+      - "frontend data-truth validation for demo-static / demo-live"
+      - "NOT claimed: any Terraform realisation, tfvars file, or TTL-cleanup automation for demo-live or preview"
+    docs_required:
+      - docs/DEPLOYMENT-PROFILES.md
     owner: platform
     status: implementation_in_progress
-    blocked_by: [FT-COST-POLICY-DATA]
+    blocked_by: [FT-9-TERRAFORM-PROFILES]
     exception: >
-      Provider-mocked configuration plans now evaluate all four checked-in
-      profiles in GitHub and preserve immutable evidence. Environment-authoritative
-      OIDC plans remain externally blocked until the complete AWS, remote-state,
-      ACM/domain/alert, Auth0, and application-URL secret set is configured.
-      Pushes to main fail closed without that remote evidence. Static frontend
-      replacement and immutable application-artifact promotion are also open, so
-      this ledger item is intentionally non-terminal.
+      Intentionally non-terminal and NOT part of the completed work in this
+      programme. Only the demo profiles' build-time data-truth enforcement
+      shipped. demo-live and preview have no Terraform realisation at all: the
+      root module's profile validation rejects both, no tfvars exist for either,
+      and neither ttl_cleanup_required nor preview's auto-expire is enforced by
+      anything. The remaining work is in-repo and needs no external
+      dependency — it simply has not been done, and this item exists so that
+      the profile matrix's three ephemeral entries are not read as delivered.
+    last_verified_commit: null
+
+  - id: FT-9-DEPLOYMENT-EVIDENCE
+    title: Evidence-backed deployment readiness scorecard, separating code-complete from externally verified
+    domain: release-governance
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Aether can state a readiness number only where an artifact on disk supports it, so the gap between what is built and what is proven is reported rather than absorbed.
+    current_behavior: >
+      config/deployment_readiness.yaml is the control table and
+      scripts/release/check_deployment_readiness.py the checker. Weight is
+      awarded only when a named artifact exists and validates — `status` is a
+      record, not an input, so writing verified_complete on a control with no
+      evidence file scores zero exactly as not_started would. Three numbers are
+      reported and never merged: code-complete, externally-verified, and the gap
+      between them. The `credentialed_artifact` evidence kind is unsatisfiable
+      without credentials by construction (it requires a real account id, a real
+      region, a captured_at timestamp, a commit sha and a source path outside
+      any temp or scratchpad directory), which is what stops a synthetic plan or
+      a hand-written JSON file from buying external-verification credit.
+      CURRENT MEASURED RESULT, run at this working tree — overall 100/100
+      code-complete and 20/100 externally-verified; production-lean 100/100 and
+      20/100; staging 75/100 and 0/100; 19 controls built but unproven;
+      1 of 17 hard gate conditions met; deployment_ready: false.
+    required_behavior: >
+      No deployment-readiness percentage is quotable unless the control table
+      awards it from an artifact; controls that depend on an AWS account carry
+      external_dependency.required and can never contribute to the
+      externally-verified score from inside CI.
+    affected_paths:
+      - config/deployment_readiness.yaml
+      - scripts/release/check_deployment_readiness.py
+      - scripts/release/collect_evidence.py
+      - tests/unit/test_deployment_readiness.py
+    tests_required:
+      - tests/unit/test_deployment_readiness.py
+      - "make deployment-readiness-score"
+    evidence_required:
+      - "check_deployment_readiness.py control-table integrity: PASS — 5 checks passed"
+      - release-evidence/ bundle with a checksummed manifest (ABSENT — COND-BUNDLE-CHECKSUM unmet)
+      - release-evidence/terraform/lean-plan-provenance.json (credentialed lean plan — ABSENT)
+      - release-evidence/terraform/promotion-provenance.json (a real reviewed apply — ABSENT)
+      - "seven days of observed AWS billing for production-lean (ABSENT — COND-COST-OBSERVED-7D, COND-COST-RECONCILED unmet)"
+    docs_required:
+      - docs/RELEASE-EVIDENCE.md
+      - docs/DEPLOYMENT-PROFILES.md
+    owner: platform
+    status: externally_blocked
+    blocked_by: [FT-9-STAGING-LIFECYCLE, FT-9-REVIEWED-PROMOTION, FT-9-COST-ENFORCEMENT]
+    exception: >
+      Externally blocked by definition — this item's whole purpose is to hold
+      the evidence that a repository cannot produce. The control table and its
+      checker are complete and validate (5/5 integrity checks), and the
+      code-complete scores are real. What is missing, and what no amount of
+      in-repo work can supply: an AWS account and a remote-state backend for a
+      credentialed `terraform plan` (OVR-TERRAFORM-ENFORCEMENT,
+      LEAN-FORBIDDEN-EXCLUSION, LEAN-REQUIRED-PRESENCE); a promotion run that
+      actually applied a reviewed plan (OVR-PLAN-CI-CORRECTNESS,
+      LEAN-PROMOTION-INTEGRITY, COND-PROMOTION-INTEGRITY); seven days of real
+      billing data for the profile (OVR-COST-ENFORCEMENT, LEAN-COST-CEILING,
+      COND-COST-OBSERVED-7D); a deployed environment to roll back and observe
+      recovering (OVR-PROMOTION-ROLLBACK, COND-ROLLBACK-VALIDATED); a real
+      staging environment to wake and sleep (OVR-STAGING-LIFECYCLE); a deployed
+      profile emitting real alarm-state transitions
+      (LEAN-OBSERVABILITY-ROLLBACK, COND-OBSERVABILITY-LIVE); and a published,
+      checksummed evidence bundle from a real release run (OVR-DOCS-RUNBOOKS,
+      LEAN-DOCS-EVIDENCE, STG-EVIDENCE-COMPLETE). deployment_ready is false and
+      the code-complete score is not a readiness figure and must not be quoted
+      as one.
     last_verified_commit: null
 
   - id: FT-10-SDK-CONFORMANCE-EVIDENCE

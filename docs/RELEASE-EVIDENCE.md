@@ -6,7 +6,7 @@ visibility: I
 audience: [ops, compliance, security]
 status: stable
 canonical_owner: platform@aether
-estimated_read_minutes: 4
+estimated_read_minutes: 9
 toc_depth: 3
 ---
 
@@ -31,6 +31,7 @@ python scripts/release/collect_evidence.py --out evidence.yaml
 python scripts/release/collect_evidence.py --ci-log ci-check.log --out evidence.yaml
 python scripts/release/collect_evidence.py --ci-log ci-check.log \
   --github-checks github-checks.json --release-mode --out evidence.yaml
+make collect-deployment-evidence   # --bundle-dir release-evidence
 ```
 
 Assembles the bundle from **real repo state** — nothing is asserted by hand:
@@ -41,6 +42,19 @@ Assembles the bundle from **real repo state** — nothing is asserted by hand:
   `check_storage_policies`, `check_implementation_ledger`, and
   `sdk_conformance`, each with exit code, duration, and output tail (this is
   where the storage/cost policy validation outputs land).
+- **Deployment/cost spine validators** — four checks that already gated
+  `make release-gate` but never reached the bundle, so the bundle could report a
+  clean sweep while the checks deciding whether the infrastructure is correctly
+  shaped and affordable were not represented in it at all:
+  `check_cost_policy_terraform` (Terraform locals encode the profile policy),
+  `check_delivery_topology` (every worker role owned by exactly one service),
+  `check_terraform_plan_policy` and `check_cost_model`. The plan-policy check is
+  pointed at `artifacts/reviewed.tfplan.json` — the plan a credentialed
+  promotion writes — **not** at the committed test fixture. With no real plan
+  present it fails, and that is the honest result. A validator that is not on
+  disk is recorded `absent` with exit code 127 and counts against the summary
+  exactly as a failure would; "we never checked" is never rendered as "nothing
+  was wrong".
 - **Implementation-ledger breakdown** — every item's recorded status,
   blockers, and exception flag, plus a status histogram. External actions are
   reported exactly as the ledger records them: `FT-EXT-ATTESTATION` (external
@@ -79,6 +93,117 @@ fail-closed gate; `make sdk-release-gate` separately validates SDK metadata,
 derived conformance, and drift between the required-check catalog and hosted
 workflow jobs.
 
+## The `release-evidence/` bundle
+
+`make collect-deployment-evidence` materialises the deployment evidence bundle
+whose layout is declared in `config/deployment_readiness.yaml`:
+
+```
+release-evidence/
+├── manifest.json      # canonicalised layout: commit, branch, dirty, per-file sha256
+├── manifest.sha256    # sha256 of the canonical manifest bytes
+├── profile/           terraform/      cost/           migrations/
+├── smoke/             security/       isolation/      load/
+└── rollback/          lifecycle/      observability/  scorecard/
+```
+
+Twelve subdirectories, always declared. **A declared subdirectory containing no
+files is reported ABSENT, never as an empty pass** — "we produced no load
+evidence" and "load evidence passed with nothing to report" are the same bytes
+on disk and must never render as the same claim. The manifest is canonicalised
+and digested with `release_manifest.py`'s helpers, so the bundle hashes
+identically wherever it is produced and there is exactly one canonicalisation in
+the repository.
+
+`COND-BUNDLE-CHECKSUM` requires that `manifest.json` validates against
+`manifest.sha256` and that every file it lists still hashes to its recorded
+digest. **No bundle has been published.** The condition is unmet, and the
+controls that depend on it (`STG-EVIDENCE-COMPLETE`, `LEAN-DOCS-EVIDENCE`,
+`OVR-DOCS-RUNBOOKS`) hold their weight as unproven rather than as done.
+
+### Evidence kinds
+
+`config/deployment_readiness.yaml` distinguishes four kinds, and the
+distinction is the point:
+
+| Kind | Satisfied by |
+|---|---|
+| `check_script` | a validator that exists **and** exits 0 when run |
+| `repo_file` | a non-empty repo file, optionally containing a token |
+| `json_artifact` | a JSON file that exists and satisfies `require_keys` (and `require_true` where declared) |
+| `credentialed_artifact` | a JSON file that additionally carries credentialed provenance — a real AWS account id, a real region, a `captured_at` timestamp, a commit sha, and a source path outside any temp or scratchpad directory |
+
+`credentialed_artifact` is **unsatisfiable without credentials by
+construction**. It is the lock that stops a synthetic plan or a hand-written
+JSON file from buying external-verification credit.
+
+## Deployment readiness
+
+```bash
+make deployment-readiness-score   # scripts/release/check_deployment_readiness.py
+```
+
+The checker reports **three numbers and never merges them**: a code-complete
+score (what is built and validating in this repo), an externally-verified score
+(what has been proven against real infrastructure), and the gap between them.
+The gap is the honest part. Terraform can be correct, a cost model
+arithmetically sound and a rollback procedure well written, and none of that is
+evidence that a plan applied, a bill arrived, or a rollback restored service.
+
+| Scorecard | Code-complete | Externally verified | Max attainable here | Gate (on externally verified) |
+|---|---|---|---|---|
+| overall | 60 / 100 | **0 / 100** | 20 | 90 |
+| `production-lean` | 45 / 100 | **0 / 100** | 20 | 92 |
+| `staging` | 75 / 100 | **0 / 100** | 10 | 95 |
+
+**Externally verified is zero, and that is the correct reading.** An earlier
+version of this table reported 20, which was an artifact of a bug rather than a
+measurement: the scorecard computed
+`verified = code_complete and all(e["satisfied"] for e in external)`, and
+`all([])` is `True`, so every control carrying *no* external evidence was
+silently promoted to verified. All 20 points came from three such controls. A
+control must now carry at least one satisfied external evidence entry before it
+can score verified, and nothing in this repository can satisfy one — there is no
+attestation verifier registered, by design, because nothing here can prove an
+artifact came from an AWS account.
+
+The scores are also no longer path-dependent. They used to change depending on
+whether gitignored `artifacts/` and `reports/` happened to be present, so two
+engineers could read different readiness numbers from the same commit;
+artifacts derived from a test fixture now earn nothing, traced one hop
+(cost-report → inventory).
+
+**1 of 17 hard gate conditions is met** (`COND-NO-EXPIRED-EXCEPTIONS`), and
+`deployment_ready` is `false`.
+
+Every gate is on the **externally-verified** column. The code-complete column
+must never be quoted as "the score" — it is the column that says the work is
+written, which has never been the question anyone was asking when they asked
+whether Aether can be deployed.
+
+`status` in the control table is a record, not an input to the score: writing
+`verified_complete` on a control with no evidence file scores zero, exactly as
+if it said `not_started`. Controls that depend on an AWS account carry
+`external_dependency.required: true` and can never contribute to the
+externally-verified score from inside CI.
+
+### Externally blocked
+
+Recorded as blocked, never counted as done, and covered by the time-bounded
+grants `DR-EX-NO-CLOUD-ACCOUNT` and `DR-EX-NO-BILLING-HISTORY` (both expiring
+2026-10-23; an expired grant is a hard failure, not a silent lapse):
+
+- credentialed `terraform plan` and `terraform apply` against the real backend
+  and state key;
+- a real staging wake → validate → sleep rehearsal, and the **two consecutive**
+  complete rehearsals the 100% gate requires;
+- Infracost's credentialed second opinion on the cost model;
+- seven consecutive days of observed AWS billing, plus the projected-vs-actual
+  reconciliation within the declared 25% tolerance;
+- sustained load observation against a deployed environment;
+- DNS and TLS certificate confirmation against real hostnames;
+- enterprise dedicated-account provisioning.
+
 ## Gates
 
 ```bash
@@ -86,7 +211,18 @@ make ci-check                     # canonical repo-consistency gate (unchanged)
 make founding-tenant-release-gate # ci-check + control-spine validators + evidence
 make release-gate                 # ci-check + strict production status + ops readiness
                                   #   (now also runs the control-spine validators)
+make deployment-profile-gate      # every deployment-profile gate that runs
+                                  #   without AWS credentials, ending in the
+                                  #   readiness scorecard
 ```
+
+`deployment-profile-gate` chains, in order: `validate-profile-config`,
+`validate-cost-policy`, `validate-cost-policy-terraform`,
+`validate-delivery-topology`, `validate-terraform-profile-policy`,
+`validate-cost-model`, `test-plan-policy`, `test-runtime-topology`,
+`test-workflow-controls`, `test-cost-model`, `test-staging-lifecycle`,
+`deployment-readiness-score`. The order matters: the two `validate-*` plan
+targets write the artifacts the scorecard later reads.
 
 The founding-tenant validators are **additive**. `ci-check` — the canonical
 completion gate — is deliberately left unchanged so the new gates cannot
@@ -112,5 +248,26 @@ Actions: documentation regeneration/drift review, `make ci-check`, and
 `make release-gate`. Every Terraform profile also produces immutable,
 provider-mocked configuration-plan evidence in GitHub. Environment-authoritative
 OIDC remote-plan artifacts are produced separately only when the complete
-deployment credential set is configured; promotion to `main` fails closed
-without that evidence.
+deployment credential set is configured; a push to `main` fails closed without
+that evidence, which gates **promotability** — `infrastructure.yml` applies
+nothing.
+
+## Terraform promotion evidence
+
+`.github/workflows/terraform-promote.yml` is the sole apply path and emits the
+provenance the `terraform/` bundle directory expects. A reviewed plan travels
+as `reviewed.tfplan` plus `reviewed.tfplan.json`, `reviewed.tfplan.txt`,
+`reviewed.tfplan.sha256`, `reviewed.commit`, `reviewed.profile`,
+`reviewed.state-key`, `reviewed.terraform-version`, `reviewed.lock.sha256`,
+`reviewed.created-utc`, `reviewed.expires-utc`, `reviewed.staging-state`,
+`reviewed.resources.json`, `reviewed.policy.txt` and `reviewed.cost.txt`; the
+apply adds `reviewed.apply.txt` and its checksum. Apply refuses to run if any
+artefact is missing, if the profile or state key disagree, if the plan digest
+does not match the dispatched checksum, if the lockfile or Terraform version
+have moved, or if the 24-hour window has closed — and it applies the stored plan
+without ever re-planning.
+
+`COND-PROMOTION-INTEGRITY` is satisfied only by a
+`credentialed_artifact` at `release-evidence/terraform/promotion-provenance.json`
+recording that a real applied plan matched its reviewed digest. That artifact
+does not exist.
