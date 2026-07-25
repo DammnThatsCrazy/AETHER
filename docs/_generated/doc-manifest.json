@@ -5318,6 +5318,68 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/KYBER_ACCOUNT_RECOVERY.md",
+      "title": "Runbook — Kyber Account Recovery",
+      "slug": "runbooks/kyber-account-recovery",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "beta",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/KYBER_DEVICE_LOSS.md",
+      "title": "Runbook — Kyber Device Loss",
+      "slug": "runbooks/kyber-device-loss",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "beta",
+      "estimated_read_minutes": 5,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/KYBER_SCOPE_LEAK.md",
+      "title": "Runbook — Kyber Tenant Scope Leak",
+      "slug": "runbooks/kyber-scope-leak",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security",
+        "compliance"
+      ],
+      "status": "beta",
+      "estimated_read_minutes": 7,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/KYBER_WORKFORCE_OFFBOARDING.md",
+      "title": "Runbook — Kyber Workforce Offboarding",
+      "slug": "runbooks/kyber-workforce-offboarding",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security",
+        "compliance"
+      ],
+      "status": "beta",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/MEASUREMENT_RESTATEMENT.md",
       "title": "Runbook — Measurement Restatement",
       "slug": "runbooks/measurement-restatement",
@@ -5991,7 +6053,59 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/KYBER_ACCESS_CONTROL.md",
+      "title": "Kyber Access Control",
+      "slug": "kyber/access-control",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/source-of-truth/KYBER_DEVICE_TRUST.md",
+      "title": "Kyber Device Trust",
+      "slug": "kyber/device-trust",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "beta"
+    },
+    {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
+    },
+    {
+      "path": "docs/source-of-truth/KYBER_SESSIONS_AND_SCOPES.md",
+      "title": "Kyber Sessions and Tenant Access Scopes",
+      "slug": "kyber/sessions-and-scopes",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/source-of-truth/KYBER_WORKFORCE_IDENTITY.md",
+      "title": "Kyber Workforce Identity",
+      "slug": "kyber/workforce-identity",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "beta"
     },
     {
       "path": "docs/source-of-truth/MEASUREMENT_INTEGRITY.md",

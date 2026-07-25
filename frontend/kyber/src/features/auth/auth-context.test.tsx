@@ -82,6 +82,12 @@ describe('AuthProvider — backend-authoritative session', () => {
   });
 });
 
+
+/** Strip comments so these assertions test CODE, not the prose that documents it. */
+function codeOnly(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
 describe('no client-side identity derivation', () => {
   const authDir = resolve(process.cwd(), 'src/features/auth');
   const sources = [
@@ -89,7 +95,7 @@ describe('no client-side identity derivation', () => {
     'session-client.ts',
     'hooks.ts',
     'schemas.ts',
-  ].map((name) => ({ name, text: readFileSync(resolve(authDir, name), 'utf8') }));
+  ].map((name) => ({ name, text: codeOnly(readFileSync(resolve(authDir, name), 'utf8')) }));
 
   it('never decodes a JWT anywhere in the auth feature', () => {
     for (const { name, text } of sources) {

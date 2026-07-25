@@ -172,14 +172,18 @@ describe('pure ceiling checks', () => {
   });
 });
 
+
+/** Strip comments so these assertions test CODE, not the prose that documents it. */
+function codeOnly(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
 describe('the canViewAll privilege bug is gone', () => {
-  const source = readFileSync(
-    resolve(process.cwd(), 'src/features/permissions/permissions.ts'),
-    'utf8',
+  const source = codeOnly(
+    readFileSync(resolve(process.cwd(), 'src/features/permissions/permissions.ts'), 'utf8'),
   );
-  const gate = readFileSync(
-    resolve(process.cwd(), 'src/features/permissions/permission-gate.tsx'),
-    'utf8',
+  const gate = codeOnly(
+    readFileSync(resolve(process.cwd(), 'src/features/permissions/permission-gate.tsx'), 'utf8'),
   );
 
   it('defines no canViewAll flag', () => {

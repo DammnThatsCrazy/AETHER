@@ -64,6 +64,16 @@ _SECRET_ENV = {
     "CANARY_SECRET_SEED": "test-canary-seed",
     "EXTRACTION_CANARY_SEED": "test-extraction-canary-seed",
     "SDK_CONFIG_SECRET": "test-sdk-config-secret",
+    # Kyber workforce identity anchors. Settings refuses staging/production when
+    # the workforce plane is on but its SSO and WebAuthn anchors are unset —
+    # that guard is the subject of tests/security/test_kyber_gate_migration.py,
+    # not of this module, so satisfy it here for the same reason the JWT/DB/BYOK
+    # secrets above are satisfied: a runtime-role test must trip only the guard
+    # it is actually testing.
+    "KYBER_GOOGLE_CLIENT_ID": "test-kyber-client-id",
+    "KYBER_GOOGLE_REDIRECT_URI": "https://kyber.test.invalid/v1/kyber/auth/callback",
+    "KYBER_WEBAUTHN_RP_ID": "kyber.test.invalid",
+    "KYBER_WEBAUTHN_ORIGIN": "https://kyber.test.invalid",
 }
 
 
