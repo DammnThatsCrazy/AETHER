@@ -385,9 +385,23 @@ class CampaignRegistryService:
         return await self._reviews.set_status(tenant_id, review_id, "open")
 
     async def list_mapping_reviews(
-        self, tenant_id: str, limit: int = 50, cursor: Optional[datetime] = None
+        self,
+        tenant_id: str,
+        status: str = "open",
+        limit: int = 50,
+        cursor: Optional[datetime] = None,
     ) -> list[dict]:
-        return await self._reviews.list_open(tenant_id, limit=limit, cursor=cursor)
+        """List mapping reviews in one status.
+
+        ``status`` is accepted because the route has always advertised it. Until
+        now this method took no such parameter, so the route's call raised
+        TypeError, its ``except Exception`` swallowed it, and the endpoint
+        returned an empty list to every caller — an operator reading the review
+        queue saw "nothing to triage" rather than "this is broken".
+        """
+        return await self._reviews.list_by_status(
+            tenant_id, status=status, limit=limit, cursor=cursor
+        )
 
     # ── Quality ───────────────────────────────────────────────────────────────
 

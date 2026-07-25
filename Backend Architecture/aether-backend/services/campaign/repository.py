@@ -620,24 +620,40 @@ class MappingReviewRepository(_PoolBackedRepository):
         )
         return _row_to_dict(row) if row else None
 
-    async def list_open(
+    async def list_by_status(
         self,
         tenant_id: str,
+        status: str = "open",
         limit: int = 50,
         cursor: Optional[datetime] = None,
     ) -> list[dict]:
+        """List reviews in one status, newest first.
+
+        The status filter exists because the route has always exposed one
+        (``status: str = Query(default="open")``) while this layer could only
+        ever answer for open reviews, so a caller asking for resolved or ignored
+        reviews was answered with an unrelated result set at best.
+        """
         pool = await self._acquire_pool()
         if pool is None:
-            return []
+            reviews = [
+                record
+                for record in _LOCAL_REVIEWS.values()
+                if record["tenant_id"] == tenant_id and record["status"] == status
+            ]
+            reviews.sort(key=lambda record: record["first_seen_at"], reverse=True)
+            if cursor:
+                reviews = [r for r in reviews if r["first_seen_at"] < cursor]
+            return reviews[:limit]
         if cursor:
             rows = await pool.fetch(
-                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = 'open' AND first_seen_at < $2 ORDER BY first_seen_at DESC LIMIT $3",
-                tenant_id, cursor, limit,
+                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = $2 AND first_seen_at < $3 ORDER BY first_seen_at DESC LIMIT $4",
+                tenant_id, status, cursor, limit,
             )
         else:
             rows = await pool.fetch(
-                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = 'open' ORDER BY first_seen_at DESC LIMIT $2",
-                tenant_id, limit,
+                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = $2 ORDER BY first_seen_at DESC LIMIT $3",
+                tenant_id, status, limit,
             )
         return [_row_to_dict(r) for r in rows]
 
