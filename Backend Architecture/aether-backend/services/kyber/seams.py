@@ -302,6 +302,44 @@ SEAMS: tuple[Seam, ...] = (
         positional=1,
         why="Exit resolves the durable scope before falling back to legacy state.",
     ),
+    # ── ops plane → step-up ───────────────────────────────────────────────────
+    # The ops plane resolves step-up once and hands it to the command lifecycle,
+    # which gates action classes 4 and 5 on a live grant. If this read drifted,
+    # the gate would resolve to a provider that answers nothing and every
+    # high-impact command would either refuse forever or — depending on how the
+    # caller reads a missing answer — stop being gated at all. Neither failure
+    # announces itself, which is why the seam is declared rather than trusted.
+    Seam(
+        caller="services.kyber.ops.containment._resolve_ops_providers",
+        module="services.kyber.sessions.step_up",
+        singleton="step_up_service",
+        attribute="active_grant",
+        positional=1,
+        why="Class 4/5 commands require a live step-up grant; this is the read "
+            "that decides whether one exists.",
+    ),
+    # ── graph projector → the append-only mutation ledger ─────────────────────
+    # The Kyber Graph is a projection with exactly one input. If this read
+    # drifted — renamed, or its `limit`/`aggregate_id` keywords changed — the
+    # projector would keep running, keep advancing nothing, and keep reporting
+    # healthy empty batches, while the operational graph quietly froze at
+    # whatever it had already built. A frozen graph that still answers is the
+    # worst outcome available here, so the seam is declared even though the
+    # target lives outside services.* and is not covered by the import scan.
+    Seam(
+        caller="services.kyber.graph.projector.KyberGraphProjector._fetch",
+        module="repositories.graph_mutation_ledger",
+        singleton="GraphMutationLedgerRepository",
+        attribute="list_records",
+        positional=1,
+        keywords=("aggregate_id", "limit", "since_offset"),
+        why="The graph projector's only input is the tenant's mutation ledger, "
+            "read in ledger order so the offset it stores means something. "
+            "`since_offset` is pinned because without it the projector must "
+            "re-read every consumed row to reach one fresh one, and a consumer "
+            "past its read window stalls permanently while still reporting "
+            "healthy empty batches.",
+    ),
 )
 
 

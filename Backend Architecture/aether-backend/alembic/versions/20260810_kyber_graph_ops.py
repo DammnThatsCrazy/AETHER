@@ -237,18 +237,20 @@ _TABLES: dict[str, str] = {
 # Uniqueness that carries correctness weight, on the expressions the
 # repositories query.
 _UNIQUE_INDEXES = (
-    # A node key is the identity edges reference; a replay must upsert, not
-    # duplicate. Scoped by environment so the same service in staging and
-    # production are distinct nodes.
+    # NOTE ON COALESCE: PostgreSQL treats NULLs as DISTINCT in a unique index, so
+    # `((data->>'node_key'), (data->>'environment'))` does not constrain rows whose
+    # environment is absent — two identical node_keys both insert. Verified
+    # directly against PG16 before this was fixed. Every nullable term in a
+    # uniqueness guarantee is wrapped in COALESCE so the constraint holds for
+    # real data rather than only for fully-populated rows.
     ("kyber_graph_nodes", "ux_kyber_graph_nodes_key",
-     "((data->>'node_key'), (data->>'environment'))", ""),
-    # source|type|target is the edge's natural key.
+     "((data->>'node_key'), COALESCE(data->>'environment', ''))", ""),
     ("kyber_graph_edges", "ux_kyber_graph_edges_key",
-     "((data->>'idempotency_key'), (data->>'environment'))", ""),
+     "((data->>'idempotency_key'), COALESCE(data->>'environment', ''))", ""),
     ("kyber_graph_projection_offsets", "ux_kyber_graph_offsets",
      "((data->>'projection'), (data->>'tenant_id'))", ""),
     ("kyber_fleet_projections", "ux_kyber_fleet_projections",
-     "((data->>'projection'), (data->>'tenant_id'), (data->>'dimension'))", ""),
+     "((data->>'projection'), (data->>'tenant_id'), COALESCE(data->>'dimension', ''))", ""),
     # An idempotency key must not execute a command type twice.
     ("kyber_command_requests", "ux_kyber_command_idempotency",
      "((data->>'command_type'), (data->>'idempotency_key'))", ""),
@@ -257,9 +259,10 @@ _UNIQUE_INDEXES = (
     ("kyber_exceptions", "ux_kyber_exceptions_open_dedupe",
      "((data->>'dedupe_key'))",
      "WHERE data->>'dedupe_key' IS NOT NULL AND data->>'status' IN ('open','acknowledged','in_progress')"),
-    # One active switch per (scope, target, control).
+    # One active switch per (scope, target, control); target is nullable for a
+    # global switch, hence COALESCE.
     ("kyber_containment_switches", "ux_kyber_containment_active",
-     "((data->>'scope'), (data->>'target'), (data->>'control'))",
+     "((data->>'scope'), COALESCE(data->>'target', ''), (data->>'control'))",
      "WHERE data->>'active' = 'true'"),
 )
 

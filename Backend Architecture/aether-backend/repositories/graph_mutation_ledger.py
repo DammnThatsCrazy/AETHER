@@ -499,9 +499,19 @@ class GraphMutationLedgerRepository:
         tenant_id: str,
         aggregate_id: Optional[str] = None,
         limit: int = 1000,
+        *,
+        since_offset: Optional[int] = None,
     ) -> list[dict]:
         """Ledger rows in ledger order, each joined with its after-version
-        ``payload`` (the replay input shape for ``replay_ledger``)."""
+        ``payload`` (the replay input shape for ``replay_ledger``).
+
+        ``since_offset`` returns only rows *after* that ledger offset. Without
+        it a resuming consumer must re-read everything it has already seen and
+        discard it client-side, which means the window needed to reach one fresh
+        row grows without bound as the ledger does — a consumer past its window
+        stops making progress permanently. That is a stall, not a slowdown, and
+        it is invisible from the outside because the consumer keeps succeeding.
+        """
         pool = await get_pool()
         if pool is None:
             rows = [
@@ -509,6 +519,7 @@ class GraphMutationLedgerRepository:
                 for r in _MEM_LEDGER.values()
                 if r["tenant_id"] == tenant_id
                 and (aggregate_id is None or r["aggregate_id"] == aggregate_id)
+                and (since_offset is None or (r.get("ledger_offset") or 0) > since_offset)
             ]
             rows.sort(key=lambda r: r["ledger_offset"])
             return [_normalize_row(r) for r in rows[:limit]]
@@ -516,8 +527,11 @@ class GraphMutationLedgerRepository:
         conditions = "l.tenant_id = $1"
         args: list[Any] = [tenant_id]
         if aggregate_id is not None:
-            conditions += " AND l.aggregate_id = $2"
+            conditions += f" AND l.aggregate_id = ${len(args) + 1}"
             args.append(aggregate_id)
+        if since_offset is not None:
+            conditions += f" AND l.ledger_offset > ${len(args) + 1}"
+            args.append(int(since_offset))
         rows = await pool.fetch(
             f"""
             SELECT l.*, v.payload AS payload

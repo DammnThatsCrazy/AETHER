@@ -706,3 +706,50 @@ kyber_routes:
     capability: kyber.audit.read
     disclosure: D4
     action_class: 0
+
+  # ── Kyber Graph ───────────────────────────────────────────────────────────
+  #
+  # services/kyber/graph/routes.py. Three disclosure tiers, and the split is the
+  # design: platform topology (D0) holds no tenant data at all, fleet surfaces
+  # (D1) are aggregates over projections, and only the two /tenants/{tenant_id}
+  # routes reach a tenant's own graph — those additionally require an active,
+  # purpose-bound access scope whose tenant matches the path, enforced again
+  # inside the gateway because a scope can expire between authorization and read.
+  #
+  # Cohorts are saved queries over fleet aggregates rather than platform state,
+  # so defining one stays at the read action class for the same reason
+  # kyber.export.create does: it derives an artifact and changes nothing. Its
+  # risk lives in the disclosure ceiling and the minimum-cohort-size suppression,
+  # not in the action class.
+  - route: "GET /v1/kyber/graph/platform"
+    capability: kyber.graph.platform.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/graph/blast-radius"
+    capability: kyber.graph.platform.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/graph/fleet"
+    capability: kyber.graph.fleet.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/graph/fleet/{projection}"
+    capability: kyber.graph.fleet.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/graph/cohorts"
+    capability: kyber.graph.cohort.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/graph/cohorts/{cohort_id}"
+    capability: kyber.graph.cohort.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/graph/tenants/{tenant_id}"
+    capability: kyber.graph.tenant.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/graph/tenants/{tenant_id}/entities/{vertex_id}"
+    capability: kyber.graph.tenant.read
+    disclosure: D3
+    action_class: 0
