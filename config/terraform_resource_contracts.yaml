@@ -61,6 +61,20 @@ required_resources:
     cardinality: exactly:8
     evidence: aws_s3_bucket.static_frontend
     terraform_gate: local.enable_static_frontends
+    # The other half of "the CDN is provisioned outside this root": the whole
+    # edge tier — distribution, DNS zone, WAF web ACL — is owned by the edge
+    # stack, not here. Naming those types keeps them inside the policy's field
+    # of view; a plan from THIS root that creates one is either a duplicate of
+    # the edge stack or an unreviewed standing cost, and either way it is not
+    # something the frontend contract should let through unremarked.
+    additional_rules:
+      - module_address: any
+        resource_types:
+          - aws_route53_zone
+          - aws_wafv2_web_acl
+        cardinality: zero
+        evidence: null
+        terraform_gate: null
 
   alb:
     description: Internet-facing Application Load Balancer with HTTPS listener and target groups.
@@ -75,16 +89,43 @@ required_resources:
 
   explicit_runtime_role_services:
     description: >-
-      One dedicated ECS service per non-api runtime role from
-      config/runtime_deployment.yaml, plus the aether-backend service that
-      serves the api role. Roles are never collapsed into an implicit worker.
+      One ECS service per SERVICE declared in config/runtime_deployment.yaml,
+      plus the aether-backend service that serves the api role. Since schema v2
+      the deployable unit is a service, not a role: a `dedicated` profile
+      (production-scale, enterprise-isolated) runs eight single-role worker
+      services, while a `consolidated` profile (production-lean, staging) runs
+      ONE `lean-worker` service whose task hosts all eight roles. Both shapes
+      satisfy this key. What is never permitted is an IMPLICIT worker: the
+      invariant is that every role in roles.py::WORKER_ROLES is hosted by
+      exactly one declared service in every profile — never orphaned, never
+      claimed twice — which scripts/release/check_delivery_topology.py enforces
+      against the matrix, and which each service's own `roles:` list makes
+      explicit. Consolidation moves the process boundary only; inside a packed
+      task each role keeps its own queue, consumer group, DLQ and metrics.
+      The exact service count per profile is not asserted here (this rule stays
+      `at_least_one`): check_terraform_plan_policy.py::check_service_cardinality
+      derives it from the matrix so there is one place that owns the number.
     module_address: module.ecs
     resource_types:
       - aws_ecs_service
     cardinality: at_least_one
-    evidence: aws_ecs_service.runtime_role
-    terraform_gate: local.runtime_role_settings
+    evidence: aws_ecs_service.runtime_service
+    terraform_gate: local.runtime_service_settings
     cross_reference: config/runtime_deployment.yaml
+    # Every one of those services runs a task definition pinned to an immutable
+    # digest in the platform's own registry, so the registry is part of the same
+    # contract: without it there is nothing for a service to pull and the
+    # `@sha256:` pin has no repository to resolve against. Counted here rather
+    # than under a key of its own because config/deployment_profiles.yaml
+    # declares no separate canonical key for it, and an orphan matcher would
+    # fail the completeness tests in both directions.
+    additional_rules:
+      - module_address: module.ecr
+        resource_types:
+          - aws_ecr_repository
+        cardinality: at_least_one
+        evidence: aws_ecr_repository.this
+        terraform_gate: null
 
   aurora_serverless_v2:
     description: Aurora Serverless v2 Postgres cluster — the database of record.
@@ -215,10 +256,16 @@ required_resources:
 forbidden_resources:
 
   msk:
-    description: MSK Kafka cluster, its configuration, KMS key and broker log group.
+    description: >-
+      MSK Kafka cluster, its configuration, KMS key and broker log group. Both
+      MSK product forms are named: modules/msk provisions the PROVISIONED
+      cluster today, and matching only that type would let the same forbidden
+      service back in through aws_msk_serverless_cluster — a different resource
+      type, the identical standing bill and the identical policy violation.
     module_address: module.msk
     resource_types:
       - aws_msk_cluster
+      - aws_msk_serverless_cluster
       - aws_msk_configuration
     cardinality: zero
     evidence: aws_msk_cluster.this
@@ -227,10 +274,16 @@ forbidden_resources:
     permitted_in: [production-scale, enterprise-isolated]
 
   elasticache:
-    description: ElastiCache Redis replication group, subnet/parameter groups and AUTH secret.
+    description: >-
+      ElastiCache Redis replication group, subnet/parameter groups and AUTH
+      secret. Both cluster forms are named for the same reason as MSK:
+      modules/elasticache uses the replication-group form, and a plan that
+      reached for the standalone aws_elasticache_cluster would be provisioning
+      exactly the forbidden service under a type no matcher watched.
     module_address: module.elasticache
     resource_types:
       - aws_elasticache_replication_group
+      - aws_elasticache_cluster
       - aws_elasticache_subnet_group
       - aws_elasticache_parameter_group
     cardinality: zero
@@ -263,6 +316,11 @@ forbidden_resources:
     resource_types:
       - aws_instance
       - aws_ecs_service
+      # A self-managed appliance arrives with its disk. Naming aws_ebs_volume
+      # alongside aws_instance keeps the storage half of the same decision
+      # inside the policy's field of view instead of leaving it as an
+      # unrecognised standing cost.
+      - aws_ebs_volume
     name_prefixes:
       - clickhouse
     cardinality: zero
@@ -370,6 +428,20 @@ forbidden_resources:
       production-lean: zero
       production-scale: exactly:1
       enterprise-isolated: exactly:3
+    # Interface VPC endpoints are the OTHER paid egress topology behind the same
+    # explicit override: `vpc_endpoints` is one of var.network_egress_mode's
+    # values, and an interface endpoint bills per AZ per hour plus data — it is
+    # not the free tier the "gateway endpoint" reflex assumes. This root wires
+    # no vpc_endpoints module today (modules/vpc_endpoints exists but main.tf
+    # instantiates no module block for it), so the honest count is zero, scoped
+    # `any` because there is no module address to name yet.
+    additional_rules:
+      - module_address: any
+        resource_types:
+          - aws_vpc_endpoint
+        cardinality: zero
+        evidence: null
+        terraform_gate: local.network_egress_mode
 
   always_on_staging_compute:
     description: >-
@@ -397,6 +469,9 @@ forbidden_resources:
       - aws_ecs_service
       - aws_grafana_workspace
       - aws_prometheus_workspace
+      # Same reasoning as the clickhouse rule: the metrics volume attached to a
+      # self-managed Prometheus host is part of the resource being forbidden.
+      - aws_ebs_volume
     name_prefixes:
       - prometheus
       - grafana

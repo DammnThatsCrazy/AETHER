@@ -7,6 +7,7 @@ derived from SDK sources/test manifests and fail closed on unverifiable claims.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "release"))
 
 import collect_evidence  # noqa: E402
+from release_manifest import canonical  # noqa: E402
 from sdk_conformance import build_matrix  # noqa: E402
 
 
@@ -169,3 +171,129 @@ def test_ci_check_summary_reports_unparseable_log_honestly(tmp_path):
     section = collect_evidence.ci_check_section(str(log))
     assert section["captured"] is False
     assert "error" in section
+
+
+# ── Deployment/cost checks reach the bundle ────────────────────────────────
+
+
+def test_bundle_inventory_includes_the_deployment_and_cost_checks():
+    """The four validators that gate release-gate but never reached the bundle.
+
+    A bundle that omits the checks deciding whether the infrastructure is
+    correctly shaped and affordable can report a clean sweep while those
+    questions went unasked.
+    """
+    names = {name for name, _ in collect_evidence.EVIDENCE_CHECKS}
+    assert "cost_policy_terraform" in names
+    assert "delivery_topology" in names
+    assert "terraform_plan_policy" in names
+    assert "cost_model" in names
+
+
+def test_every_evidence_check_is_a_name_script_pair():
+    for entry in collect_evidence.EVIDENCE_CHECKS:
+        name, script = entry
+        assert isinstance(name, str) and script.endswith(".py")
+    names = [n for n, _ in collect_evidence.EVIDENCE_CHECKS]
+    assert len(names) == len(set(names)), "duplicate evidence check name"
+
+
+def test_checks_needing_arguments_declare_them():
+    """check_cost_model refuses to run without a profile and an inventory."""
+    args = collect_evidence.EVIDENCE_CHECK_ARGS
+    assert "--profile" in args["cost_model"]
+    assert "--inventory" in args["cost_model"]
+    assert set(args) <= {n for n, _ in collect_evidence.EVIDENCE_CHECKS}
+
+
+def test_a_missing_validator_script_is_absent_never_a_pass():
+    """The check that does not exist must count against the bundle."""
+    result = collect_evidence._run("scripts/release/check_does_not_exist.py")
+    assert result["exit_code"] != 0
+    assert result["status"] == "absent"
+    assert "not present" in result["error"]
+
+
+# ── release-evidence/ bundle layout ────────────────────────────────────────
+
+
+def test_bundle_layout_declares_every_evidence_subdirectory():
+    assert set(collect_evidence.BUNDLE_SUBDIRS) == {
+        "profile", "terraform", "cost", "migrations", "smoke", "security",
+        "isolation", "load", "rollback", "lifecycle", "observability", "scorecard",
+    }
+    assert collect_evidence.BUNDLE_ROOT == "release-evidence"
+
+
+def test_write_bundle_layout_emits_manifest_and_checksum(tmp_path):
+    bundle = tmp_path / "release-evidence"
+    written = collect_evidence.write_bundle_layout(bundle, {"commit": "abc1234"})
+    assert (bundle / "manifest.json").is_file()
+    assert (bundle / "manifest.sha256").is_file()
+    for name in collect_evidence.BUNDLE_SUBDIRS:
+        assert (bundle / name).is_dir()
+    # The checksum is over release_manifest.canonical(), not an ad-hoc dump.
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    expected = hashlib.sha256(canonical(manifest)).hexdigest()
+    assert (bundle / "manifest.sha256").read_text(encoding="utf-8").strip() == expected
+    assert written["sha256"] == expected
+
+
+def test_an_empty_subdirectory_is_absent_never_an_empty_pass(tmp_path):
+    bundle = tmp_path / "release-evidence"
+    collect_evidence.write_bundle_layout(bundle, {"commit": "abc1234"})
+    layout = collect_evidence.scan_bundle_layout(bundle)
+    assert layout["file_count"] == 0
+    for name, row in layout["subdirectories"].items():
+        assert row["present"] is False, name
+        assert row["exists"] is True, name   # the directory exists, the evidence does not
+        assert row["files"] == []
+
+
+def test_bundle_layout_records_a_digest_for_every_file(tmp_path):
+    bundle = tmp_path / "release-evidence"
+    collect_evidence.write_bundle_layout(bundle, {"commit": "abc1234"})
+    (bundle / "load" / "load-result.json").write_text('{"rps": 40}', encoding="utf-8")
+    layout = collect_evidence.scan_bundle_layout(bundle)
+    assert layout["file_count"] == 1
+    load = layout["subdirectories"]["load"]
+    assert load["present"] is True
+    row = load["files"][0]
+    assert row["path"] == "load/load-result.json"
+    assert row["sha256"] == hashlib.sha256(
+        (bundle / "load/load-result.json").read_bytes()).hexdigest()
+    assert layout["subdirectories"]["smoke"]["present"] is False
+
+
+def test_unmaterialized_bundle_section_reports_absence_not_emptiness(tmp_path):
+    section = collect_evidence.evidence_bundle_section(tmp_path / "nope", None)
+    assert section["materialized"] is False
+    assert section["manifest"] is None
+    assert section["file_count"] == 0
+    assert set(section["subdirectories"]) == set(collect_evidence.BUNDLE_SUBDIRS)
+    assert all(not row["present"] for row in section["subdirectories"].values())
+    assert "not been materialized" in section["note"]
+
+
+def test_materialized_bundle_section_lists_absent_subdirectories(tmp_path):
+    bundle = tmp_path / "release-evidence"
+    written = collect_evidence.write_bundle_layout(bundle, {"commit": "abc1234"})
+    (bundle / "cost" / "cost-report.json").write_text("{}", encoding="utf-8")
+    section = collect_evidence.evidence_bundle_section(bundle, written)
+    assert section["materialized"] is True
+    assert section["manifest"] == "manifest.json"
+    assert "cost" not in section["absent_subdirectories"]
+    assert "load" in section["absent_subdirectories"]
+    assert len(section["absent_subdirectories"]) == len(collect_evidence.BUNDLE_SUBDIRS) - 1
+
+
+def test_bundle_manifest_round_trips_through_the_shared_canonicaliser(tmp_path):
+    """Two writes of identical content must produce an identical digest."""
+    first = collect_evidence.write_bundle_layout(
+        tmp_path / "a", {"commit": "abc1234"})["manifest"]
+    second = collect_evidence.write_bundle_layout(
+        tmp_path / "b", {"commit": "abc1234"})["manifest"]
+    first.pop("generated_at"), second.pop("generated_at")
+    first["root"] = second["root"]
+    assert hashlib.sha256(canonical(first)).hexdigest() == \
+        hashlib.sha256(canonical(second)).hexdigest()

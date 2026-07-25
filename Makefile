@@ -26,12 +26,18 @@
         production-status release-gate ops-readiness help \
         validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
-        validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults
+        validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults \
+        validate-terraform-profile-policy validate-cost-model test-terraform-profiles test-runtime-topology \
+        test-workflow-controls test-cost-model test-staging-lifecycle test-plan-policy \
+        deployment-readiness-score collect-deployment-evidence deployment-profile-gate
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
 ML_DIR      := ML Models/aether-ml
 AGENT_DIR   := Agent Layer
+# The live Terraform root. NOT terraform/environments/* — that tree references
+# seven modules that do not exist and `terraform init` fails there.
+TF_DIR      := AWS Deployment/aether-aws/terraform
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -376,6 +382,14 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/release/check_profile_config.py
 	python scripts/release/check_cost_policy.py
 	python scripts/release/check_cost_policy_terraform.py
+	python scripts/release/check_delivery_topology.py
+	# Plan-level deployment-profile enforcement. The plan-policy gate emits the
+	# inventory the cost model prices, so the order here is a real dependency.
+	python scripts/release/check_terraform_plan_policy.py \
+		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
+	python scripts/release/check_cost_model.py \
+		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
+	python scripts/release/check_deployment_readiness.py
 	python scripts/release/check_route_registry.py
 	python scripts/release/check_storage_policies.py
 	python scripts/validate_sdk_release_alignment.py
@@ -433,6 +447,72 @@ validate-cost-policy: ## Validate production-lean cost policy (forbidden/require
 
 validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production-lean cost policy
 	python scripts/release/check_cost_policy_terraform.py
+
+# ---------------------------------------------------------------------------
+# Deployment-profile enforcement (FT-9)
+#
+# check_cost_policy_terraform.py above is a STATIC tripwire: it reads profiles.tf
+# as text and proves the enable_* locals are false-by-derivation for lean. The
+# targets below prove the stronger property — that a generated PLAN actually
+# excludes the forbidden resources and prices within the profile's budget.
+# Both are kept: the static gate needs no plan and catches a regression the
+# moment it is written, the plan gate catches one the locals cannot express.
+# ---------------------------------------------------------------------------
+
+# PLAN_JSON defaults to the committed lean fixture so the gate is runnable with
+# no AWS credentials. CI overrides it with a credentialed `terraform show -json`.
+PLAN_PROFILE ?= production-lean
+PLAN_JSON    ?= tests/fixtures/terraform_plans/production-lean-valid.json
+
+validate-terraform-profile-policy: ## Prove a Terraform plan matches its profile's required/forbidden resources
+	python scripts/release/check_terraform_plan_policy.py \
+		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
+
+validate-cost-model: ## Price a plan inventory against the profile's numeric budget (fails closed on unpriced fixed cost)
+	python scripts/release/check_terraform_plan_policy.py \
+		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
+	python scripts/release/check_cost_model.py \
+		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
+
+test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile module cardinality
+	cd "$(TF_DIR)" && terraform init -backend=false -input=false >/dev/null && \
+		terraform validate && \
+		terraform test -filter=tests/profile_plan.tftest.hcl -no-color
+
+test-runtime-topology: ## Execution-group topology: every worker role owned by exactly one service
+	python -m pytest tests/unit/test_runtime_topology.py tests/unit/test_runtime_execution_groups.py -q
+
+test-workflow-controls: ## Structural controls: no automatic apply, no false-green, reviewed-plan integrity
+	python -m pytest tests/unit/test_release_workflow_controls.py -q
+
+test-cost-model: ## Cost-model unit tests (ceilings, fail-closed pricing, exception expiry)
+	python -m pytest tests/unit/test_cost_model.py -q
+
+test-staging-lifecycle: ## Staging wake/sleep + TTL guard structural controls
+	python -m pytest tests/unit/test_staging_lifecycle_controls.py -q
+
+test-plan-policy: ## Plan-policy validator against the pass/fail plan fixtures
+	python -m pytest tests/unit/test_terraform_plan_policy.py tests/unit/test_terraform_resource_contracts.py -q
+
+deployment-readiness-score: ## Evidence-backed readiness scorecard (code-complete vs externally verified)
+	python scripts/release/check_deployment_readiness.py
+
+collect-deployment-evidence: ## Materialise the release-evidence bundle with checksummed manifest
+	python scripts/release/collect_evidence.py --bundle-dir release-evidence
+
+deployment-profile-gate: ## Every deployment-profile gate that runs without AWS credentials
+	$(MAKE) validate-profile-config
+	$(MAKE) validate-cost-policy
+	$(MAKE) validate-cost-policy-terraform
+	$(MAKE) validate-delivery-topology
+	$(MAKE) validate-terraform-profile-policy
+	$(MAKE) validate-cost-model
+	$(MAKE) test-plan-policy
+	$(MAKE) test-runtime-topology
+	$(MAKE) test-workflow-controls
+	$(MAKE) test-cost-model
+	$(MAKE) test-staging-lifecycle
+	$(MAKE) deployment-readiness-score
 
 validate-delivery-topology: ## Validate immutable delivery and profile-to-role topology
 	python scripts/release/check_delivery_topology.py

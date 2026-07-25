@@ -307,13 +307,38 @@ def test_unmapped_expensive_type_fails_closed(tmp_path):
         "production-lean", "production-lean-unmatched-expensive-type.json", tmp_path)
     assert code == 1
     failures = failed_checks(result)
-    # One from the price book's fixed_resources, one from the curated list.
-    assert "fail_closed.unmapped_expensive.aws_ecr_repository" in failures
+    # From the curated list. This fixture also carries a module.ecr repository,
+    # which USED to be the price-book half of this demonstration: it was an
+    # unmapped fixed_resources type, so a real lean plan tripped the gate and
+    # the valid fixtures had to omit module.ecr to work around it. The contracts
+    # file now maps aws_ecr_repository (explicit_runtime_role_services ->
+    # additional_rules, module.ecr), so it is a MATCHED resource here rather
+    # than an unmapped one. That coverage is asserted directly, and for every
+    # priced type rather than one example, by the test below.
     assert "fail_closed.unmapped_expensive.aws_opensearch_domain" in failures
     types = {item["type"] for item in inventory["unmapped_expensive"]}
-    assert types == {"aws_ecr_repository", "aws_opensearch_domain"}
+    assert types == {"aws_opensearch_domain"}
     detail = detail_for(result, "fail_closed.unmapped_expensive.aws_opensearch_domain")
     assert "config/terraform_resource_contracts.yaml" in detail
+
+
+def test_every_priced_fixed_type_is_named_by_a_matcher():
+    """No type the cost model bills for may be invisible to the shape policy.
+
+    The stronger, general form of the assertion the test above used to make
+    with one example. A fixed_resources type that no matcher names cannot be
+    allowed or forbidden by any canonical key, so the fail-closed rule trips on
+    a plan that is otherwise entirely legitimate — which is not a safety
+    property, it is a gate that cannot be run.
+    """
+    priced = set(PRICE_BOOK.get("fixed_resources") or {})
+    assert priced, "the price book declares no fixed_resources"
+    named = MODULE.contract_types(CONTRACTS)
+    missing = sorted(priced - named)
+    assert not missing, (
+        f"config/terraform_resource_contracts.yaml names no matcher for priced "
+        f"type(s) {missing}; a real plan containing one fails the gate closed "
+        f"with nothing an operator can do about it except add the matcher")
 
 
 def test_canonical_key_without_a_matcher_fails_closed(tmp_path, monkeypatch):
