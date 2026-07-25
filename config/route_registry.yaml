@@ -778,3 +778,118 @@ kyber_routes:
     capability: kyber.tenant.mirror.read_masked
     disclosure: D2
     action_class: 0
+
+  # ── Kyber operations: exceptions, incidents, commands, containment ────────
+  #
+  # services/kyber/ops/routes.py.
+  #
+  # The four command-lifecycle rows are declared at a FLOOR, not at the
+  # capability actually enforced, and that is deliberate rather than a gap. A
+  # command's capability and action class come from its own CommandSpec, which
+  # is not known until the request body has been read: activate_kill_switch is
+  # class 5, retry_job is class 2, and one route dependency cannot declare both.
+  # Declaring the ceiling would deny a retry to an operator who legitimately
+  # holds only kyber.command.retry — a control that blocks the routine case is
+  # a control operators route around.
+  #
+  # So the dependency declares kyber.workforce.self.read (held by every
+  # authenticated principal; it grants nothing on its own), and the handler then
+  # calls resolve_access_context with the spec's real capability, its real
+  # action class, D4, and tenant_scope=required where the spec is tenant-scoped.
+  # That is the full evaluator — step-up for class 4/5 included — and it writes
+  # its own decision row. UNDECLARED IS NOT UNGUARDED applies twice over here:
+  # the floor is not the gate, and the gate is exercised by
+  # tests/security/test_kyber_command_plane.py.
+  - route: "GET /v1/kyber/ops/exceptions"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/exceptions/{exception_id}"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/ops/exceptions/{exception_id}/acknowledge"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/ops/exceptions/{exception_id}/resolve"
+    capability: kyber.incident.close
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/ops/exceptions/{exception_id}/suppress"
+    capability: kyber.incident.close
+    disclosure: D4
+    action_class: 1
+  - route: "GET /v1/kyber/ops/incidents"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/incidents/resume-cards"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/incidents/{incident_id}"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "GET /v1/kyber/ops/incidents/{incident_id}/signals"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "PATCH /v1/kyber/ops/incidents/{incident_id}"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/ops/incidents/{incident_id}/resolve"
+    capability: kyber.incident.close
+    disclosure: D4
+    action_class: 1
+  - route: "GET /v1/kyber/ops/commands/types"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/ops/commands"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/kyber/ops/commands/{command_id}"
+    capability: kyber.audit.read
+    disclosure: D4
+    action_class: 0
+  # Floor only — the spec's own capability is enforced inside the handler.
+  - route: "POST /v1/kyber/ops/commands"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/ops/commands/{command_id}/dry-run"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/ops/commands/{command_id}/approve"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "POST /v1/kyber/ops/commands/{command_id}/execute"
+    capability: kyber.workforce.self.read
+    disclosure: D0
+    action_class: 0
+  - route: "GET /v1/kyber/ops/containment"
+    capability: kyber.incident.read
+    disclosure: D1
+    action_class: 0
+  - route: "POST /v1/kyber/ops/containment/activate"
+    capability: kyber.command.pause
+    disclosure: D4
+    action_class: 4
+  - route: "POST /v1/kyber/ops/containment/deactivate"
+    capability: kyber.command.pause
+    disclosure: D4
+    action_class: 4
+  - route: "POST /v1/kyber/ops/containment/safe-mode"
+    capability: kyber.command.kill_switch
+    disclosure: D4
+    action_class: 5
+  - route: "DELETE /v1/kyber/ops/containment/safe-mode"
+    capability: kyber.command.kill_switch
+    disclosure: D4
+    action_class: 5

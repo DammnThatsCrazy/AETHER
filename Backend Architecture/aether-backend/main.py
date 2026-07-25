@@ -352,6 +352,7 @@ from services.kyber.access.routes import router as kyber_scopes_router
 from services.kyber.access.routes import emergency_router as kyber_emergency_router
 from services.kyber.graph.routes import router as kyber_graph_router
 from services.kyber.mirror.routes import router as kyber_mirror_router
+from services.kyber.ops.routes import router as kyber_ops_router
 from services.cluster.routes import router as cluster_router
 
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
@@ -688,6 +689,11 @@ def create_app() -> FastAPI:
     # access scope, and the mirror's whole value is that it adds operator
     # diagnostics without recomputing a single tenant-visible number.
     app.include_router(kyber_mirror_router)
+    # Exceptions, incidents and the governed command plane. The four command
+    # lifecycle routes authorize twice on purpose — see _authorize_command in
+    # services/kyber/ops/routes.py: a command's capability and action class come
+    # from its own spec, which is not known until the body has been read.
+    app.include_router(kyber_ops_router)
     app.include_router(customer_success_admin_router)
     app.include_router(value_review_router)
     app.include_router(extraction_intel_router)
