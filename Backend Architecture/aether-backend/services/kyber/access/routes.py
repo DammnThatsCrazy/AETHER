@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 
 from .capabilities import (
+    ACTION_CLASS_ANNOTATE,
     ACTION_CLASS_FLEET_DESTRUCTIVE,
     ACTION_CLASS_READ,
     SELF_CAPABILITY,
@@ -168,4 +169,97 @@ async def exit_scope(
     return APIResponse(data=_scope_body(closed) if closed else None).to_dict()
 
 
-__all__ = ["OpenScopeRequest", "router"]
+# ── Emergency root access ────────────────────────────────────────────────────
+#
+# Three routes, three different bars:
+#
+#   request   any live workforce principal may ASK. Asking grants nothing, so
+#             the bar is only "you are who you say you are, on an approved
+#             device" — the self capability.
+#   approve   action class 5, gated on `kyber.role.manage`. Approving is what
+#             confers authority, and it is the same authority class as handing
+#             out a role binding. Step-up fires automatically at class 5.
+#   active    who currently holds emergency authority, and why, is audit
+#             evidence about named operators — D4, and therefore step-up gated
+#             by the disclosure model rather than by the action class.
+#
+# The second-actor rule is NOT enforced here. It lives in
+# `break_glass_service.approve`, which refuses and audits a self-approval; the
+# route would only be able to re-implement it worse.
+
+
+class EmergencyAccessRequest(BaseModel):
+    """Body for opening an emergency root access request."""
+
+    reason: str = Field(min_length=MIN_REASON_LENGTH)
+    ticket_reference: Optional[str] = None
+
+
+@emergency_router.post("/request")
+async def request_emergency_access(
+    request: Request,
+    body: EmergencyAccessRequest,
+    context: KyberAccessContext = Depends(
+        require_kyber_access(SELF_CAPABILITY, action_class=ACTION_CLASS_ANNOTATE)
+    ),
+) -> dict:
+    """Ask for emergency root access. Grants nothing until a second operator approves."""
+    result = await emergency_access_service.request_emergency_access(
+        operator_id=context.operator_id,
+        reason=body.reason,
+        ticket_reference=body.ticket_reference,
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@emergency_router.post("/{request_id}/approve")
+async def approve_emergency_access(
+    request: Request,
+    request_id: str,
+    context: KyberAccessContext = Depends(
+        require_kyber_access(
+            "kyber.role.manage", action_class=ACTION_CLASS_FLEET_DESTRUCTIVE
+        )
+    ),
+) -> dict:
+    """Approve someone else's emergency root request.
+
+    Approving your own request is refused by the break-glass service and the
+    refusal is audited — this route does not pre-empt that check, so the
+    refusal is recorded as the security event it is.
+    """
+    result = await emergency_access_service.approve_emergency_access(
+        request_id=request_id,
+        approved_by=context.operator_id,
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@emergency_router.get("/active")
+async def list_active_emergency_access(
+    request: Request,
+    context: KyberAccessContext = Depends(
+        require_kyber_access(
+            "kyber.audit.read",
+            disclosure=DisclosureLevel.D4_EVENT_EVIDENCE,
+            action_class=ACTION_CLASS_READ,
+        )
+    ),
+) -> dict:
+    """Every live emergency grant, plus whether the caller holds one."""
+    active = await emergency_access_service.active_emergency_requests()
+    caller_has_grant = await emergency_access_service.has_active_emergency(
+        context.operator_id
+    )
+    return APIResponse(
+        data=active,
+        meta={"count": len(active), "caller_has_active_grant": caller_has_grant},
+    ).to_dict()
+
+
+__all__ = [
+    "EmergencyAccessRequest",
+    "OpenScopeRequest",
+    "emergency_router",
+    "router",
+]

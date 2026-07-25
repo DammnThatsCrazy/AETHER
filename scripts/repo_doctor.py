@@ -373,6 +373,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="route graph writes through the canonical mutation gateway; shrink scripts/allowlists/graph_write_paths.json only",
     )
     run(
+        ["python", "scripts/validate_graph_scoped_reads.py"],
+        name="Graph scoped-read gate (no scan-then-filter-by-tenant global reads in services/)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="answer per-tenant questions with GraphClient.get_vertices_for_tenant; shrink scripts/allowlists/graph_global_reads.json only",
+    )
+    run(
         ["python", "scripts/validate_reference_packs.py"],
         name="Agent-access reference packs (schema, unique pack ids, grounded reference packs)",
         results=results,

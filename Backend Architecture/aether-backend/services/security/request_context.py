@@ -290,6 +290,37 @@ def context_max_action_class(ctx: Any) -> int:
     return 0
 
 
+def context_max_disclosure(ctx: Any) -> int:
+    """The principal's disclosure ceiling as an int; D0 when unknown.
+
+    Falls back to deriving it from the bound role templates so a context that
+    predates the field still yields a real ceiling rather than silently
+    resolving to "everything".
+    """
+    templates = getattr(ctx, "role_template_ids", None) or getattr(ctx, "role_templates", None)
+    if templates:
+        try:
+            from services.kyber.access.roles import max_disclosure_for
+
+            return int(max_disclosure_for(list(templates)))
+        except Exception:
+            return 0
+    # No bound templates: fall back to the level this request was actually
+    # granted, which the access dependency already computed as the minimum
+    # across role, capability, scope and request. Falling back to 0 instead
+    # would deny a legitimately-resolved context that simply carries the
+    # decision rather than the inputs.
+    granted = getattr(ctx, "granted_disclosure", None)
+    if isinstance(granted, int):
+        return int(granted)
+    return 0
+
+
+def context_is_stepped_up(ctx: Any) -> bool:
+    """True when the session holds a live step-up elevation."""
+    return bool(getattr(ctx, "stepped_up", False))
+
+
 def context_has_tenant_scope(ctx: Any, tenant_id: Optional[str]) -> bool:
     """True when the principal holds an active access scope for ``tenant_id``.
 

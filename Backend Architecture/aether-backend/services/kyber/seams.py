@@ -171,6 +171,49 @@ SEAMS: tuple[Seam, ...] = (
             "Shipped once with seven kwargs the method does not accept.",
         optional=True,
     ),
+    # ── access.emergency → the shared break-glass service ────────────────────
+    # emergency_root is not a second emergency path. It is the existing
+    # break-glass state machine — second-actor approval, expiry, tamper-evident
+    # transitions — addressed at a reserved platform scope. That makes these
+    # four calls the load-bearing seam of the emergency plane: if `approve`
+    # drifted, Kyber would keep accepting approvals while the second-actor rule
+    # stopped running, which is the entire control.
+    Seam(
+        caller="services.kyber.access.emergency.request_emergency_access",
+        module="services.security.break_glass",
+        singleton="break_glass_service",
+        attribute="request",
+        keywords=("tenant_id", "requested_by", "reason", "requested_scope", "window_hours"),
+        why="An emergency-root request is a break-glass request at the reserved "
+            "platform scope — never a parallel request table.",
+    ),
+    Seam(
+        caller="services.kyber.access.emergency.approve_emergency_access",
+        module="services.security.break_glass",
+        singleton="break_glass_service",
+        attribute="approve",
+        keywords=("request_id", "approved_by"),
+        why="Second-actor approval — including the refusal and audit of "
+            "self-approval — is enforced there and never re-implemented here.",
+    ),
+    Seam(
+        caller="services.kyber.access.emergency.has_active_emergency",
+        module="services.security.break_glass",
+        singleton="break_glass_service",
+        attribute="has_active_grant",
+        positional=2,
+        why="Whether an operator holds live emergency authority, with stale "
+            "grants expired as a side effect.",
+    ),
+    Seam(
+        caller="services.kyber.access.emergency.active_emergency_requests",
+        module="services.security.break_glass",
+        singleton="break_glass_service",
+        attribute="list_requests",
+        keywords=("tenant_id", "limit"),
+        why="The emergency surface lists only the reserved platform scope, so "
+            "tenant break-glass never leaks onto it.",
+    ),
     # ── every plane → the shared audit ledger ────────────────────────────────
     # Seven Kyber modules record through this one call. It is the single
     # highest-consequence seam in the plane: if the signature drifted, Kyber
@@ -188,6 +231,46 @@ SEAMS: tuple[Seam, ...] = (
         ),
         why="Every privileged Kyber action is audited through the existing "
             "tamper-evident ledger — never a parallel one.",
+    ),
+    # ── retention sweep → the shared audit ledger and policy registry ────────
+    # The sweeper DELETES rows. Its two outward calls are both load-bearing:
+    # the policy registry decides whether a table may be swept at all (and with
+    # what window), and the ledger is the only record that a run happened. A
+    # silent break in either would leave deletions unexplained, or — worse —
+    # move the guard that keeps `legal`-class evidence out of reach.
+    Seam(
+        caller="services.kyber.retention.KyberRetentionSweeper._audit",
+        module="services.security.audit_ledger",
+        singleton="audit_ledger",
+        attribute="record",
+        keywords=(
+            "actor_id", "actor_type", "event_type", "resource_type", "action",
+            "outcome", "metadata",
+        ),
+        why="Each retention run writes one summary record to the shared "
+            "tamper-evident ledger; a sweep with no audit trail is "
+            "indistinguishable from data loss.",
+        optional=True,
+    ),
+    Seam(
+        caller="services.kyber.retention.KyberRetentionSweeper.policy",
+        module="shared.storage.manager",
+        singleton=None,
+        attribute="policy_for",
+        positional=2,
+        why="The retention window and the short_lived/hard_delete guard both "
+            "come from the policy registry — never a constant in the sweeper.",
+    ),
+    # ── identity.principals → the emergency guard ────────────────────────────
+    Seam(
+        caller="services.kyber.identity.principals.PrincipalService.bind_role",
+        module="services.kyber.access.emergency",
+        singleton=None,
+        attribute="assert_not_emergency_template",
+        positional=1,
+        why="emergency_root must not be grantable as an ordinary standing role "
+            "binding; break-glass authority reachable through the normal path "
+            "would make the emergency path permanent.",
     ),
     # ── legacy operator routes → the durable scope plane ─────────────────────
     Seam(

@@ -552,8 +552,18 @@ class PrincipalService:
         environment: Optional[str] = None,
         expires_at: Optional[str] = None,
     ) -> RoleBinding:
-        """Grant one role template to one principal."""
+        """Grant one role template to one principal.
+
+        ``emergency_root`` is refused here. It is break-glass authority with a
+        15-minute session ceiling and a mandatory critical alert; handing it out
+        as an ordinary standing binding would turn the emergency path into a
+        permanent one, which is the failure mode the template exists to prevent.
+        It is reachable only through the approved emergency flow.
+        """
         await self.require_principal(operator_id)
+        from services.kyber.access.emergency import assert_not_emergency_template
+
+        assert_not_emergency_template(role_template_id)
         try:
             require_role_template(role_template_id)
         except KeyError as exc:
