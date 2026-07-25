@@ -753,3 +753,28 @@ kyber_routes:
     capability: kyber.graph.tenant.read
     disclosure: D3
     action_class: 0
+
+  # ── Kyber Tenant Mirror ───────────────────────────────────────────────────
+  #
+  # services/kyber/mirror/routes.py. The mirror shows an operator exactly what
+  # the tenant sees, plus operator-only diagnostics. It reads tenant data only
+  # through the scoped graph gateway and owns no calculations of its own, which
+  # is what makes parity structural rather than aspirational — enforced by
+  # scripts/validate_tenant_mirror_parity.py.
+  #
+  # All three require an active, purpose-bound scope matching {tenant_id}. The
+  # masked variant sits at D2 because the gateway redacts at that level; it
+  # carries parity_comparable: false, since digesting redacted identifiers would
+  # manufacture a divergence that does not exist.
+  - route: "GET /v1/kyber/tenants/{tenant_id}/mirror/{surface}"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/tenants/{tenant_id}/mirror/{surface}/parity"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/tenants/{tenant_id}/mirror/{surface}/masked"
+    capability: kyber.tenant.mirror.read_masked
+    disclosure: D2
+    action_class: 0

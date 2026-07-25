@@ -338,6 +338,26 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="fix the caller, or update services/kyber/seams.py if a seam legitimately moved",
     )
     run(
+        ["python", "scripts/generate_feature_surface_manifest.py"],
+        name="Kyber feature-surface coverage (every Aether surface classified)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "classify the new Aether route: python scripts/generate_feature_surface_manifest.py --write, "
+            "then give any parity exception a written reason"
+        ),
+    )
+    run(
+        ["python", "scripts/validate_tenant_mirror_parity.py"],
+        name="Kyber Tenant Mirror parity (mirror recomputes nothing tenant-visible)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "give the parity-required surface a mirror resolver, or route the value through "
+            "the shared path Aether already uses instead of recomputing it in the mirror"
+        ),
+    )
+    run(
         ["python", "scripts/validate_sdk_release_alignment.py"],
         name="SDK release alignment",
         results=results,

@@ -61,6 +61,30 @@ logger = get_logger("aether.kyber.graph.gateway")
 #: Capability that gates a scoped tenant graph read.
 TENANT_GRAPH_CAPABILITY = "kyber.graph.tenant.read"
 
+#: Any one of these authorizes a scoped tenant read through this gateway.
+#:
+#: The Tenant Mirror reads a tenant's data through this same gateway — by
+#: design, because it is the only sanctioned path — but its routes are gated on
+#: the mirror capability, not the graph one. Requiring only
+#: ``TENANT_GRAPH_CAPABILITY`` here meant a principal granted exactly
+#: ``kyber.tenant.mirror.read`` passed the route dependency and was then denied
+#: *inside* the gateway: one request, allowed and then refused, with a reason
+#: naming a capability the operator was never told they needed. No shipped role
+#: hits it — ``access/roles.py`` grants the two together — but a direct
+#: capability grant does, and an authorization that depends on a bundle
+#: happening to include a second capability is not an authorization rule, it is
+#: a coincidence.
+#:
+#: These are alternatives, not a widening: each already authorizes reading one
+#: tenant's data at D2 or above, every one of them still passes through the
+#: identical scope, tenant-match, disclosure and budget checks below, and none
+#: of them can be reached without an active purpose-bound scope.
+TENANT_READ_CAPABILITIES: frozenset[str] = frozenset({
+    TENANT_GRAPH_CAPABILITY,
+    "kyber.tenant.mirror.read",
+    "kyber.tenant.mirror.read_masked",
+})
+
 #: Capability that gates lineage / evidence *references* on that read.
 EVIDENCE_CAPABILITY = "kyber.graph.evidence.read"
 
@@ -311,8 +335,12 @@ class ScopedTenantGraphGateway:
 
         # 2 ── Capability.
         capabilities = getattr(context, "capabilities", frozenset()) or frozenset()
-        if TENANT_GRAPH_CAPABILITY not in capabilities:
-            raise _deny("capability_missing", "Capability not held for scoped tenant graph reads")
+        if not (TENANT_READ_CAPABILITIES & set(capabilities)):
+            raise _deny(
+                "capability_missing",
+                "Capability not held for scoped tenant graph reads; one of "
+                f"{sorted(TENANT_READ_CAPABILITIES)} is required",
+            )
 
         # 3 ── An active, unexpired scope. `resolve_for_tenant` already checked
         # this upstream; it is re-checked here because this module is reachable
@@ -652,6 +680,7 @@ __all__ = [
     "MAX_TRAVERSAL_DEPTH",
     "MINIMUM_DISCLOSURE",
     "TENANT_GRAPH_CAPABILITY",
+    "TENANT_READ_CAPABILITIES",
     "ScopedTenantGraphGateway",
     "get_store",
     "get_tenant_graph",

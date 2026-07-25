@@ -385,6 +385,14 @@ class FleetProjectionService:
 
         totals_known = not missing
         return {
+            # `row_count` and `tenant_count` are what this read OBSERVED, not
+            # fleet totals. When `totals_known` is false they are a lower bound
+            # and nothing more; a consumer that renders them as a total under
+            # that flag is reporting a number the platform never claimed. The
+            # agent-access plane nulls its counts instead — both are honest, and
+            # this one is chosen because "we saw 40 of an unknown number" tells
+            # an operator more mid-incident than "unknown" does. The flag, not
+            # the field's presence, is the contract.
             "row_count": len(rows),
             "tenant_count": len(tenants),
             "by_state": dict(by_state),

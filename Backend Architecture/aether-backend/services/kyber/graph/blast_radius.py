@@ -172,8 +172,21 @@ class KyberBlastRadiusService:
             return result
 
         missing: list[str] = []
-        anchor_key = node_key_for(subject_type, subject_id)
-        walk = await self._walk(store, anchor_key, environment=environment, depth=depth)
+        # A delegated subject has no Kyber Graph node and never will: agents and
+        # capabilities are owned by the agent-access plane, and
+        # GRAPH_SUBJECT_PREFIXES deliberately has no entry for them. Walking the
+        # graph for one anyway anchors on a bare id that cannot resolve, which
+        # charges the answer a missing input that was never supposed to exist
+        # and pins confidence at 0.0 — so the one number telling an operator how
+        # much of the answer to trust carries no information on exactly the
+        # surface where the delegated plane does know. Delegated, never
+        # duplicated: skip the walk and let the owning plane answer.
+        delegated_subject = kind in DELEGATED_SUBJECTS
+        if delegated_subject:
+            walk = _empty_walk()
+        else:
+            anchor_key = node_key_for(subject_type, subject_id)
+            walk = await self._walk(store, anchor_key, environment=environment, depth=depth)
         missing.extend(walk["missing_inputs"])
 
         result.affected_services = sorted(walk["services"])
@@ -442,6 +455,28 @@ def _ids(values: Any) -> list[str]:
 def _dedupe(values: Iterable[str]) -> list[str]:
     """Stable, sorted, deduplicated ``missing_inputs``."""
     return sorted({str(v) for v in values if v})
+
+
+def _empty_walk() -> dict[str, Any]:
+    """The walk result for a subject the Kyber Graph does not own.
+
+    ``anchor_resolved: True`` is not a claim that a node was found — it is the
+    statement that no Kyber Graph anchor was *required*. The distinction matters
+    because ``_confidence`` treats an unresolved anchor as "we could not start",
+    which is the right reading for a service or a release and the wrong one for
+    an agent, whose reach the agent-access plane answers in full.
+    """
+    return {
+        "services": set(),
+        "features": set(),
+        "tenants": set(),
+        "domains": set(),
+        "evidence": set(),
+        "anchor_resolved": True,
+        "truncated": False,
+        "depth_reached": 0,
+        "missing_inputs": [],
+    }
 
 
 def _confidence(*, anchor_resolved: bool, truncated: bool, missing: list[str]) -> float:

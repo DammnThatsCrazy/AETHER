@@ -138,7 +138,7 @@ SEAMS: tuple[Seam, ...] = (
     ),
     # ── routes → the canonical authorization gate ────────────────────────────
     Seam(
-        caller="services.kyber.identity.routes / services.kyber.devices.routes",
+        caller="services.kyber.{identity,devices,graph,mirror,ops}.routes",
         module="services.kyber.access.dependencies",
         singleton=None,
         attribute="require_kyber_access",
@@ -301,6 +301,25 @@ SEAMS: tuple[Seam, ...] = (
         attribute="get",
         positional=1,
         why="Exit resolves the durable scope before falling back to legacy state.",
+    ),
+    # ── tenant mirror → the scoped tenant graph gateway ───────────────────────
+    # The mirror's only path into a tenant's data. This seam is load-bearing for
+    # the parity invariant, not just for imports: the mirror is allowed to add
+    # operator diagnostics and forbidden to recompute a tenant-visible value, and
+    # the way that is enforced is that it reads through the same gate the tenant's
+    # own data flows through and calculates nothing itself. If this read drifted,
+    # the mirror would either stop working or — far worse — someone would route
+    # around it, and a mirror with its own read path is no longer a mirror.
+    Seam(
+        caller="services.kyber.mirror.service.TenantMirrorService",
+        module="services.kyber.graph.scoped_gateway",
+        singleton="scoped_tenant_graph_gateway",
+        attribute="query",
+        positional=1,
+        keywords=("tenant_id", "vertex_type", "limit"),
+        why="The Tenant Mirror reads tenant data only through the scoped "
+            "gateway; that is what makes parity structural rather than "
+            "aspirational.",
     ),
     # ── ops plane → step-up ───────────────────────────────────────────────────
     # The ops plane resolves step-up once and hands it to the command lifecycle,
