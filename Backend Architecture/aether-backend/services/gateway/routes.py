@@ -65,7 +65,19 @@ async def health_check(request: Request):
 @router.get("/ready")
 @router.get("/v1/ready")
 async def readiness_check(request: Request):
-    """Readiness probe — infra + migration alignment + worker health (advisory).
+    """Readiness probe — infra, migration alignment, and worker health.
+
+    Worker health is no longer advisory. A failed, stopped, stale-heartbeat or
+    entirely unregistered release-critical role fails this probe; a non-critical
+    role failure marks only its own entry in the ``capabilities`` map and leaves
+    the probe passing. Deployment gates read this route, not ``/v1/health``,
+    which stays a liveness predicate so a degraded container is not killed
+    mid-rollout.
+
+    Scope worth knowing when gating on it: this evaluates the supervisor in
+    *this* process. The ALB fronts the api service, which supervises no worker
+    roles, so its workers check reports "skipped" and asserts nothing about the
+    worker fleet. Worker processes serve their own readiness surface for that.
 
     Returns 200 when ready, 503 with the full check map when not.
     """
