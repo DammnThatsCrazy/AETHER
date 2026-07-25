@@ -786,3 +786,82 @@ async def test_dependency_factory_stashes_the_context_on_request_state(harness):
     context = await dependency(request)
     assert current_kyber_context(request) is context
     assert context.decision is not None and context.decision.allowed is True
+
+
+# ── Cross-module contract: the policy-engine call must not drift ─────────────
+#
+# `_record_through_policy_engine` catches every exception and degrades to a
+# direct audit entry. That is the right runtime behaviour — a Kyber decision
+# must never be lost — but it means a signature mismatch is SILENT: the
+# `kyber.access` rows simply stop reaching `security_policy_decisions` and
+# `policy_decision_id` stops being linked onto the decision row. These two
+# modules are written independently, so pin them to each other.
+
+def test_policy_engine_call_signature_matches() -> None:
+    """Every kwarg the dependency sends must exist on check_kyber_access."""
+    import ast
+    import inspect
+    from pathlib import Path
+
+    from services.kyber.access import dependencies as deps
+    from services.security.policy_engine import PolicyEngine
+
+    accepted = set(inspect.signature(PolicyEngine.check_kyber_access).parameters) - {"self"}
+
+    source = Path(deps.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    sent: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        # the call is `await check(...)` where `check` came from getattr()
+        if isinstance(func, ast.Name) and func.id == "check":
+            sent = {kw.arg for kw in node.keywords if kw.arg}
+            break
+
+    assert sent, "could not locate the check_kyber_access call in dependencies.py"
+    unexpected = sent - accepted
+    assert not unexpected, (
+        f"dependencies.py sends kwargs check_kyber_access does not accept: "
+        f"{sorted(unexpected)} — the call would raise TypeError and silently "
+        f"fall back to an audit-only record"
+    )
+
+    required = {
+        name
+        for name, param in inspect.signature(PolicyEngine.check_kyber_access).parameters.items()
+        if name != "self" and param.default is inspect.Parameter.empty
+    }
+    missing = required - sent
+    assert not missing, (
+        f"check_kyber_access requires kwargs the dependency never sends: {sorted(missing)}"
+    )
+
+
+async def test_policy_engine_records_a_linked_decision() -> None:
+    """A real decision reaches security_policy_decisions and links back."""
+    from services.kyber.access.contracts import KyberAccessDecision
+    from services.kyber.access.dependencies import _record_through_policy_engine
+
+    decision = KyberAccessDecision(
+        operator_id="op_sig",
+        session_id="kses_sig",
+        device_id="dev_sig",
+        capability_id="kyber.tenant.mirror.read",
+        action="read",
+        action_class=0,
+        route_id="GET /v1/kyber/tenants/{tenant_id}/mirror",
+        environment="local",
+        tenant_id="tenant_sig",
+        purpose="diagnostics",
+        requested_disclosure=3,
+        granted_disclosure=3,
+        allowed=True,
+    )
+
+    policy_decision_id = await _record_through_policy_engine(decision)
+    assert policy_decision_id, (
+        "no policy decision id returned — the call fell back to audit-only, "
+        "so kyber.access decisions are not reaching security_policy_decisions"
+    )

@@ -210,45 +210,56 @@ export const auditEventSchema = z.object({
 });
 
 /**
- * Backends in this repo wrap collections either as a bare array or as
- * `{items: [...]}` / `{data: [...]}`. Accept all three so the frontend does not
- * break on an envelope decision made in a parallel PR.
+ * Backends in this repo wrap payloads either bare or as `{data: …}` /
+ * `{items: […]}`. Unwrap before validating so the frontend does not break on
+ * an envelope decision made in a parallel PR. Unwrapping is structural only —
+ * the schema still validates whatever comes out.
  */
-export function collection<T>(item: z.ZodType<T>): z.ZodType<T[]> {
-  return z.union([
-    z.array(item),
-    z.object({ items: z.array(item) }).transform((v) => v.items),
-    z.object({ data: z.array(item) }).transform((v) => v.data),
-  ]);
+export function unwrapEnvelope(raw: unknown): unknown {
+  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'data' in raw) {
+    return (raw as { data: unknown }).data;
+  }
+  return raw;
 }
 
-/** Unwrap `{data: X}` envelopes while tolerating bare objects. */
-export function envelope<T>(inner: z.ZodType<T>): z.ZodType<T> {
-  return z.union([inner, z.object({ data: inner }).transform((v) => v.data)]);
+export function unwrapCollection(raw: unknown): unknown {
+  if (Array.isArray(raw)) return raw;
+  if (raw !== null && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>;
+    if (Array.isArray(record['items'])) return record['items'];
+    if (Array.isArray(record['data'])) return record['data'];
+  }
+  return raw;
 }
 
-// Compile-time contract assertions: if a schema output drifts away from the
-// declared wire type in `@kyber/types`, these assignments fail `tsc`.
+// The explicit return annotations below are the contract assertions: if a
+// schema output drifts away from the declared wire type in `@kyber/types`,
+// these fail `tsc` rather than failing silently at runtime.
 export const parsePrincipal = (raw: unknown): KyberPrincipalView =>
-  envelope(principalSchema).parse(raw);
-export const parseSession = (raw: unknown): KyberSessionView => envelope(sessionSchema).parse(raw);
-export const parseAccessScope = (raw: unknown): AccessScope => envelope(accessScopeSchema).parse(raw);
+  principalSchema.parse(unwrapEnvelope(raw));
+export const parseSession = (raw: unknown): KyberSessionView =>
+  sessionSchema.parse(unwrapEnvelope(raw));
+export const parseAccessScope = (raw: unknown): AccessScope =>
+  accessScopeSchema.parse(unwrapEnvelope(raw));
 export const parseNullableAccessScope = (raw: unknown): AccessScope | null =>
-  envelope(accessScopeSchema.nullable()).parse(raw);
-export const parseDevices = (raw: unknown): KyberDevice[] => collection(deviceSchema).parse(raw);
-export const parseDevice = (raw: unknown): KyberDevice => envelope(deviceSchema).parse(raw);
-export const parseScopes = (raw: unknown): AccessScope[] => collection(accessScopeSchema).parse(raw);
+  accessScopeSchema.nullable().parse(unwrapEnvelope(raw));
+export const parseDevices = (raw: unknown): KyberDevice[] =>
+  z.array(deviceSchema).parse(unwrapCollection(raw));
+export const parseDevice = (raw: unknown): KyberDevice =>
+  deviceSchema.parse(unwrapEnvelope(raw));
+export const parseScopes = (raw: unknown): AccessScope[] =>
+  z.array(accessScopeSchema).parse(unwrapCollection(raw));
 export const parseRegistrationOptions = (raw: unknown): WebAuthnRegistrationOptions =>
-  envelope(registrationOptionsSchema).parse(raw);
+  registrationOptionsSchema.parse(unwrapEnvelope(raw));
 export const parseAssertionOptions = (raw: unknown): WebAuthnAssertionOptions =>
-  envelope(assertionOptionsSchema).parse(raw);
+  assertionOptionsSchema.parse(unwrapEnvelope(raw));
 export const parseProofChallenge = (raw: unknown): DeviceProofChallenge =>
-  envelope(proofChallengeSchema).parse(raw);
+  proofChallengeSchema.parse(unwrapEnvelope(raw));
 export const parseWorkforcePrincipals = (raw: unknown): WorkforcePrincipal[] =>
-  collection(workforcePrincipalSchema).parse(raw);
+  z.array(workforcePrincipalSchema).parse(unwrapCollection(raw));
 export const parseInvitations = (raw: unknown): WorkforceInvitation[] =>
-  collection(invitationSchema).parse(raw);
+  z.array(invitationSchema).parse(unwrapCollection(raw));
 export const parseInvitation = (raw: unknown): WorkforceInvitation =>
-  envelope(invitationSchema).parse(raw);
+  invitationSchema.parse(unwrapEnvelope(raw));
 export const parseAuditEvents = (raw: unknown): KyberAuditEvent[] =>
-  collection(auditEventSchema).parse(raw);
+  z.array(auditEventSchema).parse(unwrapCollection(raw));

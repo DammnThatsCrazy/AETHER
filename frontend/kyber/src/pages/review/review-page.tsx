@@ -276,7 +276,7 @@ const actionConfig: Record<ActionType, { label: string; newStatus: ReviewStatus;
 // ─── Main Page Component ───────────────────────────────────────────────────
 
 export function ReviewPage() {
-  const { user } = useAuth();
+  const { principal } = useAuth();
   const permissions = usePermissions();
 
   const {
@@ -324,10 +324,10 @@ export function ReviewPage() {
     const now = new Date().toISOString();
 
     const attribution: ActionAttribution = {
-      userId: user?.id ?? 'unknown',
-      displayName: user?.displayName ?? 'Unknown User',
-      email: user?.email ?? 'unknown@aether.internal',
-      role: user?.role ?? 'kyber_observer',
+      userId: principal?.operator_id ?? 'unknown',
+      displayName: principal?.display_name ?? principal?.email ?? 'Unknown User',
+      email: principal?.email ?? 'unknown@aether.internal',
+      role: principal?.role_template_ids[0] ?? '',
       timestamp: now,
       environment: getEnvironment(),
       reason: actionReason,
@@ -346,7 +346,7 @@ export function ReviewPage() {
         setActionError(err instanceof Error ? err.message : 'Failed to submit review decision');
       })
       .finally(() => setActionSubmitting(false));
-  }, [actionModal, actionReason, actionSubmitting, user, resolveItem, closeActionModal]);
+  }, [actionModal, actionReason, actionSubmitting, principal, resolveItem, closeActionModal]);
 
   if (isLoading) {
     return (
@@ -600,7 +600,7 @@ export function ReviewPage() {
                                 </Button>
                               </PermissionGate>
 
-                              {permissions.role !== 'kyber_observer' && (
+                              {permissions.canWriteNotes && (
                                 <Button
                                   variant="secondary"
                                   size="sm"
@@ -656,7 +656,7 @@ export function ReviewPage() {
                       <ScrollArea maxHeight="calc(100vh - 400px)">
                         <ApprovalQueue
                           canApprove={permissions.canApprove}
-                          currentUserId={user?.id ?? 'unknown'}
+                          currentUserId={principal?.operator_id ?? 'unknown'}
                         />
                       </ScrollArea>
                     </CardContent>
@@ -695,7 +695,7 @@ export function ReviewPage() {
               />
             </div>
             <div className="text-xs text-text-muted">
-              Action by: <span className="text-text-primary">{user?.displayName ?? 'Unknown'}</span> ({user?.role ?? 'unknown'})
+              Action by: <span className="text-text-primary">{principal?.display_name ?? principal?.email ?? 'Unknown'}</span> ({principal?.role_template_ids[0] ?? 'no role'})
             </div>
             {actionError && (
               <p className="text-xs text-danger font-mono">

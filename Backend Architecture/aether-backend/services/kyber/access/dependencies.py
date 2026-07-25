@@ -314,10 +314,32 @@ async def _persist_decision(decision: KyberAccessDecision) -> None:
         logger.error(f"kyber: failed to persist access decision {decision.decision_id}: {exc}")
 
 
+def _disclosure_token(level: Optional[int]) -> Optional[str]:
+    """Render a numeric disclosure level as the canonical ``D<n>`` token.
+
+    The decision record stores disclosure as an int so it indexes cleanly;
+    ``PolicyEngine.check_kyber_access`` and the route registry both speak the
+    ``D<n>`` token. Converting here keeps one representation per layer.
+    """
+    if level is None:
+        return None
+    try:
+        return DisclosureLevel(int(level)).name_token
+    except (ValueError, TypeError):
+        return None
+
+
 async def _record_through_policy_engine(decision: KyberAccessDecision) -> Optional[str]:
     """Route the decision through the shared policy engine when it supports it.
 
-    Worker D adds ``PolicyEngine.check_kyber_access``. Until it exists — or if
+    The kwargs below must track ``PolicyEngine.check_kyber_access`` exactly. A
+    mismatch does not raise to the caller — it is caught and degraded to a
+    direct audit entry — so a drifted signature would silently stop linking
+    ``policy_decision_id`` and stop writing ``kyber.access`` rows to
+    ``security_policy_decisions``. ``test_policy_engine_call_signature_matches``
+    pins the two together so that drift fails a test instead of going unnoticed.
+
+    Until the method exists — or if
     its signature differs — this falls back to writing an audit-ledger entry
     directly, so a Kyber decision is never unrecorded.
     """
@@ -333,22 +355,27 @@ async def _record_through_policy_engine(decision: KyberAccessDecision) -> Option
     try:
         result = await check(
             actor_id=decision.operator_id or "unknown",
-            actor_type="olympus_operator",
-            capability_id=decision.capability_id,
-            action=decision.action or "read",
-            action_class=decision.action_class,
-            resource_type=decision.resource_type or "kyber_route",
-            resource_id=decision.resource_id,
-            tenant_id=decision.tenant_id,
-            environment=decision.environment,
+            operator_id=decision.operator_id,
             session_id=decision.session_id,
             device_id=decision.device_id,
-            scope_id=decision.scope_id,
+            capability=decision.capability_id or "",
+            action_class=decision.action_class,
+            route_id=decision.route_id or decision.resource_id or "kyber_route",
+            environment=decision.environment or "",
+            target_tenant=decision.tenant_id,
+            purpose=decision.purpose,
+            requested_disclosure=_disclosure_token(decision.requested_disclosure),
+            granted_disclosure=_disclosure_token(decision.granted_disclosure),
             allowed=decision.allowed,
             denial_reason=decision.denial_reason,
-            requested_disclosure=decision.requested_disclosure,
-            granted_disclosure=decision.granted_disclosure,
             step_up_required=decision.step_up_required,
+            approval_required=decision.approval_required,
+            metadata={
+                "scope_ref": decision.scope_id,
+                "resource_type": decision.resource_type,
+                "resource_id": decision.resource_id,
+                "action": decision.action,
+            },
         )
     except Exception as exc:
         logger.warning(f"kyber: policy engine kyber check unusable, falling back: {exc}")

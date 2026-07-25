@@ -4,7 +4,7 @@ import { EnvironmentBadge, Badge, TimeLensControl } from '@aether/ui';
 import { useNotifications } from '@kyber/features/notifications';
 
 export function TopBar() {
-  const { user, logout } = useAuth();
+  const { principal, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const environment = getEnvironment();
   const mode = getRuntimeMode();
@@ -30,10 +30,13 @@ export function TopBar() {
             </span>
           )}
         </button>
-        {user && (
+        {principal && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-secondary">{user.displayName}</span>
-            <Badge>{user.role.replace('kyber_', '').replace(/_/g, ' ')}</Badge>
+            <span className="text-xs text-text-secondary">
+              {principal.display_name ?? principal.email}
+            </span>
+            {/* Role templates come from the backend; nothing is derived here. */}
+            <Badge>{principal.role_template_ids[0] ?? 'no role'}</Badge>
             <button
               onClick={() => void logout()}
               className="text-xs text-text-muted hover:text-text-primary transition-colors"
