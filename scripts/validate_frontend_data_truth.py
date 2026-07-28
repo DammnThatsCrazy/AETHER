@@ -581,6 +581,10 @@ def build_production_bundles(root: Path = ROOT) -> int:
     env.update(PRODUCTION_BUILD_ENV)
     workspaces = [
         "packages/shared",
+        # Aether imports the published web SDK package entry. A clean install
+        # contains source but no ignored dist/ output, so build the dependency
+        # before asking Vite to resolve it.
+        "packages/web",
         *(f"frontend/{app}" for app in APP_NAMES),
         "frontend/demo",
     ]
