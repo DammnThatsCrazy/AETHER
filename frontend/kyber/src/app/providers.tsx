@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@kyber/features/auth';
 import { NotificationProvider } from '@kyber/features/notifications';
 import { CapabilityProvider, ThemeProvider, TimeProvider } from '@aether/ui';
+import { ExplorationProvider } from '@aether/ui/exploration';
 import { JourneyProvider } from '@kyber/features/journey';
 import { fetchOperatorCapabilities } from '@kyber/lib/api/capabilities';
 import { BUILD_INFO } from '@kyber/lib/build-info';
@@ -26,6 +27,35 @@ function CapabilityGate({ children }: { readonly children: ReactNode }) {
   );
 }
 
+/**
+ * Mount canonical exploration inside workforce authentication and capability
+ * boundaries. Tenant-scoped state exists only while the backend-authoritative
+ * scope is active; fleet state is isolated per operator session.
+ */
+export function ExplorationGate({ children }: { readonly children: ReactNode }) {
+  const { isAuthenticated, principal } = useAuth();
+  const location = useLocation();
+  if (!isAuthenticated || !principal) return children;
+
+  const tenantId = principal.active_scope?.status === 'active'
+    ? principal.active_scope.tenant_id
+    : `operator:${principal.operator_id}:${principal.session_id}`;
+  const authorityKey = principal.active_scope?.status === 'active'
+    ? principal.active_scope.scope_id
+    : principal.session_id;
+
+  return (
+    <ExplorationProvider
+      key={authorityKey}
+      tenantId={tenantId}
+      surface={location.pathname}
+      query={location.search}
+    >
+      {children}
+    </ExplorationProvider>
+  );
+}
+
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
@@ -34,11 +64,13 @@ export function Providers({ children }: ProvidersProps) {
           <TimeProvider>
             <AuthProvider>
               <CapabilityGate>
-                <JourneyProvider>
-                  <NotificationProvider>
-                    {children}
-                  </NotificationProvider>
-                </JourneyProvider>
+                <ExplorationGate>
+                  <JourneyProvider>
+                    <NotificationProvider>
+                      {children}
+                    </NotificationProvider>
+                  </JourneyProvider>
+                </ExplorationGate>
               </CapabilityGate>
             </AuthProvider>
           </TimeProvider>
