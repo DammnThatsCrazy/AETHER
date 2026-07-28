@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/connectors/x_ads.py
   - Backend Architecture/aether-backend/services/measurement/connectors/reddit_ads.py
   - Backend Architecture/aether-backend/services/measurement/connectors/microsoft_ads.py
-last_synced_commit: 0d8c5ee76e27caa09d3ce2fc49131737b8c7b8d3
+last_synced_commit: "77a3ec86"
 ---
 
 # Campaign Source Connectors
@@ -22,6 +22,11 @@ All connectors follow a shared contract: they call `CampaignMeasurementWriter.wr
 - `spend_records.campaign_id` is always a canonical Aether UUID.
 - `spend_records.external_campaign_id` always stores the provider's text ID.
 - Provider campaign renames do not change the canonical UUID.
+
+Connector execution is fail-closed in every deployment profile. Missing
+credentials, an unavailable provider SDK, or a provider API failure produces an
+explicit unavailable/error result; local development does not substitute mock
+campaigns, spend, health, or successful synchronization.
 
 ## Supported providers
 
@@ -69,6 +74,10 @@ For UTM-based resolution of SDK touchpoints, apply the following tracking templa
 
 ## Known limits
 
+- Every provider requires its real credential and account configuration before
+  synchronization or credential health can succeed.
+- Google Ads additionally requires the provider SDK; if it is absent, the
+  connector reports the dependency as unavailable.
 - Connector credentials must be re-authorized when platform tokens expire. Stale credentials generate a `CampaignSourceStale` alert.
 - Provider APIs impose rate limits; connectors use exponential backoff and respect `Retry-After` headers.
 - Historical data import is bounded by each platform's retention window (typically 36 months).
