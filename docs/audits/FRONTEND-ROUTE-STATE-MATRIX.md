@@ -1,10 +1,11 @@
 ---
 title: Frontend route-state coverage matrix
-description: Evidence ledger for loading, empty, unavailable, populated, and permission states on every data-bearing Aether and Kyber route.
-audience: engineering
-status: draft
-owner: frontend-platform
-last_reviewed: 2026-07-25
+slug: audits/frontend-route-state-matrix
+section: architecture
+visibility: I
+audience: [dev-senior, architect, ops]
+status: experimental
+since_version: "8.12.0"
 ---
 
 # Frontend route-state coverage matrix

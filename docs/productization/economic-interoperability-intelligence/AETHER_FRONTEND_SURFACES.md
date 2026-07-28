@@ -11,7 +11,7 @@ source_files:
   - frontend/aether/src/pages/derivatives/derivatives-page.tsx
   - frontend/aether/src/pages/interop/interop-page.tsx
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "9fde074"
 ---
 
 # Aether Frontend Surfaces
