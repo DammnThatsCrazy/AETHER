@@ -22,6 +22,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 |---|---|---:|:---:|:---:|:---:|:---:|:---:|---|
 | `/users` | entities and profile summaries | yes | I | A | A | — | I | parameterized route-state family |
 | `/users/:id` | Profile360, identity, graph, trust, risk | yes | I | A | A | — | I | parameterized route-state family |
+| `/users/:profileId/journey` | profile-scoped journey and campaign evidence | yes | I | A | A | — | I | parameterized route-state family |
 | `/campaigns` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |
 | `/campaigns/:id` | campaign detail and touchpoints | yes | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |

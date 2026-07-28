@@ -75,6 +75,14 @@
       ]
     },
     {
+      "feature_id": "users-profileId-journey",
+      "aether_route": "/users/:profileId/journey",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "profile-scoped journey data is not projected into the tenant graph; Kyber uses its separately authorized measurement journey operations",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "campaigns",
       "aether_route": "/campaigns",
       "tenant_parity_required": true,

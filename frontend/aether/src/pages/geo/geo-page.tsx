@@ -7,7 +7,12 @@ import {
   formatCount, useTimeContext,
 } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
+import { TruthBanner, encodeExplorationContext } from '@aether/ui/exploration';
 import { useGeoSummary, useGeoEntities } from '@aether-app/features/geo/use-geo';
+import {
+  useGeoExploration,
+  type GeoExplorationRow,
+} from '@aether-app/features/geo/use-geo-exploration';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +83,83 @@ const METRICS: { value: GeoMetric; label: string }[] = [
   { value: 'anomaly_flags', label: 'Anomaly Distribution' },
 ];
 
+export function GeoExplorationPanel() {
+  const navigate = useNavigate();
+  const timeCtx = useTimeContext();
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<readonly string[]>([]);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const { data: envelope, isLoading, error, client, context } = useGeoExploration(cursor);
+  const rows = envelope?.data?.countries ?? [];
+  const adapterAvailable = envelope?.execution.adapters.includes('geo') ?? false;
+
+  async function openCountry(row: GeoExplorationRow) {
+    setLinkError(null);
+    try {
+      const resolved = await client.resolveLink({
+        context,
+        to: 'geo',
+        focus: { kind: 'geography.country', id: row.country },
+      });
+      if (!resolved.adapter_available) {
+        setLinkError('Geographic exploration is unavailable in this release.');
+        return;
+      }
+      navigate(`/geo/country/${encodeURIComponent(row.country)}?${encodeExplorationContext(resolved.link.context)}`);
+    } catch (reason) {
+      setLinkError(reason instanceof Error ? reason.message : 'Unable to preserve exploration context.');
+    }
+  }
+
+  if (error) return <ErrorState title="Geographic exploration unavailable" message={error} />;
+  if (isLoading && !envelope) return <LoadingState lines={5} />;
+  if (envelope && !adapterAvailable) {
+    return <TruthBanner status="not_enabled" surfaceLabel="Geographic exploration" />;
+  }
+
+  return (
+    <div className="space-y-3 rounded border border-border-default p-4">
+      {envelope && (
+        <TruthBanner
+          status="ready"
+          truth={envelope.truth}
+          completeness={envelope.completeness}
+          applicability={envelope.applicability}
+        />
+      )}
+      {linkError && <ErrorState title="Unable to open geography" message={linkError} />}
+      <DataTable<GeoExplorationRow>
+        caption="Graph-backed geographic exploration results"
+        columns={[
+          { key: 'country', header: 'Country', render: (row) => <code>{row.country}</code> },
+          { key: 'count', header: 'Entities returned', render: (row) => formatCount(row.count, timeCtx) },
+        ]}
+        data={rows}
+        keyExtractor={(row) => row.country}
+        onRowClick={(row) => void openCountry(row)}
+        loading={isLoading}
+        selection={{ selectedKeys, onSelectionChange: setSelectedKeys }}
+        page={{
+          returned: rows.length,
+          ...(envelope?.pagination?.total_estimate !== undefined
+            ? { total: envelope.pagination.total_estimate }
+            : {}),
+          ...(envelope?.pagination?.cursor !== undefined
+            ? { nextCursor: envelope.pagination.cursor }
+            : {}),
+          onNext: setCursor,
+        }}
+        emptyMessage="No graph entities with asserted country data match this exploration."
+      />
+      {(envelope?.data?.without_geo_count ?? 0) > 0 && (
+        <p className="text-xs text-text-muted">
+          {envelope!.data!.without_geo_count} returned entities have no asserted country.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export function GeoPage() {
@@ -91,6 +173,7 @@ export function GeoPage() {
   const [window, setWindow] = useState<TimeWindow>('30d');
   const [metric, setMetric] = useState<GeoMetric>('entity_count');
   const [entityOffset, setEntityOffset] = useState(0);
+  const [showExploration, setShowExploration] = useState(false);
 
   const { data: summary, isLoading: summaryLoading, error: summaryError } = useGeoSummary({
     level: currentLevel,
@@ -159,7 +242,17 @@ export function GeoPage() {
             {m.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setShowExploration((value) => !value)}
+          aria-expanded={showExploration}
+          className="font-mono text-xs px-3 py-1 rounded border border-border-default text-text-secondary hover:text-text-primary"
+        >
+          {showExploration ? 'Hide graph exploration' : 'Explore graph-backed geography'}
+        </button>
       </div>
+
+      {showExploration && <GeoExplorationPanel />}
 
       {summaryLoading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

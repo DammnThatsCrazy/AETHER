@@ -57,9 +57,10 @@ const STATUS_VARIANTS: Record<string, string> = {
 interface Props {
   step: JourneyStep;
   position: number;
+  onCampaignOpen?: (campaignId: string) => void;
 }
 
-export const JourneyStepCard: FC<Props> = ({ step, position }) => {
+export const JourneyStepCard: FC<Props> = ({ step, position, onCampaignOpen }) => {
   const timeCtx = useTimeContext();
   const [expanded, setExpanded] = useState(false);
   const family = step.activity_family as ActivityFamily;
@@ -126,7 +127,22 @@ export const JourneyStepCard: FC<Props> = ({ step, position }) => {
         >
           {step.chain_id && <><dt className="text-text-muted">Chain</dt><dd className="font-mono">{step.chain_id}</dd></>}
           {step.wallet_id && <><dt className="text-text-muted">Wallet</dt><dd className="font-mono truncate">{step.wallet_id.slice(0, 16)}…</dd></>}
-          {step.campaign_id && <><dt className="text-text-muted">Campaign</dt><dd className="font-mono">{step.campaign_id}</dd></>}
+          {step.campaign_id && (
+            <>
+              <dt className="text-text-muted">Campaign</dt>
+              <dd className="font-mono">
+                {onCampaignOpen ? (
+                  <button
+                    type="button"
+                    className="text-accent hover:underline"
+                    onClick={() => onCampaignOpen(step.campaign_id!)}
+                  >
+                    {step.campaign_id}
+                  </button>
+                ) : step.campaign_id}
+              </dd>
+            </>
+          )}
           {step.agent_id && <><dt className="text-text-muted">Agent</dt><dd className="font-mono">{step.agent_id.slice(0, 12)}…</dd></>}
           {step.session_id && <><dt className="text-text-muted">Session</dt><dd className="font-mono text-[10px]">{step.session_id.slice(0, 16)}…</dd></>}
           {step.identity_method && <><dt className="text-text-muted">ID method</dt><dd>{step.identity_method}</dd></>}

@@ -368,6 +368,10 @@ vi.mock('@aether-app/features/users/use-user-profile', () => {
   };
 });
 
+vi.mock('@aether-app/features/profile360', () => ({
+  ProfileExplorationPanel: () => null,
+}));
+
 vi.mock('@aether-app/features/journey', () => ({
   useUnifiedJourney: () => ({ steps: [], loading: false, error: null }),
   TouchpointEvidenceInspector: () => null,

@@ -11,6 +11,7 @@ import { ErrorBoundary } from './error-boundary';
 const SignupPage = lazy(() => import('@aether-app/pages/signup/signup-page').then(m => ({ default: m.SignupPage })));
 const UsersPage = lazy(() => import('@aether-app/pages/users').then(m => ({ default: m.UsersPage })));
 const UserProfilePage = lazy(() => import('@aether-app/pages/user-profile').then(m => ({ default: m.UserProfilePage })));
+const JourneyExplorerPage = lazy(() => import('@aether-app/pages/journey-explorer').then(m => ({ default: m.JourneyExplorerPage })));
 const CampaignsPage = lazy(() => import('@aether-app/pages/campaigns').then(m => ({ default: m.CampaignsPage })));
 const CampaignDetail360Page = lazy(() => import('@aether-app/pages/campaigns/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
 const CampaignRegistryPage = lazy(() => import('@aether-app/pages/campaigns/campaign-registry-page').then(m => ({ default: m.CampaignRegistryPage })));
@@ -93,6 +94,7 @@ export function AppRouter() {
                 <Route path="/" element={<Navigate to="/settings" replace />} />
                 <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
                 <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
+                <Route path="/users/:profileId/journey" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
                 <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
                 <Route path="/campaigns/:id" element={<PageSuspense><CampaignDetail360Page /></PageSuspense>} />
                 {/* Campaign Intelligence */}

@@ -12,6 +12,8 @@ from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from shared.dimension_state import DimensionState
+
 from shared.contracts_models.filters import FilterGroup
 from shared.dimension_state import DimensionEnvelope
 
@@ -157,7 +159,7 @@ class ExplorationCompleteness(_Model):
 
 
 class ExplorationTruth(_Model):
-    overall_state: str
+    overall_state: DimensionState
     dimensions: list[DimensionEnvelope] = Field(default_factory=list)
     freshness_watermark: Optional[str] = None
 

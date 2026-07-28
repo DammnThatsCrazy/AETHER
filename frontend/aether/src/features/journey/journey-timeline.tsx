@@ -9,9 +9,10 @@ interface Props {
   hasMore: boolean;
   loading: boolean;
   onLoadMore: () => void;
+  onCampaignOpen?: (campaignId: string) => void;
 }
 
-export const JourneyTimeline: FC<Props> = ({ steps, hasMore, loading, onLoadMore }) => {
+export const JourneyTimeline: FC<Props> = ({ steps, hasMore, loading, onLoadMore, onCampaignOpen }) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Interleave steps with transition badges: [step0, transition1, step1, transition2, ...]
@@ -79,7 +80,11 @@ export const JourneyTimeline: FC<Props> = ({ steps, hasMore, loading, onLoadMore
                 {isTransition ? (
                   <JourneyTransitionBadge transitionType={step.transition_type} />
                 ) : (
-                  <JourneyStepCard step={step} position={stepIndex + 1} />
+                  <JourneyStepCard
+                    step={step}
+                    position={stepIndex + 1}
+                    {...(onCampaignOpen ? { onCampaignOpen } : {})}
+                  />
                 )}
               </div>
             );

@@ -76,9 +76,9 @@ def validate(
 
 def _truth_state(adapter_result: Optional[AdapterResult], adapter_available: bool) -> str:
     if not adapter_available:
-        return "not_available"
+        return "error"
     if adapter_result is not None and adapter_result.populated:
-        return "populated"
+        return "ready"
     return "empty"
 
 
