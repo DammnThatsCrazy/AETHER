@@ -6,6 +6,7 @@ import { CapabilityProvider, ThemeProvider, TimeProvider } from '@aether/ui';
 import { ExplorationProvider } from '@aether/ui/exploration';
 import { JourneyProvider } from '@kyber/features/journey';
 import { fetchOperatorCapabilities } from '@kyber/lib/api/capabilities';
+import { explorationClient } from '@kyber/lib/api/exploration';
 import { BUILD_INFO } from '@kyber/lib/build-info';
 import { ErrorBoundary } from './error-boundary';
 
@@ -50,6 +51,7 @@ export function ExplorationGate({ children }: { readonly children: ReactNode }) 
       tenantId={tenantId}
       surface={location.pathname}
       query={location.search}
+      client={explorationClient}
     >
       {children}
     </ExplorationProvider>

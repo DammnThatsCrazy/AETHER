@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   observed: vi.fn(),
+  explorationClient: {},
 }));
 
 vi.mock('@kyber/features/auth', () => ({
@@ -14,6 +15,7 @@ vi.mock('@kyber/features/auth', () => ({
 vi.mock('@kyber/features/notifications', () => ({ NotificationProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@kyber/features/journey', () => ({ JourneyProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@kyber/lib/api/capabilities', () => ({ fetchOperatorCapabilities: vi.fn() }));
+vi.mock('@kyber/lib/api/exploration', () => ({ explorationClient: mocks.explorationClient }));
 vi.mock('@kyber/lib/build-info', () => ({ BUILD_INFO: {} }));
 vi.mock('@aether/ui', () => ({
   CapabilityProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -25,6 +27,7 @@ vi.mock('@aether/ui/exploration', () => ({
     tenantId: string;
     surface: string;
     query?: string;
+    client?: unknown;
     children: React.ReactNode;
   }) => {
     mocks.observed(props);
@@ -55,6 +58,7 @@ describe('Kyber ExplorationGate', () => {
       tenantId: 'operator:operator-1:session-1',
       surface: '/mission',
       query: '?surface=mission&tmode=window',
+      client: mocks.explorationClient,
     }));
   });
 

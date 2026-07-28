@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   observed: vi.fn(),
+  explorationClient: {},
 }));
 
 vi.mock('@aether-app/features/auth', () => ({
@@ -14,6 +15,7 @@ vi.mock('@aether-app/features/auth', () => ({
 vi.mock('@aether-app/lib/auth/auth0-provider', () => ({ AetherAuth0Provider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@aether-app/features/journey', () => ({ JourneyProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@aether-app/lib/api/capabilities', () => ({ fetchTenantCapabilities: vi.fn() }));
+vi.mock('@aether-app/lib/api/exploration', () => ({ explorationClient: mocks.explorationClient }));
 vi.mock('@aether-app/lib/build-info', () => ({ BUILD_INFO: {} }));
 vi.mock('@aether/ui', () => ({
   CapabilityProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -26,6 +28,7 @@ vi.mock('@aether/ui/exploration', () => ({
     tenantId: string;
     surface: string;
     query?: string;
+    client?: unknown;
     children: React.ReactNode;
   }) => {
     mocks.observed(props);
@@ -51,6 +54,7 @@ describe('Aether ExplorationGate', () => {
       tenantId: 'tenant-7',
       surface: '/graph',
       query: '?surface=graph&tmode=as_of&tas=2026-01-01T00%3A00%3A00Z',
+      client: mocks.explorationClient,
     }));
   });
 

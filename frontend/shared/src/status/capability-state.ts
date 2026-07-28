@@ -27,17 +27,23 @@ import type { DimensionState } from '@aether/shared/dimension-state';
 export const capabilityStates = [
   // ── Availability gates (capability is off / withheld) ─────────────────────
   'disabled', // turned off by operator or compliance hold
+  'disabled_intentionally', // deliberately omitted by product / release policy
+  'not_in_release', // not shipped in the active release class
   'not_entitled', // tenant plan / entitlement does not include this capability
+  'unavailable', // runtime capability truth could not be established
+  'externally_blocked', // an external provider / approval is blocking progress
   // ── Configuration + credential lifecycle ──────────────────────────────────
   'not_configured', // no credentials or config supplied yet
   'credential_required', // config present but credentials still needed
   'credential_invalid', // supplied credentials were rejected by the provider
   'connection_testing', // actively probing the provider connection
   'credential_waiting', // credentials accepted; awaiting async activation/propagation
+  'provisioning', // provider resources are actively being created
   // ── Validation ladder (working, but not partner-live) ─────────────────────
   'replay_validated', // verified against replayed/recorded provider traffic
   'sandbox_validated', // verified end-to-end in the provider sandbox
   'partner_live', // fully live against the production provider
+  'live', // canonical live spelling; partner_live remains for compatibility
   // ── Live-but-imperfect data states ────────────────────────────────────────
   'degraded', // a dependency failed; showing reduced / last-known data
   'stale', // data present but older than its freshness SLA
@@ -104,15 +110,21 @@ function style(
 
 const CAPABILITY_STATE_STYLES: Record<CapabilityState, CapabilityStateStyle> = {
   disabled: style('neutral', 'Disabled', '⊘', 'Turned off by an operator or a compliance hold.', true),
+  disabled_intentionally: style('neutral', 'Disabled intentionally', '⊖', 'Deliberately omitted by product or release policy.', true),
+  not_in_release: style('neutral', 'Not in release', '⊏', 'Not shipped in the active release class.', true),
   not_entitled: style('neutral', 'Not entitled', '⊝', 'Your plan does not include this capability.', true),
+  unavailable: style('critical', 'Unavailable', '◇', 'Capability availability could not be established.', true),
+  externally_blocked: style('action', 'Externally blocked', '⧖', 'An external provider or approval is blocking progress.', true),
   not_configured: style('neutral', 'Not configured', '○', 'No credentials or configuration supplied yet.', true),
   credential_required: style('action', 'Credential required', '⚿', 'Configuration present — provider credentials still needed.', true),
   credential_invalid: style('critical', 'Credential invalid', '⊗', 'The provider rejected the supplied credentials.', true),
   connection_testing: style('progress', 'Testing connection', '⟳', 'Probing the provider connection now.', true),
   credential_waiting: style('progress', 'Awaiting activation', '⋯', 'Credentials accepted — awaiting provider activation.', true),
+  provisioning: style('progress', 'Provisioning', '◌', 'Provider resources are being created.', true),
   replay_validated: style('validating', 'Replay validated', '⎌', 'Verified against replayed provider traffic — not live.', true),
   sandbox_validated: style('validating', 'Sandbox validated', '❖', 'Verified end-to-end in the provider sandbox — not production.', true),
   partner_live: style('live', 'Partner live', '●', 'Live against the production provider.', false),
+  live: style('live', 'Live', '◆', 'Live against the production provider.', false),
   degraded: style('critical', 'Degraded', '▲', 'A dependency failed; showing reduced or last-known data.', false),
   stale: style('caution', 'Stale', '◔', 'Data is older than its freshness SLA.', false),
   partial: style('caution', 'Partial', '◑', 'Some expected inputs are present, not all.', false),
@@ -133,17 +145,23 @@ export function isCapabilityState(value: unknown): value is CapabilityState {
  * A surface's overall badge never looks better than its weakest sub-capability.
  */
 export const capabilityStatePrecedence: readonly CapabilityState[] = [
+  'live',
   'partner_live',
   'sandbox_validated',
   'replay_validated',
   'partial',
   'stale',
+  'provisioning',
   'credential_waiting',
   'connection_testing',
   'credential_required',
   'not_configured',
   'not_entitled',
   'disabled',
+  'disabled_intentionally',
+  'not_in_release',
+  'unavailable',
+  'externally_blocked',
   'degraded',
   'credential_invalid',
   'error',
@@ -152,9 +170,10 @@ export const capabilityStatePrecedence: readonly CapabilityState[] = [
 
 /** Roll many capability states into the single worst one. */
 export function worstCapabilityState(states: readonly CapabilityState[]): CapabilityState {
-  let worst: CapabilityState = 'partner_live';
-  let worstRank = -1;
-  for (const s of states) {
+  if (states.length === 0) return 'unavailable';
+  let worst = states[0]!;
+  let worstRank = capabilityStatePrecedence.indexOf(worst);
+  for (const s of states.slice(1)) {
     const rank = capabilityStatePrecedence.indexOf(s);
     if (rank > worstRank) {
       worstRank = rank;

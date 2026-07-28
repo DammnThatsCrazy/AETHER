@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from '@aether-app/features/auth';
 import { AetherAuth0Provider } from '@aether-app/lib/auth/auth0-provider';
 import { JourneyProvider } from '@aether-app/features/journey';
 import { fetchTenantCapabilities } from '@aether-app/lib/api/capabilities';
+import { explorationClient } from '@aether-app/lib/api/exploration';
 import { BUILD_INFO } from '@aether-app/lib/build-info';
 import { ErrorBoundary } from './error-boundary';
 
@@ -47,6 +48,7 @@ export function ExplorationGate({ children }: { readonly children: ReactNode }) 
       tenantId={tenantId}
       surface={location.pathname}
       query={location.search}
+      client={explorationClient}
     >
       {children}
     </ExplorationProvider>

@@ -124,7 +124,9 @@ function DefaultCapabilityFallback({
   const message =
     state === 'not_in_release'
       ? 'This capability is not part of the current release.'
-      : 'This capability is turned off for the current deployment.';
+      : state === 'disabled'
+        ? 'This capability is turned off for the current deployment.'
+        : 'Capability availability could not be verified. Refresh or contact your operator.';
   return (
     <div role="status" style={{ padding: '2rem', textAlign: 'center', opacity: 0.75 }}>
       <p>{message}</p>
