@@ -44,4 +44,33 @@ describe('TruthBanner honest states', () => {
     );
     expect(new Set([a, b, c]).size).toBe(3);
   });
+
+  it('discloses readiness, observation class, and the complete measurement truth', () => {
+    const html = renderToStaticMarkup(
+      <TruthBanner
+        status="ready"
+        readinessState="credential_waiting"
+        observationClass="probabilistic"
+        measurement={{
+          value_state: 'partial',
+          context: 'Campaign incrementality',
+          unit: 'USD',
+          confidence: 0.72,
+          uncertainty: 'wide interval',
+          evidence_basis: ['attribution ledger'],
+          freshness: { watermark: '2026-07-01T00:00:00Z' },
+          restatement: { restated: false },
+          attribution_vs_causal: 'attribution',
+          materiality_basis: '5% revenue threshold',
+        }}
+      />,
+    );
+
+    expect(html).toContain('data-capability-state="credential_waiting"');
+    expect(html).toContain('data-observation-class="probabilistic"');
+    expect(html).toContain('Campaign incrementality');
+    expect(html).toContain('attribution ledger');
+    expect(html).toContain('Attribution result');
+    expect(html).toContain('5% revenue threshold');
+  });
 });

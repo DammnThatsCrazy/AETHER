@@ -56,6 +56,14 @@ NON_SURFACE: dict[str, str] = {
     "/audit-exports": (
         "tenant-initiated export UI; operator exports are capability-gated separately"
     ),
+    "/users/:profileId/journey": (
+        "profile-scoped journey data is not projected into the tenant graph; "
+        "Kyber uses its separately authorized measurement journey operations"
+    ),
+    "/compare": (
+        "comparison definitions and runs are not projected into the tenant graph; "
+        "operator comparison parity is not implemented"
+    ),
 }
 
 MANIFEST_COMMENT = (

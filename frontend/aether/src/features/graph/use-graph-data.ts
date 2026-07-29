@@ -1,7 +1,20 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import type {
+  ApplicabilityReport,
+  ExplorationCompleteness,
+  ExplorationContextV1,
+  ExplorationTruth,
+} from '@aether/shared/exploration-contract';
+import {
+  useExplorationClient,
+  useExplorationContext,
+  type ExplorationStatus,
+} from '@aether/ui/exploration';
 import { api } from '@aether-app/lib/api/endpoints';
+import { RestClientError } from '@aether-app/lib/api/rest/client';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
 import { classifyEdgeType } from '@aether/shared';
+import { assertCanonicalTruthState } from '@aether-app/features/profile360';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -168,11 +181,17 @@ export function bfsPath(
 const ENTITY_LINK_SAMPLE = 30;
 
 export function useGraphData(options?: { asOf?: string | null; tenantId?: string }) {
+  const client = useExplorationClient();
+  const mountedContext = useExplorationContext();
   const [allNodes, setAllNodes] = useState<GraphNode[]>([]);
   const [allEdges, setAllEdges] = useState<GraphEdge[]>([]);
   const [clusters, setClusters] = useState<GraphCluster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<ExplorationStatus>('loading');
+  const [truth, setTruth] = useState<ExplorationTruth | null>(null);
+  const [completeness, setCompleteness] = useState<ExplorationCompleteness | null>(null);
+  const [applicability, setApplicability] = useState<ApplicabilityReport | null>(null);
 
   const [activeLayer, setActiveLayer] = useState<GraphLayer>('all');
   const [overlay, setOverlay] = useState<GraphOverlay>('none');
@@ -185,56 +204,39 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
+    setStatus('loading');
     setError(null);
 
     async function fetchGraph(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; clusters: GraphCluster[] }> {
-      // For historical replay, use the universal graph query endpoint with as_of filtering
-      if (asOf && tenantId) {
-        const resp = await api.graphIntelligence.query({
-          tenant_id: tenantId,
-          as_of: asOf,
-          limit: 500,
-        });
-        const data = asRecord(resp);
-        const nodes = (Array.isArray(data.nodes) ? data.nodes : []).map(mapNode).filter(n => n.id.length > 0);
-        const rawEdges = Array.isArray(data.edges) ? data.edges : [];
-        const edgeMap = new Map<string, GraphEdge>();
-        rawEdges.forEach((e: unknown, i: number) => {
-          const edge = mapGraphEdge(e, i);
-          if (edge && !edgeMap.has(edge.id)) edgeMap.set(edge.id, edge);
-        });
-        return { nodes, edges: Array.from(edgeMap.values()), clusters: [] };
-      }
-      // 1. All entities → nodes
-      const entitiesData = await api.entities.list({ limit: 500 });
-      const rawEntities: unknown[] = entitiesData.entities;
-      const nodes = rawEntities.map(mapNode).filter(n => n.id.length > 0);
-
-      const edgeMap = new Map<string, GraphEdge>();
-      const addEdge = (e: GraphEdge | null) => {
-        if (e && !edgeMap.has(e.id)) edgeMap.set(e.id, e);
+      const context: ExplorationContextV1 = {
+        ...mountedContext,
+        scope: { tenant_id: mountedContext.scope.tenant_id, surface: 'graph' },
+        temporal: asOf
+          ? { ...mountedContext.temporal, mode: 'as_of', as_of: asOf }
+          : mountedContext.temporal,
+        presentation: { ...mountedContext.presentation, view: 'graph', page_size: 500 },
       };
-
-      // 2. Delegation records → H2A / A2H / A2A edges
-      // GET /v1/delegations returns { delegations: rows, count: N } (list shape).
-      const delData = await api.graph.delegations({ limit: 500 });
-      delData.delegations.forEach((d: unknown, i: number) => addEdge(mapDelegationEdge(d, i)));
-
-      // 3. Identity links for a sample of entities → H2H edges
-      const sampleIds = nodes.slice(0, ENTITY_LINK_SAMPLE).map(n => n.id);
-      const linkResults = await Promise.all(
-        sampleIds.map(id => api.graph.links(id, 50)),
+      const envelope = await client.queryLatest<{ nodes: unknown[]; edges: unknown[] }>(
+        { context, limit: 500 },
+        { key: `graph:${mountedContext.scope.tenant_id}:${asOf ?? 'live'}` },
       );
-      linkResults.forEach((links, i) => {
-        const entityId = sampleIds[i];
-        if (!entityId) return;
-        links.forEach((l, j) => addEdge(mapLinkEdge(l, entityId, j)));
+      assertCanonicalTruthState(envelope.truth.overall_state);
+      const rawEntities = Array.isArray(envelope.data?.nodes) ? envelope.data.nodes : [];
+      const nodes = rawEntities.map(mapNode).filter(n => n.id.length > 0);
+      const rawEdges = Array.isArray(envelope.data?.edges) ? envelope.data.edges : [];
+      const edgeMap = new Map<string, GraphEdge>();
+      rawEdges.forEach((raw, index) => {
+        const edge = mapGraphEdge(raw, index);
+        if (edge && !edgeMap.has(edge.id)) edgeMap.set(edge.id, edge);
       });
-
-      // 4. Clusters derived from entity-level cluster_id property
-      const derivedClusters = deriveClusters(rawEntities);
-
-      return { nodes, edges: Array.from(edgeMap.values()), clusters: derivedClusters };
+      setTruth(envelope.truth);
+      setCompleteness(envelope.completeness);
+      setApplicability(envelope.applicability);
+      return {
+        nodes,
+        edges: Array.from(edgeMap.values()),
+        clusters: deriveClusters(rawEntities),
+      };
     }
 
     fetchGraph()
@@ -244,15 +246,20 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
         setAllEdges(edges);
         setClusters(clusters);
         setIsLoading(false);
+        setStatus('ready');
       })
       .catch(err => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load graph');
         setIsLoading(false);
+        setStatus(err instanceof RestClientError && err.status === 404 ? 'not_enabled' : 'error');
+        setTruth(null);
+        setCompleteness(null);
+        setApplicability(null);
       });
 
     return () => { cancelled = true; };
-  }, [asOf, tenantId]);
+  }, [asOf, client, mountedContext]);
 
   const nodes = useMemo(() => allNodes, [allNodes]);
 
@@ -272,7 +279,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
 
   return {
     nodes, edges, clusters,
-    isLoading, error,
+    isLoading, error, status, truth, completeness, applicability,
     activeLayer, setActiveLayer,
     overlay, setOverlay,
     selectedNodeId, setSelectedNodeId,

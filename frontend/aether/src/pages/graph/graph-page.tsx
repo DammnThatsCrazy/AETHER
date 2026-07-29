@@ -6,6 +6,7 @@ import {
   DataTable, Tabs, TabsList, TabsTrigger, TabsContent,
   cn,
 } from '@aether/ui';
+import { TruthBanner } from '@aether/ui/exploration';
 import { GraphCanvas } from '@aether-app/components/graph/graph-canvas';
 import {
   useGraphData,
@@ -357,6 +358,7 @@ const NODE_COLUMNS = [
 
 export function GraphPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
   const deepLinkedCluster = searchParams.get('cluster');
 
@@ -367,7 +369,7 @@ export function GraphPage() {
 
   const {
     nodes, edges, clusters,
-    isLoading, error,
+    isLoading, error, status, truth, completeness, applicability,
     activeLayer, setActiveLayer,
     overlay, setOverlay,
     getNeighbors,
@@ -548,11 +550,23 @@ export function GraphPage() {
     () => nodes.filter(n => n.riskScore != null && n.riskScore >= 0.7).length,
     [nodes],
   );
+  const explorationStatus = status ?? (error ? 'error' : isLoading ? 'loading' : 'ready');
 
   if (tenant.error || error) {
     return (
       <div className="p-8">
-        <ErrorState title="Failed to load graph" message={tenant.error ?? error ?? 'Graph unavailable'} />
+        {tenant.error ? (
+          <ErrorState title="Failed to load graph" message={tenant.error} />
+        ) : (
+          <div className="space-y-3">
+            <h1 className="text-lg font-semibold text-text-primary">Failed to load graph</h1>
+            <TruthBanner
+              status={explorationStatus}
+              surfaceLabel="Graph exploration"
+              error={error}
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -560,7 +574,7 @@ export function GraphPage() {
   if (tenant.loading || isLoading) {
     return (
       <div className="p-8">
-        <LoadingState lines={6} />
+        <TruthBanner status="loading" surfaceLabel="Graph exploration" />
       </div>
     );
   }
@@ -576,10 +590,29 @@ export function GraphPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const query = searchParams.toString();
+              navigate(query ? `/compare?${query}` : '/compare');
+            }}
+          >
+            Compare
+          </Button>
           <Button variant={viewMode === 'graph' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('graph')}>Graph</Button>
           <Button variant={viewMode === 'table' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('table')}>Table</Button>
         </div>
       </div>
+
+      <TruthBanner
+        status={explorationStatus}
+        surfaceLabel="Graph exploration"
+        truth={truth}
+        completeness={completeness}
+        applicability={applicability}
+        error={error}
+      />
 
       {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

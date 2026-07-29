@@ -22,6 +22,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 |---|---|---:|:---:|:---:|:---:|:---:|:---:|---|
 | `/users` | entities and profile summaries | yes | I | A | A | — | I | parameterized route-state family |
 | `/users/:id` | Profile360, identity, graph, trust, risk | yes | I | A | A | — | I | parameterized route-state family |
+| `/users/:profileId/journey` | profile-scoped journey and campaign evidence | yes | I | A | A | — | I | parameterized route-state family |
 | `/campaigns` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |
 | `/campaigns/:id` | campaign detail and touchpoints | yes | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |
@@ -31,6 +32,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/campaign-intelligence/quality` | campaign quality | no | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence/campaigns/new` | campaign create and validation | no | I | n/a | — | — | I | gap |
 | `/graph` | graph summary, paths, clusters | yes | I | A | A | — | I | parameterized route-state family |
+| `/compare` | comparison definitions, runs, preflight, findings | no | I | A | I | A | I | `comparison-page.test.tsx` |
 | `/noesis` | Noesis conversations and answers | no | I | A | A | A | I | `noesis-page.test.tsx`, `noesis-workspace.test.tsx` |
 | `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |
@@ -152,16 +154,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 124 data-bearing route patterns above: 47 Aether and
+The denominator is the 126 data-bearing route patterns above: 49 Aether and
 77 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 0 / 124 (0.0%) | tracked for every route |
-| Empty-state assertions | 0 / 124 (0.0%) | at least 90% overall |
-| Error/unavailable assertions | 0 / 124 (0.0%) | 100% of critical routes |
-| Populated-state assertions | 0 / 124 (0.0%) | tracked for every route |
-| Critical routes with both empty and error assertions | 0 / 59 (0.0%) | 59 / 59 (100%) |
+| Explicit loading-state assertions | 16 / 126 (12.7%) | tracked for every route |
+| Empty-state assertions | 114 / 126 (90.5%) | at least 90% overall |
+| Error/unavailable assertions | 97 / 126 (77.0%) | 100% of critical routes |
+| Populated-state assertions | 30 / 126 (23.8%) | tracked for every route |
+| Critical routes with both empty and error assertions | 60 / 60 (100%) | 60 / 60 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

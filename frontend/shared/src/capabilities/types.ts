@@ -66,4 +66,5 @@ export type DestinationAvailability =
   | 'available'
   | 'not_in_release'
   | 'disabled'
+  | 'unavailable'
   | 'loading';

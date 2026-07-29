@@ -41,7 +41,18 @@ def value_mod(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
-        yield importlib.import_module("services.value")
+        module = importlib.import_module("services.value")
+        price_sources = importlib.import_module("services.value.price_sources")
+        from decimal import Decimal
+
+        rates = {
+            "ETH": (Decimal("3000"), "test_market", "fresh", "high"),
+            "USDC": (Decimal("1.000"), "test_peg", "fresh", "high"),
+        }
+        price_sources.clear_price_providers()
+        price_sources.register_price_provider(rates.get)
+        yield module
+        price_sources.clear_price_providers()
 
 
 # --------------------------------------------------------------------------- #

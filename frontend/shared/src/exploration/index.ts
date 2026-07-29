@@ -42,10 +42,37 @@ export {
   useExploration,
   useExplorationSelector,
   useExplorationContext,
+  useExplorationClient,
   useExplorationStatus,
   useExplorationFilters,
 } from './provider';
 export type { ExplorationProviderProps } from './provider';
+
+// Typed canonical API client. App-owned transports supply auth/CSRF/base URL;
+// the shared client owns endpoint contracts, validation, and stale-response
+// coordination.
+export {
+  createExplorationClient,
+  assertRegistryValidContext,
+  ExplorationClientValidationError,
+  StaleExplorationResponseError,
+} from './client';
+export type {
+  ExplorationApiResponse,
+  ExplorationTransportRequest,
+  ExplorationTransport,
+  ExplorationRequestOptions,
+  ExplorationQueryRequest,
+  ExplorationFacetRequest,
+  ExplorationFacet,
+  ExplorationFacetData,
+  SavedExplorationView,
+  SaveExplorationViewRequest,
+  ResolveContextLinkRequest,
+  ResolvedContextLink,
+  ExplorationValidationResult,
+  ExplorationClient,
+} from './client';
 
 // Filter models + components.
 export {
@@ -63,7 +90,14 @@ export { FilterBar } from './components/filter-bar';
 export type { FilterBarProps } from './components/filter-bar';
 
 // Truth + facets.
-export { dimensionStateStyle, suppressedFilterCount, completenessNotices } from './truth-model';
+export {
+  dimensionStateStyle,
+  suppressedFilterCount,
+  completenessNotices,
+  observationClassLabel,
+  measurementTruthNotices,
+} from './truth-model';
+export type { MeasurementTruth, MeasurementCausality } from './truth-model';
 export { TruthBanner } from './components/truth-banner';
 export type { TruthBannerProps } from './components/truth-banner';
 export { FacetPanel, cohortMinimumFor } from './components/facet-panel';

@@ -2,12 +2,40 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+const { get, mutate, saveView } = vi.hoisted(() => ({
+  get: vi.fn(),
+  mutate: vi.fn(),
+  saveView: vi.fn(),
+}));
 vi.mock('@aether-app/lib/api/rest/client', () => ({ restClient: { get } }));
 
 vi.mock('@aether-app/features/noesis', () => ({
+  buildNoesisRequestContext: (context: unknown, currentPage: string) => ({
+    current_page: currentPage,
+    filters: { exploration_context_v1: context },
+  }),
+  NoesisContextActions: () => <div>Exact exploration context</div>,
   useNoesisQuery: () => ({
-    mutate: vi.fn().mockResolvedValue({
+    mutate,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock('@aether/ui/exploration', () => ({
+  useExplorationContext: () => ({
+    version: '1',
+    scope: { tenant_id: 'tenant-a', surface: '/noesis' },
+    temporal: { mode: 'window', field: 'occurred_at', timezone: 'UTC' },
+  }),
+  useExplorationClient: () => ({ saveView }),
+}));
+
+import { NoesisPage } from '@aether-app/pages/noesis/noesis-page';
+
+describe('NoesisPage (Aether)', () => {
+  beforeEach(() => {
+    mutate.mockResolvedValue({
       answer: 'Here are your alerts.',
       mode: 'deterministic',
       intent: 'alert_lookup',
@@ -17,16 +45,7 @@ vi.mock('@aether-app/features/noesis', () => ({
       graph: { nodes: [], edges: [], highlights: [] },
       actions: [],
       warnings: [],
-    }),
-    isLoading: false,
-    error: null,
-  }),
-}));
-
-import { NoesisPage } from '@aether-app/pages/noesis/noesis-page';
-
-describe('NoesisPage (Aether)', () => {
-  beforeEach(() => {
+    });
     get.mockImplementation((path: string) => {
       if (path === '/v1/noesis/capabilities') {
         return Promise.resolve({ capabilities: [{ intent: 'segments', example_prompts: ['Backend prompt'] }] });
@@ -55,6 +74,18 @@ describe('NoesisPage (Aether)', () => {
     const submitButton = screen.getByRole('button', { name: 'Ask Noesis' });
     await userEvent.click(submitButton);
     expect(screen.getByText('Show alerts')).toBeInTheDocument();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Show alerts',
+      conversationId: expect.any(String),
+      context: expect.objectContaining({
+        current_page: '/',
+        filters: expect.objectContaining({
+          exploration_context_v1: expect.objectContaining({
+            scope: { tenant_id: 'tenant-a', surface: '/noesis' },
+          }),
+        }),
+      }),
+    }));
   });
 
   it('discloses unavailable metadata instead of substituting fixture prompts', async () => {

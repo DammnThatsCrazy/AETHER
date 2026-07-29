@@ -281,7 +281,7 @@ describe('Command Center ops panels (enableAgentCommandCenter off)', () => {
 
     // Existing Command page still renders.
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Command' })).toBeInTheDocument());
-    expect(screen.getByText('Roster')).toBeInTheDocument();
+    expect(await screen.findByText('Roster')).toBeInTheDocument();
 
     // No new panels, no new fetches.
     expect(screen.queryByTestId('command-center-ops')).toBeNull();

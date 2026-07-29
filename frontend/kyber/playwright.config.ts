@@ -22,7 +22,16 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    // Keep the browser server on the same explicit, backend-only profile as
+    // the component and integration suites. Inline the required values as
+    // well as passing them through `env` so Vite receives them when
+    // Playwright launches npm from a clean CI process.
+    command: [
+      'VITE_KYBER_ENV=test',
+      'VITE_API_BASE_URL=http://localhost:8000',
+      'VITE_AETHER_ENDPOINT=http://localhost:8000',
+      'npm run dev -- --mode test',
+    ].join(' '),
     env: {
       ...inheritedEnvironment,
       VITE_KYBER_ENV: 'test',

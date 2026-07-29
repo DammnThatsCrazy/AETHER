@@ -28,13 +28,53 @@ function truncate(s: unknown, n = 12): string {
 
 type TabId = 'all' | 'dead_letter';
 
+export interface DeliveryReplayPostcondition {
+  readonly replayed: boolean;
+  readonly reason?: string;
+  readonly job?: AnyRecord;
+}
+
+export function deliveryReplayPostcondition(
+  result: unknown,
+  expectedJobId: string,
+  expectedTenantId: string,
+): DeliveryReplayPostcondition {
+  if (!result || typeof result !== 'object') {
+    return { replayed: false, reason: 'The server did not return a replay result.' };
+  }
+  const response = result as AnyRecord;
+  if (response.replayed !== true) {
+    return {
+      replayed: false,
+      reason: typeof response.reason === 'string' && response.reason.trim()
+        ? response.reason
+        : 'The server did not confirm that the job was replayed.',
+    };
+  }
+  if (!response.job || typeof response.job !== 'object') {
+    return { replayed: false, reason: 'The server confirmed replay without returning the updated job.' };
+  }
+  const job = response.job as AnyRecord;
+  if (String(job.id ?? '') !== expectedJobId) {
+    return { replayed: false, reason: 'The replay response belongs to a different job.' };
+  }
+  if (String(job.tenant_id ?? '') !== expectedTenantId) {
+    return { replayed: false, reason: 'The replay response belongs to a different tenant.' };
+  }
+  if (job.state !== 'queued' || Number(job.attempt_count) !== 0) {
+    return { replayed: false, reason: 'The updated job is not queued with its attempt count reset.' };
+  }
+  return { replayed: true, job };
+}
+
 interface ReplayDialogProps {
   readonly job: AnyRecord;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
+  readonly busy: boolean;
 }
 
-function ReplayDialog({ job, onConfirm, onCancel }: ReplayDialogProps) {
+function ReplayDialog({ job, onConfirm, onCancel, busy }: ReplayDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-surface-default rounded-lg shadow-xl p-6 w-full max-w-sm space-y-4">
@@ -46,8 +86,8 @@ function ReplayDialog({ job, onConfirm, onCancel }: ReplayDialogProps) {
           The job will start from attempt 1 with fresh leasing.
         </p>
         <div className="flex gap-2 justify-end">
-          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-          <Button variant="danger" onClick={onConfirm}>Replay</Button>
+          <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button variant="danger" onClick={onConfirm} disabled={busy}>{busy ? 'Replaying…' : 'Replay'}</Button>
         </div>
       </div>
     </div>
@@ -66,6 +106,7 @@ export function DeliveryOpsPage() {
   const [hasMore, setHasMore] = useState(false);
   const [replayTarget, setReplayTarget] = useState<AnyRecord | null>(null);
   const [replayMsg, setReplayMsg] = useState<string | null>(null);
+  const [replaying, setReplaying] = useState(false);
   const PAGE_SIZE = 20;
 
   function load(p: number) {
@@ -88,10 +129,22 @@ export function DeliveryOpsPage() {
   useEffect(() => { load(page); }, [tab, page, tenantFilter, providerFilter]);
 
   function handleReplay(job: AnyRecord) {
-    (api.admin.kyber.replayDeliveryJob(String(job.id), String(job.tenant_id ?? '')) as Promise<AnyRecord>)
-      .then(() => {
+    const jobId = String(job.id ?? '');
+    const tenantId = String(job.tenant_id ?? '');
+    if (!jobId || !tenantId) {
+      setReplayTarget(null);
+      setReplayMsg('Replay blocked: the selected job is missing its exact job or tenant scope.');
+      return;
+    }
+    setReplaying(true);
+    (api.admin.kyber.replayDeliveryJob(jobId, tenantId) as Promise<unknown>)
+      .then((result) => {
+        const postcondition = deliveryReplayPostcondition(result, jobId, tenantId);
+        if (!postcondition.replayed) {
+          throw new Error(postcondition.reason);
+        }
         setReplayTarget(null);
-        setReplayMsg(`Job ${truncate(job.id)} re-queued successfully.`);
+        setReplayMsg(`Job ${truncate(job.id)} confirmed queued for tenant ${truncate(tenantId, 16)}.`);
         setTimeout(() => setReplayMsg(null), 4000);
         load(page);
       })
@@ -99,7 +152,8 @@ export function DeliveryOpsPage() {
         setReplayTarget(null);
         setReplayMsg(`Replay failed: ${e instanceof Error ? e.message : String(e)}`);
         setTimeout(() => setReplayMsg(null), 6000);
-      });
+      })
+      .finally(() => setReplaying(false));
   }
 
   return (
@@ -220,6 +274,7 @@ export function DeliveryOpsPage() {
           job={replayTarget}
           onConfirm={() => handleReplay(replayTarget)}
           onCancel={() => setReplayTarget(null)}
+          busy={replaying}
         />
       )}
     </PageWrapper>

@@ -8,7 +8,8 @@ import {
   useDerivativesVariances, useDerivativesVenues,
 } from '@aether-app/features/derivatives';
 import {
-  NotEnabledOrError, Stat, asRecord, asList, fmt,
+  DomainQueryState, EvidenceBoundary, NotEnabledOrError, Stat, asRecord, asList,
+  fmt, queryCount,
 } from '@aether-app/components/domain-intelligence';
 
 export function DerivativesPage() {
@@ -47,10 +48,17 @@ export function DerivativesPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Venues" value={venueRows.length} />
+        <Stat label="Venues" value={queryCount(venues.data, venues.isLoading, venues.error, venueRows.length)} />
         <Stat label="Linked accounts" value={accountRows.length} sub="read-only credentials" />
-        <Stat label="Open positions" value={openPositions.length} />
-        <Stat label="Unresolved variances" value={unresolvedVariances.length} sub={unresolvedVariances.length ? 'needs review' : 'reconciled'} />
+        <Stat
+          label="Open positions"
+          value={queryCount(positions.data, positions.isLoading, positions.error, openPositions.length)}
+        />
+        <Stat
+          label="Unresolved variances"
+          value={queryCount(variances.data, variances.isLoading, variances.error, unresolvedVariances.length)}
+          sub={variances.error ? 'reconciliation read failed' : unresolvedVariances.length ? 'needs review' : 'none in the returned variances'}
+        />
       </div>
 
       <Tabs defaultValue="accounts">
@@ -88,7 +96,17 @@ export function DerivativesPage() {
           <Card>
             <CardHeader><CardTitle>Observed positions</CardTitle></CardHeader>
             <CardContent>
-              {positionRows.length === 0 ? (
+              <EvidenceBoundary>
+                Source: linked venue observations. Size, entry price, and P&amp;L retain
+                the venue-reported market units; Aether performs no currency conversion.
+              </EvidenceBoundary>
+              {DomainQueryState({
+                isLoading: positions.isLoading,
+                hasData: positions.data !== null,
+                error: positions.error,
+                domainLabel: 'Derivatives positions',
+                onRetry: positions.refetch,
+              }) ?? (positionRows.length === 0 ? (
                 <EmptyState title="No positions observed" />
               ) : (
                 <DataTable
@@ -107,7 +125,7 @@ export function DerivativesPage() {
                   data={positionRows}
                   keyExtractor={r => String(r.position_id)}
                 />
-              )}
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
@@ -116,7 +134,17 @@ export function DerivativesPage() {
           <Card>
             <CardHeader><CardTitle>P&L / exposure snapshots</CardTitle></CardHeader>
             <CardContent>
-              {pnlRows.length === 0 ? (
+              <EvidenceBoundary>
+                Source: backend snapshots from read-only linked venues. Values retain
+                venue-reported units and are evidence as of the displayed timestamp.
+              </EvidenceBoundary>
+              {DomainQueryState({
+                isLoading: pnl.isLoading,
+                hasData: pnl.data !== null,
+                error: pnl.error,
+                domainLabel: 'Derivatives P&L',
+                onRetry: pnl.refetch,
+              }) ?? (pnlRows.length === 0 ? (
                 <EmptyState title="No P&L snapshots" description="Snapshots materialize when the P&L flag is enabled." />
               ) : (
                 <DataTable
@@ -131,7 +159,7 @@ export function DerivativesPage() {
                   data={pnlRows}
                   keyExtractor={r => String(r.pnl_snapshot_id)}
                 />
-              )}
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
@@ -140,8 +168,18 @@ export function DerivativesPage() {
           <Card>
             <CardHeader><CardTitle>Reconciliation variances</CardTitle></CardHeader>
             <CardContent>
-              {varianceRows.length === 0 ? (
-                <EmptyState title="No variances" description="Venue-reported and projected state agree." icon="✓" />
+              <EvidenceBoundary>
+                Postcondition: “no variances” means none were returned for this reconciliation
+                read. It does not prove the account is globally reconciled or ready for execution.
+              </EvidenceBoundary>
+              {DomainQueryState({
+                isLoading: variances.isLoading,
+                hasData: variances.data !== null,
+                error: variances.error,
+                domainLabel: 'Derivatives reconciliation',
+                onRetry: variances.refetch,
+              }) ?? (varianceRows.length === 0 ? (
+                <EmptyState title="No variances returned" description="No variance was returned for this observed reconciliation read." icon="✓" />
               ) : (
                 <DataTable
                   columns={[
@@ -157,7 +195,7 @@ export function DerivativesPage() {
                   data={varianceRows}
                   keyExtractor={r => String(r.reconciliation_variance_id)}
                 />
-              )}
+              ))}
             </CardContent>
           </Card>
         </TabsContent>

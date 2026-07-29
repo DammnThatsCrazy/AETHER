@@ -82,9 +82,24 @@ class TestQueryAndFacets:
             _request(), routes.QueryRequest(context=ctx), graph=None, cache=None
         )
         env = resp.data["envelope"]
-        assert env["truth"]["overall_state"] == "populated"
+        assert env["truth"]["overall_state"] == "ready"
         assert len(env["applicability"]["entries"]) == 1
         assert env["execution"]["adapters"] == ["graph"]
+
+    async def test_unavailable_adapter_uses_canonical_error_truth(self, monkeypatch):
+        import services.exploration.routes as routes
+
+        _enable(monkeypatch)
+        resp = await routes.query_surface(
+            _request(),
+            routes.QueryRequest(context=context("temporal_observatory")),
+            graph=None,
+            cache=None,
+        )
+        env = resp.data["envelope"]
+        assert env["truth"]["overall_state"] == "error"
+        assert env["execution"]["adapters"] == []
+        assert "surface_backend_not_available_on_this_deployment" in env["warnings"]
 
     async def test_facets_suppress_small_cohorts(self, monkeypatch):
         import services.exploration.routes as routes

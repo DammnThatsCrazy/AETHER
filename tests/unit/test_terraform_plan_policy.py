@@ -843,9 +843,9 @@ def test_missing_plan_is_a_usage_error(tmp_path):
 
 
 def test_profile_without_a_cost_policy_is_a_usage_error(tmp_path):
-    """demo-live is a real profile with no cost_policy: nothing to enforce."""
-    assert "cost_policy" not in PROFILES["profiles"]["demo-live"]
-    code = MODULE.check(["--profile", "demo-live",
+    """Local is a real profile with no cost_policy: nothing to enforce."""
+    assert "cost_policy" not in PROFILES["profiles"]["local"]
+    code = MODULE.check(["--profile", "local",
                          "--plan-json", str(FIXTURES / "production-lean-valid.json"),
                          "--out-dir", str(tmp_path)])
     assert code == MODULE.EXIT_USAGE

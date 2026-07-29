@@ -104,27 +104,40 @@ async def test_tenant_isolation(conn):
     assert b_shopify["enabled"] is False  # other tenant unaffected
 
 
-async def test_connection_states(conn):
+async def test_connection_states(conn, monkeypatch):
     disabled = await conn.service.test("tenant-a", "slack")
     assert disabled.status == "disabled"
     await conn.service.configure("tenant-a", "slack", enabled=True)
     no_secret = await conn.service.test("tenant-a", "slack")
     assert no_secret.status == "not_configured"
-    await conn.service.configure("tenant-a", "slack", enabled=True, secret_configured=True)
-    ok = await conn.service.test("tenant-a", "slack")
-    assert ok.ok is True and ok.status == "ok"
+
+    async def successful_provider_check(config, secret=None):
+        assert secret == "test-vault-credential"
+        return conn.base.ConnectionTestResult(
+            connector_type="slack",
+            ok=True,
+            status="ready",
+            detail="provider accepted credential",
+        )
+
+    monkeypatch.setattr(
+        conn.registry.get_connector("slack"),
+        "test_connection",
+        successful_provider_check,
+    )
+    await conn.service.configure(
+        "tenant-a", "slack", enabled=True, credential="test-vault-credential"
+    )
+    ready = await conn.service.test("tenant-a", "slack")
+    assert ready.ok is True and ready.status == "ready"
 
 
-async def test_sync_disabled_then_enabled_meters(conn):
+async def test_sync_disabled_then_enabled_requires_vault_credential(conn):
     disabled = await conn.service.sync("tenant-a", "stripe")
     assert disabled.status == "disabled"
     await conn.service.configure("tenant-a", "stripe", enabled=True)
-    result = await conn.service.sync("tenant-a", "stripe")
-    assert result.status == "healthy"
-    # metering best-effort recorded a connector_sync event
-    from services.billing.revops import UsageMeteringEventRepository  # noqa: E402
-    events = await UsageMeteringEventRepository().find_many(limit=1000)
-    assert any(e["event_type"] == "connector_sync" for e in events)
+    with pytest.raises(ValueError, match="credential is unavailable"):
+        await conn.service.sync("tenant-a", "stripe")
 
 
 async def test_webhook_disabled_rejected_then_ingested(conn):

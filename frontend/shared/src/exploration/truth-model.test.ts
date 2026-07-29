@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { dimensionStateStyle, suppressedFilterCount, completenessNotices } from './truth-model';
+import {
+  dimensionStateStyle,
+  suppressedFilterCount,
+  completenessNotices,
+  measurementTruthNotices,
+  observationClassLabel,
+} from './truth-model';
 
 describe('truth-model', () => {
   it('maps dimension states to honest, distinct variants', () => {
@@ -35,5 +41,33 @@ describe('truth-model', () => {
     ).toEqual(['Sampled — not the full population.', 'Truncated (node_budget).', 'Coverage 60%.']);
     expect(completenessNotices({ complete: true, sampled: false, truncated: false })).toEqual([]);
     expect(completenessNotices(null)).toEqual([]);
+  });
+
+  it('uses the canonical observation-class labels', () => {
+    expect(observationClassLabel('observed')).toBe('Observed');
+    expect(observationClassLabel('probabilistic')).toBe('Inferred / probabilistic');
+  });
+
+  it('makes non-causal, uncertain, restated measurements explicit', () => {
+    expect(
+      measurementTruthNotices({
+        value_state: 'partial',
+        context: 'Paid acquisition',
+        unit: 'USD',
+        confidence: 0.81,
+        uncertainty: '± 4.2%',
+        evidence_basis: ['touchpoints', 'conversion ledger'],
+        freshness: null,
+        restatement: { restated: true, supersedes_measurement_id: 'm-1' },
+        attribution_vs_causal: 'attribution',
+        materiality_basis: null,
+      }),
+    ).toEqual([
+      'Confidence 81%.',
+      'Uncertainty: ± 4.2%.',
+      'Restates m-1.',
+      'Attribution result — not a causal claim.',
+      'No materiality basis was reported.',
+    ]);
   });
 });

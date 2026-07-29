@@ -11,6 +11,7 @@ import { ErrorBoundary } from './error-boundary';
 const SignupPage = lazy(() => import('@aether-app/pages/signup/signup-page').then(m => ({ default: m.SignupPage })));
 const UsersPage = lazy(() => import('@aether-app/pages/users').then(m => ({ default: m.UsersPage })));
 const UserProfilePage = lazy(() => import('@aether-app/pages/user-profile').then(m => ({ default: m.UserProfilePage })));
+const JourneyExplorerPage = lazy(() => import('@aether-app/pages/journey-explorer').then(m => ({ default: m.JourneyExplorerPage })));
 const CampaignsPage = lazy(() => import('@aether-app/pages/campaigns').then(m => ({ default: m.CampaignsPage })));
 const CampaignDetail360Page = lazy(() => import('@aether-app/pages/campaigns/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
 const CampaignRegistryPage = lazy(() => import('@aether-app/pages/campaigns/campaign-registry-page').then(m => ({ default: m.CampaignRegistryPage })));
@@ -19,6 +20,7 @@ const MappingReviewPage = lazy(() => import('@aether-app/pages/campaigns/mapping
 const CampaignQualityPage = lazy(() => import('@aether-app/pages/campaigns/campaign-quality-page').then(m => ({ default: m.CampaignQualityPage })));
 const CustomCampaignPage = lazy(() => import('@aether-app/pages/campaigns/custom-campaign-page').then(m => ({ default: m.CustomCampaignPage })));
 const GraphPage = lazy(() => import('@aether-app/pages/graph').then(m => ({ default: m.GraphPage })));
+const ComparisonPage = lazy(() => import('@aether-app/pages/comparison').then(m => ({ default: m.ComparisonPage })));
 const NoesisPage = lazy(() => import('@aether-app/pages/noesis').then(m => ({ default: m.NoesisPage })));
 const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page').then(m => ({ default: m.SettingsPage })));
 const BillingPage = lazy(() => import('@aether-app/pages/billing/billing-page').then(m => ({ default: m.BillingPage })));
@@ -93,6 +95,7 @@ export function AppRouter() {
                 <Route path="/" element={<Navigate to="/settings" replace />} />
                 <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
                 <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
+                <Route path="/users/:profileId/journey" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
                 <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
                 <Route path="/campaigns/:id" element={<PageSuspense><CampaignDetail360Page /></PageSuspense>} />
                 {/* Campaign Intelligence */}
@@ -103,6 +106,7 @@ export function AppRouter() {
                 <Route path="/campaign-intelligence/quality" element={<PageSuspense><CampaignQualityPage /></PageSuspense>} />
                 <Route path="/campaign-intelligence/campaigns/new" element={<PageSuspense><CustomCampaignPage /></PageSuspense>} />
                 <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
+                <Route path="/compare" element={<PageSuspense><ComparisonPage /></PageSuspense>} />
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/settings/notifications" element={<PageSuspense><SettingsPage /></PageSuspense>} />

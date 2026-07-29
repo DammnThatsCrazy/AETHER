@@ -1,16 +1,22 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   DataTable, EmptyState, ErrorState, LoadingState, ScrollArea,
-  Tabs, TabsList, TabsTrigger, TabsContent,
+  Tabs, TabsList, TabsTrigger, TabsContent, CapabilityStatePanel,
   formatDecimal, useTimeContext, type TimeContext,
 } from '@aether/ui';
+import { TruthBanner, encodeExplorationContext } from '@aether/ui/exploration';
 import { useCluster360 } from '@aether-app/features/cluster360/use-cluster360';
 import type {
   ClusterMember, ClusterTimelineEvent, ClusterEconomicSummary,
   ClusterCampaignSummary, ClusterRiskSummary, ClusterGeographySummary,
 } from '@aether-app/features/cluster360/use-cluster360';
 import { ClusterTargetingImpactTab } from '@aether-app/features/targeting-intelligence';
+import {
+  useClusterExploration,
+  type ClusterExplorationRow,
+} from '@aether-app/features/cluster360/use-cluster-exploration';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -330,6 +336,83 @@ function GeographyTab({ geography }: { geography: ClusterGeographySummary | null
   );
 }
 
+export function ClusterExplorationTab({ clusterId }: { clusterId: string }) {
+  const navigate = useNavigate();
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<readonly string[]>([]);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const { data: envelope, isLoading, error, client, context } =
+    useClusterExploration(cursor, clusterId);
+  const rows = envelope?.data?.clusters ?? [];
+  const adapterAvailable = envelope?.execution.adapters.includes('cluster360') ?? false;
+
+  async function openCluster(row: ClusterExplorationRow) {
+    setLinkError(null);
+    try {
+      const resolved = await client.resolveLink({
+        context,
+        to: 'cluster360',
+        focus: { kind: 'cluster', id: row.cluster_id },
+      });
+      if (!resolved.adapter_available) {
+        setLinkError('Cluster exploration is unavailable in this release.');
+        return;
+      }
+      navigate(`/clusters/${encodeURIComponent(row.cluster_id)}?${encodeExplorationContext(resolved.link.context)}`);
+    } catch (reason) {
+      setLinkError(reason instanceof Error ? reason.message : 'Unable to preserve exploration context.');
+    }
+  }
+
+  if (error) return <ErrorState title="Cluster exploration unavailable" message={error} />;
+  if (isLoading && !envelope) return <LoadingState lines={5} />;
+  if (envelope && !adapterAvailable) {
+    return <TruthBanner status="not_enabled" surfaceLabel="Cluster exploration" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {envelope && (
+        <TruthBanner
+          status="ready"
+          truth={envelope.truth}
+          completeness={envelope.completeness}
+          applicability={envelope.applicability}
+        />
+      )}
+      {linkError && <ErrorState title="Unable to open cluster" message={linkError} />}
+      <DataTable<ClusterExplorationRow>
+        caption="Identity-cluster exploration results"
+        columns={[
+          { key: 'cluster_id', header: 'Cluster', render: (row) => <code>{row.cluster_id}</code> },
+          { key: 'member_count', header: 'Members returned', render: (row) => row.member_count },
+        ]}
+        data={rows}
+        keyExtractor={(row) => row.cluster_id}
+        onRowClick={(row) => void openCluster(row)}
+        loading={isLoading}
+        selection={{ selectedKeys, onSelectionChange: setSelectedKeys }}
+        page={{
+          returned: rows.length,
+          ...(envelope?.pagination?.total_estimate !== undefined
+            ? { total: envelope.pagination.total_estimate }
+            : {}),
+          ...(envelope?.pagination?.cursor !== undefined
+            ? { nextCursor: envelope.pagination.cursor }
+            : {}),
+          onNext: setCursor,
+        }}
+        emptyMessage="No asserted identity clusters match this exploration."
+      />
+      {(envelope?.data?.unclustered_count ?? 0) > 0 && (
+        <p className="text-xs text-text-muted">
+          {envelope!.data!.unclustered_count} returned nodes have no asserted identity cluster.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function Cluster360Page() {
@@ -402,6 +485,8 @@ export function Cluster360Page() {
               <TabsTrigger value="targeting-impact">Targeting Impact</TabsTrigger>
               <TabsTrigger value="risk">Risk</TabsTrigger>
               <TabsTrigger value="geography">Geography</TabsTrigger>
+              <TabsTrigger value="exploration">Exploration</TabsTrigger>
+              <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="mt-4">
@@ -436,6 +521,18 @@ export function Cluster360Page() {
 
             <TabsContent value="geography" className="mt-4">
               <GeographyTab geography={geography} />
+            </TabsContent>
+
+            <TabsContent value="exploration" className="mt-4">
+              <ClusterExplorationTab clusterId={cluster.cluster_id} />
+            </TabsContent>
+
+            <TabsContent value="cohorts" className="mt-4">
+              <CapabilityStatePanel
+                state="not_in_release"
+                title="Cohort exploration is not in this release"
+                description="The canonical exploration registry currently exposes asserted identity clusters only. It does not expose a cohort adapter, so this surface will not infer cohorts from cluster membership."
+              />
             </TabsContent>
           </Tabs>
         </CardContent>

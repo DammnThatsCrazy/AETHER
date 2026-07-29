@@ -18,6 +18,8 @@
     },
     "./*": {
       "types": "./dist/*.d.ts",
+      "import": "./dist/esm/*.js",
+      "require": "./dist/*.js",
       "default": "./dist/*.js"
     }
   },

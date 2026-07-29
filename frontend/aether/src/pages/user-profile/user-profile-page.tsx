@@ -8,6 +8,7 @@ import {
   TerminalSeparator, TimeWindowSelector, formatUSD, formatCount, formatDecimal, useTimeContext, useToast,
 } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
+import { TruthBanner } from '@aether/ui/exploration';
 import {
   useUserProfile, useUserSessions, useUserDevices, useUserPlatforms,
   useUserJourneys, useUserWallets, useUserFinancials, useUserRewards,
@@ -27,6 +28,7 @@ import {
   touchpointEvidenceSummary,
 } from '@aether-app/lib/traffic-source';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
+import { ProfileExplorationPanel } from '@aether-app/features/profile360';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -306,6 +308,8 @@ function OverviewTab({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
+      <ProfileExplorationPanel entityId={userId} />
+
       {/* Scores */}
       <Section title="Intelligence scores" loading={il} error={ie}>
         <div className="grid grid-cols-3 gap-3">
@@ -726,6 +730,11 @@ function BehavioralTab({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
+      <TruthBanner
+        status={bl ? 'loading' : be ? 'error' : 'ready'}
+        surfaceLabel="Behavioral intelligence"
+        error={be}
+      />
       {/* Why explanation */}
       <Section title="Why is this entity notable?" loading={wl} error={we}>
         {!!why.behavioral_context && (

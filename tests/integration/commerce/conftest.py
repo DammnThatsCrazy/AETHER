@@ -88,10 +88,19 @@ def reset_all_stores():
 async def seeded_resource():
     """Seed facilitators/assets and register a protected resource."""
     from services.x402.commerce_models import ProtectedResource, ResourceClass
-    from services.x402.facilitators import seed_facilitators_and_assets
+    from services.x402.facilitators import (
+        get_facilitator_registry,
+        seed_facilitators_and_assets,
+    )
     from services.x402.resources import ProtectedResourceRegistry
 
     await seed_facilitators_and_assets(TENANT)
+    # Authorization routes only to a facilitator with a current healthy signal.
+    # The integration fixture supplies that signal explicitly instead of
+    # weakening the production health gate or changing the seed defaults.
+    await get_facilitator_registry().update_health(
+        TENANT, "fac_local_aether", "healthy", latency_ms=1.0, success=True
+    )
     registry = ProtectedResourceRegistry()
     resource = ProtectedResource(
         tenant_id=TENANT,
