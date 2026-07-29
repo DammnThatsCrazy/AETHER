@@ -32,6 +32,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/campaign-intelligence/quality` | campaign quality | no | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence/campaigns/new` | campaign create and validation | no | I | n/a | — | — | I | gap |
 | `/graph` | graph summary, paths, clusters | yes | I | A | A | — | I | parameterized route-state family |
+| `/compare` | comparison definitions, runs, preflight, findings | no | I | A | I | A | I | `comparison-page.test.tsx` |
 | `/noesis` | Noesis conversations and answers | no | I | A | A | A | I | `noesis-page.test.tsx`, `noesis-workspace.test.tsx` |
 | `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |

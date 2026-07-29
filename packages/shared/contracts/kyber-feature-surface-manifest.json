@@ -227,6 +227,14 @@
       ]
     },
     {
+      "feature_id": "compare",
+      "aether_route": "/compare",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "comparison definitions and runs are not projected into the tenant graph; operator comparison parity is not implemented",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "noesis",
       "aether_route": "/noesis",
       "tenant_parity_required": true,

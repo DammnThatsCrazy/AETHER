@@ -358,6 +358,7 @@ const NODE_COLUMNS = [
 
 export function GraphPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
   const deepLinkedCluster = searchParams.get('cluster');
 
@@ -589,6 +590,16 @@ export function GraphPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const query = searchParams.toString();
+              navigate(query ? `/compare?${query}` : '/compare');
+            }}
+          >
+            Compare
+          </Button>
           <Button variant={viewMode === 'graph' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('graph')}>Graph</Button>
           <Button variant={viewMode === 'table' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('table')}>Table</Button>
         </div>

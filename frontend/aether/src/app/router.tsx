@@ -20,6 +20,7 @@ const MappingReviewPage = lazy(() => import('@aether-app/pages/campaigns/mapping
 const CampaignQualityPage = lazy(() => import('@aether-app/pages/campaigns/campaign-quality-page').then(m => ({ default: m.CampaignQualityPage })));
 const CustomCampaignPage = lazy(() => import('@aether-app/pages/campaigns/custom-campaign-page').then(m => ({ default: m.CustomCampaignPage })));
 const GraphPage = lazy(() => import('@aether-app/pages/graph').then(m => ({ default: m.GraphPage })));
+const ComparisonPage = lazy(() => import('@aether-app/pages/comparison').then(m => ({ default: m.ComparisonPage })));
 const NoesisPage = lazy(() => import('@aether-app/pages/noesis').then(m => ({ default: m.NoesisPage })));
 const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page').then(m => ({ default: m.SettingsPage })));
 const BillingPage = lazy(() => import('@aether-app/pages/billing/billing-page').then(m => ({ default: m.BillingPage })));
@@ -105,6 +106,7 @@ export function AppRouter() {
                 <Route path="/campaign-intelligence/quality" element={<PageSuspense><CampaignQualityPage /></PageSuspense>} />
                 <Route path="/campaign-intelligence/campaigns/new" element={<PageSuspense><CustomCampaignPage /></PageSuspense>} />
                 <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
+                <Route path="/compare" element={<PageSuspense><ComparisonPage /></PageSuspense>} />
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/settings/notifications" element={<PageSuspense><SettingsPage /></PageSuspense>} />

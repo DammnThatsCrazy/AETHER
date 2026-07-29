@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { z } from 'zod';
 import { NoesisWorkspace, type NoesisMessageItem } from '@aether/ui';
-import { useNoesisQuery } from '@aether-app/features/noesis';
+import { useExplorationContext } from '@aether/ui/exploration';
+import {
+  buildNoesisRequestContext,
+  NoesisContextActions,
+  useNoesisQuery,
+} from '@aether-app/features/noesis';
 import { restClient } from '@aether-app/lib/api/rest/client';
 
 const capabilitiesSchema = z.object({
@@ -48,6 +53,7 @@ export function NoesisPage() {
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const query = useNoesisQuery();
+  const explorationContext = useExplorationContext();
 
   // Restore conversation history on page load if a session conversation exists
   useEffect(() => {
@@ -93,7 +99,11 @@ export function NoesisPage() {
     }
     const userMessage: NoesisMessageItem = { id: crypto.randomUUID(), role: 'user', content: message };
     setMessages(prev => [...prev, userMessage]);
-    const response = await query.mutate({ message, context: { current_page: window.location.pathname, conversation_id: convId } });
+    const response = await query.mutate({
+      message,
+      conversationId: convId,
+      context: buildNoesisRequestContext(explorationContext, window.location.pathname),
+    });
     if (response) {
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
@@ -152,6 +162,7 @@ export function NoesisPage() {
         </div>
       )}
       <div className="flex-1 min-w-0">
+        <NoesisContextActions />
         {(historyError || capabilitiesError) && (
           <div role="alert" className="mb-3 rounded border border-danger/40 bg-danger/10 p-3 text-xs text-danger">
             Noesis metadata unavailable. Conversation queries remain available; history or suggested prompts could not be loaded.
