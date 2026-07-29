@@ -61,10 +61,28 @@ A running checklist of the productization surfaces and their readiness. See
       migration
 - [x] Repository validator rejects runtime fixture imports and known synthetic
       production-bundle literals
-- [ ] Versioned backend demo seed/status/verify/reset pipeline, idempotency, and
-      tenant-isolated reset (PR 3)
+- [x] Versioned backend demo seed/status/verify/reset pipeline, idempotency, and
+      tenant-isolated reset (merged in PR #494)
 - [ ] Clean-install, API-unavailable, seed, reset, staging, and production
-      certification report (PR 4)
+      certification. Local data-truth and route-state evidence exists, but
+      credentialed staging and hosted execution evidence is still required.
+
+## Frontend Intelligence Five-Phase Program
+
+- [x] Phase 1: canonical exploration client/provider, query cancellation and
+      stale-response protection, result-table query semantics, and canonical
+      truth/capability states
+- [x] Phase 2: context-preserving entity, profile, graph, cluster, campaign,
+      journey, and geo exploration workflows
+- [x] Phase 3: mounted comparison workbench with preflight/finding truth guards,
+      plus exact canonical context transport and durable saved views in Noesis
+- [x] Phase 4: canonical domain truth/readiness presentation and verified
+      mutation postconditions on the implemented connector, reward, delivery,
+      stablecoin, derivatives, interop, and payment-rail paths
+- [ ] Phase 5 release certification: make the complete hosted test tree green,
+      execute credentialed provider and staging rehearsals, record
+      accessibility/performance/rollback evidence, and obtain a GO verdict.
+      Until then the release verdict is **NO-GO**.
 
 ## OODA Suggestion Intelligence
 
@@ -89,8 +107,8 @@ A running checklist of the productization surfaces and their readiness. See
 - [x] Env-driven config, safe-by-default feature flags, documented local commands
 - [x] `.env.example` covers all new flags and placeholders
 - [x] Normal local startup is backend-backed and never seeds automatically
-- [ ] Backend seed policy must refuse production and require an explicit
-      staging policy and tenant allowlist (PR 3)
+- [x] Backend seed policy refuses production and requires an explicit staging
+      policy and tenant allowlist (merged in PR #494)
 
 ## Reward Enablement (A6)
 

@@ -27,7 +27,11 @@ def tenant() -> TenantContext:
 
 @pytest.fixture()
 def operator() -> TenantContext:
-    return TenantContext(tenant_id="kyber", role=Role.ADMIN, permissions=["read", "admin", "kyber:read"])
+    return TenantContext(
+        tenant_id="kyber",
+        role=Role.ADMIN,
+        permissions=["read", "admin", "kyber:read", "kyber:operator"],
+    )
 
 
 @pytest.fixture()
