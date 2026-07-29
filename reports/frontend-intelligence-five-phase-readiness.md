@@ -45,17 +45,23 @@ in these four commits.
   validation, and enforced route-state coverage passed locally after Phase 4.
 - Hosted execution is available. The Aether unit-test workflow, SDK JavaScript
   validation, TypeScript, Android, iOS, staging preflight dry run, change
-  detection, and PR-size checks passed on the Phase 4 head; other backend and
-  consistency jobs exposed the concrete blockers listed below.
+  detection, and PR-size checks passed on the Phase 4 head. The backend,
+  browser, and consistency failures exposed by that run are remediated on the
+  Phase 5 head and await final hosted confirmation.
 - The hosted Noesis test selection passes locally after correcting its legacy
   operator fixtures: 181 tests passed. The derivatives release selection also
   passes 5 tests after replacing removed fixture helpers with caller-supplied
   test observations and explicit release-gate evidence.
-- The local canonical gate passed its first 38 repository checks, including
-  strict documentation drift, generated-artifact cleanliness, contracts,
-  ownership, data truth, and route state. Its next clean-install step was
-  blocked by permissions on the workstation npm cache, which is an environment
-  failure and not passing evidence for the remaining checks.
+- The complete local canonical gate passes all 47 repository checks on the
+  Phase 5 remediation head. This includes 4,762 core Python tests; 331 ML tests
+  with 2 skips; 1,097 JavaScript tests across Aether, Kyber, shared UI, shared
+  SDK, and demo workspaces; all builds and typechecks; strict documentation
+  drift; generated-artifact cleanliness; contracts; ownership; data truth; and
+  route-state coverage.
+- The Aether onboarding browser contract passes 8 Playwright tests and the
+  Kyber smoke contract passes all 10 Playwright tests locally. The shared
+  package now publishes explicit browser ESM exports, and the test web servers
+  receive validated runtime configuration.
 - The route-state matrix classifies `/compare` honestly: it is a mounted Aether
   surface and is parity-exempt in Kyber rather than being marked as a feature
   that Kyber does not implement.
@@ -65,37 +71,23 @@ evidence below.
 
 ## Release blockers
 
-1. The complete core Python suite must collect and execute successfully. The
-   final-head hosted run passed 4,718 tests and reported 38 failures across commerce,
-   auth/API-key local profiles, graph/data-quality async compatibility,
-   connectors, demo-profile validation, route inventory/matrix, Stripe billing,
-   value semantics/price sources, and Terraform profile compatibility. Its one
-   earlier derivatives collection error was a stale test import and is fixed in
-   the Phase 5 commit; the final-head suite now collects cleanly, but the
-   remaining failures cannot be waived by frontend results.
-2. The hosted Noesis suite exposed legacy operator fixtures that did not carry
-   the explicit `kyber:operator` capability required by the current
-   authorization contract. The Phase 5 gate work updates those fixtures without
-   weakening the service gate; the hosted workflow must pass after the final
-   commit is pushed.
-3. The Phase 4 hosted Kyber browser smoke run reached Playwright but all 10
-   unauthenticated-boundary checks failed to find the expected sign-in surface.
-   The first Phase 5 run stopped earlier on a component-test race; the follow-up
-   waits for the settled UI and passes the full component selection, but the
-   hosted job must rerun through Playwright. A component-test pass does not
-   substitute for the missing browser contract.
-4. Credentialed staging must record live `/v1/explore` query IDs and filter
+1. The final Phase 5 remediation commit must pass the complete hosted core
+   Python, tenant E2E, Noesis, browser, repository-consistency, and canonical
+   release jobs. Their previously reported failures are fixed and the exact
+   local CI topology passes; hosted conclusions remain the authoritative remote
+   evidence.
+2. Credentialed staging must record live `/v1/explore` query IDs and filter
    dispositions; empty, partial, unavailable, suppressed, credential-waiting
    and failed states; and provider/readiness transitions without synthetic
    population.
-5. Empty, seeded, reset, and cross-tenant-isolation browser journeys must be
+3. Empty, seeded, reset, and cross-tenant-isolation browser journeys must be
    captured against the real backend. Comparison history and exact-context
    saved-view reproduction must be included.
-6. Connector activation, reward delivery, and Kyber delivery replay require
+4. Connector activation, reward delivery, and Kyber delivery replay require
    governed safe-rail rehearsals with durable server-side outcome evidence.
    Broader agent, import, and consent route families still need
    contract-by-contract productization review.
-7. The release bundle still needs the required accessibility,
+5. The release bundle still needs the required accessibility,
    performance/load, migration-head, worker-readiness, rollback, artifact
    checksum, and staging wake/sleep evidence.
 

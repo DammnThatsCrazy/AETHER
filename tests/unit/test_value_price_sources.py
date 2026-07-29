@@ -8,6 +8,8 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
 
@@ -25,6 +27,20 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from services.value import ownership_rules, price_sources, reconciliation  # noqa: E402
 from services.value.models import to_decimal  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def observed_prices():
+    rates = {
+        "EUR": (Decimal("1.08"), "test_fx", "fresh", "high"),
+        "ETH": (Decimal("3000"), "test_market", "fresh", "high"),
+        "USDC": (Decimal("1.000"), "test_peg", "fresh", "high"),
+        "USDT": (Decimal("0.999"), "test_peg", "fresh", "high"),
+    }
+    price_sources.clear_price_providers()
+    price_sources.register_price_provider(rates.get)
+    yield
+    price_sources.clear_price_providers()
 
 
 # --- price sources --- #

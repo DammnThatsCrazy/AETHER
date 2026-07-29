@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
 
@@ -26,6 +28,18 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from decimal import Decimal  # noqa: E402
 
 from services.value import account_rules, ltv_rules, portfolio_rules, tvl_rules  # noqa: E402
+from services.value import price_sources  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def observed_prices():
+    rates = {
+        "ETH": (Decimal("3000"), "test_market", "fresh", "high"),
+    }
+    price_sources.clear_price_providers()
+    price_sources.register_price_provider(rates.get)
+    yield
+    price_sources.clear_price_providers()
 
 
 def test_net_tvl_subtracts_borrowed_liability():

@@ -12,9 +12,12 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler"
   },
-  "include": [
-    "consent.ts",
-    "integration-consent.ts",
-    "consent-receipt.ts"
+  "include": ["*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "vitest.config.ts"
   ]
 }

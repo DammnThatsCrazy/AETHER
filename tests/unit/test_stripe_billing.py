@@ -3,7 +3,7 @@
 Covers:
   - Stripe Price ID <-> PlanTier mapping
   - Settings validation (non-local vs local)
-  - Local-mode mocked Checkout / Portal URLs
+  - Fail-closed local Checkout / Portal behavior when Stripe is unavailable
   - Webhook signature verification + idempotency
   - Subscription lifecycle (created/updated/deleted) drives plan_tier
   - Invoice upsert from invoice.* events
@@ -199,12 +199,12 @@ class TestPriceIdMapping:
 
 
 # ---------------------------------------------------------------------------
-# Local-mode mocked URLs
+# Local-mode provider availability
 # ---------------------------------------------------------------------------
 
 
-class TestLocalMockedFlows:
-    def test_checkout_returns_mocked_url_in_local_when_unconfigured(self, monkeypatch):
+class TestLocalProviderAvailability:
+    def test_checkout_fails_closed_in_local_when_unconfigured(self, monkeypatch):
         _set_env(
             monkeypatch,
             AETHER_ENV="local", JWT_SECRET="x",
@@ -217,29 +217,27 @@ class TestLocalMockedFlows:
         with backend_path():
             _reload_settings()
             client = importlib.import_module("shared.billing.stripe_client")
+            common = importlib.import_module("shared.common.common")
             from shared.auth.auth import PlanTier
 
-            session = asyncio.run(
-                client.create_checkout_session(
-                    tenant_id="t-1",
-                    plan_tier=PlanTier.P3_GROWTH_INTELLIGENCE,
-                    contact_email="dev@example.com",
+            with pytest.raises(common.ServiceUnavailableError, match="Stripe"):
+                asyncio.run(
+                    client.create_checkout_session(
+                        tenant_id="t-1",
+                        plan_tier=PlanTier.P3_GROWTH_INTELLIGENCE,
+                        contact_email="dev@example.com",
+                    )
                 )
-            )
-            assert session.mocked is True
-            assert session.session_id == "cs_mock_t-1_P3"
-            assert "tenant_id=t-1" in session.url
-            assert "plan_tier=P3" in session.url
 
-    def test_portal_returns_mocked_url_in_local_when_unconfigured(self, monkeypatch):
+    def test_portal_fails_closed_in_local_when_unconfigured(self, monkeypatch):
         _set_env(monkeypatch, AETHER_ENV="local", JWT_SECRET="x")
         with backend_path():
             _reload_settings()
             client = importlib.import_module("shared.billing.stripe_client")
+            common = importlib.import_module("shared.common.common")
 
-            portal = asyncio.run(client.create_portal_session(tenant_id="t-7"))
-            assert portal.mocked is True
-            assert "tenant_id=t-7" in portal.url
+            with pytest.raises(common.ServiceUnavailableError, match="Stripe"):
+                asyncio.run(client.create_portal_session(tenant_id="t-7"))
 
 
 # ---------------------------------------------------------------------------
@@ -419,7 +417,20 @@ class TestPlanSync:
             asyncio.run(stripe_repository.update_plan_tier("tenant_001", "P3"))
 
             from shared.auth.auth import APIKeyValidator, PlanTier
-            v = APIKeyValidator()
+
+            class Cache:
+                async def get_json(self, key):
+                    return {
+                        "tenant_id": "tenant_001",
+                        "role": "viewer",
+                        "tier": "free",
+                        "permissions": ["read"],
+                    }
+
+                async def set_json(self, key, value, ttl=None):
+                    return None
+
+            v = APIKeyValidator(cache=Cache())
             ctx = asyncio.run(v.validate_async("ak_test_123"))
             assert ctx.tenant_id == "tenant_001"
             assert ctx.plan_tier == PlanTier.P3_GROWTH_INTELLIGENCE

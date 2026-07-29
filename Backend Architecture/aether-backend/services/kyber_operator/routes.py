@@ -229,7 +229,7 @@ async def tenant_operational_envelope(
     sdk_health_score: Optional[float] = None
     try:
         from services.data_quality.service import intelligence_quality_service
-        report = intelligence_quality_service.dimension_report("graph", tenant_id)
+        report = await intelligence_quality_service.dimension_report("graph", tenant_id)
         sdk_health_score = float(report.get("quality_score", 0.0))
     except Exception:
         pass

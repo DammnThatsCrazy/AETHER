@@ -115,16 +115,15 @@ def decorator_modules(monkeypatch):
 
 
 class TestAPIKeyValidation:
-    """Tests for APIKeyValidator.validate (synchronous, local mode)."""
+    """Tests for fail-closed synchronous API-key validation."""
 
-    def test_valid_stub_key_accepted(self, auth_modules):
-        auth_mod, _ = auth_modules
+    def test_legacy_stub_key_rejected(self, auth_modules):
+        auth_mod, common_mod = auth_modules
         validator = auth_mod.APIKeyValidator()
-        ctx = validator.validate("ak_test_123")
-        assert ctx.tenant_id == "tenant_001"
-        assert ctx.role == auth_mod.Role.EDITOR
-        assert "read" in ctx.permissions
-        assert "write" in ctx.permissions
+        with pytest.raises(
+            common_mod.UnauthorizedError, match=r"use validate_async\(\)"
+        ):
+            validator.validate("ak_test_123")
 
     def test_invalid_key_rejected(self, auth_modules):
         auth_mod, common_mod = auth_modules
@@ -150,7 +149,7 @@ class TestAPIKeyValidation:
             validator = auth_mod2.APIKeyValidator(
                 environment=settings_mod.Environment.PRODUCTION
             )
-            with pytest.raises(common_mod2.UnauthorizedError, match="Stub API keys"):
+            with pytest.raises(common_mod2.UnauthorizedError, match="Invalid API key"):
                 validator.validate("ak_test_123")
 
     def test_api_key_hash_is_deterministic(self, auth_modules):
