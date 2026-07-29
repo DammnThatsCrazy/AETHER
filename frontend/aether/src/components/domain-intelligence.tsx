@@ -7,7 +7,7 @@
  * error string. NotEnabledOrError renders that honestly as an empty
  * state instead of a scary failure.
  */
-import { CapabilityStatePanel, ErrorState } from '@aether/ui';
+import { CapabilityStatePanel, ErrorState, LoadingState } from '@aether/ui';
 
 export function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -47,6 +47,60 @@ export function NotEnabledOrError({
     );
   }
   return <ErrorState message={error} {...(onRetry ? { onRetry } : {})} />;
+}
+
+/**
+ * Render the non-data states for a single backend read.
+ *
+ * Domain pages often combine several independent endpoints. A successful
+ * primary read must not turn a failed secondary read into an apparently empty
+ * dataset, so each table owns its loading/error state.
+ */
+export function DomainQueryState({
+  isLoading, hasData, error, domainLabel, onRetry,
+}: {
+  readonly isLoading: boolean;
+  readonly hasData: boolean;
+  readonly error: string | null;
+  readonly domainLabel: string;
+  readonly onRetry?: () => void;
+}): React.ReactNode {
+  if (isLoading && !hasData) return <LoadingState lines={4} />;
+  if (error) {
+    return (
+      <NotEnabledOrError
+        error={error}
+        domainLabel={domainLabel}
+        {...(onRetry ? { onRetry } : {})}
+      />
+    );
+  }
+  return null;
+}
+
+/** Compact disclosure for evidence provenance, units, and postconditions. */
+export function EvidenceBoundary({
+  children,
+}: {
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <p className="mb-3 rounded-md border border-border-default bg-surface-secondary px-3 py-2 text-xs text-text-muted">
+      {children}
+    </p>
+  );
+}
+
+/** Avoid presenting an unresolved independent backend read as a measured zero. */
+export function queryCount(
+  data: unknown,
+  isLoading: boolean,
+  error: string | null,
+  count: number,
+): React.ReactNode {
+  if (isLoading && (data === null || data === undefined)) return 'Loading';
+  if (error) return 'Unavailable';
+  return count;
 }
 
 export function Stat({ label, value, sub }: { readonly label: string; readonly value: React.ReactNode; readonly sub?: string }) {

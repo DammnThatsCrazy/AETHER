@@ -7,7 +7,8 @@ import {
   useStablecoinAssets, useStablecoinFlows, useStablecoinValuations,
 } from '@aether-app/features/stablecoins';
 import {
-  NotEnabledOrError, Stat, asRecord, asList, fmt, pegStatusVariant,
+  DomainQueryState, EvidenceBoundary, NotEnabledOrError, Stat, asRecord, asList,
+  fmt, pegStatusVariant, queryCount,
 } from '@aether-app/components/domain-intelligence';
 
 export function StablecoinsPage() {
@@ -42,9 +43,19 @@ export function StablecoinsPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Tracked assets" value={assetRows.length} />
-        <Stat label="Valuation snapshots" value={valuationRows.length} />
-        <Stat label="Depegged now" value={depegged.length} sub={depegged.length ? 'needs review' : 'all on peg'} />
-        <Stat label="Flow aggregates" value={flowRows.length} />
+        <Stat
+          label="Valuation snapshots"
+          value={queryCount(valuations.data, valuations.isLoading, valuations.error, valuationRows.length)}
+        />
+        <Stat
+          label="Depegged now"
+          value={queryCount(valuations.data, valuations.isLoading, valuations.error, depegged.length)}
+          sub={valuations.error ? 'valuation read failed' : depegged.length ? 'observed snapshots need review' : 'none in the returned snapshots'}
+        />
+        <Stat
+          label="Flow aggregates"
+          value={queryCount(flows.data, flows.isLoading, flows.error, flowRows.length)}
+        />
       </div>
 
       <Tabs defaultValue="assets">
@@ -81,7 +92,18 @@ export function StablecoinsPage() {
           <Card>
             <CardHeader><CardTitle>Peg valuation snapshots</CardTitle></CardHeader>
             <CardContent>
-              {valuationRows.length === 0 ? (
+              <EvidenceBoundary>
+                Source: backend valuation observations. Price is provider-declared USD;
+                deviation is basis points. A snapshot is evidence at its observed time,
+                not a current-price guarantee.
+              </EvidenceBoundary>
+              {DomainQueryState({
+                isLoading: valuations.isLoading,
+                hasData: valuations.data !== null,
+                error: valuations.error,
+                domainLabel: 'Stablecoin valuations',
+                onRetry: valuations.refetch,
+              }) ?? (valuationRows.length === 0 ? (
                 <EmptyState title="No valuation snapshots" description="Snapshots appear once valuation sources are configured." />
               ) : (
                 <DataTable
@@ -98,7 +120,7 @@ export function StablecoinsPage() {
                   data={valuationRows}
                   keyExtractor={r => String(r.valuation_id)}
                 />
-              )}
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
@@ -107,7 +129,17 @@ export function StablecoinsPage() {
           <Card>
             <CardHeader><CardTitle>Flow aggregates</CardTitle></CardHeader>
             <CardContent>
-              {flowRows.length === 0 ? (
+              <EvidenceBoundary>
+                Source: materialized observed transfers. Volumes remain in the asset unit
+                returned by the backend; Aether does not convert or sum unlike assets.
+              </EvidenceBoundary>
+              {DomainQueryState({
+                isLoading: flows.isLoading,
+                hasData: flows.data !== null,
+                error: flows.error,
+                domainLabel: 'Stablecoin flows',
+                onRetry: flows.refetch,
+              }) ?? (flowRows.length === 0 ? (
                 <EmptyState title="No flow aggregates materialized" description="Windowed flow metrics appear after observation ingestion." />
               ) : (
                 <DataTable
@@ -121,7 +153,7 @@ export function StablecoinsPage() {
                   data={flowRows}
                   keyExtractor={r => String(r.flow_aggregate_id)}
                 />
-              )}
+              ))}
             </CardContent>
           </Card>
         </TabsContent>

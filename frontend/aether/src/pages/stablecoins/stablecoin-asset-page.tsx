@@ -4,7 +4,8 @@ import {
   useStablecoinDeployments, useStablecoinObservations,
 } from '@aether-app/features/stablecoins';
 import {
-  NotEnabledOrError, Stat, asRecord, asList, fmt,
+  DomainQueryState, EvidenceBoundary, NotEnabledOrError, Stat, asRecord, asList,
+  fmt, queryCount,
 } from '@aether-app/components/domain-intelligence';
 
 export function StablecoinAssetPage() {
@@ -37,8 +38,14 @@ export function StablecoinAssetPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Stat label="Deployments" value={deploymentRows.length} />
-        <Stat label="Observations" value={observationRows.length} />
-        <Stat label="Finalized" value={finalized.length} />
+        <Stat
+          label="Observations"
+          value={queryCount(observations.data, observations.isLoading, observations.error, observationRows.length)}
+        />
+        <Stat
+          label="Finalized observations"
+          value={queryCount(observations.data, observations.isLoading, observations.error, finalized.length)}
+        />
       </div>
 
       <Card>
@@ -64,7 +71,17 @@ export function StablecoinAssetPage() {
       <Card>
         <CardHeader><CardTitle>Recent observations</CardTitle></CardHeader>
         <CardContent>
-          {observationRows.length === 0 ? (
+          <EvidenceBoundary>
+            Source: chain observations returned by the backend. Amounts use the deployment’s
+            declared decimals; finalized is an observed chain-finality state, not a settlement guarantee.
+          </EvidenceBoundary>
+          {DomainQueryState({
+            isLoading: observations.isLoading,
+            hasData: observations.data !== null,
+            error: observations.error,
+            domainLabel: 'Stablecoin observations',
+            onRetry: observations.refetch,
+          }) ?? (observationRows.length === 0 ? (
             <EmptyState title="No observations" description="On-chain observations appear after ingestion is enabled." />
           ) : (
             <DataTable
@@ -79,7 +96,7 @@ export function StablecoinAssetPage() {
               data={observationRows}
               keyExtractor={r => String(r.observation_id)}
             />
-          )}
+          ))}
         </CardContent>
       </Card>
     </div>
