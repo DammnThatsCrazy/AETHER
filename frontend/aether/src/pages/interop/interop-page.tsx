@@ -7,13 +7,14 @@ import {
   useInteropMessages, useInteropPaths, useInteropProviders,
 } from '@aether-app/features/interop';
 import {
-  NotEnabledOrError, Stat, asRecord, asList, fmt, messageStatusVariant,
+  DomainQueryState, EvidenceBoundary, NotEnabledOrError, Stat, asRecord, asList,
+  fmt, messageStatusVariant, queryCount,
 } from '@aether-app/components/domain-intelligence';
 
 function implementationStatusVariant(status: string): 'success' | 'warning' | 'danger' | 'default' {
   if (status === 'provider_live') return 'success';
   if (status === 'credential_gated') return 'warning';
-  return 'default'; // scaffolded / mocked_local — honest, not alarming
+  return 'default';
 }
 
 export function InteropPage() {
@@ -48,9 +49,9 @@ export function InteropPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Providers" value={providerRows.length} />
-        <Stat label="Messages observed" value={messageRows.length} />
-        <Stat label="In flight" value={inFlight.length} />
-        <Stat label="Paths" value={pathRows.length} />
+        <Stat label="Messages observed" value={queryCount(messages.data, messages.isLoading, messages.error, messageRows.length)} />
+        <Stat label="In flight" value={queryCount(messages.data, messages.isLoading, messages.error, inFlight.length)} />
+        <Stat label="Paths" value={queryCount(paths.data, paths.isLoading, paths.error, pathRows.length)} />
       </div>
 
       <Tabs defaultValue="messages">
@@ -64,7 +65,17 @@ export function InteropPage() {
           <Card>
             <CardHeader><CardTitle>Cross-chain messages</CardTitle></CardHeader>
             <CardContent>
-              {messageRows.length === 0 ? (
+              <EvidenceBoundary>
+                Source: provider and chain observations correlated by the backend.
+                A delivered or settled label is an observed provider state, not an Aether execution guarantee.
+              </EvidenceBoundary>
+              {DomainQueryState({
+                isLoading: messages.isLoading,
+                hasData: messages.data !== null,
+                error: messages.error,
+                domainLabel: 'Interoperability messages',
+                onRetry: messages.refetch,
+              }) ?? (messageRows.length === 0 ? (
                 <EmptyState title="No messages observed" description="Messages appear once provider scanning is enabled." />
               ) : (
                 <DataTable
@@ -82,7 +93,7 @@ export function InteropPage() {
                   keyExtractor={r => String(r.interop_message_id)}
                   onRowClick={r => navigate(`/interoperability/messages/${String(r.interop_message_id)}`)}
                 />
-              )}
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
@@ -91,7 +102,13 @@ export function InteropPage() {
           <Card>
             <CardHeader><CardTitle>Paths</CardTitle></CardHeader>
             <CardContent>
-              {pathRows.length === 0 ? (
+              {DomainQueryState({
+                isLoading: paths.isLoading,
+                hasData: paths.data !== null,
+                error: paths.error,
+                domainLabel: 'Interoperability paths',
+                onRetry: paths.refetch,
+              }) ?? (pathRows.length === 0 ? (
                 <EmptyState title="No paths registered" />
               ) : (
                 <DataTable
@@ -104,7 +121,7 @@ export function InteropPage() {
                   data={pathRows}
                   keyExtractor={r => String(r.path_id)}
                 />
-              )}
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
@@ -113,6 +130,10 @@ export function InteropPage() {
           <Card>
             <CardHeader><CardTitle>Provider adapters</CardTitle></CardHeader>
             <CardContent>
+              <EvidenceBoundary>
+                Readiness comes from the backend implementation status. Credential-gated
+                and scaffolded adapters are not live; this page cannot relay or retry messages.
+              </EvidenceBoundary>
               {providerRows.length === 0 ? (
                 <EmptyState title="No provider adapters registered" />
               ) : (

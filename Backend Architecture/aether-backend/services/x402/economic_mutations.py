@@ -333,8 +333,12 @@ class EconomicGraphMutations:
             properties={
                 "fulfillment_id": fulfillment.fulfillment_id,
                 "status": fulfillment.status,
-                "latency_ms": str(fulfillment.latency_ms),
                 "tenant_id": fulfillment.tenant_id,
+                **(
+                    {"latency_ms": str(fulfillment.latency_ms)}
+                    if fulfillment.latency_ms is not None
+                    else {}
+                ),
             },
         )
         await self._put_vertex(fv)

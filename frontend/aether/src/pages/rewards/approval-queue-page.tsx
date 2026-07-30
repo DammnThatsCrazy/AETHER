@@ -31,6 +31,21 @@ function fmtPct(v: unknown): string {
   return `${(Number(v) * 100).toFixed(1)}%`;
 }
 
+export function rewardActionPostcondition(
+  result: unknown,
+  expectedActionId: string,
+  expectedStatus: 'ready' | 'rejected',
+): string | null {
+  if (!result || typeof result !== 'object') return 'The server did not return the updated reward action.';
+  const updated = result as Record<string, unknown>;
+  const returnedId = updated.id ?? updated.action_id;
+  if (String(returnedId ?? '') !== expectedActionId) return 'The updated reward action has a different action ID.';
+  if (updated.status !== expectedStatus) {
+    return `The reward action is ${fmt(updated.status, 'in an unknown state')}; expected ${expectedStatus}.`;
+  }
+  return null;
+}
+
 // ── Per-action card ───────────────────────────────────────────────────────────
 
 interface ActionItemProps {
@@ -45,7 +60,8 @@ function ActionItem({ action, onActioned }: ActionItemProps) {
   const [done, setDone] = useState<'approved' | 'rejected' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const actionId = fmt(action.id ?? action.action_id);
+  const actionId = fmt(action.id ?? action.action_id, '');
+  const displayActionId = actionId || 'ID unavailable';
   const decisionId = fmt(action.decision_id, '');
   const campaignName = fmt(action.campaign_name ?? action.campaign_id);
   const ruleName = fmt(action.rule_name ?? action.rule_id, '');
@@ -57,10 +73,16 @@ function ActionItem({ action, onActioned }: ActionItemProps) {
   const rail = fmt(action.rail);
 
   async function handleApprove() {
+    if (!actionId) {
+      setErrorMsg('Approval blocked: this row has no tenant-scoped action ID.');
+      return;
+    }
     setBusy(true);
     setErrorMsg(null);
     try {
-      await api.rewards.approveAction(actionId);
+      const updated = await api.rewards.approveAction(actionId);
+      const failure = rewardActionPostcondition(updated, actionId, 'ready');
+      if (failure) throw new Error(failure);
       setDone('approved');
       setConfirming(null);
       setTimeout(onActioned, 800);
@@ -73,10 +95,16 @@ function ActionItem({ action, onActioned }: ActionItemProps) {
 
   async function handleReject() {
     if (!rejectReason.trim()) return;
+    if (!actionId) {
+      setErrorMsg('Rejection blocked: this row has no tenant-scoped action ID.');
+      return;
+    }
     setBusy(true);
     setErrorMsg(null);
     try {
-      await api.rewards.rejectAction(actionId, rejectReason.trim());
+      const updated = await api.rewards.rejectAction(actionId, rejectReason.trim());
+      const failure = rewardActionPostcondition(updated, actionId, 'rejected');
+      if (failure) throw new Error(failure);
       setDone('rejected');
       setConfirming(null);
       setTimeout(onActioned, 800);
@@ -92,7 +120,7 @@ function ActionItem({ action, onActioned }: ActionItemProps) {
       <div className="border border-border-default rounded-lg px-4 py-3 flex items-center gap-3 bg-surface-raised opacity-70">
         <Badge variant={done === 'approved' ? 'success' : 'danger'}>{done}</Badge>
         <span className="text-sm text-text-muted">
-          Action payload {actionId} {done === 'approved' ? 'approved for rail delivery' : 'rejected'}.
+          Action payload {displayActionId} {done === 'approved' ? 'confirmed ready for tenant rail delivery' : 'confirmed rejected'}.
         </span>
       </div>
     );
@@ -139,6 +167,7 @@ function ActionItem({ action, onActioned }: ActionItemProps) {
             {decisionId && (
               <span className="font-mono">Decision: {decisionId.slice(0, 12)}…</span>
             )}
+            {!actionId && <span className="text-danger">Action ID unavailable; operations are blocked.</span>}
           </div>
         </div>
 
@@ -149,7 +178,7 @@ function ActionItem({ action, onActioned }: ActionItemProps) {
               size="sm"
               variant="primary"
               onClick={() => { setConfirming('approve'); setErrorMsg(null); }}
-              disabled={busy}
+              disabled={busy || !actionId}
               className="bg-success text-white hover:bg-success/90"
             >
               Approve
@@ -158,7 +187,7 @@ function ActionItem({ action, onActioned }: ActionItemProps) {
               size="sm"
               variant="secondary"
               onClick={() => { setConfirming('reject'); setErrorMsg(null); }}
-              disabled={busy}
+              disabled={busy || !actionId}
               className="border-danger text-danger hover:bg-danger/10"
             >
               Reject

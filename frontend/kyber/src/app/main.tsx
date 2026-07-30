@@ -3,11 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { Providers } from './providers';
 import { AppRouter } from './router';
 import { log } from '@kyber/lib/logging';
-import { getEnvironment, getRuntimeMode, getStartupValidationSummary } from '@kyber/lib/env';
+import { getEnvironment, getStartupValidationSummary } from '@kyber/lib/env';
 import { cleanupLegacyMockWorker } from '@kyber/lib/browser/legacy-mock-cleanup';
 import '@kyber/styles/index.css';
 
-log.info(`[KYBER] Starting — env=${getEnvironment()} mode=${getRuntimeMode()}`);
+log.info(`[KYBER] Starting — env=${getEnvironment()} dataSource=backend`);
 
 const validation = getStartupValidationSummary();
 if (!validation.ok) {

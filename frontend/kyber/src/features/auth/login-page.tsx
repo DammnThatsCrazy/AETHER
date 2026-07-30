@@ -47,7 +47,7 @@ export function LoginPage({ returnTo }: LoginPageProps = {}) {
           onClick={() => login(returnTo)}
           data-testid="login-button"
         >
-          Sign in with Google
+          Sign in with SSO
         </Button>
 
         <p className="text-center text-[11px] leading-relaxed text-text-muted">

@@ -34,10 +34,10 @@ _queue_store = get_store("queue_snapshots")
 
 class QueueSnapshot(BaseModel):
     depth: int = Field(..., ge=0)
-    in_flight: int = Field(default=0, ge=0)
-    throughput_per_minute: float = Field(default=0.0, ge=0.0)
-    error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
-    backpressure: bool = False
+    in_flight: int | None = Field(default=None, ge=0)
+    throughput_per_minute: float | None = Field(default=None, ge=0.0)
+    error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    backpressure: bool | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -66,11 +66,21 @@ async def summary(request: Request):
     queues = await _queue_store.find(tenant_id=tenant.tenant_id)
 
     total_depth = sum(int(q.get("depth", 0)) for q in queues)
-    total_in_flight = sum(int(q.get("in_flight", 0)) for q in queues)
-    total_throughput = sum(float(q.get("throughput_per_minute", 0.0)) for q in queues)
-    backpressured = [q["queue_name"] for q in queues if q.get("backpressure")]
-    error_rates = [float(q.get("error_rate", 0.0)) for q in queues]
-    avg_error_rate = (sum(error_rates) / len(error_rates)) if error_rates else 0.0
+    in_flight = [int(q["in_flight"]) for q in queues if q.get("in_flight") is not None]
+    throughput = [
+        float(q["throughput_per_minute"])
+        for q in queues
+        if q.get("throughput_per_minute") is not None
+    ]
+    total_in_flight = sum(in_flight) if in_flight else None
+    total_throughput = sum(throughput) if throughput else None
+    backpressured = [
+        q["queue_name"] for q in queues if q.get("backpressure") is True
+    ]
+    error_rates = [
+        float(q["error_rate"]) for q in queues if q.get("error_rate") is not None
+    ]
+    avg_error_rate = (sum(error_rates) / len(error_rates)) if error_rates else None
 
     return APIResponse(data={
         "queue_count": len(queues),
@@ -79,6 +89,7 @@ async def summary(request: Request):
         "total_throughput_per_minute": total_throughput,
         "average_error_rate": avg_error_rate,
         "backpressured_queues": backpressured,
+        "availability": "available" if queues else "insufficient_evidence",
     }).to_dict()
 
 

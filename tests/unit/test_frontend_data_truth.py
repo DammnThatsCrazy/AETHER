@@ -59,6 +59,15 @@ def _build_demo(out_dir: Path, demo_env: str | None) -> subprocess.CompletedProc
     vite = _vite_binary()
     assert vite is not None
     env = {key: value for key, value in os.environ.items() if key != validator.DEMO_ENV_VAR}
+    env.update(
+        {
+            "VITE_API_BASE_URL": "https://api.invalid",
+            "VITE_DEMO_TENANT_ID": "frontend-data-truth-demo",
+            "VITE_DEMO_SEED_NAMESPACE": "frontend-data-truth",
+            "VITE_AETHER_URL": "https://app.invalid",
+            "VITE_KYBER_URL": "https://operator.invalid",
+        }
+    )
     if demo_env is not None:
         env[validator.DEMO_ENV_VAR] = demo_env
     result = subprocess.run(
@@ -88,22 +97,28 @@ def test_demo_build_fails_when_demo_env_is_unset(tmp_path: Path) -> None:
     result = _build_demo(tmp_path / "dist", None)
 
     assert result.returncode != 0
-    assert "VITE_DEMO_ENV is required and has no default" in (result.stderr + result.stdout)
+    assert (
+        "VITE_DEMO_ENV is required and must be one of: local, staging, production, test."
+        in (result.stderr + result.stdout)
+    )
     assert not (tmp_path / "dist").exists()
 
 
 @requires_build_toolchain
 def test_demo_build_rejects_a_non_canonical_profile(tmp_path: Path) -> None:
-    result = _build_demo(tmp_path / "dist", "production")
+    result = _build_demo(tmp_path / "dist", "demo-live")
 
     assert result.returncode != 0
-    assert "is not a demo profile" in (result.stderr + result.stdout)
+    assert (
+        "VITE_DEMO_ENV is required and must be one of: local, staging, production, test."
+        in (result.stderr + result.stdout)
+    )
 
 
 @requires_build_toolchain
-def test_demo_live_build_has_no_fixture_or_worker_path(tmp_path: Path) -> None:
+def test_production_build_has_no_fixture_or_worker_path(tmp_path: Path) -> None:
     out_dir = tmp_path / "dist"
-    result = _build_demo(out_dir, "demo-live")
+    result = _build_demo(out_dir, "production")
     assert result.returncode == 0, result.stderr
 
     emitted = _emitted_text(out_dir)
@@ -111,20 +126,27 @@ def test_demo_live_build_has_no_fixture_or_worker_path(tmp_path: Path) -> None:
     assert "data/fixtures" not in emitted
     assert "mockServiceWorker" not in emitted
     assert "setupWorker" not in emitted
-    assert 'content="demo-live"' in (out_dir / "index.html").read_text(encoding="utf-8")
+    assert 'content="production"' in (out_dir / "index.html").read_text(encoding="utf-8")
     # publicDir is gated too: the worker script is not copied into the bundle.
     assert not (out_dir / "mockServiceWorker.js").exists()
     assert validator.scan_demo_bundle(root=tmp_path, bundle_root=out_dir) == []
 
 
 @requires_build_toolchain
-def test_local_mocked_build_keeps_the_fixture_dataset(tmp_path: Path) -> None:
+@pytest.mark.parametrize("demo_env", ("local", "staging", "test"))
+def test_nonproduction_builds_remain_backend_only(
+    tmp_path: Path,
+    demo_env: str,
+) -> None:
     out_dir = tmp_path / "dist"
-    result = _build_demo(out_dir, "local-mocked")
+    result = _build_demo(out_dir, demo_env)
     assert result.returncode == 0, result.stderr
 
     emitted = _emitted_text(out_dir)
-    # Proves the demo-live absence above is real containment, not a broken build.
-    assert FIXTURE_TOKEN in emitted
-    assert (out_dir / "mockServiceWorker.js").exists()
+    assert FIXTURE_TOKEN not in emitted
+    assert "data/fixtures" not in emitted
+    assert "mockServiceWorker" not in emitted
+    assert "setupWorker" not in emitted
+    assert f'content="{demo_env}"' in (out_dir / "index.html").read_text(encoding="utf-8")
+    assert not (out_dir / "mockServiceWorker.js").exists()
     assert validator.scan_demo_bundle(root=tmp_path, bundle_root=out_dir) == []

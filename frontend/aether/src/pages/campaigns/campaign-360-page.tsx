@@ -11,6 +11,12 @@ import {
   useCampaign360Attribution,
 } from '@aether-app/features/campaigns/use-campaign-360';
 import { CampaignTargetingIntelligenceTab } from '@aether-app/features/targeting-intelligence';
+import {
+  encodeExplorationContext,
+  useExplorationClient,
+  useExplorationContext,
+} from '@aether/ui/exploration';
+import { campaignExplorationContext } from '@aether-app/features/campaigns/use-campaign-exploration';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -30,6 +36,42 @@ function fmtUSD(n: number, ctx: TimeContext) {
 function fmtPct(n: number | null | undefined) {
   if (n == null) return '—';
   return `${(n * 100).toFixed(1)}%`;
+}
+
+function CampaignJourneyContextLink({
+  campaignId,
+  profileId,
+}: {
+  campaignId: string;
+  profileId: string;
+}) {
+  const navigate = useNavigate();
+  const client = useExplorationClient();
+  const base = useExplorationContext();
+  const [blocked, setBlocked] = useState(false);
+
+  async function openJourney() {
+    setBlocked(false);
+    const context = campaignExplorationContext(base, campaignId);
+    const resolved = await client.resolveLink({
+      context,
+      to: 'journeys',
+      focus: { kind: 'profile', id: profileId },
+    });
+    if (!resolved.adapter_available) {
+      setBlocked(true);
+      return;
+    }
+    navigate(`/users/${encodeURIComponent(profileId)}/journey?${encodeExplorationContext(resolved.link.context)}`);
+  }
+
+  return blocked ? (
+    <span className="text-xs text-text-muted">Journey exploration unavailable</span>
+  ) : (
+    <button type="button" className="text-xs text-accent hover:underline" onClick={() => void openJourney()}>
+      Open journey
+    </button>
+  );
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
@@ -122,6 +164,16 @@ function PopulationTab({ campaignId, timeStart, timeEnd }: { campaignId: string;
                     { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
                     { key: 'attributed_revenue', header: 'Attributed $', render: r => fmtUSD(Number(r.attributed_revenue ?? 0), timeCtx) },
                     { key: 'last_activity_at', header: 'Last active', render: r => r.last_activity_at ? formatDate(String(r.last_activity_at), timeCtx) : '—' },
+                    {
+                      key: 'journey',
+                      header: 'Journey',
+                      render: r => r.entity_id ? (
+                        <CampaignJourneyContextLink
+                          campaignId={campaignId}
+                          profileId={String(r.entity_id)}
+                        />
+                      ) : <span className="text-xs text-text-muted">unresolved</span>,
+                    },
                   ]}
                 />
               )
@@ -651,12 +703,15 @@ export function Campaign360Page() {
 
   const [campaign, setCampaign] = useState<AnyRecord | null>(null);
   const [campaignLoading, setCampaignLoading] = useState(true);
+  const [campaignError, setCampaignError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!campaignId) return;
     setCampaignLoading(true);
+    setCampaignError(null);
     (api.campaigns.get(campaignId) as Promise<AnyRecord>)
       .then(d => setCampaign((d as AnyRecord)?.data as AnyRecord ?? d))
+      .catch(error => setCampaignError(error instanceof Error ? error.message : String(error)))
       .finally(() => setCampaignLoading(false));
   }, [campaignId]);
 
@@ -665,6 +720,9 @@ export function Campaign360Page() {
   }
 
   if (!campaignId) return null;
+  if (campaignError) {
+    return <div className="p-8"><ErrorState title="Failed to load campaign" message={campaignError} /></div>;
+  }
 
   return (
     <div className="p-8 space-y-6">

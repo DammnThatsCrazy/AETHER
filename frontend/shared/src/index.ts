@@ -58,6 +58,24 @@ export { Badge } from './components/badge';
 export { Button } from './components/button';
 export { Card, CardHeader, CardTitle, CardContent, CardFooter } from './components/card';
 export { DataTable } from './components/data-table';
+export {
+  nextDataTableSort,
+  toggleDataTableSelection,
+  toggleDataTablePageSelection,
+} from './components/data-table';
+export type {
+  DataTableColumn,
+  DataTableProps,
+  DataTableSort,
+  DataTableSortDirection,
+  DataTableQuery,
+  DataTableExportQuery,
+  DataTableCursorPage,
+  DataTableSelection,
+  DataTableExport,
+} from './components/data-table';
+export { DemoTenantBanner } from './components/demo-tenant-banner';
+export type { DemoTenantBannerProps } from './components/demo-tenant-banner';
 export { EmptyState } from './components/empty-state';
 export { EnvironmentBadge } from './components/environment-badge';
 export { ErrorState } from './components/error-state';
@@ -85,7 +103,6 @@ export {
   resolveCapabilityState,
   CapabilityStateBadge,
   CapabilityStatePanel,
-  MockModeBanner,
 } from './status/index';
 export type {
   CapabilityState,
@@ -93,8 +110,6 @@ export type {
   CapabilityStateStyle,
   CapabilityStateBadgeProps,
   CapabilityStatePanelProps,
-  MockModeBannerProps,
-  RuntimeDataMode,
 } from './status/index';
 export { TerminalSeparator } from './components/terminal-separator';
 export { Toggle } from './components/toggle';

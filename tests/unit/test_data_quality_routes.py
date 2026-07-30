@@ -95,19 +95,25 @@ def unwrap(resp):
 
 # ── scoring ──────────────────────────────────────────────────────────────────
 
-async def test_score_normalized_and_complete(dq):
+async def test_score_without_monitor_evidence_is_explicitly_unknown(dq):
     score = await dq.iq.compute_score("tenant-a")
     for field in dq.models.QUALITY_DIMENSIONS:
-        assert 0.0 <= score[field] <= 1.0
-    assert 0.0 <= score["overall_intelligence_quality_score"] <= 1.0
-    assert score["status"] in ("healthy", "watch", "degraded", "critical")
+        assert score[field] is None
+    assert score["overall_intelligence_quality_score"] is None
+    assert score["status"] == "unknown"
+    assert score["availability"] == "insufficient_evidence"
 
 
 async def test_dimension_reports_have_metrics(dq):
-    events = dq.iq.dimension_report("events", "tenant-a")
-    assert "event_volume" in events and "quality_score" in events
-    graph = dq.iq.dimension_report("graph", "tenant-a")
-    assert "orphaned_vertices" in graph
+    events = await dq.iq.dimension_report("events", "tenant-a")
+    assert events["quality_score"] is None
+    assert events["availability"] == "insufficient_evidence"
+    await dq.iq.report_dimension(
+        "events", "tenant-a", quality_score=0.9, metrics={"event_volume": 12}
+    )
+    events = await dq.iq.dimension_report("events", "tenant-a")
+    assert events["event_volume"] == 12
+    assert events["quality_score"] == 0.9
 
 
 # ── tenant routes ─────────────────────────────────────────────────────────────
@@ -138,6 +144,11 @@ async def test_kyber_allows_operator(dq):
 
 
 async def test_kyber_tenants_aggregate_only(dq):
+    await dq.iq.report_score(
+        "tenant-a",
+        "tenant",
+        {field: 0.8 for field in dq.models.QUALITY_DIMENSIONS},
+    )
     data = unwrap(await dq.routes.intelligence_quality_tenants(req("ops", permissions=OP_PERMS), tenant_ids=None))
     assert data["items"]
     for row in data["items"]:
@@ -146,13 +157,27 @@ async def test_kyber_tenants_aggregate_only(dq):
 
 # ── drift lifecycle ────────────────────────────────────────────────────────────
 
-async def test_drift_seed_list_ack_resolve(dq):
+async def test_drift_create_list_ack_resolve(dq):
+    created = await dq.drift.create(
+        {
+            "drift_event_id": "drift_test_reco_quality",
+            "tenant_id": None,
+            "drift_type": "recommendation_quality_drift",
+            "severity": "medium",
+            "source": "test_monitor",
+            "reason": "quality threshold crossed",
+            "supporting_metrics": {"quality_score": 0.4},
+            "recommended_action": "Review the monitor evidence.",
+        }
+    )
     items = await dq.drift.list()
-    assert len(items) >= 3
+    assert [item["drift_event_id"] for item in items] == [created["drift_event_id"]]
     op = req("ops", permissions=OP_PERMS)
-    acked = unwrap(await dq.routes.intelligence_quality_acknowledge("drift_seed_reco_quality", op))
+    acked = unwrap(await dq.routes.intelligence_quality_acknowledge(created["drift_event_id"], op))
     assert acked["status"] == "acknowledged"
-    resolved = unwrap(await dq.routes.intelligence_quality_resolve("drift_seed_reco_quality", op, dq.routes.DriftResolve(resolution_note="ok")))
+    resolved = unwrap(await dq.routes.intelligence_quality_resolve(
+        created["drift_event_id"], op, dq.routes.DriftResolve(resolution_note="ok")
+    ))
     assert resolved["status"] == "resolved"
 
 

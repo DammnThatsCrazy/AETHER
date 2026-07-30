@@ -160,10 +160,13 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 - **All pages:** `LifecycleTraceView` component for evidence inspection.
 - **Adapters:** `lib/api/commerce.ts` (`commerceApi`, `approvalsApi`, `entitlementsApi`, `commerceDiagnosticsApi`).
 - **Schemas:** `lib/schemas/commerce.ts` (all responses Zod-validated).
-- **Fixtures:** `fixtures/commerce.ts` (deterministic for mock/Lab mode).
+- **Test data:** deterministic commerce records are isolated to test-only paths
+  and cannot enter the Kyber production bundle.
 - **Hooks:** `features/approvals`, `features/commerce`, `features/entitlements`.
 
-All Kyber actions hit real backend APIs and emit real events. In mock mode (`VITE_KYBER_ENV=local-mocked`) fixtures are used deterministically.
+All Kyber reads and actions use real backend APIs. Failed mutations remain
+failed in the UI and never update browser state as though the backend accepted
+them.
 
 ## 11. Operator runbook (stuck approval)
 

@@ -36,8 +36,9 @@ describe('resolveDestinationAvailability', () => {
     expect(resolveDestinationAvailability(caps(), undefined)).toBe('available');
   });
 
-  it('is available before capabilities load (server still hard-denies)', () => {
-    expect(resolveDestinationAvailability(null, { domain: 'stablecoins' })).toBe('available');
+  it('fails closed before required capabilities load', () => {
+    expect(resolveDestinationAvailability(null, { domain: 'stablecoins' })).toBe('unavailable');
+    expect(resolveDestinationAvailability(null, undefined)).toBe('available');
   });
 
   it('marks an excluded domain not_in_release (plural matches singular)', () => {
@@ -50,7 +51,7 @@ describe('resolveDestinationAvailability', () => {
     expect(resolveDestinationAvailability(caps(), { domain: 'profile' })).toBe('available');
   });
 
-  it('disables an explicitly-off flag but allows on/unknown', () => {
+  it('disables an explicitly-off flag, allows on, and fails closed for unknown', () => {
     expect(
       resolveDestinationAvailability(caps({}, { connectors_enabled: false }), {
         flag: 'connectors_enabled',
@@ -61,7 +62,7 @@ describe('resolveDestinationAvailability', () => {
         flag: 'connectors_enabled',
       }),
     ).toBe('available');
-    expect(resolveDestinationAvailability(caps(), { flag: 'unknown_flag' })).toBe('available');
+    expect(resolveDestinationAvailability(caps(), { flag: 'unknown_flag' })).toBe('unavailable');
   });
 });
 
@@ -72,8 +73,9 @@ describe('isDomainExcluded / isDestinationVisible', () => {
     expect(isDomainExcluded(caps(), 'identity')).toBe(false);
   });
 
-  it('isDestinationVisible is false only for excluded/disabled', () => {
+  it('isDestinationVisible is false for excluded, disabled, and unavailable', () => {
     expect(isDestinationVisible(caps(), { domain: 'payments' })).toBe(false);
     expect(isDestinationVisible(caps(), { domain: 'identity' })).toBe(true);
+    expect(isDestinationVisible(null, { domain: 'identity' })).toBe(false);
   });
 });

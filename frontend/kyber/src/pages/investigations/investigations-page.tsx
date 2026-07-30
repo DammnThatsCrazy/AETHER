@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
-  DataTable, EmptyState, GlyphIcon, LoadingState, Modal,
+  DataTable, EmptyState, ErrorState, GlyphIcon, LoadingState, Modal,
   ModalBody, ModalFooter, ModalHeader, ScrollArea, Skeleton,
   TerminalSeparator, useToast, useQuery, useMutation,
   formatDateTime, useTimeContext, type TimeContext,
@@ -43,7 +43,7 @@ function CaseListView() {
   const [newTitle, setNewTitle] = useState('');
   const { toast } = useToast();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     key: 'investigations:list',
     fetcher: () => api.investigations.list(''),
     staleTime: 20_000,
@@ -93,11 +93,13 @@ function CaseListView() {
 
       {isLoading ? (
         <div className="space-y-2">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12" />)}</div>
+      ) : error ? (
+        <ErrorState title="Investigations unavailable" message={error} />
       ) : cases.length === 0 ? (
         <EmptyState title="No investigations" description="No open cases. Create one to begin tracking an entity-linked investigation." />
       ) : (
         <DataTable<CaseRow>
-          keyExtractor={c => String(c.case_id ?? c.id ?? Math.random())}
+          keyExtractor={c => String(c.case_id ?? c.id ?? `${c.title ?? 'unknown'}:${c.created_at ?? 'undated'}`)}
           data={cases}
           emptyMessage="No cases"
           columns={[
@@ -181,7 +183,7 @@ function CaseDetailView({ caseId }: { caseId: string }) {
   const [noteText, setNoteText] = useState('');
   const [transitionModal, setTransitionModal] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     key: `investigations:${caseId}`,
     fetcher: () => api.investigations.get(caseId, ''),
     staleTime: 20_000,
@@ -203,6 +205,7 @@ function CaseDetailView({ caseId }: { caseId: string }) {
   });
 
   if (isLoading) return <LoadingState lines={8} className="p-6" />;
+  if (error) return <ErrorState title="Investigation unavailable" message={error} />;
   if (!data) return <EmptyState title="Case not found" description={`No investigation with ID: ${caseId}`} />;
 
   const d = asRec(data as unknown);

@@ -6,9 +6,14 @@ import {
   TabsContent, TabsList, TabsTrigger, formatUSD,
   formatCount, useTimeContext,
 } from '@aether/ui';
+import { TruthBanner, encodeExplorationContext } from '@aether/ui/exploration';
 import { useCampaigns, usePlatformOverview, useAutomationInsights } from '@aether-app/features/campaigns/use-campaigns';
 import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
 import { useMappingReviews } from '@aether-app/features/campaigns/use-mapping-review';
+import {
+  useCampaignExploration,
+  type CampaignExplorationRow,
+} from '@aether-app/features/campaigns/use-campaign-exploration';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -407,6 +412,91 @@ function AttributionOverviewTab() {
   );
 }
 
+export function CampaignExplorationTab() {
+  const navigate = useNavigate();
+  const timeCtx = useTimeContext();
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<readonly string[]>([]);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const { data: envelope, isLoading, error, client, context } = useCampaignExploration(cursor);
+  const rows = envelope?.data?.campaigns ?? [];
+  const adapterAvailable = envelope?.execution.adapters.includes('campaign360') ?? false;
+
+  async function openCampaign(row: CampaignExplorationRow) {
+    setLinkError(null);
+    try {
+      const resolved = await client.resolveLink({
+        context,
+        to: 'campaign360',
+        focus: { kind: 'campaign', id: row.campaign_id },
+      });
+      if (!resolved.adapter_available) {
+        setLinkError('Campaign exploration is unavailable in this release.');
+        return;
+      }
+      navigate(`/campaigns/${encodeURIComponent(row.campaign_id)}?${encodeExplorationContext(resolved.link.context)}`);
+    } catch (reason) {
+      setLinkError(reason instanceof Error ? reason.message : 'Unable to preserve exploration context.');
+    }
+  }
+
+  if (error) return <ErrorState title="Campaign exploration unavailable" message={error} />;
+  if (isLoading && !envelope) return <LoadingState lines={5} />;
+  if (envelope && !adapterAvailable) {
+    return <TruthBanner status="not_enabled" surfaceLabel="Campaign exploration" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {envelope && (
+        <TruthBanner
+          status="ready"
+          truth={envelope.truth}
+          completeness={envelope.completeness}
+          applicability={envelope.applicability}
+        />
+      )}
+      {linkError && <ErrorState title="Unable to open campaign" message={linkError} />}
+      <DataTable<CampaignExplorationRow>
+        caption="Campaign exploration results"
+        columns={[
+          {
+            key: 'campaign_id',
+            header: 'Campaign',
+            render: (row) => <code>{row.campaign_id}</code>,
+          },
+          {
+            key: 'count',
+            header: 'Attributed nodes',
+            render: (row) => formatCount(row.count, timeCtx),
+          },
+        ]}
+        data={rows}
+        keyExtractor={(row) => row.campaign_id}
+        onRowClick={(row) => void openCampaign(row)}
+        loading={isLoading}
+        selection={{ selectedKeys, onSelectionChange: setSelectedKeys }}
+        page={{
+          returned: rows.length,
+          ...(envelope?.pagination?.total_estimate !== undefined
+            ? { total: envelope.pagination.total_estimate }
+            : {}),
+          ...(envelope?.pagination?.cursor !== undefined
+            ? { nextCursor: envelope.pagination.cursor }
+            : {}),
+          onNext: setCursor,
+        }}
+        emptyMessage="No attributed campaign nodes match this exploration."
+      />
+      {(envelope?.data?.unattributed_count ?? 0) > 0 && (
+        <p className="text-xs text-text-muted">
+          {envelope!.data!.unattributed_count} returned nodes have no asserted campaign attribution.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Campaign Intelligence overview strip ──────────────────────────────────────
 
 function CampaignIntelligenceStrip() {
@@ -516,6 +606,7 @@ export function CampaignsPage() {
           <TabsTrigger value="active">Active</TabsTrigger>
           <TabsTrigger value="all">All campaigns</TabsTrigger>
           <TabsTrigger value="attribution">Attribution</TabsTrigger>
+          <TabsTrigger value="exploration">Exploration</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -532,6 +623,10 @@ export function CampaignsPage() {
 
         <TabsContent value="attribution">
           <AttributionOverviewTab />
+        </TabsContent>
+
+        <TabsContent value="exploration">
+          <CampaignExplorationTab />
         </TabsContent>
       </Tabs>
     </div>

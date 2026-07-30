@@ -18,6 +18,7 @@ import {
   type ExplorationState,
 } from './store';
 import { encodeExplorationContext, decodeExplorationContext } from './url-codec';
+import type { ExplorationClient } from './client';
 
 function defaultContext(tenantId: string, surface: string): ExplorationContextV1 {
   const temporal: TemporalSelection = { mode: 'window', field: 'occurred_at', timezone: 'UTC' };
@@ -47,6 +48,8 @@ function sameContext(a: ExplorationContextV1, b: ExplorationContextV1): boolean 
 interface ExplorationContextValue {
   store: Store<ExplorationState>;
   actions: ExplorationActions;
+  /** Mounted app transport for the canonical `/v1/explore` routes. */
+  client?: ExplorationClient | undefined;
   /** Encode the current context to a query string; the host syncs it to the URL. */
   toQuery: () => string;
 }
@@ -58,10 +61,12 @@ export interface ExplorationProviderProps {
   surface: string;
   /** Authoritative URL query string (no leading '?'); decoded into initial state. */
   query?: string;
+  /** App-owned authenticated transport; required by mounted production hosts. */
+  client?: ExplorationClient;
   children: ReactNode;
 }
 
-export function ExplorationProvider({ tenantId, surface, query, children }: ExplorationProviderProps) {
+export function ExplorationProvider({ tenantId, surface, query, client, children }: ExplorationProviderProps) {
   const storeRef = useRef<Store<ExplorationState> | null>(null);
   if (storeRef.current === null) {
     storeRef.current = createExplorationStore(contextForProps(tenantId, surface, query));
@@ -80,8 +85,8 @@ export function ExplorationProvider({ tenantId, surface, query, children }: Expl
     }
   }, [query, tenantId, surface, store, actions]);
   const value = useMemo<ExplorationContextValue>(
-    () => ({ store, actions, toQuery: () => encodeExplorationContext(store.getState().context) }),
-    [store, actions],
+    () => ({ store, actions, client, toQuery: () => encodeExplorationContext(store.getState().context) }),
+    [store, actions, client],
   );
   return <ExplorationReactContext.Provider value={value}>{children}</ExplorationReactContext.Provider>;
 }
@@ -99,6 +104,14 @@ export function useExplorationSelector<S>(selector: (state: ExplorationState) =>
 
 export function useExplorationContext(): ExplorationContextV1 {
   return useExplorationSelector((s) => s.context);
+}
+
+export function useExplorationClient(): ExplorationClient {
+  const { client } = useExploration();
+  if (!client) {
+    throw new Error('The mounted ExplorationProvider has no authenticated exploration client');
+  }
+  return client;
 }
 
 export function useExplorationStatus(): ExplorationState['status'] {

@@ -17,7 +17,7 @@ export function SuggestionFeed({ suggestions, loading, error }: SuggestionFeedPr
   return (
     <div className="space-y-3">
       {suggestions.map((s) => (
-        <SuggestionCard key={s.suggestion_id ?? s.id ?? Math.random()} suggestion={s} />
+        <SuggestionCard key={s.suggestion_id ?? s.id ?? `${s.title ?? 'unknown'}:${s.created_at ?? 'undated'}`} suggestion={s} />
       ))}
     </div>
   );

@@ -6,6 +6,7 @@ import {
   DataTable, Tabs, TabsList, TabsTrigger, TabsContent,
   cn,
 } from '@aether/ui';
+import { TruthBanner } from '@aether/ui/exploration';
 import { GraphCanvas } from '@aether-app/components/graph/graph-canvas';
 import {
   useGraphData,
@@ -18,16 +19,20 @@ import { api } from '@aether-app/lib/api/endpoints';
 
 // ── Tenant ID resolution ──────────────────────────────────────────────────────
 
-function useTenantId(): string {
+function useTenantId(): { tenantId: string; loading: boolean; error: string | null } {
   const [tenantId, setTenantId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api.me.profile().then(data => {
       const r = data as Record<string, unknown>;
       const id = String(r['tenant_id'] ?? r['tenantId'] ?? '');
-      if (id) setTenantId(id);
-    }).catch(() => {});
+      if (!id) throw new Error('Authenticated profile omitted tenant identity');
+      setTenantId(id);
+    }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
   }, []);
-  return tenantId;
+  return { tenantId, loading, error };
 }
 
 // ── Cluster Inspector ─────────────────────────────────────────────────────────
@@ -132,15 +137,14 @@ function FraudInvestigationAction({ nodeId, nodeLabel, tenantId }: { nodeId: str
 // ── Inspector ─────────────────────────────────────────────────────────────────
 
 function ScoreBar({ label, value, colorFn }: { label: string; value: number | undefined; colorFn: (v: number) => string }) {
-  const v = value ?? 0;
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-text-secondary">{label}</span>
-        <span className="font-mono text-text-primary">{v.toFixed(2)}</span>
+        <span className="font-mono text-text-primary">{value?.toFixed(2) ?? '—'}</span>
       </div>
       <div className="h-1.5 w-full bg-surface-overlay rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${v * 100}%`, backgroundColor: colorFn(v) }} />
+        {value != null && <div className="h-full rounded-full transition-all" style={{ width: `${value * 100}%`, backgroundColor: colorFn(value) }} />}
       </div>
     </div>
   );
@@ -345,8 +349,8 @@ const OVERLAYS: { value: GraphOverlay; label: string }[] = [
 const NODE_COLUMNS = [
   { key: 'label', header: 'Entity', render: (n: GraphNode) => <span className="font-mono text-text-primary text-xs">{n.label}</span> },
   { key: 'kind', header: 'Kind', render: (n: GraphNode) => <Badge size="sm">{n.kind}</Badge> },
-  { key: 'trust', header: 'Trust', render: (n: GraphNode) => <span className={cn('font-mono text-xs', (n.trustScore ?? 0) >= 0.5 ? 'text-success' : 'text-danger')}>{n.trustScore?.toFixed(2) ?? '—'}</span> },
-  { key: 'risk', header: 'Risk', render: (n: GraphNode) => <span className={cn('font-mono text-xs', (n.riskScore ?? 0) >= 0.5 ? 'text-danger' : 'text-success')}>{n.riskScore?.toFixed(2) ?? '—'}</span> },
+  { key: 'trust', header: 'Trust', render: (n: GraphNode) => <span className={cn('font-mono text-xs', n.trustScore == null ? 'text-text-muted' : n.trustScore >= 0.5 ? 'text-success' : 'text-danger')}>{n.trustScore?.toFixed(2) ?? '—'}</span> },
+  { key: 'risk', header: 'Risk', render: (n: GraphNode) => <span className={cn('font-mono text-xs', n.riskScore == null ? 'text-text-muted' : n.riskScore >= 0.5 ? 'text-danger' : 'text-success')}>{n.riskScore?.toFixed(2) ?? '—'}</span> },
   { key: 'id', header: 'ID', render: (n: GraphNode) => <code className="text-[10px] text-text-muted truncate max-w-[120px] block">{n.id}</code> },
 ];
 
@@ -354,16 +358,18 @@ const NODE_COLUMNS = [
 
 export function GraphPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
   const deepLinkedCluster = searchParams.get('cluster');
 
   // Declared before useGraphData so they can be passed as options
   const [replayDate, setReplayDate] = useState<string | null>(null);
-  const tenantId = useTenantId();
+  const tenant = useTenantId();
+  const { tenantId } = tenant;
 
   const {
     nodes, edges, clusters,
-    isLoading, error,
+    isLoading, error, status, truth, completeness, applicability,
     activeLayer, setActiveLayer,
     overlay, setOverlay,
     getNeighbors,
@@ -517,7 +523,9 @@ export function GraphPage() {
       const resp = await api.graphIntelligence.explain({ tenant_id: tenantId, path_id: pathId });
       const exp = (resp as { data?: PathExplanation }).data;
       if (exp) setPathExplanations(prev => ({ ...prev, [pathId]: exp }));
-    } catch { /* ignore */ }
+    } catch (e) {
+      setPathError(e instanceof Error ? e.message : 'Path explanation unavailable.');
+    }
   }, [pathExplanations, tenantId]);
 
   const handleSaveToInvestigation = useCallback(async (pathId: string, snapshotId?: string) => {
@@ -531,30 +539,45 @@ export function GraphPage() {
       if (snapshotId) {
         // Best-effort: attach snapshot to new case (would need caseId from create response)
       }
-    } catch { /* ignore */ }
+    } catch (e) {
+      setPathError(e instanceof Error ? e.message : 'Unable to save investigation.');
+    }
   }, [tenantId]);
 
-  if (error) {
-    return (
-      <div className="p-8">
-        <ErrorState title="Failed to load graph" message={error} />
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="p-8">
-        <LoadingState lines={6} />
-      </div>
-    );
-  }
-
-  // ── Summary stats derived from current graph data ─────────────────────────
+  // Keep derived hooks above loading/error returns so tenant bootstrap does not
+  // change hook order between renders.
   const riskAlertCount = useMemo(
-    () => nodes.filter(n => (n.riskScore ?? 0) >= 0.7).length,
+    () => nodes.filter(n => n.riskScore != null && n.riskScore >= 0.7).length,
     [nodes],
   );
+  const explorationStatus = status ?? (error ? 'error' : isLoading ? 'loading' : 'ready');
+
+  if (tenant.error || error) {
+    return (
+      <div className="p-8">
+        {tenant.error ? (
+          <ErrorState title="Failed to load graph" message={tenant.error} />
+        ) : (
+          <div className="space-y-3">
+            <h1 className="text-lg font-semibold text-text-primary">Failed to load graph</h1>
+            <TruthBanner
+              status={explorationStatus}
+              surfaceLabel="Graph exploration"
+              error={error}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (tenant.loading || isLoading) {
+    return (
+      <div className="p-8">
+        <TruthBanner status="loading" surfaceLabel="Graph exploration" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-4 h-full flex flex-col">
@@ -567,10 +590,29 @@ export function GraphPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const query = searchParams.toString();
+              navigate(query ? `/compare?${query}` : '/compare');
+            }}
+          >
+            Compare
+          </Button>
           <Button variant={viewMode === 'graph' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('graph')}>Graph</Button>
           <Button variant={viewMode === 'table' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('table')}>Table</Button>
         </div>
       </div>
+
+      <TruthBanner
+        status={explorationStatus}
+        surfaceLabel="Graph exploration"
+        truth={truth}
+        completeness={completeness}
+        applicability={applicability}
+        error={error}
+      />
 
       {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

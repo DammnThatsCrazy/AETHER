@@ -34,7 +34,6 @@ class CredentialReadiness(str, Enum):
     ``DISABLED`` are off-ramp states — a provider that regressed or was pulled.
     """
 
-    MOCKED_LOCAL = "mocked_local"
     REPLAY_VALIDATED = "replay_validated"
     CREDENTIAL_WAITING = "credential_waiting"
     SANDBOX_VALIDATED = "sandbox_validated"
@@ -47,7 +46,6 @@ class CredentialReadiness(str, Enum):
 # Lossless projection of the existing connector taxonomy onto readiness tokens.
 # Every ImplementationStatus member MUST appear here (a test asserts coverage).
 IMPLEMENTATION_STATUS_TO_READINESS: dict[ImplementationStatus, CredentialReadiness] = {
-    ImplementationStatus.MOCKED_LOCAL: CredentialReadiness.MOCKED_LOCAL,
     ImplementationStatus.SCAFFOLDED: CredentialReadiness.SCAFFOLDED,
     ImplementationStatus.PRODUCTION_SHAPED: CredentialReadiness.CREDENTIAL_WAITING,
     ImplementationStatus.CREDENTIAL_GATED: CredentialReadiness.CREDENTIAL_WAITING,
@@ -64,7 +62,6 @@ IMPLEMENTATION_STATUS_TO_READINESS: dict[ImplementationStatus, CredentialReadine
 _READINESS_RANK: dict[CredentialReadiness, int] = {
     CredentialReadiness.DISABLED: -2,
     CredentialReadiness.DEGRADED: -1,
-    CredentialReadiness.MOCKED_LOCAL: 0,
     CredentialReadiness.SCAFFOLDED: 1,
     CredentialReadiness.CREDENTIAL_WAITING: 2,
     CredentialReadiness.REPLAY_VALIDATED: 3,
@@ -89,8 +86,8 @@ def to_readiness(status: ImplementationStatus) -> CredentialReadiness:
 def readiness_rank(r: CredentialReadiness) -> int:
     """Ordinal rank for a readiness token.
 
-    MOCKED_LOCAL < SCAFFOLDED < CREDENTIAL_WAITING < REPLAY_VALIDATED
-    < SANDBOX_VALIDATED < PARTNER_LIVE. DEGRADED/DISABLED rank below all of them.
+    SCAFFOLDED < CREDENTIAL_WAITING < REPLAY_VALIDATED < SANDBOX_VALIDATED
+    < PARTNER_LIVE. DEGRADED/DISABLED rank below all of them.
     Enables "at least CREDENTIAL_WAITING" assertions via ``>=``.
     """
     try:
@@ -160,8 +157,6 @@ class ReadinessDimensions(BaseModel):
             return CredentialReadiness.SANDBOX_VALIDATED
         if d.replay_validated:
             return CredentialReadiness.REPLAY_VALIDATED
-        if d.code_complete and not d.credential_required:
-            return CredentialReadiness.MOCKED_LOCAL
         if d.code_complete and d.infra_defined:
             return CredentialReadiness.CREDENTIAL_WAITING
         return CredentialReadiness.SCAFFOLDED

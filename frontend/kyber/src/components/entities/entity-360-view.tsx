@@ -214,6 +214,10 @@ export function Entity360View({
   const [drillStack, setDrillStack] = useState<Profile360DrillItem[]>([]);
   const [graphOverlay, setGraphOverlay] = useState<GraphOverlay>('none');
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<readonly string[]>([]);
+  const allScoresAvailable =
+    entity.trustScore !== null &&
+    entity.riskScore !== null &&
+    entity.anomalyScore !== null;
 
   const connectedEntities = useMemo(() => {
     if (!neighborhood) return [];
@@ -320,11 +324,11 @@ export function Entity360View({
                   </div>
                   <div>
                     <span className="text-neutral-500">Created:</span>{' '}
-                    <span className="text-neutral-400 text-xs">{formatDateTime(entity.createdAt, timeCtx)}</span>
+                    <span className="text-neutral-400 text-xs">{entity.createdAt ? formatDateTime(entity.createdAt, timeCtx) : 'Unavailable'}</span>
                   </div>
                   <div>
                     <span className="text-neutral-500">Updated:</span>{' '}
-                    <span className="text-neutral-400 text-xs">{formatRelative(entity.updatedAt, timeCtx, now)}</span>
+                    <span className="text-neutral-400 text-xs">{entity.updatedAt ? formatRelative(entity.updatedAt, timeCtx, now) : 'Unavailable'}</span>
                   </div>
                   <div className="col-span-2">
                     <span className="text-neutral-500">Tags:</span>{' '}
@@ -361,9 +365,11 @@ export function Entity360View({
                       What the entity experienced
                     </div>
                     <p className="text-sm text-neutral-300">
-                      {entity.needsHelp
-                        ? `Service disruption detected. ${entity.health.message ?? 'Health status is not nominal.'} The entity may be experiencing degraded functionality or delayed responses.`
-                        : `Normal operation. All interactions are proceeding within expected parameters. No user-facing impact detected.`}
+                      {entity.needsHelp === true
+                        ? `Service disruption detected. ${entity.health.message ?? 'The backend reported that this entity needs help.'}`
+                        : entity.needsHelp === false
+                          ? 'The backend reported no current needs-help disposition.'
+                          : 'No needs-help disposition is available.'}
                     </p>
                   </div>
                   <div>
@@ -371,9 +377,9 @@ export function Entity360View({
                       What KYBER detected
                     </div>
                     <p className="text-sm text-neutral-300">
-                      {entity.needsHelp
-                        ? `${entity.needsHelpReason ?? 'Anomaly detected.'} Trust: ${entity.trustScore.toFixed(2)}, Risk: ${entity.riskScore.toFixed(2)}, Anomaly: ${entity.anomalyScore.toFixed(2)}. Automated triage has flagged this entity for human review.`
-                        : `Entity is within normal operating bounds. Trust score is ${entity.trustScore >= 0.7 ? 'strong' : 'moderate'} at ${entity.trustScore.toFixed(2)}. Risk indicators are ${entity.riskScore < 0.3 ? 'low' : 'elevated'}.`}
+                      {allScoresAvailable
+                        ? `Backend scores — Trust: ${entity.trustScore!.toFixed(2)}, Risk: ${entity.riskScore!.toFixed(2)}, Anomaly: ${entity.anomalyScore!.toFixed(2)}.`
+                        : 'Trust, risk, or anomaly evidence is unavailable; no operating conclusion is inferred.'}
                     </p>
                   </div>
                 </div>
@@ -381,7 +387,7 @@ export function Entity360View({
             </Card>
 
             {/* Explanation Trace */}
-            {(entity.needsHelp || entity.anomalyScore > 0.4) && (
+            {allScoresAvailable && (entity.needsHelp === true || entity.anomalyScore! > 0.4) && (
               <Card className="border-amber-400/20">
                 <CardHeader>
                   <CardTitle className="text-amber-400">Explanation Trace</CardTitle>
@@ -390,15 +396,15 @@ export function Entity360View({
                   <ol className="list-decimal list-inside space-y-2 text-sm text-neutral-300">
                     <li>
                       Entity <span className="font-mono text-neutral-200">{entity.id}</span> flagged by anomaly detector
-                      (score: {entity.anomalyScore.toFixed(2)})
+                      (score: {entity.anomalyScore!.toFixed(2)})
                     </li>
                     <li>
-                      Trust score evaluated at {entity.trustScore.toFixed(2)}{' '}
-                      {entity.trustScore < 0.7 ? '(below threshold)' : '(within bounds)'}
+                      Trust score evaluated at {entity.trustScore!.toFixed(2)}{' '}
+                      {entity.trustScore! < 0.7 ? '(below threshold)' : '(within bounds)'}
                     </li>
                     <li>
-                      Risk assessment: {entity.riskScore.toFixed(2)}{' '}
-                      {entity.riskScore > 0.5 ? '-- elevated risk triggers review' : '-- within acceptable range'}
+                      Risk assessment: {entity.riskScore!.toFixed(2)}{' '}
+                      {entity.riskScore! > 0.5 ? '-- elevated risk triggers review' : '-- within acceptable range'}
                     </li>
                     {entity.needsHelp && (
                       <li>
@@ -603,6 +609,12 @@ export function Entity360View({
                 <CardTitle>Score Analysis</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {!allScoresAvailable ? (
+                  <div className="py-8 text-center text-sm text-text-muted">
+                    Trust, risk, and anomaly scores are unavailable until the backend returns measured evidence.
+                  </div>
+                ) : (
+                  <>
                 <div>
                   <div className="text-xs uppercase tracking-wider text-neutral-500 mb-1">Trust Score</div>
                   <div className="flex items-center gap-3">
@@ -610,18 +622,18 @@ export function Entity360View({
                       <div
                         className={cn(
                           'h-2 rounded-full',
-                          entity.trustScore > 0.7 ? 'bg-green-400' :
-                          entity.trustScore >= 0.4 ? 'bg-yellow-400' : 'bg-red-400',
+                          entity.trustScore! > 0.7 ? 'bg-green-400' :
+                          entity.trustScore! >= 0.4 ? 'bg-yellow-400' : 'bg-red-400',
                         )}
-                        style={{ width: `${entity.trustScore * 100}%` }}
+                        style={{ width: `${entity.trustScore! * 100}%` }}
                       />
                     </div>
-                    <span className="text-sm font-mono w-12 text-right">{entity.trustScore.toFixed(2)}</span>
+                    <span className="text-sm font-mono w-12 text-right">{entity.trustScore!.toFixed(2)}</span>
                   </div>
                   <p className="text-xs text-neutral-500 mt-1">
-                    {entity.trustScore > 0.7
+                    {entity.trustScore! > 0.7
                       ? 'Entity trust is within healthy bounds. Historical behavior is consistent and verified.'
-                      : entity.trustScore >= 0.4
+                      : entity.trustScore! >= 0.4
                         ? 'Entity trust is moderate. Some behaviors or associations warrant monitoring.'
                         : 'Entity trust is critically low. Immediate review recommended.'}
                   </p>
@@ -634,18 +646,18 @@ export function Entity360View({
                       <div
                         className={cn(
                           'h-2 rounded-full',
-                          entity.riskScore < 0.3 ? 'bg-green-400' :
-                          entity.riskScore <= 0.6 ? 'bg-yellow-400' : 'bg-red-400',
+                          entity.riskScore! < 0.3 ? 'bg-green-400' :
+                          entity.riskScore! <= 0.6 ? 'bg-yellow-400' : 'bg-red-400',
                         )}
-                        style={{ width: `${entity.riskScore * 100}%` }}
+                        style={{ width: `${entity.riskScore! * 100}%` }}
                       />
                     </div>
-                    <span className="text-sm font-mono w-12 text-right">{entity.riskScore.toFixed(2)}</span>
+                    <span className="text-sm font-mono w-12 text-right">{entity.riskScore!.toFixed(2)}</span>
                   </div>
                   <p className="text-xs text-neutral-500 mt-1">
-                    {entity.riskScore < 0.3
+                    {entity.riskScore! < 0.3
                       ? 'Risk indicators are low. No concerning patterns detected.'
-                      : entity.riskScore <= 0.6
+                      : entity.riskScore! <= 0.6
                         ? 'Moderate risk detected. Some indicators elevated above baseline.'
                         : 'High risk. Multiple risk indicators are triggered. Escalation may be required.'}
                   </p>
@@ -658,22 +670,24 @@ export function Entity360View({
                       <div
                         className={cn(
                           'h-2 rounded-full',
-                          entity.anomalyScore < 0.3 ? 'bg-green-400' :
-                          entity.anomalyScore <= 0.6 ? 'bg-yellow-400' : 'bg-red-400',
+                          entity.anomalyScore! < 0.3 ? 'bg-green-400' :
+                          entity.anomalyScore! <= 0.6 ? 'bg-yellow-400' : 'bg-red-400',
                         )}
-                        style={{ width: `${entity.anomalyScore * 100}%` }}
+                        style={{ width: `${entity.anomalyScore! * 100}%` }}
                       />
                     </div>
-                    <span className="text-sm font-mono w-12 text-right">{entity.anomalyScore.toFixed(2)}</span>
+                    <span className="text-sm font-mono w-12 text-right">{entity.anomalyScore!.toFixed(2)}</span>
                   </div>
                   <p className="text-xs text-neutral-500 mt-1">
-                    {entity.anomalyScore < 0.3
+                    {entity.anomalyScore! < 0.3
                       ? 'Behavior is within expected norms. No anomalies detected.'
-                      : entity.anomalyScore <= 0.6
+                      : entity.anomalyScore! <= 0.6
                         ? 'Mild anomalous patterns detected. May be transient or require investigation.'
                         : 'Significant anomalous behavior detected. Entity deviates substantially from expected patterns.'}
                   </p>
                 </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

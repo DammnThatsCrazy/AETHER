@@ -5,8 +5,7 @@ import { setupServer } from 'msw/node';
 
 import { SemanticOverlayPanel } from '@aether-app/pages/journey-explorer/journey-explorer-page';
 
-// Requests use relative paths (/v1/...) which resolve against the jsdom origin.
-const API = '';
+const API = 'http://localhost:8000';
 
 function envelope(data: unknown) {
   return { data, status: 'ok', timestamp: new Date().toISOString() };

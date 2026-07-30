@@ -7,7 +7,7 @@ export function useGeoSummary(params?: { level?: string; geo_id?: string; window
   const cacheKey = `geo:summary:${params?.level ?? 'global'}:${params?.geo_id ?? ''}:${params?.window ?? '30d'}`;
   return useQuery({
     key: cacheKey,
-    fetcher: () => api.geo.summary(params).catch(() => null),
+    fetcher: () => api.geo.summary(params),
     staleTime: STALE,
   });
 }
@@ -16,7 +16,7 @@ export function useGeoEntities(params: { level: string; geo_id: string; window?:
   const cacheKey = `geo:entities:${params.level}:${params.geo_id}:${params.window ?? '30d'}:${params.offset ?? 0}`;
   return useQuery({
     key: cacheKey,
-    fetcher: () => api.geo.entities(params).catch(() => null),
+    fetcher: () => api.geo.entities(params),
     staleTime: STALE,
   });
 }

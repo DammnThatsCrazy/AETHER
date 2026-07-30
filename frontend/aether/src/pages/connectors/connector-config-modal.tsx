@@ -20,6 +20,43 @@ interface Props {
 
 type Step = 'configure' | 'testing' | 'done' | 'error';
 
+type ConnectorConfigureResult = {
+  readonly connector_type?: unknown;
+  readonly enabled?: unknown;
+};
+
+type ConnectorTestResult = {
+  readonly connector_type?: unknown;
+  readonly ok?: unknown;
+  readonly status?: unknown;
+  readonly detail?: unknown;
+};
+
+export function connectorSavePostcondition(
+  result: unknown,
+  connectorType: string,
+  enabled: boolean,
+): string | null {
+  if (!result || typeof result !== 'object') return 'The server did not return the saved connector configuration.';
+  const saved = result as ConnectorConfigureResult;
+  if (saved.connector_type !== connectorType) return 'The saved configuration was returned for a different connector.';
+  if (saved.enabled !== enabled) return 'The saved connector state does not match the requested enabled state.';
+  return null;
+}
+
+export function connectorTestPostcondition(result: unknown, connectorType: string): string | null {
+  if (!result || typeof result !== 'object') return 'The server did not return a connection-test result.';
+  const tested = result as ConnectorTestResult;
+  if (tested.connector_type !== connectorType) return 'The connection test was returned for a different connector.';
+  if (tested.ok !== true) {
+    const detail = typeof tested.detail === 'string' && tested.detail.trim()
+      ? tested.detail
+      : String(tested.status ?? 'connection test did not pass');
+    return detail;
+  }
+  return null;
+}
+
 export function ConnectorConfigModal({ connector, onClose, onSaved }: Props) {
   const [secret, setSecret] = useState('');
   const [name, setName] = useState(connector.label);
@@ -39,19 +76,27 @@ export function ConnectorConfigModal({ connector, onClose, onSaved }: Props) {
       };
       if (secret.trim()) body['credential'] = secret.trim();
 
-      await api.connectors.configure(connector.connector_type, body);
+      const saved = await api.connectors.configure(connector.connector_type, body);
+      const saveFailure = connectorSavePostcondition(saved, connector.connector_type, enabled);
+      if (saveFailure) throw new Error(saveFailure);
 
       if (enabled) {
         try {
-          await api.connectors.test(connector.connector_type);
-          setTestResult('ok');
-        } catch {
+          const tested = await api.connectors.test(connector.connector_type);
+          const testFailure = connectorTestPostcondition(tested, connector.connector_type);
+          if (testFailure) {
+            setErrorMsg(testFailure);
+            setTestResult('fail');
+          } else {
+            setTestResult('ok');
+          }
+        } catch (e) {
+          setErrorMsg(e instanceof Error ? e.message : 'Connection test failed');
           setTestResult('fail');
         }
       }
 
       setStep('done');
-      onSaved();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Save failed');
       setStep('error');
@@ -122,7 +167,7 @@ export function ConnectorConfigModal({ connector, onClose, onSaved }: Props) {
             {testResult === 'ok' && <p className="text-xs text-text-muted">Connection test passed.</p>}
             {testResult === 'fail' && (
               <p className="text-xs text-status-warning">
-                Saved, but the connection test failed. Check your credential and try again from the connectors list.
+                Saved, but the connection test failed: {errorMsg || 'check the credential and try again'}.
               </p>
             )}
           </div>
@@ -134,7 +179,9 @@ export function ConnectorConfigModal({ connector, onClose, onSaved }: Props) {
       </ModalBody>
 
       <ModalFooter>
-        {step === 'done' || step === 'error' ? (
+        {step === 'done' ? (
+          <Button variant="secondary" size="sm" onClick={onSaved}>Close</Button>
+        ) : step === 'error' ? (
           <Button variant="secondary" size="sm" onClick={onClose}>Close</Button>
         ) : (
           <>

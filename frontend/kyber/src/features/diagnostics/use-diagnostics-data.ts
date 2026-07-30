@@ -5,6 +5,7 @@ import { api } from '@kyber/lib/api/endpoints';
 interface HealthApiResponse {
   status: string;
   uptime?: number;
+  timestamp?: string;
   services?: Record<string, { status: string; latency_ms?: number; error?: string | null }>;
   [key: string]: unknown;
 }
@@ -27,6 +28,8 @@ interface DiagnosticReportResponse {
   errors?: ErrorsApiResponse['errors'];
   circuit_breakers?: Record<string, { state: string; failures: number; last_failure?: string | null; next_retry?: string | null }>;
   services?: Record<string, unknown>;
+  event_lag?: Partial<{ current_ms: number; avg_ms: number; max_ms: number; trend: string }>;
+  graph_lag?: Partial<{ current_ms: number; avg_ms: number; max_ms: number; trend: string }>;
   [key: string]: unknown;
 }
 
@@ -37,25 +40,33 @@ function mapHealthStatus(raw: string): HealthStatus['status'] {
   return 'unknown';
 }
 
-function mapToSystemHealth(
+export function mapToSystemHealth(
   healthResp: HealthApiResponse,
   errorsResp: ErrorsApiResponse,
   circuitBreakers: Record<string, { state: string; failures: number; last_failure?: string | null; next_retry?: string | null }>,
   report: DiagnosticReportResponse,
 ): SystemHealth {
-  const now = new Date().toISOString();
+  const observedAt = healthResp.timestamp;
+  const lag = (value: DiagnosticReportResponse['event_lag']): SystemHealth['eventLag'] => ({
+    currentMs: typeof value?.current_ms === 'number' ? value.current_ms : null,
+    avgMs: typeof value?.avg_ms === 'number' ? value.avg_ms : null,
+    maxMs: typeof value?.max_ms === 'number' ? value.max_ms : null,
+    trend: value?.trend === 'improving' || value?.trend === 'degrading' || value?.trend === 'stable'
+      ? value.trend
+      : 'unknown',
+  });
 
   const dependencies: DependencyHealth[] = Object.entries(healthResp.services ?? {}).map(([name, svc]) => ({
     name,
     type: 'api' as DependencyHealth['type'],
-    status: { status: mapHealthStatus(svc.status), lastChecked: now },
-    latencyMs: svc.latency_ms ?? 0,
+    status: { status: mapHealthStatus(svc.status), ...(observedAt ? { lastChecked: observedAt } : {}) },
+    latencyMs: svc.latency_ms ?? null,
     lastError: svc.error ?? undefined,
   }));
 
   const cbStates: CircuitBreakerState[] = Object.entries(circuitBreakers).map(([name, cb]) => ({
     name,
-    state: (cb.state === 'closed' || cb.state === 'open' || cb.state === 'half-open' ? cb.state : 'closed') as CircuitBreakerState['state'],
+    state: (cb.state === 'closed' || cb.state === 'open' || cb.state === 'half-open' ? cb.state : 'unknown') as CircuitBreakerState['state'],
     failureCount: cb.failures,
     lastFailure: cb.last_failure ?? undefined,
     nextRetry: cb.next_retry ?? undefined,
@@ -79,13 +90,13 @@ function mapToSystemHealth(
   }
 
   return {
-    overall: { status: mapHealthStatus(healthResp.status), lastChecked: now },
+    overall: { status: mapHealthStatus(healthResp.status), ...(observedAt ? { lastChecked: observedAt } : {}) },
     dependencies,
     circuitBreakers: cbStates,
     errorFingerprints,
     severityDistribution,
-    eventLag: { currentMs: 0, avgMs: 0, maxMs: 0, trend: 'stable' },
-    graphLag: { currentMs: 0, avgMs: 0, maxMs: 0, trend: 'stable' },
+    eventLag: lag(report.event_lag),
+    graphLag: lag(report.graph_lag),
     adapterReadiness: [],
     environmentValidation: [],
   };

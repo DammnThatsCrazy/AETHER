@@ -14,12 +14,15 @@ KYBER uses generic OIDC with Authorization Code Flow + PKCE.
 7. Groups are mapped to KYBER roles
 
 ### Local Development
-In `local-mocked` and `local-live` modes, mock auth is available with a role selector UI. This is disabled in staging and production.
+Local development uses the backend development-session flow. The backend owns
+the identity, permissions, and session cookie; Kyber does not mint a token or
+construct an operator role in the browser. This flow is unavailable outside
+the local environment.
 
 ### Token Management
-- Access tokens stored in memory only (never localStorage)
-- Refresh handled via OIDC provider
-- No secrets in frontend code
+- The backend session is represented by an HttpOnly cookie.
+- Mutations carry the paired CSRF value.
+- No reusable token or secret exists in frontend code or browser storage.
 
 ## Authorization (RBAC)
 

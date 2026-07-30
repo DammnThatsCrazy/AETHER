@@ -206,7 +206,7 @@ AREAS: list[Area] = [
     Area(
         "Kyber (operator console)",
         4,
-        "React SPA with mocked/live/staging/production modes, admin-guarded backend "
+        "React SPA with live local/staging/production modes, admin-guarded backend "
         "routes (/v1/admin/kyber, fleet, drift, intelligence quality), Playwright E2E "
         "in CI. Operator data never mounted on tenant-facing routers.",
         [
@@ -218,8 +218,8 @@ AREAS: list[Area] = [
     Area(
         "customer frontend (tenant app)",
         5,
-        "React SPA with PKCE OIDC auth, typed API client, MSW fixtures isolated to "
-        "local-mocked mode. Full self-serve onboarding flow shipped: 3-step signup "
+        "React SPA with PKCE OIDC auth and a typed, API-only data client. "
+        "Full self-serve onboarding flow shipped: 3-step signup "
         "(email+password → OTP → API key reveal), plan selection (P1-P4), SSO "
         "(Google/Apple/Slack/Microsoft), billing portal (Stripe), API key management, "
         "usage dashboard, and implementation checklist (/v1/onboarding/*). "

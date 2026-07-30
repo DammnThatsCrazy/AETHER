@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard  # noqa: E402
 
 CANONICAL_PROFILES = [
-    "local-mocked", "local-live", "local-full", "demo-static", "demo-live",
+    "local", "local-full", "demo",
     "preview", "staging", "production-lean", "production-scale", "enterprise-isolated",
 ]
 BACKEND_DIMS = ["database", "cache", "event", "graph", "analytics", "object", "ml"]

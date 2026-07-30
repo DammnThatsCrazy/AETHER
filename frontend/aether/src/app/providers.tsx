@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, useLocation } from 'react-router-dom';
 import { CapabilityProvider, ThemeProvider, TimeProvider, ToastProvider } from '@aether/ui';
+import { ExplorationProvider } from '@aether/ui/exploration';
 import { AuthProvider, useAuth } from '@aether-app/features/auth';
 import { AetherAuth0Provider } from '@aether-app/lib/auth/auth0-provider';
 import { JourneyProvider } from '@aether-app/features/journey';
 import { fetchTenantCapabilities } from '@aether-app/lib/api/capabilities';
+import { explorationClient } from '@aether-app/lib/api/exploration';
 import { BUILD_INFO } from '@aether-app/lib/build-info';
 import { ErrorBoundary } from './error-boundary';
 
@@ -26,6 +28,33 @@ function CapabilityGate({ children }: { readonly children: ReactNode }) {
   );
 }
 
+/**
+ * Binds the router's authoritative URL to the shared exploration store.
+ *
+ * The provider is deliberately created only after backend authentication has
+ * established the tenant.  Its key clears all query and selection state when
+ * that authority changes; tenant identity is never accepted from the URL.
+ */
+export function ExplorationGate({ children }: { readonly children: ReactNode }) {
+  const { isAuthenticated, user } = useAuth();
+  const location = useLocation();
+  const tenantId = isAuthenticated ? user?.id : undefined;
+
+  if (!tenantId) return children;
+
+  return (
+    <ExplorationProvider
+      key={tenantId}
+      tenantId={tenantId}
+      surface={location.pathname}
+      query={location.search}
+      client={explorationClient}
+    >
+      {children}
+    </ExplorationProvider>
+  );
+}
+
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
@@ -36,9 +65,11 @@ export function Providers({ children }: ProvidersProps) {
               <ToastProvider>
                 <AuthProvider>
                   <CapabilityGate>
-                    <JourneyProvider>
-                      {children}
-                    </JourneyProvider>
+                    <ExplorationGate>
+                      <JourneyProvider>
+                        {children}
+                      </JourneyProvider>
+                    </ExplorationGate>
                   </CapabilityGate>
                 </AuthProvider>
               </ToastProvider>

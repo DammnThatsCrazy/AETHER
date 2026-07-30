@@ -71,7 +71,8 @@ export function CardLinkedActivitySection() {
         <p className="text-xs text-text-muted mb-3">
           Observed crypto-card / card-linked flows by program, issuer, and network.
           Top-up and funding are on-chain evidence; spend comes only from provider
-          feeds. Aether never processes card payments or stores card numbers.
+          feeds. USD amounts are source-reported; Aether does not convert missing amounts.
+          Aether never processes card payments or stores card numbers.
         </p>
         <div className="flex flex-wrap gap-3 mb-4">
           <FilterSelect

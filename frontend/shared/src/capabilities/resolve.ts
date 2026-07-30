@@ -17,16 +17,18 @@ export function isDomainExcluded(caps: Capabilities, domain: string): boolean {
 }
 
 /**
- * Resolve availability. With no requirement, or before capabilities have
- * loaded, a destination is treated as available (the server still hard-denies
- * excluded domains, so an optimistic render cannot leak data). An excluded
- * domain resolves to ``not_in_release``; an explicitly-off flag to ``disabled``.
+ * Resolve availability. An ungated destination is always available. A gated
+ * destination fails closed when capabilities are absent or a required flag was
+ * omitted: navigation must not flash a link that the runtime contract has not
+ * authorized. An excluded domain resolves to ``not_in_release``; an
+ * explicitly-off flag to ``disabled``.
  */
 export function resolveDestinationAvailability(
   caps: Capabilities | null | undefined,
   requirement: CapabilityRequirement | undefined,
 ): Exclude<DestinationAvailability, 'loading'> {
-  if (!requirement || !caps) return 'available';
+  if (!requirement) return 'available';
+  if (!caps) return 'unavailable';
 
   if (requirement.domain && isDomainExcluded(caps, requirement.domain)) {
     return 'not_in_release';
@@ -34,6 +36,7 @@ export function resolveDestinationAvailability(
   if (requirement.flag) {
     const flagValue = caps.feature_flags[requirement.flag];
     if (flagValue === false) return 'disabled';
+    if (flagValue !== true) return 'unavailable';
   }
   return 'available';
 }

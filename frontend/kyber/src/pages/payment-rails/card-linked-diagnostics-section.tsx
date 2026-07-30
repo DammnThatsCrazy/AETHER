@@ -8,9 +8,14 @@ type AnyRecord = Record<string, unknown>;
 const CARD_LINKED_COPY =
   'Card-linked economic observability — Aether never processes card payments, issues cards, or makes automated fraud/credit decisions. Top-up volume is never counted as card spend.';
 
-function num(value: unknown): number {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
+function num(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function count(value: unknown): string | number {
+  return num(value) ?? 'Unavailable';
 }
 
 function CountRow({ label, value, tone = 'default' }: {
@@ -52,6 +57,7 @@ export function CardLinkedDiagnosticsSection() {
   const [tenantId, setTenantId] = useState('');
   const [diagnostics, setDiagnostics] = useState<AnyRecord | null>(null);
   const [gate, setGate] = useState<AnyRecord | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,13 +65,20 @@ export function CardLinkedDiagnosticsSection() {
     if (!tenantId.trim()) return;
     setLoading(true);
     setError(null);
+    setGateError(null);
     Promise.all([
       api.admin.kyber.cardLinkedDiagnostics(tenantId.trim()),
-      api.admin.kyber.cardLinkedReleaseGate().catch(() => null),
+      api.admin.kyber.cardLinkedReleaseGate()
+        .then((value) => ({ value: value as AnyRecord, error: null }))
+        .catch((e: unknown) => ({
+          value: null,
+          error: e instanceof Error ? e.message : 'release gate unavailable',
+        })),
     ])
-      .then(([d, g]) => {
+      .then(([d, gateResult]) => {
         setDiagnostics(d as AnyRecord);
-        setGate(g as AnyRecord | null);
+        setGate(gateResult.value);
+        setGateError(gateResult.error);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -95,7 +108,7 @@ export function CardLinkedDiagnosticsSection() {
   const gateChecks = (gate?.checks ?? []) as AnyRecord[];
   const mislabelCount = num(warnings.basis_mislabeling);
   const blockedPii = num(privacy.blocked_pii_attempts);
-  const stale = paymentscan.stale === true;
+  const stale = typeof paymentscan.stale === 'boolean' ? paymentscan.stale : null;
 
   return (
     <Card>
@@ -111,6 +124,11 @@ export function CardLinkedDiagnosticsSection() {
         <div className="text-[10px] text-text-muted font-mono mt-1">{CARD_LINKED_COPY}</div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {gateError && (
+          <div className="rounded border border-warning/40 bg-warning/10 p-2 text-xs font-mono text-warning">
+            Release gate unavailable: {gateError}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <input
             className="flex-1 rounded border border-border-default bg-surface-sunken px-2 py-1.5 text-xs font-mono text-text-primary"
@@ -134,13 +152,13 @@ export function CardLinkedDiagnosticsSection() {
                 PaymentScan catalog data is stale — benchmarks may not reflect current market state.
               </div>
             )}
-            {mislabelCount > 0 && (
+            {mislabelCount !== null && mislabelCount > 0 && (
               <div className="rounded border border-warning/40 bg-warning/10 p-2 text-xs font-mono text-warning">
                 {mislabelCount} basis mislabeling warning{mislabelCount === 1 ? '' : 's'} — sources claimed a basis
                 they cannot prove (e.g. SDK-claimed spend downgraded to unknown).
               </div>
             )}
-            {blockedPii > 0 && (
+            {blockedPii !== null && blockedPii > 0 && (
               <div className="rounded border border-danger/40 bg-danger/10 p-2 text-xs font-mono text-danger">
                 {blockedPii} blocked-PII ingestion attempt{blockedPii === 1 ? '' : 's'} rejected (PAN/CVV/KYC/bank fields are never stored).
               </div>
@@ -150,11 +168,11 @@ export function CardLinkedDiagnosticsSection() {
               <Card>
                 <CardHeader><CardTitle>PaymentScan freshness</CardTitle></CardHeader>
                 <CardContent className="text-xs font-mono space-y-1">
-                  <CountRow label="Card programs" value={num(paymentscan.card_program_count)} />
-                  <CountRow label="Issuers" value={num(paymentscan.issuer_count)} />
-                  <CountRow label="Networks" value={num(paymentscan.payment_network_count)} />
-                  <CountRow label="Last sync" value={String(paymentscan.last_sync_at ?? 'never')} tone={stale ? 'warning' : 'default'} />
-                  <CountRow label="Stale" value={stale ? 'yes' : 'no'} tone={stale ? 'warning' : 'success'} />
+                  <CountRow label="Card programs" value={count(paymentscan.card_program_count)} />
+                  <CountRow label="Issuers" value={count(paymentscan.issuer_count)} />
+                  <CountRow label="Networks" value={count(paymentscan.payment_network_count)} />
+                  <CountRow label="Last sync" value={String(paymentscan.last_sync_at ?? 'Unavailable')} tone={stale === true ? 'warning' : 'default'} />
+                  <CountRow label="Stale" value={stale === null ? 'Unavailable' : stale ? 'yes' : 'no'} tone={stale === true ? 'warning' : stale === false ? 'success' : 'default'} />
                   <div className="pt-1 text-[10px] text-text-muted">
                     Benchmarks are catalog/market intelligence — never user-level card spend.
                   </div>
@@ -167,14 +185,14 @@ export function CardLinkedDiagnosticsSection() {
               <Card>
                 <CardHeader><CardTitle>Reconciliation</CardTitle></CardHeader>
                 <CardContent className="text-xs font-mono space-y-1">
-                  <CountRow label="Flows observed" value={num(d.flow_count)} />
+                  <CountRow label="Flows observed" value={count(d.flow_count)} />
                   {Object.entries((d.by_reconciliation_state ?? {}) as AnyRecord).map(([state, count]) => (
                     <CountRow key={state} label={state} value={String(count)} />
                   ))}
                   <CountRow
                     label="Conflicts"
-                    value={num(d.reconciliation_conflicts)}
-                    tone={num(d.reconciliation_conflicts) > 0 ? 'danger' : 'success'}
+                    value={count(d.reconciliation_conflicts)}
+                    tone={num(d.reconciliation_conflicts) === null ? 'default' : num(d.reconciliation_conflicts)! > 0 ? 'danger' : 'success'}
                   />
                   {Object.keys(unmatched).length > 0 && (
                     <div className="pt-1 text-[10px] text-warning">
@@ -187,10 +205,10 @@ export function CardLinkedDiagnosticsSection() {
               <Card>
                 <CardHeader><CardTitle>Privacy gates</CardTitle></CardHeader>
                 <CardContent className="text-xs font-mono space-y-1">
-                  <CountRow label="Region-restricted records" value={num(privacy.region_restricted_records)} />
-                  <CountRow label="Region suppressions" value={num(privacy.region_suppression_events)} tone={num(privacy.region_suppression_events) > 0 ? 'warning' : 'default'} />
-                  <CountRow label="Consent suppressions" value={num(privacy.consent_suppression_events)} tone={num(privacy.consent_suppression_events) > 0 ? 'warning' : 'default'} />
-                  <CountRow label="Blocked PII attempts" value={blockedPii} tone={blockedPii > 0 ? 'danger' : 'success'} />
+                  <CountRow label="Region-restricted records" value={count(privacy.region_restricted_records)} />
+                  <CountRow label="Region suppressions" value={count(privacy.region_suppression_events)} tone={(num(privacy.region_suppression_events) ?? 0) > 0 ? 'warning' : 'default'} />
+                  <CountRow label="Consent suppressions" value={count(privacy.consent_suppression_events)} tone={(num(privacy.consent_suppression_events) ?? 0) > 0 ? 'warning' : 'default'} />
+                  <CountRow label="Blocked PII attempts" value={blockedPii ?? 'Unavailable'} tone={blockedPii === null ? 'default' : blockedPii > 0 ? 'danger' : 'success'} />
                 </CardContent>
               </Card>
 

@@ -24,7 +24,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.common.common import APIResponse, ForbiddenError, NotFoundError, ServiceUnavailableError
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import APIKeyRepository
 
@@ -82,38 +82,39 @@ async def get_my_profile(request: Request):
     plan = PLAN_CATALOG.get(plan_tier) if plan_tier else None
 
     # Tenant record (name, contact_email)
-    tenant_record = {}
     try:
         repo = AdminRepository()
         tenant_record = await repo.find_by_id(tenant.tenant_id) or {}
-    except Exception:
-        pass
+    except Exception as exc:
+        raise ServiceUnavailableError("Tenant profile repository unavailable") from exc
 
     # Billing account (subscription status, period)
-    billing = {}
     try:
         acct = await stripe_repository.get_billing_account(tenant.tenant_id)
-        if acct:
-            billing = {
+        billing = (
+            {
                 "subscription_status": acct.get("subscription_status"),
                 "current_period_end": acct.get("current_period_end"),
                 "stripe_customer_id": acct.get("stripe_customer_id"),
             }
-    except Exception:
-        pass
+            if acct
+            else None
+        )
+    except Exception as exc:
+        raise ServiceUnavailableError("Billing repository unavailable") from exc
 
     key_count = await _key_repo.count(filters={"tenant_id": tenant.tenant_id})
 
     return APIResponse(data={
         "tenant_id": tenant.tenant_id,
-        "name": tenant_record.get("name", ""),
-        "contact_email": tenant_record.get("contact_email", ""),
+        "name": tenant_record.get("name"),
+        "contact_email": tenant_record.get("contact_email"),
         "plan": {
-            "plan_id": plan.plan_id if plan else (plan_tier.value if plan_tier else "P1"),
-            "display_name": plan.display_name if plan else "",
-            "monthly_quota": plan.monthly_quota if plan else 0,
-            "burst_rpm": plan.burst_rpm if plan else 0,
-        },
+            "plan_id": plan.plan_id if plan else (plan_tier.value if plan_tier else None),
+            "display_name": plan.display_name if plan else None,
+            "monthly_quota": plan.monthly_quota if plan else None,
+            "burst_rpm": plan.burst_rpm if plan else None,
+        } if plan_tier else None,
         "billing": billing,
         "api_key_count": key_count,
         # Whether the caller may manage tenant-wide SDK remote config
@@ -126,9 +127,9 @@ async def get_my_profile(request: Request):
 async def get_my_usage(request: Request):
     """Return current-period usage stats: quota consumption, peak RPM, and days remaining.
 
-    Events-used and RPM-peak are derived from the ingestion metrics store when available;
-    on any failure the response falls back to zeros so the frontend can still render quota
-    limits without crashing.
+    Events-used and RPM-peak are derived from the ingestion metrics store.
+    Missing observations are explicitly unavailable and repository failures
+    propagate as dependency failures rather than measured zeroes.
     """
     tenant = _require_tenant(request)
     from shared.plans.catalog import PLAN_CATALOG
@@ -137,8 +138,8 @@ async def get_my_usage(request: Request):
     plan_tier = getattr(tenant, "plan_tier", None)
     plan = PLAN_CATALOG.get(plan_tier) if plan_tier else None
 
-    monthly_quota = plan.monthly_quota if plan else 0
-    burst_rpm = plan.burst_rpm if plan else 0
+    monthly_quota = plan.monthly_quota if plan else None
+    burst_rpm = plan.burst_rpm if plan else None
 
     # Billing period: calendar month (1st → last day).
     today = date.today()
@@ -151,8 +152,6 @@ async def get_my_usage(request: Request):
     days_remaining = (period_end - today).days
 
     # Try to pull real event counts from the ingestion metrics layer.
-    events_used = 0
-    rpm_peak = 0
     try:
         from repositories.repos import AdminRepository
         repo = AdminRepository()
@@ -161,14 +160,16 @@ async def get_my_usage(request: Request):
             period_start=period_start.isoformat(),
             period_end=period_end.isoformat(),
         )
-        if usage_record:
-            events_used = usage_record.get("events_used", 0)
-            rpm_peak = usage_record.get("rpm_peak", 0)
-    except Exception:
-        # Graceful fallback — quota limits are still returned so UsageBar can render at 0%.
-        pass
+    except Exception as exc:
+        raise ServiceUnavailableError("Usage repository unavailable") from exc
 
-    overage_events = max(0, events_used - monthly_quota)
+    events_used = usage_record.get("events_used") if usage_record else None
+    rpm_peak = usage_record.get("rpm_peak") if usage_record else None
+    overage_events = (
+        max(0, events_used - monthly_quota)
+        if isinstance(events_used, int) and isinstance(monthly_quota, int)
+        else None
+    )
 
     metrics.increment("me_usage_fetched")
     return APIResponse(data={
@@ -180,6 +181,7 @@ async def get_my_usage(request: Request):
         "rpm_limit": burst_rpm,
         "overage_events": overage_events,
         "days_remaining": days_remaining,
+        "availability": "available" if usage_record else "insufficient_evidence",
     }).to_dict()
 
 

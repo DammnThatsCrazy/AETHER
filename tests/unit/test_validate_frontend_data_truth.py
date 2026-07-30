@@ -137,22 +137,18 @@ def test_bundle_scan_reports_known_synthetic_literals(tmp_path: Path) -> None:
 
 
 DEMO_ENV_MODULE = """
-export const DEMO_ENVIRONMENTS = ['local-mocked', 'demo-static', 'demo-live'] as const;
+export const DEMO_ENVIRONMENTS = ['local', 'staging', 'production', 'test'] as const;
 export function assertDemoEnv(value: string | undefined) {
   if (!value) throw new Error('VITE_DEMO_ENV is required and has no default.');
   return value;
 }
 """
 DEMO_VITE_CONFIG = """
-const DEMO_ENVIRONMENTS = ['local-mocked', 'demo-static', 'demo-live'] as const;
+const DEMO_ENVIRONMENTS = ['local', 'staging', 'production', 'test'] as const;
 const demoEnv = loadEnv(mode, __dirname, 'VITE_').VITE_DEMO_ENV;
 if (!demoEnv) throw new Error('VITE_DEMO_ENV is required and has no default.');
 """
-DEMO_MAIN = """
-if (import.meta.env.VITE_DEMO_ENV === 'local-mocked') {
-  const { worker } = await import('./mocks/browser');
-}
-"""
+DEMO_MAIN = "export const backendSeedStatus = '/v1/demo-seed/status';\n"
 DEMO_INDEX_HTML = '<meta name="aether-demo-env" content="%VITE_DEMO_ENV%" />'
 
 
@@ -176,10 +172,9 @@ def _scan_demo(tmp_path: Path, overrides: dict[str, str]) -> list[dict[str, obje
     return validator.scan_demo_source(root=tmp_path, app_root=app_root)
 
 
-def test_demo_source_permits_mocks_and_fixture_directories(tmp_path: Path) -> None:
+def test_demo_source_permits_backend_client_source(tmp_path: Path) -> None:
     app_root = _demo_app(tmp_path)
-    _write(app_root / "src/mocks/browser.ts", "export const worker = setupWorker();")
-    _write(app_root / "src/data/fixtures.ts", "export const DEMO_TENANT = { name: 'Orbit' };")
+    _write(app_root / "src/api/client.ts", "export const base = '/v1/demo-seed';")
 
     assert validator.scan_demo_source(root=tmp_path, app_root=app_root) == []
 
@@ -189,7 +184,7 @@ def test_demo_source_rejects_implicit_env_default(tmp_path: Path) -> None:
         tmp_path,
         {
             "src/lib/env.ts": DEMO_ENV_MODULE
-            + "const v = import.meta.env.VITE_DEMO_ENV ?? 'local-mocked';\n"
+            + "const v = import.meta.env.VITE_DEMO_ENV ?? 'local';\n"
         },
     )
 
@@ -204,7 +199,7 @@ def test_demo_source_rejects_a_default_reintroduced_indirectly(tmp_path: Path) -
         tmp_path,
         {
             "src/lib/env.ts": DEMO_ENV_MODULE
-            + "const raw = import.meta.env.VITE_DEMO_ENV;\nconst v = raw || 'local-mocked';\n"
+            + "const raw = import.meta.env.VITE_DEMO_ENV;\nconst v = raw || 'local';\n"
         },
     )
 
@@ -219,9 +214,14 @@ def test_demo_source_rejects_unguarded_mock_worker_import(tmp_path: Path) -> Non
         {"src/main.tsx": "if (isLocalMocked()) { await import('./mocks/browser'); }\n"},
     )
 
-    assert len(findings) == 1
-    assert "statically eliminable" in str(findings[0]["reason"])
-    assert findings[0]["path"] == "frontend/demo/src/main.tsx"
+    reasons = [str(finding["reason"]) for finding in findings]
+    assert "banned runtime token: isLocalMocked" in reasons
+    assert "banned runtime token: runtime import from mocks/fixtures" not in reasons
+    assert any(
+        finding["path"] == "frontend/demo/src/main.tsx"
+        and finding["reason"] == "runtime import from mocks/fixtures"
+        for finding in findings
+    )
 
 
 def test_demo_source_rejects_profile_list_drift(tmp_path: Path) -> None:
@@ -229,15 +229,15 @@ def test_demo_source_rejects_profile_list_drift(tmp_path: Path) -> None:
         tmp_path,
         {
             "src/lib/env.ts": DEMO_ENV_MODULE.replace(
-                "'local-mocked', 'demo-static', 'demo-live'",
-                "'local-mocked', 'local-live', 'staging', 'production'",
+                "'local', 'staging', 'production', 'test'",
+                "'local', 'preview', 'staging', 'production'",
             )
         },
     )
 
     assert [finding["reason"] for finding in findings] == [
         "demo profile list drifted from the canonical deployment profiles "
-        "(local-mocked, demo-static, demo-live)"
+        "(local, staging, production, test)"
     ]
 
 
@@ -279,38 +279,38 @@ def _demo_bundle(tmp_path: Path, profile: str | None, asset: str) -> Path:
     return bundle_root
 
 
-def test_demo_bundle_permits_fixtures_in_local_mocked(tmp_path: Path) -> None:
+def test_demo_bundle_permits_backend_client_in_local(tmp_path: Path) -> None:
     bundle_root = _demo_bundle(
         tmp_path,
-        "local-mocked",
-        "const t = 'tenant_demo_orbit'; navigator.serviceWorker.register('/mockServiceWorker.js');",
+        "local",
+        "const status = '/v1/demo-seed/status';",
     )
 
     assert validator.scan_demo_bundle(root=tmp_path, bundle_root=bundle_root) == []
 
 
-def test_demo_bundle_rejects_mock_worker_outside_local_mocked(tmp_path: Path) -> None:
+def test_demo_bundle_rejects_mock_worker_in_every_profile(tmp_path: Path) -> None:
     bundle_root = _demo_bundle(
-        tmp_path, "demo-static", "const t = 'tenant_demo_orbit'; setupWorker();"
+        tmp_path, "staging", "setupWorker();"
     )
 
     findings = validator.scan_demo_bundle(root=tmp_path, bundle_root=bundle_root)
 
     assert [finding["reason"] for finding in findings] == [
-        "banned demo bundle token for profile demo-static: setupWorker"
+        "banned demo bundle token for profile staging: setupWorker"
     ]
 
 
-def test_demo_bundle_rejects_fixtures_in_demo_live(tmp_path: Path) -> None:
+def test_demo_bundle_rejects_fixtures_in_production(tmp_path: Path) -> None:
     bundle_root = _demo_bundle(
-        tmp_path, "demo-live", "const t = 'tenant_demo_orbit'; const e = 'Maya Chen';"
+        tmp_path, "production", "const t = 'tenant_demo_orbit'; const e = 'Maya Chen';"
     )
 
     findings = validator.scan_demo_bundle(root=tmp_path, bundle_root=bundle_root)
 
     assert [finding["reason"] for finding in findings] == [
-        "banned demo bundle token for profile demo-live: Maya Chen",
-        "banned demo bundle token for profile demo-live: tenant_demo_orbit",
+        "banned demo bundle token for profile production: Maya Chen",
+        "banned demo bundle token for profile production: tenant_demo_orbit",
     ]
 
 
@@ -321,7 +321,7 @@ def test_demo_bundle_without_profile_stamp_uses_strictest_profile(tmp_path: Path
     reasons = [str(finding["reason"]) for finding in findings]
 
     assert any("does not declare a resolved VITE_DEMO_ENV profile stamp" in r for r in reasons)
-    assert "banned demo bundle token for profile demo-live: tenant_demo_orbit" in reasons
+    assert "banned demo bundle token for profile production: tenant_demo_orbit" in reasons
 
 
 def test_demo_bundle_scan_fails_closed_when_output_is_missing(tmp_path: Path) -> None:

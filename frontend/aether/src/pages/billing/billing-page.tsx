@@ -115,12 +115,8 @@ function EnterpriseContactModal({ open, onClose, prefill }: EnterpriseModalProps
     setSubmitError(null);
     const result = await mutate(form);
     if (result !== null) {
-      if ((result as { mailto_fallback?: boolean }).mailto_fallback) {
-        toast.info('Opening your mail client…');
-      } else {
-        setSuccess(true);
-        toast.success("Message sent — we'll be in touch within 2 business days");
-      }
+      setSuccess(true);
+      toast.success("Message sent — we'll be in touch within 2 business days");
     } else {
       setSubmitError('Could not send message — please try again');
       toast.error('Could not send message — please try again');
@@ -251,7 +247,7 @@ export function BillingPage() {
   const timeCtx = useTimeContext();
   const { data: plans, isLoading: plansLoading, error: plansError } = useBillingPlans();
   const { data: profile } = useMeProfile();
-  const { data: invoices, isLoading: invoicesLoading } = useInvoices();
+  const { data: invoices, isLoading: invoicesLoading, error: invoicesError } = useInvoices();
   const { mutate: createCheckout, isLoading: checkoutLoading } = useCreateCheckout();
   const { mutate: openPortal, isLoading: portalLoading } = useBillingPortal();
   const [enterpriseOpen, setEnterpriseOpen] = useState(false);
@@ -324,11 +320,13 @@ export function BillingPage() {
 
       {invoicesLoading && <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>}
 
-      {!invoicesLoading && invoices && invoices.length === 0 && (
+      {invoicesError && <ErrorState message="Failed to load invoices" />}
+
+      {!invoicesLoading && !invoicesError && invoices && invoices.length === 0 && (
         <p className="text-text-muted text-xs font-mono">No invoices yet.</p>
       )}
 
-      {!invoicesLoading && invoices && invoices.length > 0 && (
+      {!invoicesLoading && !invoicesError && invoices && invoices.length > 0 && (
         <div className="space-y-1">
           {invoices.map(inv => (
             <div key={inv.id} className="flex items-center justify-between text-xs py-2 border-b border-border-subtle last:border-0">

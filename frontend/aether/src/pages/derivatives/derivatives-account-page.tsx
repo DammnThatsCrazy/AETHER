@@ -4,7 +4,8 @@ import {
   useDerivativesFills, useDerivativesOrders, useDerivativesPositions,
 } from '@aether-app/features/derivatives';
 import {
-  NotEnabledOrError, Stat, asRecord, asList, fmt,
+  DomainQueryState, EvidenceBoundary, NotEnabledOrError, Stat, asRecord, asList,
+  fmt, queryCount,
 } from '@aether-app/components/domain-intelligence';
 
 export function DerivativesAccountPage() {
@@ -38,8 +39,8 @@ export function DerivativesAccountPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Stat label="Orders" value={orderRows.length} />
-        <Stat label="Fills" value={fillRows.length} />
-        <Stat label="Positions" value={positionRows.length} />
+        <Stat label="Fills" value={queryCount(fills.data, fills.isLoading, fills.error, fillRows.length)} />
+        <Stat label="Positions" value={queryCount(positions.data, positions.isLoading, positions.error, positionRows.length)} />
       </div>
 
       <Card>
@@ -67,7 +68,17 @@ export function DerivativesAccountPage() {
       <Card>
         <CardHeader><CardTitle>Fills</CardTitle></CardHeader>
         <CardContent>
-          {fillRows.length === 0 ? (
+          <EvidenceBoundary>
+            Source: venue-reported executions. Quantity, price, and fee retain their
+            reported market units; an observed fill is not an Aether execution.
+          </EvidenceBoundary>
+          {DomainQueryState({
+            isLoading: fills.isLoading,
+            hasData: fills.data !== null,
+            error: fills.error,
+            domainLabel: 'Derivatives fills',
+            onRetry: fills.refetch,
+          }) ?? (fillRows.length === 0 ? (
             <EmptyState title="No fills observed" />
           ) : (
             <DataTable
@@ -82,14 +93,20 @@ export function DerivativesAccountPage() {
               data={fillRows}
               keyExtractor={r => String(r.fill_id)}
             />
-          )}
+          ))}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader><CardTitle>Positions</CardTitle></CardHeader>
         <CardContent>
-          {positionRows.length === 0 ? (
+          {DomainQueryState({
+            isLoading: positions.isLoading,
+            hasData: positions.data !== null,
+            error: positions.error,
+            domainLabel: 'Derivatives positions',
+            onRetry: positions.refetch,
+          }) ?? (positionRows.length === 0 ? (
             <EmptyState title="No positions observed" />
           ) : (
             <DataTable
@@ -108,7 +125,7 @@ export function DerivativesAccountPage() {
               data={positionRows}
               keyExtractor={r => String(r.position_id)}
             />
-          )}
+          ))}
         </CardContent>
       </Card>
     </div>

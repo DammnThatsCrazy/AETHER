@@ -162,7 +162,6 @@ def test_mapping_covers_every_implementation_status():
 
 
 def test_mapping_exact_values():
-    assert to_readiness(ImplementationStatus.MOCKED_LOCAL) == CredentialReadiness.MOCKED_LOCAL
     assert to_readiness(ImplementationStatus.SCAFFOLDED) == CredentialReadiness.SCAFFOLDED
     assert to_readiness(ImplementationStatus.PRODUCTION_SHAPED) == CredentialReadiness.CREDENTIAL_WAITING
     assert to_readiness(ImplementationStatus.CREDENTIAL_GATED) == CredentialReadiness.CREDENTIAL_WAITING
@@ -174,14 +173,14 @@ def test_mapping_exact_values():
 
 
 def test_to_readiness_accepts_string_value_and_rejects_unknown():
-    assert to_readiness("mocked_local") == CredentialReadiness.MOCKED_LOCAL
+    with pytest.raises(ValueError):
+        to_readiness("mocked_local")
     with pytest.raises(ValueError):
         to_readiness("not_a_status")
 
 
 def test_readiness_rank_progression():
     order = [
-        CredentialReadiness.MOCKED_LOCAL,
         CredentialReadiness.SCAFFOLDED,
         CredentialReadiness.CREDENTIAL_WAITING,
         CredentialReadiness.REPLAY_VALIDATED,
@@ -273,7 +272,7 @@ def test_derive_is_honest():
     assert ReadinessDimensions.derive().state == CredentialReadiness.SCAFFOLDED
     assert (
         ReadinessDimensions.derive(code_complete=True, credential_required=False).state
-        == CredentialReadiness.MOCKED_LOCAL
+        == CredentialReadiness.SCAFFOLDED
     )
     assert (
         ReadinessDimensions.derive(code_complete=True, infra_defined=True).state

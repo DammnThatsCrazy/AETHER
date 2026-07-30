@@ -7,12 +7,10 @@ their emitted JavaScript, HTML, and CSS. Missing bundle directories are a
 failure when ``--bundles`` is requested; the bundle gate must never silently
 skip itself.
 
-Aether and Kyber are production tenant/operator apps: ``src/mocks`` and
-``src/fixtures`` are prohibited outright. The demo app has a different
-contract — synthetic data is its purpose, so those directories are permitted in
-its source — but ``VITE_DEMO_ENV`` must stay explicit (no default), and the
-fixture and MSW modules must be statically unreachable from any build whose
-canonical deployment profile forbids compiled-in synthetic data.
+Aether, Kyber, and Demo are API clients: runtime ``src/mocks`` and
+``src/fixtures`` are prohibited. Demo records are created only by the backend
+seed service, so the Demo app is held to the same production-source and bundle
+boundary as the tenant and operator applications.
 """
 from __future__ import annotations
 
@@ -50,8 +48,14 @@ SOURCE_TOKEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("msw/browser", re.compile(r"msw/browser")),
     ("setupWorker", re.compile(r"\bsetupWorker\b")),
     ("isLocalMocked", re.compile(r"\bisLocalMocked\b")),
+    ("getRuntimeMode", re.compile(r"\bgetRuntimeMode\b")),
     ("MockModeBanner", re.compile(r"\bMockModeBanner\b")),
     ("local-mocked", re.compile(r"\blocal-mocked\b")),
+    ("mocked_local", re.compile(r"\bmocked_local\b")),
+    (
+        "runtime buildMock*Data factory",
+        re.compile(r"\bbuildMock[A-Za-z0-9_]*Data\b"),
+    ),
     ("tenant_demo_001", re.compile(r"\btenant_demo_001\b")),
     ("tenant_kyber_mock", re.compile(r"\btenant_kyber_mock\b")),
     ("Alex Reeves", re.compile(r"\bAlex Reeves\b")),
@@ -75,20 +79,13 @@ BUNDLE_TOKENS = (
 )
 
 # --- Demo app -------------------------------------------------------------
-# frontend/demo is the closed synthetic demo SPA. Its source may hold mocks and
-# fixtures; what it may not do is default to them or emit them where the
-# canonical deployment profile forbids it.
+# frontend/demo is a thin backend seed-status client. It may not contain a
+# canonical operational dataset or browser API implementation.
 DEMO_APP_ROOT = ROOT / "frontend" / "demo"
 DEMO_ENV_VAR = "VITE_DEMO_ENV"
-# Canonical profile names the demo SPA can legitimately run as, per
-# config/deployment_profiles.yaml (local-mocked runs demo-spa + mock-data-msw,
-# demo-static runs synthetic-precomputed-data, demo-live runs a synthetic
-# tenant against a shared non-production backend).
-CANONICAL_DEMO_ENVIRONMENTS = ("local-mocked", "demo-static", "demo-live")
-# Profiles allowed to ship compiled-in synthetic fixture data.
-DEMO_SYNTHETIC_DATASET_ENVIRONMENTS = ("local-mocked", "demo-static")
+# Explicit runtime environments accepted by the backend-backed Demo SPA.
+CANONICAL_DEMO_ENVIRONMENTS = ("local", "staging", "production", "test")
 DEMO_BUNDLE_PROFILE_STAMP = "aether-demo-env"
-# Only local-mocked may emit the MSW worker; nothing else may.
 DEMO_MOCK_BUNDLE_TOKENS = (
     "mockServiceWorker",
     "msw/browser",
@@ -110,17 +107,13 @@ DEMO_ENV_DEFAULT_RES = (
     re.compile(rf"{DEMO_ENV_VAR}[^\n;]*?(?:\?\?|\|\|)\s*['\"]"),
     # Any fallback to a profile literal, however the value was read first.
     re.compile(
-        r"(?:\?\?|\|\|)\s*['\"](?:local-mocked|demo-static|demo-live)['\"]"
+        r"(?:\?\?|\|\|)\s*['\"](?:local|staging|production|test)['\"]"
     ),
 )
 DEMO_ENVIRONMENT_LIST_RE = re.compile(
     r"DEMO_ENVIRONMENTS\s*(?::[^=\n]*)?=\s*\[(?P<items>[^\]]*)\]"
 )
 DEMO_QUOTED_VALUE_RE = re.compile(r"['\"]([^'\"]+)['\"]")
-DEMO_STATIC_WORKER_GUARD_RE = re.compile(
-    rf"import\.meta\.env\.{DEMO_ENV_VAR}\s*===\s*['\"]local-mocked['\"]"
-)
-DEMO_WORKER_IMPORT_RE = re.compile(r"""import\s*\(\s*['\"][^'\"]*mocks/""")
 DEMO_BUNDLE_STAMP_RE = re.compile(
     rf"""<meta[^>]*name=['\"]{DEMO_BUNDLE_PROFILE_STAMP}['\"][^>]*content=['\"](?P<value>[^'\"]*)['\"]"""
 )
@@ -147,9 +140,13 @@ PRODUCTION_BUILD_ENV = {
     "VITE_OIDC_AUTHORITY": "https://identity.invalid",
     "VITE_OIDC_CLIENT_ID": "frontend-data-truth-build",
     "VITE_OIDC_REDIRECT_URI": "https://app.invalid/callback",
-    # The demo SPA is built under its strictest profile: demo-live must contain
-    # neither the MSW worker nor the fixture module.
-    DEMO_ENV_VAR: "demo-live",
+    # The demo SPA is built under its strictest profile: production must contain
+    # neither the MSW worker nor a fixture module.
+    DEMO_ENV_VAR: "production",
+    "VITE_DEMO_TENANT_ID": "certification-demo",
+    "VITE_DEMO_SEED_NAMESPACE": "certification",
+    "VITE_AETHER_URL": "https://app.invalid",
+    "VITE_KYBER_URL": "https://operator.invalid",
 }
 
 
@@ -360,12 +357,7 @@ def _check_demo_profile_declaration(
 def scan_demo_source(
     *, root: Path = ROOT, app_root: Path | None = None
 ) -> list[dict[str, object]]:
-    """Scan the demo SPA under its own contract.
-
-    ``mocks`` and ``fixtures`` directories are permitted here — they are the
-    demo app's purpose — but the environment variable that selects them must be
-    explicit, and the mock entrypoint must be statically eliminable.
-    """
+    """Scan the Demo SPA as a real backend client with no runtime fixtures."""
     app_root = app_root or DEMO_APP_ROOT
     if not app_root.is_dir():
         return [
@@ -378,9 +370,15 @@ def scan_demo_source(
         ]
 
     findings: list[dict[str, object]] = []
+    public_worker = app_root / "public" / "mockServiceWorker.js"
+    if public_worker.exists():
+        findings.append(
+            _finding(public_worker, 1, "public mockServiceWorker.js is prohibited", root)
+        )
     for path in _demo_source_files(app_root):
         if is_test_path(path, root):
             continue
+        findings.extend(_scan_source_path(path, root))
         text = path.read_text(encoding="utf-8", errors="ignore")
         seen_lines: set[int] = set()
         for pattern in DEMO_ENV_DEFAULT_RES:
@@ -412,19 +410,6 @@ def scan_demo_source(
     entrypoint = app_root / "src" / "main.tsx"
     if not entrypoint.is_file():
         findings.append(_finding(entrypoint, 0, "demo entrypoint is missing", root))
-    else:
-        text = entrypoint.read_text(encoding="utf-8", errors="ignore")
-        match = DEMO_WORKER_IMPORT_RE.search(text)
-        if match and not DEMO_STATIC_WORKER_GUARD_RE.search(text):
-            findings.append(
-                _finding(
-                    entrypoint,
-                    _line_number(text, match.start()),
-                    "demo mock worker import must be guarded by a statically eliminable "
-                    + f"import.meta.env.{DEMO_ENV_VAR} === 'local-mocked' comparison",
-                    root,
-                )
-            )
 
     index_html = app_root / "index.html"
     if not index_html.is_file():
@@ -570,13 +555,9 @@ def scan_demo_bundle(
                 root,
             )
         )
-        profile = "demo-live"
+        profile = "production"
 
-    banned: list[str] = []
-    if profile != "local-mocked":
-        banned.extend(DEMO_MOCK_BUNDLE_TOKENS)
-    if profile not in DEMO_SYNTHETIC_DATASET_ENVIRONMENTS:
-        banned.extend(DEMO_FIXTURE_BUNDLE_TOKENS)
+    banned = [*DEMO_MOCK_BUNDLE_TOKENS, *DEMO_FIXTURE_BUNDLE_TOKENS]
 
     for path in bundle_files:
         text = path.read_text(encoding="utf-8", errors="ignore")
@@ -600,6 +581,9 @@ def build_production_bundles(root: Path = ROOT) -> int:
     env.update(PRODUCTION_BUILD_ENV)
     workspaces = [
         "packages/shared",
+        # Aether imports the published web SDK package entry. A clean install
+        # contains source but no ignored dist/ output, so build the dependency
+        # before asking Vite to resolve it.
         "packages/web",
         *(f"frontend/{app}" for app in APP_NAMES),
         "frontend/demo",

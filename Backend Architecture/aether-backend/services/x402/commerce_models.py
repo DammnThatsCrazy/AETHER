@@ -119,7 +119,7 @@ class StablecoinAsset(BaseModel):
     settlement_scheme: str = "facilitator"  # on-chain|facilitator|hybrid
     facilitator_ids: list[str] = Field(default_factory=list)
     active: bool = True
-    risk_score: float = 0.0
+    risk_score: Optional[float] = None
     registered_at: str = Field(default_factory=_now_iso)
 
 
@@ -134,9 +134,9 @@ class Facilitator(BaseModel):
     supported_assets: list[str] = Field(default_factory=list)
     supported_chains: list[str] = Field(default_factory=list)
     approved_by_tenants: list[str] = Field(default_factory=list)
-    health_status: str = "healthy"  # healthy|degraded|down
-    avg_latency_ms: float = 0.0
-    success_rate: float = 1.0
+    health_status: str = "unknown"  # healthy|degraded|down|unknown
+    avg_latency_ms: Optional[float] = None
+    success_rate: Optional[float] = None
     active: bool = True
     registered_at: str = Field(default_factory=_now_iso)
 
@@ -338,7 +338,7 @@ class Fulfillment(BaseModel):
     grant_id: str
     resource_id: str
     status: str = "completed"
-    latency_ms: int = 0
+    latency_ms: Optional[int] = None
     status_code: int = 200
     completed_at: str = Field(default_factory=_now_iso)
 

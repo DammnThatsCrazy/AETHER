@@ -4,10 +4,8 @@ Thin wrapper around the Stripe Python SDK. Plan identity is sourced from
 shared.plans.catalog.PLAN_CATALOG; pricing amounts live in the catalog (and
 in Stripe's Dashboard). This module only maps PlanTier <-> Stripe Price ID.
 
-Local fallback behaviour:
-  When AETHER_ENV=local and Stripe configuration is incomplete (missing
-  secret_key or required Price IDs), Checkout/Portal calls return mocked
-  objects instead of raising. This is never used outside local mode.
+Missing SDK/configuration is an explicit unavailable error in every
+environment. Local development never fabricates Stripe resources or URLs.
 """
 
 from __future__ import annotations
@@ -15,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from config.settings import Environment, settings
+from config.settings import settings
 from shared.auth.auth import PlanTier
 from shared.common.common import BadRequestError, ServiceUnavailableError
 from shared.logger.logger import get_logger
@@ -31,38 +29,8 @@ except ImportError:
     STRIPE_SDK_AVAILABLE = False
 
 
-# ---------------------------------------------------------------------------
-# Mocked URL helpers (LOCAL ONLY)
-# ---------------------------------------------------------------------------
-
-_MOCK_CHECKOUT_BASE = "http://localhost:3000/mock-stripe/checkout"
-_MOCK_PORTAL_BASE = "http://localhost:3000/mock-stripe/portal"
-
-
-def _is_local() -> bool:
-    return settings.env == Environment.LOCAL
-
-
-def _stripe_config_complete() -> bool:
-    cfg = settings.stripe_billing
-    return bool(
-        cfg.enabled
-        and cfg.secret_key
-        and cfg.price_p1
-        and cfg.price_p2
-        and cfg.price_p3
-        and cfg.price_p4
-        and STRIPE_SDK_AVAILABLE
-    )
-
-
-def _use_mocked_mode() -> bool:
-    """Use mocked URLs only when in local AND Stripe config is incomplete."""
-    return _is_local() and not _stripe_config_complete()
-
-
 def _ensure_real_stripe() -> None:
-    """Raise if Stripe SDK or config not available (non-local enforcement)."""
+    """Raise if Stripe SDK or configuration is unavailable."""
     if not STRIPE_SDK_AVAILABLE:
         raise ServiceUnavailableError(
             "Stripe SDK not installed. Install with: pip install 'stripe>=10.0.0'"
@@ -93,10 +61,6 @@ def get_stripe_price_id(plan_tier: PlanTier) -> str:
     }
     price_id = mapping.get(plan_tier, "")
     if not price_id:
-        if _is_local() and not _stripe_config_complete():
-            # In local-mock mode, return a synthetic price ID stub. This is
-            # never used in real Stripe API calls.
-            return f"price_mock_{plan_tier.value}"
         raise BadRequestError(
             f"No Stripe Price ID configured for plan {plan_tier.value}. "
             f"Set STRIPE_PRICE_{plan_tier.value} in env."
@@ -131,13 +95,11 @@ def get_plan_for_price_id(price_id: str) -> Optional[PlanTier]:
 class CheckoutSession:
     session_id: str
     url: str
-    mocked: bool = False
 
 
 @dataclass(frozen=True)
 class PortalSession:
     url: str
-    mocked: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -151,11 +113,8 @@ async def create_or_get_customer(
 ) -> Optional[str]:
     """Return a Stripe customer ID for a tenant. Creates one if needed.
 
-    In local-mock mode, returns a stub `cus_mock_{tenant_id}` so downstream
-    flows can be exercised without real Stripe.
+    The provider must be configured; no local customer is synthesized.
     """
-    if _use_mocked_mode():
-        return existing_customer_id or f"cus_mock_{tenant_id}"
     _ensure_real_stripe()
 
     if existing_customer_id:
@@ -201,15 +160,6 @@ async def create_checkout_session(
     if plan_tier not in PLAN_CATALOG:
         raise BadRequestError(f"Unknown plan_tier: {plan_tier!r}")
 
-    if _use_mocked_mode():
-        session_id = f"cs_mock_{tenant_id}_{plan_tier.value}"
-        url = (
-            f"{_MOCK_CHECKOUT_BASE}"
-            f"?tenant_id={tenant_id}&plan_tier={plan_tier.value}"
-            f"&session_id={session_id}"
-        )
-        return CheckoutSession(session_id=session_id, url=url, mocked=True)
-
     _ensure_real_stripe()
     cfg = settings.stripe_billing
     price_id = get_stripe_price_id(plan_tier)
@@ -242,7 +192,6 @@ async def create_checkout_session(
         return CheckoutSession(
             session_id=session["id"],
             url=session.get("url") or "",
-            mocked=False,
         )
     except Exception as e:
         logger.warning(f"Stripe checkout create failed: {e}")
@@ -254,12 +203,6 @@ async def create_portal_session(
     customer_id: Optional[str] = None,
 ) -> PortalSession:
     """Create a Stripe Billing Portal session for a customer."""
-    if _use_mocked_mode():
-        return PortalSession(
-            url=f"{_MOCK_PORTAL_BASE}?tenant_id={tenant_id}",
-            mocked=True,
-        )
-
     _ensure_real_stripe()
     if not customer_id:
         raise BadRequestError(
@@ -273,7 +216,7 @@ async def create_portal_session(
             return_url=cfg.portal_return_url,
             idempotency_key=f"portal:{tenant_id}",
         )
-        return PortalSession(url=portal["url"], mocked=False)
+        return PortalSession(url=portal["url"])
     except Exception as e:
         logger.warning(f"Stripe portal create failed: {e}")
         raise ServiceUnavailableError(f"Stripe portal create failed: {e}")

@@ -1,6 +1,5 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { MockModeBanner } from '@aether/ui';
 import {
   ProviderHealthBadge,
   type ProviderHealthStatus,
@@ -36,21 +35,5 @@ describe('Payment-rails ProviderHealthBadge → capability matrix', () => {
       // Raw server term stays visible (label with underscores → spaces).
       expect(getByText(status.replace(/_/g, ' '))).toBeInTheDocument();
     }
-  });
-});
-
-describe('MockModeBanner surfaced in the tenant app shell', () => {
-  it('says nothing when live, and shouts "not live" in mocked mode', () => {
-    const { container: live } = render(
-      <MockModeBanner mode="live" envVarName="VITE_AETHER_ENV" envExplicit />,
-    );
-    expect(live.querySelector('[data-mock-mode]')).toBeNull();
-
-    const { getByText, container } = render(
-      <MockModeBanner mode="mocked" envVarName="VITE_AETHER_ENV" envExplicit={false} />,
-    );
-    expect(container.querySelector('[data-mock-mode="active"]')).not.toBeNull();
-    expect(getByText(/not live/i)).toBeInTheDocument();
-    expect(container.querySelector('[data-env-explicit="false"]')).not.toBeNull();
   });
 });

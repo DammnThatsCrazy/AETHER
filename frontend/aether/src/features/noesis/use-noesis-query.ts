@@ -2,10 +2,12 @@ import { z } from 'zod';
 import { useMutation } from '@aether/ui';
 import { restClient } from '@aether-app/lib/api/rest/client';
 import type { NoesisResponsePayload } from '@aether/ui';
+import type { NoesisRequestContext } from './exploration-context';
 
 export interface NoesisQueryInput {
   readonly message: string;
-  readonly context?: Record<string, unknown> | undefined;
+  readonly conversationId?: string | undefined;
+  readonly context?: NoesisRequestContext | undefined;
 }
 
 const noesisActionSchema = z.object({
@@ -80,6 +82,7 @@ export const noesis = {
     const raw = await restClient.post('/v1/noesis/query', noesisApiResponseSchema, {
       message: input.message,
       surface: 'aether',
+      ...(input.conversationId ? { conversation_id: input.conversationId } : {}),
       context: input.context ?? { current_page: window.location.pathname },
     });
     return raw.data as NoesisResponsePayload;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
-  DataTable, EmptyState, GlyphIcon, LoadingState, Modal,
+  DataTable, EmptyState, ErrorState, GlyphIcon, LoadingState, Modal,
   ModalBody, ModalFooter, ModalHeader, ScrollArea, Skeleton, StatusIndicator,
   TerminalSeparator, useToast,
 } from '@aether/ui';
@@ -29,13 +29,14 @@ function severityVariant(s: unknown): 'danger' | 'warning' | 'default' {
 // ── Health overview ────────────────────────────────────────────────────────────
 
 function CisHealthPanel() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     key: 'cis:health:global',
     fetcher: () => api.cis.getGlobalHealth(),
     staleTime: 15_000,
   });
 
   if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}</div>;
+  if (error) return <ErrorState title="CIS health unavailable" message={error} />;
   if (!data) return null;
 
   const d = asRec(data);
@@ -75,7 +76,7 @@ function CisMutationsPanel() {
   const [actionId, setActionId] = useState<{ id: string; action: 'quarantine' | 'approve' } | null>(null);
   const [reason, setReason] = useState('');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     key: 'cis:mutations',
     fetcher: () => api.cis.getMutations({ limit: 50 }),
     staleTime: 15_000,
@@ -113,12 +114,13 @@ function CisMutationsPanel() {
   }
 
   if (isLoading) return <LoadingState lines={5} />;
+  if (error) return <ErrorState title="CIS mutations unavailable" message={error} />;
   if (mutations.length === 0) return <EmptyState title="No mutations" description="No active CIS mutations detected." />;
 
   return (
     <>
       <DataTable<MutationRow>
-        keyExtractor={m => String(m.mutation_id ?? m.id ?? Math.random())}
+        keyExtractor={m => String(m.mutation_id ?? m.id ?? `${m.entity_id ?? 'unknown'}:${m.created_at ?? 'undated'}`)}
         data={mutations}
         emptyMessage="No mutations"
         columns={[
@@ -197,7 +199,7 @@ function CisMutationsPanel() {
 
 function CisForensicsPanel({ nodeId }: { nodeId: string }) {
   const navigate = useNavigate();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     key: `cis:forensics:${nodeId}`,
     fetcher: () => api.cis.getForensics(nodeId),
     staleTime: 60_000,
@@ -205,6 +207,7 @@ function CisForensicsPanel({ nodeId }: { nodeId: string }) {
   });
 
   if (isLoading) return <LoadingState lines={6} className="pt-2" />;
+  if (error) return <ErrorState title="CIS forensics unavailable" message={error} />;
   if (!data) return <EmptyState title="Node not found" description={`No CIS forensics data for node ${nodeId}`} />;
 
   const d = asRec(data);
@@ -277,13 +280,14 @@ function CisForensicsPanel({ nodeId }: { nodeId: string }) {
 // ── Drift panel ────────────────────────────────────────────────────────────────
 
 function CisDriftPanel() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     key: 'cis:drift',
     fetcher: () => api.cis.getDrift({}),
     staleTime: 30_000,
   });
 
   if (isLoading) return <LoadingState lines={4} />;
+  if (error) return <ErrorState title="CIS drift unavailable" message={error} />;
   const d = asRec(data);
   const alerts = Array.isArray(d.alerts) ? d.alerts as unknown[] : Array.isArray(data) ? data as unknown[] : [];
 

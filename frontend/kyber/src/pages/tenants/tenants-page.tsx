@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
-  DataTable, EmptyState, GlyphIcon, LoadingState, Modal,
+  DataTable, EmptyState, ErrorState, GlyphIcon, LoadingState, Modal,
   ModalBody, ModalFooter, ModalHeader, Skeleton, TerminalSeparator, useToast,
   formatCount, formatDate, useTimeContext, type TimeContext,
 } from '@aether/ui';
@@ -43,7 +43,7 @@ function TenantListView() {
   const navigate = useNavigate();
   const timeCtx = useTimeContext();
   const [offset, setOffset] = useState(0);
-  const { data, isLoading } = useTenantList({ limit: 25, offset });
+  const { data, isLoading, error } = useTenantList({ limit: 25, offset });
   const tenants = (data?.tenants ?? []) as TenantRow[];
   const total = data?.total ?? 0;
 
@@ -65,9 +65,11 @@ function TenantListView() {
 
       {isLoading ? (
         <div className="space-y-2">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10" />)}</div>
+      ) : error ? (
+        <ErrorState title="Tenant registry unavailable" message={error} />
       ) : (
         <DataTable<TenantRow>
-          keyExtractor={t => String(t.tenant_id ?? t.id ?? Math.random())}
+          keyExtractor={t => String(t.tenant_id ?? t.id ?? `${t.name ?? 'unknown'}:${t.created_at ?? 'undated'}`)}
           data={tenants}
           emptyMessage="No tenants found"
           columns={[
@@ -134,7 +136,7 @@ function TenantDetailView({ tenantId }: { tenantId: string }) {
   const [provisionModal, setProvisionModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
 
-  const { data: tenant, isLoading: tenantLoading } = useTenantDetail(tenantId);
+  const { data: tenant, isLoading: tenantLoading, error: tenantError } = useTenantDetail(tenantId);
   const { data: apiKeys, isLoading: keysLoading } = useTenantApiKeys(tenantId);
   const { data: billing } = useTenantBilling(tenantId);
   const { data: usage } = useTenantUsage(tenantId);
@@ -145,6 +147,7 @@ function TenantDetailView({ tenantId }: { tenantId: string }) {
   const revokeKey = useRevokeKey();
 
   if (tenantLoading) return <LoadingState lines={8} className="p-6" />;
+  if (tenantError) return <ErrorState title="Tenant unavailable" message={tenantError} />;
   if (!tenant) return <EmptyState title="Tenant not found" description={`No tenant exists with ID: ${tenantId}`} />;
 
   const t = asRec(tenant);

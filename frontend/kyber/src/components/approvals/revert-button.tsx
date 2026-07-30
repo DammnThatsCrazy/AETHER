@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Button } from '@aether/ui';
 import { ApprovalModal } from './approval-modal';
 import { PermissionGate } from '@kyber/features/permissions';
-import type { ReviewStatus, ActionAttribution } from '@kyber/types';
+import type { ReviewStatus } from '@kyber/types';
 
 interface RevertButtonProps {
   readonly itemTitle: string;
   readonly reversible: boolean;
-  readonly onRevert: (reason: string, attribution: ActionAttribution) => void;
+  readonly onRevert: (reason: string) => void;
   readonly className?: string;
 }
 
@@ -29,7 +29,7 @@ export function RevertButton({ itemTitle, reversible, onRevert, className }: Rev
       <ApprovalModal
         open={showModal}
         onClose={() => setShowModal(false)}
-        onConfirm={(_status: ReviewStatus, reason: string, attribution: ActionAttribution) => onRevert(reason, attribution)}
+        onConfirm={(_status: ReviewStatus, reason: string) => onRevert(reason)}
         action="reverted"
         itemTitle={itemTitle}
       />

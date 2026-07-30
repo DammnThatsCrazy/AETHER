@@ -16,20 +16,25 @@ import {
 const ALL = capabilityStates as readonly CapabilityState[];
 
 describe('capability state matrix', () => {
-  it('defines exactly the 15 mission tokens', () => {
-    expect(ALL.length).toBe(15);
-    expect(new Set(ALL).size).toBe(15);
+  it('defines the complete compatibility and canonical readiness tokens', () => {
+    expect(new Set(ALL).size).toBe(ALL.length);
     for (const token of [
       'disabled',
+      'disabled_intentionally',
+      'not_in_release',
+      'unavailable',
+      'externally_blocked',
       'not_entitled',
       'not_configured',
       'credential_required',
       'credential_invalid',
       'connection_testing',
       'credential_waiting',
+      'provisioning',
       'replay_validated',
       'sandbox_validated',
       'partner_live',
+      'live',
       'degraded',
       'stale',
       'partial',
@@ -47,12 +52,13 @@ describe('capability state matrix', () => {
     expect(new Set(glyphs).size).toBe(ALL.length);
   });
 
-  it('marks partner_live as the only fully-live, non-caveated state', () => {
-    // partner_live is the sole state that should ever read as production-live.
+  it('marks only canonical live and compatibility partner_live as fully live', () => {
     expect(capabilityStateStyle('partner_live').notLive).toBe(false);
     expect(capabilityStateStyle('partner_live').tone).toBe('live');
+    expect(capabilityStateStyle('live').notLive).toBe(false);
+    expect(capabilityStateStyle('live').tone).toBe('live');
     for (const s of ALL) {
-      if (s === 'partner_live') continue;
+      if (s === 'partner_live' || s === 'live') continue;
       expect(capabilityStateStyle(s).tone).not.toBe('live');
     }
     // Credential/validation-ladder states must never claim to be live.
@@ -63,7 +69,7 @@ describe('capability state matrix', () => {
 });
 
 describe('CapabilityStateBadge', () => {
-  it('renders a visually distinct treatment for every one of the 15 states', () => {
+  it('renders a visually distinct treatment for every state', () => {
     const rendered = ALL.map((s) => renderToStaticMarkup(<CapabilityStateBadge state={s} />));
     // Distinctness: no two states produce identical markup.
     expect(new Set(rendered).size).toBe(ALL.length);
@@ -140,6 +146,6 @@ describe('worstCapabilityState', () => {
     expect(worstCapabilityState(['partner_live', 'stale'])).toBe('stale');
     expect(worstCapabilityState(['partner_live', 'degraded', 'stale'])).toBe('degraded');
     expect(worstCapabilityState(['partner_live', 'kill_switch_active', 'error'])).toBe('kill_switch_active');
-    expect(worstCapabilityState([])).toBe('partner_live');
+    expect(worstCapabilityState([])).toBe('unavailable');
   });
 });

@@ -27,7 +27,7 @@ There are two separate frontend applications. **Do not mix them up.**
 | App | Directory | Audience | Purpose |
 |-----|-----------|----------|---------|
 | **Aether** | `frontend/aether/` | External paying tenants / customers / clients | Self-service: sign up, install SDK, manage API keys, view their own intelligence graph, entity profiles, campaigns, geographic intelligence |
-| **Kyber** | `frontend/kyber/` | Internal Aether team / operators only | Operator mission control: monitor all tenants, diagnose system health, approve agent actions, review entity clusters, run lab fixtures |
+| **Kyber** | `frontend/kyber/` | Internal Aether team / operators only | Operator mission control: monitor real tenants, diagnose system health, approve agent actions, and review entity clusters |
 
 ### What belongs where
 
@@ -75,7 +75,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
 - **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
 - **Measurement Operations** — connector and source-classification health, classifier-version coverage, repair status, tenant drill-down, and confirm-gated restart/backfill/recompute/repair actions (`/kyber/measurement`)
-- Lab — test fixtures and replay
+- Lab — backend-supported test and replay tools
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**
 - Design system components used by both Aether and Kyber
@@ -83,6 +83,26 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
 - **Path intelligence types** (Phase 20): `PathClassification`, `PathNode`, `PathEdge`, `PathScoreBreakdown`, `RelationshipPath`, `PathExplanation`, `TraversalSnapshot`, `PathQuery`, `PathQueryResponse`, `NodeExpansionRequest`, `NodeExpansionResponse`, `DeepTraversalJob` — canonical TS contracts in `packages/shared/operational-intelligence.ts`, mirroring the Pydantic models exactly
+
+### Runtime data-truth contract
+
+Aether and Kyber are live API clients in every normal environment. Their
+production entrypoints cannot import mocks, fixtures, test factories, or
+`msw/browser`. Environment configuration is explicit and fail-closed:
+`local`, `staging`, and `production` are the normal values, while `test` is
+injected by automation. Invalid configuration renders only the startup error
+surface.
+
+Every data-bearing route distinguishes loading, successful-empty, populated,
+and error/unavailable. Permission or capability-disabled is separate where
+applicable. A request failure never becomes an empty array, a healthy status, a
+zero metric, or example records. Missing evidence renders unavailable or
+insufficient-sample.
+
+Demo records are created only by the versioned backend seed engine. Normal
+frontend/backend startup never seeds, and demo disclosure is driven by backend
+tenant provenance. A scoped startup migration unregisters only legacy
+`mockServiceWorker.js` registrations and removes only their caches.
 
 ---
 
@@ -626,8 +646,9 @@ domain re-exports.
 | `components/entitlements/` | EntitlementList, EntitlementDetail, ReuseHistory, RevokeDialog | Entities |
 | `components/economics/` | ClusterEconomicsView, FacilitatorPerformance, SettlementStatusStrip | Live, Diagnostics |
 
-**Fixtures** (`src/fixtures/`): `commerce.ts`, `approvals.ts`, `entitlements.ts`,
-`resources.ts`, `settlement.ts` — all support mock/live parity via `isLocalMocked()`.
+All commerce modules call their API adapters in normal runtime. Reusable
+synthetic records, when needed by unit/component tests, live only in test-only
+paths and cannot be imported by a production entrypoint.
 
 ## Reward Enablement Components (A6, v8.10.0)
 

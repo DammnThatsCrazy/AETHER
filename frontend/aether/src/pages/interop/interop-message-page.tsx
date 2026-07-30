@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState } from '@aether/ui';
 import { useInteropMessageDetail } from '@aether-app/features/interop';
 import {
-  NotEnabledOrError, asRecord, asList, fmt, messageStatusVariant,
+  EvidenceBoundary, NotEnabledOrError, asRecord, asList, fmt, messageStatusVariant,
 } from '@aether-app/components/domain-intelligence';
 
 export function InteropMessagePage() {
@@ -40,6 +40,10 @@ export function InteropMessagePage() {
       <Card>
         <CardHeader><CardTitle>Lifecycle timeline</CardTitle></CardHeader>
         <CardContent>
+          <EvidenceBoundary>
+            Postcondition: lifecycle labels reproduce correlated backend observations.
+            “Delivered”, “executed”, or “settled” is not independently verified by this page.
+          </EvidenceBoundary>
           {transitions.length === 0 ? (
             <EmptyState title="No lifecycle transitions recorded" />
           ) : (
@@ -84,6 +88,10 @@ export function InteropMessagePage() {
       <Card>
         <CardHeader><CardTitle>Asset legs</CardTitle></CardHeader>
         <CardContent>
+          <EvidenceBoundary>
+            Amounts use the asset and network units returned by the backend; Aether does
+            not convert, net, or sum unlike asset legs.
+          </EvidenceBoundary>
           {legs.length === 0 ? (
             <EmptyState title="No asset legs attributed" />
           ) : (

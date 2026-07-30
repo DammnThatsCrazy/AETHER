@@ -445,7 +445,6 @@ class X402ControlPlane:
             grant_id=grant.grant_id,
             resource_id=entitlement.resource_id,
             status="completed",
-            latency_ms=1,
             status_code=200,
         )
         await self._store.put_fulfillment(fulfillment)

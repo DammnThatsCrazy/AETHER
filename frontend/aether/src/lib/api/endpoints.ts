@@ -56,6 +56,34 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+const demoSeedStatusSchema = z.object({
+  seeded: z.boolean(),
+  is_demo_tenant: z.boolean(),
+  tenant_id: z.string(),
+  tenant_name: z.string().nullable(),
+  data_origin: z.string().nullable(),
+  namespace: z.string(),
+  dataset_version: z.string(),
+  checksum: z.string(),
+  run_count: z.number(),
+  owned_record_count: z.number(),
+  latest_run: z.object({
+    seed_run_id: z.string().nullable(),
+    dataset_version: z.string().nullable(),
+    namespace: z.string().nullable(),
+    tenant_id: z.string().nullable(),
+    checksum: z.string().nullable(),
+    status: z.string().nullable(),
+    started_at: z.string().nullable(),
+    completed_at: z.string().nullable(),
+    inserted_counts: z.record(z.string(), z.number()),
+    updated_counts: z.record(z.string(), z.number()),
+    skipped_counts: z.record(z.string(), z.number()),
+  }).nullable(),
+});
+
+export type DemoSeedStatus = z.infer<typeof demoSeedStatusSchema>;
+
 // Economic-domain routes return raw {items, count} (no APIResponse envelope)
 const listSchema = z.object({ items: z.array(z.unknown()), count: z.number() });
 
@@ -143,6 +171,11 @@ export type SemanticOverlayResponse = z.infer<typeof semanticOverlaySchema>;
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
+
+  demoSeed: {
+    status: () =>
+      restClient.get('/v1/demo-seed/status', wrap(demoSeedStatusSchema)).then(r => r.data),
+  },
 
   // ── System status — tenant-safe reliability visibility ────────────────────
   status: {
@@ -1347,6 +1380,14 @@ export const api = {
   // `api_key`; both shapes are typed so the app can prefer sessions and fall
   // back to the legacy key only when the flag is off.
   auth: {
+    /**
+     * Local-only backend development identity. The backend owns and persists
+     * the session; the browser never manufactures a credential.
+     */
+    developmentSession: () =>
+      restClient.post('/v1/auth/development-session', wrap(unknownSchema), {})
+        .then(r => r.data as AuthGrantResponse & { tenant_id: string }),
+
     /** Step 1: register email+password → sends 6-digit OTP. */
     register: (body: { name: string; email: string; password: string; plan_tier: string }) =>
       restClient.post('/v1/auth/register', wrap(unknownSchema), body).then(r => r.data),
@@ -1670,18 +1711,3 @@ export const api = {
       restClient.get(`/v1/interoperability/reconciliation${buildQS({ ...params })}`, listSchema),
   },
 };
-
-// ─── Utility: call API with typed fallback ────────────────────────────────────
-export async function apiCall<T>(
-  fetcher: () => Promise<T>,
-  fallback: T,
-  label: string,
-): Promise<{ data: T; fromApi: boolean }> {
-  try {
-    const data = await fetcher();
-    return { data, fromApi: true };
-  } catch (err) {
-    console.warn(`[API] ${label} failed, using fallback`, err);
-    return { data: fallback, fromApi: false };
-  }
-}

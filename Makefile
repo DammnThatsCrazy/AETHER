@@ -21,7 +21,10 @@
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
-        frontend-data-truth frontend-data-truth-bundles \
+        frontend-data-truth frontend-data-truth-bundles frontend-route-state \
+        frontend-data-truth-report \
+        demo-seed demo-reset demo-status demo-verify dev-demo \
+        clean-install-smoke demo-seed-smoke demo-reset-smoke \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
         validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
@@ -35,6 +38,10 @@
 BACKEND_DIR := Backend Architecture/aether-backend
 ML_DIR      := ML Models/aether-ml
 AGENT_DIR   := Agent Layer
+DEMO_TENANT_ID ?= aether-demo-v1
+DEMO_SEED_NAMESPACE ?= aether-demo-v1
+DEMO_DATABASE_URL ?= postgresql://aether:aether_dev_password@localhost:5432/aether
+PYTHON ?= python3
 # The live Terraform root. NOT terraform/environments/* — that tree references
 # seven modules that do not exist and `terraform init` fails there.
 TF_DIR      := AWS Deployment/aether-aws/terraform
@@ -313,6 +320,47 @@ frontend-data-truth: ## Enforce Aether/Kyber runtime source data-truth boundarie
 
 frontend-data-truth-bundles: ## Build and scan Aether/Kyber production bundles for synthetic literals
 	python scripts/validate_frontend_data_truth.py --build-bundles
+
+frontend-route-state: ## Enforce exhaustive frontend route empty/error coverage
+	python scripts/validate_frontend_route_state_matrix.py --enforce
+
+frontend-data-truth-report: ## Run release certification and write machine-readable evidence
+	python scripts/generate_frontend_data_truth_report.py
+
+demo-seed: ## Explicitly seed the versioned backend demo dataset
+	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		$(PYTHON) -m services.demo_seed.cli seed --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
+
+demo-status: ## Show backend demo seed ledger status
+	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		$(PYTHON) -m services.demo_seed.cli status --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
+
+demo-verify: ## Verify the demo manifest checksum, records, and provenance
+	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		$(PYTHON) -m services.demo_seed.cli verify --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
+
+demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
+	@if [ -z "$(DEMO_RESET_CONFIRMATION)" ]; then \
+		echo 'Set DEMO_RESET_CONFIRMATION="RESET $(DEMO_TENANT_ID) $(DEMO_SEED_NAMESPACE)"'; exit 1; \
+	fi
+	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		$(PYTHON) -m services.demo_seed.cli reset --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)" --confirm "$(DEMO_RESET_CONFIRMATION)"
+
+dev-demo: ## Explicitly start local backend with in-process demo seeding
+	AETHER_ENV=local AETHER_DEMO_SEED_ON_START=true \
+	AETHER_DEMO_TENANT_ID="$(DEMO_TENANT_ID)" AETHER_DEMO_SEED_NAMESPACE="$(DEMO_SEED_NAMESPACE)" \
+	docker compose up -d
+	@echo "Demo seed requested explicitly. Run 'make demo-verify' after backend startup."
+
+clean-install-smoke: ## Verify normal startup has no seed run and truthful empty state
+	cd "$(BACKEND_DIR)" && $(PYTHON) -m pytest -q -o addopts='' tests/test_demo_seed.py -k "clean_install or normal_startup"
+	$(PYTHON) scripts/validate_frontend_data_truth.py
+
+demo-seed-smoke: ## Verify seed visibility, provenance, checksum, and idempotency
+	cd "$(BACKEND_DIR)" && $(PYTHON) -m pytest -q -o addopts='' tests/test_demo_seed.py -k "idempotent or status_contract or production_refuses or startup_seed_refuses"
+
+demo-reset-smoke: ## Verify reset isolation, control-record preservation, and audit
+	cd "$(BACKEND_DIR)" && $(PYTHON) -m pytest -q -o addopts='' tests/test_demo_seed.py -k "reset or tenant_ids_are_isolated"
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi

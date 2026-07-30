@@ -740,30 +740,16 @@ async def kyber_ml_audit(
                         if line:
                             try:
                                 entries.append(json.loads(line))
-                            except json.JSONDecodeError:
-                                pass
-            except OSError:
-                pass
-        else:
-            # Fallback: synthesize audit entries from artifact state metadata
-            try:
-                from common.artifact_registry import list_artifacts
-                for art in list_artifacts(artifact_root, mid):
-                    state = getattr(art, "promotion_state", "")
-                    if state in ("promoted", "active", "production", "deprecated"):
-                        entries.append({
-                            "timestamp": getattr(art, "created_at", None),
-                            "action": "promote" if state != "deprecated" else "deprecate",
-                            "model_id": mid,
-                            "artifact_version": getattr(art, "artifact_version", None),
-                            "promotion_state": state,
-                            "synthetic": getattr(art, "synthetic_data", None),
-                            "production_allowed": getattr(art, "production_allowed", None),
-                            "actor": "system",
-                            "source": "artifact_metadata_fallback",
-                        })
-            except Exception:
-                pass
+                            except json.JSONDecodeError as exc:
+                                from shared.common.common import ServiceUnavailableError
+                                raise ServiceUnavailableError(
+                                    f"ML audit ledger is malformed for model {mid!r}"
+                                ) from exc
+            except OSError as exc:
+                from shared.common.common import ServiceUnavailableError
+                raise ServiceUnavailableError(
+                    f"ML audit ledger is unavailable for model {mid!r}"
+                ) from exc
 
     entries.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
 

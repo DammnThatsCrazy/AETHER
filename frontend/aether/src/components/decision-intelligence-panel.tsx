@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardHeader, CardContent, Badge, Button, Modal, ModalBody, ModalHeader } from '@aether/ui';
+import { Card, CardHeader, CardContent, Badge, Button, ErrorState, LoadingState, Modal, ModalBody, ModalHeader } from '@aether/ui';
 import { useRecommendationInvestigation, useRecommendations, usePlaybooks } from '@aether-app/features/intelligence';
 
 const FAMILIES = [
@@ -24,7 +24,7 @@ function text(value: unknown, fallback = '—') {
 }
 
 function pct(value: unknown) {
-  return `${Math.round(Number(value ?? 0) * 100)}%`;
+  return value == null ? '—' : `${Math.round(Number(value) * 100)}%`;
 }
 
 export function DecisionIntelligencePanel() {
@@ -48,6 +48,9 @@ export function DecisionIntelligencePanel() {
           </div>
         </CardHeader>
         <CardContent>
+          {recommendations.isLoading && <LoadingState lines={4} />}
+          {recommendations.error && <ErrorState message="Recommendations unavailable" onRetry={recommendations.refetch} />}
+          {!recommendations.isLoading && !recommendations.error && <>
           <div className="mb-4 flex flex-wrap gap-2">
             {FAMILIES.map((item) => (
               <button
@@ -92,13 +95,14 @@ export function DecisionIntelligencePanel() {
               );
             })}
           </div>
+          </>}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader><h2 className="text-text-primary font-medium">Playbooks</h2></CardHeader>
         <CardContent>
-          {playbookItems.length === 0 ? <p className="text-sm text-text-secondary">No playbooks configured.</p> : playbookItems.map((pb) => (
+          {playbooks.isLoading ? <LoadingState lines={3} /> : playbooks.error ? <ErrorState message="Playbooks unavailable" onRetry={playbooks.refetch} /> : playbookItems.length === 0 ? <p className="text-sm text-text-secondary">No playbooks configured.</p> : playbookItems.map((pb) => (
             <div key={text(pb.playbook_id)} className="flex items-center justify-between border-b border-border-subtle py-2 last:border-b-0">
               <span className="text-sm text-text-primary">{text(pb.name)}</span>
               <Badge variant={pb.enabled ? 'success' : 'default'}>{pb.enabled ? 'Enabled' : 'Disabled'}</Badge>

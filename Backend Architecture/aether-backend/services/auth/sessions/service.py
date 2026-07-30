@@ -124,6 +124,7 @@ class SessionService:
         credential_class: str = CredentialClass.HUMAN_SESSION,
         device_id: Optional[str] = None,
         metadata: Optional[dict] = None,
+        permissions: Optional[list[str]] = None,
     ) -> SessionIssue:
         now = _now()
         session_id = str(uuid.uuid4())
@@ -138,7 +139,9 @@ class SessionService:
             "token_hash": token_hash,
             "status": "active",
             "credential_class": credential_class,
-            "permissions": list(_HUMAN_SESSION_PERMISSIONS),
+            "permissions": list(
+                permissions if permissions is not None else _HUMAN_SESSION_PERMISSIONS
+            ),
             "idle_expires_at": idle_expires.isoformat(),
             "absolute_expires_at": absolute_expires.isoformat(),
             "device_id": device_id,

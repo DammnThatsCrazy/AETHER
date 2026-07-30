@@ -3,12 +3,22 @@ import type {
   ExplorationCompleteness,
   ExplorationTruth,
 } from '@aether/shared/exploration-contract';
+import type { ObservationClass } from '@aether/shared/graph-contract';
 import { Badge } from '../../components/badge';
 import { EmptyState } from '../../components/empty-state';
 import { ErrorState } from '../../components/error-state';
 import { FreshnessIndicator } from '../../components/freshness-indicator';
+import { CapabilityStateBadge } from '../../status/capability-state-badge';
+import type { CapabilityState } from '../../status/capability-state';
 import type { ExplorationStatus } from '../store';
-import { completenessNotices, dimensionStateStyle, suppressedFilterCount } from '../truth-model';
+import {
+  completenessNotices,
+  dimensionStateStyle,
+  measurementTruthNotices,
+  observationClassLabel,
+  suppressedFilterCount,
+  type MeasurementTruth,
+} from '../truth-model';
 
 export interface TruthBannerProps {
   readonly status: ExplorationStatus;
@@ -18,6 +28,10 @@ export interface TruthBannerProps {
   readonly applicability?: ApplicabilityReport | null | undefined;
   readonly error?: string | null | undefined;
   readonly onRetry?: (() => void) | undefined;
+  /** Runtime readiness; uses the existing capability-state vocabulary. */
+  readonly readinessState?: CapabilityState | null | undefined;
+  readonly observationClass?: ObservationClass | null | undefined;
+  readonly measurement?: MeasurementTruth | null | undefined;
 }
 
 /**
@@ -34,6 +48,9 @@ export function TruthBanner({
   applicability,
   error,
   onRetry,
+  readinessState,
+  observationClass,
+  measurement,
 }: TruthBannerProps) {
   if (status === 'not_enabled') {
     return (
@@ -57,6 +74,9 @@ export function TruthBanner({
   const overall = truth?.overall_state;
   const suppressed = suppressedFilterCount(applicability);
   const notices = completenessNotices(completeness);
+  const measurementNotices = measurement ? measurementTruthNotices(measurement) : [];
+  const freshnessWatermark =
+    truth?.freshness_watermark ?? measurement?.freshness?.watermark;
 
   return (
     <div
@@ -69,9 +89,17 @@ export function TruthBanner({
             {dimensionStateStyle(overall).label}
           </Badge>
         )}
-        {truth?.freshness_watermark && (
+        {readinessState && <CapabilityStateBadge state={readinessState} />}
+        {observationClass && (
+          <Badge variant="info" size="sm">
+            <span data-observation-class={observationClass}>
+              {observationClassLabel(observationClass)}
+            </span>
+          </Badge>
+        )}
+        {freshnessWatermark && (
           <FreshnessIndicator
-            computedAt={truth.freshness_watermark}
+            computedAt={freshnessWatermark}
             {...(onRetry ? { onRefresh: onRetry } : {})}
           />
         )}
@@ -87,6 +115,29 @@ export function TruthBanner({
             <li key={note}>· {note}</li>
           ))}
         </ul>
+      )}
+      {measurement && (
+        <div data-testid="measurement-truth" className="text-[11px] text-text-secondary">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-2">
+            <dt>Value state</dt>
+            <dd>{dimensionStateStyle(measurement.value_state).label}</dd>
+            <dt>Context</dt>
+            <dd>{measurement.context}</dd>
+            <dt>Unit</dt>
+            <dd>{measurement.unit ?? 'Not reported'}</dd>
+            <dt>Evidence</dt>
+            <dd>{measurement.evidence_basis.length > 0 ? measurement.evidence_basis.join(', ') : 'Not reported'}</dd>
+            <dt>Interpretation</dt>
+            <dd>{measurement.attribution_vs_causal.replace(/_/g, ' ')}</dd>
+            <dt>Materiality</dt>
+            <dd>{measurement.materiality_basis ?? 'Not reported'}</dd>
+          </dl>
+          {measurementNotices.length > 0 && (
+            <ul className="mt-1 text-warning">
+              {measurementNotices.map((note) => <li key={note}>· {note}</li>)}
+            </ul>
+          )}
+        </div>
       )}
       {suppressed > 0 && (
         <p className="text-[11px] text-text-muted">

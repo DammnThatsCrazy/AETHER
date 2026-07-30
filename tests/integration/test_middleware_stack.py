@@ -101,16 +101,19 @@ def backend_module_path():
 class TestAuthMiddlewareIntegration:
     """Tests for _authenticate_async — the auth extraction layer."""
 
-    def test_stub_api_key_resolves_tenant_in_local_mode(self, monkeypatch):
-        """Stub key ak_test_123 resolves to tenant_001 in LOCAL mode."""
+    def test_stub_api_key_requires_a_configured_cache_in_local_mode(self, monkeypatch):
+        """Legacy hardcoded keys are not an authentication bypass in local mode."""
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-integration-tests!")
 
         with backend_module_path():
             auth_mod = importlib.import_module("shared.auth.auth")
             validator = auth_mod.APIKeyValidator()
-            ctx = asyncio.run(validator.validate_async("ak_test_123"))
-            assert ctx.tenant_id == "tenant_001"
+            common_mod = importlib.import_module("shared.common.common")
+            with pytest.raises(
+                common_mod.UnauthorizedError, match="cache not configured"
+            ):
+                asyncio.run(validator.validate_async("ak_test_123"))
 
     def test_unknown_api_key_raises_unauthorized(self, monkeypatch):
         """Unregistered API key raises UnauthorizedError (maps to 401)."""
@@ -147,7 +150,9 @@ class TestAuthMiddlewareIntegration:
             auth_mod = importlib.import_module("shared.auth.auth")
             common_mod = importlib.import_module("shared.common.common")
             validator = auth_mod.APIKeyValidator()
-            with pytest.raises(common_mod.UnauthorizedError, match="not allowed in non-local"):
+            with pytest.raises(
+                common_mod.UnauthorizedError, match="cache not configured"
+            ):
                 asyncio.run(validator.validate_async("ak_test_123"))
 
     def test_missing_auth_header_raises_unauthorized(self, monkeypatch):

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Card, CardContent, CardHeader, CardTitle,
   Badge, LoadingState, ErrorState, EmptyState, EvidenceDrawer,
   formatDateTime, useTimeContext,
 } from '@aether/ui';
+import { TruthBanner, encodeExplorationContext } from '@aether/ui/exploration';
 import {
   useUnifiedJourney,
   useJourneyRisk,
@@ -13,6 +14,7 @@ import {
   JourneyFilterBar,
 } from '@aether-app/features/journey';
 import type { ActivityFamily, SemanticNodeOverlay } from '@aether-app/features/journey';
+import { useJourneyExplorationAvailability } from '@aether-app/features/journey/use-journey-exploration';
 
 const RISK_TIER_VARIANT: Record<string, 'danger' | 'warning' | 'default'> = {
   critical: 'danger',
@@ -148,6 +150,7 @@ function RailSummary({ meta }: { meta: NonNullable<ReturnType<typeof useUnifiedJ
 export function JourneyExplorerPage() {
   const { profileId } = useParams<{ profileId: string }>();
   const id = profileId ?? '';
+  const navigate = useNavigate();
   const timeCtx = useTimeContext();
 
   const [activeTab, setActiveTab] = useState<'timeline' | 'risk' | 'semantic'>('timeline');
@@ -160,6 +163,13 @@ export function JourneyExplorerPage() {
   if (after) journeyParams.after = after;
   if (before) journeyParams.before = before;
   const { steps, meta, hasMore, loading, error, loadMore } = useUnifiedJourney(journeyParams);
+  const {
+    data: explorationValidation,
+    isLoading: explorationLoading,
+    error: explorationError,
+    client: explorationClient,
+    context: explorationContext,
+  } = useJourneyExplorationAvailability(id);
 
   const journeyId = meta?.journey_id ?? null;
   const { data: riskData, loading: riskLoading, error: riskError } = useJourneyRisk(
@@ -170,6 +180,16 @@ export function JourneyExplorerPage() {
     setFamily(undefined);
     setAfter('');
     setBefore('');
+  }
+
+  async function openCampaign(campaignId: string) {
+    const resolved = await explorationClient.resolveLink({
+      context: explorationContext,
+      to: 'campaign360',
+      focus: { kind: 'campaign', id: campaignId },
+    });
+    if (!resolved.adapter_available) return;
+    navigate(`/campaigns/${encodeURIComponent(campaignId)}?${encodeExplorationContext(resolved.link.context)}`);
   }
 
   if (!id) {
@@ -190,6 +210,14 @@ export function JourneyExplorerPage() {
       </header>
 
       {meta && <RailSummary meta={meta} />}
+
+      {explorationError ? (
+        <ErrorState title="Journey exploration validation unavailable" message={explorationError} />
+      ) : explorationLoading ? (
+        <p role="status" className="text-xs text-text-muted">Checking exploration availability…</p>
+      ) : explorationValidation && !explorationValidation.adapter_available ? (
+        <TruthBanner status="not_enabled" surfaceLabel="Journey exploration" />
+      ) : null}
 
       <div className="flex gap-1 border-b border-border" role="tablist" aria-label="Journey views">
         {(['timeline', 'risk', 'semantic'] as const).map(tab => (
@@ -257,6 +285,7 @@ export function JourneyExplorerPage() {
                   hasMore={hasMore}
                   loading={loading}
                   onLoadMore={loadMore}
+                  onCampaignOpen={(campaignId) => void openCampaign(campaignId)}
                 />
               )}
             </CardContent>

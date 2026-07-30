@@ -268,21 +268,27 @@ async def score_reserve_credibility(asset_id: str, tenant_id: str = "") -> dict:
     # Scoring factors
     attestation_cadence = min(1.0, len(attestations) / 12)  # Monthly = 1.0
     nav_freshness = min(1.0, len(nav_updates) / 30)  # Daily = 1.0
-    redemption_settlement = 1.0  # Default healthy; reduce if delays detected
-
-    credibility = (attestation_cadence * 0.4 + nav_freshness * 0.3 + redemption_settlement * 0.3)
+    # No redemption observation means no settlement score. It must not
+    # contribute an invented healthy 1.0 to reserve credibility.
+    redemption_settlement = None
+    credibility = (
+        round((attestation_cadence * 0.4 + nav_freshness * 0.3) / 0.7, 4)
+        if attestations or nav_updates
+        else None
+    )
 
     metrics.increment("rwa_reserve_scored")
     return {
         "asset_id": asset_id,
         "asset_name": asset.get("name", ""),
-        "credibility_score": round(credibility, 4),
+        "credibility_score": credibility,
         "attestation_count": len(attestations),
         "nav_update_count": len(nav_updates),
         "redemption_count": len(redemptions),
         "attestation_cadence_score": round(attestation_cadence, 4),
         "nav_freshness_score": round(nav_freshness, 4),
-        "redemption_settlement_score": round(redemption_settlement, 4),
+        "redemption_settlement_score": redemption_settlement,
+        "availability": "available" if credibility is not None else "insufficient_evidence",
         "scored_at": utc_now().isoformat(),
     }
 

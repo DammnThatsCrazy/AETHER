@@ -1,187 +1,195 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@aether/ui';
-import {
-  DATA_QUALITY, DECISIONS, DEMO_TENANT, DISPATCHES, INGESTION_PATHS, KYBER_VIEW,
-  OODA, OUTCOMES, PLAYBOOKS, PROFILE360, RECOMMENDATIONS, VALUE_REVIEW,
-} from '@demo/data/dataset';
-import { DEMO_DATA_SOURCE_LABEL, getDemoEnv, type DemoEnv } from '@demo/lib/env';
+import { getDemoConfig, type DemoConfig } from '@demo/lib/env';
 
-type View = 'tenant' | 'operator';
+export interface SeedRunSummary {
+  readonly seed_run_id: string;
+  readonly dataset_version: string;
+  readonly namespace: string;
+  readonly tenant_id: string;
+  readonly checksum: string;
+  readonly status: string;
+  readonly started_at: string;
+  readonly completed_at: string | null;
+  readonly inserted_counts: Readonly<Record<string, number>>;
+  readonly updated_counts: Readonly<Record<string, number>>;
+  readonly skipped_counts: Readonly<Record<string, number>>;
+}
 
-// Every demo profile serves synthetic data. The label is persistent and
-// visible so the app can never be mistaken for a production tenant.
-function SyntheticDataBanner({ env }: { readonly env: DemoEnv }) {
+export interface DemoSeedStatus {
+  readonly seeded: boolean;
+  readonly is_demo_tenant: boolean;
+  readonly tenant_id: string;
+  readonly tenant_name: string | null;
+  readonly data_origin: string | null;
+  readonly latest_run: SeedRunSummary | null;
+}
+
+type QueryState =
+  | { readonly state: 'loading' }
+  | { readonly state: 'error'; readonly message: string }
+  | { readonly state: 'success'; readonly value: DemoSeedStatus };
+
+function apiUrl(config: DemoConfig): string {
+  const query = new URLSearchParams({
+    tenant_id: config.tenantId,
+    namespace: config.seedNamespace,
+  });
+  return `${config.apiBaseUrl}/v1/demo-seed/status?${query.toString()}`;
+}
+
+async function loadStatus(config: DemoConfig): Promise<DemoSeedStatus> {
+  const response = await fetch(apiUrl(config), {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Backend seed status is unavailable (HTTP ${response.status}).`);
+  }
+  const body = (await response.json()) as { data?: DemoSeedStatus };
+  if (!body.data || typeof body.data.seeded !== 'boolean') {
+    throw new Error('Backend seed status returned an invalid response.');
+  }
+  return body.data;
+}
+
+function DemoDataBanner({ status }: { readonly status: DemoSeedStatus }) {
+  if (!status.is_demo_tenant || !status.seeded || !status.latest_run) return null;
   return (
     <div
       role="status"
       data-testid="synthetic-data-banner"
       className="sticky top-0 z-50 -mx-6 -mt-6 mb-1 border-b border-warning bg-surface-raised px-6 py-2 text-xs font-medium text-warning"
     >
-      Synthetic demo data — not a production tenant. Profile{' '}
-      <span className="font-mono">{env}</span> · {DEMO_DATA_SOURCE_LABEL[env]}.
+      Demo tenant — synthetic records were seeded into the backend. Dataset{' '}
+      <span className="font-mono">{status.latest_run.dataset_version}</span> · namespace{' '}
+      <span className="font-mono">{status.latest_run.namespace}</span>.
     </div>
   );
 }
 
-function Step({ n, title, children }: { readonly n: number; readonly title: string; readonly children: React.ReactNode }) {
+function CountList({
+  title,
+  counts,
+}: {
+  readonly title: string;
+  readonly counts: Readonly<Record<string, number>>;
+}) {
+  const entries = Object.entries(counts).sort(([left], [right]) => left.localeCompare(right));
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">
-          <span className="mr-2 font-mono text-text-muted">{n}</span>{title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
+      <CardContent>
+        {entries.length === 0 ? (
+          <p className="text-sm text-text-muted">No records reported.</p>
+        ) : (
+          <dl className="grid gap-2 text-sm">
+            {entries.map(([domain, count]) => (
+              <div key={domain} className="flex justify-between border-b border-border-default pb-1">
+                <dt>{domain}</dt>
+                <dd className="font-mono">{count}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </CardContent>
     </Card>
   );
 }
 
-function IngestionSimulator() {
-  const [count, setCount] = useState(0);
-  const [last, setLast] = useState<string | null>(null);
-  async function send(kind: string) {
+export function App({ config = getDemoConfig() }: { readonly config?: DemoConfig }) {
+  const [query, setQuery] = useState<QueryState>({ state: 'loading' });
+  const refresh = useCallback(async () => {
+    setQuery({ state: 'loading' });
     try {
-      const res = await fetch('/v1/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch: [{ id: `demo_${Date.now()}`, type: 'track', timestamp: new Date().toISOString(), sessionId: 'demo', anonymousId: 'demo', properties: { event: kind } }] }),
+      setQuery({ state: 'success', value: await loadStatus(config) });
+    } catch (error) {
+      setQuery({
+        state: 'error',
+        message: error instanceof Error ? error.message : 'Backend seed status is unavailable.',
       });
-      const body = await res.json().catch(() => ({}));
-      setCount((c) => c + 1);
-      setLast((body?.data?.event_id as string) ?? 'accepted');
-    } catch {
-      setLast('error');
     }
-  }
-  return (
-    <div className="space-y-2 text-xs">
-      <div className="flex flex-wrap gap-2">
-        <button className="rounded border border-border-default px-2 py-1 hover:border-accent" onClick={() => send('sdk_page_view')}>Send SDK event</button>
-        <button className="rounded border border-border-default px-2 py-1 hover:border-accent" onClick={() => send('webhook_order')}>Send webhook event</button>
-      </div>
-      <div className="text-text-muted">Simulated events ingested: {count}{last ? ` · last id: ${last}` : ''}</div>
-    </div>
-  );
-}
+  }, [config]);
 
-export function App() {
-  const [view, setView] = useState<View>('tenant');
-  const env = getDemoEnv();
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
+  const status = query.state === 'success' ? query.value : null;
   return (
     <div className="min-h-screen p-6 space-y-5">
-      <SyntheticDataBanner env={env} />
+      {status ? <DemoDataBanner status={status} /> : null}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-default pb-4">
         <div>
           <h1 className="text-xl font-mono font-bold">Aether — Demo</h1>
-          <p className="text-sm text-text-secondary">{DEMO_TENANT.name} · {DEMO_TENANT.plan} · synthetic data</p>
+          <p className="text-sm text-text-secondary">
+            Backend-owned demonstration dataset status and provenance
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge>{env}</Badge>
-          <button className={`rounded px-3 py-1 text-sm ${view === 'tenant' ? 'bg-accent text-surface-base' : 'border border-border-default'}`} onClick={() => setView('tenant')}>Tenant (Aether)</button>
-          <button className={`rounded px-3 py-1 text-sm ${view === 'operator' ? 'bg-accent text-surface-base' : 'border border-border-default'}`} onClick={() => setView('operator')}>Operator (Kyber)</button>
-        </div>
+        <Badge>{config.environment}</Badge>
       </header>
 
-      <p className="text-sm text-text-secondary">
-        SDK or no SDK → connect Aether → generate graph intelligence → surface recommendations →
-        make decisions → take action → observe outcomes → prove value.
-      </p>
+      {query.state === 'loading' ? (
+        <Card>
+          <CardContent className="py-8 text-sm" role="status" aria-label="Loading demo seed status">
+            Loading backend seed status…
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {view === 'tenant' ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Step n={1} title="Ingestion — SDK and no-SDK paths">
-            <div className="grid gap-1 text-xs">
-              {INGESTION_PATHS.map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded border border-border-default px-2 py-1">
-                  <span><Badge variant={p.kind === 'SDK' ? 'success' : 'default'}>{p.kind}</Badge> {p.label} — <span className="text-text-muted">{p.detail}</span></span>
-                  <Badge variant="success">{p.status}</Badge>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3"><IngestionSimulator /></div>
-          </Step>
+      {query.state === 'error' ? (
+        <Card>
+          <CardHeader><CardTitle>Backend unavailable</CardTitle></CardHeader>
+          <CardContent className="space-y-3" role="alert">
+            <p className="text-sm text-text-secondary">{query.message}</p>
+            <button className="rounded border border-border-default px-3 py-1 text-sm" onClick={() => void refresh()}>
+              Retry
+            </button>
+          </CardContent>
+        </Card>
+      ) : null}
 
-          <Step n={2} title="Graph & Profile360">
-            <div className="text-sm">{PROFILE360.entity}</div>
-            <div className="text-xs text-text-muted">{PROFILE360.signals} signals · {PROFILE360.relationships} relationships · confidence {Math.round(PROFILE360.confidence * 100)}%</div>
-            <div className="mt-2 flex flex-wrap gap-1">{PROFILE360.identities.map((i) => <Badge key={i}>{i}</Badge>)}</div>
-          </Step>
+      {status && !status.seeded ? (
+        <Card>
+          <CardHeader><CardTitle>No demonstration dataset is seeded</CardTitle></CardHeader>
+          <CardContent className="space-y-2 text-sm text-text-secondary">
+            <p>The backend returned a successful, authoritative empty seed status.</p>
+            <p>
+              Run <code>make demo-seed</code> explicitly, then retry. Normal development startup never
+              inserts demonstration records.
+            </p>
+            <button className="rounded border border-border-default px-3 py-1 text-sm" onClick={() => void refresh()}>
+              Retry
+            </button>
+          </CardContent>
+        </Card>
+      ) : null}
 
-          <Step n={3} title="Recommendation families">
-            <div className="space-y-1 text-xs">
-              {RECOMMENDATIONS.map((r) => (
-                <div key={r.id} className="flex items-center justify-between rounded border border-border-default px-2 py-1">
-                  <span><span className="font-mono text-text-muted">{r.family}</span> · {r.title}</span>
-                  <Badge>{Math.round(r.confidence * 100)}%</Badge>
-                </div>
-              ))}
-            </div>
-          </Step>
+      {status?.seeded && status.latest_run ? (
+        <>
+          <Card>
+            <CardHeader><CardTitle>{status.tenant_name ?? 'Demo tenant'}</CardTitle></CardHeader>
+            <CardContent className="grid gap-2 text-sm md:grid-cols-2">
+              <div>Tenant <span className="font-mono">{status.tenant_id}</span></div>
+              <div>Run <span className="font-mono">{status.latest_run.seed_run_id}</span></div>
+              <div>Checksum <span className="font-mono">{status.latest_run.checksum}</span></div>
+              <div>Status <Badge variant="success">{status.latest_run.status}</Badge></div>
+              <div>Started {status.latest_run.started_at}</div>
+              <div>Completed {status.latest_run.completed_at ?? 'in progress'}</div>
+            </CardContent>
+          </Card>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <CountList title="Inserted" counts={status.latest_run.inserted_counts} />
+            <CountList title="Updated" counts={status.latest_run.updated_counts} />
+            <CountList title="Idempotent skips" counts={status.latest_run.skipped_counts} />
+          </div>
+        </>
+      ) : null}
 
-          <Step n={4} title="OODA loop">
-            <div className="grid gap-1 text-xs">
-              {OODA.map((o) => <div key={o.step}><span className="font-medium">{o.step}:</span> <span className="text-text-muted">{o.detail}</span></div>)}
-            </div>
-          </Step>
-
-          <Step n={5} title="Decisions, actions & dispatch">
-            <div className="space-y-1 text-xs">
-              {DECISIONS.map((d) => (
-                <div key={d.id} className="rounded border border-border-default px-2 py-1">
-                  {d.action} <Badge variant="success">{d.status}</Badge>
-                  <span className="text-text-muted"> → dispatch {DISPATCHES.find((x) => x.decision === d.id)?.status ?? '—'}</span>
-                </div>
-              ))}
-            </div>
-          </Step>
-
-          <Step n={6} title="Outcomes & ledger">
-            <div className="space-y-1 text-xs">
-              {OUTCOMES.map((o) => (
-                <div key={o.id} className="flex justify-between rounded border border-border-default px-2 py-1">
-                  <span><Badge variant="success">{o.label}</Badge> ${o.value}</span>
-                  <span className="text-text-muted">Δconfidence +{o.confidence_delta}</span>
-                </div>
-              ))}
-            </div>
-          </Step>
-
-          <Step n={7} title="Playbooks & ROI">
-            <div className="space-y-1 text-xs">
-              {PLAYBOOKS.map((p) => (
-                <div key={p.id} className="flex justify-between rounded border border-border-default px-2 py-1">
-                  <span>{p.name} — {p.runs} runs · {Math.round(p.success_rate * 100)}%</span>
-                  <span className="text-text-muted">${p.observed_value.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </Step>
-
-          <Step n={8} title="Value review & data quality">
-            <div className="text-sm font-semibold">${VALUE_REVIEW.total.toLocaleString()} value created</div>
-            <div className="text-xs text-text-muted">retained ${VALUE_REVIEW.retained_revenue.toLocaleString()} · expansion ${VALUE_REVIEW.expansion_revenue.toLocaleString()} · avoided ${VALUE_REVIEW.avoided_loss.toLocaleString()}</div>
-            <div className="mt-2 text-xs">Intelligence quality: <Badge variant="success">{Math.round(DATA_QUALITY.overall * 100)}% {DATA_QUALITY.status}</Badge></div>
-          </Step>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card><CardHeader><CardTitle>Tenant value health</CardTitle></CardHeader><CardContent className="text-xs space-y-1">
-            <div>Tenant: {KYBER_VIEW.tenant}</div>
-            <div>Health score: <Badge variant="success">{Math.round(KYBER_VIEW.health_score * 100)}%</Badge></div>
-            <div>Expansion score: {Math.round(KYBER_VIEW.expansion_score * 100)}%</div>
-            <div>Renewal risk: <Badge>{KYBER_VIEW.renewal_risk}</Badge></div>
-          </CardContent></Card>
-          <Card><CardHeader><CardTitle>Outcome & value</CardTitle></CardHeader><CardContent className="text-xs space-y-1">
-            <div>Recommendations acted: {KYBER_VIEW.recommendations_acted}</div>
-            <div>Value created: ${KYBER_VIEW.value_created_total.toLocaleString()}</div>
-          </CardContent></Card>
-          <Card><CardHeader><CardTitle>Intelligence quality</CardTitle></CardHeader><CardContent className="text-xs space-y-1">
-            <div>Overall: <Badge variant="success">{Math.round(KYBER_VIEW.intelligence_quality * 100)}%</Badge></div>
-            <div className="text-text-muted">Aggregate-only; no raw tenant-private payloads.</div>
-          </CardContent></Card>
-        </div>
-      )}
+      <footer className="flex flex-wrap gap-3 border-t border-border-default pt-4 text-sm">
+        <a className="text-accent underline" href={config.aetherUrl}>Open Aether</a>
+        <a className="text-accent underline" href={config.kyberUrl}>Open Kyber</a>
+      </footer>
     </div>
   );
 }

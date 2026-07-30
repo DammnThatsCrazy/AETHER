@@ -3647,6 +3647,20 @@
         "architect",
         "ops"
       ],
+      "status": "stable",
+      "since_version": "8.12.0"
+    },
+    {
+      "path": "docs/audits/FRONTEND-ROUTE-STATE-MATRIX.md",
+      "title": "Frontend route-state coverage matrix",
+      "slug": "audits/frontend-route-state-matrix",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
       "status": "experimental",
       "since_version": "8.12.0"
     },

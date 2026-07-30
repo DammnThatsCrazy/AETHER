@@ -634,6 +634,16 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "validator's narrow test-only paths"
             ),
         )
+        run(
+            ["python", "scripts/validate_frontend_route_state_matrix.py", "--enforce"],
+            name="Frontend route-state coverage (Aether/Kyber)",
+            results=results,
+            stop_on_failure=stop,
+            remediation=(
+                "add evidence-backed successful-empty coverage for at least 90% "
+                "of data routes and empty/error coverage for every critical route"
+            ),
+        )
 
         if (ROOT / "package-lock.json").exists():
             run(["npm", "ci", "--ignore-scripts"], name="npm ci (lockfile integrity)", results=results, stop_on_failure=stop, remediation="update package-lock.json with npm install")

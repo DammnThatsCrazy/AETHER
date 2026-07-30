@@ -5,6 +5,7 @@ import { AetherLogo } from '@aether-app/components/aether-logo';
 import type { SocialProvider } from '@aether/ui';
 import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
+import { env } from '@aether-app/lib/env';
 
 type SsoState = 'idle' | 'loading';
 
@@ -44,6 +45,23 @@ export function LoginPage() {
       void navigate(redirectTo, { replace: true });
     } catch {
       setError('Incorrect email or password');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDevelopmentSession() {
+    setLoading(true);
+    setError(null);
+    try {
+      const grant = resolveAuthGrant(await api.auth.developmentSession());
+      if (grant.kind !== 'session') {
+        throw new Error('Development login did not return a backend session');
+      }
+      await sessionLogin(grant.session);
+      void navigate(redirectTo, { replace: true });
+    } catch {
+      setError('Development session unavailable');
     } finally {
       setLoading(false);
     }
@@ -96,6 +114,19 @@ export function LoginPage() {
               {loading ? '[···]' : 'Sign in'}
             </Button>
           </form>
+
+          {env.VITE_AETHER_ENV === 'local' && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              disabled={loading}
+              onClick={() => { void handleDevelopmentSession(); }}
+            >
+              Use backend development session
+            </Button>
+          )}
 
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-border-subtle" />

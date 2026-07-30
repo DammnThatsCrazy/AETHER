@@ -694,31 +694,31 @@ items:
     last_verified_commit: null
 
   - id: FT-9-EPHEMERAL-PROFILES
-    title: Ephemeral profiles (demo-static, demo-live, preview) — declared policy, no infrastructure realisation
+    title: Ephemeral profiles (demo, preview) — declared policy, no infrastructure realisation
     domain: cost
     severity: P2
     release_class: general_availability_blocker
     customer_impact: Sales demos and PR preview environments are described by the profile matrix but cannot yet be provisioned from it.
     current_behavior: >
       PARTIAL, and deliberately recorded as such. config/deployment_profiles.yaml
-      declares three ephemeral profiles — demo-static (class demo, cost_capped),
-      demo-live (ttl_cleanup_required: true) and preview (ttl_cleanup_required:
+      declares two ephemeral profiles — demo (class demo, cost_capped and
+      ttl_cleanup_required: true) and preview (ttl_cleanup_required:
       true, must auto-expire, forbids dedicated VPC/ALB/Aurora/Neptune and
       run-forever) — and check_profile_config.py validates their schema. The
       build-time half is real: scripts/validate_frontend_data_truth.py and
-      frontend/demo enforce that a demo bundle declares which profile's data it
-      carries, VITE_DEMO_ENV no longer defaults to local-mocked (an unset
-      variable used to ship MSW), and mockServiceWorker.js is no longer copied
-      into every bundle. The infrastructure half does not exist. The Terraform
+      frontend/demo enforce that every demo bundle is an API-only client with
+      an explicit local/staging/production/test environment; neither fixtures
+      nor mockServiceWorker.js can enter any bundle. The infrastructure half
+      does not exist. The Terraform
       root's `deployment_profile` variable validation accepts exactly four
       values — staging, production-lean, production-scale, enterprise-isolated —
-      so a plan for demo-live or preview is rejected outright, there are no
+      so a plan for demo or preview is rejected outright, there are no
       profiles/demo-*.tfvars or profiles/preview.tfvars, and no TTL cleanup or
       auto-expiry automation exists for either. The one TTL mechanism that does
       exist (.github/workflows/staging-ttl-guard.yml) is staging-only and keyed
       to the staging awake lease.
     required_behavior: >
-      demo-live and preview become provisionable from the same profile
+      demo and preview become provisionable from the same profile
       selector as the cloud profiles, on shared foundation rather than dedicated
       infrastructure, with auto-expiry and TTL cleanup enforced by automation
       rather than by convention.
@@ -734,9 +734,9 @@ items:
       - tests/unit/test_validate_frontend_data_truth.py
       - "make validate-profile-config"
     evidence_required:
-      - "check_profile_config.py accepts the three ephemeral profiles as policy data"
-      - "frontend data-truth validation for demo-static / demo-live"
-      - "NOT claimed: any Terraform realisation, tfvars file, or TTL-cleanup automation for demo-live or preview"
+      - "check_profile_config.py accepts the two ephemeral profiles as policy data"
+      - "frontend data-truth validation for the API-backed demo"
+      - "NOT claimed: any Terraform realisation, tfvars file, or TTL-cleanup automation for demo or preview"
     docs_required:
       - docs/DEPLOYMENT-PROFILES.md
     owner: platform
@@ -744,8 +744,8 @@ items:
     blocked_by: [FT-9-TERRAFORM-PROFILES]
     exception: >
       Intentionally non-terminal and NOT part of the completed work in this
-      programme. Only the demo profiles' build-time data-truth enforcement
-      shipped. demo-live and preview have no Terraform realisation at all: the
+      programme. Only the demo profile's build-time data-truth enforcement
+      shipped. demo and preview have no Terraform realisation at all: the
       root module's profile validation rejects both, no tfvars exist for either,
       and neither ttl_cleanup_required nor preview's auto-expire is enforced by
       anything. The remaining work is in-repo and needs no external

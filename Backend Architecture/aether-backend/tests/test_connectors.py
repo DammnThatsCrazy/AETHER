@@ -72,18 +72,18 @@ async def test_missing_secret_fails_test():
 
 
 @pytest.mark.asyncio
-async def test_local_mode_mocked_ok_without_secret():
+async def test_local_mode_fails_closed_when_secret_cannot_be_resolved():
     conn = SlackConnector()
     result = await conn.test_connection(_cfg("slack"))
-    assert result.ok
-    assert "mocked" in result.detail.lower() or "ok" in result.status
+    assert not result.ok
+    assert result.status == "not_configured"
 
 
 @pytest.mark.asyncio
-async def test_pull_default_returns_empty():
+async def test_pull_default_is_unavailable_not_empty_success():
     conn = SlackConnector()
-    events = await conn.pull(_cfg("slack"))
-    assert events == []
+    with pytest.raises(NotImplementedError):
+        await conn.pull(_cfg("slack"))
 
 
 # ── Webhook parsing ────────────────────────────────────────────────────────

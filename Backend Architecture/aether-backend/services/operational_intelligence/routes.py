@@ -515,14 +515,18 @@ async def _build_overlays(
     for oid in overlay_ids:
         dims = _OVERLAY_DIMENSIONS.get(oid, ["operational"])
         score_key = _OVERLAY_SCORE_KEY.get(oid, "graph")
-        report = intelligence_quality_service.dimension_report(score_key, tenant_id)
-        score_value = float(report.get("quality_score", 0.8))
-        scores[oid] = score_value
+        report = await intelligence_quality_service.dimension_report(score_key, tenant_id)
+        score_value = report.get("quality_score")
+        if isinstance(score_value, (int, float)):
+            scores[oid] = float(score_value)
         properties: dict[str, Any] = {
             "status": "computed" if has_records else "no_data",
             "node_count": node_count,
             "edge_count": edge_count,
             "computed_at": _utc_now(),
+            "quality_availability": report.get(
+                "availability", "insufficient_evidence"
+            ),
         }
         if not has_records:
             properties["reason"] = "no graph records found for tenant/time window"
@@ -1018,23 +1022,29 @@ async def graph_overlay(
         )
 
     # Augment overlay_scores with graph-level quality + contamination metrics
-    graph_report = intelligence_quality_service.dimension_report("graph", body.tenantId)
-    graph_score = float(graph_report.get("quality_score", 0.0))
+    graph_report = await intelligence_quality_service.dimension_report("graph", body.tenantId)
+    graph_score = graph_report.get("quality_score")
     open_drift = await drift_service.list(tenant_id=body.tenantId, status="open")
     contamination_count = sum(
         1 for d in open_drift if d.get("drift_type") == "tenant_data_contamination"
     )
     features = {
         **overlay_scores,
-        "graph_quality_score": graph_score,
         "open_drift_count": float(len(open_drift)),
         "contamination_count": float(contamination_count),
     }
+    if isinstance(graph_score, (int, float)):
+        features["graph_quality_score"] = float(graph_score)
 
     status_note = (
         "Overlay computed from graph records"
         if (result.nodes or result.edges)
         else "no graph records found for tenant/time window"
+    )
+    quality_note = (
+        f"{float(graph_score):.3f}"
+        if isinstance(graph_score, (int, float))
+        else "insufficient evidence"
     )
     return GraphResult(
         nodes=[_vertex_to_node(v) for v in result.nodes],
@@ -1043,7 +1053,7 @@ async def graph_overlay(
         explainability=ExplainabilityMetadata(
             summary=(
                 f"{status_note} | "
-                f"Graph quality score: {graph_score:.3f} | "
+                f"Graph quality score: {quality_note} | "
                 f"Open drift events: {len(open_drift)} | "
                 f"Open contamination events: {contamination_count}"
             ),

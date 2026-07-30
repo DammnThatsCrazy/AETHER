@@ -13,11 +13,12 @@ estimated_read_minutes: 5
 # Demo Walkthrough
 
 A guided path through the Demo App ([Demo App](DEMO-APP.md)). Start with
-`npm run dev --workspace=@aether/demo` → http://localhost:5177 (local-mocked).
+an explicitly backend-seeded demo tenant, then run
+`npm run dev --workspace=@aether/demo` → http://localhost:5177.
 
 1. **Ingestion (SDK or no SDK).** Show both paths side by side: SDK (Web/iOS/
    Android) and no-SDK (Shopify connector, Stripe signed webhook, HubSpot). Click
-   **Send SDK event** / **Send webhook event** to show live ingestion (mocked).
+   **Send SDK event** / **Send webhook event** to show real backend ingestion.
    *Message: "You don't need to wait for an SDK rollout — connect existing tools."*
 2. **Graph & Profile360.** One person resolved across email, web, wallet,
    Shopify, and HubSpot. *Message: "Aether unifies identities into one graph."*

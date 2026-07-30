@@ -12,28 +12,59 @@ estimated_read_minutes: 3
 
 # Demo Data
 
-All Demo App data is **synthetic** and self-contained in
-`frontend/demo/src/data/fixtures.ts`. No real customer data is used and no
-backend is required in `local-mocked` mode.
+Demo data is synthetic, explicit, and backend-owned. Aether, Kyber, and the Demo
+App read it through the real FastAPI contracts and canonical repositories. No
+normal frontend may manufacture operational records, intercept requests with a
+browser mock worker, or treat a failed request as an empty dataset.
 
-## Synthetic dataset
+## Default behavior
 
-- **Tenant**: `Orbit Commerce (Demo)` on plan P3.
-- **Ingestion paths**: Web/iOS/Android SDK + Shopify connector + Stripe signed
-  webhook + HubSpot connector.
-- **Profile360**: a synthetic entity with resolved identities (email, web
-  session, wallet, Shopify customer, HubSpot contact) and relationships.
-- **Intelligence**: recommendation families, OODA steps, decisions, dispatches,
-  outcomes, playbook ROI, value-created totals, data-quality scores, and the
-  Kyber operator rollup.
+`make dev` and normal backend/frontend startup never seed data. A fresh
+repository therefore produces a healthy but unpopulated system:
 
-## Seed / reset
+- a successful collection response with no records renders an empty state;
+- a missing entity uses the canonical not-found response;
+- a timeout, authorization failure, malformed response, or dependency failure
+  renders unavailable/error, not empty;
+- unobserved scores, financial values, health, and timestamps remain
+  unavailable rather than becoming zero, healthy, or current.
 
-The app renders directly from fixtures, so:
-- `npm run demo:seed --workspace=@aether/demo` and `demo:reset` are **no-ops
-  locally** (reload the app to restore fixtures).
-- For a backend-backed demo (future activation), an `AETHER_DEMO_SEED_ENABLED`
-  flag would gate a `services/demo` seed/reset endpoint that writes deterministic
-  synthetic records into the in-memory stores. Off by default; not required.
+## Explicit seed and reset contract
+
+The versioned backend seed service is the only canonical synthetic-data source.
+Its command surface is:
+
+```bash
+make demo-seed
+make demo-status
+make demo-verify
+make demo-reset
+make dev-demo
+```
+
+These commands invoke the backend seed service and must not be replaced by
+frontend scripts that mutate browser memory. Every seeded record is
+traceable to a dataset version, seed run, namespace, demo tenant, creation time,
+and source domain. Re-running the same dataset is idempotent.
+
+Dataset `v1` includes representative repository-backed tenant, user, entity,
+campaign, connector, usage-evidence, intelligence-quality, import,
+investigation, alert, payment, settlement, and agentic-commerce records.
+Aether, Kyber, and the Demo App disclose seeded tenants only from the
+authenticated `/v1/demo-seed/status` response.
+
+Reset requires an explicit tenant, namespace, and confirmation. It removes only
+records owned by that seed namespace, preserves non-seeded records, records an
+audit event, and verifies tenant isolation. Production always refuses seed and
+reset. Staging refuses them unless an explicit staging-demo policy and tenant
+allowlist are configured.
+
+## Local in-memory limitation
+
+A separate CLI process cannot change repositories held in another backend
+process's memory. In-memory demo startup therefore must invoke the seed engine
+in-process only through the explicit `dev-demo`/seed-on-start path. Normal
+startup remains unseeded. Durable PostgreSQL environments use the shared
+database through the ordinary seed CLI.
 
 See [Demo App](DEMO-APP.md).

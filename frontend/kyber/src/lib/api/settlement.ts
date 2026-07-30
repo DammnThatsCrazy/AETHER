@@ -19,6 +19,11 @@ const stuckSettlementSchema = z.object({
 });
 
 export const settlementApi = {
+  list: () =>
+    restClient
+      .get('/v1/x402/settlements', envelope(z.array(settlementSchema)))
+      .then((r) => r.data),
+
   get: (settlementId: string) =>
     restClient
       .get(`/v1/x402/settlements/${settlementId}`, envelope(settlementSchema))

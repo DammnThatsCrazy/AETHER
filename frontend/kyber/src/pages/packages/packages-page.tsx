@@ -26,6 +26,7 @@ export function SolutionPackagesPage() {
   if (error) return <PageWrapper title="Solution Packages"><EmptyState title="Unable to load packages" description={error} /></PageWrapper>;
 
   if (packageId) {
+    if (!data) return <PageWrapper title="Solution Packages"><EmptyState title="Package not found" /></PageWrapper>;
     const pkg = data ?? {};
     const readiness = pkg.readiness_report ?? {};
     return (
@@ -53,7 +54,7 @@ export function SolutionPackagesPage() {
   const items = (data?.items ?? []) as AnyRecord[];
   return (
     <PageWrapper title="Solution Packages" subtitle="Enterprise, regulated, commercial, and government-planning packages.">
-      <div className="grid gap-4 lg:grid-cols-2">
+      {items.length === 0 ? <EmptyState title="No solution packages configured" /> : <div className="grid gap-4 lg:grid-cols-2">
         {items.map(pkg => <Card key={pkg.package_id}><CardHeader><CardTitle><Link to={`/packages/${pkg.package_id}`}>{pkg.name}</Link></CardTitle></CardHeader><CardContent className="space-y-3 text-sm">
           <div className="flex flex-wrap gap-2"><Badge>{Array.isArray(pkg.market) ? pkg.market.join(' / ') : pkg.market}</Badge><Badge variant="default">{pkg.readiness_status}</Badge><Badge variant="success">tenant demand {pkg.active_tenant_demand ?? 0}</Badge></div>
           <p className="text-text-secondary">{pkg.description}</p>
@@ -62,7 +63,7 @@ export function SolutionPackagesPage() {
           <div><div className="text-xs text-text-muted font-mono">Pricing levers</div><Chips items={pkg.pricing_levers} /></div>
           {(pkg.known_gaps ?? []).length > 0 && <div className="text-xs text-warning">{pkg.known_gaps.join(' ')}</div>}
         </CardContent></Card>)}
-      </div>
+      </div>}
     </PageWrapper>
   );
 }

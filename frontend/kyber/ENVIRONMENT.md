@@ -4,8 +4,8 @@
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `VITE_KYBER_ENV` | Yes | `local-mocked` | Runtime environment |
-| `VITE_API_BASE_URL` | Live modes | `http://localhost:8000` | Backend API base URL |
+| `VITE_KYBER_ENV` | Yes | — | Runtime environment (`local`, `staging`, `production`, or `test`) |
+| `VITE_API_BASE_URL` | Yes | — | Backend API base URL |
 | `VITE_WS_BASE_URL` | Live modes | `ws://localhost:8000` | WebSocket base URL |
 | `VITE_GRAPHQL_URL` | Live modes | `http://localhost:8000/v1/analytics/graphql` | GraphQL endpoint |
 | `VITE_OIDC_AUTHORITY` | Staging/Prod | — | OIDC provider URL |
@@ -16,18 +16,12 @@
 | `VITE_AUTOMATION_POSTURE` | No | `conservative` | Automation posture |
 | `VITE_FEATURE_FLAGS` | No | `{}` | Feature flags JSON |
 
-## Runtime Modes
+## Runtime Environments
 
-### local-mocked (default)
-- All data from deterministic fixtures
-- Mock auth with role selector
-- No backend required
-- Full app functionality
-
-### local-live
+### local
 - Connected to locally running Aether services
-- Mock auth allowed
-- Real API calls
+- Uses a real backend-owned session
+- Never substitutes fixtures when an API is unavailable
 
 ### staging
 - Connected to staging infrastructure
@@ -42,4 +36,5 @@
 
 ## Startup Validation
 
-On boot, KYBER validates all environment variables via Zod. Missing required variables in staging/production will be reported on the Diagnostics page.
+On boot, KYBER validates all environment variables via Zod. Missing or invalid
+required values prevent normal application startup.

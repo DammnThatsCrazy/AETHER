@@ -2,13 +2,11 @@ import { useState } from 'react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, Button, Input } from '@aether/ui';
 import type { ReviewStatus } from '@kyber/types';
 import { useAuth } from '@kyber/features/auth';
-import { getEnvironment } from '@kyber/lib/env';
-import type { ActionAttribution } from '@kyber/types';
 
 interface ApprovalModalProps {
   readonly open: boolean;
   readonly onClose: () => void;
-  readonly onConfirm: (status: ReviewStatus, reason: string, attribution: ActionAttribution) => void;
+  readonly onConfirm: (status: ReviewStatus, reason: string) => void;
   readonly action: 'approved' | 'rejected' | 'deferred' | 'reverted';
   readonly itemTitle: string;
 }
@@ -28,17 +26,7 @@ export function ApprovalModal({ open, onClose, onConfirm, action, itemTitle }: A
 
   function handleConfirm() {
     if (!reason.trim() || !principal) return;
-    const attribution: ActionAttribution = {
-      userId: principal.operator_id,
-      displayName: principal.display_name ?? principal.email,
-      email: principal.email,
-      role: principal.role_template_ids[0] ?? '',
-      timestamp: new Date().toISOString(),
-      environment: getEnvironment(),
-      reason: reason.trim(),
-      correlationId: `action-${Date.now()}`,
-    };
-    onConfirm(action, reason.trim(), attribution);
+    onConfirm(action, reason.trim());
     setReason('');
     onClose();
   }

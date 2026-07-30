@@ -29,7 +29,7 @@ USDC_BASE_ASSET = StablecoinAsset(
     settlement_scheme="hybrid",
     facilitator_ids=["fac_local_aether", "fac_circle_v2"],
     active=True,
-    risk_score=0.05,
+    risk_score=None,
 )
 
 USDC_SOLANA_ASSET = StablecoinAsset(
@@ -43,7 +43,7 @@ USDC_SOLANA_ASSET = StablecoinAsset(
     settlement_scheme="hybrid",
     facilitator_ids=["fac_local_aether", "fac_circle_v2"],
     active=True,
-    risk_score=0.05,
+    risk_score=None,
 )
 
 LOCAL_AETHER_FACILITATOR = Facilitator(
@@ -53,8 +53,8 @@ LOCAL_AETHER_FACILITATOR = Facilitator(
     mode=FacilitatorMode.LOCAL,
     supported_assets=["USDC"],
     supported_chains=["eip155:8453", "solana:mainnet"],
-    health_status="healthy",
-    success_rate=1.0,
+    health_status="unknown",
+    success_rate=None,
     active=True,
 )
 
@@ -65,8 +65,8 @@ CIRCLE_V2_FACILITATOR = Facilitator(
     mode=FacilitatorMode.FACILITATOR,
     supported_assets=["USDC"],
     supported_chains=["eip155:8453", "solana:mainnet"],
-    health_status="healthy",
-    success_rate=0.99,
+    health_status="unknown",
+    success_rate=None,
     active=True,
 )
 
@@ -107,7 +107,12 @@ class FacilitatorRegistry:
         if not candidates:
             return None
         # Prefer highest success rate, lowest latency
-        candidates.sort(key=lambda f: (-f.success_rate, f.avg_latency_ms))
+        candidates.sort(
+            key=lambda f: (
+                -(f.success_rate if f.success_rate is not None else -1.0),
+                f.avg_latency_ms if f.avg_latency_ms is not None else float("inf"),
+            )
+        )
         return candidates[0]
 
     async def update_health(
@@ -124,11 +129,19 @@ class FacilitatorRegistry:
         facilitator.health_status = status
         if latency_ms is not None:
             # Simple EMA
-            facilitator.avg_latency_ms = facilitator.avg_latency_ms * 0.8 + latency_ms * 0.2
+            prior_latency = facilitator.avg_latency_ms
+            facilitator.avg_latency_ms = (
+                prior_latency * 0.8 + latency_ms * 0.2
+                if prior_latency is not None
+                else latency_ms
+            )
         if success is not None:
-            facilitator.success_rate = facilitator.success_rate * 0.95 + (
-                1.0 if success else 0.0
-            ) * 0.05
+            prior_rate = facilitator.success_rate
+            facilitator.success_rate = (
+                prior_rate * 0.95 + (1.0 if success else 0.0) * 0.05
+                if prior_rate is not None
+                else (1.0 if success else 0.0)
+            )
         await self._store.put_facilitator(tenant_id, facilitator)
 
 

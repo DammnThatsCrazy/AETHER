@@ -1,9 +1,8 @@
 """Data-quality / intelligence-quality services.
 
-All logic is additive and deterministic in local/mock mode (so dashboards render
-without external services), while exposing ``report_*`` adapters so live internal
-telemetry can push real values in deployment. Tenant-facing projections are
-strictly single-tenant; Kyber views are aggregate-only.
+Scores and findings exist only after a canonical monitor reports observations.
+Missing evidence is represented explicitly; the service never manufactures a
+healthy baseline or seeds drift records during a read.
 
 Critical ``tenant_data_contamination`` drift escalates into the Security &
 Governance audit ledger — it is never silently surfaced.
@@ -15,13 +14,6 @@ from typing import Any, Optional
 
 from shared.logger.logger import get_logger
 
-from services.data_quality.definitions import (
-    CONTAMINATION_BASELINE,
-    DIMENSION_BASELINES,
-    SAMPLE_TENANT_IDS,
-    SEED_DRIFT_EVENTS,
-    tenant_jitter,
-)
 from services.data_quality.models import (
     QUALITY_DIMENSIONS,
     DriftEvent,
@@ -61,10 +53,8 @@ ROUTE_TO_DIMENSION: dict[str, str] = {
 class IntelligenceQualityService:
     """Computes per-dimension and overall intelligence-quality scores.
 
-    Scores are deterministic functions of the dimension baseline and a stable
-    per-tenant jitter, so a given tenant always renders the same numbers in
-    local/mock mode. ``report_dimension`` lets live telemetry override a
-    dimension's metrics + score in deployment.
+    Canonical monitors write snapshots through ``report_score`` and
+    ``report_dimension``. Reads without a snapshot return insufficient evidence.
     """
 
     def __init__(self) -> None:
@@ -72,58 +62,48 @@ class IntelligenceQualityService:
 
     # ── per-dimension reports ────────────────────────────────────────────────
 
-    def _score_for(self, dimension_field: str, tenant_id: Optional[str]) -> float:
-        baseline = DIMENSION_BASELINES[dimension_field]
-        score = baseline["base_score"] + tenant_jitter(tenant_id, dimension_field)
-        return round(max(0.0, min(1.0, score)), 4)
-
-    def dimension_report(self, route_key: str, tenant_id: Optional[str]) -> dict[str, Any]:
+    async def dimension_report(self, route_key: str, tenant_id: Optional[str]) -> dict[str, Any]:
         """Full metric report for one dimension, by tenant-facing route key."""
         dimension_field = ROUTE_TO_DIMENSION[route_key]
-        baseline = DIMENSION_BASELINES[dimension_field]
-        score = self._score_for(dimension_field, tenant_id)
-        report = {k: v for k, v in baseline.items() if k != "base_score"}
-        report.update({
+        key = f"dimension:{tenant_id or '*'}:{dimension_field}"
+        report = await self.repo.find_by_id(key)
+        if report:
+            return {k: v for k, v in report.items() if not k.startswith("_")}
+        return {
             "dimension": dimension_field,
             "tenant_id": tenant_id,
             "scope": "tenant" if tenant_id else "platform",
-            "quality_score": score,
-            "status": status_for_score(score),
-            "calculated_at": now_iso(),
-        })
-        return report
+            "quality_score": None,
+            "status": "unknown",
+            "calculated_at": None,
+            "availability": "insufficient_evidence",
+        }
 
-    def contamination_report(self, tenant_id: Optional[str]) -> dict[str, Any]:
-        baseline = CONTAMINATION_BASELINE
-        score = round(max(0.0, min(1.0, baseline["base_score"] + tenant_jitter(tenant_id, "contamination"))), 4)
-        report = {k: v for k, v in baseline.items() if k != "base_score"}
-        report.update({
+    async def contamination_report(self, tenant_id: Optional[str]) -> dict[str, Any]:
+        key = f"dimension:{tenant_id or '*'}:contamination"
+        report = await self.repo.find_by_id(key)
+        if report:
+            return {k: v for k, v in report.items() if not k.startswith("_")}
+        return {
             "tenant_id": tenant_id,
             "scope": "tenant" if tenant_id else "platform",
-            "contamination_score": score,
-            "status": status_for_score(score),
-            "calculated_at": now_iso(),
-        })
-        return report
+            "contamination_score": None,
+            "status": "unknown",
+            "calculated_at": None,
+            "availability": "insufficient_evidence",
+        }
 
     # ── composite score ──────────────────────────────────────────────────────
 
     async def compute_score(self, tenant_id: Optional[str], scope: str = "tenant") -> dict[str, Any]:
-        dims: dict[str, float] = {
-            field: self._score_for(field, tenant_id) for field in QUALITY_DIMENSIONS
-        }
-        overall = round(sum(dims.values()) / len(dims), 4)
-        score = IntelligenceQualityScore(
+        key = f"{scope}:{tenant_id or '*'}"
+        stored = await self.repo.find_by_id(key)
+        if stored:
+            return {k: v for k, v in stored.items() if not k.startswith("_")}
+        return IntelligenceQualityScore(
             tenant_id=tenant_id,
             scope=scope,
-            overall_intelligence_quality_score=overall,
-            status=status_for_score(overall),
-            **dims,
-        )
-        record = score.model_dump()
-        key = f"{scope}:{tenant_id or '*'}"
-        await self.repo.insert(key, {**record, "_key": key})
-        return record
+        ).model_dump() | {"availability": "insufficient_evidence"}
 
     async def overview(self, tenant_id: Optional[str], scope: str = "tenant") -> dict[str, Any]:
         score = await self.compute_score(tenant_id, scope)
@@ -138,7 +118,14 @@ class IntelligenceQualityService:
         for d in active:
             by_severity[d["severity"]] = by_severity.get(d["severity"], 0) + 1
         dimensions = {
-            field: {"score": score[field], "status": status_for_score(score[field])}
+            field: {
+                "score": score.get(field),
+                "status": (
+                    status_for_score(score[field])
+                    if isinstance(score.get(field), (int, float))
+                    else "unknown"
+                ),
+            }
             for field in QUALITY_DIMENSIONS
         }
         return {
@@ -153,16 +140,20 @@ class IntelligenceQualityService:
 
         Returns scalar scores per tenant — never raw tenant-private payloads.
         """
-        ids = tenant_ids or SAMPLE_TENANT_IDS
-        out: list[dict[str, Any]] = []
-        for tid in ids:
-            score = await self.compute_score(tid, scope="tenant")
-            out.append({
-                "tenant_id": tid,
-                "overall_intelligence_quality_score": score["overall_intelligence_quality_score"],
-                "status": score["status"],
-                "calculated_at": score["calculated_at"],
-            })
+        rows = await self.repo.find_many(limit=10000)
+        out = [
+            {
+                "tenant_id": row.get("tenant_id"),
+                "overall_intelligence_quality_score": row.get("overall_intelligence_quality_score"),
+                "status": row.get("status", "unknown"),
+                "calculated_at": row.get("calculated_at"),
+            }
+            for row in rows
+            if row.get("scope") == "tenant"
+            and row.get("tenant_id")
+            and (tenant_ids is None or row.get("tenant_id") in tenant_ids)
+            and isinstance(row.get("overall_intelligence_quality_score"), (int, float))
+        ]
         return sorted(out, key=lambda r: r["overall_intelligence_quality_score"])
 
     # ── live-telemetry adapter ────────────────────────────────────────────────
@@ -181,6 +172,32 @@ class IntelligenceQualityService:
         await self.repo.insert(key, existing)
         return existing
 
+    async def report_dimension(
+        self,
+        route_key: str,
+        tenant_id: Optional[str],
+        *,
+        quality_score: float,
+        metrics: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Persist one authoritative monitor observation."""
+        dimension_field = ROUTE_TO_DIMENSION[route_key]
+        bounded = max(0.0, min(1.0, quality_score))
+        key = f"dimension:{tenant_id or '*'}:{dimension_field}"
+        record = {
+            **metrics,
+            "dimension": dimension_field,
+            "tenant_id": tenant_id,
+            "scope": "tenant" if tenant_id else "platform",
+            "quality_score": bounded,
+            "status": status_for_score(bounded),
+            "calculated_at": now_iso(),
+            "availability": "available",
+            "_key": key,
+        }
+        await self.repo.insert(key, record)
+        return {k: v for k, v in record.items() if not k.startswith("_")}
+
 
 intelligence_quality_service = IntelligenceQualityService()
 
@@ -193,13 +210,6 @@ class DriftService:
     def __init__(self) -> None:
         self.repo = _drift
 
-    async def seed(self) -> None:
-        for definition in SEED_DRIFT_EVENTS:
-            existing = await self.repo.find_by_id(definition["drift_event_id"])
-            if existing is None:
-                event = DriftEvent(**definition)
-                await self.repo.insert(event.drift_event_id, event.model_dump())
-
     async def list(
         self,
         *,
@@ -207,7 +217,6 @@ class DriftService:
         drift_type: Optional[str] = None,
         status: Optional[str] = None,
     ) -> list[dict[str, Any]]:
-        await self.seed()
         rows = await self.repo.find_many(limit=1000, sort_by="detected_at", sort_order="desc")
         if tenant_id is not None:
             rows = [r for r in rows if r.get("tenant_id") == tenant_id]
@@ -218,7 +227,6 @@ class DriftService:
         return rows
 
     async def get(self, drift_event_id: str) -> dict[str, Any] | None:
-        await self.seed()
         return await self.repo.find_by_id(drift_event_id)
 
     async def _record_audit(
@@ -261,7 +269,6 @@ class DriftService:
             return None
 
     async def create(self, data: dict[str, Any], *, actor: Optional[str] = None, actor_type: str = "system") -> dict[str, Any]:
-        await self.seed()
         drift_id = data.get("drift_event_id") or f"drift_{uuid.uuid4().hex[:12]}"
         event = DriftEvent(drift_event_id=drift_id, **{k: v for k, v in data.items() if k != "drift_event_id"})
         # Critical/high tenant-data contamination escalates into Security/Governance.

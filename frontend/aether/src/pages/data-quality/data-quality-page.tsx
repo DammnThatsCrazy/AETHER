@@ -55,7 +55,7 @@ export function DataQualityPage() {
 
   const score = (data.overview?.score ?? {}) as AnyRecord;
   const dimensions = (data.overview?.dimensions ?? {}) as Record<string, AnyRecord>;
-  const openDrift = data.overview?.open_drift_event_count ?? 0;
+  const openDrift = data.overview?.open_drift_event_count;
   const events = (data.events ?? {}) as AnyRecord;
   const recommendations = (data.recommendations ?? {}) as AnyRecord;
   const graph = (data.graph ?? {}) as AnyRecord;
@@ -77,7 +77,7 @@ export function DataQualityPage() {
             <div className="flex items-center gap-4">
               <div className="text-2xl font-semibold text-text-primary">{pct(score.overall_intelligence_quality_score)}</div>
               {statusBadge(score.status)}
-              <div className="text-xs text-text-muted">Open drift events: {openDrift}</div>
+              <div className="text-xs text-text-muted">Open drift events: {openDrift ?? '—'}</div>
             </div>
           )}
         </CardContent>

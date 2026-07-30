@@ -58,6 +58,8 @@ class MetaAdsConnector(BaseConnector):
         account_id = str(self._config.get("ad_account_id", ""))
 
         try:
+            if not await self.validate_credentials():
+                raise RuntimeError("Meta Ads credentials unavailable")
             from decimal import Decimal
             rows = await self._fetch_spend(start.date(), end.date())
             metrics_list: list[ExternalCampaignMetric] = []
@@ -128,22 +130,14 @@ class MetaAdsConnector(BaseConnector):
             )
 
     async def validate_credentials(self) -> bool:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return True
         token = self._config.get("access_token")
-        return bool(token and len(token) > 10)
+        return bool(token and len(token) > 10 and self._config.get("ad_account_id"))
 
     async def _fetch_spend(self, start_date: date, end_date: date) -> list[dict[str, Any]]:
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
-            return []
-
         try:
             import aiohttp  # type: ignore[import]
         except ImportError:
-            logger.warning("aiohttp not installed — Meta Ads connector requires aiohttp")
-            return []
+            raise RuntimeError("aiohttp not installed — Meta Ads connector unavailable")
 
         token = self._config.get("access_token")
         ad_account_id = self._config.get("ad_account_id")

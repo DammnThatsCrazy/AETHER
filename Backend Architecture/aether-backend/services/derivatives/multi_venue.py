@@ -1,15 +1,14 @@
-"""PR5 multi-venue derivatives normalization and release-readiness helpers.
+"""Multi-venue derivatives normalization capability scaffolds.
 
 Adapters here prove structurally different venues normalize into the same
-canonical Bronze/Silver concepts without provider-specific API leakage. The
-implementations are deterministic and fixture-driven for release gates; live
-network transports can wrap the same adapter contract.
+canonical Bronze/Silver concepts without provider-specific API leakage. They
+normalize caller-supplied provider observations only; this module contains no
+runtime sample records and performs no provider I/O.
 """
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any
 
 from services.derivatives.models import (
@@ -45,8 +44,8 @@ class VenueCapabilityProfile:
         }
 
 
-class FixtureVenueAdapter:
-    """Fixture-backed adapter for structurally distinct derivatives sources."""
+class VenueNormalizationAdapter:
+    """Normalization scaffold for a structurally distinct derivatives source."""
 
     def __init__(self, venue_id: str, venue_type: str, field_map: Mapping[str, str], capabilities: VenueCapabilityProfile) -> None:
         self.venue_id = venue_id
@@ -55,6 +54,9 @@ class FixtureVenueAdapter:
         self.capabilities = capabilities
 
     def bronze(self, tenant_id: str, deployment: str, source_record_id: str, payload: Mapping[str, Any]) -> BronzeObservation:
+        observed_at_field = self.field_map["executed_at"]
+        if observed_at_field not in payload:
+            raise ValueError(f"Provider observation is missing required field '{observed_at_field}'")
         return BronzeObservation(
             tenant_id=tenant_id,
             provider=self.venue_id,
@@ -62,7 +64,7 @@ class FixtureVenueAdapter:
             record_type="raw_fill",
             source_record_id=source_record_id,
             raw_payload=dict(payload),
-            observed_at=str(payload.get(self.field_map.get("executed_at", "executed_at"), payload.get("observed_at", "1970-01-01T00:00:00Z"))),
+            observed_at=str(payload[observed_at_field]),
             idempotency_key=":".join([tenant_id, self.venue_id, deployment, source_record_id]),
         )
 
@@ -93,28 +95,28 @@ class FixtureVenueAdapter:
         )
 
 
-def build_pr5_adapters() -> dict[str, FixtureVenueAdapter]:
+def build_scaffolded_adapters() -> dict[str, VenueNormalizationAdapter]:
     full = tuple(CANONICAL_CONCEPTS)
     return {
-        "dydx": FixtureVenueAdapter(
+        "dydx": VenueNormalizationAdapter(
             "dydx",
             "decentralized_perpetual_exchange",
             {"fill_id": "id", "account": "subaccount", "market": "ticker", "side": "side", "price": "price", "quantity": "size", "fee": "fee", "fee_asset": "feeAsset", "executed_at": "createdAt", "liquidity": "liquidity"},
             VenueCapabilityProfile("dydx", "decentralized_perpetual_exchange", full, ()),
         ),
-        "gmx": FixtureVenueAdapter(
+        "gmx": VenueNormalizationAdapter(
             "gmx",
             "onchain_derivatives_protocol",
             {"fill_id": "eventId", "account": "account", "market": "market", "side": "direction", "price": "executionPrice", "quantity": "sizeUsd", "fee": "feeUsd", "fee_asset": "feeAsset", "executed_at": "blockTime"},
             VenueCapabilityProfile("gmx", "onchain_derivatives_protocol", tuple(c for c in CANONICAL_CONCEPTS if c != "orders"), ("orders",), ("Onchain execution events may not expose centralized order lifecycle states.",)),
         ),
-        "drift": FixtureVenueAdapter(
+        "drift": VenueNormalizationAdapter(
             "drift",
             "decentralized_perpetual_exchange",
             {"fill_id": "fillId", "account": "authority", "market": "marketName", "side": "direction", "price": "oraclePrice", "quantity": "baseAssetAmount", "fee": "fee", "fee_asset": "feeAsset", "executed_at": "slotTime", "liquidity": "liquidity"},
             VenueCapabilityProfile("drift", "decentralized_perpetual_exchange", full, ()),
         ),
-        "centralized_futures": FixtureVenueAdapter(
+        "centralized_futures": VenueNormalizationAdapter(
             "centralized_futures",
             "centralized_futures_exchange",
             {"fill_id": "tradeId", "account": "accountId", "market": "symbol", "side": "side", "price": "avgPrice", "quantity": "contracts", "fee": "commission", "fee_asset": "commissionAsset", "executed_at": "time", "liquidity": "makerTaker"},
@@ -123,7 +125,7 @@ def build_pr5_adapters() -> dict[str, FixtureVenueAdapter]:
     }
 
 
-def cross_venue_parity_report(adapters: Mapping[str, FixtureVenueAdapter]) -> dict[str, Any]:
+def cross_venue_parity_report(adapters: Mapping[str, VenueNormalizationAdapter]) -> dict[str, Any]:
     venue_reports = {venue_id: adapter.capabilities.to_dict() for venue_id, adapter in adapters.items()}
     missing_by_concept = {
         concept: sorted(venue_id for venue_id, adapter in adapters.items() if concept in adapter.capabilities.missing_concepts)
@@ -135,23 +137,6 @@ def cross_venue_parity_report(adapters: Mapping[str, FixtureVenueAdapter]) -> di
         "venues": venue_reports,
         "missing_by_concept": missing_by_concept,
         "provider_specific_api_leakage": False,
+        "availability": "scaffolded",
+        "operational_observations": None,
     }
-
-
-def fixture_payloads() -> dict[str, dict[str, Any]]:
-    return {
-        "dydx": {"id": "dy-fill-1", "subaccount": "sub-7", "ticker": "BTC-USD", "side": "BUY", "price": "61000.12", "size": "0.10", "fee": "1.20", "feeAsset": "USDC", "createdAt": "2026-07-05T00:00:00Z", "liquidity": "maker"},
-        "gmx": {"eventId": "gmx-fill-1", "account": "0xabc", "market": "ETH-USD", "direction": "short", "executionPrice": "3400.01", "sizeUsd": "100.00", "feeUsd": "0.40", "feeAsset": "USDC", "blockTime": "2026-07-05T00:01:00Z"},
-        "drift": {"fillId": "drift-fill-1", "authority": "sol-auth", "marketName": "SOL-PERP", "direction": "long", "oraclePrice": "150.00", "baseAssetAmount": "2.5", "fee": "0.05", "feeAsset": "USDC", "slotTime": "2026-07-05T00:02:00Z", "liquidity": "taker"},
-        "centralized_futures": {"tradeId": "cex-fill-1", "accountId": "acct-cex", "symbol": "BTCUSDT-PERP", "side": "SELL", "avgPrice": "60990.00", "contracts": "0.20", "commission": "1.00", "commissionAsset": "USDT", "time": "2026-07-05T00:03:00Z", "makerTaker": "taker"},
-    }
-
-
-def normalize_all_fixture_fills(tenant_id: str = "tenant-pr5") -> list[NormalizedFillFact]:
-    adapters = build_pr5_adapters()
-    payloads = fixture_payloads()
-    facts: list[NormalizedFillFact] = []
-    for venue_id, adapter in adapters.items():
-        observation = adapter.bronze(tenant_id, "pr5-fixture", f"{venue_id}:fill:1", payloads[venue_id])
-        facts.append(adapter.normalize_fill(observation))
-    return facts

@@ -1,43 +1,64 @@
-// Demo environment contract.
-//
-// `VITE_DEMO_ENV` is required and explicit — there is no default. The valid
-// values are the canonical deployment profiles the demo SPA can legitimately
-// run as (see `config/deployment_profiles.yaml`):
-//
-//   local-mocked — MSW fixtures, no backend (runs: demo-spa, mock-data-msw)
-//   demo-static  — static frontend, synthetic precomputed data, no backend
-//   demo-live    — shared non-production backend, synthetic tenant, TTL cleanup
-//
-// An unset or unknown value fails the build in `vite.config.ts` and throws
-// here, so a demo bundle can never silently fall back to mocked mode.
-export const DEMO_ENVIRONMENTS = ['local-mocked', 'demo-static', 'demo-live'] as const;
+export const DEMO_ENVIRONMENTS = ['local', 'staging', 'production', 'test'] as const;
+export type DemoEnvironment = (typeof DEMO_ENVIRONMENTS)[number];
 
-export type DemoEnv = (typeof DEMO_ENVIRONMENTS)[number];
-
-// Profiles whose data may be compiled into the bundle as synthetic fixtures.
-// `demo-live` is excluded: its data comes from the shared non-production
-// backend, so `src/data/fixtures.ts` is aliased out of that build entirely.
-export const SYNTHETIC_DATASET_ENVIRONMENTS = ['local-mocked', 'demo-static'] as const;
-
-// Every demo profile serves synthetic data; only the source differs. The UI
-// label states which one so a viewer never mistakes the demo for a real tenant.
-export const DEMO_DATA_SOURCE_LABEL: Record<DemoEnv, string> = {
-  'local-mocked': 'in-browser MSW fixtures',
-  'demo-static': 'precomputed synthetic dataset',
-  'demo-live': 'synthetic tenant on a shared non-production backend',
-};
-
-export function assertDemoEnv(value: string | undefined): DemoEnv {
-  const valid = DEMO_ENVIRONMENTS.join(', ');
-  if (!value) {
-    throw new Error(`VITE_DEMO_ENV is required and has no default. Set it to one of: ${valid}.`);
-  }
-  if (!(DEMO_ENVIRONMENTS as readonly string[]).includes(value)) {
-    throw new Error(`VITE_DEMO_ENV="${value}" is not a demo profile. Expected one of: ${valid}.`);
-  }
-  return value as DemoEnv;
+export interface DemoConfig {
+  readonly environment: DemoEnvironment;
+  readonly apiBaseUrl: string;
+  readonly tenantId: string;
+  readonly seedNamespace: string;
+  readonly aetherUrl: string;
+  readonly kyberUrl: string;
 }
 
-export function getDemoEnv(): DemoEnv {
-  return assertDemoEnv(import.meta.env.VITE_DEMO_ENV as string | undefined);
+export class DemoEnvironmentStartupError extends Error {
+  readonly name = 'DemoEnvironmentStartupError';
+}
+
+function required(name: string, value: string | undefined): string {
+  const normalized = value?.trim();
+  if (!normalized) throw new DemoEnvironmentStartupError(`${name} is required.`);
+  return normalized;
+}
+
+function url(name: string, value: string | undefined, environment: DemoEnvironment): string {
+  const raw = required(name, value);
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new DemoEnvironmentStartupError(`${name} must be an absolute URL.`);
+  }
+  if (environment === 'production' && parsed.protocol !== 'https:') {
+    throw new DemoEnvironmentStartupError(`${name} must use HTTPS in production.`);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new DemoEnvironmentStartupError(`${name} must use HTTP or HTTPS.`);
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
+
+export function assertDemoEnvironment(value: string | undefined): DemoEnvironment {
+  const raw = required('VITE_DEMO_ENV', value);
+  if (!(DEMO_ENVIRONMENTS as readonly string[]).includes(raw)) {
+    throw new DemoEnvironmentStartupError(
+      `VITE_DEMO_ENV="${raw}" is invalid. Expected one of: ${DEMO_ENVIRONMENTS.join(', ')}.`,
+    );
+  }
+  return raw as DemoEnvironment;
+}
+
+export function parseDemoConfig(env: Record<string, string | undefined>): DemoConfig {
+  const environment = assertDemoEnvironment(env.VITE_DEMO_ENV);
+  return {
+    environment,
+    apiBaseUrl: url('VITE_API_BASE_URL', env.VITE_API_BASE_URL, environment),
+    tenantId: required('VITE_DEMO_TENANT_ID', env.VITE_DEMO_TENANT_ID),
+    seedNamespace: required('VITE_DEMO_SEED_NAMESPACE', env.VITE_DEMO_SEED_NAMESPACE),
+    aetherUrl: url('VITE_AETHER_URL', env.VITE_AETHER_URL, environment),
+    kyberUrl: url('VITE_KYBER_URL', env.VITE_KYBER_URL, environment),
+  };
+}
+
+export function getDemoConfig(): DemoConfig {
+  return parseDemoConfig(import.meta.env as Record<string, string | undefined>);
 }
