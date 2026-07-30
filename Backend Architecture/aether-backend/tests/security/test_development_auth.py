@@ -16,6 +16,25 @@ def request(host: str):
     return SimpleNamespace(client=SimpleNamespace(host=host))
 
 
+def route_paths(app: FastAPI) -> set[str]:
+    """All route paths on the app, descending into included routers.
+
+    FastAPI mounts included routers as ``_IncludedRouter`` entries that have no
+    ``path`` of their own; their routes live on ``original_router``.
+    """
+    paths: set[str] = set()
+    stack = list(app.routes)
+    while stack:
+        route = stack.pop()
+        path = getattr(route, "path", None)
+        if path is not None:
+            paths.add(path)
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            stack.extend(inner.routes)
+    return paths
+
+
 @pytest.fixture(autouse=True)
 def clean_stores():
     reset_in_memory_stores()
@@ -64,12 +83,8 @@ def test_router_is_unmounted_from_staging_and_production():
     for env in ("staging", "production"):
         app = FastAPI()
         dev_routes.mount_development_auth(app, env)
-        assert "/v1/auth/development-session" not in {
-            route.path for route in app.routes
-        }
+        assert "/v1/auth/development-session" not in route_paths(app)
 
     local_app = FastAPI()
     dev_routes.mount_development_auth(local_app, "local")
-    assert "/v1/auth/development-session" in {
-        route.path for route in local_app.routes
-    }
+    assert "/v1/auth/development-session" in route_paths(local_app)

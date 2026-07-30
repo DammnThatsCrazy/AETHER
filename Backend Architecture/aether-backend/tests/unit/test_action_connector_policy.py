@@ -43,10 +43,16 @@ async def test_sync_blocked_for_action_notifier():
 
     # Build a mock descriptor for an ACTION_NOTIFIER connector
     mock_descriptor = ConnectorDescriptor(
-        connector_type="slack",  # type: ignore[arg-type]
+        connector_type="slack",
         label="Slack",
         description="Slack notifier",
-        category="notification",  # type: ignore[arg-type]
+        category="messaging",
+        supports_webhook=False,
+        supports_pull=False,
+        requires_secret=True,
+        premium=False,
+        ingest_event_types=[],
+        docs_slug="slack",
         connector_class=ConnectorClass.ACTION_NOTIFIER,
         lake_write_policy=LakeWritePolicy.NEVER,
     )

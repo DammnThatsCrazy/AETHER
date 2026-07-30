@@ -14,6 +14,13 @@ from repositories.repos import reset_in_memory_stores
 
 class Tenant:
     tenant_id = "tenant-a"
+    user_id = "user-1"
+    # Raw permission grant required by require_kyber_operator's legacy path;
+    # Aether tenants without it are denied Kyber access.
+    permissions = ["kyber:operator"]
+
+    def has_permission(self, perm: str) -> bool:
+        return perm in self.permissions
 
     def require_permission(self, perm: str) -> None:
         return None

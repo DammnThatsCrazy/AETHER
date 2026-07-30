@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from shared.common.common import (
     APIResponse, BadRequestError, NotFoundError,
@@ -170,8 +170,13 @@ async def create_campaign(
     tenant.require_permission("campaign:manage")
     campaign_id = str(uuid.uuid4())
     campaign = await _repo.insert(campaign_id, {
+        "campaign_id": campaign_id,
         "tenant_id": tenant.tenant_id,
         **body.model_dump(),
+        # Operator-created campaigns are always custom-origin: the registry
+        # contract distinguishes them from provider-synced (external) campaigns,
+        # and a record without the label breaks that distinction downstream.
+        "origin": "custom",
         "status": "active",
     })
     await producer.publish(Event(
@@ -1062,6 +1067,7 @@ async def list_campaign_sources(request: Request):
     """List all connected campaign sources for the tenant."""
     tenant = request.state.tenant
     tenant.require_permission("campaign:read")
+    sources_degraded = False
     try:
         from repositories.repos import get_pool
         pool = await get_pool()
@@ -1073,7 +1079,11 @@ async def list_campaign_sources(request: Request):
     except Exception as exc:
         logger.warning("campaign sources list failed: %s", exc)
         items = []
-    return APIResponse(data={"items": items}).to_dict()
+        sources_degraded = True
+    return APIResponse(data={
+        "items": items,
+        "source_status": _list_source_status(sources_degraded, items),
+    }).to_dict()
 
 
 @sources_router.post("")
@@ -1175,8 +1185,16 @@ mapping_router = APIRouter(prefix="/v1/mapping-review", tags=["Mapping Review"])
 
 
 class ReviewResolve(BaseModel):
+    # campaign_id is persisted as a UUID column; a malformed value is rejected
+    # at the edge instead of surfacing as a database error mid-resolution.
     campaign_id: str
     note: Optional[str] = None
+
+    @field_validator("campaign_id")
+    @classmethod
+    def _campaign_id_must_be_uuid(cls, value: str) -> str:
+        uuid.UUID(value)
+        return value
 
 
 class ReviewIgnore(BaseModel):
