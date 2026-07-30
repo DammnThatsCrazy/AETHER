@@ -374,6 +374,18 @@ class AliasRepository(_PoolBackedRepository):
     ) -> Optional[dict]:
         pool = await self._acquire_pool()
         if pool is None:
+            # Mirrors the SQL predicate below. Returning None unconditionally
+            # here made every alias written to the local store invisible to
+            # resolution, so the resolver reported "unresolved" for aliases it
+            # had just been given.
+            for record in _LOCAL_ALIASES.values():
+                if (
+                    record["tenant_id"] == tenant_id
+                    and record["alias_type"] == alias_type
+                    and record["alias_value_normalized"] == alias_value_normalized
+                    and record["valid_until"] is None
+                ):
+                    return record
             return None
         row = await pool.fetchrow(
             """
@@ -395,7 +407,17 @@ class AliasRepository(_PoolBackedRepository):
             return {}
         pool = await self._acquire_pool()
         if pool is None:
-            return {}
+            wanted = set(lookups)
+            result: dict[tuple[str, str], dict] = {}
+            for record in _LOCAL_ALIASES.values():
+                key = (record["alias_type"], record["alias_value_normalized"])
+                if (
+                    record["tenant_id"] == tenant_id
+                    and record["valid_until"] is None
+                    and key in wanted
+                ):
+                    result[key] = record
+            return result
         # Use unnest for a single round-trip
         types = [t for t, _ in lookups]
         values = [v for _, v in lookups]
