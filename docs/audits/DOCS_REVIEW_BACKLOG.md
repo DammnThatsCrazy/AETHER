@@ -1,7 +1,7 @@
 ---
 title: Docs Review Backlog — Audit Snapshot
 slug: audits/docs-review-backlog
-section: audits
+section: operations
 visibility: I
 audience: [dev-senior, architect]
 status: stable
