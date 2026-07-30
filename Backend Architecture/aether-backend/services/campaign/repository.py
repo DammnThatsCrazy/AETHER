@@ -619,7 +619,15 @@ class MappingReviewRepository(_PoolBackedRepository):
     ) -> Optional[dict]:
         pool = await self._acquire_pool()
         if pool is None:
-            return None
+            return self._local_set_status(
+                tenant_id, review_id, "resolved",
+                extra={
+                    "resolved_campaign_id": campaign_id,
+                    "resolved_by": resolved_by,
+                    "resolved_at": _now(),
+                    "resolution_note": note,
+                },
+            )
         row = await pool.fetchrow(
             """
             UPDATE campaign_resolution_reviews
@@ -632,10 +640,38 @@ class MappingReviewRepository(_PoolBackedRepository):
         )
         return _row_to_dict(row) if row else None
 
+    @staticmethod
+    def _local_set_status(
+        tenant_id: str, review_id: UUID, status: str, extra: Optional[dict] = None
+    ) -> Optional[dict]:
+        """Local-store status transition, mirroring the SQL semantics.
+
+        The store key embeds the status because the table's unique constraint is
+        partial — (tenant, evidence_hash, status='open') — so a resolved review
+        must vacate the open slot, letting the same evidence legitimately open a
+        fresh review later. Mutating status in place under the old key would
+        instead resurface the closed review as the open one.
+        """
+        for key, record in list(_LOCAL_REVIEWS.items()):
+            if (
+                record["tenant_id"] == tenant_id
+                and str(record["review_id"]) == str(review_id)
+            ):
+                del _LOCAL_REVIEWS[key]
+                record["status"] = status
+                record["updated_at"] = _now()
+                if extra:
+                    record.update(extra)
+                _LOCAL_REVIEWS[
+                    f"{tenant_id}::{status}::{record['evidence_hash']}"
+                ] = record
+                return record
+        return None
+
     async def set_status(self, tenant_id: str, review_id: UUID, status: str) -> Optional[dict]:
         pool = await self._acquire_pool()
         if pool is None:
-            return None
+            return self._local_set_status(tenant_id, review_id, status)
         row = await pool.fetchrow(
             "UPDATE campaign_resolution_reviews SET status = $3, updated_at = NOW() WHERE tenant_id = $1 AND review_id = $2 RETURNING *",
             tenant_id, review_id, status,

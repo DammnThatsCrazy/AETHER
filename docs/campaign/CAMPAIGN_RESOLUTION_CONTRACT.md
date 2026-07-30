@@ -18,8 +18,8 @@ last_synced_commit: "3283497"
 
 | Priority | Method | Confidence | Requirement |
 |---|---|---|---|
-| 1 | `canonical_id` | 1.00 | Explicit Aether UUID validated against tenant ownership |
-| 2 | `external_ref` | 1.00 | Exact match on `(platform, external_account_id, external_campaign_id)` |
+| 1 | `canonical_uuid` | 1.00 | Explicit Aether UUID validated against tenant ownership |
+| 2 | `exact_external_ref` | 1.00 | Exact match on `(platform, external_account_id, external_campaign_id)` |
 | 3 | `utm_id_alias` | 0.99 | Exact `utm_id` alias match |
 | 4 | `composite_alias` | 0.95 | `(platform, account, source, medium, utm_campaign)` composite alias |
 | 5 | `utm_campaign_alias` | 0.85 | Tenant-unique `utm_campaign` alias |
