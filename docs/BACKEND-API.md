@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "c9d00d5"
+last_synced_commit: "9682617"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2062,7 +2062,7 @@ Multi-channel campaign management with attribution and touchpoint tracking.
 | POST | `/v1/campaigns/{id}/touchpoints` | Record a campaign touchpoint (publishes `aether.campaign.touchpoint.recorded`) |
 | GET | `/v1/campaigns/{id}/journeys` | List current journey versions that include steps from this campaign (keyset-paginated by `started_at`) |
 
-**Permissions:** `write` for create/update/delete, `campaign:read` for queries
+**Permissions:** `campaign:manage` for create/update/delete, `campaign:read` for queries
 
 ---
 
