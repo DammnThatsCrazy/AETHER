@@ -297,10 +297,22 @@ class ProductionModelProvider(SemanticClassifierProvider):
                     "content": f"language: {request.language}\ntext:\n{request.text}",
                 }
             ],
+            # Thinking is on by default on this model tier and max_tokens caps
+            # thinking + response together — with a 512-token budget the JSON
+            # would truncate. This is a strict-schema classification with no
+            # tools, so disabling thinking is safe (accepted at default effort).
+            thinking={"type": "disabled"},
             output_config={"format": {"type": "json_schema", "schema": _response_schema()}},
         )
         if getattr(response, "stop_reason", None) == "refusal":
             raise _ProviderRefusal()
+        if getattr(response, "stop_reason", None) == "max_tokens":
+            # Truncated JSON must be rejected as truncation, not parsed into a
+            # confusing malformed_json error downstream.
+            raise ProviderResponseError(
+                "truncated_response: hit max_tokens before the classification "
+                "JSON completed; raise SEMANTIC_MODEL_MAX_OUTPUT_TOKENS"
+            )
         text = next(
             (
                 block.text
