@@ -8,7 +8,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/registry.py
   - Backend Architecture/aether-backend/services/campaign/repository.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py
-last_synced_commit: "245b5b3"
+last_synced_commit: "0b6746c"
 ---
 
 # Campaign Registry Architecture
