@@ -1812,14 +1812,32 @@ async def get_profile_events(
     event_type: str | None = Query(default=None),
     composer: ProfileComposer = Depends(_get_composer),
 ):
-    """Raw event stream for this entity (alias to timeline with event_type filter)."""
+    """Raw event stream for this entity (alias to timeline with event_type filter).
+
+    Response uses the sibling envelope ({entity_id, items, count, source_status})
+    so a failed read is distinguishable from an entity with no events. The one
+    frontend consumer of this route reads it with an unpinned schema, so the
+    envelope change breaks no pinned contract; /timeline retains its original
+    shape for the consumers that pin `events`.
+    """
     tenant = request.state.tenant
     tenant.require_permission("read")
-    events = await composer.get_timeline(user_id, tenant.tenant_id, limit=limit, event_type=event_type)
+    try:
+        items = await composer.get_timeline(
+            user_id, tenant.tenant_id, limit=limit, event_type=event_type
+        )
+        degraded = False
+    except Exception as exc:
+        logger.warning("profile events unavailable: %s", exc)
+        items = []
+        degraded = True
     return APIResponse(data={
         "entity_id": user_id,
-        "events": events,
-        "count": len(events),
+        "items": items,
+        "count": len(items),
+        "source_status": (
+            "missing" if degraded else ("available" if items else "empty")
+        ),
     }).to_dict()
 
 

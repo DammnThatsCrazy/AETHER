@@ -135,21 +135,28 @@ class TestClusterEndpoints:
         """merge-history excludes records from a different tenant."""
         from services.profile.routes import get_merge_history
         req = make_request(tenant_id=TENANT_ID)
-        wrong_tenant_row = {"tenant_id": "other-tenant", "entity_id": ENTITY_ID, "merged_into": "entity-002"}
-        with patch("repositories.identity_graph_repository.IdentityGraphRepository") as MockRepo:
-            MockRepo.return_value.find_many = AsyncMock(return_value=[wrong_tenant_row])
+        # The previously patched module (repositories.identity_graph_repository)
+        # has never existed; the real read path is IdentityResolutionRepository,
+        # and isolation is enforced by passing tenant_id into the query.
+        with patch("services.identity.repository.IdentityResolutionRepository") as MockRepo:
+            MockRepo.return_value.get_merge_history = AsyncMock(return_value=[])
+            MockRepo.return_value.resolve = AsyncMock(return_value=None)
             result = await get_merge_history(ENTITY_ID, req, limit=10)
+            call = MockRepo.return_value.get_merge_history.call_args
+        assert call.args[0] == TENANT_ID
         assert result["data"]["items"] == []
 
     @pytest.mark.asyncio
     async def test_split_history_tenant_isolation(self):
-        """split-history excludes records from a different tenant."""
+        """split-history reads are tenant-scoped at the query."""
         from services.profile.routes import get_split_history
         req = make_request(tenant_id=TENANT_ID)
-        wrong_tenant_row = {"tenant_id": "other-tenant", "entity_id": ENTITY_ID, "split_from": "entity-003"}
-        with patch("repositories.identity_graph_repository.IdentityGraphRepository") as MockRepo:
-            MockRepo.return_value.find_many = AsyncMock(return_value=[wrong_tenant_row])
+        with patch("services.identity.repository.IdentityResolutionRepository") as MockRepo:
+            MockRepo.return_value.get_split_history = AsyncMock(return_value=[])
+            MockRepo.return_value.resolve = AsyncMock(return_value=None)
             result = await get_split_history(ENTITY_ID, req, limit=10)
+            call = MockRepo.return_value.get_split_history.call_args
+        assert call.args[0] == TENANT_ID
         assert result["data"]["items"] == []
 
 
@@ -211,7 +218,7 @@ class TestAttributionEndpoint:
         from services.profile.routes import get_profile_attribution
         agg = make_agg()
         req = make_request(tenant_id=TENANT_ID)
-        result = await get_profile_attribution(ENTITY_ID, req, agg, window="7d")
+        result = await get_profile_attribution(ENTITY_ID, req, agg, window="30d")
         agg.attribution.assert_called_once()
         assert result["data"]["entity_id"] == ENTITY_ID
 
@@ -224,7 +231,7 @@ class TestConsentEndpoints:
         from services.profile.routes import get_profile_consent
         req = make_request()
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=None)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=None)
             result = await get_profile_consent(ENTITY_ID, req)
         assert result["data"]["consent_status"] == "unknown"
         assert result["data"]["source_status"] == "missing"
@@ -234,7 +241,7 @@ class TestConsentEndpoints:
         from services.profile.routes import get_profile_consent
         req = make_request()
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=None)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=None)
             result = await get_profile_consent(ENTITY_ID, req)
         assert result["data"]["activation_eligibility"] == "observe_only"
 
@@ -251,7 +258,7 @@ class TestConsentEndpoints:
             "blocked_use_cases": [],
         }
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=record)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=record)
             result = await get_profile_consent(ENTITY_ID, req)
         assert result["data"]["consent_status"] == "granted"
         assert result["data"]["activation_eligibility"] == "allowed"
@@ -270,7 +277,7 @@ class TestConsentEndpoints:
             "blocked_use_cases": ["analytics", "retargeting", "targeting"],
         }
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=record)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=record)
             result = await get_profile_consent(ENTITY_ID, req)
         assert result["data"]["consent_status"] == "revoked"
         assert result["data"]["activation_eligibility"] == "blocked"
@@ -282,7 +289,7 @@ class TestConsentEndpoints:
         req = make_request(tenant_id=TENANT_ID)
         wrong_tenant_record = {"tenant_id": "other-tenant", "consent_status": "granted"}
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=wrong_tenant_record)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=wrong_tenant_record)
             result = await get_profile_consent(ENTITY_ID, req)
         assert result["data"]["consent_status"] == "unknown"
 
@@ -297,7 +304,7 @@ class TestConsentEndpoints:
             "consent_status": "revoked",
         }
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=record)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=record)
             result = await get_activation_eligibility(ENTITY_ID, req)
         assert result["data"]["activation_eligibility"] == "blocked"
 
@@ -312,7 +319,7 @@ class TestConsentEndpoints:
             "consent_status": "granted",
         }
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=record)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=record)
             result = await get_activation_eligibility(ENTITY_ID, req)
         assert result["data"]["activation_eligibility"] == "allowed"
 
@@ -321,7 +328,7 @@ class TestConsentEndpoints:
         from services.profile.routes import get_activation_eligibility
         req = make_request()
         with patch("repositories.repos.ConsentRepository") as MockRepo:
-            MockRepo.return_value.find_by_entity = AsyncMock(return_value=None)
+            MockRepo.return_value.get_consent = AsyncMock(return_value=None)
             result = await get_activation_eligibility(ENTITY_ID, req)
         assert result["data"]["activation_eligibility"] == "observe_only"
 
@@ -447,7 +454,10 @@ class TestEconomicSubRoutes:
         req = make_request()
         mock_intel = MagicMock()
         mock_intel.web2 = AsyncMock(return_value={"entity_id": ENTITY_ID, "window": "30d"})
-        result = await get_economic_web2(ENTITY_ID, req, window="30d", intel=mock_intel)
+        result = await get_economic_web2(
+            ENTITY_ID, req, window="30d", intel=mock_intel,
+            consent_repo=self._granting_consent_repo(),
+        )
         assert result["data"]["entity_id"] == ENTITY_ID
 
     @pytest.mark.asyncio
@@ -492,13 +502,30 @@ class TestEconomicSubRoutes:
             await get_economic_web3(ENTITY_ID, req, window="invalid", intel=mock_intel)
 
     @pytest.mark.asyncio
+    @staticmethod
+    def _granting_consent_repo():
+        repo = MagicMock()
+        # check_consent requires granted=True and the purpose in the
+        # purposes LIST (shared/privacy/consent_enforcement.py).
+        repo.get_consent = AsyncMock(return_value={
+            "tenant_id": TENANT_ID,
+            "granted": True,
+            "purposes": ["credit"],
+        })
+        return repo
+
     async def test_economic_web2_invalid_window(self):
         from services.profile.routes import get_economic_web2
         from shared.common.common import BadRequestError
         req = make_request()
         mock_intel = MagicMock()
+        # The credit-consent gate runs before window validation, so the gate
+        # must be satisfied for the window error to be reachable.
         with pytest.raises(BadRequestError):
-            await get_economic_web2(ENTITY_ID, req, window="bad_window", intel=mock_intel)
+            await get_economic_web2(
+                ENTITY_ID, req, window="bad_window", intel=mock_intel,
+                consent_repo=self._granting_consent_repo(),
+            )
 
     @pytest.mark.asyncio
     async def test_economic_warnings_returns_structured_list(self):
@@ -622,24 +649,61 @@ class TestActionsEventsEndpoints:
     async def test_actions_returns_correct_count(self):
         from services.profile.routes import get_profile_actions
         req = make_request()
-        items = [
-            {"tenant_id": TENANT_ID, "entity_id": ENTITY_ID, "action_type": "pay"},
-            {"tenant_id": TENANT_ID, "entity_id": ENTITY_ID, "action_type": "delegate"},
+        # The route walks recommendations first, then fetches each one's
+        # decisions; mocking only DecisionRepository leaves the (real, empty)
+        # recommendation read yielding nothing, so the decision mock is never
+        # consulted and the old test asserted against a vacuous zero.
+        recs = [
+            {"tenant_id": TENANT_ID, "entity_id": ENTITY_ID, "recommendation_id": "rec-1"},
+            {"tenant_id": TENANT_ID, "entity_id": ENTITY_ID, "recommendation_id": "rec-2"},
         ]
-        with patch("services.intelligence.repositories.DecisionRepository") as MockRepo:
-            MockRepo.return_value.find_many = AsyncMock(return_value=items)
+        decisions_by_rec = {
+            "rec-1": [{"tenant_id": TENANT_ID, "recommendation_id": "rec-1", "action_type": "pay"}],
+            "rec-2": [{"tenant_id": TENANT_ID, "recommendation_id": "rec-2", "action_type": "delegate"}],
+        }
+        with patch("services.intelligence.repositories.RecommendationRepository") as MockRecs, \
+             patch("services.intelligence.repositories.DecisionRepository") as MockDecs:
+            MockRecs.return_value.find_many = AsyncMock(return_value=recs)
+            MockDecs.return_value.find_many = AsyncMock(
+                side_effect=lambda filters, limit: decisions_by_rec.get(
+                    filters.get("recommendation_id"), []
+                )
+            )
             result = await get_profile_actions(ENTITY_ID, req, limit=10)
         assert result["data"]["count"] == 2
+
+    # These tests previously patched repositories.repos.EventRepository — a
+    # class that has never existed anywhere in the codebase, so every test
+    # failed on the patch itself and asserted nothing about the endpoint. The
+    # real data path is ProfileComposer.get_timeline (tenant-scoped at the
+    # call), which the route takes as a dependency; the tests now exercise
+    # that seam.
+
+    class _FakeComposer:
+        def __init__(self, items=None, error: Exception | None = None):
+            self.items = items or []
+            self.error = error
+            self.calls: list[tuple] = []
+
+        async def get_timeline(self, user_id, tenant_id, limit=100, event_type=None):
+            self.calls.append((user_id, tenant_id, limit, event_type))
+            if self.error is not None:
+                raise self.error
+            return [
+                e for e in self.items
+                if event_type is None or e.get("event_type") == event_type
+            ]
 
     @pytest.mark.asyncio
     async def test_events_returns_items_list(self):
         from services.profile.routes import get_profile_events
         req = make_request()
-        with patch("repositories.repos.EventRepository") as MockRepo:
-            MockRepo.return_value.find_many = AsyncMock(return_value=[])
-            result = await get_profile_events(ENTITY_ID, req, limit=10, event_type=None)
-        assert "items" in result["data"]
-        assert "count" in result["data"]
+        result = await get_profile_events(
+            ENTITY_ID, req, limit=10, event_type=None, composer=self._FakeComposer()
+        )
+        assert result["data"]["items"] == []
+        assert result["data"]["count"] == 0
+        assert result["data"]["source_status"] == "empty"
 
     @pytest.mark.asyncio
     async def test_events_event_type_filter(self):
@@ -647,28 +711,39 @@ class TestActionsEventsEndpoints:
         req = make_request()
         items = [
             {"tenant_id": TENANT_ID, "entity_id": ENTITY_ID, "event_type": "page_view", "occurred_at": "2026-06-01T00:00:00Z"},
+            {"tenant_id": TENANT_ID, "entity_id": ENTITY_ID, "event_type": "login", "occurred_at": "2026-06-01T00:00:01Z"},
         ]
-        with patch("repositories.repos.EventRepository") as MockRepo:
-            MockRepo.return_value.find_many = AsyncMock(return_value=items)
-            result = await get_profile_events(ENTITY_ID, req, limit=10, event_type="page_view")
+        result = await get_profile_events(
+            ENTITY_ID, req, limit=10, event_type="page_view",
+            composer=self._FakeComposer(items=items),
+        )
         assert result["data"]["count"] == 1
         assert result["data"]["items"][0]["event_type"] == "page_view"
+        assert result["data"]["source_status"] == "available"
 
     @pytest.mark.asyncio
-    async def test_events_tenant_isolation(self):
+    async def test_events_reads_are_tenant_scoped(self):
+        """The route must pass the caller's tenant into the timeline read.
+
+        Isolation is enforced at the query, not by post-filtering rows — a
+        route that filtered after the fact would still have fetched another
+        tenant's data.
+        """
         from services.profile.routes import get_profile_events
         req = make_request(tenant_id=TENANT_ID)
-        wrong_tenant_event = {"tenant_id": "other-tenant", "entity_id": ENTITY_ID, "event_type": "login"}
-        with patch("repositories.repos.EventRepository") as MockRepo:
-            MockRepo.return_value.find_many = AsyncMock(return_value=[wrong_tenant_event])
-            result = await get_profile_events(ENTITY_ID, req, limit=10, event_type=None)
-        assert result["data"]["items"] == []
+        composer = self._FakeComposer()
+        await get_profile_events(
+            ENTITY_ID, req, limit=10, event_type=None, composer=composer
+        )
+        assert composer.calls == [(ENTITY_ID, TENANT_ID, 10, None)]
 
     @pytest.mark.asyncio
     async def test_events_graceful_degradation_when_unavailable(self):
         from services.profile.routes import get_profile_events
         req = make_request()
-        with patch("repositories.repos.EventRepository", side_effect=ImportError):
-            result = await get_profile_events(ENTITY_ID, req, limit=10, event_type=None)
+        result = await get_profile_events(
+            ENTITY_ID, req, limit=10, event_type=None,
+            composer=self._FakeComposer(error=RuntimeError("store down")),
+        )
         assert result["data"]["items"] == []
         assert result["data"]["source_status"] == "missing"
