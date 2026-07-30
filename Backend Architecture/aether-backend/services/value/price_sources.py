@@ -21,6 +21,7 @@ from services.stablecoin.valuation import classify_peg
 from services.value.models import is_usd
 
 _STABLECOIN_SYMBOLS = {"USDC", "USDT", "DAI", "PYUSD", "USDP", "TUSD", "GUSD"}
+_FX_FIAT_SYMBOLS = frozenset({"EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR", "BRL", "MXN"})
 PriceObservation = tuple[Decimal, str, str, str]
 PriceProvider = Callable[[str], Optional[PriceObservation]]
 _providers: list[PriceProvider] = []
@@ -89,7 +90,10 @@ def price(amount: Optional[Decimal], currency: Optional[str]) -> Optional[dict]:
                           source=source, rate=peg, confidence=confidence,
                           freshness=freshness, warning=warning)
 
-    method = "fx_rate" if len(sym) == 3 and sym.isalpha() else "market_price"
+    # "Three alpha chars" is not fiat — ETH/BTC/SOL all match. Only symbols in
+    # the known fiat set are FX conversions; everything else observed is a
+    # token market price.
+    method = "fx_rate" if sym in _FX_FIAT_SYMBOLS else "market_price"
     return _valuation(
         amount * rate,
         method=method,

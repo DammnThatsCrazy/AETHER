@@ -179,14 +179,21 @@ class RewardDecisionRepository(BaseRepository):
         )
         if not actor_key:
             return len(records)
+        # wallet_address persists as None for user-only decisions, so the
+        # .get() default never applies — coerce before lowering.
         return sum(
             1 for r in records
-            if r.get("user_id") == actor_key or r.get("wallet_address", "").lower() == actor_key.lower()
+            if r.get("user_id") == actor_key
+            or (r.get("wallet_address") or "").lower() == actor_key.lower()
         )
 
     async def get_last_eligible_at(self, tenant_id: str, campaign_id: str, user_id: Optional[str], wallet_address: Optional[str]) -> Optional[str]:
         """Return ISO timestamp of last eligible decision for cooldown enforcement."""
         actor_key = user_id or wallet_address or ""
+        if not actor_key:
+            # No identity to match on — an empty key must not "match" records
+            # whose wallet_address is also empty and fabricate a cooldown hit.
+            return None
         records = await self.find_many(
             filters={"tenant_id": tenant_id, "campaign_id": campaign_id, "eligible": True},
             limit=10000,
@@ -194,7 +201,10 @@ class RewardDecisionRepository(BaseRepository):
             sort_order="desc",
         )
         for r in records:
-            if r.get("user_id") == actor_key or r.get("wallet_address", "").lower() == actor_key.lower():
+            # Records persist wallet_address: None for user-only decisions, so
+            # the .get() default never applies — coerce before lowering.
+            record_wallet = r.get("wallet_address") or ""
+            if r.get("user_id") == actor_key or record_wallet.lower() == actor_key.lower():
                 return r.get("created_at")
         return None
 

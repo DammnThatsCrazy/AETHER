@@ -7,9 +7,30 @@ by services.value (value_of / safe_rollup). Core invariants under test:
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
+import pytest
+
 from services.economic.value_diagnostics import diagnose_rollup, value_status
+from services.value import price_sources
 from services.value.rollups import safe_rollup
 from services.value.valuation import value_of
+
+
+@pytest.fixture(autouse=True)
+def observed_price_provider():
+    # The price layer never fabricates a rate — these tests need an observed
+    # source for the assets they price (same pattern as tests/value/).
+    rates = {"ETH": Decimal("3000"), "BTC": Decimal("60000")}
+    price_sources.register_price_provider(
+        lambda symbol: (
+            (rates[symbol], "test_observation", "observed", "high")
+            if symbol in rates
+            else None
+        )
+    )
+    yield
+    price_sources.clear_price_providers()
 
 
 # --------------------------------------------------------------- diagnose_rollup
@@ -136,7 +157,8 @@ def test_value_status_priced_value_surfaces_price_source_and_inclusion():
     assert s["usd_value"] == "3000"
     assert s["include_in_rollups"] is True
     assert s["valuation_method"] == "market_price"
-    assert s["price_source"] == "market_reference"
+    # price_source carries the observing provider's label verbatim
+    assert s["price_source"] == "test_observation"
     assert s["priced_at"] is not None
     assert s["is_stale"] is False
     assert any("priced via" in w for w in s["why_included"])

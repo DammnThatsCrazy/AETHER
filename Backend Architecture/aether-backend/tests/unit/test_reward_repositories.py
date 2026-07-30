@@ -354,3 +354,57 @@ def test_contract_registry_tenant_isolation():
 
     result = _run(run())
     assert result is None
+
+
+def test_cooldown_lookup_survives_user_only_decision_records():
+    """A persisted decision with wallet_address=None must not crash the
+    cooldown lookup for a wallet-keyed actor.
+
+    Records persist wallet_address: None for user-only decisions, so
+    r.get("wallet_address", "") returns None (the key exists) — this
+    500'd /v1/rewards/evaluate once any user-only decision existed in
+    the tenant.
+    """
+    repo = RewardDecisionRepository()
+
+    async def run():
+        await repo.insert("dec-user-only", {
+            "tenant_id": TENANT_A,
+            "campaign_id": "camp-1",
+            "eligible": True,
+            "user_id": "user-1",
+            "wallet_address": None,
+            "created_at": _now(),
+        })
+        return await repo.get_last_eligible_at(
+            TENANT_A, "camp-1", None, "0xAbCd000000000000000000000000000000000000"
+        )
+
+    # No crash, and a wallet actor does not match the user-only record.
+    assert _run(run()) is None
+
+    async def empty_actor():
+        return await repo.get_last_eligible_at(TENANT_A, "camp-1", None, None)
+
+    # An empty identity must not fabricate a cooldown match either.
+    assert _run(empty_actor()) is None
+
+
+def test_eligible_count_survives_user_only_decision_records():
+    """get_eligible_count has the same None-wallet record shape to survive."""
+    repo = RewardDecisionRepository()
+
+    async def run():
+        await repo.insert("dec-user-only-2", {
+            "tenant_id": TENANT_A,
+            "campaign_id": "camp-2",
+            "eligible": True,
+            "user_id": "user-2",
+            "wallet_address": None,
+            "created_at": _now(),
+        })
+        return await repo.get_eligible_count(
+            TENANT_A, "camp-2", None, "0xAbCd000000000000000000000000000000000000"
+        )
+
+    assert _run(run()) == 0
