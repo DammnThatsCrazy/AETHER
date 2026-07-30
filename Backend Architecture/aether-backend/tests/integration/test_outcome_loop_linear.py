@@ -17,6 +17,18 @@ import pytest
 
 # ─── Minimal in-memory repo ─────────────────────────────────────────────────
 
+_LINEAR_SECRET = "test-linear-webhook-secret"
+
+
+def _signed_linear_record(body: str) -> dict:
+    """Headers + secret that pass the processor's real HMAC verification."""
+    import hashlib
+    import hmac
+
+    sig = hmac.new(_LINEAR_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return {"webhook_secret": _LINEAR_SECRET, "headers": {"linear-signature": sig}}
+
+
 class _MemRepo:
     def __init__(self):
         self._store: dict[str, dict] = {}
@@ -46,6 +58,19 @@ class _MemRepo:
             if error:
                 self._store[record_id]["processing_error"] = error
 
+    async def claim_pending(self, limit: int = 20) -> list[dict]:
+        # Mirrors WebhookInboxRepository.claim_pending's in-memory predicate:
+        # skip processed/processing rows, mark claimed rows as processing.
+        results = []
+        for record in self._store.values():
+            if record.get("processed") or record.get("processing"):
+                continue
+            record["processing"] = True
+            results.append(dict(record))
+            if len(results) >= limit:
+                break
+        return results
+
 
 class _SuggestionRepo:
     def __init__(self):
@@ -74,19 +99,21 @@ async def test_linear_status_changed_outcome_loop():
     suggestion_repo = _SuggestionRepo()
 
     tenant_id = "tenant-linear"
+    issue_uuid = "lin-uuid-001"
     issue_identifier = "ENG-42"
     suggestion_id = str(uuid.uuid4())
 
     # Pre-populate suggestion
     await suggestion_repo.update(suggestion_id, {"outcome_state": "pending"})
 
-    # ExternalResourceLink: Linear issue ENG-42 → suggestion
+    # ExternalResourceLink joins on the Linear issue UUID — the id the
+    # LinearAdapter stores when it creates the issue, not the human ENG-42.
     link_id = str(uuid.uuid4())
     await link_repo.insert(link_id, {
         "id": link_id,
         "tenant_id": tenant_id,
         "provider": "linear",
-        "external_id": issue_identifier,
+        "external_id": issue_uuid,
         "resource_type": "suggestion",
         "resource_id": suggestion_id,
         "intent_id": "intent-linear-1",
@@ -110,9 +137,9 @@ async def test_linear_status_changed_outcome_loop():
         "id": inbox_id,
         "tenant_id": tenant_id,
         "provider": "linear",
-        "headers": {"linear-signature": "mock-sig"},
+        **_signed_linear_record(json.dumps(linear_payload)),
         "raw_body": json.dumps(linear_payload),
-        "signature": "mock-sig",
+        "signature": "",
         "timestamp": "",
         "verified": False,
         "processed": False,
@@ -145,7 +172,8 @@ async def test_linear_status_changed_outcome_loop():
     assert outcome["provider"] == "linear"
     assert outcome["raw_payload"]["event_type"] == "status_changed"
     assert outcome["raw_payload"]["new_state"] == "In Progress"
-    assert outcome["external_id"] == issue_identifier
+    assert outcome["external_id"] == issue_uuid
+    assert outcome["raw_payload"]["linear_identifier"] == issue_identifier
 
     # Suggestion updated to "in_progress"
     suggestion = await suggestion_repo.find_by_id(suggestion_id)
@@ -164,7 +192,7 @@ async def test_linear_remove_action_becomes_cancelled():
     suggestion_repo = _SuggestionRepo()
 
     tenant_id = "tenant-linear"
-    issue_id = "ENG-99"
+    issue_id = "lin-uuid-099"
     suggestion_id = str(uuid.uuid4())
 
     await suggestion_repo.update(suggestion_id, {"outcome_state": "pending"})
@@ -184,7 +212,7 @@ async def test_linear_remove_action_becomes_cancelled():
     linear_payload = {
         "type": "Issue",
         "action": "remove",
-        "data": {"identifier": issue_id},
+        "data": {"id": issue_id, "identifier": "ENG-99"},
     }
 
     inbox_id = str(uuid.uuid4())
@@ -192,7 +220,7 @@ async def test_linear_remove_action_becomes_cancelled():
         "id": inbox_id,
         "tenant_id": tenant_id,
         "provider": "linear",
-        "headers": {},
+        **_signed_linear_record(json.dumps(linear_payload)),
         "raw_body": json.dumps(linear_payload),
         "processed": False,
     })
@@ -260,7 +288,7 @@ async def test_linear_loop_prevention_same_state():
         "id": inbox_id,
         "tenant_id": tenant_id,
         "provider": "linear",
-        "headers": {},
+        **_signed_linear_record(json.dumps(linear_payload)),
         "raw_body": json.dumps(linear_payload),
         "processed": False,
     })

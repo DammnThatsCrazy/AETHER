@@ -17,6 +17,24 @@ import pytest
 
 # ─── Minimal in-memory repos ─────────────────────────────────────────────────
 
+_WEBHOOK_SECRET = "test-aether-callback-secret"
+
+
+def _signed_webhook_record(body: str, extra_headers: dict | None = None) -> dict:
+    """Headers + secret that pass the processor's real HMAC verification."""
+    import hashlib
+    import hmac
+    import time
+
+    ts = str(int(time.time()))
+    sig = "sha256=" + hmac.new(
+        _WEBHOOK_SECRET.encode(), f"{ts}.{body}".encode(), hashlib.sha256
+    ).hexdigest()
+    headers = {"x-aether-signature": sig, "x-aether-timestamp": ts}
+    headers.update(extra_headers or {})
+    return {"signing_secret": _WEBHOOK_SECRET, "headers": headers}
+
+
 class _MemRepo:
     def __init__(self):
         self._store: dict[str, dict] = {}
@@ -45,6 +63,19 @@ class _MemRepo:
             self._store[record_id]["processed"] = True
             if error:
                 self._store[record_id]["processing_error"] = error
+
+    async def claim_pending(self, limit: int = 20) -> list[dict]:
+        # Mirrors WebhookInboxRepository.claim_pending's in-memory predicate:
+        # skip processed/processing rows, mark claimed rows as processing.
+        results = []
+        for record in self._store.values():
+            if record.get("processed") or record.get("processing"):
+                continue
+            record["processing"] = True
+            results.append(dict(record))
+            if len(results) >= limit:
+                break
+        return results
 
 
 class _SuggestionRepo:
@@ -88,7 +119,10 @@ async def test_generic_webhook_delivered_outcome():
         "id": inbox_id,
         "tenant_id": tenant_id,
         "provider": "webhook",
-        "headers": {"x-aether-signature": "sha256=abc", "x-aether-delivery-id": delivery_id},
+        **_signed_webhook_record(
+            json.dumps(callback_payload),
+            {"x-aether-delivery-id": delivery_id},
+        ),
         "raw_body": json.dumps(callback_payload),
         "signature": "sha256=abc",
         "timestamp": "",
@@ -158,7 +192,7 @@ async def test_generic_webhook_acknowledged_routes_to_suggestion():
         "id": inbox_id,
         "tenant_id": tenant_id,
         "provider": "webhook",
-        "headers": {},
+        **_signed_webhook_record(json.dumps(callback_payload)),
         "raw_body": json.dumps(callback_payload),
         "processed": False,
     })
