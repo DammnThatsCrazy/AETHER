@@ -8,7 +8,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/registry.py
   - Backend Architecture/aether-backend/services/campaign/repository.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py
-last_synced_commit: "3283497"
+last_synced_commit: "245b5b3"
 ---
 
 # Campaign Registry Architecture
@@ -91,7 +91,7 @@ Unique constraint: `(tenant_id, evidence_hash, status='open')` prevents duplicat
 3. The resolver never fuzzy-matches campaign names.
 4. The resolver never resolves across tenants.
 5. A canonical UUID from an external source is always validated against tenant ownership before use.
-6. Production never uses in-memory fallback stores for registry or resolver.
+6. Production never uses in-memory fallback stores for registry or resolver. This is enforced in code, not convention: `_require_pool` in `services/campaign/repository.py` raises when no pool is available outside the pool-optional environments (`local`/`dev`/`test`), so a misconfigured production process fails at the read/write rather than silently minting transient campaign identity in memory. The check lives in the shared `_acquire_pool` path, so no repository method can reach a local store without passing it.
 7. Raw evidence is never discarded after resolution failure.
 8. Every manual mapping mutation is permission-gated and audited.
 9. External campaign rename retains the Aether UUID.
