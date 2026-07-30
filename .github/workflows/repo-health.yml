@@ -261,6 +261,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # ml-docs-check runs docs_drift.py, which resolves each doc's
+          # last_synced_commit against history. A shallow clone puts older
+          # stamps beyond the fetch horizon, and the drift gate correctly
+          # refuses to score an unverifiable stamp as fresh.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5

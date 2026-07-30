@@ -145,11 +145,17 @@ def test_check_doc_stale_when_commits_after_sync(dd, tmp_path, monkeypatch):
     assert "abc1234" in r["stale_detail"]
 
 
-def test_commits_touching_after_returns_empty_for_unknown_sha(dd):
-    """If the declared SHA isn't in git history, drift check should
-    skip rather than crash (graceful degradation)."""
+def test_commits_touching_after_returns_none_for_unknown_sha(dd):
+    """An unresolvable declared SHA must be distinguishable from "no drift".
+
+    The previous form of this test pinned the opposite: an unknown stamp
+    returned [] and was scored clean, which permanently exempted any doc with
+    a vanished (pre-squash) or garbage stamp from drift detection — measured
+    at 78 of 368 source-linked docs on this repo. None is the "unverifiable"
+    answer the caller turns into a stale finding.
+    """
     result = dd.commits_touching_after("zzzzzzz", ["README.md"])
-    assert result == []
+    assert result is None
 
 
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
