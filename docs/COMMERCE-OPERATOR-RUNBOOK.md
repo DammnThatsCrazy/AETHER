@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "b30af06"
+last_synced_commit: "c9d00d5"
 ---
 # Commerce Operator Runbook
 
@@ -41,8 +41,14 @@ last_synced_commit: "b30af06"
 **Symptom:** `avg_latency_ms` climbing, `success_rate` dropping on Command Facilitator panel.
 
 **Steps:**
-1. Update facilitator health: internal API or via registry method.
-2. Control plane auto-routes around unhealthy facilitators on next `authorize_payment()`.
+1. Health is derived automatically from verification outcomes: a 200 verdict marks
+   the facilitator `healthy`, a non-200 response `degraded`, and a timeout or
+   connection failure `down`. Manual override via the registry's `update_health`
+   remains available for operator intervention.
+2. `authorize_payment()` excludes facilitators marked `down` and ranks
+   `healthy` ahead of unprobed (`unknown`) ahead of `degraded` on the next
+   selection — freshly seeded facilitators are selectable before their first
+   health observation.
 3. If all facilitators down: verification falls back to local verification per chain.
 
 ## 4. Duplicate payment detected
