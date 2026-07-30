@@ -14,7 +14,7 @@ source_files:
   - deploy/observability/prometheus/alert_rules.yml
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "5a8df09"
+last_synced_commit: "365c036"
 ---
 
 # ML Incident Runbook
