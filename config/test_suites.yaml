@@ -1,0 +1,392 @@
+# =============================================================================
+# Aether — Canonical Test-Suite Registry
+#
+# Single source of truth for every automated test suite in the repo: where it
+# lives, how to run it, which environments (local/ci/release) it is expected
+# to run in, and what happens when it can't run there (skip_policy).
+#
+# Loaded and strictly validated by scripts/lib/test_suites.py (load_suites);
+# unknown keys, bad enum values, non-existent paths, and a
+# documented_quarantine suite missing its quarantine block are all hard
+# errors there, never silently defaulted.
+#
+# Consumed by:
+#   - scripts/repo_doctor.py — registry-driven pytest-suite invocation
+#     (replaces the two previously hardcoded `python -m pytest ...` calls).
+#   - scripts/validate_test_suite_coverage.py — asserts no `environments`-
+#     contains-ci pytest suite is missing from repo_doctor's invocation set.
+#   - .github/workflows/repo-health.yml's backend-tests job (subsystem
+#     lookup: suites_for(suites, "backend")).
+#
+# Field notes:
+#   - paths: repo-root-relative paths this suite covers; validated to exist.
+#   - runner: argv executed with cwd at the repo root (build_command()
+#     returns it verbatim). Suites needing a different working directory
+#     (Hardhat, standalone npm projects outside the root workspaces) encode
+#     that themselves via a `bash -lc "cd '<dir>' && ..."` form.
+#   - requires: python_packages (import names probed before running; missing
+#     ones become a tolerated skip in `local` and a hard failure in `ci` when
+#     skip_policy is `never`), services/docker/credentials (any of these
+#     present means skip_policy can never be `never` — see
+#     Requires.needs_live_infra in scripts/lib/test_suites.py).
+#   - skip_policy: never (must always run; a skip is a bug, hard-failed in
+#     ci), local_only (only ever exercised locally), documented_quarantine
+#     (tolerated skip everywhere, requires the `quarantine` block).
+#   - release_class: pr_gate (blocks a normal PR when applicable),
+#     live_certification (needs a live/credentialed environment to mean
+#     anything), advisory (informational, never blocks).
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/test_suites.yaml
+
+suites:
+
+  # ---------------------------------------------------------------------------
+  # Python / pytest suites — driven by scripts/repo_doctor.py
+  # ---------------------------------------------------------------------------
+
+  - id: root
+    subsystem: root
+    paths: ["tests"]
+    runner: ["python", "-m", "pytest", "tests/", "-v", "--tb=short"]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: backend
+    subsystem: backend
+    paths: ["Backend Architecture/aether-backend/tests"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/tests",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: ml
+    subsystem: ml
+    paths: ["ML Models/aether-ml/tests"]
+    runner:
+      ["python", "-m", "pytest", "ML Models/aether-ml/tests", "-v", "--tb=short"]
+    requires:
+      # Import names probed by repo_doctor.py before running. scikit-learn's
+      # import name is "sklearn". Both ship in the "ml" extra
+      # (pip install -e ".[ml,dev]"); `make bootstrap` installs ".[all]" so
+      # CI always has them — a missing-deps skip here in --ci is therefore a
+      # real environment misconfiguration, not an expected outcome.
+      python_packages: ["joblib", "sklearn"]
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: compliance
+    subsystem: compliance
+    paths: ["GDPR & SOC2/aether-compliance/tests"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "GDPR & SOC2/aether-compliance/tests",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: agent-layer
+    subsystem: agent
+    paths: ["Agent Layer/tests"]
+    runner: ["python", "-m", "pytest", "Agent Layer/tests", "-v", "--tb=short"]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: journey-service
+    subsystem: journey-service
+    paths: ["Backend Architecture/services/journey-service/tests"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/services/journey-service/tests",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: backend-observability
+    subsystem: observability
+    # One suite across all four *_observability services (two of the four —
+    # agent_comm_observability and protocol_observability — currently ship no
+    # test files at all; batching them into a single pytest invocation with
+    # the other two avoids pytest's "no tests collected" exit code 5 that a
+    # standalone per-service invocation would hit for those two).
+    paths:
+      [
+        "Backend Architecture/aether-backend/services/agent_comm_observability/tests",
+        "Backend Architecture/aether-backend/services/external_account_observability/tests",
+        "Backend Architecture/aether-backend/services/agentic_observability/tests",
+        "Backend Architecture/aether-backend/services/protocol_observability/tests",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/services/agent_comm_observability/tests",
+        "Backend Architecture/aether-backend/services/external_account_observability/tests",
+        "Backend Architecture/aether-backend/services/agentic_observability/tests",
+        "Backend Architecture/aether-backend/services/protocol_observability/tests",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  # ---------------------------------------------------------------------------
+  # Non-pytest suites — NOT invoked by scripts/repo_doctor.py (its registry
+  # wiring is pytest-only by design; see is_pytest_suite in
+  # scripts/lib/test_suites.py). Each is exercised today by its own dedicated
+  # GitHub Actions workflow rather than repo-health.yml, except
+  # datalake-backend (quarantined below).
+  # ---------------------------------------------------------------------------
+
+  - id: smart-contracts
+    subsystem: smart-contracts
+    paths: ["Smart Contracts/test"]
+    # Mirrors .github/workflows/smart-contract-analysis.yml's contract-tests
+    # job (npm ci already run there before this executes).
+    runner: ["bash", "-lc", "cd 'Smart Contracts' && npx hardhat test"]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "release-evidence/contract-tests.json"
+    quarantine: null
+
+  - id: datalake-backend
+    subsystem: datalake
+    paths: ["Data Lake Architecture/aether-Datalake-backend/tests"]
+    runner: ["bash", "-lc", "cd 'Data Lake Architecture/aether-Datalake-backend' && npm test"]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    # Not "ci" today: no workflow installs this project's dependencies
+    # (it is a standalone npm project outside the root package.json
+    # workspaces). Verified 2026-07-30: `npm test` here fails immediately
+    # with "vitest: not found" on a plain checkout, because node_modules is
+    # never installed by any CI job. The source tests themselves are
+    # self-contained (packages/events' createSink() falls back to an
+    # in-process ConsoleSink for every configured sink type — no live Kafka/
+    # S3/ClickHouse/Redis dependency), so once an install step is wired in
+    # this suite is expected to just pass; it is quarantined for the missing
+    # wiring, not for a live-infra blocker.
+    environments: [local, release]
+    skip_policy: documented_quarantine
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine:
+      reason: >-
+        Standalone npm project outside the root package.json workspaces; no
+        CI job installs its dependencies, so `npm test` fails today with
+        "vitest: not found" on a clean checkout. Needs a dependency-install
+        step wired into a CI job (or folding into the root workspaces).
+      owner: platform
+      expires: "2026-09-30"
+
+  # ---------------------------------------------------------------------------
+  # Frontend / SDK workspaces — npm run test --workspace=<pkg>, cwd repo root.
+  # Already exercised by .github/workflows/repo-health.yml's `typescript` job
+  # (root `npm run test` -> `npm run test --workspaces --if-present`), except
+  # frontend/kyber's component/integration suites, which are wired into
+  # .github/workflows/kyber-e2e.yml instead.
+  # ---------------------------------------------------------------------------
+
+  - id: sdk-shared
+    subsystem: sdk-shared
+    paths: ["packages/shared"]
+    runner: ["npm", "run", "test", "--workspace=packages/shared"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: sdk-web
+    subsystem: sdk-web
+    paths: ["packages/web"]
+    runner: ["npm", "run", "test", "--workspace=packages/web"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: sdk-server
+    subsystem: sdk-server
+    paths: ["packages/server"]
+    runner: ["npm", "run", "test", "--workspace=packages/server"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: sdk-react-native
+    subsystem: sdk-react-native
+    paths: ["packages/react-native"]
+    runner: ["npm", "run", "test", "--workspace=packages/react-native"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-aether
+    subsystem: frontend-aether
+    paths: ["frontend/aether"]
+    runner: ["npm", "run", "test", "--workspace=frontend/aether"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-kyber
+    subsystem: frontend-kyber
+    paths: ["frontend/kyber"]
+    runner: ["npm", "run", "test", "--workspace=frontend/kyber"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-kyber-component
+    subsystem: frontend-kyber
+    paths: ["frontend/kyber"]
+    # Wired via .github/workflows/kyber-e2e.yml (working-directory: frontend/kyber).
+    runner: ["npm", "run", "test:component", "--workspace=frontend/kyber"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-kyber-integration
+    subsystem: frontend-kyber
+    paths: ["frontend/kyber"]
+    # Wired via .github/workflows/kyber-e2e.yml (working-directory: frontend/kyber).
+    runner: ["npm", "run", "test:integration", "--workspace=frontend/kyber"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-shared
+    subsystem: frontend-shared
+    paths: ["frontend/shared"]
+    runner: ["npm", "run", "test", "--workspace=frontend/shared"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-docs
+    subsystem: frontend-docs
+    paths: ["frontend/docs"]
+    runner: ["npm", "run", "test", "--workspace=frontend/docs"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: advisory
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-demo
+    subsystem: frontend-demo
+    paths: ["frontend/demo"]
+    runner: ["npm", "run", "test", "--workspace=frontend/demo"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: advisory
+    evidence_artifact: null
+    quarantine: null

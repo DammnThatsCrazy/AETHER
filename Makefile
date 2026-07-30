@@ -288,20 +288,25 @@ docs: ## Run the full documentation pipeline (extract + sync + validate + drift)
 # Repo-Enforced Consistency (single command for humans, agents, and CI)
 # ---------------------------------------------------------------------------
 
+# Gate targets run on the isolated interpreter when the project venv exists:
+# doc generators import backend registries (fastapi et al.), which the system
+# interpreter cannot resolve — see the toolchain notes at the top of this file.
+GATE_PY := $(shell test -x $(VENV_PY) && echo $(VENV_PY) || echo python)
+
 repo-doctor: ## Validate full repo consistency (no mutations)
-	python scripts/repo_doctor.py --check
+	$(GATE_PY) scripts/repo_doctor.py --check
 
 repo-doctor-fix: ## Regenerate generated docs + sync, then validate
-	python scripts/repo_doctor.py --fix
+	$(GATE_PY) scripts/repo_doctor.py --fix
 
 docs-check: ## Docs/version/frontmatter/drift checks only (fast gate)
-	python scripts/repo_doctor.py --check --docs-only
+	$(GATE_PY) scripts/repo_doctor.py --check --docs-only
 
 ci-check: ## CI-safe full validation; fails if generators produce a diff
-	python scripts/repo_doctor.py --ci
+	$(GATE_PY) scripts/repo_doctor.py --ci
 
 docs-fix: ## Regenerate and sync docs only
-	python scripts/repo_doctor.py --fix --docs-only
+	$(GATE_PY) scripts/repo_doctor.py --fix --docs-only
 
 frontend-data-truth: ## Enforce Aether/Kyber runtime source data-truth boundaries
 	python scripts/validate_frontend_data_truth.py
