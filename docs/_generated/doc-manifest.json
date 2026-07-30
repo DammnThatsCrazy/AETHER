@@ -3640,7 +3640,7 @@
       "path": "docs/audits/DOCS_REVIEW_BACKLOG.md",
       "title": "Docs Review Backlog — Audit Snapshot",
       "slug": "audits/docs-review-backlog",
-      "section": "audits",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "dev-senior",
