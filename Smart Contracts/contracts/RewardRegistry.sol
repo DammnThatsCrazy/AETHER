@@ -347,6 +347,11 @@ contract RewardRegistry is AccessControl {
         returns (ActionType memory)
     {
         bytes32 key = keccak256(abi.encodePacked(actionType));
+        // Triaged (incorrect-equality): registeredAt is assigned
+        // block.timestamp at registration and can never legitimately be zero,
+        // so `== 0` is the existence sentinel for the struct, not a comparison
+        // against a manipulable timestamp.
+        // slither-disable-next-line incorrect-equality
         if (_actions[key].registeredAt == 0) revert ActionNotRegistered(actionType);
         return _actions[key];
     }
@@ -383,6 +388,11 @@ contract RewardRegistry is AccessControl {
         view
         returns (CampaignMeta memory)
     {
+        // Triaged (incorrect-equality): registeredAt is assigned
+        // block.timestamp at registration and can never legitimately be zero,
+        // so `== 0` is the existence sentinel for the struct, not a comparison
+        // against a manipulable timestamp.
+        // slither-disable-next-line incorrect-equality
         if (_campaigns[campaignId].registeredAt == 0) revert CampaignNotRegistered(campaignId);
         return _campaigns[campaignId];
     }

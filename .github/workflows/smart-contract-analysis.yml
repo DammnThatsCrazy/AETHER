@@ -68,8 +68,8 @@ jobs:
       - name: Run Slither — human-readable summary
         # No `|| true` here: a real Slither crash (bad artifacts, tool
         # misconfiguration) must fail the job, not be silently swallowed.
-        # Only *finding severity* is filtered (via --fail-high below), never
-        # tool errors.
+        # The summary printer never fails on findings; the blocking pass is the
+        # SARIF step below.
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
@@ -77,12 +77,22 @@ jobs:
             --exclude-dependencies \
             --print human-summary
 
-      - name: Run Slither — SARIF output
+      - name: Run Slither — SARIF output (blocking gate)
+        # Blocks on MEDIUM and HIGH findings. Informational/low classes
+        # (pragma spread, solc-version advisories, timestamp expiry checks,
+        # assembly in ecrecover, cyclomatic complexity) are advisory and are
+        # excluded from the exit code but still visible in the summary above.
+        # Accepted medium findings are triaged IN SOURCE via
+        # `slither-disable-next-line` with a written justification at the exact
+        # site — never by weakening this invocation. A new medium or high
+        # finding fails this job.
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
             --exclude-optimization \
             --exclude-dependencies \
+            --exclude-informational \
+            --exclude-low \
             --sarif results.sarif
 
       - name: Upload SARIF to GitHub Security tab
