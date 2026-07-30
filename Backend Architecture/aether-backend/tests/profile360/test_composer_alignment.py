@@ -113,8 +113,16 @@ def test_graph_root_node_fallback_includes_profile_links():
 
     result = _run(_composer(graph)._compose_graph("ghost-user", tenant_id="tenant-a"))
 
-    assert result["nodes"] == []
+    # The composer synthesizes a root fallback node so the profile surface
+    # always has a navigable anchor; what matters is that it carries real
+    # profile_links rather than appearing as a bare graph vertex.
     assert result["neighbor_count"] == 0
+    nodes = result["nodes"]
+    assert len(nodes) == 1
+    root = nodes[0]
+    assert root["id"] == "ghost-user"
+    assert root["profile_links"]["summary"] == "/v1/profile/ghost-user/summary"
+    assert root["profile_links"]["full"] == "/v1/profile360/human/ghost-user"
 
 
 def test_graph_nodes_profile_links_use_correct_entity_type():

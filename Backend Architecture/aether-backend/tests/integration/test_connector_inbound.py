@@ -208,7 +208,7 @@ async def test_connector_cursor_upserted_after_successful_sync():
     with (
         patch.object(svc.repo, "find_by_id", AsyncMock(return_value=hubspot_cfg.model_dump())),
         patch.object(svc.repo, "insert", AsyncMock(return_value={})),
-        patch.object(svc, "_resolve_secret", AsyncMock(return_value=None)),
+        patch.object(svc, "_resolve_secret", AsyncMock(return_value="pat-test-token")),
         patch(
             "services.integrations.connectors.adapters.HubSpotConnector.pull",
             AsyncMock(return_value=[]),
@@ -252,7 +252,7 @@ async def test_connector_sync_error_on_http_error():
     with (
         patch.object(svc.repo, "find_by_id", AsyncMock(return_value=cfg.model_dump())),
         patch.object(svc.repo, "insert", AsyncMock(side_effect=_fake_insert)),
-        patch.object(svc, "_resolve_secret", AsyncMock(return_value=None)),
+        patch.object(svc, "_resolve_secret", AsyncMock(return_value="pat-test-token")),
         patch(
             "services.integrations.connectors.adapters.HubSpotConnector.pull",
             AsyncMock(side_effect=Exception("HTTP 429: Too Many Requests")),
@@ -262,9 +262,9 @@ async def test_connector_sync_error_on_http_error():
         with pytest.raises(ConnectorSyncError):
             await svc.sync("t1", "hubspot")
 
-    # Health should be set to "error" in the saved config
+    # The failure is persisted with the canonical "failed" sync status
     assert len(saved) > 0
-    assert saved[-1].get("sync_status") == "error"
+    assert saved[-1].get("sync_status") == "failed"
 
 
 # ─── WebhookInbox write during ingest_webhook ─────────────────────────────────
