@@ -157,6 +157,20 @@ def ci_python_suites():
     return [s for s in suites_for(suites, "ci") if is_pytest_suite(s)]
 
 
+def resolve_runner_argv(argv: list[str]) -> list[str]:
+    """Resolve a registry runner's portable "python" argv[0] to the gate's own
+    interpreter.
+
+    Registry runners declare ``python`` so the declaration stays portable, but
+    executing that literally can fall back to a system python whose
+    site-packages the toolchain gate has already rejected. Non-python runners
+    (npm, bash, hardhat) pass through untouched.
+    """
+    if argv and argv[0] == "python":
+        return [sys.executable, *argv[1:]]
+    return list(argv)
+
+
 def run_registry_python_suites(
     results: list[CheckResult],
     *,
@@ -229,7 +243,7 @@ def run_registry_python_suites(
             continue
 
         run(
-            build_command(suite),
+            resolve_runner_argv(build_command(suite)),
             name=name,
             results=results,
             stop_on_failure=stop_on_failure,
@@ -606,7 +620,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     run(
         [sys.executable, "scripts/validate_consent_purpose_reconciliation.py"],
-        name="Consent-purpose reconciliation (compliance enum ↔ 11-purpose registry)",
+        name="Consent-purpose reconciliation (compliance enum ↔ 12-purpose registry)",
         results=results,
         stop_on_failure=stop,
         remediation="reconcile ConsentPurpose in GDPR & SOC2/aether-compliance/config/compliance_config.py with packages/shared/contracts/consent-registry.json",

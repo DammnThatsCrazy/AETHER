@@ -118,3 +118,22 @@ def test_coverage_validator_fails_when_a_ci_suite_is_orphaned(monkeypatch) -> No
 
     monkeypatch.setattr(repo_doctor, "ci_python_suites", lambda: full)
     assert coverage.main() == 0
+
+
+def test_registry_runner_python_resolves_to_gate_interpreter() -> None:
+    """A portable "python" argv must execute as the gate's own interpreter.
+
+    Executing the literal string falls back to whatever system python is on
+    PATH — the interpreter whose broken site-packages the toolchain gate
+    exists to reject — and its missing deps then fail (ci) or skip (local)
+    every registry suite.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import repo_doctor
+
+    resolved = repo_doctor.resolve_runner_argv(["python", "-m", "pytest", "tests/"])
+    assert resolved[0] == sys.executable
+    assert resolved[1:] == ["-m", "pytest", "tests/"]
+
+    npm = ["bash", "-lc", "npm test"]
+    assert repo_doctor.resolve_runner_argv(npm) == npm
