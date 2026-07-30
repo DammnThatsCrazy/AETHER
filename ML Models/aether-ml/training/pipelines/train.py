@@ -164,6 +164,26 @@ _SYNTHETIC_SPECS: dict[str, dict[str, Any]] = {
 
 
 # ---------------------------------------------------------------------------
+# Manifest checksum helper
+# ---------------------------------------------------------------------------
+
+
+def compute_manifest_checksum(manifest: dict[str, Any]) -> str:
+    """Return the canonical SHA-256 self-hash of a dataset manifest.
+
+    Computed over a canonical JSON serialization (sorted keys, compact
+    separators) of the manifest EXCLUDING the ``checksum`` field itself, so
+    the stored checksum can always be verified by re-deriving it from the
+    stored manifest.
+    """
+    import hashlib
+
+    body = {k: v for k, v in manifest.items() if k != "checksum"}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
 # Training Pipeline
 # ---------------------------------------------------------------------------
 
@@ -173,8 +193,10 @@ class TrainingPipeline:
 
     Steps:
         1. Load data (from S3/local or generate synthetic)
-        2. Preprocess features
-        3. Split into train / validation / test
+        2. Split RAW data into train / validation / test
+        3. Fit preprocessing on the TRAINING split only, then transform
+           validation and test with the frozen training-time statistics
+           (prevents leakage of holdout quantiles/medians/scale into training)
         4. Train model
         5. Evaluate on holdout test set
         6. Log metrics and artifacts to MLflow
@@ -224,10 +246,9 @@ class TrainingPipeline:
             + (f" [SYNTHETIC]" if is_synthetic else " [REAL]")
         )
 
-        # 2. Preprocess
-        X = self._preprocess(X)
-
-        # 3. Split
+        # 2. Split RAW data BEFORE any preprocessing is fitted, so that
+        #    holdout rows can never influence clip bounds, imputation medians,
+        #    or scaler statistics.
         if y is not None:
             stratify = y if y.nunique() <= 20 else None
             X_train, X_temp, y_train, y_temp = train_test_split(
@@ -236,11 +257,13 @@ class TrainingPipeline:
                 random_state=42,
                 stratify=stratify,
             )
+            # y_temp is exactly the label vector aligned with X_temp — safe for
+            # any index type (a positional .iloc on label indices is not).
             X_val, X_test, y_val, y_test = train_test_split(
                 X_temp, y_temp,
                 test_size=0.5,
                 random_state=42,
-                stratify=stratify.iloc[X_temp.index] if stratify is not None else None,
+                stratify=y_temp if stratify is not None else None,
             )
         else:
             # Unsupervised — no labels
@@ -251,6 +274,12 @@ class TrainingPipeline:
         logger.info(
             f"Split sizes: train={len(X_train)}, val={len(X_val)}, test={len(X_test)}"
         )
+
+        # 3. Fit preprocessing on the training split ONLY, then apply the
+        #    frozen transform to validation and test.
+        X_train = self._fit_preprocess(X_train)
+        X_val = self._transform(X_val)
+        X_test = self._transform(X_test)
 
         # 4. Train model
         model = self._get_model_instance()
@@ -462,8 +491,13 @@ class TrainingPipeline:
     # Preprocessing
     # ------------------------------------------------------------------
 
-    def _preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Build and fit the preprocessing pipeline, then transform X.
+    def _fit_preprocess(self, X_train: pd.DataFrame) -> pd.DataFrame:
+        """Fit the preprocessing pipeline on the TRAINING split only, then transform it.
+
+        Clip quantiles, imputation medians, and scaler statistics are computed
+        exclusively from ``X_train``. Validation/test data must be transformed
+        with :meth:`_transform` so holdout rows can never influence these
+        statistics (no train/test leakage).
 
         The fitted pipeline is stored on ``self._preprocessing_pipeline`` so it can
         be persisted alongside the model artifact — ensuring training and serving use
@@ -471,15 +505,16 @@ class TrainingPipeline:
         """
         from sklearn.compose import ColumnTransformer
 
-        numeric_cols = list(X.select_dtypes(include=[np.number]).columns)
+        numeric_cols = list(X_train.select_dtypes(include=[np.number]).columns)
+        self._numeric_cols: list[str] = numeric_cols
 
-        # Clip outliers before fitting the scaler (fit on clipped training data)
-        X_clipped = X.copy()
+        # Clip outliers before fitting the scaler — bounds come from TRAIN quantiles.
+        X_clipped = X_train.copy()
         self._clip_bounds: dict[str, tuple[float, float]] = {}
         for col in numeric_cols:
-            q_low = float(X[col].quantile(0.01))
-            q_high = float(X[col].quantile(0.99))
-            X_clipped[col] = X[col].clip(lower=q_low, upper=q_high)
+            q_low = float(X_train[col].quantile(0.01))
+            q_high = float(X_train[col].quantile(0.99))
+            X_clipped[col] = X_train[col].clip(lower=q_low, upper=q_high)
             self._clip_bounds[col] = (q_low, q_high)
 
         num_pipeline = Pipeline([
@@ -494,7 +529,27 @@ class TrainingPipeline:
         )
 
         X_transformed = self._preprocessing_pipeline.fit_transform(X_clipped)
-        return pd.DataFrame(X_transformed, columns=numeric_cols, index=X.index)
+        return pd.DataFrame(X_transformed, columns=numeric_cols, index=X_train.index)
+
+    def _transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the already-fitted preprocessing (train-time statistics) to ``X``.
+
+        Raises RuntimeError if :meth:`_fit_preprocess` has not been called yet.
+        """
+        pipeline = getattr(self, "_preprocessing_pipeline", None)
+        if pipeline is None:
+            raise RuntimeError(
+                "Preprocessing pipeline is not fitted. Call _fit_preprocess "
+                "on the training split before transforming holdout data."
+            )
+
+        X_clipped = X.copy()
+        for col, (q_low, q_high) in self._clip_bounds.items():
+            if col in X_clipped.columns:
+                X_clipped[col] = X_clipped[col].clip(lower=q_low, upper=q_high)
+
+        X_transformed = pipeline.transform(X_clipped)
+        return pd.DataFrame(X_transformed, columns=self._numeric_cols, index=X.index)
 
     # ------------------------------------------------------------------
     # Model instantiation
@@ -753,7 +808,20 @@ class TrainingPipeline:
     # ------------------------------------------------------------------
 
     def _check_thresholds(self, test_metrics: dict[str, float]) -> tuple[bool, dict[str, float]]:
-        """Check test metrics against minimum thresholds from the registry."""
+        """Check test metrics against minimum thresholds from the registry.
+
+        FAIL-CLOSED: every threshold metric declared by the registry must be
+        present and finite in ``test_metrics``. A missing, NaN, or infinite
+        metric fails the gate — a run producing zero test metrics can never
+        report ``threshold_passed=True``.
+
+        Direction: metrics listed in
+        ``training.configs.model_configs.THRESHOLD_CAP_METRICS`` are CAPS
+        (actual <= threshold passes, e.g. test_mae, test_anomaly_rate); all
+        other metrics are floors (actual >= threshold passes).
+        """
+        import math
+
         try:
             from common.model_registry import get_model
             entry = get_model(self.model_name)
@@ -764,24 +832,42 @@ class TrainingPipeline:
         if not thresholds:
             return True, {}
 
+        try:
+            from training.configs.model_configs import THRESHOLD_CAP_METRICS as _cap_metrics
+        except ImportError:
+            # Keep train.py importable in isolated test runs — must stay in
+            # sync with training/configs/model_configs.py.
+            _cap_metrics = frozenset({"test_mae", "test_rmse", "test_mape", "test_anomaly_rate"})
+
         passed = True
         results: dict[str, float] = {}
         for metric, threshold in thresholds.items():
             actual = test_metrics.get(metric)
-            if actual is None:
+            is_cap = metric in _cap_metrics
+            direction = "≤" if is_cap else "≥"
+            if (
+                actual is None
+                or isinstance(actual, bool)
+                or not isinstance(actual, (int, float))
+                or not math.isfinite(float(actual))
+            ):
+                passed = False
+                results[metric] = float("nan")
+                logger.warning(
+                    "Threshold FAIL-CLOSED: %s.%s is missing or non-finite (%r); "
+                    "required %s %.4f",
+                    self.model_name, metric, actual, direction, threshold,
+                )
                 continue
-            # For mae/rmse lower is better; for others higher is better
-            if metric in ("test_mae", "test_rmse", "test_mape"):
-                ok = actual <= threshold
-            else:
-                ok = actual >= threshold
+
+            actual = float(actual)
+            ok = actual <= threshold if is_cap else actual >= threshold
             results[metric] = actual
             if not ok:
                 passed = False
                 logger.warning(
                     "Threshold NOT met: %s.%s = %.4f (threshold %.4f, direction=%s)",
-                    self.model_name, metric, actual, threshold,
-                    "≤" if metric in ("test_mae", "test_rmse", "test_mape") else "≥",
+                    self.model_name, metric, actual, threshold, direction,
                 )
             else:
                 logger.info(
@@ -837,9 +923,9 @@ class TrainingPipeline:
         }
 
         manifest_path = artifact_path / "dataset_manifest.json"
-        manifest_content = json.dumps(manifest, indent=2, default=str)
-        manifest_path.write_text(manifest_content)
-        manifest["checksum"] = hashlib.sha256(manifest_content.encode()).hexdigest()
+        # Canonical self-hash: computed over the manifest EXCLUDING the checksum
+        # field, so verifiers can recompute it from the stored file and match.
+        manifest["checksum"] = compute_manifest_checksum(manifest)
         manifest_path.write_text(json.dumps(manifest, indent=2, default=str))
         logger.info("Dataset manifest saved: %s rows -> %s", len(X), manifest_path)
 
@@ -884,38 +970,25 @@ class TrainingPipeline:
         threshold_passed, _ = self._check_thresholds(test_metrics)
         feature_schema_hash = self._get_feature_schema_hash()
 
-        # Full canonical metadata (required by artifact registry)
-        metadata = {
-            "model_id": self.model_name,
+        # Pipeline-specific fields NOT covered by the canonical ArtifactMetadata
+        # schema. These are merged ON TOP of the canonical record so a single
+        # metadata.json carries both (previously the registry write discarded
+        # tier/class_name/config/train_metrics/test_metrics).
+        rich_fields = {
             "model_name": self.model_name,
-            "artifact_version": artifact_path.name,
-            "promotion_state": "trained",
             "tier": self.tier,
             "class_name": self.class_name,
-            "artifact_format": "joblib",
-            "artifact_path": str(artifact_file),
-            "training_run_id": training_run_id or "",
-            "feature_schema_hash": feature_schema_hash,
             "train_metrics": train_metrics,
             "test_metrics": test_metrics,
-            "metrics": {**train_metrics, **test_metrics},
-            "thresholds": {},
-            "threshold_passed": threshold_passed,
-            "synthetic_data": synthetic_data,
-            "production_allowed": False,  # Never allow production for training output
-            "saved_at": datetime.now(timezone.utc).isoformat(),
             "config": self.config,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        # Write metadata.json (also used by artifact_registry.ArtifactMetadata.load)
-        (artifact_path / "metadata.json").write_text(
-            json.dumps(metadata, indent=2, default=str)
-        )
-
-        # Write artifact registry entry using artifact_registry if available
+        # Canonical artifact-registry record (checksum, HMAC, provenance).
+        canonical: dict[str, Any]
         try:
             from common.artifact_registry import save_artifact
-            save_artifact(
+            registry_meta = save_artifact(
                 model_id=self.model_name,
                 artifact_path=artifact_file,
                 artifact_version=artifact_path.name,
@@ -928,8 +1001,46 @@ class TrainingPipeline:
                 threshold_passed=threshold_passed,
                 synthetic_data=synthetic_data,
             )
+            canonical = registry_meta.to_dict()
         except Exception as exc:
-            logger.debug("artifact_registry.save_artifact skipped: %s", exc)
+            logger.debug("artifact_registry.save_artifact unavailable: %s", exc)
+            # Fallback for isolated environments: build an equivalent canonical
+            # record locally so metadata.json still carries checksum/provenance.
+            import hashlib as _hashlib
+
+            _h = _hashlib.sha256()
+            with open(artifact_file, "rb") as f:
+                for chunk in iter(lambda: f.read(65536), b""):
+                    _h.update(chunk)
+            canonical = {
+                "model_id": self.model_name,
+                "artifact_version": artifact_path.name,
+                "promotion_state": "trained",
+                "artifact_format": "joblib",
+                "artifact_path": str(artifact_file),
+                "checksum_sha256": _h.hexdigest(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_by": "training-pipeline",
+                "training_run_id": training_run_id or "",
+                "feature_schema_hash": feature_schema_hash,
+                "metrics": {**train_metrics, **test_metrics},
+                "thresholds": {},
+                "threshold_passed": threshold_passed,
+                "synthetic_data": synthetic_data,
+                "production_allowed": False,  # Never allow production for training output
+                "disabled": False,
+                "rollback_from": None,
+                "notes": "",
+                "hmac_signature": None,
+            }
+
+        # Single final metadata.json write: canonical fields win on conflict,
+        # rich pipeline fields are additive (ArtifactMetadata.from_dict filters
+        # unknown keys, so registry loads are unaffected).
+        metadata = {**rich_fields, **canonical}
+        (artifact_path / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, default=str)
+        )
 
         if synthetic_data:
             logger.warning(

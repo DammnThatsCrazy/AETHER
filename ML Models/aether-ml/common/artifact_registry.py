@@ -477,21 +477,18 @@ def write_promotion_artifacts(
     return written
 
 
-def promote_artifact(
-    artifact_dir: Path,
-    new_state: str,
-    promoted_by: str = "system",
-) -> ArtifactMetadata:
+def validate_promotion(artifact_dir: Path, new_state: str) -> ArtifactMetadata:
     """
-    Promote an artifact to a new state.
+    Validate that an artifact is eligible for promotion to ``new_state``
+    WITHOUT mutating anything.
 
-    Rules:
-    - Cannot promote disabled artifacts.
-    - Cannot promote synthetic_data=True artifacts to production.
-    - States must advance (no downgrade except via rollback).
-    - Promoting to ``staged``/``promoted`` requires the model's governance
-      artifacts (model card, dataset card, bias audit, privacy review, training
-      manifest) to be present per its registry governance flags.
+    Runs every governance/promotion gate that :func:`promote_artifact` enforces
+    (disabled state, synthetic-data ban, threshold gate, registry production
+    permission, required governance artifacts, state ordering) and raises
+    :class:`ArtifactPromotionError` / :class:`ArtifactNotFound` on the first
+    violation. Returns the artifact's current metadata on success.
+
+    Use this to gate side effects (e.g. S3 uploads) BEFORE they happen.
     """
     meta_path = artifact_dir / "metadata.json"
     if not meta_path.exists():
@@ -540,6 +537,28 @@ def promote_artifact(
             f"Cannot downgrade promotion state from '{metadata.promotion_state}' to '{new_state}'. "
             "Use rollback_artifact() to roll back."
         )
+
+    return metadata
+
+
+def promote_artifact(
+    artifact_dir: Path,
+    new_state: str,
+    promoted_by: str = "system",
+) -> ArtifactMetadata:
+    """
+    Promote an artifact to a new state.
+
+    Rules (enforced by :func:`validate_promotion`):
+    - Cannot promote disabled artifacts.
+    - Cannot promote synthetic_data=True artifacts to production.
+    - States must advance (no downgrade except via rollback).
+    - Promoting to ``staged``/``promoted`` requires the model's governance
+      artifacts (model card, dataset card, bias audit, privacy review, training
+      manifest) to be present per its registry governance flags.
+    """
+    metadata = validate_promotion(artifact_dir, new_state)
+    meta_path = artifact_dir / "metadata.json"
 
     from_state = metadata.promotion_state
     metadata.promotion_state = new_state

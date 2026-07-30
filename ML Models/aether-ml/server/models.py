@@ -25,6 +25,7 @@ from sklearn.metrics import (
 )
 
 from common.src.base import AetherModel, DeploymentTarget, ModelMetadata, ModelType
+from common.src.artifact_preprocessing import load_artifact_preprocessing
 
 logger = logging.getLogger("aether.ml.server")
 
@@ -62,6 +63,13 @@ class IdentityResolution(AetherModel):
         super().__init__(ModelType.IDENTITY_RESOLUTION, version)
         self._model: Any = None
         self._optimizer: Any = None
+        self._preprocessing = None
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_COLS].fillna(0)
 
     # --------------------------------------------------------------------- #
     # Training
@@ -105,7 +113,7 @@ class IdentityResolution(AetherModel):
         if y is None:
             raise ValueError("Identity resolution requires pairwise labels (y).")
 
-        X_features = X[self.FEATURE_COLS].fillna(0).values.astype(np.float32)
+        X_features = self._prepare(X).values.astype(np.float32)
         y_values = y.values.astype(np.float32)
 
         X_tensor = torch.FloatTensor(X_features)
@@ -186,7 +194,7 @@ class IdentityResolution(AetherModel):
             raise RuntimeError("Model has not been trained yet.")
 
         X_tensor = torch.FloatTensor(
-            X[self.FEATURE_COLS].fillna(0).values.astype(np.float32)
+            self._prepare(X).values.astype(np.float32)
         )
         self._model.eval()
         with torch.no_grad():
@@ -251,9 +259,18 @@ class IdentityResolution(AetherModel):
             (path / "metadata.json").write_text(self.metadata.model_dump_json(indent=2))
 
     def load(self, path: Path) -> None:
-
-        self.metadata = ModelMetadata.model_validate_json(
-            (path / "metadata.json").read_text()
+        if (path / "metadata.json").exists():
+            try:
+                self.metadata = ModelMetadata.model_validate_json(
+                    (path / "metadata.json").read_text()
+                )
+            except Exception:
+                # Training-pipeline artifacts carry registry-format metadata,
+                # not the pydantic ModelMetadata schema.
+                self.metadata = None
+        # Trained preprocessing (verifies feature schema hash — fail closed).
+        self._preprocessing = load_artifact_preprocessing(
+            path, model_id="identity_resolution"
         )
         # NOTE: Caller must rebuild the architecture and load state_dict
         # externally because the inner class is not accessible here.
@@ -300,6 +317,13 @@ class ChurnPrediction(AetherModel):
     def __init__(self, version: str = "1.0.0") -> None:
         super().__init__(ModelType.CHURN_PREDICTION, version)
         self._model: Any = None
+        self._preprocessing = None
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_COLS].fillna(0)
 
     # --------------------------------------------------------------------- #
     # Training
@@ -331,7 +355,7 @@ class ChurnPrediction(AetherModel):
         if y is None:
             raise ValueError("Churn prediction requires labels (y).")
 
-        X_features = X[self.FEATURE_COLS].fillna(0)
+        X_features = self._prepare(X)
 
         # Compute class-balance weight
         n_neg = int((y == 0).sum())
@@ -383,7 +407,7 @@ class ChurnPrediction(AetherModel):
         """Return churn probability in the range ``[0.0, 1.0]``."""
         if not self.is_trained or self._model is None:
             raise RuntimeError("Model has not been trained yet.")
-        return self._model.predict_proba(X[self.FEATURE_COLS].fillna(0))[:, 1]
+        return self._model.predict_proba(self._prepare(X))[:, 1]
 
     # --------------------------------------------------------------------- #
     # Explainability
@@ -419,7 +443,7 @@ class ChurnPrediction(AetherModel):
             raise RuntimeError("Model has not been trained yet.")
 
         explainer = shap.TreeExplainer(self._model)
-        shap_values = explainer.shap_values(X[self.FEATURE_COLS].fillna(0))
+        shap_values = explainer.shap_values(self._prepare(X))
         return np.asarray(shap_values)
 
     # --------------------------------------------------------------------- #
@@ -437,10 +461,17 @@ class ChurnPrediction(AetherModel):
 
         self._model = xgb.XGBClassifier()
         self._model.load_model(str(path / "churn_xgb.json"))
+        # Trained preprocessing (verifies feature schema hash — fail closed).
+        self._preprocessing = load_artifact_preprocessing(
+            path, model_id="churn_prediction"
+        )
         if (path / "metadata.json").exists():
-            self.metadata = ModelMetadata.model_validate_json(
-                (path / "metadata.json").read_text()
-            )
+            try:
+                self.metadata = ModelMetadata.model_validate_json(
+                    (path / "metadata.json").read_text()
+                )
+            except Exception:
+                self.metadata = None
         self.is_trained = True
 
     def _compute_metrics(
@@ -489,6 +520,13 @@ class LTVPrediction(AetherModel):
         self._model: Any = None  # XGBRegressor
         self._bgf: Any = None  # BetaGeoFitter (BG/NBD)
         self._ggf: Any = None  # GammaGammaFitter
+        self._preprocessing = None
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_COLS].fillna(0)
 
     # --------------------------------------------------------------------- #
     # Training
@@ -526,7 +564,7 @@ class LTVPrediction(AetherModel):
         if y is None:
             raise ValueError("LTV prediction requires target values (y).")
 
-        X_features = X[self.FEATURE_COLS].fillna(0)
+        X_features = self._prepare(X)
 
         # ---- XGBRegressor ---------------------------------------------------
         self._model = xgb.XGBRegressor(
@@ -606,7 +644,7 @@ class LTVPrediction(AetherModel):
         """Return predicted LTV in dollars for each row in *X*."""
         if not self.is_trained or self._model is None:
             raise RuntimeError("Model has not been trained yet.")
-        return self._model.predict(X[self.FEATURE_COLS].fillna(0))
+        return self._model.predict(self._prepare(X))
 
     def predict_clv(
         self,
@@ -676,10 +714,17 @@ class LTVPrediction(AetherModel):
             self._bgf = joblib.load(path / "bgf.pkl")
         if (path / "ggf.pkl").exists():
             self._ggf = joblib.load(path / "ggf.pkl")
+        # Trained preprocessing (verifies feature schema hash — fail closed).
+        self._preprocessing = load_artifact_preprocessing(
+            path, model_id="ltv_prediction"
+        )
         if (path / "metadata.json").exists():
-            self.metadata = ModelMetadata.model_validate_json(
-                (path / "metadata.json").read_text()
-            )
+            try:
+                self.metadata = ModelMetadata.model_validate_json(
+                    (path / "metadata.json").read_text()
+                )
+            except Exception:
+                self.metadata = None
         self.is_trained = True
 
     def _compute_metrics(
@@ -730,6 +775,13 @@ class AnomalyDetection(AetherModel):
         self._autoencoder: Any = None
         self._ae_mean: Optional[np.ndarray] = None
         self._ae_std: Optional[np.ndarray] = None
+        self._preprocessing = None
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_COLS].fillna(0)
 
     # --------------------------------------------------------------------- #
     # Training
@@ -771,7 +823,7 @@ class AnomalyDetection(AetherModel):
         from sklearn.ensemble import IsolationForest
         from torch.utils.data import DataLoader, TensorDataset
 
-        X_features = X[self.FEATURE_COLS].fillna(0).values.astype(np.float32)
+        X_features = self._prepare(X).values.astype(np.float32)
 
         # ---- Isolation Forest -----------------------------------------------
         self._iforest = IsolationForest(
@@ -876,7 +928,7 @@ class AnomalyDetection(AetherModel):
         if self._iforest is None or self._autoencoder is None:
             raise RuntimeError("Model has not been trained yet.")
 
-        X_features = X[self.FEATURE_COLS].fillna(0).values.astype(np.float32)
+        X_features = self._prepare(X).values.astype(np.float32)
 
         # -- Isolation Forest score (lower = more anomalous) --
         if_raw = self._iforest.decision_function(X_features)
@@ -935,10 +987,17 @@ class AnomalyDetection(AetherModel):
             self._ae_mean = np.load(path / "ae_mean.npy")
         if (path / "ae_std.npy").exists():
             self._ae_std = np.load(path / "ae_std.npy")
+        # Trained preprocessing (verifies feature schema hash — fail closed).
+        self._preprocessing = load_artifact_preprocessing(
+            path, model_id="anomaly_detection"
+        )
         if (path / "metadata.json").exists():
-            self.metadata = ModelMetadata.model_validate_json(
-                (path / "metadata.json").read_text()
-            )
+            try:
+                self.metadata = ModelMetadata.model_validate_json(
+                    (path / "metadata.json").read_text()
+                )
+            except Exception:
+                self.metadata = None
         # NOTE: Autoencoder state_dict requires architecture rebuild externally.
         self.is_trained = True
 

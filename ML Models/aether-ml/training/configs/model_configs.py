@@ -274,6 +274,26 @@ MODEL_CONFIGS: dict[str, TrainingConfig] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Threshold direction semantics
+# ---------------------------------------------------------------------------
+
+# Metrics whose registry ``minimum_metrics`` value is an UPPER BOUND (cap):
+# a training run passes when actual <= threshold. Every other metric is a
+# floor (actual >= threshold).
+#
+# ``test_anomaly_rate``: IsolationForest trains with contamination=0.05 (see
+# ANOMALY_DETECTION_CONFIG.hyperparams above), so a healthy run flags ~5% of
+# holdout rows. The registry's 0.1 threshold is the MAXIMUM acceptable anomaly
+# rate — evaluating it as a floor would make the gate unpassable by design.
+THRESHOLD_CAP_METRICS: frozenset[str] = frozenset({
+    "test_mae",
+    "test_rmse",
+    "test_mape",
+    "test_anomaly_rate",
+})
+
+
 def get_config(model_name: str) -> TrainingConfig:
     """Retrieve the training configuration for a given model.
 
