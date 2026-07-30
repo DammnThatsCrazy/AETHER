@@ -37,8 +37,8 @@ def test_consent_purposes_match_union_and_docblock(ec):
     text = (ROOT / "packages" / "shared" / "consent.ts").read_text(encoding="utf-8")
     payload = ec.build_payload(text)
     names = [p["name"] for p in payload["purposes"]]
-    assert set(names) == {"analytics", "marketing", "personalization", "web3", "agent", "commerce", "financial_activity", "credit", "location", "economic_observability", "cross_chain_observability"}
-    assert len(names) == 11
+    assert set(names) == {"analytics", "marketing", "personalization", "web3", "agent", "commerce", "financial_activity", "credit", "location", "economic_observability", "cross_chain_observability", "fraud_prevention"}
+    assert len(names) == 12
     for p in payload["purposes"]:
         assert p["description"], f"{p['name']} has empty description"
 
