@@ -198,13 +198,18 @@ def build_normalized_payload(
 def format_rejection(result: EventValidationResult, sdk_event: Any) -> str:
     """Render the stable wire reason while keeping result fields structured."""
     code = result.reason_code or "validation_failed"
-    if result.required_purpose:
-        return f"{code}:{result.required_purpose}"
+    # Class-specific details must win over the generic purpose suffix: a
+    # deployment rejection also carries the event's required_purpose, and
+    # rendering that first told operators "deployment_context_invalid:analytics"
+    # instead of the actual cause (deployment_not_found, deployment_not_active,
+    # event_family_not_allowed).
     if code == REJECT_UNKNOWN_TYPE:
         return f"{code}:{sdk_event.type}"
     if code == REJECT_DEPLOYMENT_CONTEXT:
         detail = result.audit_metadata.get("deployment_reason")
         return f"{code}:{detail}" if detail else code
+    if result.required_purpose:
+        return f"{code}:{result.required_purpose}"
     return code
 
 
