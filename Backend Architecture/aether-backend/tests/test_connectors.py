@@ -40,8 +40,6 @@ def _cfg(connector_type: str, *, enabled: bool = True, secret: bool = True, extr
 
 
 def test_registry_covers_every_declared_connector():
-    from services.integrations.connectors.adapters import ALL_CONNECTORS
-
     # A duplicate connector_type would silently collapse in the registry dict.
     assert len(CONNECTORS) == len(ALL_CONNECTORS)
     assert set(CONNECTORS) == {c.connector_type for c in ALL_CONNECTORS}
