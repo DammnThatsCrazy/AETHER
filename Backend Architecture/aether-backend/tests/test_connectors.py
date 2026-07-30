@@ -39,17 +39,22 @@ def _cfg(connector_type: str, *, enabled: bool = True, secret: bool = True, extr
 # ── Registry ──────────────────────────────────────────────────────────────
 
 
-def test_all_14_connectors_registered():
-    assert len(CONNECTORS) == 14
+def test_registry_covers_every_declared_connector():
+    from services.integrations.connectors.adapters import ALL_CONNECTORS
+
+    # A duplicate connector_type would silently collapse in the registry dict.
+    assert len(CONNECTORS) == len(ALL_CONNECTORS)
+    assert set(CONNECTORS) == {c.connector_type for c in ALL_CONNECTORS}
 
 
 def test_list_descriptors_returns_all():
     descs = list_descriptors()
-    assert len(descs) == 14
+    assert len(descs) == len(CONNECTORS)
     types = {d["connector_type"] for d in descs}
     assert "slack" in types
     assert "shopify" in types
     assert "stripe" in types
+    assert "dune" in types
 
 
 # ── BaseConnector ──────────────────────────────────────────────────────────
@@ -184,7 +189,7 @@ async def test_service_secret_resolves_from_vault():
     await vault.insert("ref:t1:slack", {
         "id": "ref:t1:slack",
         "tenant_id": "t1",
-        "credential_value": "xoxb-test-token",
+        "api_key": "xoxb-test-token",
     })
 
     svc = ConnectorService()
