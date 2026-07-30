@@ -171,6 +171,10 @@ def run_registry_python_suites(
     tolerated skip in `local` but, for a skip_policy: never suite, a hard
     failure in `ci` (see hard_fail_skip); otherwise the suite actually runs.
     """
+    # Invoked as `python scripts/repo_doctor.py`, sys.path[0] is scripts/ —
+    # the repo root must be present for the scripts.lib package import.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     from scripts.lib.test_suites import TestSuiteConfigError, build_command, is_pytest_suite, load_suites, suites_for
 
     registry_path = ROOT / "config" / "test_suites.yaml"
