@@ -448,11 +448,11 @@ ops-readiness: ## One-person ops readiness gate (flags, stores, bridge fail-clos
 	python scripts/ops_readiness.py
 
 release-gate: ## Full release gate: repo consistency (CI mode) + strict production status + ops readiness + founding-tenant control spine
-	python scripts/repo_doctor.py --ci
-	python scripts/production_status.py --strict
-	python scripts/ops_readiness.py
-	python scripts/release/check_foundation.py
-	python scripts/release/check_implementation_ledger.py
+	$(GATE_PY) scripts/repo_doctor.py --ci
+	$(GATE_PY) scripts/production_status.py --strict
+	$(GATE_PY) scripts/ops_readiness.py
+	$(GATE_PY) scripts/release/check_foundation.py
+	$(GATE_PY) scripts/release/check_implementation_ledger.py
 	python scripts/release/check_profile_config.py
 	python scripts/release/check_cost_policy.py
 	python scripts/release/check_cost_policy_terraform.py
