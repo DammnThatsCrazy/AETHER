@@ -18,26 +18,28 @@ const EXPECTED_PURPOSES: ConsentPurpose[] = [
   'location',
   'economic_observability',
   'cross_chain_observability',
+  'fraud_prevention',
 ];
 
 const EXPLICIT_OPT_IN_PURPOSES: ConsentPurpose[] = [
   'financial_activity', 'credit', 'location', 'economic_observability', 'cross_chain_observability',
+  'fraud_prevention',
 ];
 
 describe('consent-model', () => {
-  it('exactly 11 canonical consent purposes exist', () => {
-    expect(CONSENT_PURPOSES).toHaveLength(11);
+  it('exactly 12 canonical consent purposes exist', () => {
+    expect(CONSENT_PURPOSES).toHaveLength(12);
   });
 
-  it('CANONICAL_PURPOSES includes all 11 expected purposes', () => {
+  it('CANONICAL_PURPOSES includes all 12 expected purposes', () => {
     for (const purpose of EXPECTED_PURPOSES) {
       expect(CONSENT_PURPOSES).toContain(purpose);
     }
   });
 
-  it('no purpose beyond the canonical eleven exists', () => {
+  it('no purpose beyond the canonical twelve exists', () => {
     const purposeSet = new Set(CONSENT_PURPOSES);
-    expect(purposeSet.size).toBe(11);
+    expect(purposeSet.size).toBe(12);
     const unexpected = [...purposeSet].filter((p) => !EXPECTED_PURPOSES.includes(p));
     expect(unexpected).toHaveLength(0);
   });
