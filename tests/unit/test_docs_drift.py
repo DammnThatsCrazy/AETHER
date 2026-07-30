@@ -252,3 +252,73 @@ def test_head_sha_returns_string_in_real_repo(dd):
     assert sha is not None
     assert len(sha) >= 7
     assert all(c in "0123456789abcdef" for c in sha)
+
+
+# ── Review backlog registry + restamp-only heuristic ─────────────────────────
+
+
+def test_restamp_only_commit_is_not_review(dd):
+    """A commit that only bumps last_synced_commit must not count as a review.
+
+    This is the hole that hid the 87-doc backlog: any doc edit after the last
+    source commit — including a mechanical restamp — cleared staleness.
+    """
+    import subprocess
+
+    log = subprocess.run(
+        ["git", "log", "--format=%H", "-40", "--", "docs"],
+        capture_output=True, text=True, cwd=dd.ROOT,
+    ).stdout.split()
+    # Find a real restamp-only commit on this branch to assert against; the
+    # branch's stamp commits are docs-only stamp bumps.
+    found_restamp = None
+    found_content = None
+    for sha in log:
+        names = subprocess.run(
+            ["git", "show", sha, "--format=", "--name-only"],
+            capture_output=True, text=True, cwd=dd.ROOT,
+        ).stdout.split()
+        for name in names:
+            if not name.startswith("docs/") or not name.endswith(".md"):
+                continue
+            if dd._commit_is_restamp_only(sha, name):
+                found_restamp = (sha, name)
+            else:
+                found_content = (sha, name)
+        if found_restamp and found_content:
+            break
+    assert found_restamp, "expected at least one restamp-only doc commit in history"
+    assert found_content, "expected at least one content doc commit in history"
+    sha, name = found_restamp
+    assert dd._commit_is_restamp_only(sha, name) is True
+    sha, name = found_content
+    assert dd._commit_is_restamp_only(sha, name) is False
+
+
+def test_backlog_loader_rejects_anonymous_entries(dd, tmp_path):
+    bad = tmp_path / "backlog.yaml"
+    bad.write_text("docs:\n  - path: docs/X.md\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        dd.load_review_backlog(bad)
+
+
+def test_backlog_loader_returns_entries_by_path(dd, tmp_path):
+    good = tmp_path / "backlog.yaml"
+    good.write_text(
+        "docs:\n"
+        "  - path: docs/X.md\n"
+        "    reason: sources moved\n"
+        "    owner: docs@aether\n",
+        encoding="utf-8",
+    )
+    backlog = dd.load_review_backlog(good)
+    assert set(backlog) == {"docs/X.md"}
+    assert backlog["docs/X.md"]["owner"] == "docs@aether"
+
+
+def test_real_backlog_registry_loads_and_matches_tracked_docs(dd):
+    """Every registered backlog entry must reference a tracked doc."""
+    backlog = dd.load_review_backlog()
+    tracked = {str(p.relative_to(dd.ROOT)) for p in dd.tracked_docs()}
+    unknown = sorted(p for p in backlog if p not in tracked)
+    assert unknown == [], f"backlog entries for untracked docs: {unknown}"

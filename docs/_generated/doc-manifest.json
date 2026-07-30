@@ -3637,6 +3637,18 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/audits/DOCS_REVIEW_BACKLOG.md",
+      "title": "Docs Review Backlog — Audit Snapshot",
+      "slug": "audits/docs-review-backlog",
+      "section": "audits",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable"
+    },
+    {
       "path": "docs/audits/FRONTEND-DATA-TRUTH-INVENTORY.md",
       "title": "Frontend Data Truth Inventory",
       "slug": "audits/frontend-data-truth-inventory",
