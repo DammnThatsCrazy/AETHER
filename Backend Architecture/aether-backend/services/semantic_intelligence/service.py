@@ -185,9 +185,12 @@ class SemanticIntelligenceService:
                 )
                 return await store.put_semantic(obs), []
 
-        # 3. Classify (deterministic, tool-less) + persist idempotently. The resolved
-        #    text provider stamps model provenance; structured/route calls keep the
-        #    deterministic defaults.
+        # 3. Classify + persist idempotently. Model-backed providers do REAL
+        #    inference (or abstain, first-class) inside classify_event — the
+        #    keyword classifier only ever runs, and is only ever stamped, as the
+        #    explicit deterministic mode. A ProviderResponseError (malformed
+        #    model output) propagates from classify_event BEFORE any persistence
+        #    below — a rejected response is never partially ingested.
         started = time.perf_counter()
         obs, sentiments = classify_event(payload, tenant_id, provider=provider)
         metrics.timing(

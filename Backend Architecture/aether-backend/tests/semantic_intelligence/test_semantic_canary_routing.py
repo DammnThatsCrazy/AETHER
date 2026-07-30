@@ -10,6 +10,7 @@ never silently degraded to the keyword classifier.
 from __future__ import annotations
 
 import dataclasses
+import json
 
 import pytest
 
@@ -18,7 +19,7 @@ from repositories.repos import reset_in_memory_stores
 from services.semantic_intelligence import service as service_mod
 from services.semantic_intelligence.eligibility import Eligibility
 from services.semantic_intelligence.engine import get_store, set_store
-from services.semantic_intelligence.models import ObservationStatus
+from services.semantic_intelligence.models import ObservationStatus, StanceLabel
 from services.semantic_intelligence.providers import (
     DeterministicClassifierProvider,
     DisabledProvider,
@@ -102,7 +103,7 @@ def test_canary_without_creds_fails_closed(canary_config, no_candidate_creds):
     provider = get_classifier_provider(settings, CANARY_TENANT)
     assert isinstance(provider, DisabledProvider)
     assert provider.available() is False
-    assert provider.abstention_reason() == "provider_disabled_missing_credentials"
+    assert provider.abstention_reason() == "credential_waiting"
 
 
 async def test_canary_without_creds_abstains_end_to_end(canary_config, no_candidate_creds):
@@ -111,7 +112,7 @@ async def test_canary_without_creds_abstains_end_to_end(canary_config, no_candid
         _payload("evt_canary_nocreds"), CANARY_TENANT, eligibility=Eligibility.TEXT
     )
     assert obs.status is ObservationStatus.ABSTAINED
-    assert obs.abstention_reason == "provider_disabled_missing_credentials"
+    assert obs.abstention_reason == "credential_waiting"
     assert sentiments == []
 
     # A non-canary tenant is untouched by the canary's failure mode.
@@ -122,12 +123,36 @@ async def test_canary_without_creds_abstains_end_to_end(canary_config, no_candid
     assert other_sentiments and other_sentiments[0].valence > 0
 
 
-async def test_canary_with_creds_stamps_candidate_provenance(canary_config, candidate_creds):
-    """The canary's persisted observation carries the CANDIDATE model identity."""
+async def test_canary_with_creds_stamps_candidate_provenance(
+    canary_config, candidate_creds, monkeypatch
+):
+    """The canary's persisted observation carries the candidate's REAL model
+    inference and identity — its own classify() verdict, never keyword output
+    dressed up as the production model."""
+    raw = json.dumps(
+        {
+            "stance": "opposed",
+            "intent": "cancel",
+            "speech_act": "complaint",
+            "topics": ["pricing"],
+            "valence": -0.5,
+            "confidence": 0.91,
+        }
+    )
+    monkeypatch.setattr(
+        ProductionModelProvider,
+        "_request_completion",
+        lambda self, request: (raw, "claude-opus-5"),
+    )
     obs, sentiments = await SemanticIntelligenceService().classify_and_persist(
         _payload("evt_canary_creds"), CANARY_TENANT, eligibility=Eligibility.TEXT
     )
     assert obs.status is ObservationStatus.CLASSIFIED
-    assert obs.model_id == "production-semantic-model"
-    assert obs.model_version == "1.0.0"
-    assert sentiments and sentiments[0].model_id == "production-semantic-model"
+    # Labels come from the model result (the payload's keywords say supportive).
+    assert obs.stance is StanceLabel.OPPOSED
+    # Provenance is the ACTUAL model identity, not the keyword classifier's and
+    # not a static production alias over keyword output.
+    assert obs.model_id == "claude-opus-5"
+    assert obs.model_version == "claude-opus-5"
+    assert sentiments and sentiments[0].model_id == "claude-opus-5"
+    assert sentiments[0].valence < 0

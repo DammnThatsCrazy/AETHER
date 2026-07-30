@@ -1,8 +1,15 @@
-"""Deterministic semantic/sentiment classifier and in-memory repository.
+"""Semantic/sentiment classification engine and in-memory repository.
 
-Production model providers can plug in behind this interface; this local engine
-is intentionally deterministic so CI, replay and security tests do not depend on
-external credentials.
+Two explicitly-separated classification paths:
+
+- The DETERMINISTIC keyword path (no provider, or the deterministic provider):
+  tool-less and network-free so CI, replay and security tests never depend on
+  external credentials. Its output is always stamped with the deterministic
+  identity.
+- The MODEL path (any other provider): ``provider.classify()`` performs real
+  inference (or abstains, first-class). Keyword output is NEVER emitted under a
+  model provider's identity — a model-backed observation's labels come from the
+  provider's own result, and provenance stamps the actual model id/version.
 """
 
 from __future__ import annotations
@@ -11,7 +18,7 @@ import hashlib
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 from .models import (
     EmotionLabel,
@@ -28,7 +35,14 @@ from .models import (
     SubjectType,
     utc_now,
 )
-from .providers import SemanticClassifierProvider
+from .providers import (
+    DeterministicClassifierProvider,
+    ProviderResponseError,
+    SemanticClassificationRequest,
+    SemanticClassificationResult,
+    SemanticClassifierProvider,
+    provider_identity,
+)
 
 POSITIVE = {"love", "great", "excellent", "happy", "trust", "recommend", "approve", "support"}
 NEGATIVE = {
@@ -145,14 +159,61 @@ SUPPORTED_LANGUAGES: frozenset[str] = frozenset({
 })
 
 
-def _provider_identity(provider: SemanticClassifierProvider) -> tuple[str, str]:
-    """Split a provider name ('id@version') into (model_id, model_version).
+class KeywordLabels(NamedTuple):
+    """Deterministic keyword-derived labels (the explicit deterministic mode)."""
 
-    A name without '@' keeps the full name as model_id with version '0' so the
-    provenance stays distinguishable from the deterministic defaults.
+    words: frozenset[str]
+    pos: int
+    neg: int
+    stance: StanceLabel
+    intent: IntentLabel
+    speech: SpeechAct
+    topics: list[str]
+
+
+def keyword_labels(text: str) -> KeywordLabels:
+    """Derive the deterministic keyword classification signals for ``text``.
+
+    Shared by the engine's deterministic path and
+    :meth:`providers.DeterministicClassifierProvider.classify` so the keyword
+    logic exists in exactly one place. It is only ever stamped with the
+    deterministic identity — never a model provider's.
     """
-    model_id, sep, model_version = provider.name.partition("@")
-    return (model_id, model_version) if sep else (provider.name, "0")
+    words = frozenset(re.findall(r"[a-zA-Z_]+", text.lower()))
+    pos = len(words & POSITIVE)
+    neg = len(words & NEGATIVE)
+    stance = StanceLabel.NEUTRAL
+    if "support" in words or "approve" in words:
+        stance = StanceLabel.SUPPORTIVE
+    if "oppose" in words or "reject" in words:
+        stance = StanceLabel.OPPOSED
+    intent = IntentLabel.UNKNOWN
+    for candidate in IntentLabel:
+        if candidate.value in words:
+            intent = candidate
+            break
+    speech = SpeechAct.QUESTION if "?" in text else SpeechAct.STATEMENT
+    if "complain" in words or "broken" in words:
+        speech = SpeechAct.COMPLAINT
+    if "recommend" in words:
+        speech = SpeechAct.RECOMMENDATION
+    topics = sorted(
+        (
+            words
+            & {
+                "price",
+                "pricing",
+                "quality",
+                "governance",
+                "wallet",
+                "agent",
+                "campaign",
+                "product",
+            }
+        )
+        or {"general"}
+    )
+    return KeywordLabels(words, pos, neg, stance, intent, speech, topics)
 
 
 def classify_event(
@@ -198,24 +259,63 @@ def classify_event(
         if payload.get("target_type", "other") in SubjectType._value2member_map_
         else SubjectType.OTHER
     )
-    words = set(re.findall(r"[a-zA-Z_]+", text_stripped.lower()))
-    pos = len(words & POSITIVE)
-    neg = len(words & NEGATIVE)
-    stance = StanceLabel.NEUTRAL
-    if "support" in words or "approve" in words:
-        stance = StanceLabel.SUPPORTIVE
-    if "oppose" in words or "reject" in words:
-        stance = StanceLabel.OPPOSED
-    intent = IntentLabel.UNKNOWN
-    for candidate in IntentLabel:
-        if candidate.value in words:
-            intent = candidate
-            break
-    speech = SpeechAct.QUESTION if "?" in text_stripped else SpeechAct.STATEMENT
-    if "complain" in words or "broken" in words:
-        speech = SpeechAct.COMPLAINT
-    if "recommend" in words:
-        speech = SpeechAct.RECOMMENDATION
+    # ── classification dispatch ──────────────────────────────────────────────
+    # Deterministic path (no provider, or the deterministic provider): keyword
+    # labels, deterministic provenance. Model path (any other provider): real
+    # provider.classify() or a first-class abstention — keyword labels are
+    # never derived under a model provider's identity.
+    model_backed = provider is not None and not isinstance(
+        provider, DeterministicClassifierProvider
+    )
+    model_result: SemanticClassificationResult | None = None
+    provider_abstained = False
+    if model_backed:
+        pos = neg = 0
+        if not should_abstain:
+            # Eligible text only — ineligible text abstains before any network.
+            result = provider.classify(
+                SemanticClassificationRequest(
+                    tenant_id=tenant_id,
+                    source_event_id=source_event_id,
+                    text=text_stripped,
+                    language=language,
+                )
+            )
+            if result.abstained:
+                should_abstain = True
+                provider_abstained = True
+                abstention_reason = result.abstention_reason or "provider_abstained"
+            else:
+                model_result = result
+        if model_result is not None:
+            # Fail closed on any contract violation a custom provider lets
+            # through — a partially-valid result is never partially ingested.
+            try:
+                stance = StanceLabel(model_result.stance)
+                intent = IntentLabel(model_result.intent)
+                speech = SpeechAct(model_result.speech_act)
+            except ValueError as exc:
+                raise ProviderResponseError(f"invalid_label: {exc}") from None
+            if not 0.0 <= model_result.confidence <= 1.0:
+                raise ProviderResponseError(
+                    f"schema_violation: confidence out of range: {model_result.confidence!r}"
+                )
+            topics = sorted(set(model_result.topics)) or ["general"]
+            confidence = model_result.confidence
+        else:
+            # Abstained (eligibility or provider): neutral scaffolding only —
+            # never keyword-derived labels under a model provider's identity.
+            stance = StanceLabel.NEUTRAL
+            intent = IntentLabel.UNKNOWN
+            speech = SpeechAct.STATEMENT
+            topics = ["general"]
+            confidence = 0.0 if provider_abstained else 0.2
+    else:
+        labels = keyword_labels(text_stripped)
+        pos, neg = labels.pos, labels.neg
+        stance, intent, speech = labels.stance, labels.intent, labels.speech
+        topics = labels.topics
+        confidence = 0.85 if not should_abstain else 0.2
     evidence = EvidenceRef(
         evidence_id=f"ev_{source_event_id}",
         source_type=str(payload.get("source_type", "event")),
@@ -241,22 +341,7 @@ def classify_event(
         agent_id=payload.get("agent_id"),
         wallet_id=payload.get("wallet_id"),
         language=language,
-        topics=sorted(
-            (
-                words
-                & {
-                    "price",
-                    "pricing",
-                    "quality",
-                    "governance",
-                    "wallet",
-                    "agent",
-                    "campaign",
-                    "product",
-                }
-            )
-            or {"general"}
-        ),
+        topics=topics,
         entity_mentions=payload.get("entity_mentions", []),
         claims=payload.get("claims", []),
         narrative_frames=payload.get("narrative_frames", []),
@@ -266,7 +351,7 @@ def classify_event(
         interaction_function=speech,
         agent_semantics=[],
         evidence_refs=[evidence],
-        classification_confidence=0.85 if not should_abstain else 0.2,
+        classification_confidence=confidence,
         subject_resolution_confidence=float(payload.get("subject_resolution_confidence", 1.0)),
         consent_snapshot_id=payload.get("consent_snapshot_id"),
         purposes=payload.get("purposes", ["analytics"]),
@@ -277,45 +362,82 @@ def classify_event(
         obs_kwargs["occurred_at"] = occurred_at
     sentiment_kwargs: dict[str, Any] = {}
     if provider is not None:
-        # Provenance from the RESOLVED provider ('id@version'), not the static
-        # model defaults — a production backend's output must never be stamped
-        # as the deterministic classifier. model_version participates in
-        # stable_hash / idempotency_key (models.SemanticObservation.finalize):
-        # INTENDED — a new provider version yields a new observation identity,
-        # so reclassification under a new model is never deduplicated away.
-        model_id, model_version = _provider_identity(provider)
+        # Provenance is ALWAYS truthful. Deterministic provider: its explicit
+        # deterministic 'id@version'. Model provider with a real result: the
+        # ACTUAL model id/version the provider inferred with. Model provider
+        # abstaining (or ineligible text): the resolved provider's identity with
+        # status=abstained + reason — never a classified production stamp on
+        # keyword output. model_version participates in stable_hash /
+        # idempotency_key (models.SemanticObservation.finalize): INTENDED — a
+        # new provider version yields a new observation identity, so
+        # reclassification under a new model is never deduplicated away.
+        if model_result is not None:
+            model_id, model_version = model_result.model_id, model_result.model_version
+        else:
+            model_id, model_version = provider_identity(provider.name)
         obs_kwargs["model_id"] = model_id
         obs_kwargs["model_version"] = model_version
         sentiment_kwargs = {"model_id": model_id, "model_version": model_version}
     obs = SemanticObservation(**obs_kwargs)
 
     sentiments: list[SentimentObservation] = []
-    if not should_abstain and subject != "unknown_subject" and (pos or neg):
-        total = pos + neg
-        valence = (pos - neg) / total
-        if valence == 0:
-            emotion = EmotionLabel.NEUTRAL
-        elif valence > 0:
-            emotion = EmotionLabel.JOY
-        else:
-            emotion = EmotionLabel.ANGER
-        sent = SentimentObservation(
-            semantic_observation_id=obs.observation_id,
-            tenant_id=tenant_id,
-            actor_ref=actor_ref,
-            target_subject_ref=subject,
-            source_event_id=source_event_id,
-            valence=valence,
-            arousal=min(1.0, total / 4),
-            emotion_distribution={emotion: 0.75, EmotionLabel.NEUTRAL: 0.25},
-            intensity=min(1.0, total / 3),
-            stance_label=stance,
-            uncertainty=0.15,
-            confidence=0.82,
-            consent_snapshot_id=payload.get("consent_snapshot_id"),
-            **sentiment_kwargs,
-        )
-        sentiments = [sent]
+    if not should_abstain and subject != "unknown_subject":
+        if model_result is not None and model_result.valence is not None:
+            # Model path: sentiment comes from the provider's own valence.
+            valence = model_result.valence
+            magnitude = abs(valence)
+            if valence == 0:
+                emotion = EmotionLabel.NEUTRAL
+            elif valence > 0:
+                emotion = EmotionLabel.JOY
+            else:
+                emotion = EmotionLabel.ANGER
+            sentiments = [
+                SentimentObservation(
+                    semantic_observation_id=obs.observation_id,
+                    tenant_id=tenant_id,
+                    actor_ref=actor_ref,
+                    target_subject_ref=subject,
+                    source_event_id=source_event_id,
+                    valence=valence,
+                    arousal=min(1.0, magnitude),
+                    emotion_distribution={emotion: 0.75, EmotionLabel.NEUTRAL: 0.25},
+                    intensity=min(1.0, magnitude),
+                    stance_label=stance,
+                    uncertainty=round(1.0 - model_result.confidence, 4),
+                    confidence=model_result.confidence,
+                    consent_snapshot_id=payload.get("consent_snapshot_id"),
+                    **sentiment_kwargs,
+                )
+            ]
+        elif model_result is None and not model_backed and (pos or neg):
+            # Deterministic keyword path (unchanged).
+            total = pos + neg
+            valence = (pos - neg) / total
+            if valence == 0:
+                emotion = EmotionLabel.NEUTRAL
+            elif valence > 0:
+                emotion = EmotionLabel.JOY
+            else:
+                emotion = EmotionLabel.ANGER
+            sentiments = [
+                SentimentObservation(
+                    semantic_observation_id=obs.observation_id,
+                    tenant_id=tenant_id,
+                    actor_ref=actor_ref,
+                    target_subject_ref=subject,
+                    source_event_id=source_event_id,
+                    valence=valence,
+                    arousal=min(1.0, total / 4),
+                    emotion_distribution={emotion: 0.75, EmotionLabel.NEUTRAL: 0.25},
+                    intensity=min(1.0, total / 3),
+                    stance_label=stance,
+                    uncertainty=0.15,
+                    confidence=0.82,
+                    consent_snapshot_id=payload.get("consent_snapshot_id"),
+                    **sentiment_kwargs,
+                )
+            ]
     return obs, sentiments
 
 
