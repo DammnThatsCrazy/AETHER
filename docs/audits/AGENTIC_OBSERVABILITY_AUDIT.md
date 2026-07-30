@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/agent/
   - packages/shared/events.ts
   - packages/shared/agentic-observability.ts
-last_synced_commit: "45c4cf6"
+last_synced_commit: "b30af06"
 ---
 
 # Agentic Observability Audit

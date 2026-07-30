@@ -99,19 +99,25 @@ def extract_frontmatter(text: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def commits_touching_after(declared: str, paths: list[str]) -> list[str]:
+def commits_touching_after(declared: str, paths: list[str]) -> list[str] | None:
     """Return short SHAs of commits that touched any of `paths` after `declared`.
 
-    Uses ``git log <declared>..HEAD -- <paths>``. If `declared` is unknown
-    to git (e.g. force-push removed it), returns an empty list so the
-    caller can skip drift detection rather than false-positive.
+    Uses ``git log <declared>..HEAD -- <paths>``. Returns ``None`` when
+    ``declared`` cannot be resolved in this clone. That case must NOT be
+    treated as fresh: a stamp git cannot see (a pre-squash branch commit, a
+    force-pushed-away SHA, or plain garbage) proves nothing about review
+    recency, and treating it as clean quietly exempted the doc from drift
+    detection forever — the exact fail-open this validator exists to prevent.
+    The two answers a caller can act on are therefore "these commits came
+    after the stamp" and "the stamp is unverifiable"; only a resolvable stamp
+    with no newer commits is clean.
     """
     if not paths or not declared:
         return []
     cmd = ["git", "log", f"{declared}..HEAD", "--format=%h", "--"] + paths
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
     if result.returncode != 0:
-        return []
+        return None
     return [line for line in result.stdout.splitlines() if line]
 
 
@@ -194,7 +200,15 @@ def check_doc(path: Path) -> dict:
         # are older than the stamp should NOT be flagged stale.
         present_sources = [s for s in sources if (ROOT / s).exists()]
         newer = commits_touching_after(declared, present_sources)
-        if newer and not doc_reviewed_after_sources(declared, path, present_sources):
+        if newer is None:
+            stale = True
+            detail = (
+                f"last_synced_commit={declared} cannot be resolved in this "
+                "clone, so review recency is unverifiable. Re-review the doc "
+                "against its source_files and restamp with a commit that "
+                "exists on the branch."
+            )
+        elif newer and not doc_reviewed_after_sources(declared, path, present_sources):
             stale = True
             detail = (
                 f"last_synced_commit={declared}; sources have been modified "

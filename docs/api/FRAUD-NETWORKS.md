@@ -8,7 +8,7 @@ status: stable
 since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/routes.py
-last_synced_commit: bf87315
+last_synced_commit: "3283497"
 ---
 
 # Fraud Networks API Reference
