@@ -93,6 +93,13 @@ class FeatureContract:
     online_key_patterns: list[str] = field(default_factory=list)
     freshness_sla_seconds: int = 3600
     owner: str = "ml-platform"
+    # Canonical consent-registry purposes governing collection of this
+    # contract's input features. Every key must exist in
+    # packages/shared/contracts/consent-registry.json — validated by
+    # scripts/validate_model_consent_purposes.py. Deliberately excluded from
+    # the schema hash: purpose scoping is a governance property, not a
+    # training-serving skew risk.
+    required_purposes: list[str] = field(default_factory=list)
 
     # Derived at init time
     _required: list[str] = field(default_factory=list, init=False, repr=False)
@@ -170,6 +177,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["session_features", "behavioral_features"],
     freshness_sla_seconds=60,
+    required_purposes=["analytics", "personalization"],
     features=[
         FeatureSpec("mouse_velocity_mean", "float"),
         FeatureSpec("mouse_velocity_std", "float"),
@@ -195,6 +203,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["behavioral_features"],
     freshness_sla_seconds=30,
+    required_purposes=["fraud_prevention"],
     features=[
         # Aliases bridge pipeline output names → canonical contract names
         FeatureSpec("avg_time_between_actions", "float", min_value=0.0,
@@ -227,6 +236,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["session_features"],
     freshness_sla_seconds=60,
+    required_purposes=["analytics"],
     features=[
         FeatureSpec("page_count", "int", min_value=0,
                     aliases=["pages_viewed"]),
@@ -252,6 +262,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["identity_features"],
     freshness_sla_seconds=3600,
+    required_purposes=["personalization", "fraud_prevention"],
     features=[
         FeatureSpec("device_fingerprint_sim", "float", min_value=0.0, max_value=1.0),
         FeatureSpec("behavioral_sim", "float", min_value=0.0, max_value=1.0),
@@ -272,6 +283,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["journey_features"],
     freshness_sla_seconds=1800,
+    required_purposes=["analytics"],
     features=[
         FeatureSpec("page_sequence_len", "int", min_value=0,
                     aliases=["page_sequence"]),
@@ -294,6 +306,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["identity_features"],
     freshness_sla_seconds=86400,
+    required_purposes=["analytics"],
     features=[
         FeatureSpec("days_since_last_visit", "float", min_value=0.0),
         FeatureSpec("visit_frequency_trend", "float"),
@@ -315,6 +328,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["identity_features", "web3_features"],
     freshness_sla_seconds=86400,
+    required_purposes=["commerce"],
     features=[
         FeatureSpec("purchase_frequency", "float", min_value=0.0),
         FeatureSpec("recency_days", "float", min_value=0.0),
@@ -336,6 +350,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["anomaly_features"],
     freshness_sla_seconds=300,
+    required_purposes=["analytics", "fraud_prevention"],
     features=[
         FeatureSpec("traffic_volume", "float", min_value=0.0),
         FeatureSpec("conversion_rate", "float", min_value=0.0, max_value=1.0),
@@ -355,6 +370,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["attribution_features"],
     freshness_sla_seconds=3600,
+    required_purposes=["marketing"],
     features=[
         FeatureSpec("touchpoint_count", "int", min_value=0,
                     aliases=["touchpoint_sequence"]),
@@ -375,6 +391,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["security_features"],
     freshness_sla_seconds=0,
+    required_purposes=["web3"],
     features=[
         FeatureSpec("bytecode_hash", "str"),
         FeatureSpec("opcode_count", "int", min_value=0),
@@ -390,6 +407,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["composite_inputs"],
     freshness_sla_seconds=300,
+    required_purposes=["analytics", "fraud_prevention"],
     features=[
         FeatureSpec("churn_probability", "float", min_value=0.0, max_value=1.0,
                     required=False, default=0.5),
@@ -420,6 +438,11 @@ def get_feature_contract(model_id: str) -> FeatureContract:
             f"No feature contract for model '{model_id}'. Known: {known}"
         )
     return _CONTRACTS[model_id]
+
+
+def list_feature_contracts() -> list[FeatureContract]:
+    """Return all registered feature contracts."""
+    return list(_CONTRACTS.values())
 
 
 def validate_features(

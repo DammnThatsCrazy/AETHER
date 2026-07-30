@@ -119,8 +119,20 @@ class ModelEntry:
     fail_closed_required: bool = False
 
     # ---- Model-governance metadata (additive, backward-compatible) --------
-    # Purpose/consent scoping for training data.
+    # Purpose/consent scoping. Training and serving are distinct consent gates
+    # and carry separate purpose declarations:
+    #   - allowed_training_purposes: canonical consent-registry purposes this
+    #     model's TRAINING data may legitimately be drawn from (enforced by the
+    #     backend TrainingDataGate when admitting records into a training set).
+    #   - required_inference_purposes: canonical consent-registry purposes a
+    #     subject must have granted for this model to SERVE a prediction about
+    #     them (enforced by the backend InferencePolicyGate at inference time).
+    # Both lists must be non-empty and reference only keys defined in
+    # packages/shared/contracts/consent-registry.json — validated by
+    # scripts/validate_model_consent_purposes.py. A model with no declared
+    # inference purposes is denied serving (fail closed).
     allowed_training_purposes: list[str] = field(default_factory=list)
+    required_inference_purposes: list[str] = field(default_factory=list)
     forbidden_feature_tags: list[str] = field(default_factory=list)
     # Governance gates that must be satisfied before promotion.
     requires_privacy_review: bool = False
@@ -177,7 +189,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="intent-prediction",
         fail_closed_required=False,
-        allowed_training_purposes=["behavioral_analytics", "personalization"],
+        allowed_training_purposes=["analytics", "personalization"],
+        required_inference_purposes=["analytics", "personalization"],
         requires_privacy_review=True,
     ),
 
@@ -213,7 +226,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="bot-detection",
         fail_closed_required=True,
-        allowed_training_purposes=["security_analytics", "fraud_prevention"],
+        allowed_training_purposes=["fraud_prevention"],
+        required_inference_purposes=["fraud_prevention"],
         requires_privacy_review=True,
         requires_bias_audit=True,
     ),
@@ -247,7 +261,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="session-scorer",
         fail_closed_required=False,
-        allowed_training_purposes=["behavioral_analytics"],
+        allowed_training_purposes=["analytics"],
+        required_inference_purposes=["analytics"],
     ),
 
     # ── SERVER TIER — Trainable ML ────────────────────────────────────── #
@@ -287,7 +302,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="identity-resolution",
         fail_closed_required=False,
-        allowed_training_purposes=["identity_resolution", "fraud_prevention"],
+        allowed_training_purposes=["personalization", "fraud_prevention"],
+        required_inference_purposes=["personalization", "fraud_prevention"],
         forbidden_feature_tags=["raw_pii"],
         requires_privacy_review=True,
         requires_bias_audit=True,
@@ -328,7 +344,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="journey-prediction",
         fail_closed_required=False,
-        allowed_training_purposes=["behavioral_analytics"],
+        allowed_training_purposes=["analytics"],
+        required_inference_purposes=["analytics"],
         requires_privacy_review=True,
     ),
 
@@ -363,7 +380,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="churn-prediction",
         fail_closed_required=True,
-        allowed_training_purposes=["retention_analytics"],
+        allowed_training_purposes=["analytics"],
+        required_inference_purposes=["analytics"],
         requires_privacy_review=True,
         requires_dsr_invalidation=True,
     ),
@@ -399,7 +417,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="ltv-prediction",
         fail_closed_required=True,
-        allowed_training_purposes=["revenue_analytics"],
+        allowed_training_purposes=["commerce"],
+        required_inference_purposes=["commerce"],
         requires_privacy_review=True,
         requires_dsr_invalidation=True,
     ),
@@ -435,7 +454,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="anomaly-detection",
         fail_closed_required=True,
-        allowed_training_purposes=["infrastructure_analytics", "security_analytics"],
+        allowed_training_purposes=["analytics", "fraud_prevention"],
+        required_inference_purposes=["analytics", "fraud_prevention"],
         requires_privacy_review=True,
         requires_bias_audit=True,
     ),
@@ -472,7 +492,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="campaign-attribution",
         fail_closed_required=False,
-        allowed_training_purposes=["marketing_analytics"],
+        allowed_training_purposes=["marketing"],
+        required_inference_purposes=["marketing"],
         requires_privacy_review=True,
     ),
 
@@ -503,6 +524,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         promotion_requirements=[],
         docs_slug="bytecode-risk",
         fail_closed_required=True,
+        allowed_training_purposes=["web3"],
+        required_inference_purposes=["web3"],
         requires_model_card=False,
         requires_dataset_card=False,
         requires_training_manifest=False,
@@ -540,6 +563,8 @@ _REGISTRY: dict[str, ModelEntry] = {
         kyber_visible=True,
         tenant_visible=True,
         fail_closed_required=True,
+        allowed_training_purposes=["analytics", "fraud_prevention"],
+        required_inference_purposes=["analytics", "fraud_prevention"],
         requires_model_card=False,
         requires_dataset_card=False,
         requires_training_manifest=False,

@@ -52,7 +52,16 @@ def test_consent_registry_training_semantics():
     assert consent_purposes.requires_separate_training_opt_in("economic_observability") is True
     # Unknown purpose fails closed.
     assert consent_purposes.model_training_allowed("nope") is False
-    assert len(consent_purposes.all_purposes()) == 11
+    # The purpose set mirrors the canonical registry exactly (no drift).
+    import json
+
+    registry = json.loads(
+        (ROOT / "packages" / "shared" / "contracts" / "consent-registry.json")
+        .read_text(encoding="utf-8")
+    )
+    assert consent_purposes.all_purposes() == {
+        p["key"] for p in registry["purposes"]
+    }
 
 
 # --------------------------------------------------------------- training gate

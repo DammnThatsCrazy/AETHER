@@ -365,6 +365,37 @@
       "identityLinkingPermission": "explicit_tenant_purpose_grant",
       "graphProjectionPermission": "purpose_grant_required",
       "modelTrainingPermission": "separate_opt_in_required"
+    },
+    {
+      "key": "fraud_prevention",
+      "label": "Fraud Prevention",
+      "description": "Bot detection, fraud and abuse signal analysis, and platform security monitoring. Always requires explicit opt-in.",
+      "dataCategories": [
+        "behavioral",
+        "device",
+        "session",
+        "security_signal",
+        "anomaly_signal"
+      ],
+      "defaultEnabled": false,
+      "explicitOptInRequired": true,
+      "allowedFamilies": [
+        "core",
+        "identity",
+        "consent"
+      ],
+      "retentionDays": 365,
+      "dsrDeleteScope": [
+        "events",
+        "security_facts",
+        "model_features"
+      ],
+      "revocationBehavior": "stop_new_collection",
+      "blockLocalCollection": false,
+      "allowBackendEnrichment": true,
+      "allowIdentityLinking": true,
+      "allowGraphProjection": false,
+      "allowModelTraining": true
     }
   ]
 }

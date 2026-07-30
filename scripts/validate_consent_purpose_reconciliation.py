@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Validate the compliance ConsentPurpose enum is in sync with the 11-purpose
-canonical consent registry.
+"""Validate the compliance ConsentPurpose enum is in sync with the canonical
+consent registry.
 
 The compliance project (`GDPR & SOC2/aether-compliance`) owns a
 `config.consent_registry_sync.assert_consent_registry_in_sync()` helper that
@@ -34,9 +34,9 @@ def main() -> int:
     except Exception as exc:
         print(f"consent-purpose reconciliation FAILED: {exc}")
         print("Reconcile ConsentPurpose in GDPR & SOC2/aether-compliance/config/"
-              "compliance_config.py with the 11-purpose registry.")
+              "compliance_config.py with the canonical registry.")
         return 1
-    print("consent-purpose reconciliation OK (compliance ConsentPurpose ↔ 11-purpose registry).")
+    print("consent-purpose reconciliation OK (compliance ConsentPurpose ↔ canonical registry).")
     return 0
 
 

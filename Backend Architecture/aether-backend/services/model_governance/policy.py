@@ -1,34 +1,21 @@
 """Model-governance policy resolution.
 
 Resolves, for a canonical model id, the consent purposes that gate its serving
-and the purposes its training data is allowed to be drawn from. The canonical
-source is the ML registry's governance metadata
+(``ModelEntry.required_inference_purposes``) and the purposes its training data
+is allowed to be drawn from (``ModelEntry.allowed_training_purposes``). The
+canonical source is the ML registry's governance metadata
 (``ML Models/aether-ml/common/model_registry.ModelEntry``); this module reads it
-through a lazy import and falls back to a conservative static mapping when the ML
-package is not importable (mirrors ``services/ml_serving/routes._resolve_canonical``).
+through a lazy import.
 
-Fail-closed: an unresolved sensitive model defaults to requiring consent and to
-being enforced.
+Fail-closed: a model that cannot be resolved, or that declares no inference
+purposes, resolves to an empty purpose tuple — the inference gate treats that
+as "undeclared" and denies serving.
 """
 from __future__ import annotations
 
 import os
 from functools import lru_cache
 from typing import Optional
-
-# Conservative fallback: model category → the consent purpose whose grant a
-# subject must hold for that model's inference. Used only when the ML registry
-# is not importable in this process.
-_CATEGORY_SERVING_PURPOSE: dict[str, str] = {
-    "behavioral_analytics": "analytics",
-    "identity": "analytics",
-    "journey": "analytics",
-    "marketing_attribution": "marketing",
-    "attribution": "marketing",
-    "commerce": "commerce",
-    "web3_security": "web3",
-    "security": "analytics",
-}
 
 # Models that always fail closed if the registry is unavailable (sensitive).
 _FALLBACK_FAIL_CLOSED = frozenset({"bytecode_risk", "trust_score", "identity_resolution"})
@@ -44,22 +31,18 @@ def _entry(model_id: str):
 
 @lru_cache(maxsize=256)
 def serving_required_purposes(model_id: str) -> tuple[str, ...]:
-    """Consent purpose(s) a subject must have granted for this model's inference."""
+    """Consent purpose(s) a subject must have granted for this model's inference.
+
+    Reads the model's declared ``required_inference_purposes`` (serving scope —
+    distinct from ``allowed_training_purposes``, the training-data scope). An
+    empty tuple means the model is unknown or declares no inference purposes;
+    the inference gate denies serving in that case (fail closed).
+    """
     entry = _entry(model_id)
-    if entry is not None:
-        # Governance metadata may scope serving to explicit purposes; otherwise
-        # fall back to the model's category mapping.
-        allowed = getattr(entry, "allowed_training_purposes", None) or []
-        category = getattr(entry, "category", "") or ""
-        mapped = _CATEGORY_SERVING_PURPOSE.get(category)
-        # Prefer an explicit governance purpose scope when present.
-        if allowed:
-            return tuple(dict.fromkeys(allowed))
-        if mapped:
-            return (mapped,)
+    if entry is None:
         return ()
-    mapped = _CATEGORY_SERVING_PURPOSE.get(model_id, None)
-    return (mapped,) if mapped else ()
+    required = getattr(entry, "required_inference_purposes", None) or []
+    return tuple(dict.fromkeys(required))
 
 
 @lru_cache(maxsize=256)
