@@ -4,7 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from config.settings import settings
 from repositories.repos import reset_in_memory_stores
+from shared.common.common import ForbiddenError
 from services.reliability import routes as rl
 from services.reliability.service import (
     compute_slo_status,
@@ -27,15 +29,29 @@ class Tenant:
     def __init__(self, tenant_id="tenant-a", permissions=None, user_id="user-1"):
         self.tenant_id = tenant_id
         self.user_id = user_id
-        self.permissions = set(permissions or {"read", "write", "admin"})
+        # The canonical Kyber gate inspects the RAW permission list — role
+        # admin is deliberately not enough — so the default authorized tenant
+        # carries the explicit operator grant.
+        operator_perm = settings.security_governance.kyber_operator_permission
+        self.permissions = set(permissions or {"read", "write", "admin", operator_perm})
 
     def require_permission(self, permission):
         if permission not in self.permissions:
             raise PermissionError(f"missing permission {permission}")
 
+    def has_permission(self, permission):
+        return permission in self.permissions
+
 
 def req(tenant_id="tenant-a", permissions=None):
-    return SimpleNamespace(state=SimpleNamespace(tenant=Tenant(tenant_id, permissions)))
+    # client/headers/cookies satisfy the canonical gate's request inspection
+    # (client metadata + workforce-session lookup) without a real transport.
+    return SimpleNamespace(
+        state=SimpleNamespace(tenant=Tenant(tenant_id, permissions)),
+        client=None,
+        headers={},
+        cookies={},
+    )
 
 
 def unwrap(resp):
@@ -260,10 +276,11 @@ async def test_tenant_facing_status_visibility_and_no_infra_leakage():
 
 @pytest.mark.asyncio
 async def test_kyber_admin_route_permissions():
-    # non-admin tenant is rejected
-    with pytest.raises(PermissionError):
-        await rl.reliability_overview(req("tenant-a", permissions={"read"}))
-    # admin allowed
+    # An ordinary Aether tenant is rejected — even with role admin, since the
+    # gate reads raw permissions and requires the explicit operator grant.
+    with pytest.raises(ForbiddenError):
+        await rl.reliability_overview(req("tenant-a", permissions={"read", "admin"}))
+    # the explicit operator grant passes
     resp = unwrap(await rl.reliability_overview(req("tenant-a")))
     assert "overall_status" in resp
     assert resp["service_health_summary"]["total"] == 19
