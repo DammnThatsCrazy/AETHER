@@ -184,6 +184,18 @@ async def sync_connector(connector_type: str, request: Request):
     return APIResponse(data=result.model_dump()).to_dict()
 
 
+@router.get("/{connector_type}/sync-runs")
+async def list_connector_sync_runs(connector_type: str, request: Request, limit: int = 50):
+    """Durable sync-run history — the customer-visible sync progress surface."""
+    tenant_id = _tenant_id(request, "read")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    runs = await connector_service.list_sync_runs(
+        tenant_id, connector_type, limit=max(1, min(limit, 200))
+    )
+    return APIResponse(data={"items": runs}).to_dict()
+
+
 @router.post("/{connector_type}/webhook")
 async def ingest_connector_webhook(connector_type: str, request: Request):
     """Authenticated, tenant-scoped webhook ingest (for testing/manual delivery).
