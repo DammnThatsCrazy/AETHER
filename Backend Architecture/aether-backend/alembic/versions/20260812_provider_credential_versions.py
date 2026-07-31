@@ -19,8 +19,14 @@ Purely additive and fully reversible. The legacy single-slot
 ``provider_api_keys`` table is left untouched.
 
 Revision ID: 20260812_provider_credential_versions
-Revises: 20260811_demo_seed_core
+Revises: 20260812_credential_platform
 Create Date: 2026-08-12
+
+Chained after ``20260812_credential_platform`` (main's Unified Integration
+Control Plane ``tenant_credentials`` table) rather than branching from
+``20260811_demo_seed_core`` so the revision graph keeps a single head. The two
+migrations are independent (different tables), so the linear order is arbitrary
+but must be single-headed for the migrations-head CI gate.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260812_provider_credential_versions"
-down_revision = "20260811_demo_seed_core"
+down_revision = "20260812_credential_platform"
 branch_labels = None
 depends_on = None
 

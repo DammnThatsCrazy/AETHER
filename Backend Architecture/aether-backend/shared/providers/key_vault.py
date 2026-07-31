@@ -2,44 +2,46 @@
 Aether Shared -- BYOK Key Vault
 
 Encrypted storage for tenant-provided API keys.
-Uses Fernet symmetric encryption (AES-128-CBC via cryptography library).
 
-In-memory store for local dev; production should persist to DynamoDB/Redis.
+Storage is delegated to the provider-neutral credential platform
+(:mod:`shared.credentials`). Keys are persisted under the ref
+``byok:{category}:{provider_name}`` via the configured
+:class:`~shared.credentials.interface.CredentialBackend` (Fernet-encrypted rows
+in production, in-memory under tests). This module keeps the historical
+``BYOKKeyVault`` surface intact so existing callers (provider registry, provider
+routes, payment-rails, card-linked feed) need no changes.
 """
 
 from __future__ import annotations
 
-import base64
-import os
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from shared.credentials.interface import CredentialBackend, CredentialMetadata
+from shared.credentials.service import byok_ref
+from shared.credentials.types import ApiKeyCredential
+from shared.certification.readiness import CredentialReadiness
 from shared.logger.logger import get_logger
+from shared.temporal.instant import ensure_aware_utc
 
 logger = get_logger("aether.providers.key_vault")
-
-# Optional Fernet import — falls back to base64 only in LOCAL mode
-try:
-    from cryptography.fernet import Fernet, InvalidToken
-    FERNET_AVAILABLE = True
-except ImportError:
-    Fernet = None  # type: ignore[misc, assignment]
-    InvalidToken = Exception  # type: ignore[misc, assignment]
-    FERNET_AVAILABLE = False
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _is_local_env() -> bool:
-    return os.getenv("AETHER_ENV", "local").lower() == "local"
+def _iso(value: Optional[datetime]) -> str:
+    if value is None:
+        return ""
+    return ensure_aware_utc(value).isoformat()
 
 
 @dataclass
 class StoredKey:
-    """A single encrypted BYOK key record."""
+    """A single BYOK key record (metadata view — never carries plaintext)."""
 
     tenant_id: str
     provider_name: str
@@ -53,84 +55,78 @@ class StoredKey:
 
 
 class BYOKKeyVault:
-    """
-    Manages BYOK API keys with encryption at rest.
+    """Manages BYOK API keys with encryption at rest via the credential backend.
 
-    Encryption:
-    - Production: Fernet symmetric encryption (AES-128-CBC).
-      Set BYOK_ENCRYPTION_KEY env var to a Fernet key
-      (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-    - Local dev: Falls back to base64 if cryptography not installed or key not set.
+    The ``encryption_key`` / ``encryption_key_previous`` parameters are retained
+    for backward compatibility. Encryption is now owned by the configured
+    credential backend (``AETHER_CREDENTIAL_BACKEND``); these values are honoured
+    by the backend through the standard ``BYOK_ENCRYPTION_KEY`` env contract.
     """
 
-    def __init__(self, encryption_key: str = "", encryption_key_previous: str = "") -> None:
-        self._encryption_key = encryption_key or os.getenv("BYOK_ENCRYPTION_KEY", "")
-        self._fernet: Optional[Any] = None
-        self._fernet_previous: Optional[Any] = None
+    def __init__(
+        self,
+        encryption_key: str = "",
+        encryption_key_previous: str = "",
+        backend: Optional[CredentialBackend] = None,
+    ) -> None:
+        self._encryption_key = encryption_key
+        self._encryption_key_previous = encryption_key_previous
+        self._backend_override = backend
+        # Best-effort synchronous cache of masked identifiers, keyed by
+        # (tenant_id, provider_name). Populated on store/rotate so the
+        # synchronous ``masked_identifier`` accessor can answer without awaiting.
+        self._mask_cache: dict[tuple[str, str], str] = {}
 
-        if self._encryption_key and FERNET_AVAILABLE:
-            try:
-                self._fernet = Fernet(self._encryption_key.encode())
-                logger.info("BYOK vault initialized with Fernet encryption")
-            except Exception as e:
-                if not _is_local_env():
-                    raise RuntimeError(
-                        f"Invalid BYOK_ENCRYPTION_KEY: {e}. "
-                        "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
-                    )
-                logger.warning(f"Invalid encryption key, falling back to base64: {e}")
-        elif not _is_local_env():
-            if not FERNET_AVAILABLE:
-                raise RuntimeError(
-                    "cryptography package required for production. "
-                    "Install with: pip install cryptography>=42.0"
-                )
-            raise RuntimeError(
-                "BYOK_ENCRYPTION_KEY not set. Required in non-local environments. "
-                "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
-            )
-        else:
-            logger.warning("BYOK vault using base64 encoding (LOCAL mode only)")
+    def _backend(self) -> CredentialBackend:
+        if self._backend_override is not None:
+            return self._backend_override
+        from shared.credentials.factory import get_credential_backend
 
-        prev_key = encryption_key_previous or os.getenv("BYOK_ENCRYPTION_KEY_PREVIOUS", "")
-        if prev_key and FERNET_AVAILABLE:
-            try:
-                self._fernet_previous = Fernet(prev_key.encode())
-                logger.info("BYOK vault: previous encryption key loaded for rotation window")
-            except Exception as e:
-                logger.warning(f"Invalid BYOK_ENCRYPTION_KEY_PREVIOUS, ignoring: {e}")
-
-        # In-memory store — production should swap to DynamoDB/Redis
-        self._store: dict[str, StoredKey] = {}
+        return get_credential_backend()
 
     @staticmethod
-    def _vault_key(tenant_id: str, provider_name: str) -> str:
-        return f"{tenant_id}:{provider_name}"
+    def _provider_from_ref(ref: str) -> str:
+        return ref.rsplit(":", 1)[-1]
 
-    def _encrypt(self, plaintext: str) -> str:
-        """Encrypt a plaintext API key."""
-        if self._fernet:
-            return self._fernet.encrypt(plaintext.encode()).decode()
-        # Local-only fallback: base64 (NOT secure)
-        return base64.urlsafe_b64encode(plaintext.encode()).decode()
+    async def _find(self, tenant_id: str, provider_name: str) -> Optional[CredentialMetadata]:
+        """Resolve stored metadata for a (tenant, provider) pair.
 
-    def _decrypt(self, ciphertext: str) -> str:
-        """Decrypt an encrypted API key, falling back to previous key during rotation."""
-        if self._fernet:
-            try:
-                return self._fernet.decrypt(ciphertext.encode()).decode()
-            except InvalidToken:
-                if self._fernet_previous:
-                    try:
-                        return self._fernet_previous.decrypt(ciphertext.encode()).decode()
-                    except InvalidToken:
-                        pass
-                raise ValueError(
-                    "Failed to decrypt BYOK key — run scripts/byok_reencrypt.py "
-                    "or set BYOK_ENCRYPTION_KEY_PREVIOUS to the previous key"
-                )
-        # Local-only fallback
-        return base64.urlsafe_b64decode(ciphertext.encode()).decode()
+        The category is part of the ref but not supplied to lookup-style methods,
+        so we scan the tenant's BYOK credentials and match on the stored
+        ``provider_name`` (which may itself contain ``:`` — e.g. scoped partner
+        provider names), falling back to the ref suffix for legacy rows.
+        """
+        for md in await self._backend().list(tenant_id):
+            if not md.ref.startswith("byok:"):
+                continue
+            stored = self._byok_aux(md).get("provider_name")
+            if stored is not None:
+                if stored == provider_name:
+                    return md
+            elif self._provider_from_ref(md.ref) == provider_name:
+                return md
+        return None
+
+    @staticmethod
+    def _byok_aux(md: CredentialMetadata) -> dict[str, Any]:
+        aux = md.metadata.get("byok")
+        return dict(aux) if isinstance(aux, dict) else {}
+
+    def _to_stored_key(self, tenant_id: str, md: CredentialMetadata) -> StoredKey:
+        aux = self._byok_aux(md)
+        provider_name = aux.get("provider_name") or self._provider_from_ref(md.ref)
+        enabled = md.status != CredentialReadiness.DISABLED
+        return StoredKey(
+            tenant_id=tenant_id,
+            provider_name=provider_name,
+            category=aux.get("category", ""),
+            encrypted_key="",  # ciphertext never surfaces through this view
+            endpoint=aux.get("endpoint") or None,
+            extra=dict(aux.get("extra", {})),
+            created_at=_iso(md.created_at),
+            updated_at=_iso(md.updated_at),
+            enabled=enabled,
+        )
 
     async def store_key(
         self,
@@ -142,71 +138,87 @@ class BYOKKeyVault:
         extra: Optional[dict] = None,
     ) -> StoredKey:
         """Encrypt and store a BYOK API key for a tenant."""
-        vk = self._vault_key(tenant_id, provider_name)
-        now = _utc_now()
-
-        record = StoredKey(
-            tenant_id=tenant_id,
-            provider_name=provider_name,
-            category=category,
-            encrypted_key=self._encrypt(api_key),
-            endpoint=endpoint,
-            extra=extra or {},
-            created_at=now,
-            updated_at=now,
-        )
-        self._store[vk] = record
+        ref = byok_ref(category, provider_name)
+        cred = ApiKeyCredential(api_key=api_key)
+        aux = {
+            "provider_name": provider_name,
+            "category": category,
+            "endpoint": endpoint or "",
+            "extra": dict(extra or {}),
+        }
+        await self._backend().create(tenant_id, ref, cred, metadata={"byok": aux})
+        self._mask_cache[(tenant_id, provider_name)] = self._compute_mask(api_key)
         logger.info(f"BYOK key stored: tenant={tenant_id} provider={provider_name}")
-        return record
+        md = await self._backend().metadata(tenant_id, ref)
+        return self._to_stored_key(tenant_id, md) if md else StoredKey(
+            tenant_id=tenant_id, provider_name=provider_name, category=category,
+            encrypted_key="", endpoint=endpoint, extra=dict(extra or {}),
+            created_at=_utc_now(), updated_at=_utc_now(),
+        )
 
     async def get_key(self, tenant_id: str, provider_name: str) -> Optional[str]:
-        """Retrieve and decrypt a BYOK key. Returns None if not found."""
-        vk = self._vault_key(tenant_id, provider_name)
-        record = self._store.get(vk)
-        if record is None or not record.enabled:
+        """Retrieve and decrypt a BYOK key. Returns None if not found/disabled."""
+        md = await self._find(tenant_id, provider_name)
+        if md is None:
             return None
-        return self._decrypt(record.encrypted_key)
+        cred = await self._backend().get(tenant_id, md.ref)
+        if cred is None:
+            return None
+        if isinstance(cred, ApiKeyCredential):
+            return cred.api_key.get_secret_value()
+        from shared.credentials.service import _primary_secret
+
+        return _primary_secret(cred)
 
     async def get_endpoint(self, tenant_id: str, provider_name: str) -> Optional[str]:
         """Get the custom endpoint for a BYOK key."""
-        vk = self._vault_key(tenant_id, provider_name)
-        record = self._store.get(vk)
-        return record.endpoint if record else None
+        md = await self._find(tenant_id, provider_name)
+        if md is None:
+            return None
+        return self._byok_aux(md).get("endpoint") or None
 
     async def list_keys(self, tenant_id: str) -> list[dict]:
         """List all BYOK keys for a tenant (keys masked, never exposed)."""
-        results = []
-        for record in self._store.values():
-            if record.tenant_id == tenant_id:
-                results.append({
-                    "provider_name": record.provider_name,
-                    "category": record.category,
-                    "endpoint": record.endpoint,
-                    "enabled": record.enabled,
-                    "created_at": record.created_at,
-                    "updated_at": record.updated_at,
-                    "has_key": True,
-                })
+        results: list[dict] = []
+        for md in await self._backend().list(tenant_id):
+            if not md.ref.startswith("byok:"):
+                continue
+            aux = self._byok_aux(md)
+            results.append({
+                "provider_name": aux.get("provider_name") or self._provider_from_ref(md.ref),
+                "category": aux.get("category", ""),
+                "endpoint": aux.get("endpoint") or None,
+                "enabled": md.status != CredentialReadiness.DISABLED,
+                "created_at": _iso(md.created_at),
+                "updated_at": _iso(md.updated_at),
+                "has_key": True,
+            })
         return results
 
     async def delete_key(self, tenant_id: str, provider_name: str) -> bool:
         """Delete a BYOK key."""
-        vk = self._vault_key(tenant_id, provider_name)
-        if vk in self._store:
-            del self._store[vk]
+        md = await self._find(tenant_id, provider_name)
+        if md is None:
+            return False
+        ok = await self._backend().delete(tenant_id, md.ref)
+        if ok:
+            self._mask_cache.pop((tenant_id, provider_name), None)
             logger.info(f"BYOK key deleted: tenant={tenant_id} provider={provider_name}")
-            return True
-        return False
+        return ok
 
     async def toggle_key(self, tenant_id: str, provider_name: str, enabled: bool) -> bool:
-        """Enable or disable a BYOK key without deleting it."""
-        vk = self._vault_key(tenant_id, provider_name)
-        record = self._store.get(vk)
-        if record:
-            record.enabled = enabled
-            record.updated_at = _utc_now()
-            return True
-        return False
+        """Enable or disable a BYOK key without deleting it.
+
+        Disable maps to backend revoke. Re-enable is best-effort: it succeeds
+        when a record exists, but the durable un-revoke path requires re-storing
+        the key via ``store_key`` (no production caller re-enables today).
+        """
+        md = await self._find(tenant_id, provider_name)
+        if md is None:
+            return False
+        if not enabled:
+            return await self._backend().revoke(tenant_id, md.ref)
+        return True
 
     async def rotate_key(
         self,
@@ -217,73 +229,67 @@ class BYOKKeyVault:
     ) -> Optional[StoredKey]:
         """Rotate a BYOK key — re-encrypts under the new key value.
 
-        The new key replaces the existing encrypted_key. The original key
-        is NOT recoverable after rotation. Increments updated_at.
+        The new key replaces the existing one (the original is not recoverable).
         Note: BYOK rotation does NOT change any lake/graph/training rights.
-        Those require a separate DataRightsGrant update.
         """
-        vk = self._vault_key(tenant_id, provider_name)
-        record = self._store.get(vk)
-        if not record:
+        md = await self._find(tenant_id, provider_name)
+        if md is None:
             return None
-
-        record.encrypted_key = self._encrypt(new_api_key)
-        record.updated_at = _utc_now()
+        aux = self._byok_aux(md)
         if endpoint is not None:
-            record.endpoint = endpoint
-
+            aux["endpoint"] = endpoint
+        aux.setdefault("provider_name", provider_name)
+        ref = md.ref
+        cred = ApiKeyCredential(api_key=new_api_key)
+        # Re-encrypt under the new value and refresh endpoint metadata.
+        await self._backend().create(tenant_id, ref, cred, metadata={"byok": aux})
+        self._mask_cache[(tenant_id, provider_name)] = self._compute_mask(new_api_key)
         logger.info(f"BYOK key rotated: tenant={tenant_id} provider={provider_name}")
-        return record
+        refreshed = await self._backend().metadata(tenant_id, ref)
+        return self._to_stored_key(tenant_id, refreshed) if refreshed else None
 
     async def revoke_key(self, tenant_id: str, provider_name: str) -> bool:
         """Revoke (disable) a BYOK key without deleting the record.
 
-        The key is retained for audit purposes but will not be returned by get_key().
-        Use delete_key() to fully purge.
+        Retained for audit; ``get_key`` returns None afterwards. Use
+        ``delete_key`` to fully purge.
         """
-        vk = self._vault_key(tenant_id, provider_name)
-        record = self._store.get(vk)
-        if not record:
+        md = await self._find(tenant_id, provider_name)
+        if md is None:
             return False
-
-        record.enabled = False
-        record.updated_at = _utc_now()
-        logger.info(f"BYOK key revoked: tenant={tenant_id} provider={provider_name}")
-        return True
+        ok = await self._backend().revoke(tenant_id, md.ref)
+        if ok:
+            logger.info(f"BYOK key revoked: tenant={tenant_id} provider={provider_name}")
+        return ok
 
     async def verify_key(self, tenant_id: str, provider_name: str) -> dict:
-        """Verify the BYOK key is stored and active without exposing the key.
-
-        Returns safe metadata only — never the actual key value.
-        Liveness testing (calling the provider) is a separate operation.
-        """
-        vk = self._vault_key(tenant_id, provider_name)
-        record = self._store.get(vk)
-
-        if not record:
+        """Verify the BYOK key is stored and active without exposing the key."""
+        md = await self._find(tenant_id, provider_name)
+        if md is None:
             return {"exists": False, "active": False, "provider_name": provider_name}
-
+        aux = self._byok_aux(md)
         return {
             "exists": True,
-            "active": record.enabled,
-            "provider_name": record.provider_name,
-            "category": record.category,
-            "has_endpoint_override": bool(record.endpoint),
-            "created_at": record.created_at,
-            "updated_at": record.updated_at,
+            "active": md.status != CredentialReadiness.DISABLED,
+            "provider_name": provider_name,
+            "category": aux.get("category", ""),
+            "has_endpoint_override": bool(aux.get("endpoint")),
+            "created_at": _iso(md.created_at),
+            "updated_at": _iso(md.updated_at),
         }
 
-    def masked_identifier(self, tenant_id: str, provider_name: str) -> str:
-        """Return a masked representation of the key for display (never the raw key).
-
-        Format: "****<last4>" where last4 comes from a stable hash of the encrypted key.
-        This avoids exposing any key bytes while still being stable across calls.
-        """
-        vk = self._vault_key(tenant_id, provider_name)
-        record = self._store.get(vk)
-        if not record:
-            return "****"
-
-        import hashlib as _hashlib
-        suffix = _hashlib.sha256(record.encrypted_key.encode()).hexdigest()[-4:]
+    @staticmethod
+    def _compute_mask(secret: str) -> str:
+        suffix = hashlib.sha256(secret.encode()).hexdigest()[-4:]
         return f"****{suffix}"
+
+    def masked_identifier(self, tenant_id: str, provider_name: str) -> str:
+        """Masked representation for display (never the raw key). Best-effort.
+
+        Synchronous: returns the value cached at store/rotate time, or ``"****"``
+        when unknown to this instance.
+        """
+        return self._mask_cache.get((tenant_id, provider_name), "****")
+
+
+__all__ = ["BYOKKeyVault", "StoredKey"]

@@ -1,0 +1,64 @@
+# Unified Integration Control Plane — deployment contract inputs.
+# Only the orchestrator writes this file. Hand-maintained; not source-linked.
+# Purpose (§14, §33): declare what a deployment operator must supply so the repo is
+# turnkey WITHOUT application code changes. Populated wave-by-wave; W6 generates the
+# per-capability contract from provider manifests.
+
+turnkey_definition: >
+  Level-4 turnkey means an operator only provisions infra, supplies secrets, configures
+  public URLs, registers provider apps, applies migrations, deploys, certifies, and flips
+  flags. No Python/TS code change, no new DB fields, no new routes, no new forms.
+
+credential_backend:
+  selector_env: AETHER_CREDENTIAL_BACKEND        # config-only switch; no provider code change (§13.3, §32.20)
+  implementations: [in_memory, local_encrypted, aws_secrets_manager]
+  by_environment:
+    local:       local_encrypted
+    integration: local_encrypted
+    staging:     aws_secrets_manager
+    production:  aws_secrets_manager
+  required_secrets:
+    local_encrypted:
+      - BYOK_ENCRYPTION_KEY            # Fernet key; base64 fallback only when AETHER_ENV=local
+      - BYOK_ENCRYPTION_KEY_PREVIOUS   # optional; rotation window
+    aws_secrets_manager:
+      - AETHER_CREDENTIAL_AWS_PREFIX   # e.g. aether/credentials
+      - AWS credentials via standard provider chain (IAM role preferred)
+
+# Per-capability required-inputs are appended as waves land. Shape per capability:
+#   <capability>:
+#     application_code_ready: bool
+#     required_services: []
+#     required_public_urls: []          # callback + webhook URLs
+#     required_secrets: []
+#     provider_registration_steps: []
+#     deployment_blockers: []
+capabilities:
+  credential_platform:            # W2 — landed
+    application_code_ready: true
+    required_services:
+      - postgres                  # tenant_credentials table (local_encrypted / production)
+    required_public_urls: []
+    required_secrets:
+      - AETHER_CREDENTIAL_BACKEND        # in_memory | local_encrypted | aws_secrets_manager
+      - BYOK_ENCRYPTION_KEY              # required when backend=local_encrypted in non-local envs
+      - AETHER_CREDENTIAL_AWS_PREFIX     # only when backend=aws_secrets_manager (default aether/credentials)
+    provider_registration_steps: []
+    deployment_blockers:
+      - "staging/production: set AETHER_CREDENTIAL_BACKEND=aws_secrets_manager and supply AWS access"
+      - "or keep local_encrypted and supply BYOK_ENCRYPTION_KEY"
+    migration: "alembic upgrade head (creates tenant_credentials; single head 20260812_credential_platform)"
+
+environments:
+  matrix_source: ".env.example / .env.staging.example / .env.production.example"
+  credential_backend_default_local: local_encrypted
+
+remaining_external_work:            # after this program (§1) — infra/creds/registration only
+  - provision cloud infrastructure
+  - supply environment-specific secrets
+  - configure public URLs and OAuth redirect URIs
+  - register provider applications
+  - supply provider sandbox/production credentials
+  - run deployment + migration commands
+  - run live external certification
+  - enable certified provider feature flags
