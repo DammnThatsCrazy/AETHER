@@ -1,8 +1,8 @@
 """Payment Rail Observability routes.
 
 * ``webhook_router`` (``/v1/integrations/webhooks/payment-rails``) — public
-  provider webhook ingestion: no API key, HMAC-verified per adapter with the
-  tenant's vault secret, tenant resolved from ``X-Aether-Tenant-ID`` (same
+  provider webhook ingestion: no API key, provider-native signature verified
+  with the tenant's vault secret, tenant resolved from ``X-Aether-Tenant-ID`` (same
   contract as the connector public webhooks; the prefix is already in
   feature-gate PUBLIC_PATH_PREFIXES).
 * ``router`` (``/v1/integrations/providers``) — tenant-authenticated provider
@@ -64,9 +64,11 @@ def _tenant_id(request: Request, permission: str = "read") -> str:
 async def payment_rail_webhook(provider: str, request: Request):
     """Public webhook receiver for the five named payment rail providers.
 
-    - No API key; the adapter verifies the provider HMAC signature against
-      the tenant's vault secret before anything is parsed or persisted.
-    - Tenant resolved from the ``X-Aether-Tenant-ID`` header.
+    - No API key; the provider's native signature (compound Stripe/MoonPay
+      headers, Coinbase body-hex, etc.) is verified against the tenant's vault
+      secret before anything is parsed or persisted.
+    - Tenant resolved from the ``X-Aether-Tenant-ID`` header. The
+      ``/{provider}/{endpoint_id}`` route is the server-resolved-tenant path.
     """
     _require_rails_enabled()
     tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()

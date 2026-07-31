@@ -104,16 +104,41 @@ class PaymentRailsService:
         timestamp: Optional[str] = None,
     ) -> dict[str, Any]:
         adapter = require_provider_enabled(provider)
-        verified = await adapter.verify_webhook(
-            tenant_id, payload=payload, signature=signature, timestamp=timestamp
+        # Provider-native signature verification — the same scheme the durable
+        # endpoint-registry path uses — replacing the legacy generic HMAC. The
+        # header-resolved route reads each provider's native signature header
+        # (Moonpay-Signature-V2 / Stripe-Signature compound t=,s=/v1=, etc.) but
+        # was verifying them with one generic verifier that mishandles compound
+        # signatures; native verification demands each provider's real protocol.
+        # Tenant is still caller-resolved here (legacy contract); the endpoint-id
+        # route remains the server-resolved path.
+        from services.integrations.providers.payment_rails.signature_verify import (
+            verify_signature,
         )
-        if not verified:
+
+        try:
+            from services.integrations.providers.payment_rails.base import (
+                get_payment_rails_vault,
+            )
+
+            legacy_secret = await get_payment_rails_vault().get_key(
+                tenant_id, adapter.vault_provider_name
+            )
+        except Exception:  # noqa: BLE001 — missing/unavailable secret → no_secret reject
+            legacy_secret = None
+        secrets = [legacy_secret] if legacy_secret else []
+        now_epoch = int(datetime.now(timezone.utc).timestamp())
+        result = verify_signature(
+            adapter.native_signature_scheme(), secrets, payload, signature,
+            timestamp=timestamp, now_epoch=now_epoch,
+        )
+        if not result.ok:
             await self.repos.audit.record(tenant_id, adapter.audit_record(
-                tenant_id, "webhook_rejected", {"reason": "signature_verification_failed"}
+                tenant_id, "webhook_rejected", {"reason": result.reason}
             ))
             metrics.increment("payment_rail_webhook_rejected_total",
                               labels={"provider": adapter.provider_name})
-            return {"handled": False, "reason": "signature_verification_failed"}
+            return {"handled": False, "reason": result.reason}
 
         try:
             parsed = json.loads(payload.decode("utf-8"))

@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import os
+import time
 import uuid
 from types import SimpleNamespace
 
@@ -96,16 +97,21 @@ def _moonpay_body(tx_id: str, status: str, **extra) -> bytes:
 
 
 async def _signed_webhook(service, tenant_id: str, body: bytes, provider: str = "moonpay"):
+    # MoonPay's native scheme is the compound ``Moonpay-Signature-V2: t=,s=``
+    # header (HMAC-SHA256 over ``f"{t}.{body}"``) — the same protocol the
+    # endpoint-registry path verifies. A fresh timestamp keeps it within the
+    # replay tolerance the native verifier now enforces on the legacy route.
     secret = "whsec_" + tenant_id
     vault = get_payment_rails_vault()
     stored = await vault.get_key(tenant_id, f"payment_{provider}")
     if not stored:
         await vault.store_key(tenant_id, f"payment_{provider}", "payment", secret)
-    timestamp = "1720500000"
-    signature = hmac.new(
+    timestamp = str(int(time.time()))
+    mac = hmac.new(
         secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256
     ).hexdigest()
-    return await service.handle_webhook(tenant_id, provider, body, f"v1={signature}", timestamp)
+    header = f"t={timestamp},s={mac}"  # native moonpay_compound header
+    return await service.handle_webhook(tenant_id, provider, body, header, timestamp)
 
 
 class TestFlagGating:
@@ -187,6 +193,28 @@ class TestWebhookPipeline:
             _tenant(), "moonpay", _moonpay_body("tx6", "completed"), "v1=abc", "1"
         )
         assert result["handled"] is False
+
+    async def test_legacy_route_now_requires_native_compound_signature(self, service):
+        # The legacy header-resolved route verifies with the provider's NATIVE
+        # scheme now: the old generic form (a bare ``v1=<hmac(f"{ts}.{body}")>``
+        # with the timestamp passed out-of-band) is rejected for a compound
+        # provider; only MoonPay's real ``t=,s=`` compound header verifies.
+        tenant_id = _tenant()
+        secret = "whsec_" + tenant_id
+        await get_payment_rails_vault().store_key(
+            tenant_id, "payment_moonpay", "payment", secret
+        )
+        body = _moonpay_body("txN", "completed")
+        ts = str(int(time.time()))
+        mac = hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+
+        legacy = await service.handle_webhook(tenant_id, "moonpay", body, f"v1={mac}", ts)
+        assert legacy["handled"] is False  # generic form no longer accepted
+
+        native = await service.handle_webhook(
+            tenant_id, "moonpay", body, f"t={ts},s={mac}", ts
+        )
+        assert native["handled"] is True  # native compound header verifies
 
 
 class TestStatusSync:
