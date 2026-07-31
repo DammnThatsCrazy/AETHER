@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "96acb2f"
+last_synced_commit: "241b33da"
 ---
 
 # AWS Deployment — Infrastructure Reference
