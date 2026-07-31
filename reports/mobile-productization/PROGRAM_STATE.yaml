@@ -1,0 +1,120 @@
+# Mobile / Continuity / Notification Productization — living program state.
+# SINGLE AUTHORITY for work status. Only the orchestrator writes this file.
+# Not generated; not source-linked (no drift stamping). Hand-maintained per landing.
+# Precedent: docs/integration-control-plane/PROGRAM_STATE.yaml.
+
+program:
+  branch: claude/aether-turnkey-productization-iu2qk4
+  base_commit: "78562ddae28de01ec0fe3c59e42bb357baaffb1f"   # == origin/main at program start (feat: Unified Integration Control Plane — foundation (#497))
+  observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of base_commit
+  platform_version: "8.12.0"
+  last_landed_checkpoint: C0
+  status: active
+  delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
+  gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
+  session_scope: "C0-C4"                         # owner-selected: foundation baseplate + shared mobile platform. C5-C9 staged.
+
+# Milestone commits (this session = C0-C4). Full app surfaces + governed actions +
+# compliance/distribution + adversarial review (C5-C9) are documented, not built this session.
+milestones:
+  - id: C0
+    name: reconciliation-and-orchestration-control-plane
+    status: in_progress
+    lands: [program-ledgers, reuse-map, external-blockers, credential-contracts-registry, architecture-doc, feature-flags-off]
+    runtime_behavior_change: false
+  - id: C1
+    name: continuity-context-sync-contracts
+    depends_on: [C0]
+    status: pending
+    lands: [continuation-contract-twins, continuation-plane, client-sync-feed, deep-link-contract]
+  - id: C2
+    name: notification-attention-control-plane
+    depends_on: [C1]
+    status: pending
+    lands: [notification-branding, notification-delivery-ts-twins, coverage-registry, collision-resolution, mobile-notification-projection]
+  - id: C3
+    name: delivery-providers-installations-push-email-deeplinks
+    depends_on: [C2]
+    status: pending
+    lands: [apns-fcm-webpush-email-adapters, provider-fakes, installation-push-model, deeplink-resolve, credential-preflight]
+    full_gate_checkpoint: true
+  - id: C4
+    name: shared-mobile-platform-native-security-build
+    depends_on: [C3]
+    status: pending
+    lands: [apps-aether-mobile, apps-kyber-mobile, packages-mobile-core-set, workspace-ci-wiring, sdk-permission-inventory]
+
+# Wave / architecture rollup (reuse-first). "reuse" = exists complete; "extend" = exists, add surface;
+# "build" = net-new this program. Authoritative detail: reports/mobile-productization/repo-baseline.json.
+architecture:
+  notification_control_plane: extend        # services/notification_intelligence/* exists complete; brand + TS twins + coverage registry + collision fix
+  delivery_infrastructure: extend           # services/delivery/* exists complete; add apns/fcm/webpush/email adapters + fakes
+  worker_supervisor: reuse                  # services/runtime/{supervisor,specs}.py
+  exploration_context: reuse                # shared/exploration/models.py (+ TS twin, parity-tested)
+  saved_views: reuse                        # services/exploration/store.py
+  noesis_conversations: reuse               # services/noesis/{conversations,conversation}.py (durable one referenced)
+  continuation_plane: build                 # NET-NEW: services/continuation/*, alembic, /v1/continuations
+  client_sync_feed: build                   # NET-NEW: services/client_sync/*, alembic, /v1/client-sync
+  push_provider_adapters: build             # NET-NEW: apns/fcm/webpush/email adapters
+  installation_push_model: build            # NET-NEW: extends services/auth/sessions + services/kyber/devices
+  kyber_command_plane: reuse                # services/kyber/ops/* (req->dry-run->approve->execute->verify); mobile adapts, no new plane
+  kyber_identity_device_trust: reuse        # services/kyber/{identity,devices,sessions,access}/*
+  tenant_identity_authz: reuse              # services/auth/*, middleware/middleware.py, services/policy/*
+  credential_platform: reuse                # shared/credentials/* (in_memory/local_encrypted/aws_secrets_manager)
+  mobile_apps: build                        # NET-NEW: apps/aether-mobile, apps/kyber-mobile (Expo + prebuild)
+  mobile_shared_packages: build             # NET-NEW: packages/mobile-*
+  desktop_notification_center_kyber: reuse  # frontend/kyber/src/features/notifications/* (mobile push = "Architecture-Ready")
+  desktop_notification_center_aether: build # NET-NEW: only settings/notifications-section.tsx exists today (C5)
+  release_readiness_machinery: reuse        # scripts/production_status.py, repo_doctor.py, deployment_profiles.yaml
+
+# Alembic revision reservation. Single-head invariant is enforced by
+# scripts/validate_temporal_integrity.py. Current DB head at program start: 20260812_credential_platform.
+# NOTE: PR #498 (unmerged) reserves 20260812_provider_credential_versions + 20260813_payment_webhook_endpoints.
+# Our IDs are namespaced 20260820+ to avoid name collision; down_revision must be re-pointed to the
+# real single head on any rebase that lands #498 (or other migrations) first.
+migration_reservation:
+  chain_root_at_start: "20260812_credential_platform"
+  reserved:
+    - id: "20260820_continuation_plane"      # C1: tables continuations, continuation_selections
+      down_revision: "20260812_credential_platform"
+      owner_milestone: C1
+      status: reserved
+    - id: "20260821_client_sync"             # C1: tables sync_change_log, sync_cursor_counter
+      down_revision: "20260820_continuation_plane"
+      owner_milestone: C1
+      status: reserved
+    - id: "20260822_mobile_installations"    # C3: tables mobile_installations, push_subscriptions
+      down_revision: "20260821_client_sync"
+      owner_milestone: C3
+      status: reserved
+
+# Coordination with in-flight open PRs (do NOT merge wholesale; reuse-in-place).
+open_pr_overlap:
+  - pr: 498
+    title: "durable multi-slot provider-credential authority (PR 1 of 4)"
+    branch: claude/aether-credential-ready-pilot-vwa66s
+    relation: "credential-ready foundation; our config/credential_contracts.yaml REFERENCES the credential platform, does not duplicate it"
+    action: reuse-in-place
+    disposition: still_required-parallel
+  - pr: 499
+    title: "Communications Intelligence — Klaviyo reference release"
+    branch: claude/aether-comms-intelligence-release-w7j2x0
+    relation: "low overlap"
+    action: note-only
+    disposition: parallel
+
+quality:                                     # updated at each milestone boundary from real gate runs
+  ci_check: "baseline pending first C0 gate run"
+  unit_tests: unknown
+  contract_tests: unknown
+  frontend_tests: unknown
+  migration_single_head: "true at start (head=20260812_credential_platform)"
+
+# Honest readiness verdict (per productization dimension). No fake production-ready claims.
+readiness:
+  implementation: "C0-C4 foundation targeted; C5-C9 staged"
+  credential: externally_blocked            # no AWS/APNs/FCM/email/Apple/Google; contracts + fakes + preflight only
+  design_partner: partial
+  store_submission: externally_blocked
+  controlled_production: externally_blocked
+  overall_target: "CODE_COMPLETE_CREDENTIALS_BLOCKED + READY_FOR_LOCAL_INTEGRATED_DEMO"

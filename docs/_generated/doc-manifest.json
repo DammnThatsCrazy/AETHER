@@ -6207,6 +6207,19 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/MOBILE_PLATFORM.md",
+      "title": "Mobile Platform & Productization Baseplate",
+      "slug": "mobile/platform",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/MODEL_GOVERNANCE.md"
     },
     {

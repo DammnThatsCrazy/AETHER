@@ -1,0 +1,78 @@
+{
+  "$comment": "Path-ownership freeze for the program. Prevents two work packets from editing the same file concurrently. shared_paths require orchestrator serialization. Precedent: docs/integration-control-plane/FILE_OWNERSHIP.yaml.",
+  "schema_version": 1,
+  "owners": {
+    "C0_orchestration": [
+      "reports/mobile-productization/**",
+      "config/credential_contracts.yaml",
+      "docs/source-of-truth/MOBILE_PLATFORM.md"
+    ],
+    "C1_continuity": [
+      "Backend Architecture/aether-backend/services/continuation/**",
+      "Backend Architecture/aether-backend/shared/continuation/**",
+      "Backend Architecture/aether-backend/services/client_sync/**",
+      "Backend Architecture/aether-backend/shared/client_sync/**",
+      "Backend Architecture/aether-backend/alembic/versions/20260820_continuation_plane.py",
+      "Backend Architecture/aether-backend/alembic/versions/20260821_client_sync.py",
+      "packages/shared/continuation.ts",
+      "packages/shared/sync-event.ts",
+      "packages/shared/deep-link.ts",
+      "tests/contracts/test_continuation_contract_parity.py",
+      "tests/contracts/test_sync_event_contract_parity.py",
+      "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
+    ],
+    "C2_notification": [
+      "packages/shared/notification.ts",
+      "packages/shared/delivery-receipt.ts",
+      "Backend Architecture/aether-backend/services/notification_intelligence/coverage.py",
+      "tests/contracts/test_notification_contract_parity.py",
+      "tests/contracts/test_delivery_receipt_parity.py",
+      "tests/contracts/test_route_prefix_uniqueness.py",
+      "docs/source-of-truth/NOTIFICATION_CONTROL_PLANE.md"
+    ],
+    "C3_delivery_providers": [
+      "Backend Architecture/aether-backend/services/delivery/adapters/apns.py",
+      "Backend Architecture/aether-backend/services/delivery/adapters/fcm.py",
+      "Backend Architecture/aether-backend/services/delivery/adapters/web_push.py",
+      "Backend Architecture/aether-backend/services/delivery/adapters/email.py",
+      "Backend Architecture/aether-backend/services/mobile/**",
+      "Backend Architecture/aether-backend/shared/mobile/**",
+      "Backend Architecture/aether-backend/alembic/versions/20260822_mobile_installations.py",
+      "packages/shared/installation.ts",
+      "packages/shared/mobile-config.ts",
+      "docs/source-of-truth/CREDENTIAL_ACTIVATION.md"
+    ],
+    "C4_mobile_platform": [
+      "apps/aether-mobile/**",
+      "apps/kyber-mobile/**",
+      "packages/mobile-core/**",
+      "packages/mobile-ui/**",
+      "packages/mobile-auth/**",
+      "packages/mobile-api/**",
+      "packages/mobile-notifications/**",
+      "packages/mobile-continuity/**",
+      "packages/mobile-security/**",
+      "packages/mobile-observability/**",
+      "packages/mobile-testing/**",
+      "packages/mobile-compliance/**",
+      "docs/source-of-truth/AETHER_MOBILE.md",
+      "docs/source-of-truth/KYBER_MOBILE.md",
+      "docs/source-of-truth/MOBILE_COMPLIANCE.md",
+      "docs/source-of-truth/MOBILE_DISTRIBUTION.md",
+      "docs/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md"
+    ]
+  },
+  "shared_paths_requiring_orchestrator": [
+    "Backend Architecture/aether-backend/main.py",
+    "Backend Architecture/aether-backend/config/settings.py",
+    "Backend Architecture/aether-backend/services/runtime/specs.py",
+    "packages/shared/index.ts",
+    "package.json",
+    "Makefile",
+    "config/storage_policies.yaml",
+    "scripts/bump_version.py",
+    "docs/_generated/**",
+    "docs/REPO-INDEX.md",
+    "docs/AUTOMATION.md"
+  ]
+}

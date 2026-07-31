@@ -1,0 +1,87 @@
+{
+  "$comment": "External blockers for the mobile/continuity/notification productization program. A blocker means: implementation + contract + local-fake are complete, but real-world activation needs a credential, account, live infra, physical-provider execution, or an observation window. 'externally_blocked' is NOT 'implementation incomplete' and NOT 'production ready'. Owner: orchestrator. Hand-maintained.",
+  "schema_version": 1,
+  "generated_for_milestones": "C0-C4",
+  "blockers": [
+    {
+      "id": "apns",
+      "capability": "iOS push delivery",
+      "provider": "Apple Push Notification service",
+      "state": "externally_blocked",
+      "blocked_on": ["Apple Developer Program account", "APNs auth key (.p8) or cert", "APNs topic/bundle id"],
+      "implementation_status": "adapter + provider-shaped local fake planned C3; credential contract C0",
+      "activation": "insert APNs key into credential platform; set topic/env; run credentials-preflight; no code change",
+      "evidence_required": "live APNs sandbox accept + delivery receipt in a rehearsal"
+    },
+    {
+      "id": "fcm",
+      "capability": "Android push delivery",
+      "provider": "Firebase Cloud Messaging",
+      "state": "externally_blocked",
+      "blocked_on": ["Google/Firebase project", "FCM service-account credential"],
+      "implementation_status": "adapter + local fake planned C3; credential contract C0",
+      "activation": "insert FCM service account; set project; run credentials-preflight; no code change",
+      "evidence_required": "live FCM accept + delivery receipt in a rehearsal"
+    },
+    {
+      "id": "web_push_vapid",
+      "capability": "Web Push delivery",
+      "provider": "VAPID / browser push services",
+      "state": "externally_blocked",
+      "blocked_on": ["VAPID keypair"],
+      "implementation_status": "adapter + local fake planned C3; credential contract C0",
+      "activation": "generate + insert VAPID keypair; no code change",
+      "evidence_required": "live push accept"
+    },
+    {
+      "id": "email_ses",
+      "capability": "Transactional email delivery",
+      "provider": "AWS SES (or SMTP)",
+      "state": "externally_blocked",
+      "blocked_on": ["SES verified domain/sender", "AWS credentials or SMTP creds"],
+      "implementation_status": "adapter (currently enum-only, no registered adapter) + local fake planned C3; credential contract C0",
+      "activation": "verify sender domain; insert SES/SMTP creds; run credentials-preflight; no code change",
+      "evidence_required": "live send + delivery/bounce receipt"
+    },
+    {
+      "id": "apple_signing",
+      "capability": "iOS build signing + TestFlight/App Store/Custom App distribution",
+      "provider": "Apple Developer Program",
+      "state": "externally_blocked",
+      "blocked_on": ["Apple Developer Program membership", "signing certs + provisioning profiles", "App Store Connect app records"],
+      "implementation_status": "distribution pipeline definition is C8 (staged); iOS simulator compile is C4 and does NOT require signing",
+      "activation": "provision certs/profiles; configure App Store Connect; run signing pipeline",
+      "evidence_required": "signed .ipa + TestFlight upload"
+    },
+    {
+      "id": "google_play_signing",
+      "capability": "Android build signing + Play/Managed-Google-Play distribution",
+      "provider": "Google Play Console",
+      "state": "externally_blocked",
+      "blocked_on": ["Play Console account", "upload/app-signing keys", "Play app records"],
+      "implementation_status": "distribution pipeline definition is C8 (staged); Android emulator compile is C4 and does NOT require store signing",
+      "activation": "configure signing keys; configure Play tracks; run signing pipeline",
+      "evidence_required": "signed AAB + Play internal-track upload"
+    },
+    {
+      "id": "aws_infra",
+      "capability": "Hosted design-partner / staging / production backend",
+      "provider": "AWS (existing deployment-profile architecture)",
+      "state": "externally_blocked",
+      "blocked_on": ["AWS account + credentials", "Terraform apply against a real account"],
+      "implementation_status": "reuses existing config/deployment_profiles.yaml + AWS Deployment/aether-aws terraform; no new infra stack",
+      "activation": "supply AWS creds; terraform plan/apply an existing profile",
+      "evidence_required": "reachable hosted backend + migration applied"
+    },
+    {
+      "id": "physical_device_matrix",
+      "capability": "Physical iOS/Android device push + handoff verification",
+      "provider": "n/a (hardware + observation window)",
+      "state": "externally_blocked",
+      "blocked_on": ["physical devices", "signed builds", "live push credentials"],
+      "implementation_status": "test matrix documented; no result may be claimed without execution",
+      "activation": "run the documented device matrix on real hardware",
+      "evidence_required": "recorded per-device results (foreground/background/terminated push, handoff both directions, revocation)"
+    }
+  ]
+}
