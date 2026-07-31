@@ -31,6 +31,7 @@ from typing import Coroutine, Optional
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
+from shared.observability import child_traceparent
 
 from repositories.jobs_repo import JobsRepository, get_jobs_repository
 from services.jobs.handlers import (
@@ -178,7 +179,15 @@ class JobWorker:
         job_id = job["id"]
         correlation_id = job.get("correlation_id") or ""
 
-        await self._record(job, "job.started", extra={"worker_id": self.worker_id})
+        started_extra: dict = {"worker_id": self.worker_id}
+        # Trace-context seam: continue the enqueue hop's trace (new span, same
+        # trace id) so enqueue and execution correlate. None unless
+        # AETHER_OTEL_ENABLED — see shared/observability.py.
+        traceparent = child_traceparent((job.get("payload") or {}).get("_traceparent"))
+        if traceparent is not None:
+            started_extra["traceparent"] = traceparent
+
+        await self._record(job, "job.started", extra=started_extra)
 
         handler = HANDLER_REGISTRY.get(job["job_type"])
         if handler is None:

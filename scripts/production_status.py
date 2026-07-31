@@ -791,6 +791,17 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
+        "Distributed tracing is a seam only: W3C traceparent helpers and "
+        "correlation-id propagation exist (shared/observability.py, gated on "
+        "AETHER_OTEL_ENABLED), but no OpenTelemetry SDK, spans, or exporter "
+        "are integrated — the seam must not be mistaken for observability coverage",
+        "observability / tracing",
+        "Integrate the OpenTelemetry SDK behind the existing seam (span creation at "
+        "ingestion/jobs/outbox hops, OTLP exporter), provision a collector in staging, "
+        "and validate trace continuity across enqueue -> worker -> bus",
+    ),
+    Blocker(
+        "pre-production-blocker",
         "Derivatives market streams run on the local transport; Kafka topics not provisioned",
         "derivatives intelligence",
         "Provision Kafka topics in staging; re-run stream gap/recovery validation against the real transport",
