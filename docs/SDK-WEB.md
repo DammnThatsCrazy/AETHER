@@ -15,7 +15,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "6306ea8"
+last_synced_commit: "9ebc883"
 ---
 
 # Aether Web SDK v8.12.0 — Integration Guide
@@ -89,6 +89,30 @@ Canonical event types and their required consent purposes are registry-derived
 generated into `packages/web/src/core/generated-consent-map.ts`, never
 hand-maintained.
 
+### Canonical envelope context
+
+Every emitted event carries the canonical envelope v1 context in addition to
+page/device/campaign context:
+
+- `context.surface` — the origin plane, always `'web'` for this SDK
+- `context.schemaVersion` — the envelope contract version the emitter conforms to
+- `context.sequence` — `{ event: n }`, a monotonic per-instance counter for
+  gap/reorder detection at ingest
+- `context.operatingSystem` — `{ name, version }` in the canonical envelope
+  shape (`device.os` / `device.osVersion` remain for backward compatibility)
+- `context.application` — the emitting product identity, when declared via
+  `config.application`
+- `context.journey` — snapshot of the active journey (id/name/type/status) on
+  every event, not just `journey_*` lifecycle events
+- Temporal provenance captured at event occurrence: `timezone`,
+  `utcOffsetMinutes`, `timeZoneSource: 'device'`, `clockSource: 'device'`
+
+Staging/production ingestion **enforces** `sequence`, `schemaVersion`, and
+`surface` for release-critical event families (`core`, `journey`, `identity`,
+`consent`): events missing any of them are rejected with reason
+`envelope_missing:<field>`. Keep the SDK current so these fields are always
+stamped.
+
 ### Identity
 
 ```typescript
@@ -119,9 +143,10 @@ aether.reset();
 
 When a user returns on a new device but presents a wallet the backend has
 seen before, the SDK can resume their prior session. On `init()` the SDK
-posts the current fingerprint + any connected wallets to
-`POST /sdk/identity/resolve`; if the backend matches, it returns a
-`ResolvedIdentity` and the SDK silently merges the anonymous IDs.
+posts the current fingerprint + any cached wallets to
+`POST /sdk/identity/resolve`, and it re-resolves on every subsequent wallet
+connect; if the backend matches, it returns a `ResolvedIdentity` and the SDK
+silently merges the anonymous IDs.
 
 ```typescript
 import type { ResolvedIdentity } from '@aether/web';
@@ -157,13 +182,15 @@ again.
 
 ### Consent Management (GDPR/CCPA)
 
-Consent purposes are **registry-derived** — the canonical set lives in
-`packages/shared/contracts/consent-registry.json`. Base purposes (`analytics`,
-`marketing`, `personalization`, `web3`, `agent`, `commerce`) can be granted together;
-explicit opt-in purposes (`financial_activity`, `credit`, `location`,
-`economic_observability`, `cross_chain_observability`) **always require separate
-opt-in** and are never granted by `grantAll()`. Present each explicit opt-in purpose
-as a separate choice in your consent UI.
+Consent purposes are **registry-derived** — the canonical set of 12 purposes
+lives in `packages/shared/contracts/consent-registry.json` (the web SDK consumes
+the generated `@aether/shared` consent contract, never a hand copy). Base
+purposes (`analytics`, `marketing`, `personalization`, `web3`, `agent`,
+`commerce`) can be granted together; explicit opt-in purposes
+(`financial_activity`, `credit`, `location`, `economic_observability`,
+`cross_chain_observability`, `fraud_prevention`) **always require separate
+opt-in** and are never granted by the banner's accept-all path. Present each
+explicit opt-in purpose as a separate choice in your consent UI.
 
 `personalization` gates device fingerprinting: revoking it automatically deletes the cached fingerprint.
 
@@ -171,29 +198,47 @@ as a separate choice in your consent UI.
 // Grant consent for specific purposes
 aether.consent.grant(['analytics', 'marketing', 'web3']);
 
-// Grant all non-sensitive purposes (excludes credit and location)
-aether.consent.grantAll();
-
-// Grant credit after showing separate opt-in UI
+// Grant an explicit opt-in purpose after showing its separate opt-in UI
 aether.consent.grant(['credit']);
+aether.consent.grant(['fraud_prevention']);
 
 // Revoke consent (revoking personalization also deletes cached fingerprint)
 aether.consent.revoke(['marketing']);
 
-// Check consent state (all 8 boolean fields)
+// Check consent state (one boolean per registry purpose — 12 fields)
 const state = aether.consent.getState();
 // { analytics: true, marketing: false, personalization: false, web3: true,
-//   agent: false, commerce: false, credit: false, location: false,
+//   agent: false, commerce: false, financial_activity: false, credit: false,
+//   location: false, economic_observability: false,
+//   cross_chain_observability: false, fraud_prevention: false,
 //   updatedAt: '...', policyVersion: '...' }
 
-// Show consent banner (auto-shown in gdprMode if no prior consent)
+// Show consent banner (auto-shown in gdprMode if no prior consent).
+// The banner's accept-all button grants every purpose EXCEPT the six
+// explicit opt-in purposes.
 aether.consent.showBanner({ position: 'bottom', theme: 'dark' });
 
 // Listen for consent changes
 const unsub = aether.consent.onUpdate((state) => {
   console.log('Consent updated:', state);
 });
+
+// Persist an authoritative, deterministic consent receipt to the backend
+// (POST /v1/consent/records). Returns the canonical receipt.
+const receipt = await aether.consent.recordReceipt({
+  tenant_id: 'tenant-1',
+  subject_id: 'user-123',
+  purposes: ['analytics', 'marketing'],
+  state: 'granted',
+  source: 'banner',
+  policy_version: '2026-06',
+});
 ```
+
+The public consent facade exposes `getState`, `grant`, `revoke`, `showBanner`,
+`hideBanner`, `onUpdate`, and `recordReceipt`. There is no public `grantAll()`
+method — accept-all is a banner action, and it never grants explicit opt-in
+purposes.
 
 ## Web3 Wallet Tracking
 
@@ -362,9 +407,13 @@ The SDK automatically captures on init:
 **Wire shape:** The standard web SDK attaches its first-touch observations to
 events as `context.trafficSource`; it does not emit a separate
 `context.acquisitionEvidence` field. `referralToken` is forwarded unchanged in
-that raw context and is interpreted only after server-side verification. The
-schema-versioned `AcquisitionEvidence` helper from `@aether/shared` remains
-available to custom integrations through
+that raw context and is interpreted only after server-side verification — the
+typed field is its ONLY carrier: the captured landing page URL is sanitized
+(fragments and sensitive query params such as `aether_ref` and click IDs
+stripped) so the token never travels inside a URL. The schema-versioned
+`AcquisitionEvidence` helper from `@aether/shared` (schema v3, including
+`entryMethod`, `destinationDomain`, and first-touch fields) remains available
+to custom integrations through
 `evidenceFromSearchParams(new URLSearchParams(window.location.search))`.
 
 Classification (including AI provider/product, actor, mediation, verification,
@@ -377,18 +426,16 @@ The SDK emits reward lifecycle events as part of the no-custody reward enablemen
 Aether verifies eligibility and produces reward action payloads; tenants execute rewards
 through their own configured rails.
 
+The shared `EventContext` carries the reward correlation fields
+(`rewardCampaignId`, `rewardIdempotencyKey`, `rewardWalletAddress`,
+`attributionResultId`); eligibility decisions and action payloads are produced
+backend-side. The SDK also exposes a thin claim-only client:
+
 ```typescript
-// Emit reward eligibility events (emitted automatically by the backend via reward_action_queued)
-// The SDK carries reward context in EventContext:
-aether.track('conversion', {
-  properties: { channel: 'organic', value: 49.99 },
-  context: {
-    rewardCampaignId: 'camp_uuid',
-    rewardIdempotencyKey: 'evt_session_123_conversion',
-    rewardWalletAddress: '0xf39Fd...',
-    attributionResultId: 'attr_abc',
-  },
-});
+// Thin claim-only reward API — no custody, no execution
+await aether.rewards.checkEligibility('user-123', 'reward-1');
+await aether.rewards.getClaimPayload('user-123', 'reward-1');
+await aether.rewards.submitClaim('0xTxHash...', 'reward-1');
 ```
 
 Reward lifecycle event types emitted by the platform:
@@ -403,17 +450,30 @@ Reward lifecycle event types emitted by the platform:
 interface AetherConfig {
   apiKey: string;                          // Required
   environment?: 'production' | 'staging' | 'development';
+  appVersion?: string;                     // Host app version (fleet heartbeats)
+  application?: {                          // Canonical envelope: emitting product
+    name?: string; version?: string;       // identity, stamped as
+    build?: string; environment?: string;  // context.application on every event
+    namespace?: string;
+  };
   endpoint?: string;                       // Default: 'https://api.aether.io'
+  wsEndpoint?: string;                     // WebSocket endpoint override
   debug?: boolean;                         // Enable console logging
+  autoResumeJourney?: boolean;             // Cross-device resolve (default: true)
+  onJourneyResumed?: (identity: ResolvedIdentity) => void;
+  journeyTimeoutMs?: number;               // Inactivity window before abandonment
+  onBatchResult?: (health: BatchHealth) => void; // Per-batch ingestion health
   modules?: {
     // Web2 Analytics
     autoDiscovery?: boolean;               // Auto-track clicks (default: true)
+    navigationCorrelation?: boolean;       // navigation_intent/arrival events (default: true, requires autoDiscovery)
     ecommerce?: boolean;                   // Ecommerce tracking (default: true)
     featureFlags?: boolean;                // Feature flags (default: false)
     heatmaps?: boolean;                    // Heatmap collection (default: false)
     funnels?: boolean;                     // Funnel tagging (default: false)
     formAnalytics?: boolean;               // Form field tracking (default: true)
-    // Web3 (enable per VM family)
+    performance?: boolean | { sampleRate?: number }; // Web Vitals / Navigation Timing / Long Tasks / Memory (default: true)
+    // Web3 (enable per VM family — one flag per supported family)
     walletTracking?: boolean;              // EVM wallets
     svmTracking?: boolean;                 // Solana wallets
     bitcoinTracking?: boolean;             // Bitcoin wallets
@@ -421,6 +481,20 @@ interface AetherConfig {
     nearTracking?: boolean;                // NEAR wallets
     tronTracking?: boolean;                // TRON wallets
     cosmosTracking?: boolean;              // Cosmos wallets
+    aptosTracking?: boolean;               // Aptos wallets
+    tonTracking?: boolean;                 // TON wallets
+    starknetTracking?: boolean;            // Starknet wallets
+    cardanoTracking?: boolean;             // Cardano wallets
+    substrateTracking?: boolean;           // Polkadot/Kusama wallets
+    algorandTracking?: boolean;            // Algorand wallets
+    hederaTracking?: boolean;              // Hedera wallets
+    stellarTracking?: boolean;             // Stellar wallets
+    icpTracking?: boolean;                 // Internet Computer wallets
+    cosmosChains?: string[];               // Cosmos chain IDs (default: sei-pacific-1)
+    // Connect-time enrichment (optional, adds latency)
+    approvalScan?: boolean;
+    domainResolution?: boolean;
+    networkContext?: boolean;
   };
   privacy?: {
     anonymizeIP?: boolean;                 // Hash IP addresses (default: true)
@@ -429,6 +503,8 @@ interface AetherConfig {
     respectDNT?: boolean;                  // Honor Do Not Track header
     maskSensitiveFields?: boolean;         // Mask passwords/CC fields
     cookieConsent?: 'none' | 'notice' | 'opt-in' | 'opt-out';
+    piiPatterns?: RegExp[];                // Custom PII field patterns to mask
+    sanitizeUrls?: boolean;                // Strip fragments + sensitive query params from URLs (default: true)
   };
   advanced?: {
     heartbeatInterval?: number;            // Session heartbeat in ms (default: 30000)
@@ -490,10 +566,13 @@ Browser DOM / Wallets
 - No portfolio aggregation
 - No survey rendering
 - No A/B experiment assignment
-- No Web Vitals collection
 - No OTA data module updates
 - No traffic source classification
 - No heatmap grid building
+
+(Web Vitals / Navigation Timing / Long Tasks / Memory *are* collected
+client-side by the performance module — raw metrics only; analysis is
+backend-side.)
 
 All of the above are handled by the Aether backend.
 

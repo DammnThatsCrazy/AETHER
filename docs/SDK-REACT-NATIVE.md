@@ -14,7 +14,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
-last_synced_commit: "5a44e9e"
+last_synced_commit: "9ebc883"
 ---
 
 # Aether React Native SDK v8.12.0 — Integration Guide
@@ -66,12 +66,23 @@ import Aether from '@aether/react-native-sdk';
 // Custom event
 Aether.track('button_tapped', { buttonId: 'cta-hero', screen: 'home' });
 
+// Canonical low-level observation — emits a first-class registry event type
+// through the native pipeline (unknown types are a production-safe no-op)
+Aether.observe('order_completed', { orderId: 'ord_1' });
+
+// Current native queue depth
+const depth = await Aether.queueDepth();
+
 // Screen view
 Aether.screenView('PricingScreen', { source: 'tab_bar' });
 
 // Conversion
 Aether.conversion('purchase_completed', 29.99, { plan: 'pro' });
 ```
+
+RN events ship through the **native** pipeline: native `track()`/`observe()`
+own session IDs, event IDs, batching, and context stamping — the JS layer is a
+thin bridge.
 
 ### Identity
 
@@ -209,13 +220,14 @@ Aether.wallet.transaction('0xabc123...', {
 
 ## Consent Management
 
-Consent purposes are **registry-derived** — the canonical set lives in
-`packages/shared/contracts/consent-registry.json`. Base purposes (`analytics`,
-`marketing`, `personalization`, `web3`, `agent`, `commerce`) can be granted together;
-explicit opt-in purposes (`financial_activity`, `credit`, `location`,
-`economic_observability`, `cross_chain_observability`) **always require separate
-opt-in** and are never granted by `grantAll()`. Present each explicit opt-in purpose
-as a separate consent choice in your UI.
+Consent purposes are **registry-derived** — the canonical set of 12 purposes
+lives in `packages/shared/contracts/consent-registry.json`. Base purposes
+(`analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`) can
+be granted together; explicit opt-in purposes (`financial_activity`, `credit`,
+`location`, `economic_observability`, `cross_chain_observability`,
+`fraud_prevention`) **always require separate opt-in** and are never granted by
+`grantAll()` (which grants exactly the six base purposes). Present each
+explicit opt-in purpose as a separate consent choice in your UI.
 
 ```typescript
 // Grant specific purposes
@@ -234,6 +246,20 @@ Aether.consent.revoke(['marketing']);
 const state = await Aether.consent.getState();
 // { analytics: true, marketing: false, personalization: false, web3: false,
 //   agent: false, commerce: false, credit: false, location: false, ... }
+
+// Subscribe to consent changes (native AetherConsentChanged events)
+const unsub = Aether.consent.onUpdate((state) => console.log(state));
+
+// Build + persist an authoritative canonical consent receipt
+// (POST /v1/consent/records); returns the canonical receipt
+const receipt = await Aether.consent.recordReceipt({
+  tenant_id: 'tenant-1',
+  subject_id: 'user-123',
+  purposes: ['analytics'],
+  state: 'granted',
+  source: 'settings_screen',
+  policy_version: '2026-06',
+});
 ```
 
 ## Ecommerce
@@ -283,19 +309,45 @@ Aether.feedback.submitResponse('survey-123', {
 });
 ```
 
-## Deep Links
+## Deep Links & Acquisition Attribution
+
+Incoming links are routed through the **native canonical acquisition-evidence
+parser** (shared `AcquisitionEvidence` schema v3): the URL is sanitized,
+`entryMethod` and `destinationDomain` are set, and first/latest-touch evidence
+is persisted natively. The SDK observes evidence; the backend classifier owns
+classification. Deferred attribution is **deterministic only** (explicit server
+handoff identifier) — never a probabilistic fingerprint match; unmatched
+installs stay "Direct / Unknown".
 
 ```typescript
 import { Linking } from 'react-native';
 
-// Handle deep links
+// Route any incoming link (custom scheme or https app/universal link).
+// Deduped natively, so wiring both cold-start and warm-start is safe.
 Linking.addEventListener('url', ({ url }) => {
-  Aether.handleDeepLink(url);
+  Aether.attribution.handleURL(url);
 });
-
-// Handle initial URL
 const initialUrl = await Linking.getInitialURL();
-if (initialUrl) Aether.handleDeepLink(initialUrl);
+if (initialUrl) Aether.attribution.handleURL(initialUrl);
+
+// Legacy entry point (still supported)
+Aether.handleDeepLink(url);
+
+// QR codes the host app already decoded (SDK never touches the camera).
+// Entry method "qr_code"; emits qr_code_scanned.
+Aether.attribution.handleQrScanResult(decodedUrl);
+
+// NFC tag URIs the host app already read (SDK never drives the radio).
+// Entry method "nfc"; emits nfc_tag_read.
+Aether.attribution.handleNfcUri(decodedUri);
+
+// Stored evidence (null when absent/expired)
+const first = await Aether.attribution.getFirstTouch();
+const latest = await Aether.attribution.getLatestTouch();
+
+// Deterministic deferred-attribution handoff by explicit identifier;
+// resolves with stored first-touch evidence on a server match, else null
+const evidence = await Aether.attribution.resolveDeferredHandoff(identifier);
 ```
 
 ## Push Notifications
@@ -353,6 +405,23 @@ React Components / Hooks
         ├── Ecommerce → RNEcommerce
         ├── FeatureFlags → RNFeatureFlags
         └── Feedback → RNFeedback
+```
+
+## Tracked UI Interactions
+
+`AetherPressable` (and the underlying `tracked-press` helpers) emit the
+canonical `ui_interaction_observed` event through `Aether.observe()`, sharing
+the native SDKs' payload shape (`TrackedInteractionPayload`:
+`controlId` / `controlType` / `action`). Privacy: only the developer-assigned
+stable `controlId` is captured — never rendered control text; anything else
+must be passed explicitly via `properties`.
+
+```tsx
+import { AetherPressable } from '@aether/react-native-sdk';
+
+<AetherPressable aetherId="cta-checkout" onPress={goToCheckout}>
+  <Text>Checkout</Text>
+</AetherPressable>
 ```
 
 ### What changed in v7.0:
@@ -431,6 +500,11 @@ Aether.rewards.delivered(campaignId, rewardId, properties?);
 Aether.rewards.claimSubmitted(campaignId, claimId, properties?);
 ```
 
+Reward events carry `campaignId`, `ruleId`, and `rewardIdempotencyKey` in
+properties, flow through `POST /v1/batch`, and are processed by the reward
+eligibility pipeline on the backend. The SDK does not evaluate eligibility —
+that is handled server-side by the Aether reward policy engine.
+
 ## Ecommerce (Full Workflow)
 
 ```typescript
@@ -459,5 +533,3 @@ Aether.ecommerce.trackPurchase({
   items: [{ productId: 'sku-001', quantity: 1, price: 29.99 }]
 });
 ```
-
-Emit using `Aether.track()` with `campaignId`, `ruleId`, and `rewardIdempotencyKey` in properties. These events flow through `POST /v1/batch` and are processed by the reward eligibility pipeline on the backend. The SDK does not evaluate eligibility — that is handled server-side by the Aether reward policy engine.
