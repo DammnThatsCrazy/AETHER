@@ -243,6 +243,20 @@ class ProviderGatewayConfig:
     circuit_breaker_timeout_s: int = _env_int("PROVIDER_CB_TIMEOUT_S", 30)
     # Metering
     meter_flush_interval_s: int = _env_int("PROVIDER_METER_FLUSH_S", 60)
+    # ── Durable credential authority ───────────────────────────────────────
+    # Encryption cipher for the durable multi-slot provider-credential store.
+    # "local"   → AES-256-GCM (non-production, for local/test only)
+    # "aws_kms" → KMS envelope encryption (customer-managed CMK)
+    # Fail-closed: staging/production MUST be "aws_kms" with a key id set (see
+    # CredentialCipherStartupValidator).
+    credential_cipher: str = _env("CREDENTIAL_CIPHER", "local")
+    credential_kms_key_id: str = _env("CREDENTIAL_KMS_KEY_ID", "")
+    aws_region: str = _env("AWS_REGION", "us-east-1")
+    # Bounded caches for decrypted values / metadata (Redis is never the sole
+    # authority — the durable table is). TTLs in seconds; overlap window in hours.
+    credential_decrypt_cache_ttl_s: int = _env_int("CREDENTIAL_DECRYPT_CACHE_TTL_S", 60)
+    credential_metadata_cache_ttl_s: int = _env_int("CREDENTIAL_METADATA_CACHE_TTL_S", 30)
+    credential_rotation_overlap_hours: int = _env_int("CREDENTIAL_ROTATION_OVERLAP_HOURS", 24)
 
 
 # ---------------------------------------------------------------------------

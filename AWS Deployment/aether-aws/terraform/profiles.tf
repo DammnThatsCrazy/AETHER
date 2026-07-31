@@ -80,6 +80,15 @@ locals {
   enable_sqs_sns        = true
   enable_dynamodb_cache = true
 
+  # Provider-credential envelope-encryption CMK. Required in every deployable
+  # profile: staging rehearses production and every production profile stores
+  # live provider credentials that must be envelope-encrypted under an approved
+  # KMS-backed cipher (AwsKmsEnvelopeCredentialCipher). A CMK costs ~$1/month, so
+  # like enable_aurora / enable_sqs_sns this is a literal true rather than a
+  # scale-gated toggle. There is no ephemeral/demo profile in this root; if one
+  # is added it should set this false and skip the module.
+  enable_credential_kms = true
+
   # Graph lives in Aurora Postgres for any profile that has no Neptune cluster.
   enable_postgres_graph = !local.enable_neptune
 

@@ -56,7 +56,7 @@
       "source_globs": ["**/*profile360*", "**/*Profile360*", "**/*profile-360*"],
       "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**"],
       "required_commands": ["python scripts/validate_contracts.py", "npm run typecheck", "python -m pytest tests/ -v --tb=short"],
-      "remediation": "Update Profile 360 docs, frontend types, tests, and Kyber/SHIKI-adjacent surfaces where applicable."
+      "remediation": "Update Profile 360 docs, frontend types, tests, and Kyber-adjacent surfaces where applicable."
     },
     {
       "id": "kyber_operator",

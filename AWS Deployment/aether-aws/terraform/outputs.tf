@@ -122,6 +122,29 @@ output "secret_arns" {
 }
 
 # --------------------------------------------------------------------------
+# Provider-credential envelope encryption (KMS CMK)
+#
+# The backend's AwsKmsEnvelopeCredentialCipher reads CREDENTIAL_KMS_KEY_ID from
+# credential_kms_key_id (wired into the ECS task definition by the runtime
+# slice). try(...) keeps the outputs index-safe if the module is ever gated off.
+# --------------------------------------------------------------------------
+
+output "credential_kms_key_id" {
+  description = "KMS CMK key id for provider-credential envelope encryption. The backend reads this as CREDENTIAL_KMS_KEY_ID. Empty string only if credential KMS is disabled."
+  value       = try(module.kms_credentials[0].key_id, "")
+}
+
+output "credential_kms_key_arn" {
+  description = "KMS CMK ARN for provider-credential envelope encryption (empty string when disabled)."
+  value       = try(module.kms_credentials[0].key_arn, "")
+}
+
+output "credential_kms_alias_name" {
+  description = "KMS alias for the provider-credential CMK (empty string when disabled)."
+  value       = try(module.kms_credentials[0].alias_name, "")
+}
+
+# --------------------------------------------------------------------------
 # Network
 # --------------------------------------------------------------------------
 

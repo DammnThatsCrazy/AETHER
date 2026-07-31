@@ -1600,3 +1600,177 @@ items:
     blocked_by: []
     exception: null
     last_verified_commit: 4754082
+
+  # ---- Financial-observability credential-ready release (PR 1..4) --------
+  # PR 1 (durable multi-slot credential authority) is implemented this session;
+  # PR 2..4 are sequenced follow-ups landing as later commit groups on the same
+  # branch. Nothing here is marked terminal that is not actually in-repo.
+  - id: FIN-CRED-1-AUTHORITY
+    title: Durable, encrypted, multi-slot provider-credential authority + API + KMS-ready cipher
+    domain: financial-observability
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Tenant provider credentials become durable, encrypted, multi-slot and
+      tenant-isolated — the prerequisite for enabling any payment/stablecoin
+      integration. Replaces the process-local, single-key in-memory vault as the
+      credential authority for the financial cohort.
+    current_behavior: >
+      BYOKKeyVault stored one undifferentiated api_key per (tenant, provider) in a
+      process-memory dict (lost on restart, not shared across replicas), with
+      Fernet/base64 and no KMS. The generic key API disagreed with the vault
+      (dict-as-object AttributeError; missing category TypeError). Coinbase/MoonPay/
+      Bridge each need two credentials the single-slot vault could not hold.
+    required_behavior: >
+      A durable provider_credential_versions table (JSONB, partial-unique
+      active/previous/version indexes) backs a CredentialAuthority state machine
+      (create_pending/test/activate/rotate/revoke/delete/purge) with bounded
+      webhook-secret overlap, optimistic concurrency, and a version-keyed decrypt
+      cache. A CredentialCipher abstraction (LocalCredentialCipher AES-GCM +
+      AwsKmsEnvelopeCredentialCipher) binds tenant/provider/environment/slot/version
+      as authenticated context and fails closed in staging/production. A slot-aware,
+      write-only /v1/providers/credentials API (idempotency, optimistic concurrency,
+      tenant-admin authz, sanitized audit) never returns a secret. Tenant deletion
+      cascades credential rows. KMS IaC (terraform modules/kms_credentials) is
+      defined. The legacy generic key API is repaired and deprecated.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/providers/credentials/authority.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/repository.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/slot_registry.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/schema.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/routes.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/models.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/startup.py"
+      - "Backend Architecture/aether-backend/shared/providers/credential_cipher.py"
+      - "Backend Architecture/aether-backend/alembic/versions/20260812_provider_credential_versions.py"
+      - "Backend Architecture/aether-backend/services/providers/routes.py"
+      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
+      - "config/storage_policies.yaml"
+      - "AWS Deployment/aether-aws/terraform/modules/kms_credentials"
+    tests_required:
+      - "tests/unit/test_credential_cipher.py"
+      - "tests/unit/test_credential_slot_registry.py"
+      - "tests/unit/test_credential_authority.py"
+      - "tests/unit/test_credential_startup.py"
+      - "tests/dsr/test_credential_tenant_deletion.py"
+    evidence_required:
+      - "29 credential cipher/registry/authority/startup/dsr tests pass"
+      - "storage-policy coverage gate 330/330 (provider_credential_versions inventoried)"
+      - "alembic single head 20260812_provider_credential_versions; upgrade/downgrade/upgrade"
+    docs_required: []
+    owner: platform
+    status: implemented
+    blocked_by: []
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-CRED-1-VAULT-RETIRE
+    title: Retire the in-memory BYOKKeyVault; migrate payment adapters to the authority
+    domain: financial-observability
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: >
+      Removes the last process-memory credential path so no financial credential
+      is ever memory-only.
+    current_behavior: >
+      BYOKKeyVault remains in-memory and is still read by the payment-rail adapters
+      and the RPC gateway; only the new authority is durable.
+    required_behavior: >
+      Payment adapters read slot-aware secrets from CredentialAuthority
+      (webhook_signing_secret for verification; the API-key slot for polling); the
+      in-memory vault is removed or made a durable shim, leaving a single authority.
+    affected_paths:
+      - "Backend Architecture/aether-backend/shared/providers/key_vault.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
+    tests_required: ["tests/payment_rails/test_credential_read_path.py"]
+    evidence_required: ["adapters resolve slot-aware secrets from the authority; no in-memory credential store remains"]
+    docs_required: []
+    owner: financial
+    status: not_started
+    blocked_by: [FIN-CRED-1-AUTHORITY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-2-WEBHOOK-AUTHORITY
+    title: Durable webhook endpoint registry + provider-native verification + admission controls
+    domain: financial-observability
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      A public webhook request can no longer select which tenant's credential is
+      consulted; each provider's signature is verified with its real protocol.
+    current_behavior: >
+      Payment webhook routes trust an X-Aether-Tenant-ID header, and one generic
+      HMAC verifier mishandles Stripe's compound t=,v1= signature.
+    required_behavior: >
+      A durable, high-entropy webhook endpoint registry resolves the tenant
+      server-side; per-provider native verifiers (Stripe/Privy/Coinbase/MoonPay/
+      Bridge) with golden fixtures; body-size/rate/timestamp/replay/duplicate
+      controls; consent + metadata-only quarantine on the payment-rails path;
+      read-only polling connection tests using the polling slot.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
+    tests_required: ["tests/payment_rails/test_native_verifiers.py", "tests/payment_rails/test_endpoint_registry.py"]
+    evidence_required: ["per-provider signature fixtures (valid/tampered/missing/stale/rotated) pass; header cannot reroute tenant"]
+    docs_required: []
+    owner: financial
+    status: not_started
+    blocked_by: [FIN-CRED-1-AUTHORITY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-3-CANONICAL-DELIVERY
+    title: Durable receipt ledger + atomic Bronze/outbox + repair worker + stablecoins + UI + meters
+    domain: financial-observability
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Verified provider events are durably accepted, deterministically identified,
+      projected exactly once to the correct tenant, and metered without loss.
+    current_behavior: >
+      payment_rails/service.py emits canonical events via direct EventProducer.publish
+      with a fresh uuid4 per retry, bypassing the durable bronze/outbox spine.
+    required_behavior: >
+      A durable provider-receipt ledger with deterministic IDs; atomic Bronze +
+      event_outbox insertion via ingest_many; a supervised repair worker; EVM/Solana
+      credential preflight; Aether setup/result UI; Kyber diagnostics; entitlements +
+      usage meters with billing-outage-safe acceptance.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py"
+      - "Backend Architecture/aether-backend/services/ingestion/bronze_bulk.py"
+    tests_required: ["tests/payment_rails/test_canonical_delivery.py", "tests/payment_rails/test_repair_worker.py"]
+    evidence_required: ["retry creates no duplicate projection/billing; relay outage produces repairable backlog that recovers"]
+    docs_required: []
+    owner: financial
+    status: not_started
+    blocked_by: [FIN-2-WEBHOOK-AUTHORITY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-4-CERTIFICATION
+    title: Financial credential-readiness certification, pilot manifest, runbooks, hardening
+    domain: financial-observability
+    severity: P1
+    release_class: audit_readiness_blocker
+    customer_impact: >
+      An honest, fail-closed readiness verdict and a secret-free pilot manifest so a
+      staging tenant can be activated by configuration, not code changes.
+    current_behavior: >
+      No financial-credential-readiness / payment-rails / stablecoin certification
+      commands or pilot manifest exist for this cohort.
+    required_behavior: >
+      make financial-credential-readiness / payment-rails-certification /
+      stablecoin-observer-certification / financial-pilot-preflight (fail-closed);
+      pilot manifest; runbooks; chaos/rotation/rollback evidence; adversarial review.
+    affected_paths:
+      - "Makefile"
+      - "config/pilot/examples"
+    tests_required: ["tests/payment_rails/test_certification.py"]
+    evidence_required: ["fail-closed certification commands; secret-free evidence bundle"]
+    docs_required: []
+    owner: financial
+    status: not_started
+    blocked_by: [FIN-3-CANONICAL-DELIVERY]
+    exception: null
+    last_verified_commit: null

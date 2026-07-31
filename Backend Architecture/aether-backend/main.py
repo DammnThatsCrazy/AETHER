@@ -233,6 +233,7 @@ from services.oracle.routes import router as oracle_router
 from services.analytics_automation.routes import router as automation_router
 from services.diagnostics.routes import router as diagnostics_router, commerce_diagnostics_router
 from services.providers.routes import router as providers_router
+from services.providers.credentials.routes import router as provider_credentials_router
 from services.capabilities.routes import router as capabilities_router, kyber_router as capabilities_kyber_router
 from services.agent_access_intelligence.routes import (
     catalog_router as aai_catalog_router,
@@ -525,6 +526,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.provider_gateway = provider_gateway
         logger.info("Provider Gateway initialised")
 
+    # Credential-encryption fail-closed validation: staging/production must run
+    # the approved KMS envelope cipher with a key id (never the local cipher).
+    from services.providers.credentials.startup import CredentialCipherStartupValidator
+
+    cred_cipher_errors = CredentialCipherStartupValidator().validate()
+    if cred_cipher_errors:
+        for err in cred_cipher_errors:
+            logger.error("Credential cipher startup validation failed: %s", err)
+        raise RuntimeError(
+            f"Credential cipher startup validation failed: {'; '.join(cred_cipher_errors)}"
+        )
+
     # Noesis startup validation
     try:
         from services.noesis.startup import NoesisStartupValidator
@@ -686,6 +699,7 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_router)
     app.include_router(commerce_diagnostics_router)
     app.include_router(providers_router)
+    app.include_router(provider_credentials_router)  # /v1/providers/credentials (multi-slot)
     app.include_router(capabilities_router)
     app.include_router(capabilities_kyber_router)  # /v1/kyber/capabilities (operator)
     app.include_router(aai_catalog_router)              # /v1/capability-catalog (tenant)

@@ -191,6 +191,14 @@ class DeletionPlan:
         self.add_step("postgresql", "lake_gold", DeletionBehavior.RETAIN_AGGREGATE,
                        DataClassification.INTERNAL, "Retain Gold aggregates, remove entity attribution")
 
+        # Provider credential versions — hard delete on tenant erasure. Keyed on
+        # tenant_id so a per-subject DSR (entity_id = a user) is a safe no-op:
+        # credentials are tenant-owned, so only a tenant-erasure (entity_id =
+        # tenant_id) matches and removes them.
+        self.add_step("postgresql", "provider_credential_versions", DeletionBehavior.HARD_DELETE,
+                       DataClassification.SENSITIVE_PII,
+                       "Delete tenant provider credential versions", entity_field="tenant_id")
+
         # Cache — hard delete
         self.add_step("redis", "cache_keys", DeletionBehavior.HARD_DELETE,
                        DataClassification.CONFIDENTIAL, "Delete all cache keys for entity")
@@ -511,8 +519,10 @@ class DSARRequest:
             CapabilityInstallationRepository,
         )
         from repositories.repos import DelegationRepository
+        from services.providers.credentials.repository import CredentialVersionRepo
 
         store_adapters = {
+            "postgresql:provider_credential_versions": CredentialVersionRepo(),
             "postgresql:capability_catalog": CapabilityCatalogRepository(),
             "postgresql:capability_installations": CapabilityInstallationRepository(),
             "postgresql:capability_declarations": CapabilityDeclarationRepository(),
