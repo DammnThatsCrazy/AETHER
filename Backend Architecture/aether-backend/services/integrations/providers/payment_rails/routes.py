@@ -302,3 +302,21 @@ async def payment_rails_health(request: Request):
     return APIResponse(
         data={"providers": [h.model_dump(mode="json") for h in health]}
     ).to_dict()
+
+
+@router.post("/payment-rails/canonical-backlog/repair")
+async def repair_canonical_backlog(request: Request, limit: int = 500):
+    """On-demand (admin) recovery of funding sessions with a canonical-delivery
+    gap — implied ``payment_*`` events never delivered because of a crash before
+    emission or an outbox relay outage. Re-drives emission idempotently (the
+    deterministic canonical id dedupes on both delivery paths), so the call is
+    safe to repeat. ``limit`` bounds the per-call scan (clamped to 1..2000).
+    Returns ``{scanned, repaired, events_reemitted}``.
+    """
+    _require_rails_enabled()
+    tenant_id = _tenant_id(request, "admin")
+    bounded = max(1, min(int(limit), 2000))
+    stats = await get_payment_rails_service().repair_canonical_backlog(
+        tenant_id, limit=bounded
+    )
+    return APIResponse(data=stats).to_dict()

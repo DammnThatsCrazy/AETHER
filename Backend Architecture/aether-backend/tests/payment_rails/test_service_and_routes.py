@@ -283,6 +283,26 @@ class TestRoutes:
         response = await rails_routes.payment_rails_health(FakeRequest(_tenant()))
         assert len(response["data"]["providers"]) == 5
 
+    async def test_repair_route_recovers_backlog_and_reports(self, monkeypatch, service):
+        monkeypatch.setattr(
+            "services.integrations.providers.payment_rails.routes.get_payment_rails_service",
+            lambda: service,
+        )
+        tenant = _tenant()
+        await _signed_webhook(service, tenant, _moonpay_body("txR", "completed"))
+        record = (await service.repos.sessions.list_for_tenant(tenant))[0]
+        record["metadata"]["emitted_canonical"] = []  # simulate a lost delivery
+        await service.repos.sessions.save(tenant, record)
+
+        response = await rails_routes.repair_canonical_backlog(FakeRequest(tenant))
+        assert response["data"] == {"scanned": 1, "repaired": 1, "events_reemitted": 2}
+
+    async def test_repair_route_rejected_when_master_flag_off(self, monkeypatch):
+        patched = dataclasses.replace(settings.payment_rails, enabled=False)
+        monkeypatch.setattr(settings, "payment_rails", patched)
+        with pytest.raises(BadRequestError):
+            await rails_routes.repair_canonical_backlog(FakeRequest(_tenant()))
+
     async def test_provider_status_not_configured_typed(self):
         response = await rails_routes.provider_status("privy", FakeRequest(_tenant()))
         assert response["data"]["configured"] is False
