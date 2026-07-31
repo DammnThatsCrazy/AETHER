@@ -74,13 +74,31 @@ async def _notify_dead_letter(job: dict) -> None:
     services.notification_intelligence.inbox is developed in parallel —
     guard both its absence (ImportError) and any runtime failure so the
     worker never crashes on notification delivery.
+
+    Best-effort does not mean silent: a dropped dead-letter notification is
+    an operator alert that never arrived, so every drop is logged at error
+    level with the job id and counted, instead of vanishing.
     """
     try:
         from services.notification_intelligence.inbox import create_inbox_notification
     except ImportError:
+        logger.error(
+            f"Dead-letter notification dropped for job {job.get('id')}: "
+            "notification_intelligence inbox is unavailable"
+        )
+        metrics.increment(
+            "jobs_dead_letter_notify_dropped", labels={"reason": "inbox_unavailable"}
+        )
         return
     except Exception as exc:  # noqa: BLE001 — import-time side effects must not kill the worker
-        logger.warning(f"Inbox module unavailable for dead-letter notify: {exc}")
+        logger.error(
+            f"Dead-letter notification dropped for job {job.get('id')}: "
+            f"inbox module failed to import: {exc}",
+            exc_info=True,
+        )
+        metrics.increment(
+            "jobs_dead_letter_notify_dropped", labels={"reason": "inbox_import_failed"}
+        )
         return
     try:
         await create_inbox_notification(
@@ -96,7 +114,14 @@ async def _notify_dead_letter(job: dict) -> None:
             dedupe_key=f"job:{job.get('id')}:dead_lettered",
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning(f"Dead-letter inbox notification failed for {job.get('id')}: {exc}")
+        logger.error(
+            f"Dead-letter notification dropped for job {job.get('id')}: "
+            f"inbox delivery failed: {exc}",
+            exc_info=True,
+        )
+        metrics.increment(
+            "jobs_dead_letter_notify_dropped", labels={"reason": "delivery_failed"}
+        )
 
 
 class JobWorker:

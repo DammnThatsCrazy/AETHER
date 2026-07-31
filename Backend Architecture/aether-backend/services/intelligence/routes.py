@@ -1571,16 +1571,36 @@ def _window_days(window: str) -> int:
     return _WINDOW_DAYS.get(window, 30)
 
 
-async def _query_silver(table: str, tenant_id: str, entity_id: str | None, limit: int = 500) -> list[dict]:
+async def _query_silver(
+    table: str, tenant_id: str, entity_id: str | None, limit: int = 500
+) -> tuple[list[dict], bool]:
+    """Query a Silver fact table, distinguishing failure from genuine absence.
+
+    Returns ``(rows, degraded)``. ``degraded=True`` means the store could not
+    be consulted (the read raised), which is not the same claim as "the store
+    answered and there are no rows". Collapsing the two made a Silver outage
+    read as confirmed-zero metrics across every gold endpoint fed by this
+    helper.
+    """
     try:
         from repositories.repos import AnalyticsRepository
         repo = AnalyticsRepository()
         filters: dict = {"tenant_id": tenant_id}
         if entity_id:
             filters["user_id"] = entity_id
-        return await repo.query_silver(table, filters, limit=limit)
-    except Exception:
-        return []
+        return await repo.query_silver(table, filters, limit=limit), False
+    except Exception as exc:
+        logger.warning("silver query unavailable for %s: %s", table, exc)
+        return [], True
+
+
+def _silver_source_status(degraded: bool, rows: list) -> str:
+    """profile360/campaign vocabulary: ``missing`` = source not consulted /
+    failed, ``empty`` = consulted and genuinely none, ``available`` = has
+    rows."""
+    if degraded:
+        return "missing"
+    return "available" if rows else "empty"
 
 
 @router.get("/account-health")
@@ -1594,12 +1614,16 @@ async def get_account_health(
     tenant.require_permission("read")
     tenant_id = tenant.tenant_id
 
-    from services.intelligence.customer_success import (
-        CustomerSuccessService,
-        CustomerSuccessAccountRepository,
-    )
-
     try:
+        # Inside the guard: this import names a repository that the
+        # customer-success module does not (yet) provide, so an unguarded
+        # import made every call 500 instead of degrading. A missing account
+        # store is a degraded source, reported below as source_status
+        # "missing" — not an empty-looking success and not a crash.
+        from services.intelligence.customer_success import (
+            CustomerSuccessAccountRepository,
+        )
+
         repo = CustomerSuccessAccountRepository()
         account = await repo.get_for_tenant(tenant_id, entity_id=entity_id)
         health = {
@@ -1612,15 +1636,27 @@ async def get_account_health(
             "seat_utilization": account.get("seat_utilization"),
             "churn_likelihood": account.get("churn_likelihood"),
         }
-    except Exception:
+        account_degraded = False
+    except Exception as exc:
+        logger.warning("account health read unavailable: %s", exc)
         health = {}
+        account_degraded = True
 
-    activity = await _query_silver("silver_account_activity_facts", tenant_id, entity_id, limit=200)
+    activity, activity_degraded = await _query_silver(
+        "silver_account_activity_facts", tenant_id, entity_id, limit=200
+    )
+    degraded = account_degraded or activity_degraded
+    source_status = _silver_source_status(degraded, activity or list(health))
     health["activity_count_in_window"] = len(activity)
     health["window"] = window
 
     metrics.increment("intelligence_account_health")
-    return APIResponse(data={"tenant_id": tenant_id, "entity_id": entity_id, "metrics": health}).to_dict()
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "entity_id": entity_id,
+        "metrics": health,
+        "source_status": source_status,
+    }).to_dict()
 
 
 @router.get("/revenue-intelligence")
@@ -1634,7 +1670,7 @@ async def get_revenue_intelligence(
     tenant.require_permission("read")
     tenant_id = tenant.tenant_id
 
-    rows = await _query_silver("silver_revenue_facts", tenant_id, entity_id)
+    rows, degraded = await _query_silver("silver_revenue_facts", tenant_id, entity_id)
 
     gmv = sum(float(r.get("amount", 0) or 0) for r in rows if r.get("revenue_type") in (None, "order"))
     mrr = sum(float(r.get("mrr_delta", 0) or 0) for r in rows)
@@ -1646,6 +1682,7 @@ async def get_revenue_intelligence(
     metrics.increment("intelligence_revenue")
     return APIResponse(data={
         "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "source_status": _silver_source_status(degraded, rows),
         "metrics": {
             "gmv": gmv, "mrr": mrr, "arr": arr,
             "expansion_revenue": expansion,
@@ -1667,7 +1704,7 @@ async def get_experience_intelligence(
     tenant.require_permission("read")
     tenant_id = tenant.tenant_id
 
-    rows = await _query_silver("silver_friction_facts", tenant_id, entity_id)
+    rows, degraded = await _query_silver("silver_friction_facts", tenant_id, entity_id)
     payload = rows[0].get("payload", {}) if rows else {}
 
     dead_clicks = sum(int((r.get("payload") or {}).get("dead_click_count", 0)) for r in rows)
@@ -1679,6 +1716,7 @@ async def get_experience_intelligence(
     metrics.increment("intelligence_experience")
     return APIResponse(data={
         "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "source_status": _silver_source_status(degraded, rows),
         "metrics": {
             "friction_score": round(friction_score, 4),
             "dead_click_count": dead_clicks,
@@ -1700,7 +1738,7 @@ async def get_exposure_intelligence(
     tenant.require_permission("read")
     tenant_id = tenant.tenant_id
 
-    rows = await _query_silver("silver_exposure_facts", tenant_id, entity_id)
+    rows, degraded = await _query_silver("silver_exposure_facts", tenant_id, entity_id)
     total = len(rows)
     accepted = sum(1 for r in rows if (r.get("payload") or {}).get("accepted"))
     rejected = sum(1 for r in rows if (r.get("payload") or {}).get("rejected"))
@@ -1709,6 +1747,7 @@ async def get_exposure_intelligence(
     metrics.increment("intelligence_exposure")
     return APIResponse(data={
         "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "source_status": _silver_source_status(degraded, rows),
         "metrics": {
             "exposure_count": total,
             "accepted_count": accepted,
@@ -1731,7 +1770,7 @@ async def get_agent_intelligence(
     tenant.require_permission("read")
     tenant_id = tenant.tenant_id
 
-    rows = await _query_silver("silver_agent_execution_facts", tenant_id, entity_id)
+    rows, degraded = await _query_silver("silver_agent_execution_facts", tenant_id, entity_id)
     total = len(rows)
     succeeded = sum(1 for r in rows if (r.get("payload") or {}).get("outcome") == "success")
     escalated = sum(1 for r in rows if (r.get("payload") or {}).get("escalated"))
@@ -1742,6 +1781,7 @@ async def get_agent_intelligence(
     metrics.increment("intelligence_agent")
     return APIResponse(data={
         "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "source_status": _silver_source_status(degraded, rows),
         "metrics": {
             "execution_count": total,
             "reliability_rate": round(succeeded / max(total, 1), 4),
@@ -1764,7 +1804,7 @@ async def get_integration_intelligence(
     tenant.require_permission("read")
     tenant_id = tenant.tenant_id
 
-    rows = await _query_silver("silver_server_operation_facts", tenant_id, entity_id)
+    rows, degraded = await _query_silver("silver_server_operation_facts", tenant_id, entity_id)
     total = len(rows)
     failed = sum(1 for r in rows if (r.get("payload") or {}).get("status") in ("failed", "error"))
     latencies = [
@@ -1777,6 +1817,7 @@ async def get_integration_intelligence(
     metrics.increment("intelligence_integration")
     return APIResponse(data={
         "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "source_status": _silver_source_status(degraded, rows),
         "metrics": {
             "operation_count": total,
             "failure_count": failed,

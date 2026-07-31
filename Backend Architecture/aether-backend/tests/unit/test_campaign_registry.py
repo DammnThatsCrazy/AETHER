@@ -402,3 +402,39 @@ class TestArchive:
         record = _run(CampaignRegistryRepository().get_by_id("t1", cid))
         assert record is not None
         assert str(record["campaign_id"]) == str(cid)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Alias write failure
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestAliasWriteFailure:
+    """A failed alias write must raise — returning None makes a failed write
+    indistinguishable from the documented conflict no-op, so a broken store
+    would silently drop alias registrations and every later resolution of
+    that alias would miss."""
+
+    def test_create_reraises_non_conflict_write_failure(self):
+        from services.campaign.repository import AliasRepository
+
+        class _FailingPool:
+            async def fetchrow(self, *args, **kwargs):
+                raise RuntimeError("connection reset during INSERT")
+
+        repo = AliasRepository(_FailingPool())
+        with pytest.raises(RuntimeError, match="connection reset"):
+            _run(repo.create("t1", uuid.uuid4(), "utm_campaign", "promo", "promo"))
+
+    def test_create_returns_none_only_for_unique_conflict(self):
+        from services.campaign.repository import AliasRepository
+
+        class _ConflictPool:
+            async def fetchrow(self, *args, **kwargs):
+                raise RuntimeError(
+                    "duplicate key value violates unique constraint "
+                    '"campaign_aliases_active_uniq"'
+                )
+
+        repo = AliasRepository(_ConflictPool())
+        result = _run(repo.create("t1", uuid.uuid4(), "utm_campaign", "promo", "promo"))
+        assert result is None

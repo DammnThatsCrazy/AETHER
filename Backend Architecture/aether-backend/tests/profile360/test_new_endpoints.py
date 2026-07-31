@@ -747,3 +747,85 @@ class TestActionsEventsEndpoints:
         )
         assert result["data"]["items"] == []
         assert result["data"]["source_status"] == "missing"
+
+
+# ── Silver source-status regression tests ─────────────────────────────────────
+# A Silver store failure must surface as source_status == "missing", never
+# "empty" — "empty" asserts the store was consulted and the entity genuinely
+# has no facts, a claim a failed read cannot make.
+
+_SILVER_ROUTES = [
+    ("get_entity_exposures", {"limit": 10, "content_type": None}),
+    ("get_entity_revenue", {"limit": 10, "revenue_type": None}),
+    ("get_entity_friction", {"limit": 10}),
+    ("get_entity_accounts", {"limit": 10}),
+    ("get_entity_integrations", {"limit": 10}),
+    ("get_entity_data_quality", {"limit": 10}),
+]
+
+
+class TestSilverSourceStatus:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("route_name,kwargs", _SILVER_ROUTES)
+    async def test_store_failure_reports_missing_not_empty(self, route_name, kwargs):
+        import services.profile.routes as profile_routes
+        handler = getattr(profile_routes, route_name)
+        req = make_request()
+        with patch("repositories.repos.AnalyticsRepository") as MockRepo:
+            MockRepo.return_value.query_silver = AsyncMock(
+                side_effect=RuntimeError("silver store down")
+            )
+            result = await handler(ENTITY_ID, req, **kwargs)
+        assert result["data"]["items"] == []
+        assert result["data"]["source_status"] == "missing"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("route_name,kwargs", _SILVER_ROUTES)
+    async def test_consulted_and_none_reports_empty(self, route_name, kwargs):
+        import services.profile.routes as profile_routes
+        handler = getattr(profile_routes, route_name)
+        req = make_request()
+        with patch("repositories.repos.AnalyticsRepository") as MockRepo:
+            MockRepo.return_value.query_silver = AsyncMock(return_value=[])
+            result = await handler(ENTITY_ID, req, **kwargs)
+        assert result["data"]["items"] == []
+        assert result["data"]["source_status"] == "empty"
+
+    @pytest.mark.asyncio
+    async def test_rows_report_available(self):
+        from services.profile.routes import get_entity_friction
+        req = make_request()
+        rows = [{"tenant_id": TENANT_ID, "user_id": ENTITY_ID, "payload": {}}]
+        with patch("repositories.repos.AnalyticsRepository") as MockRepo:
+            MockRepo.return_value.query_silver = AsyncMock(return_value=rows)
+            result = await get_entity_friction(ENTITY_ID, req, limit=10)
+        assert result["data"]["count"] == 1
+        assert result["data"]["source_status"] == "available"
+
+
+class TestActionsSourceStatus:
+    """/actions was the only sibling without a source_status envelope, so a
+    failed decision/recommendation read looked like an entity that executed
+    no actions."""
+
+    @pytest.mark.asyncio
+    async def test_store_failure_reports_missing_not_bare_empty(self):
+        from services.profile.routes import get_profile_actions
+        req = make_request()
+        with patch("services.intelligence.repositories.RecommendationRepository") as MockRecs:
+            MockRecs.return_value.find_many = AsyncMock(
+                side_effect=RuntimeError("intelligence store down")
+            )
+            result = await get_profile_actions(ENTITY_ID, req, limit=10)
+        assert result["data"]["items"] == []
+        assert result["data"]["source_status"] == "missing"
+
+    @pytest.mark.asyncio
+    async def test_consulted_and_none_reports_empty(self):
+        from services.profile.routes import get_profile_actions
+        req = make_request()
+        with patch("services.intelligence.repositories.RecommendationRepository") as MockRecs:
+            MockRecs.return_value.find_many = AsyncMock(return_value=[])
+            result = await get_profile_actions(ENTITY_ID, req, limit=10)
+        assert result["data"]["items"] == []
+        assert result["data"]["source_status"] == "empty"
