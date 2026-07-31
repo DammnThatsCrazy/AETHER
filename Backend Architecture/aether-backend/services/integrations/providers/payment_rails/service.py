@@ -20,7 +20,7 @@ from shared.temporal.instant import ensure_aware_utc
 from typing import Any, Optional
 
 from config.settings import settings
-from shared.common.common import BadRequestError
+from shared.common.common import BadRequestError, RateLimitedError
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 
@@ -161,7 +161,32 @@ class PaymentRailsService:
         if payload and len(payload) > self.MAX_WEBHOOK_BODY_BYTES:
             metrics.increment("payment_rail_webhook_rejected_total",
                               labels={"provider": adapter.provider_name})
+            await self._quarantine_denied(
+                tenant_id, adapter, payload, "body_too_large", endpoint_id,
+            )
             return {"handled": False, "reason": "body_too_large"}
+
+        # Admission rate limit: enforced before signature verification so a flood
+        # of unverifiable bodies to a known endpoint id can't burn CPU on crypto.
+        # A 429 (retryable) — not a 4xx — so the provider backs off and re-delivers.
+        rl = settings.payment_rails
+        if getattr(rl, "webhook_rate_limit_enabled", False):
+            from services.integrations.providers.payment_rails.rate_limit import (
+                payment_webhook_rate_limiter,
+            )
+
+            allowed = await payment_webhook_rate_limiter.allow(
+                provider=adapter.provider_name,
+                limit=getattr(rl, "webhook_rate_limit_per_minute", 600),
+                endpoint_id=endpoint_id,
+                tenant_id=tenant_id,
+            )
+            if not allowed:
+                await self.repos.audit.record(tenant_id, adapter.audit_record(
+                    tenant_id, "webhook_rate_limited",
+                    {"endpoint_id": endpoint_id, "environment": environment},
+                ))
+                raise RateLimitedError(retry_after=60)
 
         secrets = await self._webhook_secrets(tenant_id, provider, environment, adapter)
         now_epoch = int(_dt.now(_tz.utc).timestamp())
@@ -176,6 +201,13 @@ class PaymentRailsService:
             ))
             metrics.increment("payment_rail_webhook_rejected_total",
                               labels={"provider": adapter.provider_name})
+            # A body that reached a valid endpoint id without a valid signature is
+            # suspicious — quarantine it (metadata only, never the raw body) for
+            # forensics before rejecting.
+            await self._quarantine_denied(
+                tenant_id, adapter, payload, result.reason or "signature_invalid",
+                endpoint_id,
+            )
             # A signature mismatch / stale / bad-format is a permanent 4xx; a
             # missing secret is a configuration state, still a 4xx (not a retry).
             return {"handled": False, "reason": result.reason}
@@ -192,6 +224,34 @@ class PaymentRailsService:
         metrics.increment("payment_rail_webhook_handled_total",
                           labels={"provider": adapter.provider_name})
         return {"handled": True, "events": results, "environment": environment}
+
+    async def _quarantine_denied(
+        self,
+        tenant_id: str,
+        adapter: Any,
+        payload: Optional[bytes],
+        reason_code: str,
+        endpoint_id: Optional[str],
+    ) -> None:
+        """Best-effort, metadata-only quarantine of a denied webhook.
+
+        Stores only a sha256 + size + reason (never the raw body) in the shared
+        ``webhook_quarantine`` store for forensics. Never raises — a quarantine
+        failure must not change the webhook's rejection outcome.
+        """
+        if not getattr(settings.payment_rails, "webhook_quarantine_denied", False):
+            return
+        try:
+            from services.integrations.webhook_quarantine import webhook_quarantine
+
+            await webhook_quarantine.quarantine(
+                tenant_id=tenant_id,
+                connector_type=f"payment_rail:{adapter.provider_name}",
+                raw_body=payload or b"",
+                reason_code=reason_code,
+            )
+        except Exception as exc:  # noqa: BLE001 — forensic side effect, never fatal
+            logger.warning(f"payment webhook quarantine failed (non-fatal): {exc}")
 
     async def _webhook_secrets(
         self, tenant_id: str, provider: str, environment: str, adapter: Any

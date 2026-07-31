@@ -1163,6 +1163,21 @@ class PaymentRailsConfig:
     bridge_enabled: bool = _env_bool("AETHER_PROVIDER_BRIDGE_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_PAYMENT_RAILS_ENABLED", False)
 
+    # Webhook admission controls (public endpoint hardening). Rate limiting is a
+    # per-endpoint fixed-minute-window budget enforced before signature
+    # verification so a flood of unverifiable bodies can't burn CPU on crypto;
+    # denied webhooks (bad/stale signature, oversized body) are quarantined
+    # metadata-only (sha256 + size, never the raw body) for forensics.
+    webhook_rate_limit_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_RATE_LIMIT_ENABLED", True
+    )
+    webhook_rate_limit_per_minute: int = _env_int(
+        "AETHER_PAYMENT_WEBHOOK_RATE_LIMIT_PER_MINUTE", 600
+    )
+    webhook_quarantine_denied: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_QUARANTINE_DENIED", True
+    )
+
 
 @dataclass(frozen=True)
 class CardLinkedPaymentRailsConfig:
