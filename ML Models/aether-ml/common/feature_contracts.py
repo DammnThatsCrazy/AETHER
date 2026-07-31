@@ -28,6 +28,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
+import math
 from typing import Any, Optional
 
 try:
@@ -49,10 +50,14 @@ class FeatureValidationError(ValueError):
     """Raised when feature input fails schema validation."""
 
     def __init__(self, model_id: str, message: str, missing: list[str] | None = None,
-                 type_errors: list[str] | None = None):
+                 type_errors: list[str] | None = None,
+                 range_errors: list[str] | None = None,
+                 unknown: list[str] | None = None):
         self.model_id = model_id
         self.missing = missing or []
         self.type_errors = type_errors or []
+        self.range_errors = range_errors or []
+        self.unknown = unknown or []
         super().__init__(f"[{model_id}] Feature validation failed: {message}")
 
 
@@ -445,10 +450,20 @@ def list_feature_contracts() -> list[FeatureContract]:
     return list(_CONTRACTS.values())
 
 
+def _check_range(spec: "FeatureSpec", value: float, range_errors: list[str]) -> None:
+    """Enforce the contract's declared bounds — hashed into the schema for
+    years but never read until now."""
+    if spec.min_value is not None and value < spec.min_value:
+        range_errors.append(f"{spec.name}: {value} < min {spec.min_value}")
+    if spec.max_value is not None and value > spec.max_value:
+        range_errors.append(f"{spec.name}: {value} > max {spec.max_value}")
+
+
 def validate_features(
     model_id: str,
     features: dict[str, Any],
     allow_defaults: bool = True,
+    reject_unknown: bool = False,
 ) -> None:
     """
     Validate a feature dict against the model's contract.
@@ -457,9 +472,13 @@ def validate_features(
         model_id: Canonical model ID.
         features: Input feature dict (may include aliases).
         allow_defaults: If True, missing optional features are not errors.
+        reject_unknown: If True, keys outside the contract (after alias
+            normalisation) are errors — the serving boundary uses this so a
+            misspelled feature cannot silently become a default.
 
     Raises:
-        FeatureValidationError: On missing required features or type errors.
+        FeatureValidationError: On missing required features, type errors,
+        declared min/max range violations, or non-finite numeric values.
     """
     contract = get_feature_contract(model_id)
 
@@ -471,6 +490,11 @@ def validate_features(
 
     missing: list[str] = []
     type_errors: list[str] = []
+    range_errors: list[str] = []
+    unknown: list[str] = []
+    if reject_unknown:
+        contract_names = {spec.name for spec in contract.features}
+        unknown = sorted(k for k in normalised_keys if k not in contract_names)
 
     for spec in contract.features:
         # Check presence (consider aliases)
@@ -505,9 +529,27 @@ def validate_features(
             _float_types = (int, float) + ((np.floating, np.integer) if _HAS_NUMPY else ())  # type: ignore[misc]
             if not isinstance(value, _float_types):
                 type_errors.append(f"{spec.name}: expected float, got {type(value).__name__}")
+            elif not math.isfinite(float(value)):
+                # NaN/inf cannot be range-checked and silently poison models
+                # downstream — reject at the boundary.
+                range_errors.append(f"{spec.name}: non-finite value {value!r}")
+            else:
+                _check_range(spec, float(value), range_errors)
         elif spec.dtype == "int":
             _int_types = (int,) + ((np.integer,) if _HAS_NUMPY else ())  # type: ignore[misc]
-            if not isinstance(value, _int_types):
+            _float_types = (float,) + ((np.floating,) if _HAS_NUMPY else ())  # type: ignore[misc]
+            if isinstance(value, _int_types):
+                _check_range(spec, float(value), range_errors)
+            elif isinstance(value, _float_types):
+                # JSON transport (dict[str, float] request models) coerces every
+                # number to float; an integral float is a valid int on the wire.
+                if not math.isfinite(value):
+                    range_errors.append(f"{spec.name}: non-finite value {value!r}")
+                elif not float(value).is_integer():
+                    type_errors.append(f"{spec.name}: expected int, got non-integral float {value!r}")
+                else:
+                    _check_range(spec, float(value), range_errors)
+            else:
                 type_errors.append(f"{spec.name}: expected int, got {type(value).__name__}")
         elif spec.dtype == "bool":
             _bool_types = (bool,) + ((np.bool_,) if _HAS_NUMPY else ())  # type: ignore[misc]
@@ -517,17 +559,23 @@ def validate_features(
             if not isinstance(value, str):
                 type_errors.append(f"{spec.name}: expected str, got {type(value).__name__}")
 
-    if missing or type_errors:
+    if missing or type_errors or range_errors or unknown:
         parts = []
         if missing:
             parts.append(f"Missing required features: {missing}")
         if type_errors:
             parts.append(f"Type errors: {type_errors}")
+        if range_errors:
+            parts.append(f"Range errors: {range_errors}")
+        if unknown:
+            parts.append(f"Unknown features: {unknown}")
         raise FeatureValidationError(
             model_id=model_id,
             message="; ".join(parts),
             missing=missing,
             type_errors=type_errors,
+            range_errors=range_errors,
+            unknown=unknown,
         )
 
 
