@@ -56,9 +56,9 @@ architecture:
   adapter_result_contract: complete      # W1 landed (results.py AdapterResult + bridge mappers)
   deployment_contract_schema: complete   # W1 landed (deployment.py DeploymentContract)
   credential_backend: complete           # W2 landed (shared/credentials)
-  oauth_broker: pending                  # W3
-  webhook_registry: pending              # W3
-  sync_runtime: pending                  # W3/W4
+  oauth_broker: complete                 # W3a landed (services/integrations/oauth, additive library)
+  webhook_registry: exists-enhancement-deferred  # provider-native verify + generic HMAC + quarantine + inbox already present; declarative side covered by W1 manifest.webhooks + lifecycle.webhook_invalid
+  sync_runtime: exists-enhancement-deferred       # ConnectorService.sync + cursors + backfill + workers + rate-limit already present; declarative side covered by W1 manifest.sync + lifecycle
   tenant_ui: pending                     # W5
   kyber_ui: pending                      # W5
   certification: reuse                    # shared/certification/* already canonical — extend, do not duplicate
