@@ -25,6 +25,9 @@ logger = get_logger("aether.comms.ingest")
 
 # Connector catalog record types → campaign registry sync.
 _CATALOG_EVENT_SUFFIXES = (".campaign", ".flow")
+# Provider profile records → provider identity bridge (identity evidence only;
+# these are not communication facts and never become touchpoints).
+_PROFILE_EVENT_SUFFIXES = (".profile",)
 
 
 async def ingest_normalized_events(
@@ -39,16 +42,25 @@ async def ingest_normalized_events(
     event_type/external_id/occurred_at/properties. Returns counters:
     ``{"communications": n, "catalog": n, "skipped": n}``.
     """
-    counts = {"communications": 0, "catalog": 0, "skipped": 0}
+    counts = {"communications": 0, "catalog": 0, "identities": 0, "skipped": 0}
     for event in events:
         data = event.model_dump() if hasattr(event, "model_dump") else dict(event)
         event_type = data.get("event_type", "")
         if event_type in COMMUNICATION_EVENT_TYPES:
             await _ingest_communication(tenant_id, data, source_connector_id)
+            # Provider identity evidence carried on the event (best-effort;
+            # the communication fact is preserved regardless of resolution).
+            await _record_identity(tenant_id, data)
             counts["communications"] += 1
         elif any(event_type.endswith(s) for s in _CATALOG_EVENT_SUFFIXES):
             await _register_catalog_record(tenant_id, data, source_connector_id)
             counts["catalog"] += 1
+        elif any(event_type.endswith(s) for s in _PROFILE_EVENT_SUFFIXES):
+            # Provider profile records are identity evidence only.
+            if await _record_identity(tenant_id, data):
+                counts["identities"] += 1
+            else:
+                counts["skipped"] += 1
         else:
             counts["skipped"] += 1
     if counts["communications"]:
@@ -114,6 +126,17 @@ async def _ingest_communication(
         # Bronze is durable; a replay of the Bronze range recovers the publish.
         logger.warning("comms_ingest_publish_failed event=%s: %s", normalized["event_id"], exc)
         metrics.increment("comms_ingest_publish_failures_total", labels={"tenant_id": tenant_id})
+
+
+async def _record_identity(tenant_id: str, data: dict[str, Any]) -> bool:
+    """Record provider identity evidence into the bridge (§13). Best-effort."""
+    try:
+        from services.comms.identity_bridge import record_identity_from_event
+        result = await record_identity_from_event(tenant_id, data)
+        return result is not None
+    except Exception as exc:  # pragma: no cover - never break ingest
+        logger.warning("comms_identity_bridge_failed: %s", exc)
+        return False
 
 
 async def _register_catalog_record(
