@@ -31,6 +31,7 @@ from services.integrations.providers.payment_rails.base import (
     payload_hash,
 )
 from services.integrations.providers.payment_rails.models import (
+    FundingSession,
     PaymentRailHealth,
     utc_now_iso,
 )
@@ -384,6 +385,13 @@ class PaymentRailsService:
             return {"provider_event_id": event.provider_event_id,
                     "disposition": "side_record"}
 
+        # Consent gate (default OFF): a funding-session observation is persisted
+        # and emitted only when its subject has granted the required purpose.
+        if not await self._consent_permits_session(tenant_id, adapter, event, session):
+            return {"provider_event_id": event.provider_event_id,
+                    "disposition": "consent_denied",
+                    "funding_session_id": session.id}
+
         record, session_disposition = await self.repos.sessions.upsert_from_event(
             tenant_id, session, source=event.source
         )
@@ -415,6 +423,80 @@ class PaymentRailsService:
             "reconciliation_state": reconciliation.state,
             "canonical_events_emitted": emitted,
         }
+
+    # The canonical consent purpose governing a payment funding-session
+    # observation — "Payments, approvals, entitlements, subscriptions, orders"
+    # in packages/shared/contracts/consent-registry.json.
+    _CONSENT_PURPOSE = "commerce"
+
+    async def _consent_permits_session(
+        self,
+        tenant_id: str,
+        adapter: PaymentRailAdapter,
+        event: ParsedProviderEvent,
+        session: FundingSession,
+    ) -> bool:
+        """Consent gate for persisting a funding-session observation (default OFF).
+
+        When ``payment_rails.webhook_consent_gate_enabled`` is set, the normalized
+        session is persisted/emitted only if its subject (``user_id``) has granted
+        the ``commerce`` consent purpose. A session with no resolvable subject is
+        allowed — there is no subject whose consent could be evaluated. Denials are
+        recorded metadata-only (never the raw observation) on the payment-rails
+        audit trail; the consent engine additionally records the policy decision.
+        Fails closed: a missing consent record or an unavailable consent store
+        denies the observation.
+        """
+        if not getattr(settings.payment_rails, "webhook_consent_gate_enabled", False):
+            return True
+        subject = session.user_id
+        if not subject:
+            await self.repos.audit.record(tenant_id, adapter.audit_record(
+                tenant_id, "consent_gate_no_subject",
+                {"provider_event_id": event.provider_event_id},
+            ))
+            return True
+
+        granted = await self._granted_purposes(tenant_id, subject)
+        from services.policy.engine import consent_policy_engine
+
+        decision = await consent_policy_engine.decide(
+            tenant_id=tenant_id,
+            actor_id=tenant_id,
+            actor_type="system",
+            action="observe",
+            resource_type="payment_funding_session",
+            resource_id=session.id,
+            subject_ref=subject,
+            purpose=self._CONSENT_PURPOSE,
+            granted_purposes=granted,
+        )
+        if decision.allowed:
+            return True
+        await self.repos.audit.record(tenant_id, adapter.audit_record(
+            tenant_id, "consent_denied",
+            {"provider_event_id": event.provider_event_id,
+             "subject_ref": subject,
+             "missing_purposes": decision.missing_purposes},
+        ))
+        return False
+
+    async def _granted_purposes(self, tenant_id: str, subject: str) -> set[str]:
+        """Consent purposes ``subject`` has granted under ``tenant_id``.
+
+        Fails closed (empty set) when the consent store is unavailable or holds no
+        record for the subject — an undeterminable grant is treated as no grant.
+        """
+        try:
+            from repositories.repos import ConsentRepository
+
+            record = await ConsentRepository().get_consent(tenant_id, subject)
+        except Exception as exc:  # noqa: BLE001 — consent store unavailable → fail closed
+            logger.warning(f"payment consent lookup failed (fail-closed): {exc}")
+            return set()
+        if not record:
+            return set()
+        return set(record.get("granted_purposes") or record.get("purposes") or [])
 
     async def _emit_canonical_events(
         self, tenant_id: str, adapter: PaymentRailAdapter, record: dict[str, Any]

@@ -1177,6 +1177,16 @@ class PaymentRailsConfig:
     webhook_quarantine_denied: bool = _env_bool(
         "AETHER_PAYMENT_WEBHOOK_QUARANTINE_DENIED", True
     )
+    # Consent gate on the payment-rails observation path (default OFF, opt-in).
+    # When enabled, a normalized funding session is persisted/emitted only when
+    # its subject (user_id) has granted the ``commerce`` consent purpose; a denied
+    # observation is dropped (never persisted) and recorded metadata-only. A
+    # session with no resolvable subject is allowed (there is no subject whose
+    # consent could be evaluated). Fails closed: a missing consent record or an
+    # unavailable consent store denies the observation.
+    webhook_consent_gate_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_CONSENT_GATE_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)

@@ -1717,6 +1717,7 @@ items:
       - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/rate_limit.py"
       - "Backend Architecture/aether-backend/alembic/versions/20260813_payment_webhook_endpoints.py"
       - "config/storage_policies.yaml"
+      - "Backend Architecture/aether-backend/config/settings.py"
     tests_required:
       - "tests/payment_rails/test_signature_verify.py"
       - "tests/payment_rails/test_signature_golden.py"
@@ -1724,6 +1725,7 @@ items:
       - "tests/payment_rails/test_native_webhook_flow.py"
       - "tests/payment_rails/test_webhook_admission.py"
       - "tests/payment_rails/test_connection_probe.py"
+      - "tests/payment_rails/test_consent_gate.py"
     evidence_required:
       - "Stripe compound t=,v1= verified natively (golden vectors); tampered/stale/missing/multi-sig/rotation-overlap covered"
       - "per-provider frozen golden vectors wired through each adapter's native_signature_scheme(): stripe (compound v1=), moonpay (compound s=), coinbase (body_hex) CONFIRMED; scheme-isolation + one-byte-tamper + wrong-secret rejection locked"
@@ -1732,6 +1734,7 @@ items:
       - "per-endpoint webhook rate limiting (fixed-minute window, atomic incr_if_under, fails open) enforced before signature verification, surfacing a retryable 429"
       - "denied webhooks (bad/stale signature, oversized body) quarantined metadata-only (sha256 + size + reason, never the raw body)"
       - "read-only polling connection-probe contract proven uniformly across the three pull rails (coinbase/moonpay/bridge): each _live_connection_test issues exactly one bounded, GET-only health ping through the injectable mock transport with no live network; ok / auth_error / rate-limit-exhaustion / timeout / not_configured outcomes covered with the GET-only invariant asserted on every path, plus test_connection mode routing (local-mode skip, non-local live probe, not_configured short-circuit)"
+      - "consent gate on the observation path (default OFF, AETHER_PAYMENT_WEBHOOK_CONSENT_GATE_ENABLED): a normalized funding session is persisted/emitted only when its subject (user_id) has granted the `commerce` consent purpose via ConsentPolicyEngine; denied observations are dropped (never persisted) and recorded metadata-only on the audit trail; a session with no resolvable subject is allowed (nothing to gate); fails closed on a missing consent record or an unavailable consent store"
     docs_required: []
     owner: financial
     status: implementation_in_progress
