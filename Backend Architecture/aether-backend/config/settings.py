@@ -1130,6 +1130,14 @@ class StablecoinIntelligenceConfig:
     olympus_benchmarks_enabled: bool = _env_bool("OLYMPUS_STABLECOIN_BENCHMARKS_ENABLED", False)
     kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
     shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
+    # Usage metering on the stablecoin observation path (default OFF, opt-in).
+    # Accept-then-meter, fail-open: records a RevOps usage-metering event AFTER an
+    # observation is persisted, keyed by the deterministic observation_id so
+    # replays dedupe; a metering-store failure never rejects/drops the
+    # observation. Aether writes only its own billing bookkeeping.
+    usage_metering_enabled: bool = _env_bool(
+        "AETHER_STABLECOIN_USAGE_METERING_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)
@@ -1197,6 +1205,15 @@ class PaymentRailsConfig:
     # end-to-end for this source.
     canonical_outbox_enabled: bool = _env_bool(
         "AETHER_PAYMENT_CANONICAL_OUTBOX_ENABLED", False
+    )
+    # Usage metering on the observation path (default OFF, opt-in). When enabled,
+    # an accept-then-meter, fail-open hook records a RevOps usage-metering event
+    # AFTER a payment_* canonical event is emitted — keyed by the deterministic
+    # canonical event id so replays dedupe. A metering-store failure is swallowed
+    # and never rejects or drops the observation (billing-outage-safe). Aether
+    # only writes its own billing bookkeeping — never provider state.
+    usage_metering_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_USAGE_METERING_ENABLED", False
     )
 
 

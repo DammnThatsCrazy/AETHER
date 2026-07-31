@@ -11,12 +11,39 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Mapping
 
+from config.settings import settings
 from repositories.lake import BronzeRepository, ProvenanceStatus, SilverRepository
 from repositories.stablecoin_repos import StablecoinObservationRepository
 from shared.common.common import utc_now
+from shared.logger.logger import get_logger
 
 from .models import FinalityState, StablecoinEventType, StablecoinMoney, StablecoinObservation
 from .registry import PLATFORM_STABLECOIN_REGISTRY, StablecoinDeploymentRegistry
+
+logger = get_logger("aether.stablecoins.ingestion")
+
+
+async def _meter_usage(
+    tenant_id: str, event_type: str, source_id: str, source_type: str
+) -> None:
+    """Fail-open usage meter — record a RevOps usage-metering event, swallowing
+    any error so metering can never reject or drop an observation. Idempotent on
+    ``source_id`` (RevOps ``find_idempotent`` dedupes on replay)."""
+    try:
+        from services.billing.revops import (
+            MeteringService,
+            UsageMeteringEvent,
+            UsageMeteringEventRepository,
+        )
+
+        await MeteringService(UsageMeteringEventRepository()).record_event(
+            UsageMeteringEvent(
+                tenant_id=tenant_id, event_type=event_type, source_id=source_id,
+                source_type=source_type, occurred_at=utc_now().isoformat(),
+            )
+        )
+    except Exception as exc:  # pragma: no cover — metering must never break flow
+        logger.warning(f"stablecoin usage metering failed: {exc}")
 
 
 @dataclass(frozen=True)
@@ -146,6 +173,12 @@ class StablecoinIngestionPipeline:
             bronze_record=bronze_record,
         )
         await self.observations.upsert_observation(self._observation_to_record(fact.observation))
+        # accept-then-meter: only after the observation is persisted, and fail-open.
+        if getattr(settings.stablecoin_intelligence, "usage_metering_enabled", False):
+            await _meter_usage(
+                obs.tenant_id, "stablecoin_observation_ingested",
+                fact.observation.observation_id, "stablecoin_observation",
+            )
         return fact
 
     def _normalize(

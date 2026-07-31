@@ -77,6 +77,29 @@ def canonical_event_id(tenant_id: str, session_id: Optional[str], event_type: st
     return str(uuid.uuid5(_CANONICAL_EVENT_NAMESPACE, key))
 
 
+async def _meter_usage(
+    tenant_id: str, event_type: str, source_id: Optional[str], source_type: str
+) -> None:
+    """Fail-open usage meter — record a RevOps usage-metering event, swallowing
+    any error so metering can never reject or drop an observation. Idempotent on
+    ``source_id`` (RevOps ``find_idempotent`` dedupes on replay)."""
+    try:
+        from services.billing.revops import (
+            MeteringService,
+            UsageMeteringEvent,
+            UsageMeteringEventRepository,
+        )
+
+        await MeteringService(UsageMeteringEventRepository()).record_event(
+            UsageMeteringEvent(
+                tenant_id=tenant_id, event_type=event_type, source_id=source_id,
+                source_type=source_type, occurred_at=utc_now_iso(),
+            )
+        )
+    except Exception as exc:  # pragma: no cover — metering must never break flow
+        logger.warning(f"payment usage metering failed: {exc}")
+
+
 def _age_seconds(iso_value: Optional[str], now: datetime) -> Optional[float]:
     """Seconds between an ISO timestamp and ``now`` (None when unparseable)."""
     if not iso_value:
@@ -558,6 +581,7 @@ class PaymentRailsService:
         implied = adapter.normalize_to_aether_events(session)
         already = set(record.setdefault("metadata", {}).get("emitted_canonical", []))
         to_outbox = getattr(settings.payment_rails, "canonical_outbox_enabled", False)
+        meter_on = getattr(settings.payment_rails, "usage_metering_enabled", False)
         emitted: list[str] = []
         for canonical in implied:
             event_type = canonical["event_type"]
@@ -588,6 +612,12 @@ class PaymentRailsService:
                     payload=payload,
                 ))
             emitted.append(event_type)
+            # accept-then-meter: only after the event is emitted, and fail-open.
+            if meter_on:
+                await _meter_usage(
+                    tenant_id, "payment_rail_observation_ingested",
+                    event_id, "payment_rail_canonical_event",
+                )
         if emitted:
             record["metadata"]["emitted_canonical"] = sorted(already | set(emitted))
             await self.repos.sessions.save(tenant_id, record)
