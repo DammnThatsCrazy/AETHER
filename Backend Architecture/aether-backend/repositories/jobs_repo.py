@@ -494,6 +494,33 @@ class JobsRepository:
         )
         return result is not None
 
+    async def update_payload(self, job_id: str, payload: dict) -> Optional[dict]:
+        """Durably replace a running job's payload — handler checkpointing.
+
+        Used by resumable handlers (e.g. ``semantic.replay``) to persist a
+        progress cursor into the job row itself, so a retry/restart resumes
+        from the checkpoint instead of row 0. Returns the updated row, or
+        None when the job does not exist.
+        """
+        now = utc_now()
+        pool = await self._backend()
+
+        if pool is None:
+            async with _mem_lock():
+                rec = _MEM_JOBS.get(job_id)
+                if rec is None:
+                    return None
+                rec["payload"] = copy.deepcopy(payload or {})
+                rec["updated_at"] = now.isoformat()
+                return _job_row(rec)
+
+        row = await pool.fetchrow(
+            "UPDATE jobs SET payload = $2::jsonb, updated_at = $3 "
+            "WHERE id = $1 RETURNING *",
+            job_id, json.dumps(payload or {}, default=str), now,
+        )
+        return _job_row(dict(row)) if row is not None else None
+
     async def finish(
         self,
         job_id: str,

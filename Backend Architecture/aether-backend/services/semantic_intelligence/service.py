@@ -8,7 +8,6 @@ persistence + the read/aggregation surface, sitting over the pluggable store
 
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import Any, Optional
 from uuid import uuid4
@@ -81,23 +80,79 @@ class SemanticIntelligenceService:
     async def create_replay_job(
         self, tenant_id: str, *, dry_run: bool, filters: dict[str, Any]
     ) -> dict[str, Any]:
-        """Create a replay job. Dry-run counts inline; a real run executes async."""
+        """Create a replay job. Dry-run counts inline; a real run is durably
+        enqueued on the jobs platform (``semantic.replay``) — never an
+        in-process task that a crash/restart would silently lose."""
         from .replay import SemanticReplayRunner
 
         job = await self._replay_jobs.create(tenant_id, dry_run=dry_run, filters=filters)
-        runner = SemanticReplayRunner(self._replay_jobs)
         if dry_run:
+            runner = SemanticReplayRunner(self._replay_jobs)
             result = await self._run_replay(runner, tenant_id, job["id"])
             return {"job_id": job["id"], "dry_run": True, **result}
-        # Real backfill runs in the background so ingestion is never blocked.
-        asyncio.get_event_loop().create_task(self._run_replay(runner, tenant_id, job["id"]))
-        return {"job_id": job["id"], "dry_run": False, "status": "running"}
+        platform_job = await self._enqueue_replay(tenant_id, job["id"])
+        return {
+            "job_id": job["id"],
+            "dry_run": False,
+            "status": "queued",
+            "platform_job_id": platform_job["id"],
+        }
 
-    async def _run_replay(self, runner: Any, tenant_id: str, job_id: str) -> dict[str, Any]:
+    async def _enqueue_replay(
+        self, tenant_id: str, replay_job_id: str, *, cursor: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
+        """Durably enqueue one ``semantic.replay`` execution for a replay job."""
+        from services.jobs.service import get_jobs_service
+
+        from .jobs import SEMANTIC_REPLAY_JOB_TYPE
+
+        payload: dict[str, Any] = {"replay_job_id": replay_job_id}
+        # Cursor-scoped idempotency: re-submitting the same execution point
+        # dedupes, while a resume from a new cursor is a fresh durable job.
+        idempotency_key = f"semantic-replay:{replay_job_id}"
+        if cursor:
+            payload["cursor"] = cursor
+            idempotency_key += (
+                f":{cursor.get('received_at', '')}:{cursor.get('event_id', '')}"
+            )
+        return await get_jobs_service().enqueue(
+            tenant_id,
+            SEMANTIC_REPLAY_JOB_TYPE,
+            payload,
+            idempotency_key=idempotency_key,
+            correlation_id=replay_job_id,
+            requested_by="semantic_intelligence",
+        )
+
+    async def run_replay_for_job(
+        self,
+        tenant_id: str,
+        replay_job_id: str,
+        *,
+        cursor: Optional[dict[str, Any]] = None,
+        checkpoint: Optional[Any] = None,
+    ) -> dict[str, Any]:
+        """Execute one replay run (jobs-platform handler entry point)."""
+        from .replay import SemanticReplayRunner
+
+        runner = SemanticReplayRunner(self._replay_jobs)
+        return await self._run_replay(
+            runner, tenant_id, replay_job_id, cursor=cursor, checkpoint=checkpoint
+        )
+
+    async def _run_replay(
+        self,
+        runner: Any,
+        tenant_id: str,
+        job_id: str,
+        *,
+        cursor: Optional[dict[str, Any]] = None,
+        checkpoint: Optional[Any] = None,
+    ) -> dict[str, Any]:
         """Execute one replay run holding the replay-jobs-active gauge up."""
         _replay_jobs_active_delta(+1)
         try:
-            return await runner.run(tenant_id, job_id)
+            return await runner.run(tenant_id, job_id, cursor=cursor, checkpoint=checkpoint)
         finally:
             _replay_jobs_active_delta(-1)
 
@@ -129,11 +184,11 @@ class SemanticIntelligenceService:
         if new_status is None:
             return None
         await self._replay_jobs.update(tenant_id, job_id, status=new_status)
-        if action == "resume":
-            from .replay import SemanticReplayRunner
-
-            runner = SemanticReplayRunner(self._replay_jobs)
-            asyncio.get_event_loop().create_task(self._run_replay(runner, tenant_id, job_id))
+        if action == "resume" and not job.get("dry_run", True):
+            # Resume durably from the persisted Bronze cursor (progress.cursor)
+            # via a fresh jobs-platform execution — never an in-process task.
+            cursor = (job.get("progress") or {}).get("cursor") or None
+            await self._enqueue_replay(tenant_id, job_id, cursor=cursor)
         return await self._replay_jobs.get(tenant_id, job_id)
 
     # ── write path ─────────────────────────────────────────────────────────────
