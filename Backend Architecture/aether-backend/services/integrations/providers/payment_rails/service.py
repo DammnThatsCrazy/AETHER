@@ -51,6 +51,28 @@ _PROVIDER_FLAGS = {
     "bridge": "bridge_enabled",
 }
 
+# Deterministic namespace for payment-rail canonical event ids. A uuid5 over a
+# stable (tenant, session, event_type) key yields the SAME id every time the
+# same logical canonical event is emitted, so a provider redelivery or a crash
+# between publish and the ``emitted_canonical`` checkpoint re-emits an
+# IDEMPOTENT event the downstream validated-events bus can dedupe by id — never
+# a duplicate carrying a fresh random id, as ``uuid4`` produced.
+_CANONICAL_EVENT_NAMESPACE = uuid.uuid5(
+    uuid.NAMESPACE_URL, "https://aether.dev/payment_rails/canonical_event"
+)
+_KEY_SEP = "\x1f"  # unit separator — unambiguous field delimiter in the id key
+
+
+def canonical_event_id(tenant_id: str, session_id: Optional[str], event_type: str) -> str:
+    """Stable, replay-safe id for a canonical payment event.
+
+    Identity is the (tenant, funding session, canonical event type) tuple: the
+    same logical event always hashes to the same UUID, so re-emission is a
+    downstream-idempotent no-op instead of a duplicate.
+    """
+    key = f"{tenant_id}{_KEY_SEP}{session_id or ''}{_KEY_SEP}{event_type}"
+    return str(uuid.uuid5(_CANONICAL_EVENT_NAMESPACE, key))
+
 
 def _age_seconds(iso_value: Optional[str], now: datetime) -> Optional[float]:
     """Seconds between an ISO timestamp and ``now`` (None when unparseable)."""
@@ -542,7 +564,9 @@ class PaymentRailsService:
                 tenant_id=tenant_id,
                 source_service="payment_rails",
                 payload={
-                    "event_id": str(uuid.uuid4()),
+                    "event_id": canonical_event_id(
+                        tenant_id, canonical.get("session_id"), event_type
+                    ),
                     "tenant_id": tenant_id,
                     "event_type": event_type,
                     "session_id": canonical.get("session_id"),

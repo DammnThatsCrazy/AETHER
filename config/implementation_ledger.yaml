@@ -1763,11 +1763,13 @@ items:
     affected_paths:
       - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py"
       - "Backend Architecture/aether-backend/services/ingestion/bronze_bulk.py"
-    tests_required: ["tests/payment_rails/test_canonical_delivery.py", "tests/payment_rails/test_repair_worker.py"]
-    evidence_required: ["retry creates no duplicate projection/billing; relay outage produces repairable backlog that recovers"]
+    tests_required: ["tests/payment_rails/test_canonical_delivery.py", "tests/payment_rails/test_repair_worker.py", "tests/payment_rails/test_canonical_event_ids.py"]
+    evidence_required:
+      - "retry creates no duplicate projection/billing; relay outage produces repairable backlog that recovers"
+      - "canonical event ids are deterministic uuid5 over (tenant, funding session, event_type) replacing the fresh uuid4 per publish: a provider redelivery or a crash between publish and the emitted_canonical checkpoint re-emits the SAME id, so the validated-events bus dedupes downstream instead of double-counting (atomic Bronze/outbox insertion, durable receipt ledger, and the repair worker remain pending)"
     docs_required: []
     owner: financial
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [FIN-2-WEBHOOK-AUTHORITY]
     exception: null
     last_verified_commit: null
