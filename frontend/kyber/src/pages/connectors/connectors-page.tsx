@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatInstant, useTimeContext } from '@aether/ui';
-import type { TimeContext } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, formatInstant, resolveCapabilityState, useTimeContext } from '@aether/ui';
+import type { CapabilityState, TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 
@@ -17,11 +17,12 @@ function Metric({ label, value }: { readonly label: string; readonly value: unkn
   );
 }
 
-function statusColor(status: string): 'success' | 'warning' | 'danger' | 'default' {
-  if (status === 'healthy') return 'success';
-  if (status === 'degraded') return 'warning';
-  if (status === 'failed') return 'danger';
-  return 'default';
+function connectorHealthState(raw: string): CapabilityState {
+  // never_synced (configured but no successful sync yet) isn't in the shared
+  // resolver's vocabulary → awaiting activation. Unknown server statuses fall back
+  // to a non-live 'unavailable'. Nothing not-live reads green.
+  if (raw === 'never_synced') return 'credential_waiting';
+  return resolveCapabilityState(raw) ?? 'unavailable';
 }
 
 function formatTs(ts: string | null | undefined, timeCtx: TimeContext): string {
@@ -84,7 +85,7 @@ export function ConnectorsPage() {
             <div className="grid gap-1 md:grid-cols-3">
               {Object.entries(byStatus).map(([s, n]) => (
                 <div key={s} className="flex justify-between rounded border border-border-default px-2 py-1">
-                  <Badge variant={statusColor(s)}>{s}</Badge>
+                  <CapabilityStateBadge state={connectorHealthState(s)} label={s} />
                   <span>{n}</span>
                 </div>
               ))}
@@ -128,7 +129,7 @@ export function ConnectorsPage() {
                         <td className="py-2 px-2">
                           {row.enabled_tenants === 0
                             ? <span className="text-text-muted">—</span>
-                            : <Badge variant={statusColor(worstStatus)}>{worstStatus}</Badge>}
+                            : <CapabilityStateBadge state={connectorHealthState(worstStatus)} label={worstStatus} />}
                         </td>
                         <td className="py-2 px-2 text-text-muted">{formatTs(row.last_synced_at, timeCtx)}</td>
                         <td className="py-2 px-2 text-text-muted">
