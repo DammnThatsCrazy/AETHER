@@ -512,6 +512,43 @@ async def operator_reconcile_suppressions(
     return APIResponse(data=result).to_dict()
 
 
+async def _activation_signals(tenant_id: str) -> dict[str, Any]:
+    """Best-effort turnkey/activation signals for the comms health card.
+
+    Bounded, never raises — additive to the base health snapshot so the golden
+    scenario's core assertions (facts/resolution) stay stable.
+    """
+    signals: dict[str, Any] = {}
+    try:
+        from services.comms.identity_bridge import ProviderIdentityRepository
+        signals["provisional_identities"] = len(
+            await ProviderIdentityRepository().list_provisional(tenant_id, limit=1000)
+        )
+    except Exception:  # pragma: no cover - best-effort
+        pass
+    try:
+        from services.comms.suppression_authority import SuppressionAuthorityService
+        signals["active_suppressions"] = len(
+            await SuppressionAuthorityService().list_for_tenant(tenant_id, limit=1000)
+        )
+    except Exception:  # pragma: no cover - best-effort
+        pass
+    try:
+        from services.comms.sync_runs import SyncRunService
+        runs = await SyncRunService().list_for_tenant(tenant_id, limit=1)
+        if runs:
+            r = runs[0]
+            signals["last_sync_run"] = {
+                "status": r.get("status"), "mode": r.get("mode"),
+                "completed_at": r.get("completed_at"),
+                "records_received": r.get("records_received"),
+                "safe_error_code": r.get("safe_error_code"),
+            }
+    except Exception:  # pragma: no cover - best-effort
+        pass
+    return signals
+
+
 async def _health_snapshot(tenant_id: str) -> dict[str, Any]:
     from repositories.repos import get_pool
     pool = await get_pool()
@@ -520,13 +557,15 @@ async def _health_snapshot(tenant_id: str) -> dict[str, Any]:
         rows = [r for r in _local_facts.values() if r.get("tenant_id") == tenant_id]
         resolved = sum(1 for r in rows if r.get("campaign_id"))
         machine = sum(1 for r in rows if r.get("suspected_machine_activity"))
-        return {
+        base = {
             "tenant_id": tenant_id,
             "communication_facts": len(rows),
             "campaign_resolution_rate": round(resolved / len(rows), 4) if rows else None,
             "machine_event_rate": round(machine / len(rows), 4) if rows else None,
             "last_event_at": max((str(r.get("occurred_at")) for r in rows), default=None),
         }
+        base.update(await _activation_signals(tenant_id))
+        return base
     async with pool.acquire() as conn:
         rec = await conn.fetchrow(
             """
@@ -539,13 +578,15 @@ async def _health_snapshot(tenant_id: str) -> dict[str, Any]:
             tenant_id,
         )
     total = rec["communication_facts"] or 0
-    return {
+    base = {
         "tenant_id": tenant_id,
         "communication_facts": total,
         "campaign_resolution_rate": round((rec["resolved"] or 0) / total, 4) if total else None,
         "machine_event_rate": round((rec["machine"] or 0) / total, 4) if total else None,
         "last_event_at": str(rec["last_event_at"]) if rec["last_event_at"] else None,
     }
+    base.update(await _activation_signals(tenant_id))
+    return base
 
 
 async def _fleet_snapshot() -> dict[str, Any]:
