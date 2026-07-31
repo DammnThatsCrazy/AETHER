@@ -1,15 +1,8 @@
-// Server SDK types — mirrors the shared consent model.
+// Server SDK types — the consent vocabulary is the canonical, registry-generated
+// contract re-exported from @aether/shared, so this SDK cannot drift from the
+// registry again (a hand-written copy here shipped 9 of 12 purposes).
 
-export type ConsentPurpose =
-  | 'analytics'
-  | 'marketing'
-  | 'personalization'
-  | 'web3'
-  | 'agent'
-  | 'commerce'
-  | 'credit'
-  | 'location'
-  | 'financial_activity';
+export type { ConsentPurpose } from '@aether/shared/consent';
 
 export interface ServerConsentState {
   analytics: boolean;
@@ -24,6 +17,12 @@ export interface ServerConsentState {
   location: boolean;
   /** Always requires explicit opt-in — gates agent trading orders, fills, positions, portfolio, and performance snapshots. */
   financial_activity: boolean;
+  /** Always requires explicit opt-in — read-only stablecoin economic intelligence. */
+  economic_observability: boolean;
+  /** Always requires explicit opt-in — read-only cross-network interoperability intelligence. */
+  cross_chain_observability: boolean;
+  /** Always requires explicit opt-in — bot detection, fraud/abuse signals, platform security monitoring. */
+  fraud_prevention: boolean;
 }
 
 /**
