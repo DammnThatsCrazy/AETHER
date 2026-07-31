@@ -61,6 +61,9 @@ _CANONICAL_EVENT_NAMESPACE = uuid.uuid5(
     uuid.NAMESPACE_URL, "https://aether.dev/payment_rails/canonical_event"
 )
 _KEY_SEP = "\x1f"  # unit separator — unambiguous field delimiter in the id key
+# Bronze schema version for payment canonical events (matches the ingestion
+# batch/validation spine's SCHEMA_VERSION so Bronze rows share one envelope).
+_CANONICAL_SCHEMA_VERSION = "1.0.0"
 
 
 def canonical_event_id(tenant_id: str, session_id: Optional[str], event_type: str) -> str:
@@ -554,35 +557,89 @@ class PaymentRailsService:
         session = FundingSession.model_validate(record)
         implied = adapter.normalize_to_aether_events(session)
         already = set(record.setdefault("metadata", {}).get("emitted_canonical", []))
+        to_outbox = getattr(settings.payment_rails, "canonical_outbox_enabled", False)
         emitted: list[str] = []
         for canonical in implied:
             event_type = canonical["event_type"]
             if event_type in already:
                 continue
-            await self.producer.publish(Event(
-                topic=Topic.SDK_EVENTS_VALIDATED,
-                tenant_id=tenant_id,
-                source_service="payment_rails",
-                payload={
-                    "event_id": canonical_event_id(
-                        tenant_id, canonical.get("session_id"), event_type
-                    ),
-                    "tenant_id": tenant_id,
-                    "event_type": event_type,
-                    "session_id": canonical.get("session_id"),
-                    "user_id": canonical.get("user_id"),
-                    "device_id": None,
-                    "properties": canonical["properties"],
-                    "timestamp": canonical.get("occurred_at") or utc_now_iso(),
-                    "ingested_at": utc_now_iso(),
-                    "ip_enrichment": {},
-                },
-            ))
+            event_id = canonical_event_id(tenant_id, canonical.get("session_id"), event_type)
+            payload = {
+                "event_id": event_id,
+                "tenant_id": tenant_id,
+                "event_type": event_type,
+                "session_id": canonical.get("session_id"),
+                "user_id": canonical.get("user_id"),
+                "device_id": None,
+                "properties": canonical["properties"],
+                "timestamp": canonical.get("occurred_at") or utc_now_iso(),
+                "ingested_at": utc_now_iso(),
+                "ip_enrichment": {},
+            }
+            if to_outbox:
+                await self._enqueue_canonical_outbox(
+                    tenant_id, adapter, canonical, event_id, payload
+                )
+            else:
+                await self.producer.publish(Event(
+                    topic=Topic.SDK_EVENTS_VALIDATED,
+                    tenant_id=tenant_id,
+                    source_service="payment_rails",
+                    payload=payload,
+                ))
             emitted.append(event_type)
         if emitted:
             record["metadata"]["emitted_canonical"] = sorted(already | set(emitted))
             await self.repos.sessions.save(tenant_id, record)
         return emitted
+
+    async def _enqueue_canonical_outbox(
+        self,
+        tenant_id: str,
+        adapter: PaymentRailAdapter,
+        canonical: dict[str, Any],
+        event_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Atomically persist a canonical event to the durable Bronze + outbox
+        spine (ingest_many). The deterministic ``event_id`` is the Bronze/outbox
+        key, so a retry writes no second outbox row (ingest_many enqueues only for
+        a newly-accepted Bronze row); the supervised outbox relay publishes it to
+        the validated-events bus exactly once.
+        """
+        from services.ingestion.bronze_bulk import (
+            BronzeSDKEvent,
+            OutboxEvent,
+            ingest_many,
+        )
+
+        now = utc_now_iso()
+        session_id = canonical.get("session_id") or ""
+        bronze = BronzeSDKEvent(
+            tenant_id=tenant_id,
+            event_id=event_id,
+            schema_version=_CANONICAL_SCHEMA_VERSION,
+            batch_id=f"payment_rails:{tenant_id}",
+            event_type=canonical["event_type"],
+            event_family=canonical.get("event_family", "commerce"),
+            event_timestamp=canonical.get("occurred_at") or now,
+            received_at=now,
+            session_id=session_id,
+            anonymous_id="",
+            user_id=canonical.get("user_id"),
+            entity_id=session_id or tenant_id,
+            payload=payload,
+            source="payment_rails",
+            source_tag=adapter.provider_name,
+        )
+        outbox = OutboxEvent(
+            tenant_id=tenant_id,
+            event_id=event_id,
+            topic=Topic.SDK_EVENTS_VALIDATED.value,
+            partition_key=session_id or tenant_id,
+            payload=payload,
+        )
+        await ingest_many([bronze], [outbox])
 
     # ── Health ────────────────────────────────────────────────────────────
 

@@ -1187,6 +1187,17 @@ class PaymentRailsConfig:
     webhook_consent_gate_enabled: bool = _env_bool(
         "AETHER_PAYMENT_WEBHOOK_CONSENT_GATE_ENABLED", False
     )
+    # Canonical-event delivery path (default OFF, opt-in). When enabled, implied
+    # payment_* canonical events are written atomically to the durable Bronze +
+    # event_outbox spine (ingest_many) — the supervised outbox relay publishes
+    # them to the validated-events bus — instead of a direct EventProducer.publish.
+    # The deterministic canonical event id is the Bronze/outbox key, so a retry is
+    # a no-op (ingest_many writes an outbox row only for a newly-accepted Bronze
+    # row). Default OFF keeps the direct-publish path until the relay is validated
+    # end-to-end for this source.
+    canonical_outbox_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_CANONICAL_OUTBOX_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)
