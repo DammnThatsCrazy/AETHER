@@ -91,6 +91,50 @@ async def payment_rail_webhook(provider: str, request: Request):
     return APIResponse(data=result).to_dict()
 
 
+def _webhook_signature_header(request: Request) -> Optional[str]:
+    return (
+        request.headers.get("Stripe-Signature")
+        or request.headers.get("Moonpay-Signature-V2")
+        or request.headers.get("X-CC-Webhook-Signature")
+        or request.headers.get("X-Signature")
+        or request.headers.get("X-Webhook-Signature")
+    )
+
+
+@webhook_router.post("/{provider}/{endpoint_id}")
+async def payment_rail_webhook_by_endpoint(provider: str, endpoint_id: str, request: Request):
+    """Provider webhook receiver with a durable, server-resolved endpoint id.
+
+    The tenant and environment are resolved from the endpoint registry — never a
+    request header. Unknown/revoked/mismatched endpoints return a uniform 404
+    that does not reveal whether the id, tenant, or provider exists. The provider
+    signature is verified natively before anything is parsed or persisted.
+    """
+    _require_rails_enabled()
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        webhook_endpoint_registry,
+    )
+
+    endpoint = await webhook_endpoint_registry.resolve(endpoint_id, provider)
+    if endpoint is None:
+        raise NotFoundError("webhook endpoint")
+
+    payload = await request.body()
+    signature = _webhook_signature_header(request)
+    timestamp = request.headers.get("X-Signature-Timestamp") or request.headers.get(
+        "X-Webhook-Timestamp"
+    )
+    result = await get_payment_rails_service().handle_verified_webhook(
+        endpoint["tenant_id"], provider, endpoint["environment"],
+        payload, signature, timestamp, endpoint_id=endpoint_id,
+    )
+    if not result.get("handled"):
+        # Verified failures (bad/stale/missing signature) are permanent 4xx so
+        # the provider does not retry; durable acceptance would return 2xx.
+        raise BadRequestError(f"webhook rejected: {result.get('reason', 'unverified')}")
+    return APIResponse(data=result).to_dict()
+
+
 # ── Tenant provider controls ──────────────────────────────────────────────
 
 class SyncRequest(BaseModel):
@@ -107,6 +151,73 @@ async def sync_provider(provider: str, body: SyncRequest, request: Request):
         tenant_id, provider, records=body.records
     )
     return APIResponse(data=result).to_dict()
+
+
+# ── Webhook endpoint management (tenant-admin) ────────────────────────────
+
+class WebhookEndpointCreate(BaseModel):
+    environment: str = "sandbox"
+
+
+def _endpoint_actor(request: Request) -> str:
+    t = request.state.tenant
+    return getattr(t, "principal_id", None) or getattr(t, "tenant_id", None) or "tenant-admin"
+
+
+@router.post("/{provider}/webhook-endpoints")
+async def create_webhook_endpoint(provider: str, body: WebhookEndpointCreate, request: Request):
+    """Mint a durable, high-entropy public webhook endpoint id for this provider."""
+    _require_rails_enabled()
+    tenant_id = _tenant_id(request, "admin")
+    if provider not in ADAPTERS:
+        raise NotFoundError("provider")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        webhook_endpoint_registry,
+    )
+    ep = await webhook_endpoint_registry.create(
+        tenant_id, provider, body.environment, created_by=_endpoint_actor(request)
+    )
+    return APIResponse(data=ep).to_dict()
+
+
+@router.get("/{provider}/webhook-endpoints")
+async def list_webhook_endpoints(provider: str, request: Request):
+    _require_rails_enabled()
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        webhook_endpoint_registry,
+    )
+    return APIResponse(
+        data=await webhook_endpoint_registry.list_for(tenant_id, provider)
+    ).to_dict()
+
+
+@router.post("/{provider}/webhook-endpoints/rotate")
+async def rotate_webhook_endpoint(provider: str, body: WebhookEndpointCreate, request: Request):
+    _require_rails_enabled()
+    tenant_id = _tenant_id(request, "admin")
+    if provider not in ADAPTERS:
+        raise NotFoundError("provider")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        webhook_endpoint_registry,
+    )
+    ep = await webhook_endpoint_registry.rotate(
+        tenant_id, provider, body.environment, actor=_endpoint_actor(request)
+    )
+    return APIResponse(data=ep).to_dict()
+
+
+@router.post("/{provider}/webhook-endpoints/{endpoint_id}/revoke")
+async def revoke_webhook_endpoint(provider: str, endpoint_id: str, request: Request):
+    _require_rails_enabled()
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        webhook_endpoint_registry,
+    )
+    ok = await webhook_endpoint_registry.revoke(tenant_id, endpoint_id, actor=_endpoint_actor(request))
+    if not ok:
+        raise NotFoundError("webhook endpoint")
+    return APIResponse(data={"endpoint_id": endpoint_id, "state": "revoked"}).to_dict()
 
 
 @router.get("/{provider}/status")

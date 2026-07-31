@@ -1711,11 +1711,21 @@ items:
     affected_paths:
       - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py"
       - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
-    tests_required: ["tests/payment_rails/test_native_verifiers.py", "tests/payment_rails/test_endpoint_registry.py"]
-    evidence_required: ["per-provider signature fixtures (valid/tampered/missing/stale/rotated) pass; header cannot reroute tenant"]
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/signature_verify.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/webhook_endpoints.py"
+      - "Backend Architecture/aether-backend/alembic/versions/20260813_payment_webhook_endpoints.py"
+      - "config/storage_policies.yaml"
+    tests_required:
+      - "tests/payment_rails/test_signature_verify.py"
+      - "tests/payment_rails/test_webhook_endpoints.py"
+      - "tests/payment_rails/test_native_webhook_flow.py"
+    evidence_required:
+      - "Stripe compound t=,v1= verified natively (golden vectors); tampered/stale/missing/multi-sig/rotation-overlap covered"
+      - "durable endpoint registry resolves tenant server-side; X-Aether-Tenant-ID no longer selects tenant on the new route"
     docs_required: []
     owner: financial
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [FIN-CRED-1-AUTHORITY]
     exception: null
     last_verified_commit: null

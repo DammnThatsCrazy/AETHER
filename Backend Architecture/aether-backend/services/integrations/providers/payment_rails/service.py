@@ -127,6 +127,101 @@ class PaymentRailsService:
                           labels={"provider": adapter.provider_name})
         return {"handled": True, "events": results}
 
+    # Max webhook body we will read before verification (admission control).
+    MAX_WEBHOOK_BODY_BYTES = 512 * 1024
+
+    async def handle_verified_webhook(
+        self,
+        tenant_id: str,
+        provider: str,
+        environment: str,
+        payload: bytes,
+        signature: Optional[str],
+        timestamp: Optional[str] = None,
+        *,
+        endpoint_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Server-resolved-tenant webhook path with provider-native verification.
+
+        The tenant/environment are resolved from the durable endpoint registry
+        (never a header). The webhook signing secret(s) — current + a valid
+        previous during a rotation overlap — come from the durable credential
+        authority (falling back to the legacy vault only if none is configured).
+        Verification uses the provider's native scheme; nothing is parsed or
+        persisted before a valid signature.
+        """
+        from datetime import datetime as _dt, timezone as _tz
+
+        from services.integrations.providers.payment_rails.signature_verify import (
+            verify_signature,
+        )
+
+        adapter = require_provider_enabled(provider)
+
+        if payload and len(payload) > self.MAX_WEBHOOK_BODY_BYTES:
+            metrics.increment("payment_rail_webhook_rejected_total",
+                              labels={"provider": adapter.provider_name})
+            return {"handled": False, "reason": "body_too_large"}
+
+        secrets = await self._webhook_secrets(tenant_id, provider, environment, adapter)
+        now_epoch = int(_dt.now(_tz.utc).timestamp())
+        result = verify_signature(
+            adapter.native_signature_scheme(), secrets, payload, signature,
+            timestamp=timestamp, now_epoch=now_epoch,
+        )
+        if not result.ok:
+            await self.repos.audit.record(tenant_id, adapter.audit_record(
+                tenant_id, "webhook_rejected",
+                {"reason": result.reason, "endpoint_id": endpoint_id, "environment": environment},
+            ))
+            metrics.increment("payment_rail_webhook_rejected_total",
+                              labels={"provider": adapter.provider_name})
+            # A signature mismatch / stale / bad-format is a permanent 4xx; a
+            # missing secret is a configuration state, still a 4xx (not a retry).
+            return {"handled": False, "reason": result.reason}
+
+        try:
+            parsed = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise BadRequestError(f"Webhook payload is not valid JSON: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise BadRequestError("Webhook payload must be a JSON object")
+
+        events = adapter.parse_webhook(tenant_id, parsed, payload_hash(parsed))
+        results = [await self._process_event(tenant_id, adapter, event) for event in events]
+        metrics.increment("payment_rail_webhook_handled_total",
+                          labels={"provider": adapter.provider_name})
+        return {"handled": True, "events": results, "environment": environment}
+
+    async def _webhook_secrets(
+        self, tenant_id: str, provider: str, environment: str, adapter: Any
+    ) -> list[str]:
+        """Active + valid-previous webhook signing secrets, credential authority
+        first, then the legacy vault as a migration fallback."""
+        secrets: list[str] = []
+        try:
+            from services.providers.credentials.authority import credential_authority
+
+            secrets = await credential_authority.get_verification_secrets(
+                tenant_id, provider, environment, "webhook_signing_secret"
+            )
+        except Exception:  # authority not configured for this slot yet
+            secrets = []
+        if not secrets:
+            try:
+                from services.integrations.providers.payment_rails.base import (
+                    get_payment_rails_vault,
+                )
+
+                legacy = await get_payment_rails_vault().get_key(
+                    tenant_id, adapter.vault_provider_name
+                )
+                if legacy:
+                    secrets = [legacy]
+            except Exception:
+                secrets = []
+        return secrets
+
     # ── Polling / status sync ─────────────────────────────────────────────
 
     async def status_sync(

@@ -441,6 +441,17 @@ class PaymentRailAdapter(ABC):
             provided = provided.removeprefix(prefix)
         return hmac.compare_digest(expected, provided)
 
+    def native_signature_scheme(self) -> str:
+        """Provider-native scheme token for ``signature_verify.verify_signature``.
+
+        Stripe and MoonPay send compound ``t=…,<tag>=…`` headers (parsed
+        natively); the others use their declared ``signature_scheme``.
+        """
+        return {
+            "stripe": "stripe_compound",
+            "moonpay": "moonpay_compound",
+        }.get(self.provider_name, self.signature_scheme)
+
     # ── Parsing / normalization ───────────────────────────────────────────
 
     @abstractmethod
