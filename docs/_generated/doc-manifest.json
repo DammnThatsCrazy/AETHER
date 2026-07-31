@@ -3238,7 +3238,7 @@
       ],
       "status": "stable",
       "since_version": "8.8.0",
-      "estimated_read_minutes": 4,
+      "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
     },
