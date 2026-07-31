@@ -54,6 +54,8 @@ async def ingest_normalized_events(
             # Suppression signals (unsubscribe/complaint/hard-bounce/suppressed)
             # update the canonical suppression authority (best-effort).
             await _record_suppression(tenant_id, data)
+            # Billable usage metering (dedupe-safe; §20).
+            await _meter_event(tenant_id, data)
             counts["communications"] += 1
         elif any(event_type.endswith(s) for s in _CATALOG_EVENT_SUFFIXES):
             await _register_catalog_record(tenant_id, data, source_connector_id)
@@ -149,6 +151,22 @@ async def _record_suppression(tenant_id: str, data: dict[str, Any]) -> None:
         await SuppressionAuthorityService().record_from_event(tenant_id, data)
     except Exception as exc:  # pragma: no cover - never break ingest
         logger.warning("comms_suppression_authority_failed: %s", exc)
+
+
+async def _meter_event(tenant_id: str, data: dict[str, Any]) -> None:
+    """Emit billable usage metering for one canonical event. Best-effort."""
+    try:
+        from services.comms.metering import record_event_usage
+        props = data.get("properties") or {}
+        provider = props.get("provider") or data.get("source") or "webhook"
+        event_id = str(data.get("external_id") or "")
+        if event_id:
+            await record_event_usage(
+                tenant_id, event_type=data.get("event_type", ""),
+                event_id=f"{provider}:{event_id}", provider=provider,
+            )
+    except Exception as exc:  # pragma: no cover - metering never breaks ingest
+        logger.warning("comms_event_metering_failed: %s", exc)
 
 
 async def _register_catalog_record(

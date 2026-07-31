@@ -393,12 +393,16 @@ class ConnectorService:
         if sync_run is not None and run_service is not None:
             try:
                 from services.comms.sync_runs import derive_sync_counts
-                await run_service.complete_run(
+                completed = await run_service.complete_run(
                     sync_run,
                     status="completed",
                     cursor_after=cursor_value,
                     counts=derive_sync_counts(events, ingest_counts, ingested=ingested),
                 )
+                # Billable sync-run-level metering for comms connectors (§20).
+                if any(o.startswith("comms.") for o in descriptor.manifest_data_outputs):
+                    from services.comms.metering import record_sync_usage
+                    await record_sync_usage(tenant_id, completed.model_dump())
             except Exception as exc:  # pragma: no cover - best-effort
                 logger.warning(f"connector sync-run close(completed) failed: {exc}")
         return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]

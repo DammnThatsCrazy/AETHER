@@ -205,6 +205,35 @@ async def comms_health(request: Request) -> dict:
     return APIResponse(data=data).to_dict()
 
 
+# ── Commercial entitlements + quotas (§20) ───────────────────────────────────
+
+@router.get("/entitlement")
+async def comms_entitlement(request: Request) -> dict:
+    """The tenant's comms plan entitlement + current usage + quota state.
+
+    Consumed by the connection wizard to show availability, limits, and any
+    ``upgrade_required`` / ``quota_reached`` state BEFORE a connection is made.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from shared.auth.auth import PlanTier
+    from services.comms.entitlements import CommsEntitlementPolicy, is_comms_connector
+    from services.integrations.connectors.service import connector_service
+
+    plan = getattr(tenant, "plan_tier", PlanTier.P1_HOBBYIST)
+    policy = CommsEntitlementPolicy()
+    connectors = await connector_service.list_for_tenant(tenant.tenant_id)
+    comms_conns = [c for c in connectors if is_comms_connector(c.get("connector_type", ""))]
+    decision = policy.evaluate_connection(plan, current_connections=len(comms_conns))
+    return APIResponse(data={
+        "summary": policy.summary(plan),
+        "current_connections": len(comms_conns),
+        "connection_state": decision.state,
+        "connection_allowed": decision.allowed,
+        "reason": decision.reason,
+    }).to_dict()
+
+
 # ── Canonical suppression authority (§16) ────────────────────────────────────
 
 @router.get("/suppressions")

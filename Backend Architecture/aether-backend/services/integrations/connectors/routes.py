@@ -158,6 +158,28 @@ async def configure_connector(connector_type: str, body: ConnectorConfigure, req
     tenant_id = _tenant_id(request, "write")
     if get_connector(connector_type) is None:
         raise NotFoundError("connector")
+    # Comms connectors are plan-gated (§20): enforce entitlement on enable, with
+    # an explicit upgrade_required / quota_reached reason (never a silent drop).
+    if body.enabled:
+        from services.comms.entitlements import CommsEntitlementPolicy, is_comms_connector
+        if is_comms_connector(connector_type):
+            from shared.auth.auth import PlanTier
+            from shared.common.common import ForbiddenError
+            plan = getattr(getattr(request.state, "tenant", None), "plan_tier",
+                           PlanTier.P1_HOBBYIST)
+            existing = await connector_service.list_for_tenant(tenant_id)
+            current = sum(
+                1 for c in existing
+                if c.get("enabled") and c.get("connector_type") != connector_type
+                and is_comms_connector(c.get("connector_type", ""))
+            )
+            decision = CommsEntitlementPolicy().evaluate_connection(
+                plan, current_connections=current,
+            )
+            if not decision.allowed:
+                raise ForbiddenError(
+                    f"comms entitlement {decision.state}: {decision.reason}"
+                )
     stored = await connector_service.configure(
         tenant_id, connector_type, name=body.name or "", config=body.config,
         enabled=body.enabled, secret_configured=body.secret_configured,
