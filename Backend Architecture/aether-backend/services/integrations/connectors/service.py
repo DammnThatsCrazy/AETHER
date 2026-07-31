@@ -95,26 +95,42 @@ class ConnectorService:
         return self._providers
 
     async def _resolve_secret(self, config: ConnectorConfig) -> Optional[str]:
-        """Look up the stored credential from the vault via secret_ref."""
+        """Resolve the stored credential via the credential platform.
+
+        Reads through the provider-neutral credential backend. If the credential
+        is absent there but a legacy ``ProvidersRepository`` row exists for the
+        ref (pre-migration plaintext), it is encrypted into the backend on read
+        (migrate-on-read) and returned.
+        """
         if not config.secret_ref:
             return None
+        tenant_id = getattr(config, "tenant_id", "") or ""
+        from shared.credentials.service import credential_service
+
         try:
-            record = await self._providers_repo().find_by_id(config.secret_ref)
-            if record:
-                return record.get("api_key")
+            secret = await credential_service.reveal(tenant_id, config.secret_ref)
+            if secret:
+                return secret
         except Exception as exc:
             logger.warning(f"Secret resolution failed for {config.connector_type}: {exc}")
+
+        # Migrate-on-read from the legacy plaintext ProvidersRepository row.
+        try:
+            record = await self._providers_repo().find_by_id(config.secret_ref)
+            if record and record.get("api_key"):
+                api_key = record["api_key"]
+                await credential_service.create(tenant_id, config.secret_ref, api_key)
+                return api_key
+        except Exception as exc:
+            logger.warning(f"Legacy secret migration failed for {config.connector_type}: {exc}")
         return None
 
     async def _store_credential(self, tenant_id: str, connector_type: str, credential: str) -> str:
-        """Persist a raw credential to the vault and return its ref key."""
-        ref = f"connector:{tenant_id}:{connector_type}"
-        await self._providers_repo().upsert(ref, {
-            "api_key": credential,
-            "provider": connector_type,
-            "tenant_id": tenant_id,
-        })
-        return ref
+        """Persist a credential via the credential platform and return its ref."""
+        from shared.credentials.service import connector_ref, credential_service
+
+        ref = connector_ref(tenant_id, connector_type)
+        return await credential_service.create(tenant_id, ref, credential)
 
     async def list_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
         """Descriptors merged with this tenant's config/status (no secrets)."""
