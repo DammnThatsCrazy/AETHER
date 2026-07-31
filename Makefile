@@ -494,7 +494,7 @@ sbom: ## Generate a CycloneDX SBOM of the Python environment (reports/sbom/)
 
 supply-chain-audit: ## Advisory supply-chain report (never fails)
 	-npm audit --omit=dev --audit-level=high
-	-pip-audit --skip-editable --progress-spinner off
+	-$(GATE_PY) -m pip_audit --skip-editable --progress-spinner off
 
 supply-chain-check: ## Fail-closed supply-chain gate (npm prod criticals + SBOM required)
 	@echo "== npm production dependency audit — CRITICAL vulns fail =="
@@ -502,7 +502,7 @@ supply-chain-check: ## Fail-closed supply-chain gate (npm prod criticals + SBOM 
 	@echo "== npm production HIGH-severity — advisory (tracked) =="
 	-npm audit --omit=dev --audit-level=high
 	@echo "== Python dependency audit — advisory (base-image CVEs tracked) =="
-	-pip-audit --skip-editable --progress-spinner off
+	-$(GATE_PY) -m pip_audit --skip-editable --progress-spinner off
 	@echo "== CycloneDX SBOM generation (required) =="
 	$(MAKE) sbom
 

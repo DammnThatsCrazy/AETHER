@@ -104,6 +104,7 @@ dev = [
     "ruff>=0.4",
     "PyYAML>=6.0",  # used by scripts/validate_frontmatter.py
     "cyclonedx-bom>=4.0",  # `make sbom` — the supply-chain gate fails closed without it
+    "pip-audit>=2.7",  # advisory dependency audit in `make supply-chain-check`
 ]
 
 # Everything
