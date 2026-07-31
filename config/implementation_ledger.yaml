@@ -1719,11 +1719,14 @@ items:
       - "config/storage_policies.yaml"
     tests_required:
       - "tests/payment_rails/test_signature_verify.py"
+      - "tests/payment_rails/test_signature_golden.py"
       - "tests/payment_rails/test_webhook_endpoints.py"
       - "tests/payment_rails/test_native_webhook_flow.py"
       - "tests/payment_rails/test_webhook_admission.py"
     evidence_required:
       - "Stripe compound t=,v1= verified natively (golden vectors); tampered/stale/missing/multi-sig/rotation-overlap covered"
+      - "per-provider frozen golden vectors wired through each adapter's native_signature_scheme(): stripe (compound v1=), moonpay (compound s=), coinbase (body_hex) CONFIRMED; scheme-isolation + one-byte-tamper + wrong-secret rejection locked"
+      - "bridge + privy honestly classified externally_blocked (real headers — Bridge t=,v0= / Privy Svix base64 — unconfirmed vs the declared timestamped_hex placeholder); guard test fails if reclassified without a confirmed vector, and if any registered adapter lacks a golden entry"
       - "durable endpoint registry resolves tenant server-side; X-Aether-Tenant-ID no longer selects tenant on the new route"
       - "per-endpoint webhook rate limiting (fixed-minute window, atomic incr_if_under, fails open) enforced before signature verification, surfacing a retryable 429"
       - "denied webhooks (bad/stale signature, oversized body) quarantined metadata-only (sha256 + size + reason, never the raw body)"

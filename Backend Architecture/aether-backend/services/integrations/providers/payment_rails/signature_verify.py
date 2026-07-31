@@ -16,8 +16,10 @@ Schemes (each provider adapter declares ``signature_scheme``):
   header). Tolerance is checked against ``t``.
 * ``moonpay_compound`` — MoonPay ``Moonpay-Signature-V2: t=<unix>,s=<hexmac>``.
   Same construction as Stripe with an ``s`` tag instead of ``v1``.
-* ``body_hex`` — Coinbase Commerce ``X-CC-Webhook-Signature`` (and Bridge):
-  hex ``HMAC-SHA256(secret, raw_body)``; no timestamp.
+* ``body_hex`` — Coinbase Commerce ``X-CC-Webhook-Signature``: hex
+  ``HMAC-SHA256(secret, raw_body)``; no timestamp. (Bridge's real header —
+  ``X-Webhook-Signature: t=,v0=`` — is unconfirmed and NOT this scheme; the
+  adapter declares a placeholder ``timestamped_hex`` until it is confirmed.)
 * ``timestamped_hex`` — a generic ``HMAC-SHA256(secret, f"{ts}.{raw_body}")`` with
   the timestamp supplied out-of-band (used by adapters whose exact native header
   is not yet confirmed; see each adapter's source-of-truth note).
