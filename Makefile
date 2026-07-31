@@ -453,23 +453,23 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	$(GATE_PY) scripts/ops_readiness.py
 	$(GATE_PY) scripts/release/check_foundation.py
 	$(GATE_PY) scripts/release/check_implementation_ledger.py
-	python scripts/release/check_profile_config.py
-	python scripts/release/check_cost_policy.py
-	python scripts/release/check_cost_policy_terraform.py
-	python scripts/release/check_delivery_topology.py
+	$(GATE_PY) scripts/release/check_profile_config.py
+	$(GATE_PY) scripts/release/check_cost_policy.py
+	$(GATE_PY) scripts/release/check_cost_policy_terraform.py
+	$(GATE_PY) scripts/release/check_delivery_topology.py
 	# Plan-level deployment-profile enforcement. The plan-policy gate emits the
 	# inventory the cost model prices, so the order here is a real dependency.
-	python scripts/release/check_terraform_plan_policy.py \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py \
 		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
-	python scripts/release/check_cost_model.py \
+	$(GATE_PY) scripts/release/check_cost_model.py \
 		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
 	$(MAKE) validate-staging-budget
-	python scripts/release/check_deployment_readiness.py
-	python scripts/release/check_route_registry.py
-	python scripts/release/check_storage_policies.py
-	python scripts/validate_sdk_release_alignment.py
-	python scripts/release/sdk_conformance.py --quiet
-	python scripts/release/check_required_checks.py
+	$(GATE_PY) scripts/release/check_deployment_readiness.py
+	$(GATE_PY) scripts/release/check_route_registry.py
+	$(GATE_PY) scripts/release/check_storage_policies.py
+	$(GATE_PY) scripts/validate_sdk_release_alignment.py
+	$(GATE_PY) scripts/release/sdk_conformance.py --quiet
+	$(GATE_PY) scripts/release/check_required_checks.py
 	$(MAKE) security-release-check
 	$(MAKE) supply-chain-check
 
@@ -489,7 +489,7 @@ secret-scan-advisory: ## Secret scan (advisory; never fails)
 
 sbom: ## Generate a CycloneDX SBOM of the Python environment (reports/sbom/)
 	@mkdir -p reports/sbom
-	cyclonedx-py environment --output-file reports/sbom/python-sbom.json --output-format JSON
+	$(GATE_PY) -m cyclonedx_py environment --output-file reports/sbom/python-sbom.json --output-format JSON
 	@echo "SBOM: reports/sbom/python-sbom.json"
 
 supply-chain-audit: ## Advisory supply-chain report (never fails)
@@ -507,8 +507,8 @@ supply-chain-check: ## Fail-closed supply-chain gate (npm prod criticals + SBOM 
 	$(MAKE) sbom
 
 security-release-check: ## Fail-closed security gate: secrets + security-control regressions
-	python scripts/security/secret_scan.py
-	python -m pytest tests/security/test_extraction_defense_mode.py tests/unit/test_release_profile_enforcement.py -q -o addopts=""
+	$(GATE_PY) scripts/security/secret_scan.py
+	$(GATE_PY) -m pytest tests/security/test_extraction_defense_mode.py tests/unit/test_release_profile_enforcement.py -q -o addopts=""
 
 # ---------------------------------------------------------------------------
 # Founding-tenant production — control-spine gates (additive; ci-check unchanged)
