@@ -44,7 +44,7 @@ baseline:
 
 # Per-wave target readiness (what a landed wave is allowed to claim).
 wave_targets:
-  W2: { credential_platform: level_4_infra_neutral }   # backend interface + local durable + AWS-adapter contract
+  W2: { credential_platform: level_4_infra_neutral, achieved: true }   # landed: interface + local durable + AWS-adapter + consolidation
   W3: { oauth_broker: level_3, webhook_registry: level_3, sync_runtime: level_3 }
   W4: { inbound_connectors: level_4, payment_rails: level_4, gateway_remediated: level_3 }
   W5: { tenant_onboarding: level_3, kyber_operations: level_3 }

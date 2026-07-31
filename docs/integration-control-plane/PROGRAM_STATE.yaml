@@ -5,7 +5,7 @@
 program:
   branch: feat/unified-integration-control-plane
   base_commit: "06aeaf97d3e0b0d3926da714ce51446a5b0a94cb"   # == origin/main at program start
-  last_landed_checkpoint: C0
+  last_landed_checkpoint: C2                                  # W0 + W2 landed; W1 next
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, isolated-worktree specialists, serialized commit queue
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -16,7 +16,7 @@ waves:
     name: program-control
     parallelism: solo
     depends_on: []
-    status: in_progress
+    status: completed
     lands: [scaffolding-files, dependency-graph, ownership-freeze, migration-id-reservation]
   - id: W1
     name: canonical-contracts            # provider identity, manifest, adapter-result, lifecycle, deployment-contract schema
@@ -26,8 +26,8 @@ waves:
   - id: W2
     name: credential-platform            # CredentialBackend + tenant_credentials + wiring
     parallelism: solo
-    depends_on: [W1]
-    status: pending
+    depends_on: [W0]                      # decoupled from W1: manifest describes cred SHAPE, not cred value types
+    status: completed
   - id: W3
     name: auth-webhook-sync-core         # OAuth broker | webhook registry | sync runtime
     parallelism: "3x"
@@ -55,7 +55,7 @@ architecture:
   connection_lifecycle: pending          # W1
   adapter_result_contract: pending       # W1
   deployment_contract_schema: pending    # W1
-  credential_backend: pending            # W2
+  credential_backend: complete           # W2 landed (shared/credentials)
   oauth_broker: pending                  # W3
   webhook_registry: pending              # W3
   sync_runtime: pending                  # W3/W4
@@ -71,7 +71,7 @@ migration_reservation:
     - id: "20260812_credential_platform"   # W2, table tenant_credentials
       down_revision: "20260811_demo_seed_core"
       owner_wave: W2
-      status: reserved
+      status: landed
     - id: "20260813_integration_contracts" # W1, only if contracts require a table
       down_revision: "20260812_credential_platform"
       owner_wave: W1
@@ -99,11 +99,12 @@ provider_counts:                          # rollup; canonical machine source is 
   scaffolded_visible: 0
 
 quality:                                   # updated at each wave boundary from real gate runs
-  ci_check: unknown
-  unit_tests: unknown
+  ci_check: "docs-path green (repo_doctor --fix --docs-only 34/34); full gate pending W1 boundary"
+  unit_tests: "credential suite 36 passed; regressions 112 passed (byok/connectors/payment-rails/card-linked)"
   contract_tests: unknown
   frontend_tests: unknown
-  typecheck: unknown
-  lint: unknown
-  migration_single_head: "true"
-  secret_scan: unknown
+  typecheck: "ruff clean on shared/credentials"
+  lint: "ruff clean on shared/credentials"
+  migration_single_head: "true (head=20260812_credential_platform)"
+  storage_policies: "PASS (330 checks; tenant_credentials covered)"
+  secret_scan: "PASS (no high-confidence secrets)"

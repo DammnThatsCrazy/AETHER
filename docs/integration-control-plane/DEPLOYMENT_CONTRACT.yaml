@@ -33,7 +33,21 @@ credential_backend:
 #     required_secrets: []
 #     provider_registration_steps: []
 #     deployment_blockers: []
-capabilities: {}   # populated W2..W6
+capabilities:
+  credential_platform:            # W2 — landed
+    application_code_ready: true
+    required_services:
+      - postgres                  # tenant_credentials table (local_encrypted / production)
+    required_public_urls: []
+    required_secrets:
+      - AETHER_CREDENTIAL_BACKEND        # in_memory | local_encrypted | aws_secrets_manager
+      - BYOK_ENCRYPTION_KEY              # required when backend=local_encrypted in non-local envs
+      - AETHER_CREDENTIAL_AWS_PREFIX     # only when backend=aws_secrets_manager (default aether/credentials)
+    provider_registration_steps: []
+    deployment_blockers:
+      - "staging/production: set AETHER_CREDENTIAL_BACKEND=aws_secrets_manager and supply AWS access"
+      - "or keep local_encrypted and supply BYOK_ENCRYPTION_KEY"
+    migration: "alembic upgrade head (creates tenant_credentials; single head 20260812_credential_platform)"
 
 environments:
   matrix_source: ".env.example / .env.staging.example / .env.production.example"
