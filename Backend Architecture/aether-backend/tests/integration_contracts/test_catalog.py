@@ -76,9 +76,20 @@ def test_identity_shape_is_canonical() -> None:
         assert manifest.identity_key == (
             f"{manifest.provider_family}.ingestion.connector"
         )
-        # Connectors write to Bronze; downstream destinations are honestly empty.
-        assert manifest.data_outputs == ["bronze.connector_events"]
-        assert manifest.product_destinations == []
+        # Every manifest declares at least one output (honesty invariant).
+        assert manifest.data_outputs, f"{manifest.provider_family} declares no outputs"
+        # A connector is either generic (writes only to Bronze, no downstream
+        # product destination) or declares a richer capability surface (e.g. the
+        # comms adapters project campaigns/messages/replies into Campaign360 /
+        # Profile360). A manifest may not claim product destinations without also
+        # declaring the domain outputs that feed them.
+        if manifest.data_outputs == ["bronze.connector_events"]:
+            assert manifest.product_destinations == []
+        else:
+            assert manifest.product_destinations, (
+                f"{manifest.provider_family} declares domain outputs but no "
+                "product destination"
+            )
 
 
 # ── Honesty guards (§32) ─────────────────────────────────────────────────────
