@@ -796,6 +796,19 @@ class IngestionV2Config:
     canary_tenants: list[str] = field(
         default_factory=lambda: _env_list("INGESTION_V2_CANARY_TENANTS", "")
     )
+    # Envelope required-field enforcement (staged): when ON, release-critical
+    # events missing any of context.sequence / schemaVersion / surface are
+    # rejected with reason `envelope_missing:<field>` (see
+    # services/ingestion/validation.py). Default derives from the release
+    # profile, same mechanism as ROUTE_REGISTRY_ENFORCED / _TRUST_DEFAULT_ON:
+    # OFF in local/dev/integration (older SDK payloads without the canonical
+    # envelope v1 stay accepted, promotion remains downstream), ON in the
+    # staging/production ingestion profile. Explicit env var always wins, so
+    # the enforcement can be rolled back per environment without a code change.
+    envelope_required_fields_enforced: bool = _env_bool(
+        "INGESTION_ENVELOPE_REQUIRED_FIELDS_ENFORCED",
+        _env("AETHER_ENV", "local") in ("staging", "production"),
+    )
     outbox_relay_enabled: bool = _env_bool("OUTBOX_RELAY_ENABLED", False)
     # Relay tuning (PR 6 / FT-6): claim batch size, idle poll cadence, claim
     # lease duration (crashed relays release rows when the lease lapses) and
