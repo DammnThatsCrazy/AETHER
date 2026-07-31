@@ -543,6 +543,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     register_import_handlers()  # import.commit / import.replay
     register_source_classification_repair_handler()
+    from services.consent.erasure_jobs import register_consent_erasure_handler
+
+    register_consent_erasure_handler()  # consent.erasure (durable DSR erasure)
 
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —
