@@ -1,0 +1,59 @@
+# Unified Integration Control Plane — provider readiness rollup.
+# Only the orchestrator writes this file. Hand-maintained; not source-linked.
+#
+# CANONICAL MACHINE SOURCE (do not duplicate here — reference it):
+#   shared/certification/registry.py::build_capability_matrix()
+#   -> docs/_generated/adapter-certification-matrix.json
+# This file is the CONTROL-PLANE rollup + per-wave target states, keyed to the
+# existing CredentialReadiness tokens (shared/certification/readiness.py):
+#   scaffolded < credential_waiting < replay_validated < sandbox_validated < partner_live
+#   (degraded / disabled are off-ramp states ranked below the progression)
+#
+# Readiness LEVELS (monoprompt §9) map onto tokens for control-plane reporting:
+#   L1 scaffolded  L2 contract-complete  L3 locally-runnable
+#   L4 deployment-turnkey  L5 live-certified
+# Objective: L4 for every intended capability; L5 only with real external creds + infra.
+
+canonical_source: docs/_generated/adapter-certification-matrix.json
+
+# Baseline states carried from the prior productization audit (2026-07-18).
+# Updated only with real evidence as waves land — never inflated.
+baseline:
+  inbound_connectors:            # services/integrations/connectors — 15, production-shaped, credential-gated
+    state: credential_waiting
+    level: 3
+    note: "Real credential-gated API calls + vault->pull->Bronze path; disabled by default. Staging validation with live creds is the remaining gap."
+    members: [slack, webhook, shopify, stripe, hubspot, salesforce, klaviyo, segment, posthog, ga4, jira, linear, zendesk, intercom, dune]
+  economic_first_release:        # derivatives x4, interop x7, payments x5, stablecoin-chain x2
+    state: credential_waiting
+    level: 3
+    note: "18 providers resolve to CREDENTIAL_WAITING; none partner_live, none scaffolded."
+  gateway_streaming_social:      # instagram, linkedin, youtube, spotify, tiktok, telegram
+    state: credential_waiting
+    level: 2
+    note: "Adapters exist but return plain dict, diverging from ProviderResult — W4/A10 remediation target."
+  payment_rails:                 # privy, stripe_onramp, coinbase, moonpay, bridge
+    state: credential_waiting
+    level: 3
+    note: "Observability V1 (observe-only; never moves funds). Payment-sensitive sanitization enforced."
+  credit_bureaus:                # experian, equifax, transunion
+    state: scaffolded
+    level: 1
+    deferred: true
+    note: "product_deferred (§26). execute() raises NotImplementedError. Hidden from tenants; visible in Kyber as deferred only. NOT activated by this program."
+
+# Per-wave target readiness (what a landed wave is allowed to claim).
+wave_targets:
+  W2: { credential_platform: level_4_infra_neutral }   # backend interface + local durable + AWS-adapter contract
+  W3: { oauth_broker: level_3, webhook_registry: level_3, sync_runtime: level_3 }
+  W4: { inbound_connectors: level_4, payment_rails: level_4, gateway_remediated: level_3 }
+  W5: { tenant_onboarding: level_3, kyber_operations: level_3 }
+  W6: { certification_gates: level_4 }
+
+honesty_invariants:              # enforced by CI (§32); no capability may exceed its evidence
+  - no_tenant_secret_in_ordinary_jsonb
+  - no_secret_in_api_responses_or_logs
+  - every_visible_provider_has_manifest
+  - staging_enabled_requires_level_4
+  - live_enabled_requires_current_level_5_certification
+  - credit_bureaus_inaccessible_while_deferred

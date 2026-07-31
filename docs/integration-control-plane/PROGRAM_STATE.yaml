@@ -1,0 +1,109 @@
+# Unified Integration Control Plane — living program state.
+# SINGLE AUTHORITY for work status. Only the orchestrator writes this file.
+# Not generated; not source-linked (no drift stamping). Hand-maintained per landing.
+
+program:
+  branch: feat/unified-integration-control-plane
+  base_commit: "06aeaf97d3e0b0d3926da714ce51446a5b0a94cb"   # == origin/main at program start
+  last_landed_checkpoint: C0
+  status: active
+  delivery_model: orchestrated-swarm            # one orchestrator, isolated-worktree specialists, serialized commit queue
+  gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
+
+# Wave schedule (dependency-ordered). Foundation W0-W2 is sequential and guaranteed.
+waves:
+  - id: W0
+    name: program-control
+    parallelism: solo
+    depends_on: []
+    status: in_progress
+    lands: [scaffolding-files, dependency-graph, ownership-freeze, migration-id-reservation]
+  - id: W1
+    name: canonical-contracts            # provider identity, manifest, adapter-result, lifecycle, deployment-contract schema
+    parallelism: solo
+    depends_on: [W0]
+    status: pending
+  - id: W2
+    name: credential-platform            # CredentialBackend + tenant_credentials + wiring
+    parallelism: solo
+    depends_on: [W1]
+    status: pending
+  - id: W3
+    name: auth-webhook-sync-core         # OAuth broker | webhook registry | sync runtime
+    parallelism: "3x"
+    depends_on: [W1, W2]
+    status: pending
+  - id: W4
+    name: provider-migration             # 15 connectors | 5 payment rails | gateway remediation
+    parallelism: "up to 5x"
+    depends_on: [W3]
+    status: pending
+  - id: W5
+    name: frontends                      # tenant onboarding | kyber operations
+    parallelism: "2x"
+    depends_on: [W4]
+    status: pending
+  - id: W6
+    name: deploy-and-certify
+    parallelism: solo
+    depends_on: [W5]
+    status: pending
+
+architecture:
+  provider_identity: pending             # W1
+  provider_manifest: pending             # W1
+  connection_lifecycle: pending          # W1
+  adapter_result_contract: pending       # W1
+  deployment_contract_schema: pending    # W1
+  credential_backend: pending            # W2
+  oauth_broker: pending                  # W3
+  webhook_registry: pending              # W3
+  sync_runtime: pending                  # W3/W4
+  tenant_ui: pending                     # W5
+  kyber_ui: pending                      # W5
+  certification: reuse                    # shared/certification/* already canonical — extend, do not duplicate
+
+# Alembic revision block reserved before W2 so parallel agents never collide on the single head.
+# Current DB head at program start: 20260811_demo_seed_core
+migration_reservation:
+  chain_root: "20260811_demo_seed_core"
+  reserved:
+    - id: "20260812_credential_platform"   # W2, table tenant_credentials
+      down_revision: "20260811_demo_seed_core"
+      owner_wave: W2
+      status: reserved
+    - id: "20260813_integration_contracts" # W1, only if contracts require a table
+      down_revision: "20260812_credential_platform"
+      owner_wave: W1
+      status: reserved-conditional
+    - id: "20260814_oauth_grants"          # W3 OAuth
+      down_revision: "20260813_integration_contracts"
+      owner_wave: W3
+      status: reserved-conditional
+    - id: "20260815_webhook_registry"      # W3 webhooks
+      down_revision: "20260814_oauth_grants"
+      owner_wave: W3
+      status: reserved-conditional
+    - id: "20260816_sync_cursors"          # W4 sync
+      down_revision: "20260815_webhook_registry"
+      owner_wave: W4
+      status: reserved-conditional
+
+provider_counts:                          # rollup; canonical machine source is the certification matrix (see PROVIDER_READINESS.yaml)
+  certified: 0
+  credential_waiting: 18                   # first-release economic providers, per prior audit
+  contract_required: 0
+  provider_approval_required: 0
+  product_deferred: 3                      # Experian / Equifax / TransUnion — stay deferred (§26)
+  unsupported: 0
+  scaffolded_visible: 0
+
+quality:                                   # updated at each wave boundary from real gate runs
+  ci_check: unknown
+  unit_tests: unknown
+  contract_tests: unknown
+  frontend_tests: unknown
+  typecheck: unknown
+  lint: unknown
+  migration_single_head: "true"
+  secret_scan: unknown

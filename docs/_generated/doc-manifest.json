@@ -4238,6 +4238,22 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/integration-control-plane/ARCHITECTURE_DECISIONS.md",
+      "title": "Integration Control Plane — Architecture Decisions",
+      "slug": "architecture/integration-control-plane-decisions",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "security"
+      ],
+      "status": "experimental",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/internal/noesis-security-checklist.md",
       "title": "Noesis Production Security Checklist",
       "slug": "internal/noesis-security-checklist",
