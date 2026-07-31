@@ -198,11 +198,15 @@ async def test_connector(connector_type: str, request: Request):
 
 
 @router.post("/{connector_type}/sync")
-async def sync_connector(connector_type: str, request: Request):
+async def sync_connector(connector_type: str, request: Request, since: Optional[str] = None):
+    """Trigger a sync. ``since`` (ISO-8601) selects a historical backfill window;
+    omit it for an incremental sync from the connector's last cursor."""
     tenant_id = _tenant_id(request, "write")
     if get_connector(connector_type) is None:
         raise NotFoundError("connector")
-    result = await connector_service.sync(tenant_id, connector_type, actor_id=_actor(request))
+    result = await connector_service.sync(
+        tenant_id, connector_type, actor_id=_actor(request), since=since,
+    )
     return APIResponse(data=result.model_dump()).to_dict()
 
 
