@@ -61,7 +61,7 @@ class MockServer:
 
 _SENSITIVE_COINBASE = {
     "card_number": "4111111111111111",
-    "cvv": "321",
+    "cvv": "cvv-leak-sentinel",
     "ssn": "123-45-6789",
 }
 _SENSITIVE_BRIDGE = {
@@ -208,4 +208,9 @@ def bridge_activity(activity_id: str, status: str) -> dict:
     }
 
 
-SENSITIVE_MARKERS = ("4111111111111111", "321", "123-45-6789", "9876543210", "021000021")
+# Distinctive multi-char sentinels only. A short numeric marker (e.g. a bare
+# 3-digit CVV like "321") would false-positive: it can appear by chance as a
+# substring of a random hex id (tenant/event ids) in the serialized store,
+# flaking the leak-detection assertions. Keep every marker long / non-hex so
+# `m in flat` only matches a genuine value leak.
+SENSITIVE_MARKERS = ("4111111111111111", "cvv-leak-sentinel", "123-45-6789", "9876543210", "021000021")
