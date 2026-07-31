@@ -54,6 +54,62 @@ TOUCHPOINT_ID = str(uuid4())
 CONVERSION_ID = str(uuid4())
 SPEND_ID = str(uuid4())
 
+# Stable so a re-seed (see _ensure_seeded) is an idempotent replay, never a
+# duplicate conversion under a fresh key.
+DEDUP_KEY = f"order-{uuid4().hex}"
+
+
+def _touchpoint_payload() -> dict:
+    return {
+        "touchpoint_id": TOUCHPOINT_ID,
+        "tenant_id": TENANT_ID,
+        "profile_id": PROFILE_ID,
+        "campaign_id": CAMPAIGN_ID,
+        "touchpoint_type": "click",
+        "channel": "paid_search",
+        "source": "google",
+        "platform": "google_ads",
+        "is_click_through": True,
+        "occurred_at": _now_iso(),
+        "received_at": _now_iso(),
+        "idempotency_key": f"tp-{TOUCHPOINT_ID}",
+    }
+
+
+def _conversion_payload() -> dict:
+    return {
+        "conversion_id": CONVERSION_ID,
+        "tenant_id": TENANT_ID,
+        "conversion_type": "purchase",
+        "profile_id": PROFILE_ID,
+        "gross_value": "120.00",
+        "net_value": "108.00",
+        "currency": "USD",
+        "occurred_at": _now_iso(),
+        "observed_at": _now_iso(),
+        "conversion_status": "confirmed",
+        "authority_rank": 80,
+        "attribution_eligible": True,
+        "deduplication_key": DEDUP_KEY,
+    }
+
+
+def _ensure_seeded() -> None:
+    """Idempotently (re)establish the touchpoint + conversion graph.
+
+    The in-process stores are global; a foreign test calling
+    reset_in_memory_stores() (or a worker split under pytest-xdist
+    ``--dist load``) can drop this class's earlier writes between its ordered
+    methods. Every upsert is keyed by a stable module-level idempotency /
+    deduplication key, so re-seeding is a no-op replay when state survived and
+    a clean restore when it did not.
+    """
+    from services.measurement.repositories.conversion_repo import ConversionRepository
+    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+
+    _run(TouchpointRepository().upsert(_touchpoint_payload()))
+    _run(ConversionRepository().upsert(_conversion_payload()))
+
 
 # ── tests ─────────────────────────────────────────────────────────────────────
 
@@ -68,21 +124,7 @@ class TestPaidMediaEcommerceFlow:
             pytest.skip("TouchpointRepository not available")
 
         repo = TouchpointRepository()
-        tp = {
-            "touchpoint_id": TOUCHPOINT_ID,
-            "tenant_id": TENANT_ID,
-            "profile_id": PROFILE_ID,
-            "campaign_id": CAMPAIGN_ID,
-            "touchpoint_type": "click",
-            "channel": "paid_search",
-            "source": "google",
-            "platform": "google_ads",
-            "is_click_through": True,
-            "occurred_at": _now_iso(),
-            "received_at": _now_iso(),
-            "idempotency_key": f"tp-{TOUCHPOINT_ID}",
-        }
-        result = _run(repo.upsert(tp))
+        result = _run(repo.upsert(_touchpoint_payload()))
         assert result is not None, "upsert should return the stored touchpoint"
 
     def test_conversion_ingestion(self):
@@ -93,22 +135,7 @@ class TestPaidMediaEcommerceFlow:
             pytest.skip("ConversionRepository not available")
 
         repo = ConversionRepository()
-        conv = {
-            "conversion_id": CONVERSION_ID,
-            "tenant_id": TENANT_ID,
-            "conversion_type": "purchase",
-            "profile_id": PROFILE_ID,
-            "gross_value": "120.00",
-            "net_value": "108.00",
-            "currency": "USD",
-            "occurred_at": _now_iso(),
-            "observed_at": _now_iso(),
-            "conversion_status": "confirmed",
-            "authority_rank": 80,
-            "attribution_eligible": True,
-            "deduplication_key": f"order-{uuid4().hex}",
-        }
-        result = _run(repo.upsert(conv))
+        result = _run(repo.upsert(_conversion_payload()))
         assert result is not None
 
     def test_journey_compilation(self):
@@ -118,6 +145,7 @@ class TestPaidMediaEcommerceFlow:
         except ImportError:
             pytest.skip("JourneyCompiler not available")
 
+        _ensure_seeded()
         compiler = JourneyCompiler()
         journey = _run(compiler.compile_for_profile(TENANT_ID, PROFILE_ID))
         assert isinstance(journey, dict), "compile_for_profile should return a dict"
@@ -132,6 +160,7 @@ class TestPaidMediaEcommerceFlow:
         except ImportError:
             pytest.skip("AttributionEngine not available")
 
+        _ensure_seeded()
         engine = AttributionEngine()
         run = _run(engine.run_for_conversion(
             TENANT_ID,
