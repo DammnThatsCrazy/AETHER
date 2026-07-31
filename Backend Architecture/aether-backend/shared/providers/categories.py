@@ -1246,78 +1246,111 @@ class _BaseStreamingProvider(Provider):
 
     async def health_check(self) -> ProviderStatus:
         _require_httpx()
-        if not self.api_key:
+        if not self.config.api_key:
             return ProviderStatus.UNAVAILABLE
-        return ProviderStatus.AVAILABLE
+        return ProviderStatus.HEALTHY
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         raise NotImplementedError(f"{self.__class__.__name__}.execute({method}) not implemented")
 
 
 class YouTubeProvider(_BaseStreamingProvider):
     """YouTube Data API v3 — channel stats, video counts, subscriber count."""
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         _require_httpx()
-        if method == "channel_stats":
-            channel_id = params.get("channel_id", "")
-            url = "https://www.googleapis.com/youtube/v3/channels"
-            query = {
-                "part": "statistics,snippet,brandingSettings",
-                "id": channel_id,
-                "key": self.api_key,
-            }
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, params=query)
-                resp.raise_for_status()
-                items = resp.json().get("items", [])
-                return {"data": items[0] if items else {}}
-        return {"data": {}}
+        start = time.perf_counter()
+        self._request_count += 1
+        try:
+            if method == "channel_stats":
+                channel_id = params.get("channel_id", "")
+                url = "https://www.googleapis.com/youtube/v3/channels"
+                query = {
+                    "part": "statistics,snippet,brandingSettings",
+                    "id": channel_id,
+                    "key": self.config.api_key,
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(url, params=query)
+                    resp.raise_for_status()
+                    items = resp.json().get("items", [])
+                    data = items[0] if items else {}
+            else:
+                data = {}
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=data, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.error(f"YouTube error: {e}")
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
 
 
 class SpotifyProvider(_BaseStreamingProvider):
     """Spotify Web API — artist profile, monthly listeners, user library."""
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         _require_httpx()
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        if method == "artist_profile":
-            artist_id = params.get("artist_id", "")
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"https://api.spotify.com/v1/artists/{artist_id}",
-                    headers=headers,
-                )
-                resp.raise_for_status()
-                return {"data": resp.json()}
-        if method == "user_profile":
-            user_id = params.get("user_id", "")
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"https://api.spotify.com/v1/users/{user_id}",
-                    headers=headers,
-                )
-                resp.raise_for_status()
-                return {"data": resp.json()}
-        return {"data": {}}
+        start = time.perf_counter()
+        self._request_count += 1
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+        try:
+            if method == "artist_profile":
+                artist_id = params.get("artist_id", "")
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://api.spotify.com/v1/artists/{artist_id}",
+                        headers=headers,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+            elif method == "user_profile":
+                user_id = params.get("user_id", "")
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://api.spotify.com/v1/users/{user_id}",
+                        headers=headers,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+            else:
+                data = {}
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=data, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.error(f"Spotify error: {e}")
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
 
 
 class TikTokProvider(_BaseStreamingProvider):
     """TikTok Display API — creator profile, follower count, video stats."""
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         _require_httpx()
-        if method == "user_info":
-            username = params.get("username", "")
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    "https://open.tiktokapis.com/v2/user/info/",
-                    params={"fields": "open_id,union_id,display_name,username,avatar_url,follower_count,following_count,likes_count,video_count"},
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                )
-                resp.raise_for_status()
-                return {"data": resp.json().get("data", {})}
-        return {"data": {}}
+        start = time.perf_counter()
+        self._request_count += 1
+        try:
+            if method == "user_info":
+                username = params.get("username", "")
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        "https://open.tiktokapis.com/v2/user/info/",
+                        params={"fields": "open_id,union_id,display_name,username,avatar_url,follower_count,following_count,likes_count,video_count"},
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json().get("data", {})
+            else:
+                data = {}
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=data, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.error(f"TikTok error: {e}")
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
 
 
 # ======================================================================
@@ -1329,37 +1362,48 @@ class _BaseContentPlatformProvider(Provider):
 
     async def health_check(self) -> ProviderStatus:
         _require_httpx()
-        if not self.api_key:
+        if not self.config.api_key:
             return ProviderStatus.UNAVAILABLE
-        return ProviderStatus.AVAILABLE
+        return ProviderStatus.HEALTHY
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         raise NotImplementedError(f"{self.__class__.__name__}.execute({method}) not implemented")
 
 
 class TelegramProvider(_BaseContentPlatformProvider):
     """Telegram Bot API — public channel stats (subscriber count, post reach)."""
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         _require_httpx()
-        if method == "channel_stats":
-            channel_id = params.get("channel_id", "")
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"https://api.telegram.org/bot{self.api_key}/getChat",
-                    params={"chat_id": channel_id},
-                )
-                resp.raise_for_status()
-                result = resp.json().get("result", {})
-                # Get member count separately
-                count_resp = await client.get(
-                    f"https://api.telegram.org/bot{self.api_key}/getChatMemberCount",
-                    params={"chat_id": channel_id},
-                )
-                member_count = count_resp.json().get("result", 0) if count_resp.is_success else 0
-                result["members_count"] = member_count
-                return {"data": result}
-        return {"data": {}}
+        start = time.perf_counter()
+        self._request_count += 1
+        try:
+            if method == "channel_stats":
+                channel_id = params.get("channel_id", "")
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://api.telegram.org/bot{self.config.api_key}/getChat",
+                        params={"chat_id": channel_id},
+                    )
+                    resp.raise_for_status()
+                    result = resp.json().get("result", {})
+                    # Get member count separately
+                    count_resp = await client.get(
+                        f"https://api.telegram.org/bot{self.config.api_key}/getChatMemberCount",
+                        params={"chat_id": channel_id},
+                    )
+                    member_count = count_resp.json().get("result", 0) if count_resp.is_success else 0
+                    result["members_count"] = member_count
+                    data = result
+            else:
+                data = {}
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=data, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.error(f"Telegram error: {e}")
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
 
 
 # ======================================================================
@@ -1375,23 +1419,34 @@ class InstagramProvider(Provider):
 
     async def health_check(self) -> ProviderStatus:
         _require_httpx()
-        if not self.api_key:
+        if not self.config.api_key:
             return ProviderStatus.UNAVAILABLE
-        return ProviderStatus.AVAILABLE
+        return ProviderStatus.HEALTHY
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         _require_httpx()
-        if method == "user_profile":
-            ig_user_id = params.get("ig_user_id") or params.get("username", "")
-            fields = "id,name,followers_count,follows_count,media_count,is_verified"
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"https://graph.facebook.com/v19.0/{ig_user_id}",
-                    params={"fields": fields, "access_token": self.api_key},
-                )
-                resp.raise_for_status()
-                return {"data": resp.json()}
-        return {"data": {}}
+        start = time.perf_counter()
+        self._request_count += 1
+        try:
+            if method == "user_profile":
+                ig_user_id = params.get("ig_user_id") or params.get("username", "")
+                fields = "id,name,followers_count,follows_count,media_count,is_verified"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://graph.facebook.com/v19.0/{ig_user_id}",
+                        params={"fields": fields, "access_token": self.config.api_key},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+            else:
+                data = {}
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=data, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.error(f"Instagram error: {e}")
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
 
 
 class LinkedInProvider(Provider):
@@ -1402,24 +1457,35 @@ class LinkedInProvider(Provider):
 
     async def health_check(self) -> ProviderStatus:
         _require_httpx()
-        if not self.api_key:
+        if not self.config.api_key:
             return ProviderStatus.UNAVAILABLE
-        return ProviderStatus.AVAILABLE
+        return ProviderStatus.HEALTHY
 
-    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
         _require_httpx()
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        if method == "profile_stats":
-            linkedin_id = params.get("linkedin_id", "")
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"https://api.linkedin.com/v2/people/{linkedin_id}",
-                    headers=headers,
-                    params={"projection": "(id,localizedFirstName,localizedLastName,vanityName,followersCount)"},
-                )
-                resp.raise_for_status()
-                return {"data": resp.json()}
-        return {"data": {}}
+        start = time.perf_counter()
+        self._request_count += 1
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+        try:
+            if method == "profile_stats":
+                linkedin_id = params.get("linkedin_id", "")
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://api.linkedin.com/v2/people/{linkedin_id}",
+                        headers=headers,
+                        params={"projection": "(id,localizedFirstName,localizedLastName,vanityName,followersCount)"},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+            else:
+                data = {}
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=data, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.error(f"LinkedIn error: {e}")
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
 
 
 # ======================================================================
