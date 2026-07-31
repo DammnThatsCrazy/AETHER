@@ -460,42 +460,6 @@ module "ecs" {
 }
 
 # ---------------------------------------------------------------------------
-# 6b. Provider-credential envelope-encryption CMK
-#
-# The durable credential authority (AwsKmsEnvelopeCredentialCipher) calls
-# kms:GenerateDataKey + kms:Decrypt under this customer-managed CMK, binding a
-# {tenant_id, provider, environment, slot_name, credential_version} KMS
-# encryption context on every operation. The backend reads the key id from the
-# CREDENTIAL_KMS_KEY_ID env var; this root publishes it as an output
-# (credential_kms_key_id) for the ECS task definition to consume.
-#
-# Required in every deployable profile (local.enable_credential_kms is a literal
-# true, like enable_aurora / enable_sqs_sns), so the count is always 1 — it is
-# gated only so an ephemeral/demo profile, were one ever added, could omit it
-# and so the module's presence is assertable via length(module.kms_credentials).
-#
-# Dependency direction is one-way on purpose: this module consumes the ECS task
-# role ARN (to grant it envelope crypto in the CMK key policy), and the reverse
-# CREDENTIAL_KMS_KEY_ID wiring into the ECS task definition is left to the ECS
-# slice, so the two modules do not form a cycle.
-# ---------------------------------------------------------------------------
-
-module "kms_credentials" {
-  source = "./modules/kms_credentials"
-  count  = local.enable_credential_kms ? 1 : 0
-
-  environment = var.environment
-  project     = var.project
-
-  # API and workers share one ECS task role today (modules/ecs
-  # aws_iam_role.task); pass it as a single-element list. The module's CMK key
-  # policy grants exactly this principal the four envelope-crypto actions under
-  # the five-key encryption context, and also exports an equivalent identity
-  # policy (iam_policy_json) for the ECS task-role wiring to attach.
-  task_role_arns = [module.ecs.task_role_arn]
-}
-
-# ---------------------------------------------------------------------------
 # 7. Monitoring
 # ---------------------------------------------------------------------------
 
