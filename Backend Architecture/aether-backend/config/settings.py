@@ -779,6 +779,22 @@ class IntegrationConsentConfig:
 
 
 # ---------------------------------------------------------------------------
+# Credential platform — provider-neutral credential storage backend selector.
+#
+# ``backend`` chooses the concrete CredentialBackend (shared/credentials):
+#   in_memory           — tests only (non-durable process dict)
+#   local_encrypted     — default; Fernet-encrypted rows in tenant_credentials
+#   aws_secrets_manager — AWS Secrets Manager (lazy boto3)
+# ``aws_secret_prefix`` namespaces secrets when the AWS backend is selected.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class CredentialPlatformConfig:
+    backend: str = _env("AETHER_CREDENTIAL_BACKEND", "local_encrypted")
+    aws_secret_prefix: str = _env("AETHER_CREDENTIAL_AWS_PREFIX", "aether/credentials")
+
+
+# ---------------------------------------------------------------------------
 # Ingestion V2 (PR 5) — typed Bronze + transactional outbox for /v1/batch.
 #
 # Canary rollout, default OFF. When `enabled` is True (or the request's tenant
@@ -1349,6 +1365,7 @@ class Settings:
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
     semantic: SemanticIntelligenceConfig = field(default_factory=SemanticIntelligenceConfig)
     integration_consent: IntegrationConsentConfig = field(default_factory=IntegrationConsentConfig)
+    credential_platform: CredentialPlatformConfig = field(default_factory=CredentialPlatformConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
