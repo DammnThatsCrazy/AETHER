@@ -22,7 +22,7 @@ waves:
     name: canonical-contracts            # provider identity, manifest, adapter-result, lifecycle, deployment-contract schema
     parallelism: solo
     depends_on: [W0]
-    status: pending
+    status: completed                    # shared/integration_contracts landed (additive)
   - id: W2
     name: credential-platform            # CredentialBackend + tenant_credentials + wiring
     parallelism: solo
@@ -50,11 +50,11 @@ waves:
     status: pending
 
 architecture:
-  provider_identity: pending             # W1
-  provider_manifest: pending             # W1
-  connection_lifecycle: pending          # W1
-  adapter_result_contract: pending       # W1
-  deployment_contract_schema: pending    # W1
+  provider_identity: complete            # W1 landed (shared/integration_contracts/identity.py)
+  provider_manifest: complete            # W1 landed (manifest.py + validate_manifest honesty gate)
+  connection_lifecycle: complete         # W1 landed (lifecycle.py ConnectionState machine)
+  adapter_result_contract: complete      # W1 landed (results.py AdapterResult + bridge mappers)
+  deployment_contract_schema: complete   # W1 landed (deployment.py DeploymentContract)
   credential_backend: complete           # W2 landed (shared/credentials)
   oauth_broker: pending                  # W3
   webhook_registry: pending              # W3
