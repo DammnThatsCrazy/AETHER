@@ -51,7 +51,7 @@ waves:
 
 architecture:
   provider_identity: complete            # W1 landed (shared/integration_contracts/identity.py)
-  provider_manifest: complete            # W1 landed (manifest.py + validate_manifest honesty gate)
+  provider_manifest: complete            # W1 manifest.py + validate_manifest; catalog.py derives 15 honest connector manifests from the registry (all validated at import)
   connection_lifecycle: complete         # W1 landed (lifecycle.py ConnectionState machine)
   adapter_result_contract: complete      # W1 landed (results.py AdapterResult + bridge mappers)
   deployment_contract_schema: complete   # W1 landed (deployment.py DeploymentContract)
