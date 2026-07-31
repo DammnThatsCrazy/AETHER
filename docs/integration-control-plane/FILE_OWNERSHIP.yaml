@@ -1,0 +1,97 @@
+# Unified Integration Control Plane — file ownership map.
+# Only the orchestrator writes this file. Frozen at W0; extended only with a lease.
+# An agent MUST NOT write outside its owned paths (§29). Hot shared-contract files are
+# orchestrator-leased: an agent submits the needed diff as evidence and the orchestrator
+# applies it during landing to avoid cross-agent conflicts on the single branch.
+#
+# Backend root = "Backend Architecture/aether-backend/". Paths are relative to it unless
+# prefixed with "/" (repo root).
+
+orchestrator:
+  owner: orchestrator
+  exclusive: true
+  paths:
+    - /docs/integration-control-plane/**            # all program-state files
+    - alembic/versions/**                           # migration id reservation + authoring
+    - /config/storage_policies.yaml                 # storage-policy coverage gate
+    - config/settings.py                            # control-plane config flag block
+    - /CHANGELOG.md
+
+contracts:            # A1 (W1)
+  owner: architecture-agent
+  paths:
+    - shared/integration_contracts/**
+  reuse_only:                                       # may read/import, must not restructure
+    - shared/certification/**
+    - services/integrations/connectors/base.py
+
+credentials:          # A2 (W2)
+  owner: credential-agent
+  paths:
+    - shared/credentials/**
+    - shared/providers/key_vault.py
+  leased:                                           # scoped edits only, submitted as diff evidence
+    - services/integrations/connectors/service.py   # secret store/resolve path only
+
+oauth:                # A3 (W3)
+  owner: oauth-agent
+  paths:
+    - services/integrations/oauth/**
+
+webhooks:             # A4 (W3)
+  owner: webhook-agent
+  paths:
+    - services/integrations/webhook_policy.py
+    - services/integrations/webhook_quarantine.py
+    - services/security/integration_security.py
+
+sync:                 # A5 (W4)
+  owner: sync-agent
+  leased:
+    - services/integrations/connectors/service.py   # sync methods only
+  paths:
+    - services/jobs/**
+
+connector_group_a:    # A6 (W4) — slack, webhook, shopify, stripe, hubspot
+  owner: connector-agent-a
+  leased:
+    - services/integrations/connectors/adapters.py
+connector_group_b:    # A7 (W4) — salesforce, klaviyo, segment, posthog, ga4
+  owner: connector-agent-b
+  leased:
+    - services/integrations/connectors/adapters.py
+    - services/integrations/connectors/klaviyo.py
+connector_group_c:    # A8 (W4) — jira, linear, zendesk, intercom, dune
+  owner: connector-agent-c
+  leased:
+    - services/integrations/connectors/adapters.py
+
+payment_rails:        # A9 (W4)
+  owner: payment-rail-agent
+  paths:
+    - services/integrations/providers/payment_rails/**
+
+gateway_remediation:  # A10 (W4)
+  owner: gateway-agent
+  paths:
+    - shared/providers/categories.py                # streaming/social ProviderResult remediation
+
+tenant_ui:            # A11 (W5)
+  owner: tenant-ui-agent
+  paths:
+    - /frontend/aether/src/**
+
+kyber_ui:             # A12 (W5)
+  owner: kyber-ui-agent
+  paths:
+    - /frontend/kyber/src/**
+
+deploy_cert:          # A13 (W6)
+  owner: deploy-cert-agent
+  paths:
+    - /tests/contracts/**
+    - /tests/e2e/**
+
+# Connector-group agents share adapters.py by lease. Because they touch one hot file,
+# the orchestrator serializes their landings (A6 -> A7 -> A8) rather than landing in
+# parallel, or splits adapters.py into per-connector modules in W4 before fan-out.

@@ -22,6 +22,11 @@ from typing import Any
 
 import pytest
 
+# Credentials are stored via the provider-neutral credential platform. Under the
+# test suite default to the non-durable in-memory backend so no DB/encryption
+# key is required. An explicit env var still wins.
+os.environ.setdefault("AETHER_CREDENTIAL_BACKEND", "in_memory")
+
 
 # Make backend packages importable even when a sub-suite is executed directly.
 BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
