@@ -37,7 +37,7 @@ waves:
     name: provider-migration             # 15 connectors | 5 payment rails | gateway remediation
     parallelism: "up to 5x"
     depends_on: [W3]
-    status: in_progress                  # keystone IntegrationAdapter facade (services/integrations/adapter.py) landed: connectors reachable through the §17 lifecycle returning AdapterResult. Per-provider migration + payment rails + gateway remediation remain.
+    status: in_progress                  # IntegrationAdapter facade (adapter.py) + PaymentRailIntegrationAdapter (payment_adapter.py) landed: connectors AND observe-only payment rails reachable through the §17 lifecycle returning AdapterResult. Gateway ProviderResult remediation + OAuth route wiring remain.
   - id: W5
     name: frontends                      # tenant onboarding | kyber operations
     parallelism: "2x"
