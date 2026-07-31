@@ -40,7 +40,7 @@ baseline:
     state: scaffolded
     level: 1
     deferred: true
-    note: "product_deferred (§26). execute() raises NotImplementedError. Hidden from tenants; visible in Kyber as deferred only. NOT activated by this program."
+    note: "product_deferred (§26) as a POLICY stance, not a code gap. CreditBureauProvider.execute (shared/providers/categories.py) is a credential-gated adapter that returns a typed error when unconfigured (it does NOT raise NotImplementedError — that belief was a mis-read of a different provider's execute). Deferred manifests (catalog.build_deferred_credit_bureau_manifests) declare them SCAFFOLDED/level 1, tenant_self_service=False, every environment False — hidden from tenants, enabled nowhere. NOT activated by this program; activation requires legal/consent/security/commercial/certification approval."
 
 # Per-wave target readiness (what a landed wave is allowed to claim).
 wave_targets:
