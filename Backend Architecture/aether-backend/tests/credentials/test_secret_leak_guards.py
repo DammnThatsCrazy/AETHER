@@ -60,6 +60,13 @@ async def test_metadata_and_list_have_no_plaintext():
 
 @pytest.mark.asyncio
 async def test_logs_never_contain_the_secret():
+    # A sibling suite (tests/commerce/*) calls logging.disable(logging.CRITICAL) at
+    # module level and never restores it, suppressing our INFO audit lines
+    # process-wide under the shared xdist worker. Restore the precondition
+    # explicitly (mirrors tests/unit/test_logger_call_shape.py) so this assertion
+    # is about our logging, not test ordering.
+    previous_disable = logging.root.manager.disable
+    logging.disable(logging.NOTSET)
     cap = _attach()
     try:
         svc = CredentialService(
@@ -70,6 +77,7 @@ async def test_logs_never_contain_the_secret():
         await svc.revoke("t1", "r1")
     finally:
         _detach(cap)
+        logging.disable(previous_disable)
 
     joined = "\n".join(cap.messages)
     assert _FAKE not in joined
