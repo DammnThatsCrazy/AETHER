@@ -41,9 +41,39 @@ class InferencePolicyGate:
         )
         enforced = policy.inference_enforcement(model_id, override=enforce)
 
+        if required_purposes is None and not required:
+            # Fail closed: a model unknown to the registry, or one that
+            # declares no inference purposes, may not serve. Record a single
+            # auditable evidence decision, then deny.
+            decision = await self._engine.decide(
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                action="serve_inference",
+                resource_type="ml_model",
+                resource_id=model_id,
+                subject_ref=subject_ref,
+                purpose=None,
+                granted_purposes=set(granted_purposes or []),
+                consent_snapshot_id=consent_snapshot_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            return InferenceGateResult(
+                model_id=model_id,
+                allowed=False,
+                blocked=True,
+                enforced=True,
+                reason="inference_denied:no_declared_inference_purposes",
+                policy_decision_id=decision.policy_decision_id if decision else None,
+                required_purposes=[],
+                missing_purposes=[],
+                decision=decision,
+            )
+
         # Record one evidence decision per required purpose (or a single
-        # no-purpose evidence record when the model is unscoped). The engine
-        # persists serve_inference decisions unconditionally.
+        # no-purpose evidence record when the caller explicitly overrides the
+        # scope to be empty). The engine persists serve_inference decisions
+        # unconditionally.
         decision = None
         missing: list[str] = []
         granted = set(granted_purposes or [])

@@ -21,6 +21,16 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+def _cid(campaign: dict):
+    """Extract the canonical id from a campaign record.
+
+    upsert_external_campaign and create_custom_campaign return the full
+    campaign dict — the production contract (measurement writer and comms
+    ingest consume the record) — not a bare id.
+    """
+    return campaign["campaign_id"]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Normalization
 # ─────────────────────────────────────────────────────────────────────────────
@@ -129,44 +139,44 @@ def _make_resolver(pool=None):
 class TestCampaignRegistryService:
     def test_upsert_external_creates_canonical_uuid(self):
         svc = _make_registry()
-        cid = _run(svc.upsert_external_campaign(
+        cid = _cid(_run(svc.upsert_external_campaign(
             tenant_id="t1",
             platform="google_ads",
             external_account_id="acc-001",
             external_campaign_id="ggl-camp-001",
-            name="Summer Sale",
-        ))
+            external_campaign_name="Summer Sale",
+        )))
         assert cid is not None
         # Must be a valid UUID
         uuid.UUID(str(cid))
 
     def test_upsert_external_idempotent(self):
         svc = _make_registry()
-        cid1 = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", "Camp A"))
-        cid2 = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", "Camp A"))
+        cid1 = _cid(_run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", external_campaign_name="Camp A")))
+        cid2 = _cid(_run(svc.upsert_external_campaign("t1", "google_ads", "acc", "camp-1", external_campaign_name="Camp A")))
         assert str(cid1) == str(cid2)
 
     def test_upsert_external_rename_retains_uuid(self):
         svc = _make_registry()
-        cid1 = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", "Old Name"))
-        cid2 = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", "New Name"))
+        cid1 = _cid(_run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", external_campaign_name="Old Name")))
+        cid2 = _cid(_run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "fb-100", external_campaign_name="New Name")))
         assert str(cid1) == str(cid2)
 
     def test_upsert_external_different_platforms_different_campaigns(self):
         svc = _make_registry()
-        cid_g = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "same-id", "Camp"))
-        cid_m = _run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "same-id", "Camp"))
+        cid_g = _cid(_run(svc.upsert_external_campaign("t1", "google_ads", "acc", "same-id", external_campaign_name="Camp")))
+        cid_m = _cid(_run(svc.upsert_external_campaign("t1", "meta_ads", "acc", "same-id", external_campaign_name="Camp")))
         assert str(cid_g) != str(cid_m)
 
     def test_create_custom_campaign(self):
         svc = _make_registry()
-        cid = _run(svc.create_custom_campaign("t1", name="Q4 Promo", channel="email"))
+        cid = _cid(_run(svc.create_custom_campaign("t1", name="Q4 Promo", channel="email")))
         uuid.UUID(str(cid))
 
     def test_add_alias_and_retrieve(self):
         svc = _make_registry()
-        cid = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g1", "Camp"))
-        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", value="summer-sale-2026"))
+        cid = _cid(_run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g1", external_campaign_name="Camp")))
+        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", alias_value="summer-sale-2026"))
         reviews = _run(svc.list_mapping_reviews("t1", status="open", limit=100))
         # Alias itself doesn't create a review; just verify no error
         assert isinstance(reviews, list)
@@ -187,7 +197,7 @@ class TestCampaignRegistryService:
 
     def test_resolve_review(self):
         svc = _make_registry()
-        cid = _run(svc.create_custom_campaign("t1", name="Target Camp"))
+        cid = _cid(_run(svc.create_custom_campaign("t1", name="Target Camp")))
         ev = {"platform": "unknown", "utm_campaign": "ambiguous"}
         review = _run(svc.get_or_create_review("t1", ev))
         _run(svc.resolve_review("t1", review["review_id"], cid, resolved_by="operator@acme.com"))
@@ -208,12 +218,12 @@ class TestCampaignRegistryService:
         assert "spend_mapping_rate" in quality
         assert "touchpoint_mapping_rate" in quality
         assert "open_reviews" in quality
-        assert "total_campaigns" in quality
+        assert "unresolved_reviews" in quality
 
     def test_tenant_isolation_campaigns(self):
         svc = _make_registry()
-        cid_a = _run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "g1", "Camp"))
-        cid_b = _run(svc.upsert_external_campaign("tenant_b", "google_ads", "acc", "g1", "Camp"))
+        cid_a = _cid(_run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "g1", external_campaign_name="Camp")))
+        cid_b = _cid(_run(svc.upsert_external_campaign("tenant_b", "google_ads", "acc", "g1", external_campaign_name="Camp")))
         assert str(cid_a) != str(cid_b)
 
 
@@ -223,7 +233,7 @@ class TestCampaignRegistryService:
 
 class TestCampaignResolver:
     def _seed_campaign(self, svc, tenant, platform, account, external_id, name="Camp"):
-        return _run(svc.upsert_external_campaign(tenant, platform, account, external_id, name))
+        return _cid(_run(svc.upsert_external_campaign(tenant, platform, account, external_id, external_campaign_name=name)))
 
     def test_resolve_by_exact_external_ref(self):
         svc = _make_registry()
@@ -238,23 +248,23 @@ class TestCampaignResolver:
         assert result.status == "resolved"
         assert str(result.campaign_id) == str(cid)
         assert result.confidence == Decimal("1.00")
-        assert result.method == "external_ref"
+        assert result.method == "exact_external_ref"
 
     def test_resolve_by_canonical_id(self):
         svc = _make_registry()
         resolver = _make_resolver()
-        cid = _run(svc.create_custom_campaign("t1", name="Direct Camp"))
+        cid = _cid(_run(svc.create_custom_campaign("t1", name="Direct Camp")))
         result = _run(resolver.resolve_one("t1", canonical_campaign_id=str(cid)))
         assert result.status == "resolved"
         assert str(result.campaign_id) == str(cid)
         assert result.confidence == Decimal("1.00")
-        assert result.method == "canonical_id"
+        assert result.method == "canonical_uuid"
 
     def test_resolve_by_utm_id_alias(self):
         svc = _make_registry()
         resolver = _make_resolver()
-        cid = _run(svc.create_custom_campaign("t1", name="UTM Camp"))
-        _run(svc.add_alias("t1", cid, alias_type="utm_id", value="utm-xyz-999"))
+        cid = _cid(_run(svc.create_custom_campaign("t1", name="UTM Camp")))
+        _run(svc.add_alias("t1", cid, alias_type="utm_id", alias_value="utm-xyz-999"))
         result = _run(resolver.resolve_one("t1", utm_id="utm-xyz-999"))
         assert result.status == "resolved"
         assert str(result.campaign_id) == str(cid)
@@ -264,8 +274,8 @@ class TestCampaignResolver:
     def test_resolve_by_utm_campaign_alias_unique(self):
         svc = _make_registry()
         resolver = _make_resolver()
-        cid = _run(svc.create_custom_campaign("t1", name="UTM Camp"))
-        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", value="summer-promo-2026"))
+        cid = _cid(_run(svc.create_custom_campaign("t1", name="UTM Camp")))
+        _run(svc.add_alias("t1", cid, alias_type="utm_campaign", alias_value="summer-promo-2026"))
         result = _run(resolver.resolve_one("t1", utm_campaign="summer-promo-2026"))
         assert result.status == "resolved"
         assert result.confidence == Decimal("0.85")
@@ -356,22 +366,22 @@ class TestAliasValidity:
         from datetime import datetime, timezone
         svc = _make_registry()
         resolver = _make_resolver()
-        cid = _run(svc.create_custom_campaign("t1", name="Expiring Camp"))
-        alias_id = _run(svc.add_alias("t1", cid, alias_type="utm_campaign", value="promo-q1"))
-        # Expire the alias
-        _run(svc.expire_alias("t1", alias_id))
+        cid = _cid(_run(svc.create_custom_campaign("t1", name="Expiring Camp")))
+        alias = _run(svc.add_alias("t1", cid, alias_type="utm_campaign", alias_value="promo-q1"))
+        # add_alias returns the alias record; expiry is keyed by its id.
+        _run(svc.expire_alias("t1", alias["alias_id"]))
         # Now resolution must not succeed via this alias
         result = _run(resolver.resolve_one("t1", utm_campaign="promo-q1"))
         assert result.status != "resolved"
 
     def test_conflicting_alias_same_type_same_value_raises_or_no_ops(self):
         svc = _make_registry()
-        cid_a = _run(svc.create_custom_campaign("t1", name="Camp A"))
-        cid_b = _run(svc.create_custom_campaign("t1", name="Camp B"))
-        _run(svc.add_alias("t1", cid_a, alias_type="utm_campaign", value="conflict-value"))
+        cid_a = _cid(_run(svc.create_custom_campaign("t1", name="Camp A")))
+        cid_b = _cid(_run(svc.create_custom_campaign("t1", name="Camp B")))
+        _run(svc.add_alias("t1", cid_a, alias_type="utm_campaign", alias_value="conflict-value"))
         # Second add for same value → should not silently overwrite; expect no crash
         try:
-            _run(svc.add_alias("t1", cid_b, alias_type="utm_campaign", value="conflict-value"))
+            _run(svc.add_alias("t1", cid_b, alias_type="utm_campaign", alias_value="conflict-value"))
         except Exception:
             pass  # Conflict error is acceptable
 
@@ -383,8 +393,48 @@ class TestAliasValidity:
 class TestArchive:
     def test_archive_preserves_campaign_record(self):
         svc = _make_registry()
-        cid = _run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g-arch", "Archived"))
+        cid = _cid(_run(svc.upsert_external_campaign("t1", "google_ads", "acc", "g-arch", external_campaign_name="Archived")))
         _run(svc.archive_external_campaign("t1", "google_ads", "acc", "g-arch"))
-        # Campaign UUID should still be accessible (history preserved)
-        quality = _run(svc.get_mapping_quality("t1"))
-        assert "total_campaigns" in quality
+        # The property under test is history preservation: archiving must not
+        # delete the canonical record. Probe the record directly rather than a
+        # quality-scorecard field that never asserted it.
+        from services.campaign.repository import CampaignRegistryRepository
+        record = _run(CampaignRegistryRepository().get_by_id("t1", cid))
+        assert record is not None
+        assert str(record["campaign_id"]) == str(cid)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Alias write failure
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestAliasWriteFailure:
+    """A failed alias write must raise — returning None makes a failed write
+    indistinguishable from the documented conflict no-op, so a broken store
+    would silently drop alias registrations and every later resolution of
+    that alias would miss."""
+
+    def test_create_reraises_non_conflict_write_failure(self):
+        from services.campaign.repository import AliasRepository
+
+        class _FailingPool:
+            async def fetchrow(self, *args, **kwargs):
+                raise RuntimeError("connection reset during INSERT")
+
+        repo = AliasRepository(_FailingPool())
+        with pytest.raises(RuntimeError, match="connection reset"):
+            _run(repo.create("t1", uuid.uuid4(), "utm_campaign", "promo", "promo"))
+
+    def test_create_returns_none_only_for_unique_conflict(self):
+        from services.campaign.repository import AliasRepository
+
+        class _ConflictPool:
+            async def fetchrow(self, *args, **kwargs):
+                raise RuntimeError(
+                    "duplicate key value violates unique constraint "
+                    '"campaign_aliases_active_uniq"'
+                )
+
+        repo = AliasRepository(_ConflictPool())
+        result = _run(repo.create("t1", uuid.uuid4(), "utm_campaign", "promo", "promo"))
+        assert result is None

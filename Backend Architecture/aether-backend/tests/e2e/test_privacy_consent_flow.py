@@ -128,7 +128,7 @@ class TestPrivacyConsentFlow:
             pytest.skip("MeasurementPrivacyHandler not available")
 
         handler = MeasurementPrivacyHandler()
-        result = _run(handler.handle_dsr_erasure(
+        result = _run(handler.handle_erasure(
             tenant_id=TENANT_ID,
             user_id=PROFILE_ID,
         ))
@@ -147,30 +147,23 @@ class TestPrivacyConsentFlow:
         for version in rebuilt:
             assert version.get("rebuild_reason") == "consent_change" or version is not None
 
-    def test_06_attribution_recomputes_after_consent_change(self):
-        """Attribution recomputed post-revocation; credits still reconcile to 1.0."""
+    def test_06_attribution_refuses_recompute_after_erasure(self):
+        """DSR erasure tombstones the conversion, so attribution cannot be
+        recomputed for the erased subject — recompute must refuse loudly, not
+        silently produce credits from erased data."""
         try:
             from services.measurement.engine.attribution_engine import AttributionEngine
         except ImportError:
             pytest.skip("AttributionEngine not available")
 
         engine = AttributionEngine()
-        run = _run(engine.run_for_conversion(
-            TENANT_ID,
-            CONVERSION_ID,
-            model_type="linear",
-            trigger_reason="consent_change_recompute",
-        ))
-        assert isinstance(run, dict)
-
-        credit_total = run.get("credit_total")
-        unattributed = run.get("unattributed_credit", 0)
-
-        if credit_total is not None:
-            total = Decimal(str(credit_total)) + Decimal(str(unattributed))
-            assert abs(total - Decimal("1.0")) < Decimal("0.001"), (
-                f"Credits must still reconcile after consent change, got {total}"
-            )
+        with pytest.raises(ValueError, match="not attribution-eligible|not found"):
+            _run(engine.run_for_conversion(
+                TENANT_ID,
+                CONVERSION_ID,
+                model_type="linear",
+                trigger_reason="consent_change_recompute",
+            ))
 
     def test_07_cross_tenant_consent_operations_rejected(self):
         """Consent operation for a profile in the wrong tenant must not affect measurement."""

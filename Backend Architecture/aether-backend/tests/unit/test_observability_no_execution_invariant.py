@@ -26,11 +26,15 @@ from fastapi.testclient import TestClient
 def _build_app():
     from fastapi import FastAPI
     app = FastAPI()
+    from services.agentic_observability.routes import mcp_router as agentic_mcp_router
     from services.agentic_observability.routes import router as agentic_obs_router
     from services.protocol_observability.routes import router as protocol_obs_router
     from services.agent_comm_observability.routes import router as comm_obs_router
     from services.external_account_observability.routes import router as ext_account_obs_router
     app.include_router(agentic_obs_router)
+    # The MCP observation endpoint lives on its own router (flag-gated in
+    # main.py); without it the MCP no-execution invariant is untested.
+    app.include_router(agentic_mcp_router)
     app.include_router(protocol_obs_router)
     app.include_router(comm_obs_router)
     app.include_router(ext_account_obs_router)

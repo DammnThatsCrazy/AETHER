@@ -49,7 +49,7 @@
       "deprecated_aliases": [],
       "governance": {
         "allowed_training_purposes": [
-          "behavioral_analytics",
+          "analytics",
           "personalization"
         ],
         "forbidden_feature_tags": [],
@@ -109,7 +109,6 @@
       "deprecated_aliases": [],
       "governance": {
         "allowed_training_purposes": [
-          "security_analytics",
           "fraud_prevention"
         ],
         "forbidden_feature_tags": [],
@@ -166,7 +165,7 @@
       "deprecated_aliases": [],
       "governance": {
         "allowed_training_purposes": [
-          "behavioral_analytics"
+          "analytics"
         ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": false,
@@ -228,7 +227,7 @@
       ],
       "governance": {
         "allowed_training_purposes": [
-          "identity_resolution",
+          "personalization",
           "fraud_prevention"
         ],
         "forbidden_feature_tags": [
@@ -291,7 +290,7 @@
       ],
       "governance": {
         "allowed_training_purposes": [
-          "behavioral_analytics"
+          "analytics"
         ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": true,
@@ -349,7 +348,7 @@
       "deprecated_aliases": [],
       "governance": {
         "allowed_training_purposes": [
-          "retention_analytics"
+          "analytics"
         ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": true,
@@ -407,7 +406,7 @@
       "deprecated_aliases": [],
       "governance": {
         "allowed_training_purposes": [
-          "revenue_analytics"
+          "commerce"
         ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": true,
@@ -464,8 +463,8 @@
       "deprecated_aliases": [],
       "governance": {
         "allowed_training_purposes": [
-          "infrastructure_analytics",
-          "security_analytics"
+          "analytics",
+          "fraud_prevention"
         ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": true,
@@ -521,7 +520,7 @@
       "deprecated_aliases": [],
       "governance": {
         "allowed_training_purposes": [
-          "marketing_analytics"
+          "marketing"
         ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": true,
@@ -569,7 +568,9 @@
       "docs_slug": "bytecode-risk",
       "deprecated_aliases": [],
       "governance": {
-        "allowed_training_purposes": [],
+        "allowed_training_purposes": [
+          "web3"
+        ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": false,
         "requires_bias_audit": false,
@@ -616,7 +617,10 @@
       "docs_slug": "trust-score",
       "deprecated_aliases": [],
       "governance": {
-        "allowed_training_purposes": [],
+        "allowed_training_purposes": [
+          "analytics",
+          "fraud_prevention"
+        ],
         "forbidden_feature_tags": [],
         "requires_privacy_review": false,
         "requires_bias_audit": false,

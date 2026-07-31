@@ -100,17 +100,21 @@ def test_d2_no_create_task_in_consumer():
 
 # ─── D3: delivery_router must not return credentials_ref as literal ──────────
 
-def test_d3_delivery_router_raises_without_providers_repo():
-    """D3: _resolve_credentials must raise RuntimeError when providers_repo is None."""
+@pytest.mark.asyncio
+async def test_d3_delivery_router_raises_without_providers_repo():
+    """D3: _resolve_credentials must raise RuntimeError when providers_repo is None.
+
+    Async like its siblings — get_event_loop() raised its own unrelated
+    RuntimeError once an earlier async suite had closed the loop, which
+    satisfied pytest.raises for the wrong reason or failed the match.
+    """
     from services.notification_intelligence.delivery_router import DeliveryRouter
 
     router = DeliveryRouter(channel_repo=None, providers_repo=None)
     channel = {"credentials_ref": "vault-key-abc"}
 
     with pytest.raises(RuntimeError, match="providers_repo"):
-        asyncio.get_event_loop().run_until_complete(
-            router._resolve_credentials(channel)
-        )
+        await router._resolve_credentials(channel)
 
 
 # ─── D4: BaseActionTarget.dispatch must raise NotImplementedError ─────────────

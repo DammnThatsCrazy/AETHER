@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Publish staged ML model artifacts to S3 and mark them as promoted.
 
-Scans the artifact directory for models with promotion_state='staged', uploads
-each artifact file to $ML_ARTIFACT_BUCKET via boto3, promotes it in the
-registry metadata, then runs a health-check against $ML_SERVING_URL/v1/health.
+Scans the artifact directory for models with promotion_state='staged'. For
+each staged artifact, the governance/promotion gate is validated FIRST
+(``common.artifact_registry.validate_promotion``) — only artifacts that pass
+are uploaded to $ML_ARTIFACT_BUCKET via boto3 and then promoted in the
+registry metadata. A health-check against $ML_SERVING_URL/v1/health runs last.
+
+Any gate failure, missing artifact file, or promotion failure is fatal:
+the script reports every failure and exits 1. Nothing is uploaded for an
+artifact that fails its gate.
 
 Exit 0 on success, 1 with error detail on failure.
 
@@ -67,7 +73,12 @@ def main() -> None:
     artifact_dir = Path(os.getenv("ML_ARTIFACT_DIR", str(ML_ROOT / "artifacts")))
 
     try:
-        from common.artifact_registry import list_artifacts, promote_artifact, ArtifactMetadata
+        from common.artifact_registry import (
+            ArtifactMetadata,
+            list_artifacts,
+            promote_artifact,
+            validate_promotion,
+        )
     except ImportError as exc:
         print(f"ERROR: cannot import artifact_registry — {exc}", file=sys.stderr)
         sys.exit(1)
@@ -93,7 +104,10 @@ def main() -> None:
         return
 
     print(f"Publishing {len(staged)} staged artifact(s) to s3://{bucket}")
+    failures: list[str] = []
     for model_id, artifact in staged:
+        ref = f"{model_id}@{artifact.artifact_version}"
+
         # artifact_path in metadata is the absolute path to the model file
         artifact_file = Path(artifact.artifact_path)
         if not artifact_file.exists():
@@ -101,19 +115,46 @@ def main() -> None:
             version_dir = artifact_dir / model_id / artifact.artifact_version
             artifact_file = version_dir / Path(artifact.artifact_path).name
         if not artifact_file.exists():
-            print(f"  WARN: artifact file not found for {model_id}@{artifact.artifact_version}, skipping")
+            print(f"  ERROR: artifact file not found for {ref}", file=sys.stderr)
+            failures.append(f"{ref}: artifact file not found")
+            continue
+
+        # The version directory holds metadata.json + governance artifacts.
+        version_dir = artifact_file.parent
+
+        # ── Governance gate FIRST — nothing is uploaded for an artifact that
+        # cannot legally be promoted (synthetic data, failed thresholds,
+        # missing governance artifacts, registry ban, etc.).
+        try:
+            validate_promotion(version_dir, "promoted")
+        except Exception as exc:
+            print(f"  ERROR: governance gate failed for {ref} — {exc}", file=sys.stderr)
+            failures.append(f"{ref}: governance gate failed — {exc}")
             continue
 
         s3_key = f"models/{model_id}/{artifact.artifact_version}/{artifact_file.name}"
-        _s3_upload(bucket, s3_key, artifact_file)
+        try:
+            _s3_upload(bucket, s3_key, artifact_file)
+        except Exception as exc:
+            print(f"  ERROR: upload failed for {ref} — {exc}", file=sys.stderr)
+            failures.append(f"{ref}: upload failed — {exc}")
+            continue
 
         # promote_artifact takes the version directory (where metadata.json lives)
-        version_dir = artifact_file.parent
         try:
             promote_artifact(version_dir, "promoted", promoted_by="publish_ml_artifacts")
-            print(f"  marked {model_id}@{artifact.artifact_version} as promoted")
+            print(f"  marked {ref} as promoted")
         except Exception as exc:
-            print(f"  WARN: failed to mark promoted — {exc}")
+            print(f"  ERROR: failed to mark {ref} promoted — {exc}", file=sys.stderr)
+            failures.append(f"{ref}: promotion failed — {exc}")
+
+    if failures:
+        print(
+            f"ERROR: {len(failures)} artifact(s) failed to publish:", file=sys.stderr
+        )
+        for failure in failures:
+            print(f"  - {failure}", file=sys.stderr)
+        sys.exit(1)
 
     print("Upload complete. Running serving health check...")
     _health_check(serving_url)

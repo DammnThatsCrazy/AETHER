@@ -24,6 +24,8 @@ Routes:
 
 from __future__ import annotations
 
+import logging
+
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -33,7 +35,7 @@ from pydantic import BaseModel, Field
 
 from services.profile.economic import AgentProfile360EconomicComposer
 from shared.common.common import APIResponse, NotFoundError
-from shared.logger.logger import get_logger, metrics
+from shared.logger.logger import get_logger, log_event, metrics
 from shared.observability import trace_request, emit_latency
 
 logger = get_logger("aether.service.economic")
@@ -159,7 +161,7 @@ async def get_entity_economic_breakdown(
     """Unified economic breakdown for any entity."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.breakdown", entity_id=entity_id, tenant_id=tenant_id, window=window)
+    log_event(logger, logging.INFO, "economic.breakdown", entity_id=entity_id, tenant_id=tenant_id, window=window)
 
     warnings = []
     warnings.append(EconomicWarningResponse(
@@ -192,7 +194,7 @@ async def get_entity_web2_economic(
     """Web2 economic metrics for an entity (GMV, TPV, revenue, subscriptions)."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.web2", entity_id=entity_id, tenant_id=tenant_id)
+    log_event(logger, logging.INFO, "economic.web2", entity_id=entity_id, tenant_id=tenant_id)
 
     response = Web2EconomicResponse()
     emit_latency("economic.web2", request)
@@ -210,7 +212,7 @@ async def get_entity_web3_economic(
     """Web3 economic metrics for an entity (TVL for protocols, protocol exposure for others)."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.web3", entity_id=entity_id, tenant_id=tenant_id)
+    log_event(logger, logging.INFO, "economic.web3", entity_id=entity_id, tenant_id=tenant_id)
 
     response = Web3EconomicResponse()
     emit_latency("economic.web3", request)
@@ -226,7 +228,7 @@ async def get_entity_agentic_economic(
     """Agentic / x402 economic metrics for an entity."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.agentic", entity_id=entity_id, tenant_id=tenant_id)
+    log_event(logger, logging.INFO, "economic.agentic", entity_id=entity_id, tenant_id=tenant_id)
 
     try:
         composer = AgentProfile360EconomicComposer()
@@ -251,7 +253,7 @@ async def get_entity_agentic_economic(
             settlement_success_rate=trust.get("settlement_reliability"),
         )
     except Exception as exc:
-        logger.warning("economic.agentic.composer_error", entity_id=entity_id, error=str(exc))
+        log_event(logger, logging.WARNING, "economic.agentic.composer_error", entity_id=entity_id, error=str(exc))
         response = AgenticEconomicResponse()
 
     emit_latency("economic.agentic", request)
@@ -268,7 +270,7 @@ async def get_entity_campaign_economic(
     """Campaign economics for an entity — ROAS from actual spend and attributed revenue."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.campaigns", entity_id=entity_id, tenant_id=tenant_id)
+    log_event(logger, logging.INFO, "economic.campaigns", entity_id=entity_id, tenant_id=tenant_id)
 
     from datetime import timedelta
     from decimal import Decimal
@@ -369,7 +371,7 @@ async def get_entity_economic_warnings(
     """Economic warnings for an entity (mixed currency, stale prices, double-counting)."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.warnings", entity_id=entity_id, tenant_id=tenant_id)
+    log_event(logger, logging.INFO, "economic.warnings", entity_id=entity_id, tenant_id=tenant_id)
 
     warnings: list[dict[str, Any]] = []
     emit_latency("economic.warnings", request)
@@ -386,7 +388,7 @@ async def get_tenant_economic_overview(
     """Tenant-level economic overview — Total Value Observed with domain breakdown."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.overview", tenant_id=tenant_id, window=window)
+    log_event(logger, logging.INFO, "economic.overview", tenant_id=tenant_id, window=window)
 
     from datetime import timedelta
     from decimal import Decimal
@@ -481,7 +483,7 @@ async def get_tenant_economic_warnings(
     """Tenant-wide economic warnings — mixed currencies, stale prices, double-counting risks."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
-    logger.info("economic.tenant_warnings", tenant_id=tenant_id)
+    log_event(logger, logging.INFO, "economic.tenant_warnings", tenant_id=tenant_id)
 
     emit_latency("economic.tenant_warnings", request)
     return APIResponse(data={"tenant_id": tenant_id, "warnings": []}).to_dict()

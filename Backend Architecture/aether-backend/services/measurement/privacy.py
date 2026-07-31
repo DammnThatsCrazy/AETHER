@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from shared.logger.logger import get_logger
@@ -18,8 +17,9 @@ _conversion_repo = ConversionRepository()
 class MeasurementPrivacyHandler:
     """Propagates consent erasure into the measurement data pipeline.
 
-    Called fire-and-forget from the DSR route when request_type == 'erasure'.
-    Steps:
+    Executed by the durable ``consent.erasure`` job handler
+    (services/consent/erasure_jobs.py) when a DSR with request_type ==
+    'erasure' is submitted. Steps:
       1. Tombstone touchpoints (sets privacy_class='deleted', nulls identity fields)
       2. Mark conversions attribution-ineligible (nulls identity fields)
       3. Triggers journey rebuild for the profile (which will auto-recompute attribution)
@@ -76,10 +76,15 @@ class MeasurementPrivacyHandler:
 _handler = MeasurementPrivacyHandler()
 
 
-async def handle_erasure_background(tenant_id: str, user_id: str) -> None:
-    """Fire-and-forget wrapper — swallows exceptions after logging."""
-    try:
-        result = await _handler.handle_erasure(tenant_id, user_id)
-        logger.info("DSR erasure complete: %s", result, extra={"tenant_id": tenant_id})
-    except Exception as exc:
-        logger.error("DSR erasure handler fatal: %s", exc, extra={"tenant_id": tenant_id})
+async def handle_erasure_background(tenant_id: str, user_id: str) -> dict[str, Any]:
+    """Durable-job entry point for measurement erasure.
+
+    Returns the per-store evidence dict (tombstone counts, journey-rebuild
+    flag, per-store errors). Per-store failures are captured in
+    ``result["errors"]``; a fatal error outside the per-store try blocks
+    propagates so the jobs worker can retry/dead-letter the job instead of
+    silently losing the erasure (the old fire-and-forget path swallowed it).
+    """
+    result = await _handler.handle_erasure(tenant_id, user_id)
+    logger.info("DSR erasure complete: %s", result, extra={"tenant_id": tenant_id})
+    return result

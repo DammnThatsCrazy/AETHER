@@ -90,9 +90,9 @@ def test_ci_check_routes_through_repo_doctor() -> None:
 
 def test_repo_doctor_enforces_frontend_data_truth_source_and_bundles() -> None:
     doctor = _read("scripts/repo_doctor.py")
-    assert '["python", "scripts/validate_frontend_data_truth.py"]' in doctor
+    assert '[sys.executable, "scripts/validate_frontend_data_truth.py"]' in doctor
     assert (
-        '["python", "scripts/validate_frontend_data_truth.py", "--build-bundles"]'
+        '[sys.executable, "scripts/validate_frontend_data_truth.py", "--build-bundles"]'
         in doctor
     )
 

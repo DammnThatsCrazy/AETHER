@@ -17,7 +17,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "6cb5d4da"
+last_synced_commit: "297c204"
 ---
 
 # Profile 360 Aggregation Layer
@@ -326,6 +326,11 @@ returns an empty list with the matching summary set to zero — the rest
 of the response still succeeds. This keeps Profile 360 surfaces useful
 during partial outages rather than 500-ing whole pages.
 
+Degradation is reported, not hidden: the unified-journey envelope carries
+`degraded_dimensions` (e.g. `attribution_credits` when the revenue join
+failed), so zeroed attribution revenue reads as "unknown", never as a
+verified zero.
+
 The composer (`get_full_profile`) applies the same principle across its
 dimensions: each is assembled under `asyncio.gather(return_exceptions=True)`,
 so a single subsystem raising degrades only its own dimension to a typed
@@ -479,8 +484,13 @@ repository change unless the underlying read pattern is new.
 ### Silver-backed sub-resource endpoints (v8.10.0+)
 
 These endpoints read directly from Silver fact tables populated by the Silver projector layer.
-They return `{entity_id, items, count, source, source_status}` and degrade gracefully to an empty
-list when Silver data is unavailable.  All require the `read` permission on the active tenant.
+They return `{entity_id, items, count, source, source_status}`. `source_status`
+distinguishes three states honestly: `available` (rows returned), `empty`
+(Silver consulted, no rows for this entity), and `missing` (the Silver read
+failed — the empty list is *not* a confirmed absence). A store outage
+degrades to an empty list with `source_status: "missing"` rather than
+masquerading as confirmed-empty. All require the `read` permission on the
+active tenant.
 
 | Method | Path                              | Silver table                    | Returns                                    |
 |--------|-----------------------------------|---------------------------------|--------------------------------------------|
@@ -512,7 +522,9 @@ Silver fact tables are populated asynchronously by the `SilverDispatcher` projec
 `silver_fact_projector` ingestion worker. One event may fan out to several projectors
 (communications lifecycle first — ADR-C3); rows are persisted by
 `services/silver/writer.py`. Until a projector has written records for a given entity the
-endpoint returns `source_status: "empty"` — this is correct behavior, not an error.
+endpoint returns `source_status: "empty"` — this is correct behavior, not an
+error. A failed Silver read is reported as `source_status: "missing"` instead,
+so consumers can tell "no data yet" from "could not check".
 
 Communication items never contain raw addresses (tenant-scoped alias hashes with
 redacted displays only) and carry machine-activity classification so reported

@@ -1356,27 +1356,8 @@ export interface BitcoinTransactionOptions extends TransactionOptions {
     feeRate?: number;
     isInscription?: boolean;
 }
-export interface ConsentState {
-    analytics: boolean;
-    marketing: boolean;
-    personalization: boolean;
-    web3: boolean;
-    agent: boolean;
-    commerce: boolean;
-    /** Always requires explicit opt-in — never granted by accept-all. */
-    financial_activity: boolean;
-    /** Always requires explicit opt-in — never granted by accept-all. */
-    credit: boolean;
-    /** Always requires explicit opt-in — never granted by accept-all. */
-    location: boolean;
-    /** Always requires explicit opt-in — never granted by accept-all. */
-    economic_observability: boolean;
-    /** Always requires explicit opt-in — never granted by accept-all. */
-    cross_chain_observability: boolean;
-    updatedAt: string;
-    policyVersion: string;
-}
-export type ConsentPurpose = 'analytics' | 'marketing' | 'personalization' | 'web3' | 'agent' | 'commerce' | 'financial_activity' | 'credit' | 'location' | 'economic_observability' | 'cross_chain_observability';
+import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
+export type { ConsentState, ConsentPurpose };
 export interface ConsentConfig {
     purposes: ConsentPurpose[];
     policyUrl: string;
@@ -1561,4 +1542,3 @@ export interface ConsentInterface {
      */
     recordReceipt(input: CanonicalConsentReceiptInput): Promise<CanonicalConsentReceipt>;
 }
-export {};

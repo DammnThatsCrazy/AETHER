@@ -40,11 +40,19 @@ class TestPredictionEndpoints:
             "session_id": "test-session-123",
             "features": {
                 "mouse_velocity_mean": 2.5,
+                "mouse_velocity_std": 0.8,
                 "scroll_depth_max": 0.6,
+                "scroll_velocity_mean": 1.2,
+                "hover_duration_mean": 0.9,
+                "time_between_actions_mean": 1.5,
+                "time_between_actions_std": 0.5,
+                "click_to_scroll_ratio": 0.7,
                 "active_ratio": 0.8,
+                "page_depth": 3,
                 "session_duration_s": 120.0,
                 "click_count": 5,
-                "page_depth": 3,
+                "scroll_count": 12,
+                "keypress_count": 4,
             }
         }
         response = client.post("/v1/predict/intent", json=payload)
@@ -57,8 +65,18 @@ class TestPredictionEndpoints:
             "features": {
                 "avg_time_between_actions": 1500.0,
                 "time_variance": 800.0,
+                "click_to_scroll_ratio": 0.7,
+                "mouse_velocity_mean": 2.5,
+                "mouse_velocity_std": 0.8,
                 "mouse_entropy": 3.2,
-                "has_perfect_timing": 0,
+                "navigation_entropy": 2.1,
+                "interaction_diversity": 0.6,
+                "has_natural_pauses": 1.0,
+                "has_erratic_movement": 0.0,
+                "has_perfect_timing": 0.0,
+                "keypress_count": 8,
+                "unique_action_types": 4,
+                "action_rate": 0.5,
             }
         }
         response = client.post("/v1/predict/bot", json=payload)
@@ -69,8 +87,16 @@ class TestPredictionEndpoints:
             "identity_id": "user-789",
             "features": {
                 "days_since_last_visit": 15.0,
+                "visit_frequency_trend": -0.1,
+                "feature_usage_breadth": 0.4,
+                "session_duration_trend": 0.05,
+                "support_ticket_count": 0,
+                "billing_status": 1.0,
+                "engagement_percentile": 0.6,
                 "total_sessions": 25,
+                "avg_session_duration": 120.0,
                 "conversion_rate": 0.05,
+                "days_since_first_visit": 90.0,
             }
         }
         response = client.post("/v1/predict/churn", json=payload)

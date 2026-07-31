@@ -209,7 +209,9 @@ class WalletAgeSignal(FraudSignal):
         self.known_mixers: set[str] = known_mixers or set()
 
     async def evaluate(self, event: dict, context: dict) -> SignalResult:
-        wallet = context.get("wallet_address", "").lower()
+        # The reward policy engine passes identity.wallet_address verbatim,
+        # which is None for user-only identities.
+        wallet = (context.get("wallet_address") or "").lower()
         wallet_age_hours = context.get("wallet_age_hours")
         interacted_with: list[str] = context.get("interacted_addresses", [])
 

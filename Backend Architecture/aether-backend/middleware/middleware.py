@@ -166,8 +166,17 @@ def _legacy_defense_available() -> bool:
 
 
 def _extraction_defense_required() -> bool:
-    """True when a protected ML route must fail closed if no defense is available."""
-    return settings.extraction_defense.require_defense
+    """True when a protected ML route must fail closed if no defense is available.
+
+    Reads the settings singleton through the module attribute at call time
+    rather than the import-time binding: several test suites reload
+    config.settings, which replaces the singleton, and a resolver holding the
+    stale object would answer from configuration nothing else can see. In a
+    process that never reloads (production) the two are identical.
+    """
+    import config.settings as _config_settings
+
+    return _config_settings.settings.extraction_defense.require_defense
 
 
 def resolve_extraction_defense_mode() -> str:

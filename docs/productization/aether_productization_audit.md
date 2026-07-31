@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "9fde074"
+last_synced_commit: "00fdcbc"
 ---
 
 # AETHER Productization Audit
@@ -214,6 +214,10 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 
 **Overall: ~3.77/5 — pre-production** (canonical live figure from
 `make production-status`; this table is a dated excerpt of the full scorecard).
+A W3C trace-context seam (correlation-id + traceparent propagation across the
+jobs platform, no-op unless `AETHER_OTEL_ENABLED`) landed with a matching
+declared pre-production blocker: no OpenTelemetry SDK/exporter is integrated,
+and the seam is explicitly not claimed as observability coverage.
 The 2026-07-23 pass added **semantic intelligence at 2/5 (partial/pilot)** —
 a real fail-closed pipeline with reliability/SLO/alerting surfaces registered,
 held at 2 because no production model provider, staging durable-store run, or

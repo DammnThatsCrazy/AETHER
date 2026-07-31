@@ -36,10 +36,11 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install Python dependencies
-        run: |
-          pip install uv
-          uv pip install --system -e ".[dev,security,backend,agent,ml]"
+      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
+        run: make bootstrap
+
+      - name: Add project virtualenv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
@@ -65,6 +66,16 @@ jobs:
       - name: Run repo consistency checks
         run: make ci-check
 
+      - name: Record repo-consistency evidence
+        run: |
+          mkdir -p release-evidence
+          printf '{"sha":"%s","job":"repo-consistency"}\n' "$GITHUB_SHA" > release-evidence/repo-consistency.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repo-consistency-evidence
+          path: release-evidence/repo-consistency.json
+
   # Full release gate (ci-check + strict production status + ops readiness +
   # staging preflight self-test). Manual dispatch only — this is the
   # pre-release ratchet, not a per-PR gate.
@@ -88,10 +99,11 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install Python dependencies
-        run: |
-          pip install uv
-          uv pip install --system -e ".[dev,security,backend,agent,ml]" alembic
+      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
+        run: make bootstrap
+
+      - name: Add project virtualenv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts

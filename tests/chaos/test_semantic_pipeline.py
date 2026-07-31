@@ -87,7 +87,9 @@ async def test_model_unavailable_classify_abstains_never_fabricates(tenant, mode
         _feedback(tenant), tenant, eligibility=Eligibility.TEXT
     )
     assert obs.status == ObservationStatus.ABSTAINED
-    assert obs.abstention_reason == "provider_disabled_missing_credentials"
+    # Renamed to the canonical readiness token: a provider that lacks
+    # credentials is credential_waiting, matching the platform vocabulary.
+    assert obs.abstention_reason == "credential_waiting"
     assert sentiments == []
     # Content-free abstention: zero inferred semantics, zero confidence.
     assert obs.classification_confidence == 0.0

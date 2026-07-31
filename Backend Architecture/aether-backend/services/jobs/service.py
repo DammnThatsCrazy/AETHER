@@ -16,6 +16,7 @@ from shared.logger.logger import get_logger, metrics
 
 from repositories.jobs_repo import JobsRepository, get_jobs_repository
 from services.jobs.models import JobStatus, TERMINAL_STATUSES
+from shared.observability import new_traceparent
 
 logger = get_logger("aether.service.jobs")
 
@@ -119,10 +120,18 @@ class JobsService:
         if max_attempts < 1:
             raise BadRequestError("max_attempts must be >= 1")
 
+        payload = dict(payload or {})
+        # Trace-context seam: stamp the enqueue hop so the worker's execution
+        # can continue the same trace. No-op unless AETHER_OTEL_ENABLED.
+        if "_traceparent" not in payload:
+            traceparent = new_traceparent()
+            if traceparent is not None:
+                payload["_traceparent"] = traceparent
+
         job = await self._repo.enqueue(
             tenant_id,
             job_type,
-            payload or {},
+            payload,
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
             requested_by=requested_by,

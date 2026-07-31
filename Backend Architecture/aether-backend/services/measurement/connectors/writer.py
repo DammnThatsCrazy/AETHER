@@ -12,13 +12,15 @@ Every connector converts its API response to this format before calling write_me
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from shared.logger.logger import get_logger, metrics
+from shared.logger.logger import get_logger, log_event, metrics
 
 from services.campaign.registry import CampaignRegistryService
 from services.measurement.repositories.spend_repo import SpendRepository
@@ -133,7 +135,7 @@ class CampaignMeasurementWriter:
                 result.campaigns_registered += 1
             except Exception as exc:
                 error_msg = f"Failed to register campaign {campaign_id_str} on {platform}: {exc}"
-                logger.error("campaign_registration_failed", error=error_msg, tenant_id=tenant_id)
+                log_event(logger, logging.ERROR, "campaign_registration_failed", error=error_msg, tenant_id=tenant_id)
                 result.errors.append(error_msg)
 
         # Step 2: Write spend records with canonical campaign_id + external fields
@@ -181,7 +183,7 @@ class CampaignMeasurementWriter:
                 result.spend_records_written += 1
             except Exception as exc:
                 error_msg = f"Failed to write spend for campaign {m.external_campaign_id}: {exc}"
-                logger.error("spend_write_failed", error=error_msg, tenant_id=tenant_id)
+                log_event(logger, logging.ERROR, "spend_write_failed", error=error_msg, tenant_id=tenant_id)
                 result.errors.append(error_msg)
 
         metrics.increment(
@@ -189,7 +191,7 @@ class CampaignMeasurementWriter:
             tags={"platform": metrics_list[0].platform if metrics_list else "unknown",
                   "status": "success" if result.success else "partial_failure"},
         )
-        logger.info(
+        log_event(logger, logging.INFO,
             "campaign_metrics_written",
             tenant_id=tenant_id,
             connector_id=connector_id,

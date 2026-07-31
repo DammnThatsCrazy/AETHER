@@ -11,7 +11,7 @@ source_files:
   - Smart Contracts/audit/DEPLOYMENT.md
   - Smart Contracts/audit/KNOWN_LIMITATIONS.md
 canonical_owner: platform@aether
-last_synced_commit: "ac900d5"
+last_synced_commit: "365c036"
 ---
 
 # EVM Deploy & Emergency Runbook

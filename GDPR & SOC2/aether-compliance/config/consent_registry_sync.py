@@ -3,7 +3,7 @@ Aether Compliance — Consent Registry Reconciliation.
 
 Verifies that the compliance ``ConsentPurpose`` enum (and its opt-in flags) stay
 in sync with the canonical platform consent registry at
-``packages/shared/contracts/consent-registry.json`` (11 purposes). The registry
+``packages/shared/contracts/consent-registry.json``. The registry
 is the single source of truth; this module never mutates it.
 
 The registry is path-resolved relative to the repo root by walking up parent

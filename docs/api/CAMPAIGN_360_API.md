@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
-last_synced_commit: "4a16247"
+last_synced_commit: "9682617"
 ---
 
 # Campaign 360 API Reference
@@ -512,6 +512,6 @@ All errors use this envelope:
 
 ## Campaign Registry API (v8.11.0+)
 
-The Campaign Registry API is a separate API surface introduced in v8.11.0 for managing canonical campaign identities, external references, aliases, campaign sources, and mapping review. It lives at `/v1/campaigns` (list/create), `/v1/campaign-sources`, `/v1/mapping-review`, and `/v1/campaign-quality`. These endpoints use the same permission model (`campaign:read` / `campaign:write`) and error envelope as the Campaign 360 API above.
+The Campaign Registry API is a separate API surface introduced in v8.11.0 for managing canonical campaign identities, external references, aliases, campaign sources, and mapping review. It lives at `/v1/campaigns` (list/create), `/v1/campaign-sources`, `/v1/mapping-review`, and `/v1/campaign-quality`. These endpoints use the same permission model (`campaign:read` for queries, `campaign:manage` for mutations) and error envelope as the Campaign 360 API above.
 
 See `docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md` and `docs/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md` for the full contract.

@@ -62,9 +62,14 @@ subject is missing a required purpose, the route returns `403` and increments
 prediction response for traceability.
 
 Required serving purposes are resolved from the ML registry governance metadata
-(`ModelEntry.allowed_training_purposes` / category mapping) via
-`services/model_governance/policy.py`, with a conservative static fallback when
-the ML package is not importable in-process.
+(`ModelEntry.required_inference_purposes` — the serving scope, distinct from the
+training scope `ModelEntry.allowed_training_purposes`) via
+`services/model_governance/policy.py`. There is no static fallback: a model that
+is unknown to the registry, or that declares no inference purposes, is denied
+serving outright (`inference_denied:no_declared_inference_purposes`), with a
+single auditable evidence decision recorded. Purpose declarations are validated
+against the canonical consent registry by
+`scripts/validate_model_consent_purposes.py`.
 
 ## Gates
 

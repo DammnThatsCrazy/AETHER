@@ -5,7 +5,12 @@ in CacheClient (Redis in production, in-memory in dev).
 
 - Turns are append-only; only the last _MAX_TURNS_STORED are retained.
 - Conversations expire after _CONVERSATION_TTL seconds of inactivity.
-- Any cache failure silently degrades (turns are not stored/retrieved).
+- Writes (append/register) silently degrade — losing a turn must never fail
+  the query that produced it.
+- Reads (get_recent/list_for_tenant) raise :class:`ConversationStoreUnavailable`
+  on store failure instead of returning ``[]``. An unreachable store and a
+  conversation with no turns are different claims; collapsing them made a
+  Redis outage read as "no conversations exist".
 """
 
 from __future__ import annotations
@@ -21,6 +26,14 @@ logger = get_logger("aether.service.noesis.conversation")
 _CONVERSATION_TTL = 3600   # 1 hour inactivity expiry
 _MAX_TURNS_STORED = 20     # hard cap on stored turns per conversation
 _MAX_TURNS_RETURNED = 5    # default context window returned to callers
+
+
+class ConversationStoreUnavailable(Exception):
+    """The conversation store could not be consulted.
+
+    Raised by read paths so callers can report a degraded source
+    (``source_status: missing``) instead of presenting a store failure as a
+    genuinely empty result."""
 
 
 class NoesisConversationStore:
@@ -67,7 +80,11 @@ class NoesisConversationStore:
         n: int = _MAX_TURNS_RETURNED,
         limit: int | None = None,
     ) -> list[dict]:
-        """Return up to n recent turns. Returns [] on any failure."""
+        """Return up to n recent turns; [] means the conversation has none.
+
+        Raises :class:`ConversationStoreUnavailable` when the store cannot be
+        consulted, so a cache outage is not reported as an empty conversation.
+        """
         n = limit if limit is not None else n
         try:
             key = self._key(conversation_id, tenant_id)
@@ -78,7 +95,9 @@ class NoesisConversationStore:
             return turns[-n:]
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"Noesis conversation get failed: {exc}")
-            return []
+            raise ConversationStoreUnavailable(
+                f"conversation turns unavailable for {conversation_id}: {exc}"
+            ) from exc
 
     def _index_key(self, tenant_id: str) -> str:
         return CacheKey.custom(f"noesis:conv:index:{tenant_id}")
@@ -97,7 +116,12 @@ class NoesisConversationStore:
             logger.warning(f"Noesis conversation register failed: {exc}")
 
     async def list_for_tenant(self, tenant_id: str, limit: int = 20) -> list[dict]:
-        """List recent conversation summaries for a tenant."""
+        """List recent conversation summaries; [] means the tenant has none.
+
+        Raises :class:`ConversationStoreUnavailable` when the store cannot be
+        consulted, so a cache outage is not reported as a tenant with no
+        conversations.
+        """
         try:
             key = self._index_key(tenant_id)
             raw = await self._cache.get(key)
@@ -115,6 +139,10 @@ class NoesisConversationStore:
                     "last_ts": last.get("ts", ""),
                 })
             return results
+        except ConversationStoreUnavailable:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"Noesis conversation list failed: {exc}")
-            return []
+            raise ConversationStoreUnavailable(
+                f"conversation index unavailable for tenant {tenant_id}: {exc}"
+            ) from exc

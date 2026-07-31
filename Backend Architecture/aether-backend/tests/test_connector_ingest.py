@@ -93,7 +93,10 @@ async def test_sync_live_path_mocked():
 @pytest.mark.asyncio
 async def test_sync_sets_healthy_status():
     svc = ConnectorService()
-    await svc.configure("t3", "stripe", enabled=True, secret_configured=True)
+    await svc.configure(
+        "t3", "stripe", enabled=True, secret_configured=True,
+        credential="sk_test_connector_ingest",
+    )
 
     with patch(
         "services.integrations.connectors.adapters.StripeConnector.pull",
@@ -113,16 +116,21 @@ async def test_sync_sets_healthy_status():
 @pytest.mark.asyncio
 async def test_sync_sets_failed_status_on_pull_error():
     svc = ConnectorService()
-    await svc.configure("t4", "hubspot", enabled=True, secret_configured=True)
+    await svc.configure(
+        "t4", "hubspot", enabled=True, secret_configured=True,
+        credential="pat-test-connector-ingest",
+    )
+
+    from services.delivery.adapters.base import ConnectorSyncError
 
     with patch(
         "services.integrations.connectors.adapters.HubSpotConnector.pull",
         new=AsyncMock(side_effect=RuntimeError("API timeout")),
     ):
-        result = await svc.sync("t4", "hubspot")
-
-    assert result.status == "failed"
-    assert result.events_ingested == 0
+        # A failed pull persists the failed status, then raises so callers
+        # cannot mistake a broken sync for an empty one.
+        with pytest.raises(ConnectorSyncError):
+            await svc.sync("t4", "hubspot")
     cfg = await svc.get("t4", "hubspot")
     assert cfg is not None
     assert cfg["sync_status"] == "failed"

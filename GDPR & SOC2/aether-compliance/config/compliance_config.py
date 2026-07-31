@@ -138,7 +138,7 @@ DATA_PROTECTION_CONTROLS = [
 class ConsentPurpose(str, Enum):
     """Granular consent purposes.
 
-    The canonical set is the 11-purpose consent registry at
+    The canonical set is the consent registry at
     ``packages/shared/contracts/consent-registry.json`` (the single source of
     truth). Every member's value MUST equal a canonical registry ``key``; drift
     is caught by ``config.consent_registry_sync.assert_consent_registry_in_sync``.
@@ -164,6 +164,7 @@ class ConsentPurpose(str, Enum):
     LOCATION = "location"                              # precise / coarse location
     ECONOMIC_OBSERVABILITY = "economic_observability"  # stablecoin economic intelligence
     CROSS_CHAIN_OBSERVABILITY = "cross_chain_observability"  # interop / cross-network
+    FRAUD_PREVENTION = "fraud_prevention"              # bot / fraud / abuse detection
 
     @property
     def requires_explicit_opt_in(self) -> bool:
@@ -190,6 +191,7 @@ EXPLICIT_OPT_IN_PURPOSES: frozenset = frozenset({
     ConsentPurpose.LOCATION,
     ConsentPurpose.ECONOMIC_OBSERVABILITY,
     ConsentPurpose.CROSS_CHAIN_OBSERVABILITY,
+    ConsentPurpose.FRAUD_PREVENTION,
 })
 
 # Legacy → canonical purpose aliases for back-compat. Maps a historical purpose

@@ -28,6 +28,58 @@ _GOLD_MODE = "gold"
 _SILVER_MODE = "silver"
 
 
+def _reducer_version_of(data: dict[str, Any]) -> Optional[str]:
+    """Reducer version lives at data top level or under semantic_delta."""
+    value = data.get("reducer_version")
+    if value is None:
+        delta = data.get("semantic_delta")
+        if isinstance(delta, dict):
+            value = delta.get("reducer_version")
+    return str(value) if value is not None else None
+
+
+def _reducer_suffix(version: str) -> Optional[tuple[str, int]]:
+    """Split 'weighted-reducer.v3' -> ('weighted-reducer', 3); None if unparseable."""
+    prefix, sep, tail = version.rpartition(".v")
+    if not sep or not tail.isdigit():
+        return None
+    return prefix, int(tail)
+
+
+def incoming_supersedes(existing: dict[str, Any], incoming: dict[str, Any]) -> bool:
+    """Whether an incoming gold payload may overwrite the persisted one.
+
+    Version-checked upsert: a stale writer (old replay, outdated reducer) must
+    not clobber newer state. Rules, checked in order:
+
+    - ``version`` (schema version, int): incoming < existing → refuse.
+    - Same/absent ``version``: reducer versions with a shared prefix and a
+      numeric ``.vN`` suffix are ordered by suffix; incoming < existing → refuse.
+    - Anything not comparable (missing fields, different reducer families,
+      unparseable values — i.e. legacy rows) keeps last-write-wins.
+    """
+    try:
+        ev, iv = existing.get("version"), incoming.get("version")
+        if isinstance(ev, int) and isinstance(iv, int):
+            if iv < ev:
+                return False
+            if iv > ev:
+                return True
+        er, ir = _reducer_version_of(existing), _reducer_version_of(incoming)
+        if er is not None and ir is not None and er != ir:
+            eparsed, iparsed = _reducer_suffix(er), _reducer_suffix(ir)
+            if (
+                eparsed is not None
+                and iparsed is not None
+                and eparsed[0] == iparsed[0]
+                and iparsed[1] < eparsed[1]
+            ):
+                return False
+    except Exception:  # pragma: no cover — malformed payloads keep LWW
+        return True
+    return True
+
+
 class SemanticFactRepository:
     """Idempotent durable storage for one semantic fact table.
 
@@ -59,6 +111,13 @@ class SemanticFactRepository:
             existing_id = self._find_by_idem(tenant_id, idem)
             if existing_id is not None:
                 if self.mode == _GOLD_MODE:
+                    existing_data = (self._store[existing_id] or {}).get("data") or {}
+                    if not incoming_supersedes(existing_data, data):
+                        logger.debug(
+                            "semantic_gold_upsert_skipped_stale",
+                            extra={"table": self.table_name, "id": existing_id},
+                        )
+                        return self._store[existing_id]
                     self._store[existing_id] = {**fact}
                     return self._store[existing_id]
                 return self._store[existing_id]
@@ -99,13 +158,38 @@ class SemanticFactRepository:
             f"{conflict}"
         )
         async with pool.acquire() as conn:
-            await conn.execute(sql, *params)
-            row = await conn.fetchrow(
-                f"SELECT data FROM {self.table_name} "
-                "WHERE tenant_id = $1 AND data->>'idempotency_key' = $2",
-                tenant_id,
-                idem,
-            )
+            async with conn.transaction():
+                if self.mode == _GOLD_MODE and idem is not None:
+                    # Version-checked upsert: lock the row and refuse a stale
+                    # overwrite before the ON CONFLICT DO UPDATE can clobber it.
+                    # First-insert races fall through to the upsert, which is
+                    # idempotent on idempotency_key.
+                    existing = await conn.fetchrow(
+                        f"SELECT data FROM {self.table_name} "
+                        "WHERE tenant_id = $1 AND data->>'idempotency_key' = $2 "
+                        "FOR UPDATE",
+                        tenant_id,
+                        idem,
+                    )
+                    if existing is not None and not incoming_supersedes(
+                        json.loads(existing["data"]), data
+                    ):
+                        logger.debug(
+                            "semantic_gold_upsert_skipped_stale",
+                            extra={"table": self.table_name, "tenant_id": tenant_id},
+                        )
+                        return {
+                            "id": record_id,
+                            "tenant_id": tenant_id,
+                            "data": json.loads(existing["data"]),
+                        }
+                await conn.execute(sql, *params)
+                row = await conn.fetchrow(
+                    f"SELECT data FROM {self.table_name} "
+                    "WHERE tenant_id = $1 AND data->>'idempotency_key' = $2",
+                    tenant_id,
+                    idem,
+                )
         if row is not None:
             return {"id": record_id, "tenant_id": tenant_id, "data": json.loads(row["data"])}
         return fact

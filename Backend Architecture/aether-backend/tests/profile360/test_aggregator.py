@@ -847,3 +847,77 @@ def test_aggregator_degrades_on_repo_failure_without_raising():
     out = _run(agg.wallets("user-1", "t-a"))
     assert out["items"] == []
     assert out["pagination"]["count"] == 0
+
+
+# ── Unified journey: attribution-credit degradation ──────────────────
+
+
+_JOURNEY = {
+    "journey_id": "j-1",
+    "journey_version_id": "jv-1",
+    "compiler_version": "2.0",
+    "journey_state": "converted",
+    "step_count": 1,
+    "conversion_ids": ["conv-1"],
+    "started_at": "2026-06-01T00:00:00Z",
+    "ended_at": "2026-06-02T00:00:00Z",
+}
+
+_STEP = {
+    "step_id": "s-1",
+    "step_position": 1,
+    "activity_family": "campaign",
+    "activity_type": "email_click",
+    "evidence_summary": {"touchpoint_id": "tp-1"},
+    "occurred_at": "2026-06-01T00:00:00Z",
+}
+
+
+def _unified_journey_with_credits(credits_effect):
+    """Run unified_journey with mocked journey/step/credit repositories."""
+    from unittest.mock import AsyncMock, patch
+
+    agg = _make_aggregator()
+    with patch("services.measurement.repositories.journey_repo.JourneyRepository") as MockJourney, \
+         patch("services.measurement.repositories.journey_step_repo.JourneyStepRepository") as MockSteps, \
+         patch("services.measurement.repositories.attribution_run_repo.AttributionRunRepository") as MockAttr:
+        MockJourney.return_value.find_current_for_profile = AsyncMock(
+            return_value=[dict(_JOURNEY)]
+        )
+        MockSteps.return_value.list_by_version = AsyncMock(return_value=[dict(_STEP)])
+        if isinstance(credits_effect, Exception):
+            MockAttr.return_value.list_active_credits_for_conversions = AsyncMock(
+                side_effect=credits_effect
+            )
+        else:
+            MockAttr.return_value.list_active_credits_for_conversions = AsyncMock(
+                return_value=credits_effect
+            )
+        return _run(agg.unified_journey("user-1", "t-a"))
+
+
+def test_unified_journey_credit_failure_marks_dimension_degraded():
+    """A failed attribution-credit read must not silently null revenue on every
+    step while presenting the journey as fully computed — the envelope reports
+    the degraded dimension so 'revenue unknown' is distinguishable from
+    'revenue zero'."""
+    out = _unified_journey_with_credits(RuntimeError("credits store down"))
+    assert out["degraded_dimensions"] == ["attribution_credits"]
+    # The join itself still degrades to no revenue rather than raising.
+    assert out["steps"][0]["attributed_net_revenue"] is None
+
+
+def test_unified_journey_credit_success_reports_no_degradation():
+    credits = [{"touchpoint_id": "tp-1", "attributed_net_revenue": "12.5"}]
+    out = _unified_journey_with_credits(credits)
+    assert out["degraded_dimensions"] == []
+    assert out["steps"][0]["attributed_net_revenue"] == 12.5
+
+
+def test_unified_journey_unavailable_envelope_carries_degraded_dimensions_field():
+    """The not-provisioned envelope keeps the same shape so consumers can read
+    the field unconditionally."""
+    from services.profile.aggregator import _unified_journey_unavailable
+
+    out = _unified_journey_unavailable("user-1", "t-a", "not_provisioned")
+    assert out["degraded_dimensions"] == []

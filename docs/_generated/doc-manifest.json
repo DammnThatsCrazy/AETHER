@@ -3238,7 +3238,7 @@
       ],
       "status": "stable",
       "since_version": "8.8.0",
-      "estimated_read_minutes": 4,
+      "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
     },
@@ -3635,6 +3635,18 @@
       ],
       "status": "experimental",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/audits/DOCS_REVIEW_BACKLOG.md",
+      "title": "Docs Review Backlog — Audit Snapshot",
+      "slug": "audits/docs-review-backlog",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable"
     },
     {
       "path": "docs/audits/FRONTEND-DATA-TRUTH-INVENTORY.md",

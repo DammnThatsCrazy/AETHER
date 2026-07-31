@@ -69,6 +69,10 @@ def _every_workflow_file() -> list[Path]:
         if path.parent.name == "workflows"
         and path.parent.parent.name == ".github"
         and "node_modules" not in path.parts
+        # .claude/ is git-ignored local scratch (agent worktrees clone the
+        # repo there); nothing under it is tracked, so nothing under it can
+        # ever reach GitHub Actions.
+        and ".claude" not in path.parts
     )
 
 

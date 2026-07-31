@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from repositories.repos import reset_in_memory_stores
@@ -51,7 +53,11 @@ async def test_contract_entitlement_metering_summary_invoice_leakage_and_expansi
     assert first == duplicate
     assert first["metadata"] == {"safe": "ok"}
 
-    start, end = "2026-06-01T00:00:00+00:00", "2026-07-01T00:00:00+00:00"
+    # Window derived from the clock — a hardcoded month is a time bomb that
+    # silently empties the summary once the calendar passes it.
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=1)).isoformat()
+    end = (now + timedelta(days=1)).isoformat()
     summary = await UsageSummaryService().calculate("t1", start, end)
     assert summary["usage_by_dimension"]["audit_export_generated"] == 2
     assert summary["overage_by_dimension"]["audit_export_generated"] == 1

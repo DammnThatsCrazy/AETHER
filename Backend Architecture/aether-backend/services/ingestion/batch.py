@@ -178,10 +178,16 @@ class EventContext(BaseModel):
     sequence: Optional[dict[str, Any]] = None
 
     # Canonical envelope context v1 (packages/shared/events.ts). All optional +
-    # additive; the SDKs stamp `surface` (and, progressively, the rest) on every
-    # event. `extra="forbid"` above means these MUST be declared or real SDK
-    # batches 422 at ingest. Backend persists them in the opaque context JSONB;
-    # first-class promotion (e.g. surface attribution) happens downstream.
+    # additive at the MODEL layer; the SDKs stamp `surface` (and, progressively,
+    # the rest) on every event. `extra="forbid"` above means these MUST be
+    # declared or real SDK batches 422 at ingest. Backend persists them in the
+    # opaque context JSONB; first-class promotion (e.g. surface attribution)
+    # happens downstream. Requiredness is enforced separately and staged:
+    # when settings.ingestion_v2.envelope_required_fields_enforced is on
+    # (default in staging/production), release-critical events missing
+    # sequence/schemaVersion/surface are rejected per-event with
+    # `envelope_missing:<field>` (services/ingestion/validation.py) rather
+    # than failing the whole batch here.
     schemaVersion: Optional[str] = None
     surface: Optional[str] = None
     application: Optional[dict[str, Any]] = None

@@ -158,4 +158,5 @@ async def test_text_event_abstains_when_provider_disabled(monkeypatch):
         eligibility=Eligibility.TEXT,
     )
     assert obs.status is ObservationStatus.ABSTAINED
-    assert "provider_disabled" in (obs.abstention_reason or "")
+    # Production mode without credentials records the configuration state.
+    assert obs.abstention_reason == "credential_waiting"

@@ -28,13 +28,56 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 os.environ.setdefault("AETHER_ENV", "local")
 
 try:
+    from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
     from fastapi.testclient import TestClient
-    from main import app
+
+    from shared.common.common import AetherError
+    from services.rewards.routes import router as rewards_router
+
     _FASTAPI_AVAILABLE = True
 except (ImportError, Exception):
     _FASTAPI_AVAILABLE = False
-    app = None
+    FastAPI = None
+    rewards_router = None
     TestClient = None
+
+
+class _RewardTestTenant:
+    """Authenticated caller stand-in for the reward flows under test.
+
+    These tests previously mounted the whole application, whose auth middleware
+    correctly rejects an unauthenticated client with 401 — there is no local-env
+    bypass, and adding one to make tests pass would remove the very check that
+    matters. Instead the reward router is mounted on a scoped app with the tenant
+    injected, which is the pattern the graph and operational-intelligence suites
+    already use.
+
+    Scope note: this exercises routes → policy engine → repository → response.
+    The authentication boundary is deliberately NOT covered here; it is covered
+    by the dedicated auth and tenant-isolation suites.
+    """
+
+    tenant_id = "tenant_reward_tests"
+
+    def require_permission(self, permission: str) -> None:
+        return None
+
+
+def _build_app():
+    app = FastAPI()
+
+    @app.exception_handler(AetherError)
+    async def _error_handler(request: Request, exc: AetherError) -> JSONResponse:
+        return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
+
+    @app.middleware("http")
+    async def _inject_tenant(request: Request, call_next):
+        request.state.tenant = _RewardTestTenant()
+        return await call_next(request)
+
+    app.include_router(rewards_router)
+    return app
 
 
 def _run(coro):
@@ -51,7 +94,7 @@ pytestmark = pytest.mark.skipif(
 def client():
     if not _FASTAPI_AVAILABLE:
         pytest.skip("FastAPI not available")
-    return TestClient(app)
+    return TestClient(_build_app())
 
 
 # ═══════════════════════════════════════════════════════════════════════════

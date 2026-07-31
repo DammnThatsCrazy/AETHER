@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aether.internal/schemas/test_suites.schema.json",
+  "title": "Aether canonical test-suite registry",
+  "description": "Schema for config/test_suites.yaml. Authoritative enforcement lives in scripts/lib/test_suites.py::load_suites (cross-field rules such as quarantine-required-when-documented_quarantine and needs_live_infra-forbids-never cannot be expressed by JSON Schema draft-07 boolean-only conditionals alone and are enforced there); this file documents the shape for editors/IDE validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "canonical_source", "suites"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "canonical_source": { "type": "string", "const": "config/test_suites.yaml" },
+    "suites": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/suite" },
+      "minItems": 1
+    }
+  },
+  "definitions": {
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python_packages", "services", "docker", "credentials"],
+      "properties": {
+        "python_packages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Import names probed before running; missing ones become a tolerated skip in local and a hard failure in ci when skip_policy is never."
+        },
+        "services": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Live services this suite depends on (e.g. 'redis', 'neptune'). Non-empty forbids skip_policy: never."
+        },
+        "docker": {
+          "type": "boolean",
+          "description": "True when this suite requires Docker. True forbids skip_policy: never."
+        },
+        "credentials": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Named credentials/secrets this suite needs. Non-empty forbids skip_policy: never."
+        }
+      }
+    },
+    "quarantine": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["reason", "owner", "expires"],
+      "properties": {
+        "reason": { "type": "string", "minLength": 1 },
+        "owner": { "type": "string", "minLength": 1 },
+        "expires": { "type": "string", "minLength": 1 }
+      }
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "paths",
+        "runner",
+        "subsystem",
+        "requires",
+        "environments",
+        "skip_policy",
+        "release_class",
+        "evidence_artifact",
+        "quarantine"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Unique suite id." },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "description": "Repo-root-relative paths this suite covers; must exist on disk (enforced by the loader, not this schema)."
+        },
+        "runner": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "description": "Argv executed with cwd at the repo root."
+        },
+        "subsystem": { "type": "string", "minLength": 1 },
+        "requires": { "$ref": "#/definitions/requires" },
+        "environments": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["local", "ci", "release"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "skip_policy": {
+          "type": "string",
+          "enum": ["never", "local_only", "documented_quarantine"]
+        },
+        "release_class": {
+          "type": "string",
+          "enum": ["pr_gate", "live_certification", "advisory"]
+        },
+        "evidence_artifact": { "type": ["string", "null"] },
+        "quarantine": { "$ref": "#/definitions/quarantine" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "skip_policy": { "const": "documented_quarantine" } } },
+          "then": { "properties": { "quarantine": { "type": "object" } } },
+          "else": { "properties": { "quarantine": { "type": "null" } } }
+        }
+      ]
+    }
+  }
+}

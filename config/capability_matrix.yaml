@@ -1,0 +1,259 @@
+# =============================================================================
+# Aether — Capability Matrix Join Layer
+#
+# One entry per capability in config/deploy_profile.yaml's matrix, joining that
+# capability to every other release facet BY KEY (never by prose):
+#
+#   route            -> a known_prefixes entry in config/route_registry.yaml
+#   runtime_role     -> an ALL_ROLES token from
+#                       Backend Architecture/aether-backend/services/runtime/roles.py
+#                       (read via the release gate's AST reader, never imported)
+#   release_flag     -> a required_controls.feature_flags key or rollouts key in
+#                       config/founding_tenant_release.yaml
+#   depends_on       -> other capability ids in config/deploy_profile.yaml
+#   control_evidence -> a controls[].id or gate_conditions[].id in
+#                       config/deployment_readiness.yaml
+#
+# Validated fail-closed by scripts/staging_capability_matrix.py: EVERY
+# referenced key must resolve against its facet (dangling references fail), and
+# coverage is bidirectional — every capability in deploy_profile.yaml's matrix
+# must appear here and every entry here must exist there (same design as
+# config/test_suites.yaml + scripts/validate_test_suite_coverage.py).
+#
+# `states` records the capability's disposition per deployment profile
+# (profiles are keys of config/deployment_profiles.yaml). Enum:
+#
+#   required_enabled       - the release depends on it; deployed and serving
+#   enabled_experimental   - deployed, but not yet load-bearing for the release
+#   disabled_intentionally - deliberately off in this profile (e.g. cost policy
+#                            forbids the backing resource; a lean substitute
+#                            serves the function)
+#   externally_blocked     - implemented, but proving it requires external
+#                            infrastructure the repo cannot reach (see
+#                            config/deployment_readiness.yaml exceptions)
+#   not_in_release         - not implemented for this release train (must match
+#                            a deploy_profile `gap`)
+#
+# A capability whose deploy_profile status is `gap` may never claim
+# required_enabled/enabled_experimental, and any capability claiming
+# required_enabled anywhere must name its control_evidence.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/capability_matrix.yaml
+
+# Profiles this matrix takes a position on (keys of config/deployment_profiles.yaml).
+profiles: [local, staging, production-lean]
+
+capabilities:
+
+  - id: api
+    route: /v1/batch
+    runtime_role: api
+    release_flag: ROUTE_REGISTRY_ENFORCED
+    depends_on: [postgres, secrets, migrations]
+    control_evidence: LEAN-RUNTIME-TOPOLOGY
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: frontends
+    route: null
+    runtime_role: null
+    release_flag: KYBER_OPERATOR_GATE_ENFORCED
+    depends_on: [api]
+    control_evidence: LEAN-REQUIRED-PRESENCE
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: postgres
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: []
+    control_evidence: LEAN-REQUIRED-PRESENCE
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  # ElastiCache is a forbidden resource in staging/production-lean cost policy;
+  # DynamoDB is the lean-profile cache backend (config/deployment_profiles.yaml).
+  - id: redis
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: []
+    control_evidence: LEAN-FORBIDDEN-EXCLUSION
+    states:
+      local: required_enabled
+      staging: disabled_intentionally
+      production-lean: disabled_intentionally
+
+  # MSK is a forbidden resource in staging/production-lean cost policy; SQS/SNS
+  # is the lean-profile event bus (founding_tenant_release event_backend: sns_sqs).
+  - id: kafka
+    route: null
+    runtime_role: null
+    release_flag: EVENT_OUTBOX_RELAY_ENABLED
+    depends_on: []
+    control_evidence: LEAN-FORBIDDEN-EXCLUSION
+    states:
+      local: required_enabled
+      staging: disabled_intentionally
+      production-lean: disabled_intentionally
+
+  # ClickHouse is FORBIDDEN in production-lean by cost policy (postgres serves
+  # analytics there); locally it is an optional compose service.
+  - id: clickhouse
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: []
+    control_evidence: LEAN-FORBIDDEN-EXCLUSION
+    states:
+      local: enabled_experimental
+      staging: disabled_intentionally
+      production-lean: disabled_intentionally
+
+  - id: graph
+    route: null
+    runtime_role: graph-writer
+    release_flag: null
+    depends_on: [postgres]
+    control_evidence: LEAN-RUNTIME-TOPOLOGY
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: object_store
+    route: null
+    runtime_role: null
+    release_flag: OBJECT_STORAGE_EXTERNALIZATION_ENABLED
+    depends_on: []
+    control_evidence: LEAN-REQUIRED-PRESENCE
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: secrets
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: []
+    control_evidence: LEAN-REQUIRED-PRESENCE
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  # In production-lean the worker roles co-host in the single lean-worker
+  # execution group token (services/runtime/roles.py EXECUTION_GROUPS).
+  - id: workers
+    route: null
+    runtime_role: lean-worker
+    release_flag: EVENT_OUTBOX_RELAY_ENABLED
+    depends_on: [postgres, kafka]
+    control_evidence: LEAN-RUNTIME-TOPOLOGY
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: scheduled_jobs
+    route: null
+    runtime_role: maintenance
+    release_flag: null
+    depends_on: [workers]
+    control_evidence: LEAN-RUNTIME-TOPOLOGY
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: migrations
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: [postgres]
+    control_evidence: STG-MIGRATIONS
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: metrics
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: []
+    control_evidence: LEAN-OBSERVABILITY-ROLLBACK
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  - id: logs
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: []
+    control_evidence: LEAN-OBSERVABILITY-ROLLBACK
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  # Distributed tracing is a documented deploy_profile gap: not implemented in
+  # either local compose or Terraform for this release train.
+  - id: traces
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: []
+    control_evidence: null
+    states:
+      local: not_in_release
+      staging: not_in_release
+      production-lean: not_in_release
+
+  - id: dashboards_alerts
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: [metrics]
+    control_evidence: LEAN-OBSERVABILITY-ROLLBACK
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled
+
+  # DB-level snapshots exist (deploy_profile status: partial); proving restore
+  # against real infrastructure requires an AWS account the repo does not have
+  # (config/deployment_readiness.yaml DR-EX-NO-CLOUD-ACCOUNT).
+  - id: backup_restore
+    route: null
+    runtime_role: null
+    release_flag: null
+    depends_on: [postgres]
+    control_evidence: STG-ROLLBACK
+    states:
+      local: enabled_experimental
+      staging: externally_blocked
+      production-lean: externally_blocked
+
+  - id: readiness_probes
+    route: /ready
+    runtime_role: api
+    release_flag: null
+    depends_on: [api]
+    control_evidence: STG-SMOKE
+    states:
+      local: required_enabled
+      staging: required_enabled
+      production-lean: required_enabled

@@ -96,19 +96,28 @@ class FacilitatorRegistry:
         asset_symbol: str,
         chain: str,
     ) -> Optional[Facilitator]:
-        """Select best facilitator for an asset/chain pair. Prefers healthiest."""
+        """Select best facilitator for an asset/chain pair. Prefers healthiest.
+
+        Health is a derived signal — verification outcomes feed update_health;
+        there is no standalone prober — so a freshly seeded facilitator is
+        "unknown". Selection therefore excludes only facilitators known to be
+        down and ranks healthy ahead of unprobed ahead of degraded; requiring
+        "healthy" here made a new tenant's payments structurally unroutable.
+        """
+        health_rank = {"healthy": 0, "unknown": 1, "degraded": 2}
         facilitators = await self.list(tenant_id)
         candidates = [
             f for f in facilitators
             if asset_symbol in f.supported_assets
             and chain in f.supported_chains
-            and f.health_status == "healthy"
+            and f.health_status != "down"
         ]
         if not candidates:
             return None
-        # Prefer highest success rate, lowest latency
+        # Within a health rank, prefer highest success rate, lowest latency
         candidates.sort(
             key=lambda f: (
+                health_rank.get(f.health_status, 2),
                 -(f.success_rate if f.success_rate is not None else -1.0),
                 f.avg_latency_ms if f.avg_latency_ms is not None else float("inf"),
             )

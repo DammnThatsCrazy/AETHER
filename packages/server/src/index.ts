@@ -4,7 +4,9 @@
 //
 // Security invariants:
 //   - execution_by_aether is never set (Aether observes, never executes)
-//   - credit and location consent require explicit opt-in; grantAll() excludes them
+//   - explicit-opt-in purposes (credit, location, financial_activity,
+//     economic_observability, cross_chain_observability, fraud_prevention)
+//     are never granted by grantAll()
 //   - sensitive fields are scrubbed before transmission (scrubSensitiveFields)
 //   - no API keys, secrets, or sensitive payloads in event properties
 //
@@ -16,6 +18,9 @@
 import os from 'node:os';
 
 import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@aether/shared';
+// Registry-generated purpose sets — hand-written copies here drifted to 9 of
+// the registry's 12 purposes before being replaced with the canonical source.
+import { CONSENT_PURPOSES as ALL_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } from '@aether/shared/consent';
 import type { EventType } from '@aether/shared';
 import { EventQueue } from './queue';
 import { sendBatch } from './transport';
@@ -46,11 +51,7 @@ export {
 } from './agentic';
 export type { AgentEventEnvelope } from './agentic';
 
-const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['credit', 'location', 'financial_activity'];
-const ALL_PURPOSES: readonly ConsentPurpose[] = [
-  'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce',
-  'credit', 'location', 'financial_activity',
-];
+
 const DEFAULT_ENDPOINT = 'https://ingest.aether.so/v1/batch';
 
 export class AetherServerSDK {
@@ -98,8 +99,9 @@ export class AetherServerSDK {
   }
 
   /**
-   * Grant all non-explicit-opt-in purposes (excludes credit and location).
-   * To grant credit or location, call grant(['credit']) or grant(['location']) explicitly.
+   * Grant all non-explicit-opt-in purposes. Explicit-opt-in purposes
+   * (EXPLICIT_OPT_IN_PURPOSES from the registry) must each be granted
+   * individually, e.g. grant(['credit']).
    */
   grantAll(): void {
     this.grant(ALL_PURPOSES.filter((p) => !EXPLICIT_OPT_IN_PURPOSES.includes(p)));
@@ -235,18 +237,12 @@ export class AetherServerSDK {
   }
 
   private buildConsentState(partial: Partial<ServerConsentState>): ServerConsentState {
-    return {
-      analytics: false,
-      marketing: false,
-      personalization: false,
-      web3: false,
-      agent: false,
-      commerce: false,
-      credit: false,
-      location: false,
-      financial_activity: false,
-      ...partial,
-    };
+    // Deny-by-default across the full registry vocabulary, then apply the
+    // host's explicit grants.
+    const state = Object.fromEntries(
+      ALL_PURPOSES.map((p) => [p, false]),
+    ) as unknown as ServerConsentState;
+    return { ...state, ...partial };
   }
 
   private scheduleFlush(): void {

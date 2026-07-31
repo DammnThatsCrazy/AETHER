@@ -292,6 +292,139 @@ async def test_conversation_not_persisted_for_rejected_prompt(tenant: TenantCont
     assert turns == []
 
 
+class _FailingCache:
+    """Cache stub whose reads and writes always fail (Redis outage)."""
+
+    async def get(self, key):
+        raise RuntimeError("redis down")
+
+    async def set(self, key, value, ttl=None):
+        raise RuntimeError("redis down")
+
+
+@pytest.mark.asyncio
+async def test_conversation_get_recent_raises_when_store_unavailable():
+    """A store outage must propagate distinctly — returning [] asserts the
+    conversation genuinely has no turns, which nobody verified."""
+    from services.noesis.conversation import ConversationStoreUnavailable
+
+    store = NoesisConversationStore(_FailingCache())
+    with pytest.raises(ConversationStoreUnavailable):
+        await store.get_recent("conv-1", "tenant-a")
+
+
+@pytest.mark.asyncio
+async def test_conversation_list_for_tenant_raises_when_store_unavailable():
+    from services.noesis.conversation import ConversationStoreUnavailable
+
+    store = NoesisConversationStore(_FailingCache())
+    with pytest.raises(ConversationStoreUnavailable):
+        await store.list_for_tenant("tenant-a")
+
+
+@pytest.mark.asyncio
+async def test_conversation_append_still_degrades_silently_on_failure():
+    """Writes remain best-effort: losing a turn must never fail the query
+    that produced it."""
+    store = NoesisConversationStore(_FailingCache())
+    await store.append("conv-1", "tenant-a", "q", "alert_lookup", "deterministic", "a")
+
+
+@pytest.mark.asyncio
+async def test_query_survives_conversation_store_outage(tenant: TenantContext):
+    """History enrichment is best-effort — an unreachable conversation store
+    degrades to no history instead of failing the query."""
+    svc = _svc(conversation_store=NoesisConversationStore(_FailingCache()))
+    alerts = BaseRepository("alerts")
+    await alerts.insert("a1", {"tenant_id": "tenant-a", "status": "open"})
+    resp = await svc.query(
+        NoesisQueryRequest(message="show alerts", surface="aether", conversation_id="c9"),
+        tenant,
+    )
+    assert resp.intent == "alert_lookup"
+
+
+@pytest.mark.asyncio
+async def test_conversations_route_reports_missing_on_store_failure():
+    """GET /v1/noesis/conversations must not present a store outage as a
+    tenant with no conversations."""
+    import json as _json
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from services.noesis.routes import list_conversations
+
+    request = SimpleNamespace(state=SimpleNamespace(tenant=TenantContext(
+        tenant_id="tenant-a", role=Role.VIEWER, permissions=["read"],
+    )))
+    with patch("services.noesis.conversation.NoesisConversationStore") as MockStore:
+        MockStore.return_value = NoesisConversationStore(_FailingCache())
+        resp = await list_conversations(request, graph=None)
+    body = _json.loads(resp.body)
+    assert body["data"] == []
+    assert body["source_status"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_conversations_route_reports_empty_when_store_answers_none():
+    import json as _json
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from services.noesis.routes import list_conversations
+
+    request = SimpleNamespace(state=SimpleNamespace(tenant=TenantContext(
+        tenant_id="tenant-a", role=Role.VIEWER, permissions=["read"],
+    )))
+    with patch("services.noesis.conversation.NoesisConversationStore") as MockStore:
+        MockStore.return_value = NoesisConversationStore(CacheClient())
+        resp = await list_conversations(request, graph=None)
+    body = _json.loads(resp.body)
+    assert body["data"] == []
+    assert body["source_status"] == "empty"
+
+
+@pytest.mark.asyncio
+async def test_conversation_detail_route_reports_missing_on_store_failure():
+    import json as _json
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from services.noesis.routes import get_conversation
+
+    request = SimpleNamespace(state=SimpleNamespace(tenant=TenantContext(
+        tenant_id="tenant-a", role=Role.VIEWER, permissions=["read"],
+    )))
+    with patch("services.noesis.conversation.NoesisConversationStore") as MockStore:
+        MockStore.return_value = NoesisConversationStore(_FailingCache())
+        resp = await get_conversation("conv-1", request, graph=None)
+    body = _json.loads(resp.body)
+    assert body["messages"] == []
+    assert body["source_status"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_conversation_detail_route_reports_available_with_turns():
+    import json as _json
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from services.noesis.routes import get_conversation
+
+    cache = CacheClient()
+    store = NoesisConversationStore(cache)
+    await store.append("conv-live", "tenant-a", "show alerts", "alert_lookup", "deterministic", "3 alerts")
+    request = SimpleNamespace(state=SimpleNamespace(tenant=TenantContext(
+        tenant_id="tenant-a", role=Role.VIEWER, permissions=["read"],
+    )))
+    with patch("services.noesis.conversation.NoesisConversationStore") as MockStore:
+        MockStore.return_value = store
+        resp = await get_conversation("conv-live", request, graph=None)
+    body = _json.loads(resp.body)
+    assert body["count"] == 1
+    assert body["source_status"] == "available"
+
+
 @pytest.mark.asyncio
 async def test_conversation_not_persisted_without_conversation_id(tenant: TenantContext):
     store = NoesisConversationStore(CacheClient())

@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: cb00c2e3
+last_synced_commit: "9ebc883"
 ---
 
 # Aether iOS SDK v8.12.0 — Integration Guide
@@ -51,12 +51,20 @@ Aether.shared.initialize(config: AetherConfig(apiKey: "your-api-key"))
 
 ### Event Tracking
 
+`track()` is for **custom application events**. To emit a **canonical backend
+event type** directly, use `observe()` (unknown types are a production-safe
+no-op; payloads asserting `execution_by_aether == true` are rejected — Aether
+observes, it never executes).
+
 ```swift
 // Custom event
 Aether.shared.track("button_tapped", properties: [
     "buttonId": AnyCodable("cta-hero"),
     "screen": AnyCodable("home")
 ])
+
+// Canonical low-level observation (registry event types only)
+Aether.shared.observe("order_completed", properties: ["orderId": AnyCodable("ord_1")])
 
 // Screen view (auto-tracked if screenTracking enabled)
 Aether.shared.screenView("PricingScreen", properties: [
@@ -93,7 +101,11 @@ Aether.shared.reset()
 
 The SDK automatically generates a SHA-256 device fingerprint on initialization from: `identifierForVendor`, device model, system version, screen dimensions, scale, locale, timezone, processor count, and physical memory (via CryptoKit).
 
-The fingerprint is included in every event's `context.fingerprint.id`. Only the composite hash is sent — raw device signals are never transmitted.
+The fingerprint is stamped as `context.fingerprint.id`, but stamping is
+**gated**: in GDPR mode it is omitted until `analytics` consent is granted, and
+when `respectATT` is enabled it is omitted unless the user authorized tracking
+via App Tracking Transparency (iOS 14.5+). Only the composite hash is sent —
+raw device signals are never transmitted.
 
 ## Wallet Tracking
 
@@ -119,19 +131,28 @@ Aether.shared.walletTransaction(
 
 ## Consent Management
 
-Consent purposes are **registry-derived** — the canonical set lives in
-`packages/shared/contracts/consent-registry.json`. Base purposes (`analytics`,
-`marketing`, `personalization`, `web3`, `agent`, `commerce`) can be granted together;
-explicit opt-in purposes (`financial_activity`, `credit`, `location`,
-`economic_observability`, `cross_chain_observability`) **always require separate
-opt-in** and are never granted by `grantAll()`. Present each explicit opt-in purpose
-as a separate consent choice in your UI.
+The platform's canonical consent registry
+(`packages/shared/contracts/consent-registry.json`) defines **12 purposes**:
+base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
+`commerce`, plus explicit opt-in purposes `financial_activity`, `credit`,
+`location`, `economic_observability`, `cross_chain_observability`, and
+`fraud_prevention`, which always require separate opt-in and are never granted
+by an accept-all path. Present each explicit opt-in purpose as a separate
+consent choice in your UI.
+
+The iOS runtime exposes `canonicalConsentPurposes` (8 purposes, listed below)
+with `explicitOptInPurposes = ["credit", "location"]`; the extended purposes
+`financial_activity`, `economic_observability`, and `cross_chain_observability`
+are used by the event gating map and stamped into per-event `context.consent`.
+The registry's `fraud_prevention` purpose is not yet surfaced by the iOS
+runtime lists (grant it via `grantConsent` if your integration collects
+fraud-prevention signals; it is never included in `grantAll()`).
 
 ```swift
 // Grant specific purposes
 Aether.shared.grantConsent(categories: ["analytics", "marketing"])
 
-// Grant all non-sensitive purposes (excludes credit and location)
+// Grant all non-explicit-opt-in purposes (excludes credit and location)
 Aether.shared.grantAll()
 
 // Explicitly grant credit after showing separate consent UI
@@ -143,9 +164,19 @@ Aether.shared.revokeConsent(categories: ["marketing"])
 // Check current state
 let state = Aether.shared.getConsentState() // ["analytics", ...]
 
-// All canonical purposes
-let purposes = AetherSDK.canonicalConsentPurposes
+// Runtime canonical purposes
+let purposes = Aether.canonicalConsentPurposes
 // ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
+```
+
+### Consent receipts
+
+```swift
+// Build a deterministic canonical receipt locally
+let receipt = try Aether.shared.buildCanonicalConsentReceipt(input)
+
+// Build AND persist it to the backend (POST /v1/consent/records)
+Aether.shared.recordConsentReceipt(input) { result in ... }
 ```
 
 ## Ecommerce
@@ -199,16 +230,53 @@ The SDK captures **12 ad platform click IDs** and all UTM parameters from deep l
 
 **Campaign context fields:** `source`, `medium`, `campaign`, `content`, `term`, `clickIds` (dictionary), `referrerDomain`
 
+Every attribution entry point runs through one canonical funnel: URL+timestamp
+dedup → canonical acquisition-evidence parse (shared `AcquisitionEvidence`
+schema v3, sanitized URL, `entryMethod`, `destinationDomain`) → campaign
+context → first/latest-touch persistence (30-day TTL) → event emission. The
+active (unexpired) latest-touch evidence rides on every event as
+`context.acquisitionEvidence`.
+
 All classification (organic, paid, social, email, direct) happens server-side via the backend `SourceClassifier` — the SDK ships raw signals only.
 
 ```swift
-// In SceneDelegate or AppDelegate
+// Custom URL scheme (entry method "ios_custom_url")
 func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
     if let url = contexts.first?.url {
         Aether.shared.handleDeepLink(url)
     }
 }
+
+// Universal Links (entry method "ios_universal_link"); returns true when consumed
+func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    Aether.shared.handleUniversalLink(userActivity)
+}
+
+// Generic router (http(s) → universal link, otherwise custom scheme)
+Aether.shared.handleURL(url)
+
+// QR codes the host app already decoded (SDK never touches the camera).
+// Entry method "qr_code"; emits qr_code_scanned.
+Aether.shared.handleQrScanResult(url)
+
+// NFC tag URIs the host app already read via CoreNFC (SDK never drives the
+// radio). Entry method "nfc"; emits nfc_tag_read.
+Aether.shared.handleNfcUri(url)
+
+// App Clip invocations; first-touch persists so the full-app install
+// inherits the acquisition source. Emits app_clip_invoked.
+Aether.shared.handleAppClipInvocation(userActivity)
+Aether.shared.handleAppClipInvocation(url: url)
 ```
+
+### Deferred attribution
+
+iOS has no Android-style install referrer: on first launch the SDK can resolve
+a deterministic deferred-attribution handoff via
+`POST /v1/attribution/deferred/resolve`. The SDK never fingerprints its way to
+a match — an unmatched install simply stays unattributed. A successful match
+persists first-touch evidence (only if none exists yet) and emits
+`deferred_attribution_resolved`.
 
 ## Push Notification Tracking
 
@@ -234,6 +302,7 @@ struct AetherConfig {
     var privacy: PrivacyConfig = PrivacyConfig()
     var batchSize: Int = 10                      // Events per batch
     var flushInterval: TimeInterval = 5.0        // Seconds between flushes
+    var manifestVerificationKey: String? = nil   // HMAC-SHA256 manifest signature key
     var autoResumeJourney: Bool = true           // Call /sdk/identity/resolve on init
     var onJourneyResumed:                        // Fires once when a prior session is matched
         ((_ resolvedAnonymousId: String,
@@ -273,11 +342,18 @@ UIKit Events / Wallet Interactions
     POST /v1/batch → Aether Backend
 ```
 
-### What the SDK sends:
+### What the SDK sends (event context):
 - Event type, name, and raw properties
-- Minimal context: `{os: "iOS", osVersion, locale, timezone}`
-- Device fingerprint hash
-- Campaign context: `{source, medium, campaign, content, term, clickIds, referrerDomain}` (from deep links)
+- `library` `{name: "aether-ios", version}`, `device` `{osName: "iOS"|"macOS", osVersion, locale, timezone}`
+- Temporal provenance captured at the event's occurrence instant:
+  `utcOffsetMinutes` (zone-at-instant, DST-correct), `timeZoneSource: "device"`,
+  `clockSource: "device"`
+- Device fingerprint hash (gated: GDPR analytics consent + ATT authorization)
+- Campaign context `{source, medium, campaign, content, term, clickIds, referrerDomain}` and active `acquisitionEvidence` (schema v3)
+- Active journey snapshot on every event, network type, thermal state
+- Per-purpose `consent` booleans and a monotonic per-session
+  `sequence.event` counter (reset on session rotation) for gap/reorder
+  detection at ingest
 - Session ID, anonymous ID, user ID
 
 ### What the backend derives:
@@ -305,9 +381,12 @@ All event operations are dispatched to a private serial queue (`DispatchQueue(la
 ## Health Agent
 
 The health agent starts automatically after `initialize()`. It:
-- POSTs a signed heartbeat to `/v1/sdk/health` every 60 seconds
-- Fetches the remote manifest from `/v1/config` every 5 minutes
-- Both are fire-and-forget; gated on analytics consent in GDPR mode
+- POSTs a signed heartbeat to `/v1/diagnostics/sdk/heartbeat` every 60 seconds
+- Fetches the remote manifest from `/v1/config/sdk/manifest` every 5 minutes
+- Both are fire-and-forget; gated on analytics consent in GDPR mode (it starts
+  when `analytics` is granted post-init)
+- When `manifestVerificationKey` is set, unsigned or invalid manifest
+  signatures are rejected and the last-known-good config is kept
 
 ## Granular Agent Lifecycle Emitters
 

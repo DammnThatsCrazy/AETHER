@@ -256,15 +256,58 @@ async def test_status_shape():
     try:
         status = supervisor.status()
         for name, info in status.items():
+            # This key set is a pinned contract: /v1/ready projects it, so an
+            # unannounced addition or removal changes the readiness payload.
             # "role" carries the owning logical worker role so a consolidated
             # execution group stays per-role observable; "" when unattributed.
-            assert set(info.keys()) == {"state", "restarts", "last_error", "required", "role"}
+            # The liveness/backlog fields below exist because a supervisor that
+            # only reports "running" cannot distinguish a worker doing work from
+            # one wedged holding a lease.
+            assert set(info.keys()) == {
+                "state",
+                "restarts",
+                "last_error",
+                "required",
+                "role",
+                "lease_owner",
+                "heartbeat_at",
+                "heartbeat_age_s",
+                "last_success_at",
+                "consumer_lag",
+                "oldest_pending_age_s",
+                "dlq_depth",
+                "telemetry_error",
+            }
             assert isinstance(info["role"], str)
             assert info["state"] in {"running", "failed", "disabled", "stopped", "restarting"}
             assert isinstance(info["restarts"], int)
             assert info["last_error"] is None or isinstance(info["last_error"], str)
             assert isinstance(info["required"], bool)
+
+            # Absence of a signal must be reported as unknown (None), never as a
+            # healthy-looking zero — a zero lag and a lag nobody measured are
+            # different facts, and conflating them is how a dead worker reads as
+            # idle.
+            assert info["lease_owner"] is None or isinstance(info["lease_owner"], str)
+            assert info["heartbeat_at"] is None or isinstance(info["heartbeat_at"], str)
+            assert info["heartbeat_age_s"] is None or isinstance(info["heartbeat_age_s"], float)
+            assert info["last_success_at"] is None or isinstance(info["last_success_at"], str)
+            assert info["consumer_lag"] is None or isinstance(info["consumer_lag"], int)
+            assert (
+                info["oldest_pending_age_s"] is None
+                or isinstance(info["oldest_pending_age_s"], float)
+            )
+            assert info["dlq_depth"] is None or isinstance(info["dlq_depth"], int)
+            assert info["telemetry_error"] is None or isinstance(info["telemetry_error"], str)
+
+            # A worker that has never reported a heartbeat has no age to report.
+            if info["heartbeat_at"] is None:
+                assert info["heartbeat_age_s"] is None
+
         assert status["a"]["required"] is True
         assert status["b"]["state"] == "disabled"
+        # A disabled worker holds no lease — reporting one would make an
+        # intentionally-off worker look like a live participant.
+        assert status["b"]["lease_owner"] is None
     finally:
         await supervisor.stop_all()

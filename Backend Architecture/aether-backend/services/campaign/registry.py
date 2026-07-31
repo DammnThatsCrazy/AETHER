@@ -8,13 +8,15 @@ the canonical campaign_id field.
 
 from __future__ import annotations
 
+import logging
+
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from shared.logger.logger import get_logger, metrics
+from shared.logger.logger import get_logger, log_event, metrics
 
 from services.campaign.normalization import (
     build_evidence_hash,
@@ -50,11 +52,26 @@ ALIAS_TYPE_QR_CODE = "qr_code"
 class CampaignRegistryService:
     """Authoritative campaign registry operations."""
 
-    def __init__(self) -> None:
-        self._campaigns = CampaignRegistryRepository()
-        self._external_refs = ExternalRefRepository()
-        self._aliases = AliasRepository()
-        self._reviews = MappingReviewRepository()
+    def __init__(
+        self,
+        *,
+        campaign_repo: Optional[CampaignRegistryRepository] = None,
+        external_ref_repo: Optional[ExternalRefRepository] = None,
+        alias_repo: Optional[AliasRepository] = None,
+        review_repo: Optional[MappingReviewRepository] = None,
+    ) -> None:
+        """Construct the service, optionally injecting its repositories.
+
+        Each repository defaults to the process-wide, pool-resolving instance,
+        so existing no-argument callers are unaffected. Injection exists because
+        the service's behaviour — confidence scoring, alias resolution, review
+        queueing — is worth testing against a controlled store rather than only
+        against a live pool.
+        """
+        self._campaigns = campaign_repo or CampaignRegistryRepository()
+        self._external_refs = external_ref_repo or ExternalRefRepository()
+        self._aliases = alias_repo or AliasRepository()
+        self._reviews = review_repo or MappingReviewRepository()
 
     # ── External campaign upsert ──────────────────────────────────────────────
 
@@ -127,7 +144,7 @@ class CampaignRegistryService:
             )
         except Exception as exc:
             # Race condition: another worker created the campaign; re-read it
-            logger.warning("campaign_create_race", error=str(exc), platform=canonical_platform, ext_id=ext_id)
+            log_event(logger, logging.WARNING, "campaign_create_race", error=str(exc), platform=canonical_platform, ext_id=ext_id)
             existing_ref = await self._external_refs.get_exact(
                 tenant_id, canonical_platform, ext_account, ext_id
             )
@@ -158,7 +175,7 @@ class CampaignRegistryService:
         )
 
         metrics.increment("campaign_registry_upsert_total", labels={"origin": "external", "action": "create"})
-        logger.info(
+        log_event(logger, logging.INFO,
             "campaign_registered",
             tenant_id=tenant_id,
             campaign_id=str(campaign_id),
@@ -243,7 +260,7 @@ class CampaignRegistryService:
             properties=properties or {},
         )
         metrics.increment("campaign_registry_upsert_total", labels={"origin": "custom", "action": "create"})
-        logger.info("custom_campaign_created", tenant_id=tenant_id, campaign_id=str(campaign["campaign_id"]))
+        log_event(logger, logging.INFO, "custom_campaign_created", tenant_id=tenant_id, campaign_id=str(campaign["campaign_id"]))
         return campaign
 
     # ── Alias management ──────────────────────────────────────────────────────
@@ -358,7 +375,7 @@ class CampaignRegistryService:
                         created_by=resolved_by,
                         provenance={"source": "mapping_review_resolution", "review_id": str(review_id)},
                     )
-            logger.info("mapping_review_resolved", tenant_id=tenant_id, review_id=str(review_id), campaign_id=str(campaign_id))
+            log_event(logger, logging.INFO, "mapping_review_resolved", tenant_id=tenant_id, review_id=str(review_id), campaign_id=str(campaign_id))
         return result
 
     async def ignore_review(self, tenant_id: str, review_id: UUID) -> Optional[dict]:
@@ -368,9 +385,23 @@ class CampaignRegistryService:
         return await self._reviews.set_status(tenant_id, review_id, "open")
 
     async def list_mapping_reviews(
-        self, tenant_id: str, limit: int = 50, cursor: Optional[datetime] = None
+        self,
+        tenant_id: str,
+        status: str = "open",
+        limit: int = 50,
+        cursor: Optional[datetime] = None,
     ) -> list[dict]:
-        return await self._reviews.list_open(tenant_id, limit=limit, cursor=cursor)
+        """List mapping reviews in one status.
+
+        ``status`` is accepted because the route has always advertised it. Until
+        now this method took no such parameter, so the route's call raised
+        TypeError, its ``except Exception`` swallowed it, and the endpoint
+        returned an empty list to every caller — an operator reading the review
+        queue saw "nothing to triage" rather than "this is broken".
+        """
+        return await self._reviews.list_by_status(
+            tenant_id, status=status, limit=limit, cursor=cursor
+        )
 
     # ── Quality ───────────────────────────────────────────────────────────────
 

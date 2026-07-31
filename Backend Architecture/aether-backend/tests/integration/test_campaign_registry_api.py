@@ -1,8 +1,13 @@
-"""Integration tests for Campaign Registry API endpoints."""
+"""Integration tests for Campaign Registry API endpoints.
+
+The campaign routers are mounted on a scoped FastAPI app with the tenant
+injected via middleware and the event producer overridden — the same pattern
+the reward API suite uses. Handlers are never called directly, because their
+``Depends()`` parameters only bind through the framework.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 import uuid
@@ -12,23 +17,86 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
+
+try:
+    from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
+    from fastapi.testclient import TestClient
+
+    from shared.common.common import AetherError
+    from dependencies.providers import get_producer
+    from services.campaign.routes import (
+        mapping_router, quality_router, router, sources_router,
+    )
+
+    _FASTAPI_AVAILABLE = True
+except (ImportError, Exception):
+    _FASTAPI_AVAILABLE = False
+    FastAPI = None
+    TestClient = None
 
 
-def _run(coro):
-    return asyncio.run(coro)
+pytestmark = pytest.mark.skipif(
+    not _FASTAPI_AVAILABLE,
+    reason="FastAPI app not importable (missing dependencies)",
+)
+
+_TENANT_HEADER = "x-test-tenant"
+_DEFAULT_TENANT = "test-tenant"
 
 
-def _mock_tenant(tenant_id: str = "test-tenant"):
-    t = MagicMock()
-    t.tenant_id = tenant_id
-    return t
+class _CampaignTestTenant:
+    """Authenticated caller stand-in with full campaign permissions.
+
+    The authentication boundary is deliberately NOT covered here; it is covered
+    by the dedicated auth and campaign-registry security suites.
+    """
+
+    def __init__(self, tenant_id: str = _DEFAULT_TENANT) -> None:
+        self.tenant_id = tenant_id
+
+    def require_permission(self, permission: str) -> None:
+        return None
 
 
-def _mock_request(tenant_id: str = "test-tenant"):
-    req = MagicMock()
-    req.state.tenant = _mock_tenant(tenant_id)
-    return req
+def _build_app():
+    app = FastAPI()
+
+    @app.exception_handler(AetherError)
+    async def _error_handler(request: Request, exc: AetherError) -> JSONResponse:
+        return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
+
+    @app.middleware("http")
+    async def _inject_tenant(request: Request, call_next):
+        request.state.tenant = _CampaignTestTenant(
+            request.headers.get(_TENANT_HEADER, _DEFAULT_TENANT)
+        )
+        return await call_next(request)
+
+    app.include_router(router)
+    app.include_router(sources_router)
+    app.include_router(mapping_router)
+    app.include_router(quality_router)
+    app.dependency_overrides[get_producer] = lambda: AsyncMock()
+    return app
+
+
+@pytest.fixture(scope="module")
+def client():
+    if not _FASTAPI_AVAILABLE:
+        pytest.skip("FastAPI not available")
+    return TestClient(_build_app())
+
+
+def _create_campaign(client, name: str) -> dict:
+    resp = client.post("/v1/campaigns", json={
+        "name": name,
+        "channel": "email",
+        "start_date": "2026-01-01",
+    })
+    assert resp.status_code == 200, resp.text
+    return resp.json()["data"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,36 +104,32 @@ def _mock_request(tenant_id: str = "test-tenant"):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestCampaignListEndpoint:
-    def test_list_campaigns_returns_dict(self):
-        from services.campaign.routes import list_campaigns
-        req = _mock_request()
-        result = _run(list_campaigns(req, status=None, origin=None, platform=None, mapping_quality=None, limit=50, offset=0))
+    def test_list_campaigns_returns_dict(self, client):
+        resp = client.get("/v1/campaigns", params={"limit": 50})
+        assert resp.status_code == 200
+        result = resp.json()
         assert isinstance(result, dict)
         assert "data" in result
 
-    def test_list_campaigns_respects_limit(self):
-        from services.campaign.routes import list_campaigns
-        req = _mock_request()
-        result = _run(list_campaigns(req, status=None, origin=None, platform=None, mapping_quality=None, limit=5, offset=0))
-        data = result.get("data") or []
+    def test_list_campaigns_respects_limit(self, client):
+        resp = client.get("/v1/campaigns", params={"limit": 5})
+        assert resp.status_code == 200
+        data = resp.json().get("data") or []
         assert isinstance(data, list)
         assert len(data) <= 5
 
-    def test_create_custom_campaign(self):
-        from services.campaign.routes import create_campaign, CampaignCreateRequest
-        req = _mock_request()
-        body = CampaignCreateRequest(name="Test Camp", channel="email")
-        result = _run(create_campaign(req, body))
-        assert "data" in result
-        data = result["data"]
+    def test_create_custom_campaign(self, client):
+        data = _create_campaign(client, "Test Camp")
         assert "campaign_id" in data
         assert data.get("origin") == "custom"
 
-    def test_create_campaign_name_required(self):
-        from services.campaign.routes import CampaignCreateRequest
-        from pydantic import ValidationError
-        with pytest.raises((ValidationError, Exception)):
-            CampaignCreateRequest(name="", channel="email")
+    def test_create_campaign_name_required(self, client):
+        resp = client.post("/v1/campaigns", json={
+            "name": "",
+            "channel": "email",
+            "start_date": "2026-01-01",
+        })
+        assert resp.status_code == 422
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -73,13 +137,12 @@ class TestCampaignListEndpoint:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestExternalRefsEndpoint:
-    def test_get_external_refs_unknown_campaign(self):
-        from services.campaign.routes import list_campaign_external_refs
-        req = _mock_request()
+    def test_get_external_refs_unknown_campaign(self, client):
         fake_id = str(uuid.uuid4())
-        result = _run(list_campaign_external_refs(fake_id, req))
-        # Should return empty list or 404-style, not crash
-        assert isinstance(result, dict)
+        resp = client.get(f"/v1/campaigns/{fake_id}/external-refs")
+        # Unknown campaign is a structured 404, not a crash or a silent empty 200
+        assert resp.status_code == 404
+        assert isinstance(resp.json(), dict)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -87,30 +150,25 @@ class TestExternalRefsEndpoint:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestAliasEndpoints:
-    def test_add_alias_to_campaign(self):
-        from services.campaign.routes import create_campaign, add_campaign_alias
-        from services.campaign.routes import CampaignCreateRequest, AliasCreateRequest
-        req = _mock_request()
-        camp_result = _run(create_campaign(req, CampaignCreateRequest(name="Alias Test Camp")))
-        campaign_id = camp_result["data"]["campaign_id"]
+    def test_add_alias_to_campaign(self, client):
+        campaign_id = _create_campaign(client, "Alias Test Camp")["campaign_id"]
 
-        alias_result = _run(add_campaign_alias(
-            campaign_id,
-            req,
-            AliasCreateRequest(alias_type="utm_campaign", value="alias-test-value"),
-        ))
-        assert "data" in alias_result
+        resp = client.post(f"/v1/campaigns/{campaign_id}/aliases", json={
+            "alias_type": "utm_campaign",
+            "alias_value": "alias-test-value",
+        })
+        assert resp.status_code == 200, resp.text
+        assert "data" in resp.json()
 
-    def test_list_aliases_empty(self):
-        from services.campaign.routes import create_campaign, list_campaign_aliases
-        from services.campaign.routes import CampaignCreateRequest
-        req = _mock_request()
-        camp_result = _run(create_campaign(req, CampaignCreateRequest(name="No Alias Camp")))
-        campaign_id = camp_result["data"]["campaign_id"]
+    def test_list_aliases_empty(self, client):
+        campaign_id = _create_campaign(client, "No Alias Camp")["campaign_id"]
 
-        result = _run(list_campaign_aliases(campaign_id, req))
+        resp = client.get(f"/v1/campaigns/{campaign_id}/aliases")
+        assert resp.status_code == 200
+        result = resp.json()
         assert "data" in result
-        assert isinstance(result["data"], list)
+        assert isinstance(result["data"]["items"], list)
+        assert result["data"]["source_status"] in ("missing", "empty", "available")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -118,25 +176,23 @@ class TestAliasEndpoints:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestCampaignSourcesEndpoints:
-    def test_list_sources_returns_list(self):
-        from services.campaign.routes import list_campaign_sources
-        req = _mock_request()
-        result = _run(list_campaign_sources(req))
+    def test_list_sources_returns_list(self, client):
+        resp = client.get("/v1/campaign-sources")
+        assert resp.status_code == 200
+        result = resp.json()
         assert "data" in result
-        assert isinstance(result["data"], list)
+        assert isinstance(result["data"]["items"], list)
+        assert result["data"]["source_status"] in ("missing", "empty", "available")
 
-    def test_create_source_requires_platform(self):
-        from services.campaign.routes import create_campaign_source, CampaignSourceCreateRequest
-        from pydantic import ValidationError
-        with pytest.raises((ValidationError, Exception)):
-            CampaignSourceCreateRequest(platform="", connector_id="c1")
+    def test_create_source_requires_platform(self, client):
+        resp = client.post("/v1/campaign-sources", json={"platform": ""})
+        assert resp.status_code == 422
 
-    def test_sync_source_not_found(self):
-        from services.campaign.routes import sync_campaign_source
-        req = _mock_request()
-        result = _run(sync_campaign_source("nonexistent-connector", req))
-        # Should return a structured response, not crash
-        assert isinstance(result, dict)
+    def test_sync_source_not_found(self, client):
+        resp = client.post("/v1/campaign-sources/nonexistent-connector/sync")
+        # Unknown connector is a structured client error, not a crash
+        assert resp.status_code == 400
+        assert isinstance(resp.json(), dict)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -144,29 +200,27 @@ class TestCampaignSourcesEndpoints:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestMappingReviewEndpoints:
-    def test_list_reviews_empty(self):
-        from services.campaign.routes import list_mapping_reviews
-        req = _mock_request()
-        result = _run(list_mapping_reviews(req, status="open", limit=20, offset=0))
+    def test_list_reviews_empty(self, client):
+        resp = client.get("/v1/mapping-review", params={"status": "open", "limit": 20})
+        assert resp.status_code == 200
+        result = resp.json()
         assert "data" in result
-        assert isinstance(result["data"], list)
+        assert isinstance(result["data"]["items"], list)
 
-    def test_resolve_review_missing_campaign_id(self):
-        from services.campaign.routes import resolve_mapping_review, MappingReviewResolveRequest
-        from pydantic import ValidationError
-        req = _mock_request()
+    def test_resolve_review_missing_campaign_id(self, client):
         fake_review_id = str(uuid.uuid4())
-        with pytest.raises((ValidationError, Exception)):
-            body = MappingReviewResolveRequest(campaign_id="not-a-uuid")
-            _run(resolve_mapping_review(fake_review_id, req, body))
+        resp = client.post(f"/v1/mapping-review/{fake_review_id}/resolve", json={
+            "campaign_id": "not-a-uuid",
+        })
+        # campaign_id must be a UUID — rejected at the request-model edge
+        assert resp.status_code == 422
 
-    def test_ignore_review_returns_structured(self):
-        from services.campaign.routes import ignore_mapping_review
-        req = _mock_request()
+    def test_ignore_review_returns_structured(self, client):
         fake_review_id = str(uuid.uuid4())
         # Ignoring a non-existent review should not crash; may return error response
-        result = _run(ignore_mapping_review(fake_review_id, req))
-        assert isinstance(result, dict)
+        resp = client.post(f"/v1/mapping-review/{fake_review_id}/ignore", json={"note": None})
+        assert resp.status_code in (200, 400, 404)
+        assert isinstance(resp.json(), dict)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -174,21 +228,20 @@ class TestMappingReviewEndpoints:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestCampaignQualityEndpoint:
-    def test_quality_returns_rates(self):
-        from services.campaign.routes import get_campaign_quality
-        req = _mock_request()
-        result = _run(get_campaign_quality(req))
+    def test_quality_returns_rates(self, client):
+        resp = client.get("/v1/campaign-quality")
+        assert resp.status_code == 200
+        result = resp.json()
         assert "data" in result
         data = result["data"]
         assert "spend_mapping_rate" in data
         assert "touchpoint_mapping_rate" in data
 
-    def test_tenant_isolation(self):
-        from services.campaign.routes import get_campaign_quality
-        req_a = _mock_request("tenant_a")
-        req_b = _mock_request("tenant_b")
-        result_a = _run(get_campaign_quality(req_a))
-        result_b = _run(get_campaign_quality(req_b))
+    def test_tenant_isolation(self, client):
+        result_a = client.get("/v1/campaign-quality", headers={_TENANT_HEADER: "tenant_a"})
+        result_b = client.get("/v1/campaign-quality", headers={_TENANT_HEADER: "tenant_b"})
         # Both must succeed without leaking data across tenants
-        assert "data" in result_a
-        assert "data" in result_b
+        assert result_a.status_code == 200
+        assert result_b.status_code == 200
+        assert "data" in result_a.json()
+        assert "data" in result_b.json()

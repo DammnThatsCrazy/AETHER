@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -27,6 +28,12 @@ def _literal_assignment(path: Path, name: str):
                     value = value.args[0]
                 return ast.literal_eval(value)
     raise ValueError(f"{name} not found in {path}")
+
+
+def _makefile_targets() -> set[str]:
+    """Every target name defined in the root Makefile (`name:` at column 0)."""
+    text = (ROOT / "Makefile").read_text(encoding="utf-8")
+    return set(re.findall(r"(?m)^([A-Za-z0-9][A-Za-z0-9_.\-]*)\s*:(?!=)", text))
 
 
 def validate() -> list[str]:
@@ -62,6 +69,38 @@ def validate() -> list[str]:
                  "KYBER_OPERATOR_GATE_ENFORCED", "SERVER_AUTHORITATIVE_CONSENT_ENABLED"):
         if flags.get(flag) is not True:
             errors.append(f"FT_UNSAFE_FLAG:{flag}")
+
+    # required_controls.tests must name real, invokable release gates. A test
+    # id that does not resolve to a Makefile target is a control that reads as
+    # enforced in this manifest but cannot actually be run by anyone.
+    required_tests = manifest["required_controls"].get("tests") or []
+    if not required_tests:
+        errors.append("FT_CONTROL_TESTS_EMPTY")
+    make_targets = _makefile_targets()
+    seen_tests: set[str] = set()
+    for test_id in required_tests:
+        if test_id in seen_tests:
+            errors.append(f"FT_CONTROL_TEST_DUPLICATE:{test_id}")
+        seen_tests.add(test_id)
+        if test_id not in make_targets:
+            errors.append(f"FT_CONTROL_TEST_UNKNOWN_TARGET:{test_id}")
+
+    # required_controls.alerts must each carry a concrete, testable breach
+    # condition. release_thresholds is the only place in this manifest that
+    # operationalizes an alert into a numeric trigger; an alert with no
+    # corresponding threshold key is a name with nothing wired behind it.
+    required_alerts = manifest["required_controls"].get("alerts") or []
+    if not required_alerts:
+        errors.append("FT_CONTROL_ALERTS_EMPTY")
+    thresholds = manifest.get("release_thresholds") or {}
+    seen_alerts: set[str] = set()
+    for alert in required_alerts:
+        if alert in seen_alerts:
+            errors.append(f"FT_ALERT_DUPLICATE:{alert}")
+        seen_alerts.add(alert)
+        if not any(key == alert or key.startswith(f"{alert}_") for key in thresholds):
+            errors.append(f"FT_ALERT_NO_THRESHOLD:{alert}")
+
     return errors
 
 

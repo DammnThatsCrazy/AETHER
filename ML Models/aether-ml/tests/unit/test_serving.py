@@ -67,13 +67,20 @@ class TestPredictionEndpoints:
         payload = {
             "session_id": "test-session-001",
             "features": {
-                "click_count": 5.0,
-                "scroll_depth": 0.6,
-                "time_on_page": 120.0,
-                "pages_viewed": 3.0,
-                "last_action_encoded": 1.0,
-                "session_duration": 300.0,
-                "device_type_encoded": 0.0,
+                "mouse_velocity_mean": 2.5,
+                "mouse_velocity_std": 0.8,
+                "scroll_depth_max": 0.6,
+                "scroll_velocity_mean": 1.2,
+                "hover_duration_mean": 0.9,
+                "time_between_actions_mean": 1.5,
+                "time_between_actions_std": 0.5,
+                "click_to_scroll_ratio": 0.7,
+                "active_ratio": 0.8,
+                "page_depth": 3,
+                "session_duration_s": 300.0,
+                "click_count": 5,
+                "scroll_count": 12,
+                "keypress_count": 4,
             },
         }
         response = client.post("/v1/predict/intent", json=payload)
@@ -84,18 +91,20 @@ class TestPredictionEndpoints:
         payload = {
             "session_id": "test-session-002",
             "features": {
-                "mouse_speed_mean": 2.5,
-                "mouse_speed_std": 0.8,
-                "click_interval_mean": 1.5,
-                "click_interval_std": 0.5,
-                "scroll_pattern_entropy": 3.0,
-                "keystroke_timing_variance": 0.3,
-                "session_duration": 300.0,
-                "page_views": 5.0,
-                "unique_pages": 4.0,
-                "js_execution_time": 50.0,
-                "has_webdriver": 0.0,
-                "user_agent_anomaly_score": 0.1,
+                "avg_time_between_actions": 1.5,
+                "time_variance": 0.8,
+                "click_to_scroll_ratio": 0.7,
+                "mouse_velocity_mean": 2.5,
+                "mouse_velocity_std": 0.8,
+                "mouse_entropy": 3.0,
+                "navigation_entropy": 2.1,
+                "interaction_diversity": 0.6,
+                "has_natural_pauses": 1.0,
+                "has_erratic_movement": 0.0,
+                "has_perfect_timing": 0.0,
+                "keypress_count": 8,
+                "unique_action_types": 4,
+                "action_rate": 0.5,
             },
         }
         response = client.post("/v1/predict/bot", json=payload)
@@ -105,16 +114,15 @@ class TestPredictionEndpoints:
         payload = {
             "session_id": "test-session-003",
             "features": {
-                "page_views": 5.0,
-                "unique_pages": 4.0,
-                "session_duration": 300.0,
-                "scroll_depth_mean": 0.6,
-                "click_count": 10.0,
-                "form_interactions": 2.0,
-                "search_queries": 1.0,
-                "product_views": 3.0,
-                "add_to_cart_count": 1.0,
-                "time_to_first_interaction": 15.0,
+                "page_count": 5,
+                "event_count": 42,
+                "session_duration_s": 300.0,
+                "max_scroll_depth": 0.6,
+                "form_interaction_count": 2,
+                "is_return_visit": 1.0,
+                "referral_source_score": 0.7,
+                "click_count": 10,
+                "active_ratio": 0.8,
             },
         }
         response = client.post("/v1/predict/session-score", json=payload)
@@ -125,15 +133,16 @@ class TestPredictionEndpoints:
             "identity_id": "user-001",
             "features": {
                 "days_since_last_visit": 15.0,
-                "visit_frequency_30d": 2.0,
-                "session_count_30d": 5.0,
+                "visit_frequency_trend": -0.1,
+                "feature_usage_breadth": 0.4,
+                "session_duration_trend": 0.05,
+                "support_ticket_count": 0,
+                "billing_status": 1.0,
+                "engagement_percentile": 0.6,
+                "total_sessions": 25,
                 "avg_session_duration": 120.0,
-                "page_views_trend": -0.1,
-                "conversion_count_30d": 1.0,
-                "support_tickets": 0.0,
-                "email_open_rate": 0.3,
-                "days_since_signup": 90.0,
-                "lifetime_value": 200.0,
+                "conversion_rate": 0.05,
+                "days_since_first_visit": 90.0,
             },
         }
         response = client.post("/v1/predict/churn", json=payload)
@@ -143,16 +152,17 @@ class TestPredictionEndpoints:
         payload = {
             "identity_id": "user-002",
             "features": {
-                "monetary_value": 100.0,
-                "frequency": 5.0,
-                "recency": 10.0,
-                "T": 90.0,
-                "avg_order_value": 50.0,
-                "purchase_count_90d": 3.0,
-                "days_since_first_purchase": 180.0,
-                "product_categories_count": 4.0,
-                "discount_usage_rate": 0.2,
-                "referral_count": 1.0,
+                "purchase_frequency": 5.0,
+                "recency_days": 10.0,
+                "monetary_mean": 50.0,
+                "monetary_total": 250.0,
+                "avg_session_duration": 120.0,
+                "total_sessions": 25,
+                "conversion_rate": 0.05,
+                "acquisition_channel_score": 0.7,
+                "engagement_percentile": 0.6,
+                "web3_tx_count": 3,
+                "web3_total_value": 150.0,
             },
         }
         response = client.post("/v1/predict/ltv", json=payload)
@@ -182,6 +192,50 @@ class TestPredictionEndpoints:
         }
         response = client.post("/v1/predict/batch", json=payload)
         assert response.status_code == 400
+
+
+class TestFeatureContractEnforcement:
+    """Contract violations must be rejected with 422 before inference."""
+
+    def test_out_of_range_feature_returns_422(self, client: TestClient) -> None:
+        payload = {
+            "record_id": "rec-oob",
+            "features": {**ANOMALY_FEATURES, "conversion_rate": 1.5},
+        }
+        response = client.post("/v1/predict/anomaly", json=payload)
+        assert response.status_code == 422
+        assert "conversion_rate" in response.json()["detail"]
+
+    def test_unknown_feature_returns_422(self, client: TestClient) -> None:
+        payload = {
+            "record_id": "rec-unknown",
+            "features": {**ANOMALY_FEATURES, "not_a_feature": 1.0},
+        }
+        response = client.post("/v1/predict/anomaly", json=payload)
+        assert response.status_code == 422
+        assert "not_a_feature" in response.json()["detail"]
+
+    def test_non_finite_feature_rejected(self) -> None:
+        # NaN cannot cross the JSON transport, but internal callers (batch
+        # pipelines) hit validate_features directly — prove finiteness holds.
+        import pytest
+
+        from common.feature_contracts import FeatureValidationError, validate_features
+
+        with pytest.raises(FeatureValidationError, match="non-finite"):
+            validate_features(
+                "anomaly_detection",
+                {**ANOMALY_FEATURES, "revenue": float("nan")},
+                reject_unknown=True,
+            )
+
+    def test_incomplete_payload_returns_422(self, client: TestClient) -> None:
+        payload = {
+            "session_id": "sess-partial",
+            "features": {"click_count": 5, "active_ratio": 0.8},
+        }
+        response = client.post("/v1/predict/intent", json=payload)
+        assert response.status_code == 422
 
 
 # =============================================================================
@@ -530,17 +584,26 @@ class TestDriftMonitoringEndpoint:
             assert data["models"] == {}
 
 
+ANOMALY_FEATURES = {
+    "traffic_volume": 1000.0,
+    "conversion_rate": 0.05,
+    "avg_session_duration": 120.0,
+    "bounce_rate": 0.4,
+    "error_rate": 0.01,
+    "api_latency_p99": 250.0,
+    "bot_traffic_ratio": 0.1,
+    "unique_visitors": 800.0,
+    "revenue": 5000.0,
+}
+
+
 class TestAnomalyDetectionEndpoint:
     """Tests for POST /v1/predict/anomaly."""
 
     def test_anomaly_returns_200(self, client: TestClient) -> None:
         payload = {
             "record_id": "rec-001",
-            "features": {
-                "feature_a": 1.0,
-                "feature_b": 0.5,
-                "feature_c": 2.3,
-            },
+            "features": dict(ANOMALY_FEATURES),
         }
         response = client.post("/v1/predict/anomaly", json=payload)
         assert response.status_code in (200, 503)
@@ -548,7 +611,7 @@ class TestAnomalyDetectionEndpoint:
     def test_anomaly_response_schema(self, client: TestClient) -> None:
         payload = {
             "record_id": "rec-002",
-            "features": {"x": 0.1, "y": 0.9},
+            "features": dict(ANOMALY_FEATURES),
         }
         response = client.post("/v1/predict/anomaly", json=payload)
         if response.status_code == 200:
@@ -566,7 +629,7 @@ class TestAnomalyDetectionEndpoint:
         from serving.src.api import _prediction_buffers
 
         before = len(_prediction_buffers["anomaly_detection"])
-        payload = {"record_id": "rec-003", "features": {"v": 0.5}}
+        payload = {"record_id": "rec-003", "features": dict(ANOMALY_FEATURES)}
         response = client.post("/v1/predict/anomaly", json=payload)
         if response.status_code == 200:
             assert len(_prediction_buffers["anomaly_detection"]) == before + 1

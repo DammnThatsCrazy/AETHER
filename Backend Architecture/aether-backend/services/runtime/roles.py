@@ -15,6 +15,9 @@ role entrypoint (``services/runtime/run_role.py``):
 - :func:`roles_in` / :func:`owning_role` — the two directions of the
   deployment-token ⇄ logical-role mapping that keeps a consolidated process
   per-role observable.
+- :data:`RELEASE_CRITICAL_ROLES` + :data:`ROLE_CAPABILITIES` — the single
+  declaration of which role failures block a release and which capability each
+  role delivers, consumed by both readiness surfaces.
 
 Deliberately dependency-free (no settings/registry imports) so it is trivially
 importable and unit-testable regardless of suite ordering.
@@ -62,6 +65,55 @@ EXECUTION_GROUPS: dict[str, frozenset[str]] = {
 # single-process "all" default, and the execution groups. Kept in sync with
 # config.settings.RUNTIME_ROLES.
 ALL_ROLES: frozenset[str] = WORKER_ROLES | {"api", "all"} | frozenset(EXECUTION_GROUPS)
+
+# Release-critical worker roles: the roles whose loss makes a release unsafe to
+# complete rather than merely degraded, so a failure here fails the global
+# readiness probe (services/gateway/readiness.py) and the worker process's own
+# readiness surface (services/runtime/run_role.py).
+#
+# The dividing line is *recoverability*, not importance. A role is critical when
+# its outage destroys work or breaks an at-least-once guarantee that catching up
+# later cannot repair:
+#
+# - outbox-relay      — the at-least-once delivery path. Nothing else drains
+#                       event_outbox / notification_outbox, so a stopped relay
+#                       silently accumulates undelivered obligations.
+# - stream-worker     — owns event replay and the ingestion stream. Its queues
+#                       expire on the broker's retention, so backlog becomes
+#                       permanent event loss rather than delayed processing.
+# - identity-worker   — identity resolution sits on the same expiring ingestion
+#                       queues; unresolved events cannot be re-derived once the
+#                       source message is gone.
+# - graph-writer      — projects the graph mutation ledger. The ledger is the
+#                       only ordered record of topology change; a gap in the
+#                       projection is not detectable from the projected state.
+#
+# The remaining roles degrade a capability while their work stays durably
+# recorded and replayable (measurement restatement, semantic enrichment,
+# materialisation, scheduled maintenance), so they must not block a rollout.
+RELEASE_CRITICAL_ROLES: frozenset[str] = frozenset(
+    {
+        "outbox-relay",
+        "stream-worker",
+        "identity-worker",
+        "graph-writer",
+    }
+)
+
+# The platform capability each worker role delivers. Readiness reports per
+# capability rather than per role because a capability is what a caller loses
+# when the role stops: "semantic-enrichment unavailable" is actionable to a
+# consumer of the API, "semantic-worker failed" is not.
+ROLE_CAPABILITIES: dict[str, str] = {
+    "outbox-relay": "event-delivery",
+    "stream-worker": "stream-ingestion",
+    "identity-worker": "identity-resolution",
+    "graph-writer": "graph-projection",
+    "measurement-worker": "measurement-restatement",
+    "semantic-worker": "semantic-enrichment",
+    "materializer": "materialization",
+    "maintenance": "scheduled-maintenance",
+}
 
 # Worker roles whose process also attaches the shared stream (Kafka) consumers.
 # A pure "api" process attaches none; "all" attaches everything.
@@ -145,9 +197,53 @@ def _build_spec_owner_index() -> dict[str, str]:
 _SPEC_NAME_TO_ROLE: dict[str, str] = _build_spec_owner_index()
 
 
+def _assert_role_metadata_complete() -> None:
+    """Fail at import if criticality/capability declarations drift from the roles.
+
+    Readiness reads both maps to decide whether a failure blocks a rollout, so a
+    role added to WORKER_ROLES without an entry here would silently become
+    non-critical and capability-less — exactly the "absent signal read as
+    healthy" failure the probe exists to prevent.
+    """
+    unknown = RELEASE_CRITICAL_ROLES - WORKER_ROLES
+    if unknown:  # pragma: no cover — topology guard
+        raise ValueError(
+            f"RELEASE_CRITICAL_ROLES names non-worker role(s): {sorted(unknown)}"
+        )
+    missing = WORKER_ROLES - set(ROLE_CAPABILITIES)
+    extra = set(ROLE_CAPABILITIES) - WORKER_ROLES
+    if missing or extra:  # pragma: no cover — topology guard
+        raise ValueError(
+            "ROLE_CAPABILITIES must cover exactly WORKER_ROLES "
+            f"(missing={sorted(missing)}, unknown={sorted(extra)})"
+        )
+
+
+_assert_role_metadata_complete()
+
+
 def is_valid_role(role: str) -> bool:
     """Return True if ``role`` is a recognised AETHER_ROLE token."""
     return role in ALL_ROLES
+
+
+def is_release_critical(role: str) -> bool:
+    """Return True when a failure of ``role`` must block a release.
+
+    Unknown roles are not critical: an unattributed supervised worker degrades a
+    capability nobody declared, and treating it as release-blocking would let any
+    stray spec veto every rollout.
+    """
+    return role in RELEASE_CRITICAL_ROLES
+
+
+def capability_for(role: str) -> str:
+    """Return the platform capability ``role`` delivers.
+
+    Roles outside :data:`WORKER_ROLES` (an unattributed supervised worker) get a
+    namespaced fallback so their state is still reportable rather than dropped.
+    """
+    return ROLE_CAPABILITIES.get(role) or f"worker:{role}"
 
 
 def is_worker_role(role: str) -> bool:

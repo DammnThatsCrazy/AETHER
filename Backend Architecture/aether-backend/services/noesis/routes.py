@@ -186,6 +186,16 @@ async def noesis_health(request: Request):
     )
 
 
+def _conversation_source_status(degraded: bool, items: list) -> str:
+    """profile360/campaign vocabulary: ``missing`` = store not consulted /
+    failed, ``empty`` = consulted and genuinely none, ``available`` = has
+    items. A cache outage must not present as a tenant with no
+    conversations."""
+    if degraded:
+        return "missing"
+    return "available" if items else "empty"
+
+
 @router.get("/conversations")
 async def list_conversations(request: Request, graph: GraphClient = Depends(get_graph)):
     """List recent Noesis conversations for the authenticated tenant scope."""
@@ -194,9 +204,16 @@ async def list_conversations(request: Request, graph: GraphClient = Depends(get_
     store = NoesisConversationStore()
     try:
         conversations = await store.list_for_tenant(tenant.tenant_id, limit=20)
-    except Exception:
+        degraded = False
+    except Exception as exc:  # noqa: BLE001 — degrade with an honest status
+        logger.warning("Noesis conversation list unavailable", extra={"error": str(exc)})
         conversations = []
-    return JSONResponse(content={"data": conversations, "count": len(conversations)})
+        degraded = True
+    return JSONResponse(content={
+        "data": conversations,
+        "count": len(conversations),
+        "source_status": _conversation_source_status(degraded, conversations),
+    })
 
 
 @router.get("/conversations/{conversation_id}")
@@ -207,6 +224,14 @@ async def get_conversation(conversation_id: str, request: Request, graph: GraphC
     store = NoesisConversationStore()
     try:
         messages = await store.get_recent(conversation_id, tenant.tenant_id, limit=50)
-    except Exception:
+        degraded = False
+    except Exception as exc:  # noqa: BLE001 — degrade with an honest status
+        logger.warning("Noesis conversation get unavailable", extra={"error": str(exc)})
         messages = []
-    return JSONResponse(content={"conversation_id": conversation_id, "messages": messages, "count": len(messages)})
+        degraded = True
+    return JSONResponse(content={
+        "conversation_id": conversation_id,
+        "messages": messages,
+        "count": len(messages),
+        "source_status": _conversation_source_status(degraded, messages),
+    })

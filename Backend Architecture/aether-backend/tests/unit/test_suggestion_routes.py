@@ -12,7 +12,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from services.suggestions.models import (
@@ -23,6 +24,7 @@ from services.suggestions.models import (
     SuggestionSummary,
 )
 from services.suggestions.routes import router
+from shared.common.common import AetherError
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +64,10 @@ def _make_record(
 def _make_app(tenant_id: str = "tenant_abc") -> FastAPI:
     """Build a minimal FastAPI app with the suggestion router and stub auth."""
     app = FastAPI()
+
+    @app.exception_handler(AetherError)
+    async def error_handler(request: Request, exc: AetherError) -> JSONResponse:
+        return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
 
     @app.middleware("http")
     async def inject_tenant(request, call_next):
@@ -127,7 +133,9 @@ def test_list_suggestions_meta_includes_total(client):
 def test_get_suggestion_returns_404_for_unknown_id(client):
     from shared.common.common import NotFoundError
     mock_svc = MagicMock()
-    mock_svc.get_suggestion = AsyncMock(side_effect=NotFoundError("not found"))
+    # NotFoundError takes a resource name and appends " not found" itself
+    # (see shared/common/common.py); passing "not found" here double-appends.
+    mock_svc.get_suggestion = AsyncMock(side_effect=NotFoundError("Suggestion"))
 
     with patch("services.suggestions.routes._get_service", return_value=mock_svc):
         response = client.get("/v1/suggestions/unknown_id")

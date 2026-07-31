@@ -1,6 +1,6 @@
 """
 Tests that the compliance ``ConsentPurpose`` enum stays reconciled with the
-canonical 11-purpose consent registry at
+canonical 12-purpose consent registry at
 ``packages/shared/contracts/consent-registry.json``.
 
 These are drift guards: if a purpose is added, removed, or has its
@@ -35,11 +35,14 @@ from config.consent_registry_sync import (
     reconcile,
 )
 
-EXPECTED_PURPOSE_COUNT = 11
+# 12 = the original 11 + the governed fraud_prevention purpose (explicit
+# opt-in) added so security/fraud models stop leaking category names into
+# allowed_training_purposes.
+EXPECTED_PURPOSE_COUNT = 12
 
 
-def test_registry_is_locatable_and_has_eleven_purposes():
-    """The canonical registry resolves and defines exactly 11 purposes."""
+def test_registry_is_locatable_and_has_twelve_purposes():
+    """The canonical registry resolves and defines exactly 12 purposes."""
     path = find_registry_path()
     assert path.is_file(), f"registry not found at {path}"
     assert len(canonical_keys()) == EXPECTED_PURPOSE_COUNT

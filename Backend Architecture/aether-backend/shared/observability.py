@@ -172,3 +172,51 @@ def metrics_summary() -> dict:
     except Exception:  # pragma: no cover — dashboard must never fail hard
         pass
     return summary
+
+
+# =========================================================================
+# W3C trace-context seam (AETHER_OTEL_ENABLED)
+# =========================================================================
+# This is deliberately a *seam*, not an OpenTelemetry integration: it
+# generates and propagates W3C `traceparent` values so job/event hops share
+# a trace id, and it is a no-op (None passthrough) unless AETHER_OTEL_ENABLED
+# is set. Full OTel (SDK, exporters, spans) is a declared production_status
+# blocker — this seam must not be mistaken for observability coverage.
+
+import os
+import re
+import secrets
+
+_TRACEPARENT_RE = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$")
+
+
+def otel_enabled() -> bool:
+    return os.getenv("AETHER_OTEL_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def new_traceparent() -> Optional[str]:
+    """A fresh W3C traceparent, or None when the seam is disabled."""
+    if not otel_enabled():
+        return None
+    return f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
+
+
+def child_traceparent(parent: Optional[str]) -> Optional[str]:
+    """Continue `parent`'s trace with a new span id; fresh trace if absent/invalid."""
+    if not otel_enabled():
+        return None
+    if parent:
+        match = _TRACEPARENT_RE.match(parent.strip().lower())
+        if match:
+            return f"00-{match.group(1)}-{secrets.token_hex(8)}-01"
+    return new_traceparent()
+
+
+def parse_traceparent(header: Optional[str]) -> Optional[tuple[str, str]]:
+    """(trace_id, span_id) from a W3C traceparent header, else None."""
+    if not header:
+        return None
+    match = _TRACEPARENT_RE.match(header.strip().lower())
+    if match is None:
+        return None
+    return match.group(1), match.group(2)

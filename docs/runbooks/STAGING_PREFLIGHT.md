@@ -84,12 +84,37 @@ never echoes secret values. Checks:
   heads are computed once from disk, the DB revision cached ~30 s. *(Skipped in
   local / no pool.)*
 - **cache**, **event_bus** — backends reachable.
-- **workers** — supervisor status. **Advisory: never fails readiness** — a failed
-  worker shows in the map but does not flip `ready` to false.
+- **workers** — per-role health of the worker roles *this process supervises*.
+  Graded by criticality, declared in
+  `Backend Architecture/aether-backend/services/runtime/roles.py`:
+  - a role in `RELEASE_CRITICAL_ROLES` (`outbox-relay`, `stream-worker`,
+    `identity-worker`, `graph-writer`) reports `failed` and flips `ready` false;
+  - any other role reports `degraded` — `ready` stays true and only that role's
+    capability is marked unavailable;
+  - a role this process should supervise but cannot see reports `unknown`, which
+    counts as unavailable. Absence of a signal is never treated as health.
+  A pure `api` task supervises no roles, so this check is `skipped` there and the
+  worker fleet is gated by the worker tasks' own endpoints (see below).
 - **auth_config** — non-local only; JWT secret present and not the default.
 
-`ready` is the AND of all **non-advisory** checks being `ok` or `skipped`. In
-local, migrations/workers/auth report `skipped` and the service reports ready.
+`ready` is the AND of every check being `ok`, `skipped`, or `degraded`
+(`degraded` is emitted only by `workers`). The response also carries a top-level
+`capabilities` map — `{capability: {available, state, role, release_critical,
+detail}}` — which is what to read when deciding whether a degraded environment
+still serves the path you care about.
+
+### Worker task endpoints
+
+Worker processes (`python -m services.runtime.run_role <role>`) serve their own
+health surface on `AETHER_WORKER_HEALTH_PORT` (default `8080`):
+
+- `GET /healthz`, `GET /livez` — **liveness**: 200 while the process is up. This
+  is the predicate an ECS container `healthCheck` should use. Pointing a
+  container health check at the degraded signal makes ECS kill and replace a task
+  that comes back equally degraded, and the deployment never settles.
+- `GET /ready`, `GET /readyz`, `GET /v1/ready` — **readiness**: 503 when a
+  release-critical role hosted by that task is unavailable, 200 otherwise, with
+  the same `roles` / `capabilities` payload the gateway probe returns.
 
 ### Symptoms → actions
 
@@ -98,9 +123,15 @@ local, migrations/workers/auth report `skipped` and the service reports ready.
 - **503 with `database`/`cache`/`event_bus` failed.** The dependency is
   unreachable from the running container — fix connectivity/credentials; the
   service is intentionally refusing traffic.
-- **`workers` shows failed but `/v1/ready` is 200.** Expected — workers are
-  advisory. Investigate the named worker via the supervisor/logs, but readiness
-  is not the mechanism that gates it.
+- **503 with `workers` failed.** A release-critical role has no working
+  supervised worker in that process. Read `checks.workers.critical_failures` for
+  the role and `checks.workers.roles.<role>.detail` for why — `failed` (restart
+  budget exhausted), `stale` (no heartbeat within 60 s), `stopped` (the worker
+  returned), or `unknown` (nothing registered for a role this process claims).
+- **`workers` shows `degraded` and `/v1/ready` is 200.** A non-release-critical
+  role is down. This is intentional: the rollout is not blocked, but the
+  capability named in `capabilities` is genuinely unavailable and needs the same
+  investigation, just not the same urgency.
 - **503 with `auth_config` failed.** The JWT secret is missing or still the
   default in a non-local env — set a real secret and restart.
 

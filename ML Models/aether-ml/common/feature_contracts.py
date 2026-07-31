@@ -28,6 +28,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
+import math
 from typing import Any, Optional
 
 try:
@@ -49,10 +50,14 @@ class FeatureValidationError(ValueError):
     """Raised when feature input fails schema validation."""
 
     def __init__(self, model_id: str, message: str, missing: list[str] | None = None,
-                 type_errors: list[str] | None = None):
+                 type_errors: list[str] | None = None,
+                 range_errors: list[str] | None = None,
+                 unknown: list[str] | None = None):
         self.model_id = model_id
         self.missing = missing or []
         self.type_errors = type_errors or []
+        self.range_errors = range_errors or []
+        self.unknown = unknown or []
         super().__init__(f"[{model_id}] Feature validation failed: {message}")
 
 
@@ -93,6 +98,13 @@ class FeatureContract:
     online_key_patterns: list[str] = field(default_factory=list)
     freshness_sla_seconds: int = 3600
     owner: str = "ml-platform"
+    # Canonical consent-registry purposes governing collection of this
+    # contract's input features. Every key must exist in
+    # packages/shared/contracts/consent-registry.json — validated by
+    # scripts/validate_model_consent_purposes.py. Deliberately excluded from
+    # the schema hash: purpose scoping is a governance property, not a
+    # training-serving skew risk.
+    required_purposes: list[str] = field(default_factory=list)
 
     # Derived at init time
     _required: list[str] = field(default_factory=list, init=False, repr=False)
@@ -170,6 +182,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["session_features", "behavioral_features"],
     freshness_sla_seconds=60,
+    required_purposes=["analytics", "personalization"],
     features=[
         FeatureSpec("mouse_velocity_mean", "float"),
         FeatureSpec("mouse_velocity_std", "float"),
@@ -195,6 +208,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["behavioral_features"],
     freshness_sla_seconds=30,
+    required_purposes=["fraud_prevention"],
     features=[
         # Aliases bridge pipeline output names → canonical contract names
         FeatureSpec("avg_time_between_actions", "float", min_value=0.0,
@@ -227,6 +241,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["session_features"],
     freshness_sla_seconds=60,
+    required_purposes=["analytics"],
     features=[
         FeatureSpec("page_count", "int", min_value=0,
                     aliases=["pages_viewed"]),
@@ -252,6 +267,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["identity_features"],
     freshness_sla_seconds=3600,
+    required_purposes=["personalization", "fraud_prevention"],
     features=[
         FeatureSpec("device_fingerprint_sim", "float", min_value=0.0, max_value=1.0),
         FeatureSpec("behavioral_sim", "float", min_value=0.0, max_value=1.0),
@@ -272,6 +288,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["journey_features"],
     freshness_sla_seconds=1800,
+    required_purposes=["analytics"],
     features=[
         FeatureSpec("page_sequence_len", "int", min_value=0,
                     aliases=["page_sequence"]),
@@ -294,6 +311,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["identity_features"],
     freshness_sla_seconds=86400,
+    required_purposes=["analytics"],
     features=[
         FeatureSpec("days_since_last_visit", "float", min_value=0.0),
         FeatureSpec("visit_frequency_trend", "float"),
@@ -315,6 +333,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["identity_features", "web3_features"],
     freshness_sla_seconds=86400,
+    required_purposes=["commerce"],
     features=[
         FeatureSpec("purchase_frequency", "float", min_value=0.0),
         FeatureSpec("recency_days", "float", min_value=0.0),
@@ -336,6 +355,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["anomaly_features"],
     freshness_sla_seconds=300,
+    required_purposes=["analytics", "fraud_prevention"],
     features=[
         FeatureSpec("traffic_volume", "float", min_value=0.0),
         FeatureSpec("conversion_rate", "float", min_value=0.0, max_value=1.0),
@@ -355,6 +375,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["attribution_features"],
     freshness_sla_seconds=3600,
+    required_purposes=["marketing"],
     features=[
         FeatureSpec("touchpoint_count", "int", min_value=0,
                     aliases=["touchpoint_sequence"]),
@@ -375,6 +396,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["security_features"],
     freshness_sla_seconds=0,
+    required_purposes=["web3"],
     features=[
         FeatureSpec("bytecode_hash", "str"),
         FeatureSpec("opcode_count", "int", min_value=0),
@@ -390,6 +412,7 @@ _register(FeatureContract(
     schema_version="1.0",
     source_feature_groups=["composite_inputs"],
     freshness_sla_seconds=300,
+    required_purposes=["analytics", "fraud_prevention"],
     features=[
         FeatureSpec("churn_probability", "float", min_value=0.0, max_value=1.0,
                     required=False, default=0.5),
@@ -422,10 +445,25 @@ def get_feature_contract(model_id: str) -> FeatureContract:
     return _CONTRACTS[model_id]
 
 
+def list_feature_contracts() -> list[FeatureContract]:
+    """Return all registered feature contracts."""
+    return list(_CONTRACTS.values())
+
+
+def _check_range(spec: "FeatureSpec", value: float, range_errors: list[str]) -> None:
+    """Enforce the contract's declared bounds — hashed into the schema for
+    years but never read until now."""
+    if spec.min_value is not None and value < spec.min_value:
+        range_errors.append(f"{spec.name}: {value} < min {spec.min_value}")
+    if spec.max_value is not None and value > spec.max_value:
+        range_errors.append(f"{spec.name}: {value} > max {spec.max_value}")
+
+
 def validate_features(
     model_id: str,
     features: dict[str, Any],
     allow_defaults: bool = True,
+    reject_unknown: bool = False,
 ) -> None:
     """
     Validate a feature dict against the model's contract.
@@ -434,9 +472,13 @@ def validate_features(
         model_id: Canonical model ID.
         features: Input feature dict (may include aliases).
         allow_defaults: If True, missing optional features are not errors.
+        reject_unknown: If True, keys outside the contract (after alias
+            normalisation) are errors — the serving boundary uses this so a
+            misspelled feature cannot silently become a default.
 
     Raises:
-        FeatureValidationError: On missing required features or type errors.
+        FeatureValidationError: On missing required features, type errors,
+        declared min/max range violations, or non-finite numeric values.
     """
     contract = get_feature_contract(model_id)
 
@@ -448,6 +490,11 @@ def validate_features(
 
     missing: list[str] = []
     type_errors: list[str] = []
+    range_errors: list[str] = []
+    unknown: list[str] = []
+    if reject_unknown:
+        contract_names = {spec.name for spec in contract.features}
+        unknown = sorted(k for k in normalised_keys if k not in contract_names)
 
     for spec in contract.features:
         # Check presence (consider aliases)
@@ -482,9 +529,27 @@ def validate_features(
             _float_types = (int, float) + ((np.floating, np.integer) if _HAS_NUMPY else ())  # type: ignore[misc]
             if not isinstance(value, _float_types):
                 type_errors.append(f"{spec.name}: expected float, got {type(value).__name__}")
+            elif not math.isfinite(float(value)):
+                # NaN/inf cannot be range-checked and silently poison models
+                # downstream — reject at the boundary.
+                range_errors.append(f"{spec.name}: non-finite value {value!r}")
+            else:
+                _check_range(spec, float(value), range_errors)
         elif spec.dtype == "int":
             _int_types = (int,) + ((np.integer,) if _HAS_NUMPY else ())  # type: ignore[misc]
-            if not isinstance(value, _int_types):
+            _float_types = (float,) + ((np.floating,) if _HAS_NUMPY else ())  # type: ignore[misc]
+            if isinstance(value, _int_types):
+                _check_range(spec, float(value), range_errors)
+            elif isinstance(value, _float_types):
+                # JSON transport (dict[str, float] request models) coerces every
+                # number to float; an integral float is a valid int on the wire.
+                if not math.isfinite(value):
+                    range_errors.append(f"{spec.name}: non-finite value {value!r}")
+                elif not float(value).is_integer():
+                    type_errors.append(f"{spec.name}: expected int, got non-integral float {value!r}")
+                else:
+                    _check_range(spec, float(value), range_errors)
+            else:
                 type_errors.append(f"{spec.name}: expected int, got {type(value).__name__}")
         elif spec.dtype == "bool":
             _bool_types = (bool,) + ((np.bool_,) if _HAS_NUMPY else ())  # type: ignore[misc]
@@ -494,17 +559,23 @@ def validate_features(
             if not isinstance(value, str):
                 type_errors.append(f"{spec.name}: expected str, got {type(value).__name__}")
 
-    if missing or type_errors:
+    if missing or type_errors or range_errors or unknown:
         parts = []
         if missing:
             parts.append(f"Missing required features: {missing}")
         if type_errors:
             parts.append(f"Type errors: {type_errors}")
+        if range_errors:
+            parts.append(f"Range errors: {range_errors}")
+        if unknown:
+            parts.append(f"Unknown features: {unknown}")
         raise FeatureValidationError(
             model_id=model_id,
             message="; ".join(parts),
             missing=missing,
             type_errors=type_errors,
+            range_errors=range_errors,
+            unknown=unknown,
         )
 
 

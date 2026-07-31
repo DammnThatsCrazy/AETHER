@@ -161,7 +161,7 @@ def test_compute_permission_findings_expired_grant():
         tenant_id="t-1",
         provider_id="x_reference",
         scopes=["read"],
-        expires_at="2020-01-01T00:00:00",
+        expires_at="2020-01-01T00:00:00Z",
         is_active=True,
     )
     findings = compute_permission_findings("t-1", [grant], [], {})
@@ -201,7 +201,7 @@ def test_compute_permission_findings_revoked_grant_used():
         tenant_id="t-1",
         provider_id="x_reference",
         scopes=["read"],
-        revoked_at="2025-01-01T00:00:00",
+        revoked_at="2025-01-01T00:00:00Z",
         is_active=False,
         agent_id="agent-1",
     )
@@ -209,7 +209,7 @@ def test_compute_permission_findings_revoked_grant_used():
         action_id="a-1",
         provider_id="x_reference",
         agent_id="agent-1",
-        observed_at="2025-06-01T00:00:00",
+        observed_at="2025-06-01T00:00:00Z",
     )
     findings = compute_permission_findings("t-1", [grant], [action], {})
     types = [f.finding_type for f in findings]

@@ -36,3 +36,41 @@ checks:
     blocks_founding_tenant_release: true
     runner_class: macos
     evidence_artifact: ios-release-evidence
+  - id: repo-health-validate
+    workflow: .github/workflows/repo-health.yml
+    job: validate
+    applicability: [backend, ml, frontend, e2e_tenant, docs]
+    blocks_pr_merge: true
+    blocks_founding_tenant_release: true
+    runner_class: ubuntu
+    evidence_artifact: repo-health-validate-evidence
+  - id: hardening-release-gate
+    workflow: .github/workflows/hardening-release-gate.yml
+    job: canonical-gates
+    applicability: [release_gate, ci_check]
+    blocks_pr_merge: true
+    blocks_founding_tenant_release: true
+    runner_class: ubuntu
+    evidence_artifact: hardening-release-gate-evidence
+  - id: repo-consistency
+    workflow: .github/workflows/repo-consistency.yml
+    job: repo-consistency
+    applicability: [repo_consistency, docs, contracts]
+    blocks_pr_merge: true
+    blocks_founding_tenant_release: true
+    runner_class: ubuntu
+    evidence_artifact: repo-consistency-evidence
+  - id: smart-contract-analysis
+    workflow: .github/workflows/smart-contract-analysis.yml
+    job: slither
+    applicability: [smart_contracts]
+    blocks_pr_merge_when_paths_touched: true
+    runner_class: ubuntu
+    evidence_artifact: smart-contract-analysis-evidence
+  - id: smart-contract-tests
+    workflow: .github/workflows/smart-contract-analysis.yml
+    job: contract-tests
+    applicability: [smart_contracts]
+    blocks_pr_merge_when_paths_touched: true
+    runner_class: ubuntu
+    evidence_artifact: contract-tests-evidence

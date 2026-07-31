@@ -457,6 +457,11 @@ contract AnalyticsRewards is
     {
         if (to == address(0)) revert ZeroAddress();
         uint256 balance = rewardToken.balanceOf(address(this));
+        // Triaged (incorrect-equality): the balance is read fresh in this call
+        // and the strict zero check only guards the no-op case. An attacker
+        // donating dust merely makes the withdraw proceed, which is the
+        // intended admin path; no balance-dependent branch is exploitable.
+        // slither-disable-next-line incorrect-equality
         if (balance == 0) revert ZeroAmount();
         rewardToken.safeTransfer(to, balance);
     }

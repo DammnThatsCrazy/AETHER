@@ -26,6 +26,13 @@ Consumer-attached roles get one ``EventConsumer`` per distinct
 ``(role, group_id)`` via ``services/runtime/consumer_runner.py``, and each
 receive loop is registered with the same :class:`WorkerSupervisor` as the loop
 workers so it inherits crash → metric → backoff-restart isolation.
+
+Every worker process also serves a small HTTP health surface (see
+:class:`_WorkerHealthServer`), which is what lets an ECS worker task definition
+carry a real ``healthCheck`` instead of none at all. Liveness and readiness are
+deliberately separate endpoints: a container health check must not kill a task
+because one non-critical role degraded, and a rollout gate must not pass because
+a doomed task is still able to accept a TCP connection.
 """
 
 from __future__ import annotations
@@ -34,11 +41,12 @@ import argparse
 import asyncio
 import contextlib
 import dataclasses
+import json
 import os
 import signal
 import sys
 
-from services.runtime.roles import ALL_ROLES, is_valid_role
+from services.runtime.roles import ALL_ROLES, is_valid_role, roles_in
 
 # Signals an orchestrator uses to ask for a graceful stop. ECS sends SIGTERM and
 # then SIGKILL after ``stopTimeout``; SIGINT is the interactive equivalent.
@@ -47,6 +55,169 @@ _SHUTDOWN_SIGNALS = (signal.SIGTERM, signal.SIGINT)
 # How often the health watch re-reads per-role supervisor state while the
 # process is otherwise idle waiting for a shutdown signal.
 _HEALTH_WATCH_INTERVAL_S = 30.0
+
+# Health surface configuration. Enabled by default: a worker task with no health
+# endpoint is a task ECS cannot check, which is the state this exists to end.
+_HEALTH_ENABLED_ENV = "AETHER_WORKER_HEALTH_ENABLED"
+_HEALTH_HOST_ENV = "AETHER_WORKER_HEALTH_HOST"
+_HEALTH_PORT_ENV = "AETHER_WORKER_HEALTH_PORT"
+_DEFAULT_HEALTH_HOST = "0.0.0.0"
+_DEFAULT_HEALTH_PORT = 8080
+
+# Bounds on a single health request. The endpoint is reachable from anything
+# that can route to the task, so it never reads unboundedly.
+_HEALTH_READ_TIMEOUT_S = 5.0
+_HEALTH_MAX_HEADERS = 64
+
+_HTTP_REASON = {200: "OK", 404: "Not Found", 405: "Method Not Allowed", 503: "Service Unavailable"}
+
+# Liveness paths: "this process is up". Never reflect degraded roles — a
+# container health check wired to a degraded signal kills the task, ECS replaces
+# it with one that comes up equally degraded, and the deployment never settles.
+_LIVENESS_PATHS = ("/healthz", "/livez")
+# Readiness paths: "every release-critical role this process hosts is working".
+_READINESS_PATHS = ("/ready", "/readyz", "/v1/ready")
+
+
+def _health_enabled() -> bool:
+    return os.environ.get(_HEALTH_ENABLED_ENV, "true").strip().lower() not in (
+        "0", "false", "no", "off",
+    )
+
+
+class _WorkerHealthServer:
+    """Minimal HTTP surface exposing this worker process's health.
+
+    Hand-rolled on ``asyncio.start_server`` rather than mounted on uvicorn: the
+    ASGI server installs its own SIGTERM/SIGINT handlers, which would displace
+    the ones :func:`_install_shutdown_signals` relies on to reach the drain path.
+    Two endpoints and no request body is not worth losing graceful shutdown over.
+
+    Readiness delegates to :func:`evaluate_worker_readiness`, the same evaluator
+    the gateway probe uses, so a role can never read healthy here and unhealthy
+    there.
+    """
+
+    def __init__(self, supervisor, role: str, host: str, port: int) -> None:
+        self._supervisor = supervisor
+        self._role = role
+        self._host = host
+        self._port = port
+        # Every logical role this process hosts. Unlike the API lifespan, this
+        # process registers a supervised worker for each of them (loop specs and
+        # consumer receive loops alike), so a hosted role missing from the
+        # supervisor is a real fault and must read as unknown, not as absent.
+        self._expected_roles = roles_in(role) or frozenset({role})
+        self._server = None
+
+    async def start(self) -> None:
+        self._server = await asyncio.start_server(self._handle, self._host, self._port)
+        print(
+            f"[run_role] health surface role={self._role} "
+            f"bind={self._host}:{self._port} "
+            f"liveness={','.join(_LIVENESS_PATHS)} "
+            f"readiness={','.join(_READINESS_PATHS)}",
+            flush=True,
+        )
+
+    async def stop(self) -> None:
+        if self._server is None:
+            return
+        self._server.close()
+        with contextlib.suppress(Exception):
+            await self._server.wait_closed()
+        self._server = None
+
+    def _readiness(self) -> tuple[int, dict]:
+        from services.runtime.supervisor import evaluate_worker_readiness
+
+        health = evaluate_worker_readiness(self._supervisor, self._expected_roles)
+        payload = {
+            "ready": health["ready"],
+            "booted_as": self._role,
+            "roles": health["roles"],
+            "capabilities": health["capabilities"],
+            "critical_failures": health["critical_failures"],
+            "degraded_roles": health["degraded_roles"],
+        }
+        return (200 if health["ready"] else 503), payload
+
+    def _route(self, method: str, path: str) -> tuple[int, dict]:
+        if method != "GET":
+            return 405, {"error": "method not allowed"}
+        if path in _LIVENESS_PATHS:
+            return 200, {
+                "status": "alive",
+                "booted_as": self._role,
+                "lease_owner": self._supervisor.lease_owner,
+            }
+        if path in _READINESS_PATHS:
+            return self._readiness()
+        return 404, {"error": "not found"}
+
+    async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            request_line = await asyncio.wait_for(
+                reader.readline(), _HEALTH_READ_TIMEOUT_S
+            )
+            if not request_line:
+                return
+            parts = request_line.decode("latin-1", "replace").split()
+            method = parts[0] if parts else ""
+            target = parts[1] if len(parts) > 1 else "/"
+            # Consume the request headers so the peer is not reset before it has
+            # read the response.
+            for _ in range(_HEALTH_MAX_HEADERS):
+                line = await asyncio.wait_for(reader.readline(), _HEALTH_READ_TIMEOUT_S)
+                if line in (b"\r\n", b"\n", b""):
+                    break
+            status, payload = self._route(method, target.split("?", 1)[0])
+            body = json.dumps(payload).encode("utf-8")
+            head = (
+                f"HTTP/1.1 {status} {_HTTP_REASON.get(status, 'OK')}\r\n"
+                "Content-Type: application/json\r\n"
+                f"Content-Length: {len(body)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("latin-1")
+            writer.write(head + body)
+            await writer.drain()
+        except (asyncio.TimeoutError, ConnectionResetError, BrokenPipeError):
+            # A probe that hung up or stalled tells us nothing about worker
+            # health; the next poll decides.
+            pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # pragma: no cover — defensive
+            print(
+                f"[run_role] health request failed role={self._role} "
+                f"error={type(exc).__name__}: {exc}",
+                flush=True,
+            )
+        finally:
+            with contextlib.suppress(Exception):
+                writer.close()
+                await writer.wait_closed()
+
+
+async def _start_health_surface(supervisor, role: str):
+    """Bind the health surface, or return None when it is switched off.
+
+    A bind failure is fatal. A worker task whose health endpoint never came up
+    is a task the orchestrator cannot distinguish from a healthy one, and
+    continuing would reintroduce exactly the blind spot this surface removes.
+    """
+    if not _health_enabled():
+        print(
+            f"[run_role] health surface disabled role={role} "
+            f"({_HEALTH_ENABLED_ENV} is off) — this task exposes no health endpoint",
+            flush=True,
+        )
+        return None
+    host = os.environ.get(_HEALTH_HOST_ENV) or _DEFAULT_HEALTH_HOST
+    port = int(os.environ.get(_HEALTH_PORT_ENV) or _DEFAULT_HEALTH_PORT)
+    server = _WorkerHealthServer(supervisor, role, host, port)
+    await server.start()
+    return server
 
 
 def _run_api() -> int:
@@ -213,14 +384,13 @@ async def _watch_role_health(supervisor, role: str, interval_s: float) -> None:
 
     ``status_by_role()`` was otherwise read in exactly one place — inside
     ``_shutdown`` — so a role that exhausted its restart budget stayed invisible
-    for the entire remaining life of the task. Combined with runtime_service
-    tasks having no ECS health check, a process doing seven-eighths of its job
-    reported as fully healthy indefinitely.
+    for the entire remaining life of the task: a process doing seven-eighths of
+    its job reported as fully healthy indefinitely.
 
-    This does not *fix* that (a container-level health check and a readiness
-    endpoint are infrastructure, not this file); it makes the state continuously
-    observable in logs and metrics instead of only at exit, which is the part
-    that can be fixed from here.
+    This is the log/metric half of that signal; :class:`_WorkerHealthServer`
+    serves the same state to the orchestrator over HTTP. Both are wanted: the
+    endpoint answers only when polled, while this emits a counter and a one-shot
+    log line the moment a role degrades, which is what an alert can fire on.
     """
     from shared.logger.logger import metrics
 
@@ -317,6 +487,10 @@ async def _run_workers(role: str) -> int:
     runners = build_consumer_runners(registry, consumer_specs)
 
     supervisor = WorkerSupervisor()
+    # Bound before the workers start so the endpoint answers throughout boot:
+    # liveness is true from this point, readiness stays 503 until every hosted
+    # role is actually supervised and beating.
+    health = await _start_health_surface(supervisor, role)
     try:
         await start_consumer_runners(runners)
 
@@ -325,14 +499,21 @@ async def _run_workers(role: str) -> int:
         # Consumer receive loops are supervised alongside the loop workers, so
         # one logical role's crash is counted, logged with its role label, and
         # restarted with backoff without touching the other roles' tasks.
+        # ``telemetry`` hands the supervisor the runner's own counters, which is
+        # what turns "the receive loop task is alive" into "this pipeline has
+        # acknowledged work recently and holds N dead letters".
         for runner in runners:
-            supervisor.register(runner.worker_spec())
+            supervisor.register(
+                dataclasses.replace(runner.worker_spec(), telemetry=runner.status)
+            )
         await supervisor.start_all()
     except Exception:
         # Boot failed after the registry came up (a required consumer could not
         # bind, or a required worker failed its first start under the
         # supervisor's fail-closed policy). Release what we did acquire, then
         # let the failure propagate — never come up half-started.
+        if health is not None:
+            await health.stop()
         await _shutdown(role, registry, supervisor, runners)
         raise
 
@@ -354,6 +535,10 @@ async def _run_workers(role: str) -> int:
         health_watch.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await health_watch
+        # Stop answering probes before draining: a task that is on its way down
+        # must not keep reporting itself ready while it sheds its consumers.
+        if health is not None:
+            await health.stop()
         await _shutdown(role, registry, supervisor, runners)
     return 0
 

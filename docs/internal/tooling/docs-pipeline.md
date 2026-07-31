@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: c198b6b
+last_synced_commit: "1a5625c"
 ---
 
 # Documentation Pipeline
@@ -59,7 +59,7 @@ This page is `I`.
 | `scripts/validate_docs.py` | Version-drift check across package manifests, changelogs, doc headers. |
 | `scripts/validate_frontmatter.py` | Validates every `docs/**/*.{md,mdx}` against `docs_schema.json`. Fails on invalid **or** missing frontmatter. |
 | `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. |
-| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range, ensuring that PRs which update source + doc together don't generate spurious CI failures. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
+| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range — but a doc commit whose only change is the `last_synced_commit` line is a restamp, not a review, and does **not** count. Known-stale docs pending genuine review live in `config/docs_review_backlog.yaml`: their staleness is reported without failing `--strict`, an unlisted stale doc still fails, a listed doc that is no longer stale fails until its entry is removed (shrink-only), and `--update` refuses to stamp them. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
 
@@ -192,7 +192,9 @@ to force a human eye on every change a doc claims to describe.
 
 `--update` checks each doc before stamping: only docs whose source
 files have commits newer than `last_synced_commit` are updated.
-Docs whose sources are unchanged are skipped entirely. This prevents
-the 60+ `last_synced_commit` conflicts that arise when both branches
-run a bulk-stamp pass and then rebase — conflicts only appear where
-sources genuinely diverged.
+Docs whose sources are unchanged are skipped entirely, and docs listed
+in `config/docs_review_backlog.yaml` are refused — a backlogged doc is
+cleared only by a genuine content review plus removal of its registry
+entry. This prevents the 60+ `last_synced_commit` conflicts that arise
+when both branches run a bulk-stamp pass and then rebase — conflicts
+only appear where sources genuinely diverged.

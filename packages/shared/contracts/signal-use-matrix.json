@@ -6,306 +6,455 @@
     {
       "signal_type": "email_hash",
       "data_category": "pii_hash",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "identity_aliases", "profiles"]
+      "dsr_scope": [
+        "events",
+        "identity_aliases",
+        "profiles"
+      ]
     },
     {
       "signal_type": "phone_hash",
       "data_category": "pii_hash",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "identity_aliases", "profiles"]
+      "dsr_scope": [
+        "events",
+        "identity_aliases",
+        "profiles"
+      ]
     },
     {
       "signal_type": "device_fingerprint",
       "data_category": "fingerprint",
-      "required_purposes": ["personalization"],
+      "required_purposes": [
+        "personalization"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": false,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "short",
-      "dsr_scope": ["events", "fingerprints", "identity_aliases"],
+      "dsr_scope": [
+        "events",
+        "fingerprints",
+        "identity_aliases"
+      ],
       "note": "Fingerprint-only signals must NEVER auto-link or auto-merge."
     },
     {
       "signal_type": "browser_id",
       "data_category": "device",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events"]
+      "dsr_scope": [
+        "events"
+      ]
     },
     {
       "signal_type": "mobile_install_id",
       "data_category": "device",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events"]
+      "dsr_scope": [
+        "events"
+      ]
     },
     {
       "signal_type": "installation_id",
       "data_category": "device",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events"]
+      "dsr_scope": [
+        "events"
+      ]
     },
     {
       "signal_type": "anonymous_id",
       "data_category": "pseudonymous",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "sessions"]
+      "dsr_scope": [
+        "events",
+        "sessions"
+      ]
     },
     {
       "signal_type": "session_id",
       "data_category": "session",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": false,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "sessions"]
+      "dsr_scope": [
+        "events",
+        "sessions"
+      ]
     },
     {
       "signal_type": "user_id",
       "data_category": "deterministic_identity",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "identity_subjects", "profiles"]
+      "dsr_scope": [
+        "events",
+        "identity_subjects",
+        "profiles"
+      ]
     },
     {
       "signal_type": "external_id",
       "data_category": "deterministic_identity",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "identity_subjects", "profiles"]
+      "dsr_scope": [
+        "events",
+        "identity_subjects",
+        "profiles"
+      ]
     },
     {
       "signal_type": "wallet_address",
       "data_category": "wallet",
-      "required_purposes": ["web3"],
+      "required_purposes": [
+        "web3"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "extended",
-      "dsr_scope": ["events", "wallet_facts", "graph_edges"],
+      "dsr_scope": [
+        "events",
+        "wallet_facts",
+        "graph_edges"
+      ],
       "note": "Unverified wallet observation goes to candidate/conflict review, not auto-merge."
     },
     {
       "signal_type": "wallet_signature_verified",
       "data_category": "wallet",
-      "required_purposes": ["web3"],
+      "required_purposes": [
+        "web3"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "extended",
-      "dsr_scope": ["events", "wallet_facts", "graph_edges"]
+      "dsr_scope": [
+        "events",
+        "wallet_facts",
+        "graph_edges"
+      ]
     },
     {
       "signal_type": "payment_customer_id",
       "data_category": "payment",
-      "required_purposes": ["commerce"],
+      "required_purposes": [
+        "commerce"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "financial",
-      "dsr_scope": ["events"],
+      "dsr_scope": [
+        "events"
+      ],
       "note": "Payment identity paths go to candidate/conflict review unless tenant policy allows deterministic linking."
     },
     {
       "signal_type": "account_id",
       "data_category": "account",
-      "required_purposes": ["commerce"],
+      "required_purposes": [
+        "commerce"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "financial",
-      "dsr_scope": ["events"]
+      "dsr_scope": [
+        "events"
+      ]
     },
     {
       "signal_type": "agent_id",
       "data_category": "agent",
-      "required_purposes": ["agent"],
+      "required_purposes": [
+        "agent"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "agent_facts", "graph_edges"]
+      "dsr_scope": [
+        "events",
+        "agent_facts",
+        "graph_edges"
+      ]
     },
     {
       "signal_type": "org_id",
       "data_category": "organization",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "profiles"]
+      "dsr_scope": [
+        "events",
+        "profiles"
+      ]
     },
     {
       "signal_type": "campaign_id",
       "data_category": "attribution",
-      "required_purposes": ["marketing"],
+      "required_purposes": [
+        "marketing"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events", "attribution"],
-      "note": "Attribution-only — never triggers identity merge."
+      "dsr_scope": [
+        "events",
+        "attribution"
+      ],
+      "note": "Attribution-only \u2014 never triggers identity merge."
     },
     {
       "signal_type": "journey_id",
       "data_category": "journey",
-      "required_purposes": ["analytics"],
+      "required_purposes": [
+        "analytics"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": false,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "standard",
-      "dsr_scope": ["events"]
+      "dsr_scope": [
+        "events"
+      ]
     },
     {
       "signal_type": "location",
       "data_category": "precise_location",
-      "required_purposes": ["location"],
+      "required_purposes": [
+        "location"
+      ],
       "explicit_opt_in_required": true,
       "allow_identity_linking": false,
       "allow_graph_projection": false,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "short",
-      "dsr_scope": ["events", "location_facts"]
+      "dsr_scope": [
+        "events",
+        "location_facts"
+      ]
     },
     {
       "signal_type": "credit",
       "data_category": "credit",
-      "required_purposes": ["credit"],
+      "required_purposes": [
+        "credit"
+      ],
       "explicit_opt_in_required": true,
       "allow_identity_linking": true,
       "allow_graph_projection": false,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "extended",
-      "dsr_scope": ["events", "credit_facts"]
+      "dsr_scope": [
+        "events",
+        "credit_facts"
+      ]
     },
     {
       "signal_type": "financial_activity",
       "data_category": "trading",
-      "required_purposes": ["financial_activity"],
+      "required_purposes": [
+        "financial_activity"
+      ],
       "explicit_opt_in_required": true,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "financial",
-      "dsr_scope": ["events", "derivatives_facts", "graph_edges", "profiles", "model_features"]
+      "dsr_scope": [
+        "events",
+        "derivatives_facts",
+        "graph_edges",
+        "profiles",
+        "model_features"
+      ]
     },
     {
       "signal_type": "commerce",
       "data_category": "commerce",
-      "required_purposes": ["commerce"],
+      "required_purposes": [
+        "commerce"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": true,
       "allow_profile360": true,
       "retention_class": "financial",
-      "dsr_scope": ["events"]
+      "dsr_scope": [
+        "events"
+      ]
     },
     {
       "signal_type": "web3",
       "data_category": "onchain",
-      "required_purposes": ["web3"],
+      "required_purposes": [
+        "web3"
+      ],
       "explicit_opt_in_required": false,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "extended",
-      "dsr_scope": ["events", "wallet_facts", "graph_edges"]
+      "dsr_scope": [
+        "events",
+        "wallet_facts",
+        "graph_edges"
+      ]
     },
     {
       "signal_type": "economic_observability",
       "data_category": "stablecoin",
-      "required_purposes": ["economic_observability"],
+      "required_purposes": [
+        "economic_observability"
+      ],
       "explicit_opt_in_required": true,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "financial",
-      "dsr_scope": ["events", "stablecoin_facts", "graph_edges", "profiles"]
+      "dsr_scope": [
+        "events",
+        "stablecoin_facts",
+        "graph_edges",
+        "profiles"
+      ]
     },
     {
       "signal_type": "cross_chain_observability",
       "data_category": "interop",
-      "required_purposes": ["cross_chain_observability"],
+      "required_purposes": [
+        "cross_chain_observability"
+      ],
       "explicit_opt_in_required": true,
       "allow_identity_linking": true,
       "allow_graph_projection": true,
       "allow_model_training": false,
       "allow_profile360": true,
       "retention_class": "financial",
-      "dsr_scope": ["events", "interop_facts", "graph_edges"]
+      "dsr_scope": [
+        "events",
+        "interop_facts",
+        "graph_edges"
+      ]
+    },
+    {
+      "signal_type": "security_telemetry",
+      "data_category": "security",
+      "required_purposes": [
+        "fraud_prevention"
+      ],
+      "explicit_opt_in_required": true,
+      "allow_identity_linking": false,
+      "allow_graph_projection": false,
+      "allow_model_training": true,
+      "allow_profile360": false,
+      "retention_class": "security",
+      "dsr_scope": [
+        "events"
+      ]
     }
   ]
 }

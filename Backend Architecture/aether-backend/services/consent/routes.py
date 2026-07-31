@@ -311,8 +311,9 @@ async def submit_dsr(
     producer: EventProducer = Depends(get_producer),
 ):
     """Submit a GDPR data subject request."""
-    import asyncio
-    from services.measurement.privacy import handle_erasure_background
+    from services.consent.erasure_jobs import ERASURE_JOB_TYPE
+    from services.dsr_propagation.service import dsr_propagation_service
+    from services.jobs.service import get_jobs_service
 
     tenant = request.state.tenant
     tenant.require_permission("consent:manage")
@@ -340,9 +341,30 @@ async def submit_dsr(
     ))
 
     if body.request_type == "erasure":
-        asyncio.create_task(
-            handle_erasure_background(tenant.tenant_id, body.user_id)
+        # Durable erasure: open the per-component propagation record, then
+        # durably enqueue the job. A process death after this request can no
+        # longer lose the erasure — the jobs worker owns retry/lease recovery,
+        # and the propagation record tracks per-store completion evidence.
+        propagation_request_id = await dsr_propagation_service.open_request(
+            tenant.tenant_id, body.user_id, "erasure"
         )
+        job = await get_jobs_service().enqueue(
+            tenant.tenant_id,
+            ERASURE_JOB_TYPE,
+            {
+                "dsr_id": dsr_id,
+                "user_id": body.user_id,
+                "propagation_request_id": propagation_request_id,
+            },
+            idempotency_key=f"consent-erasure:{dsr_id}",
+            correlation_id=dsr_id,
+            requested_by="consent.dsr",
+        )
+        dsr = await _repo.update(f"dsr_{dsr_id}", {
+            "status": "queued",
+            "erasure_job_id": job["id"],
+            "propagation_request_id": propagation_request_id,
+        })
 
     return APIResponse(data=dsr).to_dict()
 
