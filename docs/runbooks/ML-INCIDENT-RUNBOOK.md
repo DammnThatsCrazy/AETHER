@@ -14,7 +14,7 @@ source_files:
   - deploy/observability/prometheus/alert_rules.yml
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "365c036"
+last_synced_commit: "1a5625c"
 ---
 
 # ML Incident Runbook
@@ -103,6 +103,7 @@ docker logs aether-ml-serving 2>&1 | grep "ContractMismatch\|validation_error" |
 |-----------------|-------|-----|
 | `ContractMismatchError` | Schema version mismatch between training and serving | Rollback artifact or redeploy matching serving image |
 | `ValidationError` on features | Upstream feature pipeline renamed fields | Check `features/pipeline.py` vs feature contract |
+| HTTP 422 spike on prediction endpoints | Caller sending out-of-contract payloads (unknown keys, out-of-range or non-finite values, missing required features) — serving rejects these before inference | Compare the 422 detail against the model's contract in `common/feature_contracts.py`; fix the caller, not the contract |
 | `503` on all models | Redis unreachable and fail-closed | Restore Redis connectivity; check `REDIS_URL` |
 | `401 Unauthorized` | `ML_SERVICE_TOKEN` rotation not propagated | Update token in both backend and ML serving env |
 

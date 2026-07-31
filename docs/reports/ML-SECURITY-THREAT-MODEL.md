@@ -16,7 +16,7 @@ source_files:
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "f8d00d3"
+last_synced_commit: "1a5625c"
 ---
 
 # ML Security Threat Model
@@ -116,6 +116,7 @@ produce unreliable predictions that may be exploitable.
 | Control | Location | State |
 |---------|----------|-------|
 | Feature contract validation on every prediction request | `feature_contracts.validate_features()` | ✅ |
+| Declared min/max bounds, finiteness, and unknown-key rejection enforced at the serving boundary (HTTP 422) | `serving/src/api.py` `_validated_frame()` | ✅ |
 | `ContractMismatchError` in strict mode on schema hash mismatch | `feature_contracts.py` | ✅ |
 | Preprocessing bundle loaded from artifact (no runtime reconstruction) | `serving` artifact loader | ✅ |
 | `feature_contract.json` snapshot stored with every artifact | `train.py` | ✅ |
