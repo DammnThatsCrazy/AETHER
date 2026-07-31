@@ -11,10 +11,6 @@
 # Clearing an entry requires reviewing the doc against its source_files,
 # updating content where contradicted, stamping, and deleting the entry.
 docs:
-  - path: "docs/ARCHITECTURE.md"
-    reason: "sources moved in 72 commit(s) since the last genuine content review; stamp was advanced mechanically during the pre-squash stamp translation"
-    owner: "docs@aether"
-    registered_at: "137aeca"
   - path: "docs/BACKEND-EXECUTION-MODEL.md"
     reason: "sources moved in 2 commit(s) since the last genuine content review; stamp was advanced mechanically during the pre-squash stamp translation"
     owner: "docs@aether"
@@ -137,10 +133,6 @@ docs:
     registered_at: "137aeca"
   - path: "docs/productization/economic-interoperability-intelligence/GOVERNANCE_AND_CONSENT.md"
     reason: "sources moved in 5 commit(s) since the last genuine content review; stamp was advanced mechanically during the pre-squash stamp translation"
-    owner: "docs@aether"
-    registered_at: "137aeca"
-  - path: "docs/productization/economic-interoperability-intelligence/TARGET_ARCHITECTURE.md"
-    reason: "sources moved in 45 commit(s) since the last genuine content review; stamp was advanced mechanically during the pre-squash stamp translation"
     owner: "docs@aether"
     registered_at: "137aeca"
   - path: "docs/productization/unified-canonical-journey/RELEASE_READINESS.md"

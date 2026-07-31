@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "3283497"
+last_synced_commit: "9ebc883"
 ---
 # Aether vNext — Architecture Guide
 
@@ -23,7 +23,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 145 topics), S3, Prometheus.
+2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), event bus with 181 topics (Kafka via aiokafka, or AWS SNS/SQS when `EVENT_BROKER=sns_sqs`), S3, Prometheus.
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
@@ -68,9 +68,9 @@ The SDK also collects raw user interactions, device fingerprints, wallet events,
 
 1. **Collect, don't compute** — The SDK captures raw data (clicks, scrolls, wallet connections, transactions, fingerprints) and ships it unprocessed. All classification, scoring, and analysis happens server-side.
 
-2. **Minimal context, maximum signal** — Mobile SDKs send `{os, osVersion, locale, timezone}`. The backend derives device model, screen size, and capabilities from HTTP headers. Web SDK includes device fingerprint hash.
+2. **Minimal context, maximum signal** — Mobile SDKs send a lean context (`os`/`device` identity, `locale`, `timezone`, temporal provenance, per-session `sequence` counter, campaign/acquisition evidence, consent booleans). The backend derives remaining device capabilities from HTTP headers. Web SDK additionally stamps the canonical envelope fields (`surface`, `schemaVersion`) and the device fingerprint hash (consent-gated).
 
-3. **Config from server** — Feature flags, funnel definitions, and survey triggers are fetched from `GET /v1/config` on init and cached locally. No client-side evaluation logic.
+3. **Config from server** — SDK remote config (signed manifests + rollouts) is served from `GET /v1/config/sdk/manifest` and cached locally; native health agents refresh it every 5 minutes. No client-side evaluation logic. (The web feature-flag module still targets the legacy `/v1/config` path.)
 
 4. **Offline-first** — Events are queued in memory and batch-flushed. Network failures result in retry with exponential backoff, not data loss.
 
@@ -83,10 +83,10 @@ The SDK also collects raw user interactions, device fingerprints, wallet events,
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.7.0
+AetherSDK (index.ts) — v8.12.0
 │
 ├── Core (always loaded)
-│   ├── EventQueue .............. Batch + offline queue (POST /v1/events)
+│   ├── EventQueue .............. Batch + offline queue (POST /v1/batch)
 │   ├── SessionManager ......... Session lifecycle + heartbeat
 │   ├── IdentityManager ........ Multi-wallet identity + traits
 │   ├── ConsentModule .......... GDPR/CCPA consent gates
@@ -98,11 +98,15 @@ AetherSDK (index.ts) — v8.7.0
 │   ├── FeatureFlags ........... Cache-only (fetch from /v1/config)
 │   ├── FormAnalytics .......... focus/blur/change events
 │   ├── Funnels ................ Event tagger from server config
-│   └── Heatmaps ............... Raw coordinate emitter
+│   ├── Heatmaps ............... Raw coordinate emitter
+│   └── Performance ............ Web Vitals / Navigation Timing / Long Tasks
+│                                 raw metric emitter (default on, sampled)
 │
 ├── Web3 (wallet detection + raw tx shipping)
-│   ├── 7 VM Providers ......... EVM, SVM, Bitcoin, Move, NEAR, TRON, Cosmos
-│   └── 7 VM Trackers .......... Raw transaction data emitters
+│   ├── 16 VM Providers ........ EVM, SVM, Bitcoin, Move/SUI, Aptos, NEAR,
+│   │                             TRON, Cosmos, TON, Starknet, Cardano,
+│   │                             Algorand, Hedera, Stellar, Substrate, ICP
+│   └── VM Trackers ............ Raw transaction data emitters
 │
 ├── Context
 │   ├── SemanticContext ........ Tier 1 only (device, viewport, URL)
@@ -129,16 +133,16 @@ All SDKs generate a deterministic device fingerprint (SHA-256 hash) that is incl
 SDKs collect raw traffic signals and ship them to the backend, where the `SourceClassifier` (`services/traffic/classifier.py`) classifies every session into source/medium/channel automatically.
 
 ```
-SDK detect()                    Backend SourceClassifier
-┌─────────────────────┐         ┌──────────────────────────────────────┐
-│ referrer URL        │  POST   │ Priority chain:                      │
-│ referrerDomain      │ /v1/    │  1. Click IDs → Paid (confidence 1.0)│
-│ UTM params (5)      │ track/  │  2. UTM params → Custom (0.95)       │
-│ Click IDs (12)      │ traffic │  3. Referrer → Organic/Social (0.9)  │
-│ Landing page        │ source  │  4. No signals → Direct (0.5)        │
-└─────────────────────┘ ──────> └──────────────────────────────────────┘
-                                         │
-                                ClassifiedSource{source, medium, channel, confidence}
+SDK detect()                       Backend SourceClassifier
+┌─────────────────────┐            ┌──────────────────────────────────────┐
+│ referrer URL        │   POST     │ Priority chain:                      │
+│ referrerDomain      │   /v1/     │  1. Click IDs → Paid (confidence 1.0)│
+│ UTM params (5)      │   track/   │  2. UTM params → Custom (0.95)       │
+│ Click IDs (12)      │   traffic- │  3. Referrer → Organic/Social (0.9)  │
+│ Landing page        │   source   │  4. No signals → Direct (0.5)        │
+└─────────────────────┘  ────────> └──────────────────────────────────────┘
+                                            │
+                                   ClassifiedSource{source, medium, channel, confidence}
 ```
 
 **Domain lookup tables (O(1) dict lookups — no regex):**
@@ -269,13 +273,11 @@ Resolution Consumer (real-time)
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v1/events` | POST | Batched raw events (Web SDK) |
-| `/v1/batch` | POST | Batched raw events (iOS/Android) |
-| `/v1/config` | GET | SDK init config (flags, funnels, surveys) |
-| `/v1/tx/enrich` | POST | Transaction classification + DeFi labeling |
-| `/v1/chains/{id}` | GET | Chain metadata on demand |
-| `/v1/protocols/{addr}` | GET | Protocol identification |
-| `/v1/predict` | POST | ML inference (9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
+| `/v1/batch` | POST | Canonical batched raw events (ALL SDKs — web, iOS, Android, RN) |
+| `/v1/ingest/events[/batch]` | POST | Deprecated server-to-server connector aliases |
+| `/v1/config/sdk/manifest` | GET | SDK remote config (signed manifests + rollouts) |
+| `/v1/ml/predict` | POST | ML inference (single; 9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
+| `/v1/ml/predict/batch` | POST | Batch ML inference |
 | `/v1/rewards/evaluate` | POST | Evaluate reward eligibility (A6 no-custody) |
 | `/v1/rewards/evaluate/batch` | POST | Batch eligibility evaluation (max 50) |
 | `/v1/rewards/campaigns` | POST/GET | Campaign management |
@@ -284,8 +286,8 @@ Resolution Consumer (real-time)
 | `/v1/rewards/actions` | GET | Action payload queue |
 | `/v1/rewards/proofs` | GET | On-chain claim proofs |
 | `/v1/rewards/rails` | POST/GET | Tenant delivery rail config |
-| `/v1/classify-source` | POST | Traffic source classification |
-| `/v1/wallet-label/{addr}` | GET | Wallet risk + label |
+| `/v1/track/traffic-source` | POST | Traffic source classification |
+| `/v1/onchain/contracts/{address}` | GET | On-chain contract metadata |
 | `/v1/resolution/cluster/{user_id}` | GET | Identity cluster for a user |
 | `/v1/resolution/pending` | GET | Pending merge decisions (admin) |
 | `/v1/resolution/pending/{id}/approve` | POST | Approve merge |
@@ -312,7 +314,9 @@ Resolution Consumer (real-time)
          │
 5. Batch threshold reached OR flush timer fires
          │
-6. POST /v1/events { batch: [...events], sentAt, context }
+6. POST /v1/batch { batch: [...events], sentAt, context }
+   (staging/production reject release-critical events missing the canonical
+    envelope fields sequence/schemaVersion/surface: `envelope_missing:<field>`)
          │
 7. Backend pipeline:
    ├── IP enrichment (MaxMind GeoLite2)
@@ -339,17 +343,17 @@ Resolution Consumer (real-time)
 
 | Capability | Was (Client) | Now (Backend) |
 |---|---|---|
-| ML Intent Prediction | `edge-ml.ts` (401 LOC) | `POST /v1/predict` |
-| Bot Detection | `edge-ml.ts` | `POST /v1/predict` |
-| DeFi Classification | `protocol-registry.ts` + 15 trackers | `POST /v1/tx/enrich` |
+| ML Intent Prediction | `edge-ml.ts` (401 LOC) | `POST /v1/ml/predict` |
+| Bot Detection | `edge-ml.ts` | `POST /v1/ml/predict` |
+| DeFi Classification | `protocol-registry.ts` + 15 trackers | Backend transaction enrichment (ingestion + on-chain services) |
 | Portfolio Aggregation | `portfolio-tracker.ts` (209 LOC) | Backend aggregation service |
-| Wallet Classification | `wallet-classifier.ts` (170 LOC) | `GET /v1/wallet-label/{addr}` |
-| Chain Registry | `chain-registry.ts` + `evm-chains.ts` | `GET /v1/chains/{id}` |
-| Traffic Source Classification | Regex engine (431 LOC) | `POST /v1/classify-source` |
+| Wallet Classification | `wallet-classifier.ts` (170 LOC) | Backend wallet labeling (graph + fraud services) |
+| Chain Registry | `chain-registry.ts` + `evm-chains.ts` | Backend chain metadata (`/v1/onchain/*`) |
+| Traffic Source Classification | Regex engine (431 LOC) | `SourceClassifier` (`POST /v1/track/traffic-source` + inline at ingest) |
 | Survey Rendering | `feedback.ts` (596 LOC) | Backend-rendered iframe |
 | A/B Experiments | `experiments.ts` (125 LOC) | Feature flags module |
-| Web Vitals | `performance.ts` (188 LOC) | External tools (Sentry, DataDog) |
-| OTA Data Updates | `update-manager.ts` (301 LOC) | `GET /v1/config` |
+| Web Vitals *(re-added client-side)* | `performance.ts` (188 LOC) | Web SDK performance module now emits raw Web Vitals again; analysis is backend-side |
+| OTA Data Updates | `update-manager.ts` (301 LOC) | `GET /v1/config/sdk/manifest` (signed) |
 | Funnel Matching | `funnels.ts` (357 LOC) | Backend event matching |
 | Heatmap Aggregation | Grid building (392 LOC) | Backend grid generation |
 | Identity Resolution | N/A (not available) | Backend resolution service |
@@ -365,7 +369,8 @@ All four SDKs expose the same core public API surface:
 | `pageView` / `screenView` | Y | Y | Y | Y |
 | `conversion(event, value)` | Y | Y | Y | Y |
 | `hydrateIdentity(data)` | Y | Y | Y | Y |
-| `getIdentity()` | Y | Y | Y | Y |
+| `getIdentity()` / `getAnonymousId()` | Y (`getIdentity`) | Y (`getAnonymousId`) | Y (`getAnonymousId`) | Y (`getIdentity`) |
+| `observe(type, props)` (canonical registry events) | Y | Y | Y | Y |
 | `walletConnected(addr)` | Y | Y | Y | Y |
 | `walletDisconnected(addr)` | Y | Y | Y | Y |
 | `walletTransaction(tx)` | Y | Y | Y | Y |
@@ -414,7 +419,12 @@ Request ──> Auth ──> Extraction Defense ──> Model.predict() ──> 
 | **Canary Detector** | Secret-seed trap inputs trigger cooldown on detection |
 | **Risk Scorer** | EMA-smoothed aggregate score across 4 tiers (normal/elevated/high/critical) |
 
-All protections are gated behind `ENABLE_EXTRACTION_DEFENSE` (default off). See [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
+All protections are gated behind `ENABLE_EXTRACTION_DEFENSE` (default off).
+The middleware resolves an explicit defense mode at request time (extraction
+mesh → legacy defense layer → off); with `REQUIRE_EXTRACTION_DEFENSE=true`
+(production profiles) an unavailable defense fails closed with
+`EXTRACTION_DEFENSE_UNAVAILABLE` instead of silently passing traffic. See
+[Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
 
 ## Unified On-Chain Intelligence Graph
 
@@ -477,7 +487,14 @@ All events — human and agent — flow through the existing Unified Pipeline vi
 
 ### Feature Flags
 
-All Intelligence Graph layers are **disabled by default** behind feature flags (`intelligence_graph.h2a.enabled`, `intelligence_graph.a2h.enabled`, `intelligence_graph.a2a.enabled`). See `docs/INTELLIGENCE-GRAPH.md` for the full specification, edge schemas, and rollout guide.
+All Intelligence Graph layers are **disabled by default** behind
+`IntelligenceGraphConfig` feature flags (`IG_AGENT_LAYER` for L2,
+`IG_COMMERCE_LAYER` for L3a, `IG_X402_LAYER` for L3b, `IG_ONCHAIN_LAYER` for
+L0, plus `IG_TRUST_SCORING`, `IG_BYTECODE_RISK`, and `IG_RPC_GATEWAY`). The
+one exception is the Agentic Commerce control plane
+(`COMMERCE_CONTROL_PLANE_ENABLED`), which defaults on. See
+`docs/INTELLIGENCE-GRAPH.md` for the full specification, edge schemas, and
+rollout guide.
 
 ---
 
@@ -532,7 +549,7 @@ Three additive service modules mount conditionally via `main.py` behind feature 
 |---------|-------------|---------------|
 | `services/fraud_networks` | `FEATURE_FRAUD_NETWORKS` | `/v1/fraud/networks` |
 | `services/flow_trace` | `FEATURE_FLOW_TRACE` | `/v1/flow-trace` |
-| `services/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlay` |
+| `services/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlays` |
 
 These services are fully additive — they add no startup overhead when their flags are disabled. They share the graph client, event producer, and investigation repository with existing services. The `FraudIntelligenceConfig` dataclass in `config/settings.py` owns all five flags and tuning parameters (`alert_risk_threshold`, `max_network_depth`, `max_flow_trace_hops`).
 
