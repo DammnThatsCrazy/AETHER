@@ -20,8 +20,13 @@ sys.path.insert(0, str(ROOT))
 from repositories.repos import reset_in_memory_stores
 from repositories.stablecoin_repos import StablecoinObservationRepository
 from services.stablecoins.connector_base import (
+    CONNECTOR_AUTH_ERROR,
+    CONNECTOR_CHAIN_MISMATCH,
+    CONNECTOR_NOT_CONFIGURED,
+    CONNECTOR_OK,
     CONNECTOR_RATE_LIMITED,
     CONNECTOR_TIMEOUT,
+    ConnectorPreflightResult,
     StablecoinConnectorError,
     classify_rpc_error,
     decode_cursor,
@@ -660,3 +665,55 @@ async def test_all_connectors_certify_as_credential_waiting():
         results = run_certification(connector)
         failed = [r.name for r in results if not r.passed]
         assert failed == [], f"{type(connector).__name__} failed checks: {failed}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Read-only observer preflight — typed, fail-closed, never raises, no writes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_evm_preflight_ok_reads_only_chain_id():
+    mock = MockEVMRpcServer(chain_id=8453, contract=BASE_DEPLOYMENT.contract_or_mint)
+    result = await make_evm_connector(mock).preflight()
+    assert isinstance(result, ConnectorPreflightResult)
+    assert result.ok is True and result.status == CONNECTOR_OK
+    assert result.checked_at  # stamped
+    # observe-only identity probe — the chain-id read alone, no logs/blocks/receipts
+    assert mock.calls == ["eth_chainId"]
+
+
+@pytest.mark.asyncio
+async def test_evm_preflight_wrong_chain_fails_closed_without_raising():
+    wrong = MockEVMRpcServer(chain_id=1, contract=BASE_DEPLOYMENT.contract_or_mint)
+    result = await make_evm_connector(wrong).preflight()  # must NOT raise
+    assert result.ok is False and result.status == CONNECTOR_CHAIN_MISMATCH
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exc,expected", [
+    (FakeHTTPStatusError(429), CONNECTOR_RATE_LIMITED),
+    (FakeHTTPStatusError(401), CONNECTOR_AUTH_ERROR),
+    (RuntimeError("RPC gateway endpoint not configured"), CONNECTOR_NOT_CONFIGURED),
+])
+async def test_evm_preflight_classifies_failures_fail_closed(exc, expected):
+    mock = MockEVMRpcServer(chain_id=8453, contract=BASE_DEPLOYMENT.contract_or_mint)
+    mock.raise_on("eth_chainId", exc)
+    result = await make_evm_connector(mock).preflight()
+    assert result.ok is False and result.status == expected
+
+
+@pytest.mark.asyncio
+async def test_solana_preflight_ok_reads_only():
+    mock = MockSolanaRpcServer(chain_id="solana-mainnet", genesis_hash=GENESIS_HASH)
+    result = await make_solana_connector(mock).preflight()
+    assert result.ok is True and result.status == CONNECTOR_OK
+    # observe-only: slot + genesis-block identity reads, nothing else
+    assert set(mock.calls) <= {"sol_getSlot", "sol_getBlock"}
+
+
+@pytest.mark.asyncio
+async def test_solana_preflight_timeout_fails_closed():
+    mock = MockSolanaRpcServer(chain_id="solana-mainnet", genesis_hash=GENESIS_HASH)
+    mock.raise_on("sol_getSlot", TimeoutError("slot read timed out"))
+    result = await make_solana_connector(mock).preflight()
+    assert result.ok is False and result.status == CONNECTOR_TIMEOUT
