@@ -641,6 +641,42 @@ class PaymentRailsService:
         )
         await ingest_many([bronze], [outbox])
 
+    async def repair_canonical_backlog(
+        self, tenant_id: str, *, limit: int = 500
+    ) -> dict[str, int]:
+        """Re-drive canonical emission for funding sessions with a delivery gap.
+
+        A crash between a session upsert and its canonical emission — or an outbox
+        relay outage while the durable path is enabled — can leave a funding
+        session whose implied ``payment_*`` events were never delivered. This
+        supervised-repair entrypoint scans the tenant's sessions, and for any whose
+        expected canonical event types (implied by the session's status) are not
+        all recorded in ``emitted_canonical``, re-drives ``_emit_canonical_events``.
+
+        Recovery is idempotent: the deterministic canonical id means an
+        already-delivered event is a no-op on both delivery paths (direct-publish
+        dedupes on ``emitted_canonical``; the outbox path dedupes on the accepted
+        Bronze row), so repeated repair runs never double-emit. Returns per-run
+        counts for observability.
+        """
+        sessions = await self.repos.sessions.list_for_tenant(tenant_id)
+        scanned = repaired = reemitted = 0
+        for record in sessions[:limit]:
+            adapter = ADAPTERS.get(record.get("provider"))
+            if adapter is None:
+                continue
+            scanned += 1
+            session = FundingSession.model_validate(record)
+            expected = {c["event_type"] for c in adapter.normalize_to_aether_events(session)}
+            already = set(record.get("metadata", {}).get("emitted_canonical", []))
+            if expected <= already:
+                continue  # no gap — every implied event already delivered
+            emitted = await self._emit_canonical_events(tenant_id, adapter, record)
+            if emitted:
+                repaired += 1
+                reemitted += len(emitted)
+        return {"scanned": scanned, "repaired": repaired, "events_reemitted": reemitted}
+
     # ── Health ────────────────────────────────────────────────────────────
 
     async def health(self, tenant_id: str) -> list[PaymentRailHealth]:
