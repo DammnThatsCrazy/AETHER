@@ -264,11 +264,31 @@ def _resolve_stablecoin_chain() -> list[AdapterCertificationDescriptor]:
     return descriptors
 
 
+def _resolve_communications() -> list[AdapterCertificationDescriptor]:
+    """Communications provider descriptors (read from the comms conformance
+    module, which resolves state from the live Klaviyo connector)."""
+    try:
+        from services.comms.conformance import comms_certification_descriptor
+
+        return [comms_certification_descriptor("klaviyo")]
+    except Exception:  # pragma: no cover - comms module present in this repo
+        return [
+            AdapterCertificationDescriptor(
+                provider="klaviyo",
+                domain="communications",
+                adapter="KlaviyoConnector(unresolved)",
+                implementation_state=CredentialReadiness.SCAFFOLDED,
+                first_release=True,
+            )
+        ]
+
+
 _RESOLVERS = (
     _resolve_payments,
     _resolve_interop,
     _resolve_derivatives,
     _resolve_stablecoin_chain,
+    _resolve_communications,
 )
 
 
