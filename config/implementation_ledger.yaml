@@ -1723,6 +1723,7 @@ items:
       - "tests/payment_rails/test_webhook_endpoints.py"
       - "tests/payment_rails/test_native_webhook_flow.py"
       - "tests/payment_rails/test_webhook_admission.py"
+      - "tests/payment_rails/test_connection_probe.py"
     evidence_required:
       - "Stripe compound t=,v1= verified natively (golden vectors); tampered/stale/missing/multi-sig/rotation-overlap covered"
       - "per-provider frozen golden vectors wired through each adapter's native_signature_scheme(): stripe (compound v1=), moonpay (compound s=), coinbase (body_hex) CONFIRMED; scheme-isolation + one-byte-tamper + wrong-secret rejection locked"
@@ -1730,6 +1731,7 @@ items:
       - "durable endpoint registry resolves tenant server-side; X-Aether-Tenant-ID no longer selects tenant on the new route"
       - "per-endpoint webhook rate limiting (fixed-minute window, atomic incr_if_under, fails open) enforced before signature verification, surfacing a retryable 429"
       - "denied webhooks (bad/stale signature, oversized body) quarantined metadata-only (sha256 + size + reason, never the raw body)"
+      - "read-only polling connection-probe contract proven uniformly across the three pull rails (coinbase/moonpay/bridge): each _live_connection_test issues exactly one bounded, GET-only health ping through the injectable mock transport with no live network; ok / auth_error / rate-limit-exhaustion / timeout / not_configured outcomes covered with the GET-only invariant asserted on every path, plus test_connection mode routing (local-mode skip, non-local live probe, not_configured short-circuit)"
     docs_required: []
     owner: financial
     status: implementation_in_progress
