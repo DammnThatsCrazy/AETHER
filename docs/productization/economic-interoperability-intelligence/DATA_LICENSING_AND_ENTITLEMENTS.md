@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/plans/service_catalog.py
   - Backend Architecture/aether-backend/services/billing/revops.py
 canonical_owner: platform@aether
-last_synced_commit: "03ab3a6"
+last_synced_commit: "103902dd"
 ---
 
 # Data Licensing and Entitlements
@@ -23,14 +23,17 @@ plan access mirroring the existing premium-vertical pattern.
 
 ## Metering
 
-Eight canonical meters (validated by `scripts/validate_meter_names.py`
+Nine canonical meters (validated by `scripts/validate_meter_names.py`
 against `MeteringEventType`):
 `stablecoin_observation_ingested`, `stablecoin_flow_materialized`,
 `derivatives_event_ingested`, `derivatives_reconciliation_run`,
 `derivatives_stream_gap_detected`, `interop_observation_ingested`,
-`interop_message_correlated`, `interop_reconciliation_run`.
+`interop_message_correlated`, `interop_reconciliation_run`,
+`payment_rail_observation_ingested`.
 Emission is best-effort at intake/materialization/run sites and never
-blocks the request path.
+blocks the request path — the payment-rail and stablecoin observation
+meters are default-off, accept-then-meter, and fail-open (a metering-store
+failure is swallowed and never rejects or drops the observation).
 
 ## Licensing constraints
 
