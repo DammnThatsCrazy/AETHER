@@ -51,6 +51,9 @@ async def ingest_normalized_events(
             # Provider identity evidence carried on the event (best-effort;
             # the communication fact is preserved regardless of resolution).
             await _record_identity(tenant_id, data)
+            # Suppression signals (unsubscribe/complaint/hard-bounce/suppressed)
+            # update the canonical suppression authority (best-effort).
+            await _record_suppression(tenant_id, data)
             counts["communications"] += 1
         elif any(event_type.endswith(s) for s in _CATALOG_EVENT_SUFFIXES):
             await _register_catalog_record(tenant_id, data, source_connector_id)
@@ -137,6 +140,15 @@ async def _record_identity(tenant_id: str, data: dict[str, Any]) -> bool:
     except Exception as exc:  # pragma: no cover - never break ingest
         logger.warning("comms_identity_bridge_failed: %s", exc)
         return False
+
+
+async def _record_suppression(tenant_id: str, data: dict[str, Any]) -> None:
+    """Record a canonical suppression when the event carries one. Best-effort."""
+    try:
+        from services.comms.suppression_authority import SuppressionAuthorityService
+        await SuppressionAuthorityService().record_from_event(tenant_id, data)
+    except Exception as exc:  # pragma: no cover - never break ingest
+        logger.warning("comms_suppression_authority_failed: %s", exc)
 
 
 async def _register_catalog_record(

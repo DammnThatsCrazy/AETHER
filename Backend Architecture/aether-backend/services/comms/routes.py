@@ -205,6 +205,55 @@ async def comms_health(request: Request) -> dict:
     return APIResponse(data=data).to_dict()
 
 
+# ── Canonical suppression authority (§16) ────────────────────────────────────
+
+@router.get("/suppressions")
+async def list_suppressions(request: Request, limit: int = 200) -> dict:
+    """Tenant-visible canonical suppression ledger (provider-reported vs
+    Aether-enforced state visible per row)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.suppression_authority import SuppressionAuthorityService
+    items = await SuppressionAuthorityService().list_for_tenant(
+        tenant.tenant_id, limit=max(1, min(limit, 1000))
+    )
+    return APIResponse(data={"items": items}).to_dict()
+
+
+# ── Provider identity bridge — provisional/unresolved queue (§13) ────────────
+
+class IdentityResolveBody(BaseModel):
+    canonical_entity_id: str = Field(..., min_length=1, max_length=200)
+
+
+@router.get("/identities/provisional")
+async def list_provisional_identities(request: Request, limit: int = 100) -> dict:
+    """Provider identities awaiting resolution — the mapping-review queue."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.identity_bridge import ProviderIdentityRepository
+    items = await ProviderIdentityRepository().list_provisional(
+        tenant.tenant_id, limit=max(1, min(limit, 500))
+    )
+    return APIResponse(data={"items": items}).to_dict()
+
+
+@router.post("/identities/{identity_id}/resolve")
+async def resolve_provisional_identity(
+    identity_id: str, request: Request, body: IdentityResolveBody
+) -> dict:
+    """Map a provisional provider identity to a canonical entity (mapping review)."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from services.comms.identity_bridge import ProviderIdentityBridge
+    row = await ProviderIdentityBridge().mark_resolved(
+        tenant.tenant_id, identity_id, body.canonical_entity_id,
+    )
+    if row is None:
+        raise BadRequestError("unknown provider identity")
+    return APIResponse(data=row).to_dict()
+
+
 # ── Cross-channel initiatives (Phase 10, ADR-C9) ─────────────────────────────
 
 class InitiativeCreateBody(BaseModel):
@@ -417,6 +466,50 @@ async def operator_dsr_erase(request: Request, body: OperatorDsrEraseBody) -> di
         metadata={"facts_removed": removed},
     )
     return APIResponse(data={"facts_removed": removed}).to_dict()
+
+
+@admin_router.get("/sync-runs")
+async def operator_sync_runs(
+    request: Request, tenant_id: str, limit: int = 100
+) -> dict:
+    """Durable sync-run history for a tenant (Kyber Communications Operations)."""
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    from services.comms.sync_runs import SyncRunService
+    items = await SyncRunService().list_for_tenant(
+        tenant_id, limit=max(1, min(limit, 500))
+    )
+    return APIResponse(data={"items": items}).to_dict()
+
+
+class OperatorSuppressionReconcileBody(BaseModel):
+    tenant_id: str
+    provider: str
+    provider_reported: list[dict[str, Any]] = Field(default_factory=list, max_length=5000)
+
+
+@admin_router.post("/suppressions/reconcile")
+async def operator_reconcile_suppressions(
+    request: Request, body: OperatorSuppressionReconcileBody
+) -> dict:
+    """Reconcile provider-reported suppressions against Aether's canonical set.
+
+    Observe-only: reports drift and stamps reconciliation; never writes back to
+    the provider unless suppression write-back is separately authorized.
+    """
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    from services.comms.suppression_authority import SuppressionAuthorityService
+    result = await SuppressionAuthorityService().reconcile(
+        body.tenant_id, provider=body.provider,
+        provider_reported=body.provider_reported,
+    )
+    await _audit_operator_action(
+        request, action="reconcile_suppressions", tenant_id=body.tenant_id,
+        resource_id=body.provider, outcome="allowed",
+        metadata={"in_sync": result.get("in_sync")},
+    )
+    return APIResponse(data=result).to_dict()
 
 
 async def _health_snapshot(tenant_id: str) -> dict[str, Any]:

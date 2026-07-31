@@ -699,8 +699,13 @@ class CommunicationSuppressionRepository:
                 INSERT INTO communication_suppressions (
                     suppression_id, tenant_id, entity_id, recipient_alias_id,
                     channel, scope, scope_ref, reason, source_event_id,
-                    provider, active, created_at
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                    provider, active, created_at,
+                    provider_account_id, canonical_entity_id, canonical_profile_id,
+                    consent_purpose, processing_basis,
+                    provider_enforcement_state, aether_enforcement_state,
+                    last_reconciled_at, evidence_reference
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+                          $13,$14,$15,$16,$17,$18,$19,$20,$21)
                 ON CONFLICT DO NOTHING
                 """,
                 suppression["suppression_id"], suppression["tenant_id"],
@@ -709,6 +714,16 @@ class CommunicationSuppressionRepository:
                 suppression.get("scope_ref"), suppression["reason"],
                 suppression.get("source_event_id"), suppression.get("provider"),
                 suppression["active"], _parse_ts(suppression["created_at"]),
+                suppression.get("provider_account_id"),
+                suppression.get("canonical_entity_id"),
+                suppression.get("canonical_profile_id"),
+                suppression.get("consent_purpose"),
+                suppression.get("processing_basis"),
+                suppression.get("provider_enforcement_state"),
+                suppression.get("aether_enforcement_state"),
+                _parse_ts(suppression["last_reconciled_at"])
+                if suppression.get("last_reconciled_at") else None,
+                suppression.get("evidence_reference"),
             )
         return suppression
 
@@ -734,6 +749,31 @@ class CommunicationSuppressionRepository:
                        OR ($4::text IS NOT NULL AND recipient_alias_id = $4))
                 """,
                 tenant_id, channel, entity_id, recipient_alias_id,
+            )
+        return [dict(r) for r in records]
+
+    async def list_active_for_tenant(
+        self, tenant_id: str, *, provider: Optional[str] = None, limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """All active suppressions for a tenant (read API + reconciliation)."""
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                s for s in _local_suppressions.values()
+                if s.get("tenant_id") == tenant_id and s.get("active")
+                and (provider is None or s.get("provider") == provider)
+            ]
+            return rows[:limit]
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                SELECT * FROM communication_suppressions
+                WHERE tenant_id = $1 AND active
+                  AND ($2::text IS NULL OR provider = $2)
+                ORDER BY created_at DESC
+                LIMIT $3
+                """,
+                tenant_id, provider, limit,
             )
         return [dict(r) for r in records]
 
