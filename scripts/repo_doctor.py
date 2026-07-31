@@ -605,6 +605,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="add a policy for every persistent resource type to config/storage_policies.yaml (inventory: repositories/repos.py stores + alembic-created tables)",
     )
     run(
+        [sys.executable, "scripts/staging_capability_matrix.py"],
+        name="Deploy-profile capability matrix + join layer (facet references resolve; bidirectional coverage)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "align config/capability_matrix.yaml with config/deploy_profile.yaml and its "
+            "facets (route_registry, roles.py, founding_tenant_release, deployment_readiness); "
+            "never delete a facet key to silence a dangling reference"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_sdk_contracts.py"],
         name="SDK ingestion contract (shared TS ↔ backend /v1/batch)",
         results=results,
