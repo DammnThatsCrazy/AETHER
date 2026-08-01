@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 from shared.logger.logger import get_logger
 from repositories.delivery_repos import DeliveryAttemptRepository
 from repositories.repos import BaseRepository
+from shared.temporal import ensure_aware_utc
 
 logger = get_logger("aether.notification.customer_webhook_delivery")
 
@@ -288,9 +289,11 @@ class _WebhookDeliveryClaimRepository(BaseRepository):
                 if claimed_at:
                     try:
                         parsed = datetime.fromisoformat(str(claimed_at).replace("Z", "+00:00"))
-                        if parsed.tzinfo is None:
-                            parsed = parsed.replace(tzinfo=timezone.utc)
-                        stale = (current - parsed.astimezone(timezone.utc)).total_seconds() > IN_FLIGHT_RECOVERY_SECONDS
+                        if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+                            stale = True
+                        else:
+                            parsed = ensure_aware_utc(parsed)
+                            stale = (current - parsed).total_seconds() > IN_FLIGHT_RECOVERY_SECONDS
                     except (TypeError, ValueError):
                         stale = True
                 if status == "in_flight" and stale:

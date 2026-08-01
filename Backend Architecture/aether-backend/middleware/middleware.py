@@ -167,7 +167,14 @@ def _legacy_defense_available() -> bool:
 
 def _extraction_defense_required() -> bool:
     """True when a protected ML route must fail closed if no defense is available."""
-    return settings.extraction_defense.require_defense
+    # Some backend tests intentionally evict/reload ``config.settings`` to
+    # isolate module generations. Resolve the current settings module here so
+    # a stale imported object cannot turn a required fail-closed posture into
+    # ``disabled_by_profile``.
+    import importlib
+
+    current_settings = importlib.import_module("config.settings").settings
+    return current_settings.extraction_defense.require_defense
 
 
 def resolve_extraction_defense_mode() -> str:
