@@ -1,34 +1,55 @@
-import { Card, CardHeader, CardContent, Button } from '@aether/ui';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardHeader, CardTitle, CardContent, Button } from '@aether/ui';
 import { useAuth } from '@aether-app/features/auth';
 import { DecisionIntelligencePanel } from '@aether-app/components/decision-intelligence-panel';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 
+// Pure navigation targets — no metrics, counts, or fabricated status. The panels
+// below are the only data-bearing surfaces and each renders its own backend
+// truth (loading / empty / error / populated) independently.
+const NEXT_STEPS: ReadonlyArray<{ readonly to: string; readonly label: string; readonly hint: string }> = [
+  { to: '/activation', label: 'Activation', hint: 'Finish setup and prove first value' },
+  { to: '/me', label: 'Usage & plan', hint: 'Review measured usage and limits' },
+  { to: '/settings', label: 'Settings', hint: 'Manage API keys and tenant profile' },
+  { to: '/integrations', label: 'Integrations', hint: 'Connect and monitor data sources' },
+];
+
 export function HomePage() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-surface-base p-8">
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-sans font-semibold text-text-primary">Aether</h1>
-            <p className="text-text-secondary text-sm mt-1">Customer Portal</p>
+            <h1 className="text-2xl font-sans font-semibold text-text-primary">Aether workspace</h1>
+            <p className="text-text-secondary text-sm mt-1">
+              Welcome{user ? `, ${user.displayName}` : ''} — your customer intelligence home.
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => void logout()}>
-              Sign out
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={() => void logout()}>
+            Sign out
+          </Button>
         </div>
 
         <Card>
           <CardHeader>
-            <h2 className="text-text-primary font-medium">Welcome{user ? `, ${user.displayName}` : ''}</h2>
+            <CardTitle className="text-sm">Where to next</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-text-secondary text-sm">
-              This is the Aether customer portal. Features will be added here as the product grows.
-            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {NEXT_STEPS.map(step => (
+                <button
+                  key={step.to}
+                  onClick={() => void navigate(step.to)}
+                  className="text-left rounded-lg border border-border-subtle bg-surface-raised p-3 transition-colors hover:border-accent/50"
+                >
+                  <p className="text-sm font-medium text-text-primary">{step.label}</p>
+                  <p className="text-xs text-text-secondary mt-0.5">{step.hint}</p>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
 

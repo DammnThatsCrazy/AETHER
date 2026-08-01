@@ -14,7 +14,7 @@ source_files:
   - ML Models/aether-ml/training/pipelines/train.py
 estimated_read_minutes: 6
 toc_depth: 2
-last_synced_commit: "fabddb8"
+last_synced_commit: "1a5625c"
 ---
 
 # ML Model Readiness Matrix
@@ -76,6 +76,13 @@ All 9 trainable models have a corresponding feature contract in
 nullable, allowed values, default, unit, aliases, aggregation window, freshness
 SLA seconds, schema version. A hash mismatch between training-time and
 serving-time contracts raises `ContractMismatchError` in strict mode.
+
+The flat-dict serving endpoints (intent, bot, session, churn, ltv, anomaly,
+identity) enforce the contract on every request via
+`serving/src/api.py::_validated_frame`: missing required features, unknown
+keys, non-finite values, and declared min/max range violations are rejected
+with HTTP 422 before inference. Integral floats are accepted for int-dtype
+features because the JSON request models coerce all numbers to float.
 
 ## Serving Endpoint Coverage
 

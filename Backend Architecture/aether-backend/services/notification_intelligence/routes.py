@@ -241,7 +241,24 @@ async def emit_notification(body: EmitNotificationRequest, request: Request):
                       labels={"tenant_id": body.tenant_id,
                               "severity": body.severity.value,
                               "source_topic": body.source_topic})
+    # Producer-coverage heartbeat (additive, never affects emission): stamp the
+    # producer's last-emit, keyed by the top-level source_service/topic segment.
+    try:
+        from services.notification_intelligence.coverage import record_producer_emit
+        record_producer_emit((body.source_service or body.source_topic or "").split(".")[0])
+    except Exception:  # noqa: BLE001 — coverage is observability, never a failure path
+        pass
     return APIResponse(data=result).to_dict()
+
+
+@router.get("/coverage")
+async def producer_coverage(request: Request):
+    """Producer-coverage report for the notification plane. Honest states — never
+    'healthy' without a declared baseline, and a silent producer is surfaced as
+    unavailable/unknown rather than read as all-quiet-all-well."""
+    request.state.tenant.require_permission("read")
+    from services.notification_intelligence.coverage import build_coverage_report
+    return APIResponse(data=build_coverage_report().to_dict()).to_dict()
 
 
 @router.get("/intelligence")
@@ -1030,6 +1047,52 @@ async def delete_webhook(webhook_id: str, request: Request):
         raise ForbiddenError("Webhook belongs to a different tenant")
     await wh_repo.delete(webhook_id)
     return APIResponse(data={"deleted": True}).to_dict()
+
+
+@router.post("/webhooks/{webhook_id}/test")
+async def test_webhook(webhook_id: str, request: Request):
+    """Send a test payload to a configured webhook (migrated from the retired legacy
+    notification router). Unlike the legacy handler this fails closed on SSRF: the
+    target URL is checked against private/loopback ranges before any request."""
+    import time
+
+    from repositories.repos import WebhookRepository
+    from shared.common.common import ForbiddenError, NotFoundError
+    from services.delivery.adapters.base import SSRFBlockedError
+    from services.delivery.adapters.webhook import _check_ssrf
+
+    request.state.tenant.require_permission("read")
+    wh_repo = WebhookRepository()
+    webhook = await wh_repo.find_by_id(webhook_id)
+    if not webhook:
+        raise NotFoundError("Webhook")
+    if webhook.get("tenant_id") != request.state.tenant.tenant_id:
+        raise ForbiddenError("Webhook belongs to a different tenant")
+    url = webhook.get("url", "")
+    try:
+        _check_ssrf(url)
+    except SSRFBlockedError as exc:
+        return APIResponse(data={"success": False, "error": f"blocked: {exc}", "latency_ms": 0}).to_dict()
+
+    import httpx
+
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                url,
+                json={"event": "test", "source": "aether"},
+                headers={"X-Aether-Event": "test"},
+            )
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return APIResponse(data={
+            "success": resp.status_code < 400,
+            "status_code": resp.status_code,
+            "latency_ms": latency_ms,
+        }).to_dict()
+    except httpx.RequestError as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return APIResponse(data={"success": False, "error": str(exc), "latency_ms": latency_ms}).to_dict()
 
 
 @router.post("/alerts")

@@ -20,7 +20,7 @@ from shared.temporal.instant import ensure_aware_utc
 from typing import Any, Optional
 
 from config.settings import settings
-from shared.common.common import BadRequestError
+from shared.common.common import BadRequestError, RateLimitedError
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 
@@ -31,6 +31,7 @@ from services.integrations.providers.payment_rails.base import (
     payload_hash,
 )
 from services.integrations.providers.payment_rails.models import (
+    FundingSession,
     PaymentRailHealth,
     utc_now_iso,
 )
@@ -49,6 +50,54 @@ _PROVIDER_FLAGS = {
     "moonpay": "moonpay_enabled",
     "bridge": "bridge_enabled",
 }
+
+# Deterministic namespace for payment-rail canonical event ids. A uuid5 over a
+# stable (tenant, session, event_type) key yields the SAME id every time the
+# same logical canonical event is emitted, so a provider redelivery or a crash
+# between publish and the ``emitted_canonical`` checkpoint re-emits an
+# IDEMPOTENT event the downstream validated-events bus can dedupe by id — never
+# a duplicate carrying a fresh random id, as ``uuid4`` produced.
+_CANONICAL_EVENT_NAMESPACE = uuid.uuid5(
+    uuid.NAMESPACE_URL, "https://aether.dev/payment_rails/canonical_event"
+)
+_KEY_SEP = "\x1f"  # unit separator — unambiguous field delimiter in the id key
+# Bronze schema version for payment canonical events (matches the ingestion
+# batch/validation spine's SCHEMA_VERSION so Bronze rows share one envelope).
+_CANONICAL_SCHEMA_VERSION = "1.0.0"
+
+
+def canonical_event_id(tenant_id: str, session_id: Optional[str], event_type: str) -> str:
+    """Stable, replay-safe id for a canonical payment event.
+
+    Identity is the (tenant, funding session, canonical event type) tuple: the
+    same logical event always hashes to the same UUID, so re-emission is a
+    downstream-idempotent no-op instead of a duplicate.
+    """
+    key = f"{tenant_id}{_KEY_SEP}{session_id or ''}{_KEY_SEP}{event_type}"
+    return str(uuid.uuid5(_CANONICAL_EVENT_NAMESPACE, key))
+
+
+async def _meter_usage(
+    tenant_id: str, event_type: str, source_id: Optional[str], source_type: str
+) -> None:
+    """Fail-open usage meter — record a RevOps usage-metering event, swallowing
+    any error so metering can never reject or drop an observation. Idempotent on
+    ``source_id`` (RevOps ``find_idempotent`` dedupes on replay)."""
+    try:
+        from services.billing.revops import (
+            MeteringService,
+            UsageMeteringEvent,
+            UsageMeteringEventRepository,
+        )
+
+        await MeteringService(UsageMeteringEventRepository()).record_event(
+            UsageMeteringEvent(
+                tenant_id=tenant_id, event_type=event_type, source_id=source_id,
+                source_type=source_type, occurred_at=utc_now_iso(),
+            )
+        )
+    except Exception as exc:  # pragma: no cover — metering must never break flow
+        logger.warning(f"payment usage metering failed: {exc}")
 
 
 def _age_seconds(iso_value: Optional[str], now: datetime) -> Optional[float]:
@@ -103,16 +152,41 @@ class PaymentRailsService:
         timestamp: Optional[str] = None,
     ) -> dict[str, Any]:
         adapter = require_provider_enabled(provider)
-        verified = await adapter.verify_webhook(
-            tenant_id, payload=payload, signature=signature, timestamp=timestamp
+        # Provider-native signature verification — the same scheme the durable
+        # endpoint-registry path uses — replacing the legacy generic HMAC. The
+        # header-resolved route reads each provider's native signature header
+        # (Moonpay-Signature-V2 / Stripe-Signature compound t=,s=/v1=, etc.) but
+        # was verifying them with one generic verifier that mishandles compound
+        # signatures; native verification demands each provider's real protocol.
+        # Tenant is still caller-resolved here (legacy contract); the endpoint-id
+        # route remains the server-resolved path.
+        from services.integrations.providers.payment_rails.signature_verify import (
+            verify_signature,
         )
-        if not verified:
+
+        try:
+            from services.integrations.providers.payment_rails.base import (
+                get_payment_rails_vault,
+            )
+
+            legacy_secret = await get_payment_rails_vault().get_key(
+                tenant_id, adapter.vault_provider_name
+            )
+        except Exception:  # noqa: BLE001 — missing/unavailable secret → no_secret reject
+            legacy_secret = None
+        secrets = [legacy_secret] if legacy_secret else []
+        now_epoch = int(datetime.now(timezone.utc).timestamp())
+        result = verify_signature(
+            adapter.native_signature_scheme(), secrets, payload, signature,
+            timestamp=timestamp, now_epoch=now_epoch,
+        )
+        if not result.ok:
             await self.repos.audit.record(tenant_id, adapter.audit_record(
-                tenant_id, "webhook_rejected", {"reason": "signature_verification_failed"}
+                tenant_id, "webhook_rejected", {"reason": result.reason}
             ))
             metrics.increment("payment_rail_webhook_rejected_total",
                               labels={"provider": adapter.provider_name})
-            return {"handled": False, "reason": "signature_verification_failed"}
+            return {"handled": False, "reason": result.reason}
 
         try:
             parsed = json.loads(payload.decode("utf-8"))
@@ -126,6 +200,161 @@ class PaymentRailsService:
         metrics.increment("payment_rail_webhook_handled_total",
                           labels={"provider": adapter.provider_name})
         return {"handled": True, "events": results}
+
+    # Max webhook body we will read before verification (admission control).
+    MAX_WEBHOOK_BODY_BYTES = 512 * 1024
+
+    async def handle_verified_webhook(
+        self,
+        tenant_id: str,
+        provider: str,
+        environment: str,
+        payload: bytes,
+        signature: Optional[str],
+        timestamp: Optional[str] = None,
+        *,
+        endpoint_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Server-resolved-tenant webhook path with provider-native verification.
+
+        The tenant/environment are resolved from the durable endpoint registry
+        (never a header). The webhook signing secret(s) — current + a valid
+        previous during a rotation overlap — come from the durable credential
+        authority (falling back to the legacy vault only if none is configured).
+        Verification uses the provider's native scheme; nothing is parsed or
+        persisted before a valid signature.
+        """
+        from datetime import datetime as _dt, timezone as _tz
+
+        from services.integrations.providers.payment_rails.signature_verify import (
+            verify_signature,
+        )
+
+        adapter = require_provider_enabled(provider)
+
+        if payload and len(payload) > self.MAX_WEBHOOK_BODY_BYTES:
+            metrics.increment("payment_rail_webhook_rejected_total",
+                              labels={"provider": adapter.provider_name})
+            await self._quarantine_denied(
+                tenant_id, adapter, payload, "body_too_large", endpoint_id,
+            )
+            return {"handled": False, "reason": "body_too_large"}
+
+        # Admission rate limit: enforced before signature verification so a flood
+        # of unverifiable bodies to a known endpoint id can't burn CPU on crypto.
+        # A 429 (retryable) — not a 4xx — so the provider backs off and re-delivers.
+        rl = settings.payment_rails
+        if getattr(rl, "webhook_rate_limit_enabled", False):
+            from services.integrations.providers.payment_rails.rate_limit import (
+                payment_webhook_rate_limiter,
+            )
+
+            allowed = await payment_webhook_rate_limiter.allow(
+                provider=adapter.provider_name,
+                limit=getattr(rl, "webhook_rate_limit_per_minute", 600),
+                endpoint_id=endpoint_id,
+                tenant_id=tenant_id,
+            )
+            if not allowed:
+                await self.repos.audit.record(tenant_id, adapter.audit_record(
+                    tenant_id, "webhook_rate_limited",
+                    {"endpoint_id": endpoint_id, "environment": environment},
+                ))
+                raise RateLimitedError(retry_after=60)
+
+        secrets = await self._webhook_secrets(tenant_id, provider, environment, adapter)
+        now_epoch = int(_dt.now(_tz.utc).timestamp())
+        result = verify_signature(
+            adapter.native_signature_scheme(), secrets, payload, signature,
+            timestamp=timestamp, now_epoch=now_epoch,
+        )
+        if not result.ok:
+            await self.repos.audit.record(tenant_id, adapter.audit_record(
+                tenant_id, "webhook_rejected",
+                {"reason": result.reason, "endpoint_id": endpoint_id, "environment": environment},
+            ))
+            metrics.increment("payment_rail_webhook_rejected_total",
+                              labels={"provider": adapter.provider_name})
+            # A body that reached a valid endpoint id without a valid signature is
+            # suspicious — quarantine it (metadata only, never the raw body) for
+            # forensics before rejecting.
+            await self._quarantine_denied(
+                tenant_id, adapter, payload, result.reason or "signature_invalid",
+                endpoint_id,
+            )
+            # A signature mismatch / stale / bad-format is a permanent 4xx; a
+            # missing secret is a configuration state, still a 4xx (not a retry).
+            return {"handled": False, "reason": result.reason}
+
+        try:
+            parsed = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise BadRequestError(f"Webhook payload is not valid JSON: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise BadRequestError("Webhook payload must be a JSON object")
+
+        events = adapter.parse_webhook(tenant_id, parsed, payload_hash(parsed))
+        results = [await self._process_event(tenant_id, adapter, event) for event in events]
+        metrics.increment("payment_rail_webhook_handled_total",
+                          labels={"provider": adapter.provider_name})
+        return {"handled": True, "events": results, "environment": environment}
+
+    async def _quarantine_denied(
+        self,
+        tenant_id: str,
+        adapter: Any,
+        payload: Optional[bytes],
+        reason_code: str,
+        endpoint_id: Optional[str],
+    ) -> None:
+        """Best-effort, metadata-only quarantine of a denied webhook.
+
+        Stores only a sha256 + size + reason (never the raw body) in the shared
+        ``webhook_quarantine`` store for forensics. Never raises — a quarantine
+        failure must not change the webhook's rejection outcome.
+        """
+        if not getattr(settings.payment_rails, "webhook_quarantine_denied", False):
+            return
+        try:
+            from services.integrations.webhook_quarantine import webhook_quarantine
+
+            await webhook_quarantine.quarantine(
+                tenant_id=tenant_id,
+                connector_type=f"payment_rail:{adapter.provider_name}",
+                raw_body=payload or b"",
+                reason_code=reason_code,
+            )
+        except Exception as exc:  # noqa: BLE001 — forensic side effect, never fatal
+            logger.warning(f"payment webhook quarantine failed (non-fatal): {exc}")
+
+    async def _webhook_secrets(
+        self, tenant_id: str, provider: str, environment: str, adapter: Any
+    ) -> list[str]:
+        """Active + valid-previous webhook signing secrets, credential authority
+        first, then the legacy vault as a migration fallback."""
+        secrets: list[str] = []
+        try:
+            from services.providers.credentials.authority import credential_authority
+
+            secrets = await credential_authority.get_verification_secrets(
+                tenant_id, provider, environment, "webhook_signing_secret"
+            )
+        except Exception:  # authority not configured for this slot yet
+            secrets = []
+        if not secrets:
+            try:
+                from services.integrations.providers.payment_rails.base import (
+                    get_payment_rails_vault,
+                )
+
+                legacy = await get_payment_rails_vault().get_key(
+                    tenant_id, adapter.vault_provider_name
+                )
+                if legacy:
+                    secrets = [legacy]
+            except Exception:
+                secrets = []
+        return secrets
 
     # ── Polling / status sync ─────────────────────────────────────────────
 
@@ -229,6 +458,13 @@ class PaymentRailsService:
             return {"provider_event_id": event.provider_event_id,
                     "disposition": "side_record"}
 
+        # Consent gate (default OFF): a funding-session observation is persisted
+        # and emitted only when its subject has granted the required purpose.
+        if not await self._consent_permits_session(tenant_id, adapter, event, session):
+            return {"provider_event_id": event.provider_event_id,
+                    "disposition": "consent_denied",
+                    "funding_session_id": session.id}
+
         record, session_disposition = await self.repos.sessions.upsert_from_event(
             tenant_id, session, source=event.source
         )
@@ -261,6 +497,80 @@ class PaymentRailsService:
             "canonical_events_emitted": emitted,
         }
 
+    # The canonical consent purpose governing a payment funding-session
+    # observation — "Payments, approvals, entitlements, subscriptions, orders"
+    # in packages/shared/contracts/consent-registry.json.
+    _CONSENT_PURPOSE = "commerce"
+
+    async def _consent_permits_session(
+        self,
+        tenant_id: str,
+        adapter: PaymentRailAdapter,
+        event: ParsedProviderEvent,
+        session: FundingSession,
+    ) -> bool:
+        """Consent gate for persisting a funding-session observation (default OFF).
+
+        When ``payment_rails.webhook_consent_gate_enabled`` is set, the normalized
+        session is persisted/emitted only if its subject (``user_id``) has granted
+        the ``commerce`` consent purpose. A session with no resolvable subject is
+        allowed — there is no subject whose consent could be evaluated. Denials are
+        recorded metadata-only (never the raw observation) on the payment-rails
+        audit trail; the consent engine additionally records the policy decision.
+        Fails closed: a missing consent record or an unavailable consent store
+        denies the observation.
+        """
+        if not getattr(settings.payment_rails, "webhook_consent_gate_enabled", False):
+            return True
+        subject = session.user_id
+        if not subject:
+            await self.repos.audit.record(tenant_id, adapter.audit_record(
+                tenant_id, "consent_gate_no_subject",
+                {"provider_event_id": event.provider_event_id},
+            ))
+            return True
+
+        granted = await self._granted_purposes(tenant_id, subject)
+        from services.policy.engine import consent_policy_engine
+
+        decision = await consent_policy_engine.decide(
+            tenant_id=tenant_id,
+            actor_id=tenant_id,
+            actor_type="system",
+            action="observe",
+            resource_type="payment_funding_session",
+            resource_id=session.id,
+            subject_ref=subject,
+            purpose=self._CONSENT_PURPOSE,
+            granted_purposes=granted,
+        )
+        if decision.allowed:
+            return True
+        await self.repos.audit.record(tenant_id, adapter.audit_record(
+            tenant_id, "consent_denied",
+            {"provider_event_id": event.provider_event_id,
+             "subject_ref": subject,
+             "missing_purposes": decision.missing_purposes},
+        ))
+        return False
+
+    async def _granted_purposes(self, tenant_id: str, subject: str) -> set[str]:
+        """Consent purposes ``subject`` has granted under ``tenant_id``.
+
+        Fails closed (empty set) when the consent store is unavailable or holds no
+        record for the subject — an undeterminable grant is treated as no grant.
+        """
+        try:
+            from repositories.repos import ConsentRepository
+
+            record = await ConsentRepository().get_consent(tenant_id, subject)
+        except Exception as exc:  # noqa: BLE001 — consent store unavailable → fail closed
+            logger.warning(f"payment consent lookup failed (fail-closed): {exc}")
+            return set()
+        if not record:
+            return set()
+        return set(record.get("granted_purposes") or record.get("purposes") or [])
+
     async def _emit_canonical_events(
         self, tenant_id: str, adapter: PaymentRailAdapter, record: dict[str, Any]
     ) -> list[str]:
@@ -270,33 +580,132 @@ class PaymentRailsService:
         session = FundingSession.model_validate(record)
         implied = adapter.normalize_to_aether_events(session)
         already = set(record.setdefault("metadata", {}).get("emitted_canonical", []))
+        to_outbox = getattr(settings.payment_rails, "canonical_outbox_enabled", False)
+        meter_on = getattr(settings.payment_rails, "usage_metering_enabled", False)
         emitted: list[str] = []
         for canonical in implied:
             event_type = canonical["event_type"]
             if event_type in already:
                 continue
-            await self.producer.publish(Event(
-                topic=Topic.SDK_EVENTS_VALIDATED,
-                tenant_id=tenant_id,
-                source_service="payment_rails",
-                payload={
-                    "event_id": str(uuid.uuid4()),
-                    "tenant_id": tenant_id,
-                    "event_type": event_type,
-                    "session_id": canonical.get("session_id"),
-                    "user_id": canonical.get("user_id"),
-                    "device_id": None,
-                    "properties": canonical["properties"],
-                    "timestamp": canonical.get("occurred_at") or utc_now_iso(),
-                    "ingested_at": utc_now_iso(),
-                    "ip_enrichment": {},
-                },
-            ))
+            event_id = canonical_event_id(tenant_id, canonical.get("session_id"), event_type)
+            payload = {
+                "event_id": event_id,
+                "tenant_id": tenant_id,
+                "event_type": event_type,
+                "session_id": canonical.get("session_id"),
+                "user_id": canonical.get("user_id"),
+                "device_id": None,
+                "properties": canonical["properties"],
+                "timestamp": canonical.get("occurred_at") or utc_now_iso(),
+                "ingested_at": utc_now_iso(),
+                "ip_enrichment": {},
+            }
+            if to_outbox:
+                await self._enqueue_canonical_outbox(
+                    tenant_id, adapter, canonical, event_id, payload
+                )
+            else:
+                await self.producer.publish(Event(
+                    topic=Topic.SDK_EVENTS_VALIDATED,
+                    tenant_id=tenant_id,
+                    source_service="payment_rails",
+                    payload=payload,
+                ))
             emitted.append(event_type)
+            # accept-then-meter: only after the event is emitted, and fail-open.
+            if meter_on:
+                await _meter_usage(
+                    tenant_id, "payment_rail_observation_ingested",
+                    event_id, "payment_rail_canonical_event",
+                )
         if emitted:
             record["metadata"]["emitted_canonical"] = sorted(already | set(emitted))
             await self.repos.sessions.save(tenant_id, record)
         return emitted
+
+    async def _enqueue_canonical_outbox(
+        self,
+        tenant_id: str,
+        adapter: PaymentRailAdapter,
+        canonical: dict[str, Any],
+        event_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Atomically persist a canonical event to the durable Bronze + outbox
+        spine (ingest_many). The deterministic ``event_id`` is the Bronze/outbox
+        key, so a retry writes no second outbox row (ingest_many enqueues only for
+        a newly-accepted Bronze row); the supervised outbox relay publishes it to
+        the validated-events bus exactly once.
+        """
+        from services.ingestion.bronze_bulk import (
+            BronzeSDKEvent,
+            OutboxEvent,
+            ingest_many,
+        )
+
+        now = utc_now_iso()
+        session_id = canonical.get("session_id") or ""
+        bronze = BronzeSDKEvent(
+            tenant_id=tenant_id,
+            event_id=event_id,
+            schema_version=_CANONICAL_SCHEMA_VERSION,
+            batch_id=f"payment_rails:{tenant_id}",
+            event_type=canonical["event_type"],
+            event_family=canonical.get("event_family", "commerce"),
+            event_timestamp=canonical.get("occurred_at") or now,
+            received_at=now,
+            session_id=session_id,
+            anonymous_id="",
+            user_id=canonical.get("user_id"),
+            entity_id=session_id or tenant_id,
+            payload=payload,
+            source="payment_rails",
+            source_tag=adapter.provider_name,
+        )
+        outbox = OutboxEvent(
+            tenant_id=tenant_id,
+            event_id=event_id,
+            topic=Topic.SDK_EVENTS_VALIDATED.value,
+            partition_key=session_id or tenant_id,
+            payload=payload,
+        )
+        await ingest_many([bronze], [outbox])
+
+    async def repair_canonical_backlog(
+        self, tenant_id: str, *, limit: int = 500
+    ) -> dict[str, int]:
+        """Re-drive canonical emission for funding sessions with a delivery gap.
+
+        A crash between a session upsert and its canonical emission — or an outbox
+        relay outage while the durable path is enabled — can leave a funding
+        session whose implied ``payment_*`` events were never delivered. This
+        supervised-repair entrypoint scans the tenant's sessions, and for any whose
+        expected canonical event types (implied by the session's status) are not
+        all recorded in ``emitted_canonical``, re-drives ``_emit_canonical_events``.
+
+        Recovery is idempotent: the deterministic canonical id means an
+        already-delivered event is a no-op on both delivery paths (direct-publish
+        dedupes on ``emitted_canonical``; the outbox path dedupes on the accepted
+        Bronze row), so repeated repair runs never double-emit. Returns per-run
+        counts for observability.
+        """
+        sessions = await self.repos.sessions.list_for_tenant(tenant_id)
+        scanned = repaired = reemitted = 0
+        for record in sessions[:limit]:
+            adapter = ADAPTERS.get(record.get("provider"))
+            if adapter is None:
+                continue
+            scanned += 1
+            session = FundingSession.model_validate(record)
+            expected = {c["event_type"] for c in adapter.normalize_to_aether_events(session)}
+            already = set(record.get("metadata", {}).get("emitted_canonical", []))
+            if expected <= already:
+                continue  # no gap — every implied event already delivered
+            emitted = await self._emit_canonical_events(tenant_id, adapter, record)
+            if emitted:
+                repaired += 1
+                reemitted += len(emitted)
+        return {"scanned": scanned, "repaired": repaired, "events_reemitted": reemitted}
 
     # ── Health ────────────────────────────────────────────────────────────
 

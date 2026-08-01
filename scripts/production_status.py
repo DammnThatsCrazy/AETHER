@@ -791,6 +791,17 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
+        "Distributed tracing is a seam only: W3C traceparent helpers and "
+        "correlation-id propagation exist (shared/observability.py, gated on "
+        "AETHER_OTEL_ENABLED), but no OpenTelemetry SDK, spans, or exporter "
+        "are integrated — the seam must not be mistaken for observability coverage",
+        "observability / tracing",
+        "Integrate the OpenTelemetry SDK behind the existing seam (span creation at "
+        "ingestion/jobs/outbox hops, OTLP exporter), provision a collector in staging, "
+        "and validate trace continuity across enqueue -> worker -> bus",
+    ),
+    Blocker(
+        "pre-production-blocker",
         "Derivatives market streams run on the local transport; Kafka topics not provisioned",
         "derivatives intelligence",
         "Provision Kafka topics in staging; re-run stream gap/recovery validation against the real transport",
@@ -891,7 +902,13 @@ def _platform_version() -> str:
 
 
 def _run_check(check: LiveCheck) -> tuple[bool, str]:
-    proc = subprocess.run(check.cmd, cwd=ROOT, capture_output=True, text=True)
+    # A portable "python" argv must run on this gate's own interpreter — the
+    # system python's site-packages are exactly what the toolchain gate
+    # rejects, and running checks there fails them for the wrong reason.
+    argv = list(check.cmd)
+    if argv and argv[0] == "python":
+        argv[0] = sys.executable
+    proc = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
     output = (proc.stdout + proc.stderr).strip()
     tail = "\n".join(output.splitlines()[-6:]) if output else ""
     return proc.returncode == 0, tail

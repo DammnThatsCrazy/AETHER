@@ -1,12 +1,14 @@
 name: Smart Contract Static Analysis
 
-# Runs Slither on every PR or push that touches Smart Contracts/**
-# so audit-relevant issues are caught before they reach main.
+# Runs Slither and the Hardhat contract test suite on every PR or push that
+# touches Smart Contracts/** so audit-relevant issues are caught before they
+# reach main.
 #
-# Slither findings are uploaded as a SARIF artifact (not blocking CI)
-# so reviewers can triage without every new finding hard-failing the build.
+# Slither findings are uploaded as a SARIF artifact for reviewer triage.
 # Hard failure is reserved for HIGH / CRITICAL severity; MEDIUM and below
-# are surfaced as warnings only.
+# are surfaced as warnings only via the human-summary print. Every Slither
+# invocation below fails the job on a real tool error (no `|| true`) --
+# only finding-severity is filtered, never tool crashes/misconfiguration.
 
 on:
   pull_request:
@@ -64,24 +66,34 @@ jobs:
         run: pip install slither-analyzer
 
       - name: Run Slither — human-readable summary
-        # --fail-high exits non-zero only for HIGH+ severity findings
-        # --exclude-optimization suppresses optimizer false positives
+        # No `|| true` here: a real Slither crash (bad artifacts, tool
+        # misconfiguration) must fail the job, not be silently swallowed.
+        # The summary printer never fails on findings; the blocking pass is the
+        # SARIF step below.
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
             --exclude-optimization \
             --exclude-dependencies \
-            --print human-summary \
-            || true
+            --print human-summary
 
-      - name: Run Slither — SARIF output
+      - name: Run Slither — SARIF output (blocking gate)
+        # Blocks on MEDIUM and HIGH findings. Informational/low classes
+        # (pragma spread, solc-version advisories, timestamp expiry checks,
+        # assembly in ecrecover, cyclomatic complexity) are advisory and are
+        # excluded from the exit code but still visible in the summary above.
+        # Accepted medium findings are triaged IN SOURCE via
+        # `slither-disable-next-line` with a written justification at the exact
+        # site — never by weakening this invocation. A new medium or high
+        # finding fails this job.
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
             --exclude-optimization \
             --exclude-dependencies \
-            --sarif results.sarif \
-            || true
+            --exclude-informational \
+            --exclude-low \
+            --sarif results.sarif
 
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
@@ -91,9 +103,64 @@ jobs:
         continue-on-error: true
 
       - name: Fail on HIGH/CRITICAL findings
+        # --fail-high exits non-zero only for HIGH+ severity findings
+        # --exclude-optimization suppresses optimizer false positives
         run: |
           slither . \
             --hardhat-artifacts-directory artifacts \
             --exclude-optimization \
             --exclude-dependencies \
             --fail-high
+
+      - name: Record slither evidence
+        run: |
+          mkdir -p ../release-evidence
+          printf '{"sha":"%s","job":"slither"}\n' "$GITHUB_SHA" > ../release-evidence/smart-contract-analysis.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-contract-analysis-evidence
+          path: release-evidence/smart-contract-analysis.json
+
+  contract-tests:
+    # Smart Contracts/test/ was not run by any gate. This job closes that gap
+    # by running the Hardhat contract test suite (npm test -> `hardhat test`)
+    # on the same triggers as Slither.
+    name: Hardhat contract test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: Smart Contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js (for Hardhat / solc)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: 'Smart Contracts/package-lock.json'
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Compile contracts (Hardhat)
+        run: npx hardhat compile
+        env:
+          REPORT_GAS: false
+
+      - name: Run Hardhat contract test suite
+        run: npm test
+
+      - name: Record contract-tests evidence
+        run: |
+          mkdir -p ../release-evidence
+          printf '{"sha":"%s","job":"contract-tests"}\n' "$GITHUB_SHA" > ../release-evidence/contract-tests.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contract-tests-evidence
+          path: release-evidence/contract-tests.json

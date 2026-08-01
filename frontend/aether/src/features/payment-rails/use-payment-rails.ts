@@ -6,6 +6,7 @@ import {
   fetchPaymentRailHealth,
   fetchProviderStatus,
   syncProviderStatus,
+  repairCanonicalBacklog,
 } from './api';
 import type {
   FundingSessionRecord,
@@ -15,6 +16,7 @@ import type {
   PaymentRailHealthRecord,
   PaymentRailHealthResult,
   ProviderAdapterStatusRecord,
+  CanonicalBacklogRepairOutcome,
 } from './api';
 
 const KEY_PREFIX = 'payment-rails';
@@ -130,4 +132,17 @@ export function useSyncProvider(): {
   });
 
   return { sync: mutate, loading: isLoading, error };
+}
+
+export function useRepairCanonicalBacklog(): {
+  readonly repair: (limit?: number) => Promise<CanonicalBacklogRepairOutcome | null>;
+  readonly loading: boolean;
+  readonly error: string | null;
+} {
+  const { mutate, isLoading, error } = useMutation<number | undefined, CanonicalBacklogRepairOutcome>({
+    mutationFn: limit => repairCanonicalBacklog(limit),
+    onSuccess: () => queryCache.invalidatePrefix(KEY_PREFIX),
+  });
+
+  return { repair: (limit?: number) => mutate(limit), loading: isLoading, error };
 }

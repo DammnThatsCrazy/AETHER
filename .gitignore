@@ -112,3 +112,6 @@ artifacts/
 # Only created on an explicit flag, but never a committed artifact: it is
 # per-run evidence, and a stale committed copy would be worse than none.
 release-evidence/
+
+# Local Python virtualenv (toolchain isolation from system dist-packages)
+.venv/

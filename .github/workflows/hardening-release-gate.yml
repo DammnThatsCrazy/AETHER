@@ -29,13 +29,23 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-      - name: Install repository dependencies
-        run: |
-          python -m pip install --disable-pip-version-check -e '.[all]'
-          npm ci
+      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
+        run: make bootstrap
+      - name: Add project virtualenv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Install Node dependencies
+        run: npm ci
       - name: Install supply-chain scan tools
         run: python -m pip install --disable-pip-version-check 'pip-audit>=2.7' 'cyclonedx-bom>=4.0'
       - name: Canonical PR completion gate
         run: make ci-check
       - name: Release readiness gate
         run: make release-gate
+      - name: Record hardening-release-gate evidence
+        run: |
+          mkdir -p release-evidence
+          printf '{"sha":"%s","job":"canonical-gates"}\n' "$GITHUB_SHA" > release-evidence/hardening-release-gate.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hardening-release-gate-evidence
+          path: release-evidence/hardening-release-gate.json

@@ -16,7 +16,10 @@ class _FakeRepo:
     def __init__(self, rows):
         self._rows = rows
 
-    async def active_for(self, _grantee):
+    async def active_for(self, _grantee, _tenant_id):
+        # Signature mirrors DelegationRepository.active_for(grantee_entity_id,
+        # tenant_id): delegation lookups are tenant-scoped, and a fake accepting
+        # fewer arguments than production would fail every caller.
         return self._rows
 
 

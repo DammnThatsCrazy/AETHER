@@ -8,13 +8,26 @@ Aggregates infrastructure checks behind GET /ready and GET /v1/ready:
                     revision is cached in-process for 30 s
 - ``cache``       — Redis / in-memory cache health
 - ``event_bus``   — Kafka / in-memory producer health
-- ``workers``     — WorkerSupervisor status map (ADVISORY: never fails readiness)
+- ``workers``     — per-role health of the worker roles this process hosts
 - ``auth_config`` — non-local only: JWT secret loaded and non-default
                     (values are never echoed)
 
+Worker health is graded, not advisory. A worker role declared release-critical
+in ``services/runtime/roles.py::RELEASE_CRITICAL_ROLES`` fails the whole probe;
+any other role's failure leaves the probe ready and marks only its own
+capability unavailable. Absence of a signal for a role this process is supposed
+to host counts as a failure, never as health.
+
 Response shape:
     {"ready": bool, "environment": "...",
-     "checks": {name: {"status": "ok"|"failed"|"skipped", "detail": "..."}}}
+     "checks": {name: {"status": "ok"|"degraded"|"failed"|"skipped",
+                       "detail": "..."}},
+     "capabilities": {capability: {"available": bool, "state": "...",
+                                   "role": "...", "release_critical": bool,
+                                   "detail": "..."}}}
+
+``degraded`` is emitted only by the ``workers`` check and does not fail the
+probe; every other check is ready only on ``ok`` or ``skipped``.
 
 The report never contains secrets or stack traces; failure details are
 limited to exception class names and terse descriptions.
@@ -30,6 +43,11 @@ from config.settings import Environment
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.gateway.readiness")
+
+# Check statuses that do not block readiness. "degraded" is worker-scoped: a
+# non-release-critical capability is unavailable, which is reported to callers
+# through the capabilities map but must not block a rollout.
+_READY_STATUSES = ("ok", "skipped", "degraded")
 
 # ── module-level caches ──────────────────────────────────────────────────────
 
@@ -91,6 +109,37 @@ def _failed(detail: str) -> dict[str, Any]:
 
 def _skipped(detail: str) -> dict[str, Any]:
     return {"status": "skipped", "detail": detail}
+
+
+def expected_worker_roles(settings: Any) -> frozenset[str]:
+    """The worker roles this API process is itself responsible for supervising.
+
+    Mirrors the lifespan's own gating in ``main.py``: a pure ``api`` process
+    supervises nothing (its worker fleet runs as separate tasks and is gated by
+    those tasks' own readiness surface), an ungated process runs every worker,
+    and a role or execution group runs the roles it expands to.
+
+    Narrowed to the roles that own supervised *loop* specs, because those are
+    the only ones the lifespan registers: a consumer-attached role's receive
+    loop is registered by ``run_role``, not here, so demanding one in this
+    process would fail a probe over work this process never had. Roles that do
+    show up in the supervisor regardless are still evaluated —
+    :func:`evaluate_worker_readiness` unions expected with observed.
+    """
+    # Late import: ``services.runtime`` pulls in the whole worker spec builder,
+    # which the request path has no reason to load at gateway import time.
+    from services.runtime.roles import ROLE_TO_SPEC_NAMES, WORKER_ROLES, roles_in
+
+    runtime = getattr(settings, "runtime", None)
+    role = getattr(runtime, "aether_role", "all") or "all"
+    if role == "api":
+        return frozenset()
+    hosted = (
+        roles_in(role)
+        if getattr(runtime, "worker_roles_enabled", True)
+        else WORKER_ROLES
+    )
+    return frozenset(r for r in hosted if ROLE_TO_SPEC_NAMES.get(r))
 
 
 # ── report ───────────────────────────────────────────────────────────────────
@@ -162,27 +211,50 @@ async def readiness_report(
     except Exception as exc:
         checks["event_bus"] = _failed(f"event bus check error: {type(exc).__name__}")
 
-    # ── workers (ADVISORY — never fails readiness) ──────────────────────────
-    if supervisor is None:
-        checks["workers"] = {
-            **_skipped("worker supervisor not initialised"),
-            "advisory": True,
-        }
+    # ── workers (release-critical roles fail the probe) ─────────────────────
+    from services.runtime.supervisor import evaluate_worker_readiness
+
+    worker_health = evaluate_worker_readiness(supervisor, expected_worker_roles(settings))
+    capabilities: dict[str, Any] = worker_health["capabilities"]
+    if not worker_health["roles"]:
+        # This process hosts no worker role and none turned up unannounced.
+        # Nothing is being claimed about the fleet: the worker tasks answer for
+        # themselves on their own readiness surface (run_role.py).
+        checks["workers"] = _skipped("this process supervises no worker roles")
     else:
-        worker_map = supervisor.status()
-        failed_workers = sorted(
-            name for name, info in worker_map.items() if info.get("state") == "failed"
-        )
+        critical = worker_health["critical_failures"]
+        degraded = worker_health["degraded_roles"]
+        if critical:
+            status = "failed"
+            detail = f"release-critical role(s) unavailable: {', '.join(critical)}"
+        elif degraded:
+            status = "degraded"
+            detail = f"non-critical role(s) unavailable: {', '.join(degraded)}"
+        else:
+            status = "ok"
+            detail = f"{len(worker_health['roles'])} worker role(s) available"
         checks["workers"] = {
-            "status": "ok" if not failed_workers else "failed",
-            "detail": (
-                "all workers healthy"
-                if not failed_workers
-                else f"failed workers: {', '.join(failed_workers)}"
-            ),
-            "advisory": True,
-            "workers": worker_map,
+            "status": status,
+            "detail": detail,
+            "roles": worker_health["roles"],
+            "critical_failures": critical,
+            "degraded_roles": degraded,
+            "workers": supervisor.status() if supervisor is not None else {},
         }
+
+    # ── communications subsystem (§21) ──────────────────────────────────────
+    # A dedicated comms dimension: storage reachability + comms-required worker
+    # dependency (a dead projector/relay fails comms readiness) + backlog. Never
+    # fails on a single tenant's credential — that truth is per-connector.
+    try:
+        from services.comms.readiness import comms_subsystem_readiness
+        checks["communications"] = await comms_subsystem_readiness(
+            pool=pool, worker_capabilities=capabilities, is_local=is_local,
+        )
+    except Exception as exc:
+        checks["communications"] = _failed(
+            f"comms readiness error: {type(exc).__name__}"
+        )
 
     # ── auth config (non-local only; never echo values) ─────────────────────
     if is_local:
@@ -194,15 +266,12 @@ async def readiness_report(
         else:
             checks["auth_config"] = _failed("jwt secret missing or default")
 
-    # ── aggregate (advisory checks excluded) ────────────────────────────────
-    ready = all(
-        check.get("status") in ("ok", "skipped")
-        for check in checks.values()
-        if not check.get("advisory", False)
-    )
+    # ── aggregate (every check counts) ──────────────────────────────────────
+    ready = all(check.get("status") in _READY_STATUSES for check in checks.values())
     report = {
         "ready": ready,
         "environment": settings.env.value,
         "checks": checks,
+        "capabilities": capabilities,
     }
     return ready, report

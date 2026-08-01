@@ -214,6 +214,22 @@ def get_payment_rails_vault() -> BYOKKeyVault:
     return _vault
 
 
+def _credential_authority_enabled() -> bool:
+    """True when payment-rail adapters resolve secrets from the durable
+    CredentialAuthority instead of the in-memory BYOKKeyVault (default OFF)."""
+    from config.settings import settings
+
+    return getattr(settings.payment_rails, "credential_authority_enabled", False)
+
+
+def _credential_environment() -> str:
+    """CredentialAuthority environment for the current process. Single-environment
+    per process (founding-tenant posture); the follow-up cutover threads a
+    per-request environment before the flag defaults on."""
+    env = (os.getenv("AETHER_ENV") or "").strip().lower()
+    return "live" if env in ("production", "prod", "live") else "sandbox"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Typed adapter results
 # ─────────────────────────────────────────────────────────────────────────────
@@ -409,6 +425,33 @@ class PaymentRailAdapter(ABC):
 
     # ── Webhook verification (HMAC, no provider SDKs) ─────────────────────
 
+    # Credential-authority slot name for the webhook signing secret.
+    WEBHOOK_SLOT = "webhook_signing_secret"
+
+    async def _resolve_signing_secrets(self, tenant_id: str) -> list[str]:
+        """Acceptable webhook signing secrets, active first.
+
+        Flag-ON (``credential_authority_enabled``): resolve ONLY from the durable
+        CredentialAuthority — the active secret plus a valid rotation-overlap
+        previous secret — with NO vault fallback (an unconfigured slot yields an
+        empty list, so verification fails closed). Flag-OFF: the legacy single
+        BYOKKeyVault secret, byte-for-byte as before.
+        """
+        if _credential_authority_enabled():
+            try:
+                from services.providers.credentials.authority import credential_authority
+
+                return await credential_authority.get_verification_secrets(
+                    tenant_id, self.provider_name, _credential_environment(), self.WEBHOOK_SLOT
+                )
+            except Exception:  # noqa: BLE001 — authority unavailable → fail closed
+                return []
+        try:
+            secret = await get_payment_rails_vault().get_key(tenant_id, self.vault_provider_name)
+        except ValueError:
+            return []
+        return [secret] if secret else []
+
     async def verify_webhook(
         self,
         tenant_id: str,
@@ -416,18 +459,17 @@ class PaymentRailAdapter(ABC):
         signature: Optional[str],
         timestamp: Optional[str] = None,
     ) -> bool:
-        """Verify a provider webhook signature with the tenant's vault secret.
+        """Verify a provider webhook signature against the tenant's signing secret.
 
-        HMAC-SHA256 per provider scheme, constant-time compare. Never logs the
-        secret or the expected signature.
+        HMAC-SHA256 per provider scheme, constant-time compare. Accepts a match
+        against ANY resolved secret (flag-OFF: the single vault secret — identical
+        behavior; flag-ON: active + rotation-overlap previous from the credential
+        authority). Never logs the secret or the expected signature.
         """
         if not signature:
             return False
-        try:
-            secret = await get_payment_rails_vault().get_key(tenant_id, self.vault_provider_name)
-        except ValueError:
-            return False
-        if not secret:
+        secrets = await self._resolve_signing_secrets(tenant_id)
+        if not secrets:
             return False
         if self.signature_scheme == "timestamped_hex":
             if not timestamp:
@@ -435,11 +477,25 @@ class PaymentRailAdapter(ABC):
             signed_payload = f"{timestamp}.".encode("utf-8") + payload
         else:
             signed_payload = payload
-        expected = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
         provided = signature.strip()
         for prefix in ("v1=", "s=", "sha256="):
             provided = provided.removeprefix(prefix)
-        return hmac.compare_digest(expected, provided)
+        for secret in secrets:
+            expected = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, provided):
+                return True
+        return False
+
+    def native_signature_scheme(self) -> str:
+        """Provider-native scheme token for ``signature_verify.verify_signature``.
+
+        Stripe and MoonPay send compound ``t=…,<tag>=…`` headers (parsed
+        natively); the others use their declared ``signature_scheme``.
+        """
+        return {
+            "stripe": "stripe_compound",
+            "moonpay": "moonpay_compound",
+        }.get(self.provider_name, self.signature_scheme)
 
     # ── Parsing / normalization ───────────────────────────────────────────
 

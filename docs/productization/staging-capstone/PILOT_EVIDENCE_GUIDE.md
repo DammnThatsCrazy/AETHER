@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - scripts/production_status.py
 canonical_owner: platform@aether
-last_synced_commit: "9fde074"
+last_synced_commit: "00fdcbc"
 ---
 
 # Pilot Evidence Guide

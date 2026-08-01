@@ -1,0 +1,48 @@
+{
+  "$comment": "Milestone dependency graph + the gate registries each milestone must update. Prevents 'green targeted tests but red ci-check' by naming the ripple registries up front.",
+  "schema_version": 1,
+  "milestone_dependencies": {
+    "C0": [],
+    "C1": ["C0"],
+    "C2": ["C1"],
+    "C3": ["C2"],
+    "C4": ["C3"]
+  },
+  "ci_check_ripple_registries": {
+    "$note": "Every new surface ripples into these. Named so no milestone lands green-locally but red-in-ci.",
+    "new_alembic_table": [
+      "config/storage_policies.yaml (check_storage_policies.py — one policy per persistent type)",
+      "single alembic head (validate_temporal_integrity.py)"
+    ],
+    "new_backend_route": [
+      "scripts/generate_feature_surface_manifest.py (classify every new Aether surface)",
+      "config/capability_matrix.yaml + config/deploy_profile.yaml facets (staging_capability_matrix.py)",
+      "route-state coverage for Aether/Kyber frontends (validate_frontend_route_state_matrix.py --enforce) — backend-only routes may be exempt; verify"
+    ],
+    "new_ts_contract": [
+      "packages/shared/index.ts barrel export (validate_ts_public_exports.py)",
+      "matching tests/contracts/test_*_parity.py (snake_case fields only)"
+    ],
+    "new_event_type": [
+      "packages/shared/events.ts <-> CANONICAL_EVENT_TYPES (validate_event_schema_parity.py)",
+      "consent purposes/families (validate_contracts.py)"
+    ],
+    "new_doc": [
+      "make repo-doctor-fix regenerates docs/_generated + REPO-INDEX + AUTOMATION; commit them",
+      "valid frontmatter (validate_frontmatter.py)",
+      "source_files must EXIST and be non-stale (docs_drift.py --strict) — do not list files that land in a later commit"
+    ],
+    "new_package_json": [
+      "root package.json workspaces (check_version_consistency.py)",
+      "scripts/bump_version.py must know the file (version alignment)",
+      "validate_sdk_release_alignment.py if it is an SDK-adjacent package"
+    ]
+  },
+  "reuse_targets": {
+    "continuation_plane": ["shared/exploration/models.py", "services/exploration/store.py", "services/noesis/conversations.py", "services/runtime/specs.py"],
+    "client_sync_feed": ["shared/events/events.py (EventConsumer)", "services/ingestion/outbox_relay.py", "services/runtime/specs.py"],
+    "push_adapters": ["services/delivery/adapters/base.py (ProviderAdapterRegistry)", "shared/credentials/ (credential_service)"],
+    "installation_model": ["services/auth/sessions/service.py", "services/kyber/devices/", "shared/credentials/"],
+    "mobile_operator_actions_staged": ["services/kyber/ops/registry.py", "services/kyber/sessions/step_up.py", "services/kyber/devices/device_proof.py"]
+  }
+}

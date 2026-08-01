@@ -13,11 +13,20 @@ vi.mock('@aether-app/features/onboarding', () => ({
   usePatchOnboardingStep: () => ({ mutate: vi.fn() }),
 }));
 
+vi.mock('@aether-app/lib/api/endpoints', () => ({
+  api: { connectors: { get: vi.fn(() => Promise.resolve({
+    connector_type: 'klaviyo', label: 'Klaviyo', description: 'Email lifecycle',
+    requires_secret: true, enabled: false, secret_configured: false, sync_status: 'never_synced',
+  })) } },
+}));
+
 describe('Aether Onboarding Center', () => {
   it('renders checklist and blocker empty state', async () => {
     render(<OnboardingPage />);
     await waitFor(() => expect(screen.getByText('Onboarding Center')).toBeInTheDocument());
     expect(screen.getByText('SDK installed')).toBeInTheDocument();
     expect(screen.getByText('No blockers')).toBeInTheDocument();
+    expect(await screen.findByTestId('comms-connect-onboarding-step')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Klaviyo' })).toBeInTheDocument();
   });
 });

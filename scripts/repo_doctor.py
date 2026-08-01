@@ -97,8 +97,158 @@ def run(
 
 
 def skip(name: str, reason: str, results: list[CheckResult]) -> None:
+    """Record a tolerated skip: never counts as a failure, in any mode.
+
+    For registry-driven suite skips that must NOT be tolerated in --ci (a
+    skip_policy: never suite skipped for a reason repo_doctor didn't
+    override), use hard_fail_skip instead.
+    """
     print(f"\n[SKIP] {name}: {reason}")
     results.append(CheckResult(name=name, passed=True, skipped=True, detail=reason))
+
+
+def hard_fail_skip(
+    name: str,
+    reason: str,
+    remediation: str,
+    results: list[CheckResult],
+    *,
+    stop_on_failure: bool,
+) -> None:
+    """Record a skip that IS a failure.
+
+    Fixes the historical defect where skip() unconditionally set
+    passed=True, making every skip -- tolerated or not -- invisible to the
+    exit code. This is for a suite declared skip_policy: never that could
+    not be run (e.g. required deps missing) while the current mode does not
+    tolerate that: the skip is real (nothing ran), but it must fail the gate.
+    """
+    print(f"\n[FAIL] {name} (skipped, not tolerated in this mode): {reason}")
+    if remediation:
+        print(f"Required fix: {remediation}")
+    results.append(CheckResult(name=name, passed=False, skipped=True, detail=reason, remediation=remediation))
+    if stop_on_failure:
+        _print_summary(results)
+        sys.exit(1)
+
+
+def _registry_environment(args: argparse.Namespace) -> str:
+    """Map repo_doctor's CLI mode to a test_suites.yaml environment.
+
+    --ci is the strict gate (environment "ci"); --check and --fix are both
+    local developer/CI-fix invocations (environment "local"). There is no
+    repo_doctor mode corresponding to environment "release" -- that's for
+    other release-oriented tooling (e.g. make release-gate) to consume the
+    same registry with.
+    """
+    return "ci" if args.ci else "local"
+
+
+def ci_python_suites():
+    """The pytest-runner suites repo_doctor's --ci mode processes.
+
+    Exists as an importable seam for scripts/validate_test_suite_coverage.py,
+    which checks that no ci-scoped suite is silently missing from this
+    invocation set without needing to execute pytest itself.
+    """
+    from scripts.lib.test_suites import is_pytest_suite, load_suites, suites_for
+
+    suites = load_suites(str(ROOT / "config" / "test_suites.yaml"))
+    return [s for s in suites_for(suites, "ci") if is_pytest_suite(s)]
+
+
+def resolve_runner_argv(argv: list[str]) -> list[str]:
+    """Resolve a registry runner's portable "python" argv[0] to the gate's own
+    interpreter.
+
+    Registry runners declare ``python`` so the declaration stays portable, but
+    executing that literally can fall back to a system python whose
+    site-packages the toolchain gate has already rejected. Non-python runners
+    (npm, bash, hardhat) pass through untouched.
+    """
+    if argv and argv[0] == "python":
+        return [sys.executable, *argv[1:]]
+    return list(argv)
+
+
+def run_registry_python_suites(
+    results: list[CheckResult],
+    *,
+    environment: str,
+    stop_on_failure: bool,
+) -> None:
+    """Replace the old two hardcoded pytest invocations with every applicable
+    pytest-runner suite from config/test_suites.yaml.
+
+    Per suite, in order: documented_quarantine and local_only-out-of-scope
+    suites are always a tolerated skip; missing required python_packages is a
+    tolerated skip in `local` but, for a skip_policy: never suite, a hard
+    failure in `ci` (see hard_fail_skip); otherwise the suite actually runs.
+    """
+    # Invoked as `python scripts/repo_doctor.py`, sys.path[0] is scripts/ —
+    # the repo root must be present for the scripts.lib package import.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from scripts.lib.test_suites import TestSuiteConfigError, build_command, is_pytest_suite, load_suites, suites_for
+
+    registry_path = ROOT / "config" / "test_suites.yaml"
+    try:
+        suites = load_suites(str(registry_path))
+    except TestSuiteConfigError as exc:
+        results.append(CheckResult(
+            name="Test-suite registry (config/test_suites.yaml)",
+            passed=False,
+            remediation="fix the reported field in config/test_suites.yaml",
+            detail=str(exc),
+        ))
+        print(f"\n[FAIL] Test-suite registry (config/test_suites.yaml): {exc}")
+        if stop_on_failure:
+            _print_summary(results)
+            sys.exit(1)
+        return
+
+    applicable = [s for s in suites_for(suites, environment) if is_pytest_suite(s)]
+    for suite in applicable:
+        name = f"Python tests ({suite.id})"
+        remediation = (
+            f"install dev dependencies with pip install -e '.[dev,security,backend,agent,ml]', "
+            f"then rerun {' '.join(build_command(suite))}"
+        )
+
+        if suite.skip_policy == "documented_quarantine":
+            q = suite.quarantine
+            skip(name, f"documented_quarantine: {q.reason} (owner={q.owner}, expires={q.expires})", results)
+            continue
+        if suite.skip_policy == "local_only" and environment != "local":
+            skip(name, f"skip_policy=local_only; not run in environment={environment!r}", results)
+            continue
+
+        missing = [
+            pkg for pkg in suite.requires.python_packages
+            if subprocess.run([sys.executable, "-c", f"import {pkg}"], cwd=ROOT).returncode != 0
+        ]
+        if missing:
+            reason = f"missing required python package(s): {', '.join(missing)}"
+            if suite.skip_policy == "never" and environment == "ci":
+                hard_fail_skip(
+                    name,
+                    reason,
+                    f"install the missing package(s) ({', '.join(missing)}) so this "
+                    f"skip_policy=never suite can run in ci",
+                    results,
+                    stop_on_failure=stop_on_failure,
+                )
+            else:
+                skip(name, reason + "; install them to run this suite locally", results)
+            continue
+
+        run(
+            resolve_runner_argv(build_command(suite)),
+            name=name,
+            results=results,
+            stop_on_failure=stop_on_failure,
+            remediation=remediation,
+        )
 
 
 def _print_generated_diff(paths: Sequence[str]) -> None:
@@ -152,7 +302,7 @@ def _report_stale_docs() -> bool:
         │  python scripts/docs_drift.py --update.                         │
         └─────────────────────────────────────────────────────────────────┘
     """))
-    proc = subprocess.run(["python", "scripts/docs_drift.py", "--strict"], cwd=ROOT)
+    proc = subprocess.run([sys.executable, "scripts/docs_drift.py", "--strict"], cwd=ROOT)
     return proc.returncode == 0
 
 
@@ -169,8 +319,14 @@ def _print_summary(results: list[CheckResult]) -> None:
     print("=" * 70)
     width = max((len(r.name) for r in results), default=40) + 2
     for r in results:
-        if r.skipped:
+        if r.skipped and r.passed:
             status = "SKIP"
+            suffix = f" ({r.detail})"
+        elif r.skipped and not r.passed:
+            # A skip that IS a failure: skipped=True no longer implies
+            # passed=True (see hard_fail_skip) -- distinct status so it can
+            # never be mistaken for a tolerated skip.
+            status = "FAIL(skip)"
             suffix = f" ({r.detail})"
         elif r.passed:
             status = "PASS"
@@ -179,12 +335,12 @@ def _print_summary(results: list[CheckResult]) -> None:
             status = "FAIL"
             suffix = ""
         print(f"  [{status}] {r.name:<{width}}{suffix}")
-        if not r.passed and not r.skipped:
+        if not r.passed:
             if r.command:
                 print(f"         Failed command: {r.command}")
             if r.remediation:
                 print(f"         Required fix: {r.remediation}")
-    failed = [r for r in results if not r.passed and not r.skipped]
+    failed = [r for r in results if not r.passed]
     print("-" * 70)
     print(f"  Gates: {len(results) - len(failed)} passed, {len(failed)} failed")
     if failed:
@@ -202,7 +358,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     results: list[CheckResult] = []
 
     run(
-        ["python", "scripts/bump_version.py", "--check"],
+        [sys.executable, "scripts/bump_version.py", "--check"],
         name="Version alignment (pyproject.toml is canonical)",
         results=results,
         stop_on_failure=stop,
@@ -210,7 +366,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
-        ["python", "scripts/docs_extract/run_all.py"],
+        [sys.executable, "scripts/docs_extract/run_all.py"],
         name="Regenerate docs/_generated artifacts",
         results=results,
         stop_on_failure=stop,
@@ -218,7 +374,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
-        ["python", "scripts/generate_ml_manifest.py"],
+        [sys.executable, "scripts/generate_ml_manifest.py"],
         name="Regenerate ML implementation manifest (docs/_generated/ml-implementation-manifest.json)",
         results=results,
         stop_on_failure=stop,
@@ -226,7 +382,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
-        ["python", "scripts/generate_platform_contracts.py"],
+        [sys.executable, "scripts/generate_platform_contracts.py"],
         name="Regenerate unified-platform contract artifacts (platform registries)",
         results=results,
         stop_on_failure=stop,
@@ -264,7 +420,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
 
     run(
-        ["python", "scripts/sync_docs.py"],
+        [sys.executable, "scripts/sync_docs.py"],
         name="Sync generated docs (REPO-INDEX, AUTOMATION)",
         results=results,
         stop_on_failure=stop,
@@ -280,9 +436,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
 
     docs_gates = [
-        (["python", "scripts/validate_docs.py"], "Docs version drift validation", "python scripts/bump_version.py <canonical-version>"),
-        (["python", "scripts/validate_frontmatter.py"], "Docs frontmatter validity", "fix the reported frontmatter errors"),
-        (["python", "scripts/validate_consent_registry_docs.py"], "Consent-purpose docs are registry-derived (no hardcoded count)", "use registry-derived language; canonical source is packages/shared/contracts/consent-registry.json"),
+        ([sys.executable, "scripts/validate_docs.py"], "Docs version drift validation", "python scripts/bump_version.py <canonical-version>"),
+        ([sys.executable, "scripts/validate_frontmatter.py"], "Docs frontmatter validity", "fix the reported frontmatter errors"),
+        ([sys.executable, "scripts/validate_consent_registry_docs.py"], "Consent-purpose docs are registry-derived (no hardcoded count)", "use registry-derived language; canonical source is packages/shared/contracts/consent-registry.json"),
     ]
     for cmd, name, remediation in docs_gates:
         run(cmd, name=name, results=results, stop_on_failure=stop, remediation=remediation)
@@ -302,7 +458,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             sys.exit(1)
     else:
         run(
-            ["python", "scripts/docs_drift.py", "--strict"],
+            [sys.executable, "scripts/docs_drift.py", "--strict"],
             name="Source-linked docs drift (strict)",
             results=results,
             stop_on_failure=stop,
@@ -310,35 +466,35 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
 
     run(
-        ["python", "scripts/validate_contracts.py"],
+        [sys.executable, "scripts/validate_contracts.py"],
         name="Contract / event / consent alignment",
         results=results,
         stop_on_failure=stop,
         remediation="update contracts, event schemas, consent docs, and SDK surfaces together",
     )
     run(
-        ["python", "scripts/validate_signal_use_matrix.py"],
+        [sys.executable, "scripts/validate_signal_use_matrix.py"],
         name="Signal-use matrix (exact purpose per signal; no broad-consent fallback)",
         results=results,
         stop_on_failure=stop,
         remediation="align packages/shared/contracts/signal-use-matrix.json with consent-registry.json",
     )
     run(
-        ["python", "scripts/validate_policy_decisions.py"],
+        [sys.executable, "scripts/validate_policy_decisions.py"],
         name="Consent PolicyDecision evidence service (present, matrix-driven, wired)",
         results=results,
         stop_on_failure=stop,
         remediation="keep services/policy/ decision fields + signal-use-matrix wiring intact",
     )
     run(
-        ["python", "scripts/validate_kyber_seams.py"],
+        [sys.executable, "scripts/validate_kyber_seams.py"],
         name="Kyber cross-package seam integrity (declared calls still resolve)",
         results=results,
         stop_on_failure=stop,
         remediation="fix the caller, or update services/kyber/seams.py if a seam legitimately moved",
     )
     run(
-        ["python", "scripts/generate_feature_surface_manifest.py"],
+        [sys.executable, "scripts/generate_feature_surface_manifest.py"],
         name="Kyber feature-surface coverage (every Aether surface classified)",
         results=results,
         stop_on_failure=stop,
@@ -348,7 +504,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
-        ["python", "scripts/validate_tenant_mirror_parity.py"],
+        [sys.executable, "scripts/validate_tenant_mirror_parity.py"],
         name="Kyber Tenant Mirror parity (mirror recomputes nothing tenant-visible)",
         results=results,
         stop_on_failure=stop,
@@ -358,126 +514,137 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
-        ["python", "scripts/validate_sdk_release_alignment.py"],
+        [sys.executable, "scripts/validate_sdk_release_alignment.py"],
         name="SDK release alignment",
         results=results,
         stop_on_failure=stop,
         remediation="align SDK versions/endpoints/public exports/docs, then rerun validation",
     )
     run(
-        ["python", "scripts/validate_consistency_ownership.py"],
+        [sys.executable, "scripts/validate_consistency_ownership.py"],
         name="Source-of-truth ownership map enforcement",
         results=results,
         stop_on_failure=stop,
         remediation="update the derived surfaces required by docs/source-of-truth/repo_consistency_ownership.json",
     )
     run(
-        ["python", "scripts/validate_ts_public_exports.py"],
+        [sys.executable, "scripts/validate_ts_public_exports.py"],
         name="TypeScript public export/package boundary validation",
         results=results,
         stop_on_failure=stop,
         remediation="export public declaration types from package barrels and fix package.json exports",
     )
     run(
-        ["python", "scripts/validate_temporal_integrity.py"],
+        [sys.executable, "scripts/validate_temporal_integrity.py"],
         name="Temporal integrity static gates (naive datetimes, ad-hoc frontend formatting, CH DateTime64, single Alembic head)",
         results=results,
         stop_on_failure=stop,
         remediation="use shared/temporal (Py) or frontend/shared/src/time (TS); shrink scripts/allowlists/* only",
     )
     run(
-        ["python", "scripts/validate_graph_write_paths.py"],
+        [sys.executable, "scripts/validate_graph_write_paths.py"],
         name="Graph write-path freeze (direct writers pending mutation-gateway migration)",
         results=results,
         stop_on_failure=stop,
         remediation="route graph writes through the canonical mutation gateway; shrink scripts/allowlists/graph_write_paths.json only",
     )
     run(
-        ["python", "scripts/validate_graph_scoped_reads.py"],
+        [sys.executable, "scripts/validate_graph_scoped_reads.py"],
         name="Graph scoped-read gate (no scan-then-filter-by-tenant global reads in services/)",
         results=results,
         stop_on_failure=stop,
         remediation="answer per-tenant questions with GraphClient.get_vertices_for_tenant; shrink scripts/allowlists/graph_global_reads.json only",
     )
     run(
-        ["python", "scripts/validate_reference_packs.py"],
+        [sys.executable, "scripts/validate_reference_packs.py"],
         name="Agent-access reference packs (schema, unique pack ids, grounded reference packs)",
         results=results,
         stop_on_failure=stop,
         remediation="fix the reported fields in config/agent_access_reference_packs/*.yaml; the schema is owned by services/agent_access_intelligence/reference_packs.py::pack_violations",
     )
     run(
-        ["python", "scripts/validate_projector_ownership.py"],
+        [sys.executable, "scripts/validate_projector_ownership.py"],
         name="Silver projector ownership (registry == dispatcher; one activity owner per event type)",
         results=results,
         stop_on_failure=stop,
         remediation="align packages/shared/contracts/projector-ownership-registry.json with services/silver/dispatcher.py, then regenerate via make repo-doctor-fix",
     )
     run(
-        ["python", "scripts/validate_financial_value_semantics.py"],
+        [sys.executable, "scripts/validate_financial_value_semantics.py"],
         name="Financial value semantics (USD-first contract + no cross-currency sums)",
         results=results,
         stop_on_failure=stop,
         remediation="use services.value.safe_rollup and the canonical value contract; see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
     )
     run(
-        ["python", "scripts/validate_frontend_value_display.py"],
+        [sys.executable, "scripts/validate_frontend_value_display.py"],
         name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
         results=results,
         stop_on_failure=stop,
         remediation="render financial values via frontend/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
     )
     run(
-        ["python", "scripts/validate_event_schema_parity.py"],
+        [sys.executable, "scripts/validate_event_schema_parity.py"],
         name="EventType parity (TypeScript ↔ Python CANONICAL_EVENT_TYPES)",
         results=results,
         stop_on_failure=stop,
         remediation="sync CANONICAL_EVENT_TYPES in services/ingestion/batch.py with EventType union in packages/shared/events.ts",
     )
     run(
-        ["python", "scripts/validate_meter_names.py"],
+        [sys.executable, "scripts/validate_meter_names.py"],
         name="Canonical meter names (ingestion/connector paths)",
         results=results,
         stop_on_failure=stop,
         remediation="rename non-canonical metrics.increment() names or add them to CANONICAL_NAMES in scripts/validate_meter_names.py",
     )
     run(
-        ["python", "scripts/release/check_storage_policies.py"],
+        [sys.executable, "scripts/release/check_storage_policies.py"],
         name="Storage policy registry (schema + per-persistent-type coverage)",
         results=results,
         stop_on_failure=stop,
         remediation="add a policy for every persistent resource type to config/storage_policies.yaml (inventory: repositories/repos.py stores + alembic-created tables)",
     )
     run(
-        ["python", "scripts/validate_sdk_contracts.py"],
+        [sys.executable, "scripts/staging_capability_matrix.py"],
+        name="Deploy-profile capability matrix + join layer (facet references resolve; bidirectional coverage)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "align config/capability_matrix.yaml with config/deploy_profile.yaml and its "
+            "facets (route_registry, roles.py, founding_tenant_release, deployment_readiness); "
+            "never delete a facet key to silence a dangling reference"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_contracts.py"],
         name="SDK ingestion contract (shared TS ↔ backend /v1/batch)",
         results=results,
         stop_on_failure=stop,
         remediation="align packages/shared/ingestion-contract.ts with services/ingestion/batch.py (endpoint, idempotency key, batch bounds)",
     )
     run(
-        ["python", "scripts/validate_model_governance.py"],
+        [sys.executable, "scripts/validate_model_governance.py"],
         name="Model governance (consent-scoped training + inference gates)",
         results=results,
         stop_on_failure=stop,
         remediation="ensure services/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/source-of-truth/MODEL_GOVERNANCE.md",
     )
     run(
-        ["python", "scripts/validate_consent_purpose_reconciliation.py"],
-        name="Consent-purpose reconciliation (compliance enum ↔ 11-purpose registry)",
+        [sys.executable, "scripts/validate_consent_purpose_reconciliation.py"],
+        name="Consent-purpose reconciliation (compliance enum ↔ 12-purpose registry)",
         results=results,
         stop_on_failure=stop,
         remediation="reconcile ConsentPurpose in GDPR & SOC2/aether-compliance/config/compliance_config.py with packages/shared/contracts/consent-registry.json",
     )
     run(
-        ["python", "scripts/validate_sdk_parity.py"],
+        [sys.executable, "scripts/validate_sdk_parity.py"],
         name="SDK runtime parity (observe / manifest-verify / batch-health across SDKs)",
         results=results,
         stop_on_failure=stop,
         remediation="expose canonical observe(), iOS/Android manifest signature verification, and batch health metrics; see docs/source-of-truth/SDK_RUNTIME_PARITY.md",
     )
     run(
-        ["python", "scripts/check_version_consistency.py"],
+        [sys.executable, "scripts/check_version_consistency.py"],
         name="Version/workspace consistency aggregate",
         results=results,
         stop_on_failure=stop,
@@ -486,7 +653,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if not args.docs_only:
         run(
-            ["python", "scripts/validate_frontend_data_truth.py"],
+            [sys.executable, "scripts/validate_frontend_data_truth.py"],
             name="Frontend data-truth source guardrail (Aether/Kyber)",
             results=results,
             stop_on_failure=stop,
@@ -526,7 +693,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
 
         run(
-            ["python", "scripts/validate_frontend_data_truth.py", "--build-bundles"],
+            [sys.executable, "scripts/validate_frontend_data_truth.py", "--build-bundles"],
             name="Frontend data-truth production bundle build and scan (Aether/Kyber)",
             results=results,
             stop_on_failure=stop,
@@ -547,44 +714,17 @@ def main(argv: Sequence[str] | None = None) -> None:
             else:
                 skip(label, f"no {script_name} script in root package.json", results)
 
-        run(
-            ["python", "-m", "pytest", "tests/", "-v", "--tb=short"],
-            name="Python tests (core)",
-            results=results,
+        run_registry_python_suites(
+            results,
+            environment=_registry_environment(args),
             stop_on_failure=stop,
-            remediation="install dev dependencies with pip install -e '.[dev,security,backend,agent,ml]' and fix failing tests",
         )
-        ml_tests_dir = Path("ML Models/aether-ml/tests")
-        if ml_tests_dir.exists():
-            missing_ml_deps: list[str] = []
-            for module_name in ["joblib", "sklearn"]:
-                probe = subprocess.run(["python", "-c", f"import {module_name}"], cwd=ROOT)
-                if probe.returncode != 0:
-                    missing_ml_deps.append(module_name)
-            if missing_ml_deps:
-                skip(
-                    "Python tests (ML)",
-                    "missing optional ML test dependencies "
-                    + ", ".join(missing_ml_deps)
-                    + "; install with pip install -e '.[ml,dev]'",
-                    results,
-                )
-            else:
-                run(
-                    ["python", "-m", "pytest", str(ml_tests_dir), "-v", "--tb=short"],
-                    name="Python tests (ML)",
-                    results=results,
-                    stop_on_failure=stop,
-                    remediation="install ML dependencies with pip install -e '.[ml,dev]' and fix failing tests",
-                )
-        else:
-            skip("Python tests (ML)", f"{ml_tests_dir} not found", results)
 
         # ML registry consistency — CI gate
         ml_registry_script = ROOT / "scripts" / "validate_ml_registry.py"
         if ml_registry_script.exists():
             run(
-                ["python", str(ml_registry_script)],
+                [sys.executable, str(ml_registry_script)],
                 name="ML registry consistency",
                 results=results,
                 stop_on_failure=stop,
@@ -592,7 +732,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
 
     _print_summary(results)
-    failed = [r for r in results if not r.passed and not r.skipped]
+    failed = [r for r in results if not r.passed]
     sys.exit(1 if failed else 0)
 
 

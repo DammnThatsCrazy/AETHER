@@ -67,20 +67,31 @@ def test_suggestion_status_contains_expected_values():
 # SuggestionClass enum
 # ---------------------------------------------------------------------------
 
+# Single source of truth for both tests below so the count can't drift from
+# the membership check again: add new classes here once and both pass.
+_EXPECTED_SUGGESTION_CLASS_VALUES = {
+    "customer_success", "data_quality", "sdk_health", "sdk_drift",
+    "identity", "graph_health", "profile360", "campaign", "retargeting",
+    "revenue", "reliability", "security", "governance", "agent_operations",
+    "notification", "investigation", "general_intelligence",
+    "stablecoin_depeg", "derivatives_reconciliation", "derivatives_risk",
+    "interop_delivery_health",
+}
+
+
 def test_suggestion_class_has_17_values():
+    # Count is derived from _EXPECTED_SUGGESTION_CLASS_VALUES so this can't
+    # rot again: add new members there and the count follows automatically.
     values = [c.value for c in SuggestionClass]
-    assert len(values) == 17, f"Expected 17 classes, got {len(values)}: {values}"
+    expected_count = len(_EXPECTED_SUGGESTION_CLASS_VALUES)
+    assert len(values) == expected_count, (
+        f"Expected {expected_count} classes, got {len(values)}: {values}"
+    )
 
 
 def test_suggestion_class_contains_expected_values():
-    expected = {
-        "customer_success", "data_quality", "sdk_health", "sdk_drift",
-        "identity", "graph_health", "profile360", "campaign", "retargeting",
-        "revenue", "reliability", "security", "governance", "agent_operations",
-        "notification", "investigation", "general_intelligence",
-    }
     actual = {c.value for c in SuggestionClass}
-    assert actual == expected
+    assert actual == _EXPECTED_SUGGESTION_CLASS_VALUES
 
 
 # ---------------------------------------------------------------------------

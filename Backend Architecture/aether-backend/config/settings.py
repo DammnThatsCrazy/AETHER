@@ -206,6 +206,31 @@ class CommsConfig:
     # Attribution policy switches (ADR-C8)
     reported_opens_as_view_through: bool = _env_bool("AETHER_COMMS_OPENS_VIEW_THROUGH", False)
     replies_attribution_eligible: bool = _env_bool("AETHER_COMMS_REPLIES_ELIGIBLE", True)
+    # Provider suppression write-back is a separately-authorized capability
+    # (read permission never implies suppression-write); OFF by default,
+    # observe-only per ADR-C1.
+    suppression_write_back_enabled: bool = _env_bool("AETHER_COMMS_SUPPRESSION_WRITE_BACK", False)
+
+
+# ---------------------------------------------------------------------------
+# Tenant Activation — turnkey activation state (flag-gated OFF by default)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ActivationConfig:
+    """Feature flags for tenant activation state rollout."""
+    activation_enabled: bool = _env_bool("AETHER_ACTIVATION_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# Kyber Missions — mission control plane + monitoring loop (OFF by default)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class KyberMissionsConfig:
+    """Feature flags for Kyber missions control plane and monitoring loop."""
+    missions_enabled: bool = _env_bool("KYBER_MISSIONS_ENABLED", False)
+    monitoring_loop_enabled: bool = _env_bool("KYBER_MISSION_MONITORING_ENABLED", False)
 
 
 @dataclass(frozen=True)
@@ -215,6 +240,11 @@ class QuickNodeConfig:
     endpoint: str = _env("QUICKNODE_ENDPOINT", "")
     x402_enabled: bool = _env_bool("QUICKNODE_X402_ENABLED", False)
     max_rps: int = _env_int("QUICKNODE_MAX_RPS", 100)
+    # Per-tenant BYOK RPC endpoint/credential resolution (default OFF, observe-only).
+    # When enabled, a tenant-scoped RPCGateway resolves the tenant's OWN read-only
+    # RPC endpoint+key as an ATOMIC pair from the BYOK vault; OFF resolves to this
+    # global endpoint (identity behavior). x402_enabled/max_rps stay platform-level.
+    tenant_byok_enabled: bool = _env_bool("AETHER_ONCHAIN_TENANT_BYOK_RPC_ENABLED", False)
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +273,20 @@ class ProviderGatewayConfig:
     circuit_breaker_timeout_s: int = _env_int("PROVIDER_CB_TIMEOUT_S", 30)
     # Metering
     meter_flush_interval_s: int = _env_int("PROVIDER_METER_FLUSH_S", 60)
+    # ── Durable credential authority ───────────────────────────────────────
+    # Encryption cipher for the durable multi-slot provider-credential store.
+    # "local"   → AES-256-GCM (non-production, for local/test only)
+    # "aws_kms" → KMS envelope encryption (customer-managed CMK)
+    # Fail-closed: staging/production MUST be "aws_kms" with a key id set (see
+    # CredentialCipherStartupValidator).
+    credential_cipher: str = _env("CREDENTIAL_CIPHER", "local")
+    credential_kms_key_id: str = _env("CREDENTIAL_KMS_KEY_ID", "")
+    aws_region: str = _env("AWS_REGION", "us-east-1")
+    # Bounded caches for decrypted values / metadata (Redis is never the sole
+    # authority — the durable table is). TTLs in seconds; overlap window in hours.
+    credential_decrypt_cache_ttl_s: int = _env_int("CREDENTIAL_DECRYPT_CACHE_TTL_S", 60)
+    credential_metadata_cache_ttl_s: int = _env_int("CREDENTIAL_METADATA_CACHE_TTL_S", 30)
+    credential_rotation_overlap_hours: int = _env_int("CREDENTIAL_ROTATION_OVERLAP_HOURS", 24)
 
 
 # ---------------------------------------------------------------------------
@@ -779,6 +823,22 @@ class IntegrationConsentConfig:
 
 
 # ---------------------------------------------------------------------------
+# Credential platform — provider-neutral credential storage backend selector.
+#
+# ``backend`` chooses the concrete CredentialBackend (shared/credentials):
+#   in_memory           — tests only (non-durable process dict)
+#   local_encrypted     — default; Fernet-encrypted rows in tenant_credentials
+#   aws_secrets_manager — AWS Secrets Manager (lazy boto3)
+# ``aws_secret_prefix`` namespaces secrets when the AWS backend is selected.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class CredentialPlatformConfig:
+    backend: str = _env("AETHER_CREDENTIAL_BACKEND", "local_encrypted")
+    aws_secret_prefix: str = _env("AETHER_CREDENTIAL_AWS_PREFIX", "aether/credentials")
+
+
+# ---------------------------------------------------------------------------
 # Ingestion V2 (PR 5) — typed Bronze + transactional outbox for /v1/batch.
 #
 # Canary rollout, default OFF. When `enabled` is True (or the request's tenant
@@ -795,6 +855,19 @@ class IngestionV2Config:
     enabled: bool = _env_bool("INGESTION_V2_ENABLED", False)
     canary_tenants: list[str] = field(
         default_factory=lambda: _env_list("INGESTION_V2_CANARY_TENANTS", "")
+    )
+    # Envelope required-field enforcement (staged): when ON, release-critical
+    # events missing any of context.sequence / schemaVersion / surface are
+    # rejected with reason `envelope_missing:<field>` (see
+    # services/ingestion/validation.py). Default derives from the release
+    # profile, same mechanism as ROUTE_REGISTRY_ENFORCED / _TRUST_DEFAULT_ON:
+    # OFF in local/dev/integration (older SDK payloads without the canonical
+    # envelope v1 stay accepted, promotion remains downstream), ON in the
+    # staging/production ingestion profile. Explicit env var always wins, so
+    # the enforcement can be rolled back per environment without a code change.
+    envelope_required_fields_enforced: bool = _env_bool(
+        "INGESTION_ENVELOPE_REQUIRED_FIELDS_ENFORCED",
+        _env("AETHER_ENV", "local") in ("staging", "production"),
     )
     outbox_relay_enabled: bool = _env_bool("OUTBOX_RELAY_ENABLED", False)
     # Relay tuning (PR 6 / FT-6): claim batch size, idle poll cadence, claim
@@ -1087,6 +1160,14 @@ class StablecoinIntelligenceConfig:
     olympus_benchmarks_enabled: bool = _env_bool("OLYMPUS_STABLECOIN_BENCHMARKS_ENABLED", False)
     kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
     shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
+    # Usage metering on the stablecoin observation path (default OFF, opt-in).
+    # Accept-then-meter, fail-open: records a RevOps usage-metering event AFTER an
+    # observation is persisted, keyed by the deterministic observation_id so
+    # replays dedupe; a metering-store failure never rejects/drops the
+    # observation. Aether writes only its own billing bookkeeping.
+    usage_metering_enabled: bool = _env_bool(
+        "AETHER_STABLECOIN_USAGE_METERING_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)
@@ -1119,6 +1200,61 @@ class PaymentRailsConfig:
     moonpay_enabled: bool = _env_bool("AETHER_PROVIDER_MOONPAY_ENABLED", False)
     bridge_enabled: bool = _env_bool("AETHER_PROVIDER_BRIDGE_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_PAYMENT_RAILS_ENABLED", False)
+
+    # Webhook admission controls (public endpoint hardening). Rate limiting is a
+    # per-endpoint fixed-minute-window budget enforced before signature
+    # verification so a flood of unverifiable bodies can't burn CPU on crypto;
+    # denied webhooks (bad/stale signature, oversized body) are quarantined
+    # metadata-only (sha256 + size, never the raw body) for forensics.
+    webhook_rate_limit_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_RATE_LIMIT_ENABLED", True
+    )
+    webhook_rate_limit_per_minute: int = _env_int(
+        "AETHER_PAYMENT_WEBHOOK_RATE_LIMIT_PER_MINUTE", 600
+    )
+    webhook_quarantine_denied: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_QUARANTINE_DENIED", True
+    )
+    # Consent gate on the payment-rails observation path (default OFF, opt-in).
+    # When enabled, a normalized funding session is persisted/emitted only when
+    # its subject (user_id) has granted the ``commerce`` consent purpose; a denied
+    # observation is dropped (never persisted) and recorded metadata-only. A
+    # session with no resolvable subject is allowed (there is no subject whose
+    # consent could be evaluated). Fails closed: a missing consent record or an
+    # unavailable consent store denies the observation.
+    webhook_consent_gate_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_CONSENT_GATE_ENABLED", False
+    )
+    # Canonical-event delivery path (default OFF, opt-in). When enabled, implied
+    # payment_* canonical events are written atomically to the durable Bronze +
+    # event_outbox spine (ingest_many) — the supervised outbox relay publishes
+    # them to the validated-events bus — instead of a direct EventProducer.publish.
+    # The deterministic canonical event id is the Bronze/outbox key, so a retry is
+    # a no-op (ingest_many writes an outbox row only for a newly-accepted Bronze
+    # row). Default OFF keeps the direct-publish path until the relay is validated
+    # end-to-end for this source.
+    canonical_outbox_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_CANONICAL_OUTBOX_ENABLED", False
+    )
+    # Usage metering on the observation path (default OFF, opt-in). When enabled,
+    # an accept-then-meter, fail-open hook records a RevOps usage-metering event
+    # AFTER a payment_* canonical event is emitted — keyed by the deterministic
+    # canonical event id so replays dedupe. A metering-store failure is swallowed
+    # and never rejects or drops the observation (billing-outage-safe). Aether
+    # only writes its own billing bookkeeping — never provider state.
+    usage_metering_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_USAGE_METERING_ENABLED", False
+    )
+    # Credential-authority-backed secret resolution (default OFF, opt-in). When
+    # enabled, payment-rail adapters resolve their webhook_signing_secret ONLY
+    # from the durable multi-slot CredentialAuthority (active + rotation-overlap
+    # previous, NO in-memory vault fallback); default-OFF preserves the legacy
+    # BYOKKeyVault read byte-for-byte until the cutover is proven. First step of
+    # retiring the in-memory BYOKKeyVault (polling-slot resolution + vault removal
+    # + default-on flip remain the sequenced follow-up).
+    credential_authority_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)
@@ -1303,6 +1439,25 @@ class ExplorationConfig:
 
 
 @dataclass(frozen=True)
+class ContinuationConfig:
+    # Cross-device continuation plane (/v1/continuations). Default OFF: a
+    # disabled surface answers 404, indistinguishable from an unmounted route.
+    enabled: bool = _env_bool("AETHER_CONTINUATION_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class ClientSyncConfig:
+    # Client-sync cursor feed (/v1/client-sync). Default OFF.
+    enabled: bool = _env_bool("AETHER_CLIENT_SYNC_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class MobileConfig:
+    # Mobile gateway (/v1/mobile — installations + push subscriptions). Default OFF.
+    enabled: bool = _env_bool("AETHER_MOBILE_ENABLED", False)
+
+
+@dataclass(frozen=True)
 class ComparisonConfig:
     enabled: bool = _env_bool("AETHER_COMPARISON_INTELLIGENCE_ENABLED", False)
 
@@ -1336,6 +1491,7 @@ class Settings:
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
     semantic: SemanticIntelligenceConfig = field(default_factory=SemanticIntelligenceConfig)
     integration_consent: IntegrationConsentConfig = field(default_factory=IntegrationConsentConfig)
+    credential_platform: CredentialPlatformConfig = field(default_factory=CredentialPlatformConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
@@ -1343,6 +1499,12 @@ class Settings:
 
     # Communications Intelligence
     comms: CommsConfig = field(default_factory=CommsConfig)
+
+    # Tenant Activation
+    activation: ActivationConfig = field(default_factory=ActivationConfig)
+
+    # Kyber Missions
+    kyber_missions: KyberMissionsConfig = field(default_factory=KyberMissionsConfig)
 
     # Provider Gateway
     provider_gateway: ProviderGatewayConfig = field(default_factory=ProviderGatewayConfig)
@@ -1437,6 +1599,9 @@ class Settings:
     context_intelligence: ContextIntelligenceConfig = field(default_factory=ContextIntelligenceConfig)
     temporal_observatory: TemporalObservatoryConfig = field(default_factory=TemporalObservatoryConfig)
     exploration: ExplorationConfig = field(default_factory=ExplorationConfig)
+    continuation: ContinuationConfig = field(default_factory=ContinuationConfig)
+    client_sync: ClientSyncConfig = field(default_factory=ClientSyncConfig)
+    mobile: MobileConfig = field(default_factory=MobileConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
 
     def __post_init__(self):

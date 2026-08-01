@@ -234,12 +234,15 @@ def test_execute_rec_transitions_to_executed_when_eligible():
     svc._repo = MagicMock()
     svc._producer = MagicMock()
 
+    # apply_transition/emit_suggestion_event are imported lazily inside
+    # execute_recommendation_via_suggestion from their owning modules, so
+    # those are the real seams to patch (not adapter-module attributes).
     with patch(
-        "services.suggestions.adapters.recommendation_adapter.apply_transition",
+        "services.suggestions.lifecycle.apply_transition",
         AsyncMock(return_value=executed),
     ) as mock_trans:
         with patch(
-            "services.suggestions.adapters.recommendation_adapter.emit_suggestion_event",
+            "services.suggestions.events.emit_suggestion_event",
             AsyncMock(),
         ):
             result = _run(execute_recommendation_via_suggestion(suggestion, svc))

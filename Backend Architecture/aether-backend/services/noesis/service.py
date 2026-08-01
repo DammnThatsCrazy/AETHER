@@ -26,7 +26,7 @@ from repositories.repos import (
 )
 
 from .circuit_breaker import NoesisCircuitBreaker
-from .conversation import NoesisConversationStore
+from .conversation import ConversationStoreUnavailable, NoesisConversationStore
 from .flags import NoesisFlags
 from .models import (
     INJECTION_PATTERNS,
@@ -122,12 +122,17 @@ class NoesisService:
         # Real rate limiting — increments counters, raises RateLimitedError if exceeded
         await self._check_rate_limit(scope)
 
-        # Conversation history for multi-turn continuity
+        # Conversation history for multi-turn continuity. Context enrichment
+        # is best-effort: an unreachable store degrades to no history rather
+        # than failing the query itself.
         history: list[dict] = []
         if body.conversation_id:
-            history = await self.conversation_store.get_recent(
-                body.conversation_id, scope.effective_tenant_id
-            )
+            try:
+                history = await self.conversation_store.get_recent(
+                    body.conversation_id, scope.effective_tenant_id
+                )
+            except ConversationStoreUnavailable as exc:
+                logger.warning("Noesis conversation history unavailable: %s", exc)
 
         plan = self._classify(body, scope, history)
         mode = "deterministic"
@@ -236,9 +241,12 @@ class NoesisService:
 
             history: list[dict] = []
             if body.conversation_id:
-                history = await self.conversation_store.get_recent(
-                    body.conversation_id, scope.effective_tenant_id
-                )
+                try:
+                    history = await self.conversation_store.get_recent(
+                        body.conversation_id, scope.effective_tenant_id
+                    )
+                except ConversationStoreUnavailable as exc:
+                    logger.warning("Noesis conversation history unavailable: %s", exc)
 
             plan = self._classify(body, scope, history)
             mode = "deterministic"

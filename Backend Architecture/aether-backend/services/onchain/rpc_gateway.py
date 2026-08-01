@@ -39,14 +39,67 @@ class RPCGateway:
     Fails closed when no live RPC transport is configured.
     """
 
-    def __init__(self, provider_gateway=None) -> None:
+    def __init__(self, provider_gateway=None, *, endpoint: Optional[str] = None,
+                 api_key: Optional[str] = None) -> None:
         self._config = settings.quicknode
+        # (endpoint, api_key) is an ATOMIC pair. An explicit endpoint (tenant
+        # scoping) uses ITS paired key verbatim — even None, meaning "no key" —
+        # so a tenant endpoint is NEVER sent with the global key. No endpoint
+        # (the default) uses the global config pair (identity behavior).
+        if endpoint is not None:
+            self._endpoint = endpoint
+            self._api_key = api_key
+        else:
+            self._endpoint = self._config.endpoint
+            self._api_key = self._config.api_key
         self._provider_gateway = provider_gateway
         self._request_count = 0
         self._request_times: list[float] = []
         self._cache: dict[str, Any] = {}
         self._connected = False
         self._rate_lock = asyncio.Lock()
+
+    @staticmethod
+    async def resolve_tenant_rpc_endpoint(
+        tenant_id: str, chain_id: str, *, vault=None
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Resolve a tenant's read-only RPC ``(endpoint, api_key)`` as an ATOMIC
+        pair. Default OFF, or no tenant BYOK on file → ``(None, None)`` so the
+        gateway uses the global QuickNode pair (identity behavior). When a tenant
+        has provisioned a BYOK RPC endpoint, returns THAT endpoint together with
+        the tenant's key (which may be None) — NEVER the tenant endpoint paired
+        with the global key. Read-only: reads the BYOK vault only, never writes.
+        """
+        if not getattr(settings.quicknode, "tenant_byok_enabled", False):
+            return None, None
+        if vault is None:
+            from shared.providers.key_vault import BYOKKeyVault
+
+            vault = BYOKKeyVault()
+        provider_name = f"onchain_rpc:{chain_id}"
+        try:
+            endpoint = await vault.get_endpoint(tenant_id, provider_name)
+        except Exception:  # noqa: BLE001 — vault unavailable → global fallback (atomic)
+            return None, None
+        if not endpoint:
+            return None, None
+        try:
+            api_key = await vault.get_key(tenant_id, provider_name)
+        except Exception:  # noqa: BLE001 — key unreadable → tenant endpoint, no key (never global key)
+            api_key = None
+        return endpoint, api_key
+
+    @classmethod
+    async def for_tenant(
+        cls, tenant_id: str, chain_id: str, *, provider_gateway=None, vault=None
+    ) -> "RPCGateway":
+        """A read-only RPCGateway scoped to the tenant's BYOK RPC endpoint+key
+        (atomic pair) when tenant BYOK is enabled; otherwise the global endpoint
+        (identity behavior)."""
+        endpoint, api_key = await cls.resolve_tenant_rpc_endpoint(
+            tenant_id, chain_id, vault=vault
+        )
+        return cls(provider_gateway=provider_gateway, endpoint=endpoint, api_key=api_key)
 
     async def connect(self) -> None:
         """Initialize RPC connections."""
@@ -100,7 +153,7 @@ class RPCGateway:
                 metrics.increment("rpc_cache_hit", labels={"chain_id": chain_id})
                 return cached
 
-        if not self._config.endpoint:
+        if not self._endpoint:
             raise RuntimeError("RPC gateway endpoint not configured and provider gateway unavailable")
 
         result = await self._execute_via_http(chain_id, method, params, vm_type)
@@ -131,11 +184,11 @@ class RPCGateway:
             "params": params,
         }
         headers = {"content-type": "application/json"}
-        if self._config.api_key:
-            headers["x-api-key"] = self._config.api_key
+        if self._api_key:
+            headers["x-api-key"] = self._api_key
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(self._config.endpoint, json=payload, headers=headers)
+            response = await client.post(self._endpoint, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
 
@@ -162,7 +215,7 @@ class RPCGateway:
         """RPC gateway health status."""
         return {
             "connected": self._connected,
-            "configured": bool(self._provider_gateway and settings.provider_gateway.enabled) or bool(self._config.endpoint),
+            "configured": bool(self._provider_gateway and settings.provider_gateway.enabled) or bool(self._endpoint),
             "total_requests": self._request_count,
             "cache_size": len(self._cache),
             "x402_enabled": self._config.x402_enabled,

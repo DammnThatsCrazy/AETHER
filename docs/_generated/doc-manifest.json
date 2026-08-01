@@ -3238,7 +3238,7 @@
       ],
       "status": "stable",
       "since_version": "8.8.0",
-      "estimated_read_minutes": 4,
+      "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
     },
@@ -3507,6 +3507,68 @@
       ]
     },
     {
+      "path": "docs/acquisition/ARCHITECTURE_AND_OPERATIONS_OVERVIEW.md",
+      "title": "Architecture & Operations Overview",
+      "slug": "acquisition/architecture-and-operations-overview",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "buyer"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 13,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/acquisition/DEMO_AND_VALUE_PROOF_GUIDE.md",
+      "title": "Demo & Value-Proof Guide",
+      "slug": "acquisition/demo-and-value-proof-guide",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 9,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/acquisition/PRODUCTIZATION_DOSSIER.md",
+      "title": "Acquisition Productization Dossier",
+      "slug": "acquisition/productization-dossier",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 13,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/acquisition/RISK_AND_READINESS_REGISTER.md",
+      "title": "Risk & Readiness Register",
+      "slug": "acquisition/risk-and-readiness-register",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/api/CAMPAIGN_360_API.md",
       "title": "Campaign 360 API Reference",
       "slug": "api/campaign-360",
@@ -3635,6 +3697,18 @@
       ],
       "status": "experimental",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/audits/DOCS_REVIEW_BACKLOG.md",
+      "title": "Docs Review Backlog — Audit Snapshot",
+      "slug": "audits/docs-review-backlog",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable"
     },
     {
       "path": "docs/audits/FRONTEND-DATA-TRUTH-INVENTORY.md",
@@ -4224,6 +4298,54 @@
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/implementation/AETHER_KYBER_RELEASE_STATE.md",
+      "title": "AETHER × Kyber Release State",
+      "slug": "implementation/aether-kyber-release-state",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 14,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/implementation/BEFORE_AFTER_PRODUCTIZATION_REPORT.md",
+      "title": "Before / After Productization Report",
+      "slug": "implementation/before-after-productization-report",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/integration-control-plane/ARCHITECTURE_DECISIONS.md",
+      "title": "Integration Control Plane — Architecture Decisions",
+      "slug": "architecture/integration-control-plane-decisions",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "security"
+      ],
+      "status": "experimental",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/internal/noesis-security-checklist.md",
@@ -5057,6 +5179,38 @@
       "since_version": "8.12.0"
     },
     {
+      "path": "docs/readiness/LEAN_PRODUCTION_READINESS_DOSSIER.md",
+      "title": "Lean Production Readiness Dossier",
+      "slug": "readiness/lean-production-readiness-dossier",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "exec"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 11,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/readiness/STAGING_READINESS_DOSSIER.md",
+      "title": "Staging Readiness Dossier",
+      "slug": "readiness/staging-readiness-dossier",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "exec"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/reports/ML-FULL-PRODUCTIONIZATION-REPORT.md",
       "title": "ML Full Productionization Report",
       "slug": "ai/ml-full-productionization-report",
@@ -5323,6 +5477,20 @@
       "status": "stable",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md",
+      "title": "Financial Credential-Readiness Runbook",
+      "slug": "runbooks/financial-credential-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5702,6 +5870,36 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/ACTIVATION.md",
+      "title": "Self-Serve Tenant Activation",
+      "slug": "concepts/activation",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/AETHER_MOBILE.md",
+      "title": "Aether Mobile — App Architecture",
+      "slug": "mobile/aether-app",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "mobile",
+        "security"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md",
       "title": "AI and Agent Referral Attribution Source of Truth",
       "status": "stable"
@@ -5786,6 +5984,32 @@
       "path": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md",
       "title": "Contextual Session Intelligence Source of Truth",
       "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/CREDENTIAL_ACTIVATION.md",
+      "title": "Credential Activation",
+      "slug": "mobile/credential-activation",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
+    },
+    {
+      "path": "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md",
+      "title": "Cross-Device Continuity",
+      "slug": "mobile/cross-device-continuity",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
     },
     {
       "path": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
@@ -6162,6 +6386,36 @@
       "status": "beta"
     },
     {
+      "path": "docs/source-of-truth/KYBER_MISSIONS.md",
+      "title": "Kyber Mission Aggregate & Monitoring",
+      "slug": "kyber/missions",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/KYBER_MOBILE.md",
+      "title": "Kyber Mobile — App Architecture",
+      "slug": "mobile/kyber-app",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "mobile",
+        "security"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
     },
     {
@@ -6196,7 +6450,47 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/MOBILE_COMPLIANCE.md",
+      "title": "Mobile Compliance — DSR Erasure & Privacy Manifests",
+      "slug": "mobile/compliance",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "compliance",
+        "mobile"
+      ],
+      "status": "alpha"
+    },
+    {
+      "path": "docs/source-of-truth/MOBILE_PLATFORM.md",
+      "title": "Mobile Platform & Productization Baseplate",
+      "slug": "mobile/platform",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/MODEL_GOVERNANCE.md"
+    },
+    {
+      "path": "docs/source-of-truth/NOTIFICATION_CONTROL_PLANE.md",
+      "title": "Notification Control Plane",
+      "slug": "mobile/notification-control-plane",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
     },
     {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",

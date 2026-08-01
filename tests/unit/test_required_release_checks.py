@@ -46,7 +46,7 @@ def _fake_github_api(sha: str = "expected", *, conclusion: str = "success",
         {"name": row["evidence_artifact"], "expired": artifact_expired}
         for row in catalog["checks"]
     ]
-    workflow = workflow_path or catalog["checks"][0]["workflow"]
+    rows = catalog["checks"]
 
     def api(repo: str, path: str, token: str) -> dict:
         assert repo and token
@@ -54,6 +54,19 @@ def _fake_github_api(sha: str = "expected", *, conclusion: str = "success",
             return {"jobs": jobs}
         if path.endswith("/artifacts?per_page=100"):
             return {"artifacts": artifacts}
+        # The evidence checker verifies each run belongs to its check's declared
+        # workflow (collect_evidence.py rejects a workflow-path mismatch), and
+        # the catalog now spans several workflows. _hosted_file assigns
+        # workflow_run_id = 1-based catalog index, so the run id in the URL
+        # identifies which check's workflow this run must report. A single
+        # hardcoded workflow here would fail every check after the first —
+        # which is a fixture artifact, not the mismatch the tests probe with
+        # the explicit workflow_path override.
+        if workflow_path is not None:
+            workflow = workflow_path
+        else:
+            run_id = int(path.rstrip("/").rsplit("/", 1)[-1])
+            workflow = rows[run_id - 1]["workflow"]
         return {"head_sha": sha, "path": workflow, "conclusion": conclusion}
 
     return api
@@ -200,7 +213,18 @@ def test_hosted_evidence_rejects_failed_cancelled_and_skipped(tmp_path):
 def test_hosted_evidence_rejects_missing_required_check(tmp_path):
     path = _hosted_file(tmp_path, "expected")
     payload = json.loads(path.read_text())
-    payload["checks"].pop()
+    # Drop a check that actually carries blocks_founding_tenant_release —
+    # popping the last row silently stopped testing anything once the catalog
+    # grew rows (smart-contract checks) that are deliberately not
+    # founding-tenant blockers, whose absence is correctly not "missing".
+    catalog = yaml.safe_load((ROOT / "config/required_release_checks.yaml").read_text())
+    required_ids = {
+        row["id"] for row in catalog["checks"]
+        if row.get("blocks_founding_tenant_release")
+    }
+    assert required_ids, "catalog no longer declares any founding-tenant blockers"
+    victim = sorted(required_ids)[0]
+    payload["checks"] = [row for row in payload["checks"] if row["id"] != victim]
     path.write_text(json.dumps(payload))
     result = collect_evidence.hosted_checks_section(str(path), "expected")
     assert result["passed"] is False
@@ -278,14 +302,42 @@ def _fixture_root(tmp_path: Path, merge_flag: str, workflow_text: str) -> Path:
     return tmp_path
 
 
-def test_catalog_marks_path_filtered_sdk_checks_as_path_scoped_blockers():
+def test_catalog_merge_block_scope_matches_workflow_path_filtering():
+    """Each check's merge-block flag must match how its workflow triggers.
+
+    A workflow whose pull_request trigger filters by paths does not run on
+    every PR, so it may only claim blocks_pr_merge_when_paths_touched —
+    claiming a universal block would deadlock PRs that never trigger it. An
+    unfiltered workflow runs on every PR and must claim the universal block,
+    not the path-scoped one. This mirrors the rule check_required_checks.py
+    enforces; the earlier form of this test asserted the path-scoped flag for
+    EVERY row, which was only true while the catalog contained nothing but the
+    three path-filtered SDK checks.
+    """
     catalog = yaml.safe_load((ROOT / "config/required_release_checks.yaml").read_text())
     for row in catalog["checks"]:
-        assert row.get("blocks_pr_merge") is not True, (
-            f"{row['id']}: path-filtered workflow must not claim a universal "
-            "merge block"
-        )
-        assert row.get("blocks_pr_merge_when_paths_touched") is True
+        workflow = yaml.safe_load((ROOT / row["workflow"]).read_text())
+        triggers = workflow.get("on") or workflow.get(True) or {}
+        pr_trigger = triggers.get("pull_request")
+        pr_paths = pr_trigger.get("paths") if isinstance(pr_trigger, dict) else None
+        if pr_paths:
+            assert row.get("blocks_pr_merge") is not True, (
+                f"{row['id']}: path-filtered workflow must not claim a "
+                "universal merge block"
+            )
+            assert row.get("blocks_pr_merge_when_paths_touched") is True, (
+                f"{row['id']}: path-filtered workflow must declare the "
+                "path-scoped merge block"
+            )
+        else:
+            assert row.get("blocks_pr_merge") is True, (
+                f"{row['id']}: unfiltered workflow runs on every PR and must "
+                "claim the universal merge block"
+            )
+            assert row.get("blocks_pr_merge_when_paths_touched") is not True, (
+                f"{row['id']}: unfiltered workflow cannot scope its block to "
+                "paths it does not filter by"
+            )
 
 
 def test_validator_rejects_universal_merge_block_on_path_filtered_workflow(tmp_path):

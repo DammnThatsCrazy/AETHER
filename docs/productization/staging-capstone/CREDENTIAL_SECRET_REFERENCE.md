@@ -10,10 +10,17 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/registry.py
   - docs/SECRETS-MANAGEMENT.md
 canonical_owner: platform@aether
-last_synced_commit: "ac900d5"
+last_synced_commit: "146e1603"
 ---
 
 # Credential & Secret Reference
+
+> v8.12.0 — communications: the Klaviyo reference adapter requires a provider
+> **API key**, stored per-tenant through the credential platform under the
+> reference `connector:{tenant_id}:klaviyo` (backend `aws_secrets_manager` maps
+> this to `aether/credentials/{tenant_id}/connector:{tenant_id}:klaviyo`).
+> Read access never implies suppression write-back, which is a separately
+> authorized capability (`AETHER_COMMS_SUPPRESSION_WRITE_BACK`, off by default).
 
 Which secret each first-release provider needs to move off `credential_waiting`,
 and where it lives. This guide is a per-provider index; the mechanics of storing

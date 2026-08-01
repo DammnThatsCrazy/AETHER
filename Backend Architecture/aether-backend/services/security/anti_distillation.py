@@ -18,6 +18,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Deque, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -43,9 +44,15 @@ def apply_output_precision(score: float, plan_tier: str = DEFAULT_PLAN_TIER) -> 
 
     Higher-tier plans receive finer precision to support professional use.
     This prevents low-tier callers from reconstructing full-precision model output.
+
+    Binning is done in decimal arithmetic: binary-float division makes decimal
+    midpoints land just below the bin boundary (0.8765 / 0.001 == 876.4999…),
+    which silently rounds down instead of to the nearest bin.
     """
     bin_size = SCORE_BINS_BY_PLAN.get(plan_tier, SCORE_BINS_BY_PLAN[DEFAULT_PLAN_TIER])
-    return round(round(score / bin_size) * bin_size, 6)
+    bin_dec = Decimal(str(bin_size))
+    bins = (Decimal(str(score)) / bin_dec).to_integral_value(rounding=ROUND_HALF_UP)
+    return float(bins * bin_dec)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────

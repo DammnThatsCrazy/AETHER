@@ -235,6 +235,7 @@ from services.oracle.routes import router as oracle_router
 from services.analytics_automation.routes import router as automation_router
 from services.diagnostics.routes import router as diagnostics_router, commerce_diagnostics_router
 from services.providers.routes import router as providers_router
+from services.providers.credentials.routes import router as provider_credentials_router
 from services.capabilities.routes import router as capabilities_router, kyber_router as capabilities_kyber_router
 from services.agent_access_intelligence.routes import (
     catalog_router as aai_catalog_router,
@@ -303,7 +304,10 @@ from services.billing.routes import router as billing_router, admin_overage_rout
 from services.auth.routes import router as auth_router, admin_auth_router
 from services.contact.routes import router as contact_router
 from services.recommendations.routes import router as recommendations_router
-from services.notification.routes import router as notification_alerts_router
+# Legacy notification router retired: notification_intelligence is canonical and
+# first-match-shadowed all its endpoints except POST /webhooks/{id}/test, which was
+# migrated into notification_intelligence (with SSRF protection). See the route-
+# conflict ratchet in tests/unit/test_route_conflicts.py.
 from services.pnl.routes import router as pnl_router
 from services.resolution.routes import router as resolution_router
 from services.signals.routes import router as signals_router
@@ -527,6 +531,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.provider_gateway = provider_gateway
         logger.info("Provider Gateway initialised")
 
+    # Credential-encryption fail-closed validation: staging/production must run
+    # the approved KMS envelope cipher with a key id (never the local cipher).
+    from services.providers.credentials.startup import CredentialCipherStartupValidator
+
+    cred_cipher_errors = CredentialCipherStartupValidator().validate()
+    if cred_cipher_errors:
+        for err in cred_cipher_errors:
+            logger.error("Credential cipher startup validation failed: %s", err)
+        raise RuntimeError(
+            f"Credential cipher startup validation failed: {'; '.join(cred_cipher_errors)}"
+        )
+
     # Noesis startup validation
     try:
         from services.noesis.startup import NoesisStartupValidator
@@ -545,6 +561,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     register_import_handlers()  # import.commit / import.replay
     register_source_classification_repair_handler()
+    from services.consent.erasure_jobs import register_consent_erasure_handler
+
+    register_consent_erasure_handler()  # consent.erasure (durable DSR erasure)
+    from services.semantic_intelligence.jobs import register_semantic_replay_handler
+
+    register_semantic_replay_handler()  # semantic.replay (durable Bronze backfill)
 
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —
@@ -562,6 +584,45 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             supervisor.register(spec)
         app.state.worker_supervisor = supervisor
         await supervisor.start_all()
+
+    # ── Kyber Missions monitoring loop (feature-flagged, OFF by default) ──
+    # Periodically invokes MonitoringService.check_due() to evaluate due
+    # MonitoringConditions and escalate breaches. The service module is imported
+    # lazily *inside* the flag block. Signature confirmed against the landed
+    # missions wave: MonitoringService() takes no required args and
+    # check_due(now=None) is a coroutine. The task is supervised via
+    # app.state.kyber_mission_monitor_task and cancelled on shutdown (below).
+    app.state.kyber_mission_monitor_task = None
+    if settings.kyber_missions.monitoring_loop_enabled:
+        _mission_monitor_interval = float(
+            os.getenv("KYBER_MISSION_MONITORING_INTERVAL_SECONDS", "60").strip() or "60"
+        )
+
+        async def _kyber_mission_monitor_loop() -> None:
+            from services.kyber.ops.monitoring_service import MonitoringService
+
+            monitor = MonitoringService()
+            while True:
+                try:
+                    await monitor.check_due()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — loop must survive one bad tick
+                    logger.exception("Kyber Missions: monitoring tick failed")
+                await asyncio.sleep(_mission_monitor_interval)
+
+        app.state.kyber_mission_monitor_task = asyncio.create_task(
+            _kyber_mission_monitor_loop()
+        )
+        logger.info(
+            "Kyber Missions: monitoring loop started (interval=%ss)",
+            _mission_monitor_interval,
+        )
+    else:
+        logger.info(
+            "Kyber Missions: monitoring loop disabled "
+            "(set KYBER_MISSION_MONITORING_ENABLED=true to enable)"
+        )
 
     from services.demo_seed.startup import maybe_seed_demo_on_start
 
@@ -581,6 +642,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Graceful shutdown: stop workers, drain connections, close backends
     logger.info("Initiating graceful shutdown...")
+    _mission_monitor_task = getattr(app.state, "kyber_mission_monitor_task", None)
+    if _mission_monitor_task is not None:
+        _mission_monitor_task.cancel()
+        try:
+            await _mission_monitor_task
+        except asyncio.CancelledError:
+            pass
     if supervisor is not None:
         await supervisor.stop_all()
     if provider_gateway:
@@ -682,6 +750,7 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_router)
     app.include_router(commerce_diagnostics_router)
     app.include_router(providers_router)
+    app.include_router(provider_credentials_router)  # /v1/providers/credentials (multi-slot)
     app.include_router(capabilities_router)
     app.include_router(capabilities_kyber_router)  # /v1/kyber/capabilities (operator)
     app.include_router(aai_catalog_router)              # /v1/capability-catalog (tenant)
@@ -724,6 +793,15 @@ def create_app() -> FastAPI:
     # services/kyber/ops/routes.py: a command's capability and action class come
     # from its own spec, which is not known until the body has been read.
     app.include_router(kyber_ops_router)
+
+    # ── Kyber Missions control plane (feature-flagged, OFF by default) ──
+    if settings.kyber_missions.missions_enabled:
+        from services.kyber.ops.mission_routes import router as kyber_mission_router
+        app.include_router(kyber_mission_router)   # /v1/kyber missions
+        logger.info("Kyber Missions: routes mounted (/v1/kyber)")
+    else:
+        logger.info("Kyber Missions: disabled (set KYBER_MISSIONS_ENABLED=true to enable)")
+
     app.include_router(customer_success_admin_router)
     app.include_router(value_review_router)
     app.include_router(extraction_intel_router)
@@ -766,7 +844,6 @@ def create_app() -> FastAPI:
     _mount_demo_seed_routes(app, settings.env.value)
     app.include_router(contact_router)
     app.include_router(recommendations_router)
-    app.include_router(notification_alerts_router)
     app.include_router(resolution_router)
     app.include_router(signals_router)
     app.include_router(geo_router)
@@ -819,6 +896,14 @@ def create_app() -> FastAPI:
     app.include_router(noesis_router)        # Noesis: graph-native natural-language intelligence
     app.include_router(onboarding_router)      # Customer onboarding center
     app.include_router(onboarding_admin_router) # Kyber implementation lifecycle
+
+    # ── Tenant Activation (feature-flagged, OFF by default) ─────────────
+    if settings.activation.activation_enabled:
+        from services.activation.routes import router as activation_router
+        app.include_router(activation_router)   # /v1/activation
+        logger.info("Tenant Activation: routes mounted (/v1/activation)")
+    else:
+        logger.info("Tenant Activation: disabled (set AETHER_ACTIVATION_ENABLED=true to enable)")
     app.include_router(reliability_admin_router)  # Kyber reliability command center
     app.include_router(reliability_status_router) # Tenant-safe system status
 
@@ -1233,6 +1318,27 @@ def create_app() -> FastAPI:
         logger.info("Exploration Fabric mounted (/v1/explore)")
     else:
         logger.info("Exploration Fabric disabled (AETHER_EXPLORATION_ENABLED=false)")
+
+    if settings.continuation.enabled:
+        from services.continuation.routes import router as continuation_router
+        app.include_router(continuation_router, tags=["Continuation Plane"])
+        logger.info("Continuation plane mounted (/v1/continuations)")
+    else:
+        logger.info("Continuation plane disabled (AETHER_CONTINUATION_ENABLED=false)")
+
+    if settings.client_sync.enabled:
+        from services.client_sync.routes import router as client_sync_router
+        app.include_router(client_sync_router, tags=["Client Sync"])
+        logger.info("Client-sync feed mounted (/v1/client-sync)")
+    else:
+        logger.info("Client-sync feed disabled (AETHER_CLIENT_SYNC_ENABLED=false)")
+
+    if settings.mobile.enabled:
+        from services.mobile.routes import router as mobile_router
+        app.include_router(mobile_router, tags=["Mobile Gateway"])
+        logger.info("Mobile gateway mounted (/v1/mobile)")
+    else:
+        logger.info("Mobile gateway disabled (AETHER_MOBILE_ENABLED=false)")
 
     return app
 

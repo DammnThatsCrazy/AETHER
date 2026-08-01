@@ -13,7 +13,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: e8d95a8
+last_synced_commit: "41c7a80"
 ---
 # Aether Agentic Commerce — Control Plane
 

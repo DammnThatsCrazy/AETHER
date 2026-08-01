@@ -7,6 +7,7 @@ per-doc check that surfaces missing source paths.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -145,11 +146,17 @@ def test_check_doc_stale_when_commits_after_sync(dd, tmp_path, monkeypatch):
     assert "abc1234" in r["stale_detail"]
 
 
-def test_commits_touching_after_returns_empty_for_unknown_sha(dd):
-    """If the declared SHA isn't in git history, drift check should
-    skip rather than crash (graceful degradation)."""
+def test_commits_touching_after_returns_none_for_unknown_sha(dd):
+    """An unresolvable declared SHA must be distinguishable from "no drift".
+
+    The previous form of this test pinned the opposite: an unknown stamp
+    returned [] and was scored clean, which permanently exempted any doc with
+    a vanished (pre-squash) or garbage stamp from drift detection — measured
+    at 78 of 368 source-linked docs on this repo. None is the "unverifiable"
+    answer the caller turns into a stale finding.
+    """
     result = dd.commits_touching_after("zzzzzzz", ["README.md"])
-    assert result == []
+    assert result is None
 
 
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
@@ -246,3 +253,83 @@ def test_head_sha_returns_string_in_real_repo(dd):
     assert sha is not None
     assert len(sha) >= 7
     assert all(c in "0123456789abcdef" for c in sha)
+
+
+# ── Review backlog registry + restamp-only heuristic ─────────────────────────
+
+
+def test_restamp_only_commit_is_not_review(dd, tmp_path, monkeypatch):
+    """A commit that only bumps last_synced_commit must not count as a review.
+
+    This is the hole that hid the 87-doc backlog: any doc edit after the last
+    source commit — including a mechanical restamp — cleared staleness.
+    Constructed in a temp repo so the assertion never depends on how much of
+    the real repo's history a CI checkout happens to include.
+    """
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True,
+            env={
+                "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+                "PATH": os.environ["PATH"],
+            },
+        )
+
+    def head():
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+
+    doc = repo / "doc.md"
+    git("init", "-q")
+    doc.write_text('---\nlast_synced_commit: "aaa"\n---\nbody\n', encoding="utf-8")
+    git("add", "doc.md")
+    git("commit", "-qm", "initial")
+
+    doc.write_text('---\nlast_synced_commit: "bbb"\n---\nbody\n', encoding="utf-8")
+    git("commit", "-aqm", "restamp only")
+    restamp_sha = head()
+
+    doc.write_text('---\nlast_synced_commit: "bbb"\n---\nnew body\n', encoding="utf-8")
+    git("commit", "-aqm", "content change")
+    content_sha = head()
+
+    monkeypatch.setattr(dd, "ROOT", repo)
+    assert dd._commit_is_restamp_only(restamp_sha, "doc.md") is True
+    assert dd._commit_is_restamp_only(content_sha, "doc.md") is False
+
+
+def test_backlog_loader_rejects_anonymous_entries(dd, tmp_path):
+    bad = tmp_path / "backlog.yaml"
+    bad.write_text("docs:\n  - path: docs/X.md\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        dd.load_review_backlog(bad)
+
+
+def test_backlog_loader_returns_entries_by_path(dd, tmp_path):
+    good = tmp_path / "backlog.yaml"
+    good.write_text(
+        "docs:\n"
+        "  - path: docs/X.md\n"
+        "    reason: sources moved\n"
+        "    owner: docs@aether\n",
+        encoding="utf-8",
+    )
+    backlog = dd.load_review_backlog(good)
+    assert set(backlog) == {"docs/X.md"}
+    assert backlog["docs/X.md"]["owner"] == "docs@aether"
+
+
+def test_real_backlog_registry_loads_and_matches_tracked_docs(dd):
+    """Every registered backlog entry must reference a tracked doc."""
+    backlog = dd.load_review_backlog()
+    tracked = {str(p.relative_to(dd.ROOT)) for p in dd.tracked_docs()}
+    unknown = sorted(p for p in backlog if p not in tracked)
+    assert unknown == [], f"backlog entries for untracked docs: {unknown}"

@@ -17,7 +17,7 @@ related:
   - reliability/incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 6
-last_synced_commit: 48fb9d4
+last_synced_commit: "9ebc883"
 ---
 
 # Security, Compliance & Governance Controls
@@ -106,6 +106,17 @@ requires an approved decision; elevated/critical dispatch requires an
 disabled or unsafe integration dispatch is blocked; audit logs cannot be deleted;
 capability invocation requires an observed capability, an identified agent, and an
 active capability authorization.
+
+Kyber workforce access decisions are recorded as first-class policy decisions
+under the sensitive `kyber.access` policy key (`check_kyber_access`): the Kyber
+access plane (capability + disclosure + tenant scope + device + session
+strength) is evaluated by `services.kyber.access.dependencies`, and the RESULT
+is recorded as evidence — the engine deliberately does not re-evaluate
+authority. Because `kyber.access` is sensitive, **allowed** decisions are
+persisted alongside denials (an operator access log that only records refusals
+is not an access log), landing in `security_policy_decisions` with a linked
+`audit_ledger` entry; the target tenant becomes the decision's `tenant_id` so a
+tenant's operator-access history is queryable per tenant.
 
 ## Audit event model
 

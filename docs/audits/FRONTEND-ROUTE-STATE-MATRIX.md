@@ -37,6 +37,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |
 | `/onboarding` | readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
+| `/activation` | activation status, first value, plan/sdk/keys/test-event | yes | A | A | A | A | I | `activation-landing.test.tsx` (activation-page.tsx) |
 | `/billing` | account, subscription, invoices | yes | I | A | A | — | I | parameterized route-state family |
 | `/usage-plan` | measured usage and plan | yes | I | A | A | — | I | parameterized route-state family |
 | `/me` | tenant profile and measured usage | no | A | A | A | A | I | `me-data-truth.test.tsx` |
@@ -154,16 +155,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 126 data-bearing route patterns above: 49 Aether and
+The denominator is the 127 data-bearing route patterns above: 50 Aether and
 77 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 16 / 126 (12.7%) | tracked for every route |
-| Empty-state assertions | 114 / 126 (90.5%) | at least 90% overall |
-| Error/unavailable assertions | 97 / 126 (77.0%) | 100% of critical routes |
-| Populated-state assertions | 30 / 126 (23.8%) | tracked for every route |
-| Critical routes with both empty and error assertions | 60 / 60 (100%) | 60 / 60 (100%) |
+| Explicit loading-state assertions | 17 / 127 (13.4%) | tracked for every route |
+| Empty-state assertions | 115 / 127 (90.6%) | at least 90% overall |
+| Error/unavailable assertions | 98 / 127 (77.2%) | 100% of critical routes |
+| Populated-state assertions | 31 / 127 (24.4%) | tracked for every route |
+| Critical routes with both empty and error assertions | 61 / 61 (100%) | 61 / 61 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

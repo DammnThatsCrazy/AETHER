@@ -995,6 +995,25 @@ async def extraction_defense_middleware(request: Request, call_next):
 # =============================================================================
 
 
+def _validated_frame(model_id: str, features: dict) -> pd.DataFrame:
+    """Contract-validate a request's feature dict, then build the model frame.
+
+    The contract's min/max bounds and dtype rules were declared and hashed but
+    never enforced at serving until now; a violation is the caller's error, so
+    it surfaces as 422 rather than silently scoring garbage.
+    """
+    from common.feature_contracts import FeatureValidationError, validate_features
+
+    try:
+        validate_features(model_id, features, reject_unknown=True)
+    except FeatureValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except KeyError:
+        # Model without a registered contract: nothing to enforce.
+        pass
+    return pd.DataFrame([features])
+
+
 def _apply_output_defense(request: Request, value: float, features: dict) -> float:
     """Apply extraction mesh disclosure control + legacy defense to a scalar output.
 
@@ -1140,7 +1159,7 @@ async def predict_intent(req: IntentPredictionRequest, request: Request) -> Inte
     t0 = time.perf_counter()
     model = server.get_model("intent_prediction")
 
-    df = pd.DataFrame([req.features])
+    df = _validated_frame("intent_prediction", req.features)
     result = model.predict_full(df)
 
     # Extract individual prediction heads from the multi-output model.
@@ -1191,7 +1210,7 @@ async def predict_bot(req: BotDetectionRequest, request: Request) -> BotDetectio
     t0 = time.perf_counter()
     model = server.get_model("bot_detection")
 
-    df = pd.DataFrame([req.features])
+    df = _validated_frame("bot_detection", req.features)
     prediction = model.predict(df)[0]
     proba = model.predict_proba(df)[0]
 
@@ -1221,7 +1240,7 @@ async def predict_session_score(req: SessionScoreRequest, request: Request) -> S
     t0 = time.perf_counter()
     model = server.get_model("session_scorer")
 
-    df = pd.DataFrame([req.features])
+    df = _validated_frame("session_scorer", req.features)
     result = model.predict_full(df)
 
     engagement = int(result.get("engagement_score", [0])[0])
@@ -1269,7 +1288,7 @@ async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnP
         )
 
     model = server.get_model("churn_prediction")
-    df = pd.DataFrame([features])
+    df = _validated_frame("churn_prediction", features)
     result = model.predict_with_factors(df)
 
     churn_prob = float(result["churn_probability"].iloc[0])
@@ -1319,7 +1338,7 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
         )
 
     model = server.get_model("ltv_prediction")
-    df = pd.DataFrame([features])
+    df = _validated_frame("ltv_prediction", features)
     prediction = model.predict(df)
 
     ltv = _apply_output_defense(request, float(prediction[0]), features)
@@ -1346,7 +1365,7 @@ async def predict_anomaly(req: AnomalyDetectionRequest, request: Request) -> Ano
     """
     t0 = time.perf_counter()
     model = server.get_model("anomaly_detection")
-    df = pd.DataFrame([req.features])
+    df = _validated_frame("anomaly_detection", req.features)
     score = _apply_output_defense(request, float(model.predict(df)[0]), req.features)
     _prediction_buffers["anomaly_detection"].append(dict(req.features))
     if _freshness_tracker is not None:
@@ -1484,7 +1503,7 @@ async def predict_identity(req: IdentityResolutionRequest, request: Request) -> 
     features = dict(req.features)
     features.setdefault("wallet_link_score", 0.0)
 
-    df = pd.DataFrame([features])
+    df = _validated_frame("identity_resolution", features)
     raw = model.predict(df)
     merge_probability = float(raw[0]) if hasattr(raw, "__len__") else float(raw)
     merge_probability = max(0.0, min(1.0, merge_probability))

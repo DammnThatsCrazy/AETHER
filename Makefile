@@ -46,9 +46,24 @@ PYTHON ?= python3
 # seven modules that do not exist and `terraform init` fails there.
 TF_DIR      := AWS Deployment/aether-aws/terraform
 
+# Project virtualenv. The system interpreter resolves /usr/lib/python3/dist-packages,
+# where Debian's cryptography build panics under pyo3 and its PyJWT cannot be replaced
+# by pip. Gates must run against this isolated interpreter, not the system one.
+VENV        := .venv
+VENV_PY     := $(VENV)/bin/python
+
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
+
+bootstrap: ## Create an isolated .venv and install all extras (reproducible toolchain)
+	python3 -m venv $(VENV)
+	$(VENV_PY) -m pip install --upgrade pip setuptools wheel
+	$(VENV_PY) -m pip install -e ".[all]"
+	$(VENV_PY) scripts/validate_toolchain.py
+
+toolchain-check: ## Assert every release-critical dependency imports (fails, never skips)
+	$(VENV_PY) scripts/validate_toolchain.py
 
 setup: ## Install all Python dependencies in editable mode
 	pip install -e ".[all]"
@@ -63,8 +78,9 @@ setup-minimal: ## Install minimal dependencies (security module only)
 # Testing
 # ---------------------------------------------------------------------------
 
-test: ## Run ALL tests across all subsystems (suites run separately to avoid conftest collision)
+test: ## Run every Python test subsystem: root tests/, full backend tree, and ML tests/ (suites run separately to avoid conftest collision; TypeScript and Smart Contracts have their own gates -- see ci-check)
 	python -m pytest tests/ -v
+	python -m pytest "$(BACKEND_DIR)/tests/" -v
 	python -m pytest "$(ML_DIR)/tests/" -v
 
 test-security: ## Run extraction defense tests only
@@ -114,14 +130,19 @@ ml-container-build: ## Build all ML Docker stages (requires Docker daemon)
 	docker build --target features   -t aether-ml-features:dev   "$(ML_DIR)"
 	docker build --target monitoring -t aether-ml-monitoring:dev "$(ML_DIR)"
 
-ml-container-smoke: ## Health/ready/predict smoke against built serving container (requires Docker)
+ml-container-smoke: ## Health/ready/predict smoke against built serving container (requires Docker; fails closed on a non-200 /ready)
 	@echo "Building serving image for smoke test..."
 	docker build --target serving -t aether-ml-serving:smoke "$(ML_DIR)" -q
 	docker run --rm -d --name aether-ml-smoke -p 8765:8000 -e AETHER_ENV=local aether-ml-serving:smoke
 	sleep 4
-	curl -sf http://localhost:8765/health | python -m json.tool | grep '"status"'
-	-curl -sf http://localhost:8765/ready
-	docker stop aether-ml-smoke
+	@status=0; \
+	curl -sf http://localhost:8765/health | python -m json.tool | grep '"status"' || status=1; \
+	ready_code=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8765/ready || echo 000); \
+	if [ "$$ready_code" != "200" ]; then \
+	  echo "ERROR: /ready returned HTTP $$ready_code (expected 200)"; status=1; \
+	fi; \
+	docker stop aether-ml-smoke >/dev/null 2>&1; \
+	exit $$status
 	@echo "Container smoke test complete."
 
 ml-staging-smoke: ## Staging-like integration run (AETHER_ENV=staging, no stubs, expects local services)
@@ -274,20 +295,25 @@ docs: ## Run the full documentation pipeline (extract + sync + validate + drift)
 # Repo-Enforced Consistency (single command for humans, agents, and CI)
 # ---------------------------------------------------------------------------
 
+# Gate targets run on the isolated interpreter when the project venv exists:
+# doc generators import backend registries (fastapi et al.), which the system
+# interpreter cannot resolve — see the toolchain notes at the top of this file.
+GATE_PY := $(shell test -x $(VENV_PY) && echo $(VENV_PY) || echo python)
+
 repo-doctor: ## Validate full repo consistency (no mutations)
-	python scripts/repo_doctor.py --check
+	$(GATE_PY) scripts/repo_doctor.py --check
 
 repo-doctor-fix: ## Regenerate generated docs + sync, then validate
-	python scripts/repo_doctor.py --fix
+	$(GATE_PY) scripts/repo_doctor.py --fix
 
 docs-check: ## Docs/version/frontmatter/drift checks only (fast gate)
-	python scripts/repo_doctor.py --check --docs-only
+	$(GATE_PY) scripts/repo_doctor.py --check --docs-only
 
 ci-check: ## CI-safe full validation; fails if generators produce a diff
-	python scripts/repo_doctor.py --ci
+	$(GATE_PY) scripts/repo_doctor.py --ci
 
 docs-fix: ## Regenerate and sync docs only
-	python scripts/repo_doctor.py --fix --docs-only
+	$(GATE_PY) scripts/repo_doctor.py --fix --docs-only
 
 frontend-data-truth: ## Enforce Aether/Kyber runtime source data-truth boundaries
 	python scripts/validate_frontend_data_truth.py
@@ -366,6 +392,61 @@ generate-contracts: ## Regenerate all contract artifacts from JSON canonical reg
 generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts differ from committed
 	python scripts/generate_contracts.py --check
 
+# ---------------------------------------------------------------------------
+# Mobile / continuity / notification productization gates (program C0-C4)
+# ---------------------------------------------------------------------------
+.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test
+
+mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
+	npm run typecheck --workspace=packages/mobile-core --if-present
+
+mobile-test: ## CI gate — unit tests for the mobile SDK packages
+	npm run test --workspace=packages/mobile-core --if-present
+
+mobile-build-check: ## Mobile app scaffold invariants + honest native-build posture (report; exit 0 unless a scaffold is broken)
+	python scripts/mobile_build_check.py
+
+.PHONY: privacy-manifest-check dsr-coverage-check
+privacy-manifest-check: ## CI gate — regenerate app privacy manifests (Apple + Play) and fail on drift
+	python scripts/generate_privacy_manifests.py --check
+
+dsr-coverage-check: ## CI gate — every principal-scoped mobile table is reachable by a DSR erasure
+	python scripts/release/check_dsr_coverage.py
+
+mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Python contract parity
+	python -m pytest tests/contracts/test_continuation_contract_parity.py \
+		tests/contracts/test_sync_event_contract_parity.py \
+		tests/contracts/test_delivery_receipt_parity.py \
+		tests/contracts/test_notification_contract_parity.py -q
+
+continuity-check: ## CI gate — cross-device continuation plane + client-sync feed
+	python -m pytest \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_repo.py" \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_routes.py" \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_ddl_parity.py" \
+		"$(BACKEND_DIR)/tests/unit/test_client_sync_repo.py" \
+		"$(BACKEND_DIR)/tests/unit/test_client_sync_routes.py" \
+		"$(BACKEND_DIR)/tests/unit/test_client_sync_ddl_parity.py" \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_sync_integration.py" -q
+
+notification-check: ## CI gate — notification/delivery contract twins
+	python -m pytest tests/contracts/test_notification_contract_parity.py \
+		tests/contracts/test_delivery_receipt_parity.py -q
+
+notification-provider-check: ## CI gate — mobile push/email provider adapters + local fakes
+	python -m pytest \
+		"$(BACKEND_DIR)/tests/unit/test_notification_provider_adapters.py" \
+		"$(BACKEND_DIR)/tests/unit/test_delivery_adapters.py" -q
+
+credentials-inventory: ## Credential registry inventory (report; never prints secrets; exit 0)
+	python scripts/credentials_status.py --mode inventory
+
+credentials-preflight: ## Credential preflight — no live send; --strict blocks missing required creds
+	python scripts/credentials_status.py --mode preflight
+
+credentials-activation-smoke: ## Credential activation posture — no live send; never reports "ready"
+	python scripts/credentials_status.py --mode activation-smoke
+
 validate-schema-parity: ## Check event-registry.json, TS, and Python are in parity
 	python scripts/validate_event_schema_parity.py
 
@@ -415,6 +496,24 @@ credentialless-certification: ## Provider certification matrix + honest Credenti
 credentialless-certification-strict: ## Enforce every first-release provider >= CREDENTIAL_WAITING (no SCAFFOLDED); PR7-time gate
 	python scripts/credentialless_certification.py --strict
 
+.PHONY: financial-credential-readiness financial-credential-readiness-strict payment-rails-certification stablecoin-observer-certification financial-pilot-preflight
+
+financial-credential-readiness: ## Financial cohort (payments + stablecoin_chain) credential-readiness truth (report; exit 0)
+	python scripts/financial_credential_readiness.py
+
+financial-credential-readiness-strict: ## Fail-closed: every financial adapter READY (>= CREDENTIAL_WAITING, checks pass); NOT wired into ci-check
+	python scripts/financial_credential_readiness.py --strict
+
+payment-rails-certification: ## Fail-closed payment-rail cohort certification (Privy/Stripe/Coinbase/MoonPay/Bridge)
+	python scripts/financial_credential_readiness.py --domain payments --strict
+
+stablecoin-observer-certification: ## Fail-closed stablecoin-chain observer certification (EVM + Solana)
+	python scripts/financial_credential_readiness.py --domain stablecoin_chain --strict
+
+financial-pilot-preflight: ## Compose: strict financial readiness gate + validate the financial observation pilot manifest (fail-closed)
+	python scripts/financial_credential_readiness.py --strict
+	python scripts/validate_pilot_manifest.py config/pilot/examples/financial-observation.yaml --strict-providers
+
 audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with --check)
 	python scripts/smart_contract_audit_prep.py
 
@@ -422,28 +521,28 @@ ops-readiness: ## One-person ops readiness gate (flags, stores, bridge fail-clos
 	python scripts/ops_readiness.py
 
 release-gate: ## Full release gate: repo consistency (CI mode) + strict production status + ops readiness + founding-tenant control spine
-	python scripts/repo_doctor.py --ci
-	python scripts/production_status.py --strict
-	python scripts/ops_readiness.py
-	python scripts/release/check_foundation.py
-	python scripts/release/check_implementation_ledger.py
-	python scripts/release/check_profile_config.py
-	python scripts/release/check_cost_policy.py
-	python scripts/release/check_cost_policy_terraform.py
-	python scripts/release/check_delivery_topology.py
+	$(GATE_PY) scripts/repo_doctor.py --ci
+	$(GATE_PY) scripts/production_status.py --strict
+	$(GATE_PY) scripts/ops_readiness.py
+	$(GATE_PY) scripts/release/check_foundation.py
+	$(GATE_PY) scripts/release/check_implementation_ledger.py
+	$(GATE_PY) scripts/release/check_profile_config.py
+	$(GATE_PY) scripts/release/check_cost_policy.py
+	$(GATE_PY) scripts/release/check_cost_policy_terraform.py
+	$(GATE_PY) scripts/release/check_delivery_topology.py
 	# Plan-level deployment-profile enforcement. The plan-policy gate emits the
 	# inventory the cost model prices, so the order here is a real dependency.
-	python scripts/release/check_terraform_plan_policy.py \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py \
 		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
-	python scripts/release/check_cost_model.py \
+	$(GATE_PY) scripts/release/check_cost_model.py \
 		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
 	$(MAKE) validate-staging-budget
-	python scripts/release/check_deployment_readiness.py
-	python scripts/release/check_route_registry.py
-	python scripts/release/check_storage_policies.py
-	python scripts/validate_sdk_release_alignment.py
-	python scripts/release/sdk_conformance.py --quiet
-	python scripts/release/check_required_checks.py
+	$(GATE_PY) scripts/release/check_deployment_readiness.py
+	$(GATE_PY) scripts/release/check_route_registry.py
+	$(GATE_PY) scripts/release/check_storage_policies.py
+	$(GATE_PY) scripts/validate_sdk_release_alignment.py
+	$(GATE_PY) scripts/release/sdk_conformance.py --quiet
+	$(GATE_PY) scripts/release/check_required_checks.py
 	$(MAKE) security-release-check
 	$(MAKE) supply-chain-check
 
@@ -463,12 +562,12 @@ secret-scan-advisory: ## Secret scan (advisory; never fails)
 
 sbom: ## Generate a CycloneDX SBOM of the Python environment (reports/sbom/)
 	@mkdir -p reports/sbom
-	cyclonedx-py environment --output-file reports/sbom/python-sbom.json --output-format JSON
+	$(GATE_PY) -m cyclonedx_py environment --output-file reports/sbom/python-sbom.json --output-format JSON
 	@echo "SBOM: reports/sbom/python-sbom.json"
 
 supply-chain-audit: ## Advisory supply-chain report (never fails)
 	-npm audit --omit=dev --audit-level=high
-	-pip-audit --skip-editable --progress-spinner off
+	-$(GATE_PY) -m pip_audit --skip-editable --progress-spinner off
 
 supply-chain-check: ## Fail-closed supply-chain gate (npm prod criticals + SBOM required)
 	@echo "== npm production dependency audit — CRITICAL vulns fail =="
@@ -476,13 +575,13 @@ supply-chain-check: ## Fail-closed supply-chain gate (npm prod criticals + SBOM 
 	@echo "== npm production HIGH-severity — advisory (tracked) =="
 	-npm audit --omit=dev --audit-level=high
 	@echo "== Python dependency audit — advisory (base-image CVEs tracked) =="
-	-pip-audit --skip-editable --progress-spinner off
+	-$(GATE_PY) -m pip_audit --skip-editable --progress-spinner off
 	@echo "== CycloneDX SBOM generation (required) =="
 	$(MAKE) sbom
 
 security-release-check: ## Fail-closed security gate: secrets + security-control regressions
-	python scripts/security/secret_scan.py
-	python -m pytest tests/security/test_extraction_defense_mode.py tests/unit/test_release_profile_enforcement.py -q -o addopts=""
+	$(GATE_PY) scripts/security/secret_scan.py
+	$(GATE_PY) -m pytest tests/security/test_extraction_defense_mode.py tests/unit/test_release_profile_enforcement.py -q -o addopts=""
 
 # ---------------------------------------------------------------------------
 # Founding-tenant production — control-spine gates (additive; ci-check unchanged)
@@ -708,11 +807,11 @@ load-baselines: ## Record staging load baselines via Locust (requires STAGING_UR
 ml-artifacts: ## Publish staged ML model artifacts to S3 and mark promoted (requires ML_ARTIFACT_BUCKET + ML_SERVING_URL)
 	python scripts/publish_ml_artifacts.py
 
-load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (exits 2 if backend unreachable)
+load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (fails closed: unreachable backend, no traffic, and threshold breaches are all failures)
 	python scripts/load_smoke.py
 
-load-smoke-ci: ## Load smoke in CI — exits 0 when backend unreachable (non-blocking), fails on threshold breach
-	python scripts/load_smoke.py || [ $$? -eq 2 ]
+load-smoke-ci: ## Load smoke gate for CI pipelines (same fail-closed contract as load-smoke; distinct name for workflow wiring)
+	python scripts/load_smoke.py
 
 
 # ---------------------------------------------------------------------------

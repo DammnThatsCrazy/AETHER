@@ -1,0 +1,81 @@
+# Auditable per-app data-flow declaration — SOURCE OF TRUTH for the privacy manifests.
+#
+# scripts/generate_privacy_manifests.py reads this file and validates EVERY entry
+# before it emits anything:
+#   * `purpose` MUST be a real purpose key in
+#     packages/shared/contracts/consent-registry.json (the 12-purpose registry);
+#   * `classification` MUST be a real tier in the backend DataClassification
+#     taxonomy (Backend Architecture/aether-backend/shared/privacy/classification.py),
+#     and if `field` is a known key in that module's FIELD_CLASSIFICATIONS registry
+#     the declared tier must match classify_field(field);
+#   * `apple_data_type` / `apple_purpose` / `play_purpose` MUST be members of the
+#     Apple / Google Play vocabularies.
+# Any violation fails closed (exit 2) — nothing is generated.
+#
+# From this file the generator emits:
+#   * apps/aether-mobile/PrivacyInfo.xcprivacy  (Apple Privacy Manifest)
+#   * apps/aether-mobile/data-safety.json       (Google Play Data Safety declaration)
+#
+# HONESTY RULES:
+#   * Never invent a data category. If a field is not listed here, the app does not
+#     declare collecting it. This is the only list the generator trusts.
+#   * This app (Aether intelligence companion, com.aether.mobile) collects exactly
+#     three device-scoped, IDENTITY-LINKED, NON-tracking fields. It does NOT track
+#     users across apps or companies — an Aether token can never call Kyber — so
+#     every `tracking` flag is false and the generated manifest declares
+#     NSPrivacyTracking=false with no tracking domains.
+#
+# purpose <-> Apple/Play purpose note:
+#   The consent registry has no dedicated "app functionality" purpose; `analytics`
+#   is its core-platform-function purpose ("Required for core platform function.",
+#   dataCategories: behavioral/session/navigation/performance/error). It is therefore
+#   the honest consent-governance purpose for these functional, identity-linked
+#   flows. The store-facing purpose is declared explicitly per entry
+#   (`apple_purpose` / `play_purpose`) as "App functionality", which is what these
+#   flows actually serve (device addressing, push delivery, cross-device resume) —
+#   they are NOT an advertising or third-party analytics stream.
+version: 1
+data_flows:
+  - field: device_installation_id
+    description: >-
+      Per-app native installation identity (MobileInstallation.id) minted at
+      POST /v1/mobile/installations. A device identifier bound to the principal,
+      used to address push, resolve deep links, and manage device trust.
+    apple_data_type: DeviceID
+    apple_purpose: AppFunctionality
+    play_category: Device or other IDs
+    play_data_type: Device or other IDs
+    play_purpose: App functionality
+    purpose: analytics
+    linked: true
+    tracking: false
+    classification: confidential
+  - field: push_token
+    description: >-
+      APNs/FCM push token obtained from the OS and sent to register a push
+      subscription. The server stores only its SHA-256 token_hash for dedupe; the
+      raw token is a device identifier the app handles in transit.
+    apple_data_type: DeviceID
+    apple_purpose: AppFunctionality
+    play_category: Device or other IDs
+    play_data_type: Device or other IDs
+    play_purpose: App functionality
+    purpose: analytics
+    linked: true
+    tracking: false
+    classification: confidential
+  - field: continuation_activity
+    description: >-
+      Continuation records (ContinuationContext) — route/surface, selected
+      resource references, and a short summary of what the user was doing — used
+      to resume work across the user's own devices. Product-interaction bound to
+      the principal; never used for cross-app tracking.
+    apple_data_type: ProductInteraction
+    apple_purpose: AppFunctionality
+    play_category: App activity
+    play_data_type: App interactions
+    play_purpose: App functionality
+    purpose: analytics
+    linked: true
+    tracking: false
+    classification: confidential

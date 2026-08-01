@@ -95,26 +95,42 @@ class ConnectorService:
         return self._providers
 
     async def _resolve_secret(self, config: ConnectorConfig) -> Optional[str]:
-        """Look up the stored credential from the vault via secret_ref."""
+        """Resolve the stored credential via the credential platform.
+
+        Reads through the provider-neutral credential backend. If the credential
+        is absent there but a legacy ``ProvidersRepository`` row exists for the
+        ref (pre-migration plaintext), it is encrypted into the backend on read
+        (migrate-on-read) and returned.
+        """
         if not config.secret_ref:
             return None
+        tenant_id = getattr(config, "tenant_id", "") or ""
+        from shared.credentials.service import credential_service
+
         try:
-            record = await self._providers_repo().find_by_id(config.secret_ref)
-            if record:
-                return record.get("api_key")
+            secret = await credential_service.reveal(tenant_id, config.secret_ref)
+            if secret:
+                return secret
         except Exception as exc:
             logger.warning(f"Secret resolution failed for {config.connector_type}: {exc}")
+
+        # Migrate-on-read from the legacy plaintext ProvidersRepository row.
+        try:
+            record = await self._providers_repo().find_by_id(config.secret_ref)
+            if record and record.get("api_key"):
+                api_key = record["api_key"]
+                await credential_service.create(tenant_id, config.secret_ref, api_key)
+                return api_key
+        except Exception as exc:
+            logger.warning(f"Legacy secret migration failed for {config.connector_type}: {exc}")
         return None
 
     async def _store_credential(self, tenant_id: str, connector_type: str, credential: str) -> str:
-        """Persist a raw credential to the vault and return its ref key."""
-        ref = f"connector:{tenant_id}:{connector_type}"
-        await self._providers_repo().upsert(ref, {
-            "api_key": credential,
-            "provider": connector_type,
-            "tenant_id": tenant_id,
-        })
-        return ref
+        """Persist a credential via the credential platform and return its ref."""
+        from shared.credentials.service import connector_ref, credential_service
+
+        ref = connector_ref(tenant_id, connector_type)
+        return await credential_service.create(tenant_id, ref, credential)
 
     async def list_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
         """Descriptors merged with this tenant's config/status (no secrets)."""
@@ -270,6 +286,28 @@ class ConnectorService:
                 f"Connector {connector_type} credential is unavailable; "
                 "configure a valid vault secret before syncing"
             )
+        # Open a durable sync-run ledger entry BEFORE provider work (§12.4).
+        # Best-effort: the ledger is a truthful record, never a sync gate.
+        sync_run = None
+        run_service = None
+        try:
+            from repositories.delivery_repos import ConnectorCursorRepository
+            from services.comms.sync_runs import SyncRunService
+            _prev_cursor = await ConnectorCursorRepository().get_cursor(
+                tenant_id, connector_type
+            )
+            run_service = SyncRunService()
+            sync_run = await run_service.open_run(
+                tenant_id=tenant_id,
+                connector_instance_id=config.config_id,
+                provider=connector_type,
+                mode="incremental" if since else "backfill",
+                requested_window=since,
+                cursor_before=(_prev_cursor or {}).get("cursor_value"),
+                triggered_by=actor_id,
+            )
+        except Exception as exc:  # pragma: no cover - ledger must never break sync
+            logger.warning(f"connector sync-run open failed tenant={tenant_id}: {exc}")
         try:
             events = await connector.pull(config, since=since, secret=secret)
             status = "healthy"
@@ -296,6 +334,16 @@ class ConnectorService:
                      "allowed" if status == "healthy" else "blocked",
                      {"events": len(events), "status": status})
         if status == "failed":
+            if sync_run is not None and run_service is not None:
+                try:
+                    await run_service.complete_run(
+                        sync_run,
+                        status="failed",
+                        safe_error_code="provider_pull_failed",
+                        safe_error_detail=error_detail,
+                    )
+                except Exception as exc:  # pragma: no cover - best-effort
+                    logger.warning(f"connector sync-run close(failed) failed: {exc}")
             from services.delivery.adapters.base import ConnectorSyncError
             raise ConnectorSyncError(
                 f"Connector sync failed: {error_detail}",
@@ -320,19 +368,20 @@ class ConnectorService:
                 logger.warning(f"connector bronze ingest failed tenant={tenant_id} type={connector_type}: {exc}")
         # Canonical communication events and campaign catalog records flow
         # into the standard Bronze → bus → Silver pipeline (ADR-C3).
+        ingest_counts: dict[str, int] = {}
         if events:
             try:
                 from services.comms.ingest import ingest_normalized_events
-                await ingest_normalized_events(
+                ingest_counts = await ingest_normalized_events(
                     tenant_id, events, source_connector_id=config.config_id,
-                )
+                ) or {}
             except Exception as exc:  # pragma: no cover - Bronze retains records for replay
                 logger.warning(f"connector sync comms ingest failed tenant={tenant_id}: {exc}")
         # Upsert ConnectorCursor with the latest sync position
+        cursor_value = now_iso()
         try:
             from repositories.delivery_repos import ConnectorCursorRepository
             cursor_repo = ConnectorCursorRepository()
-            cursor_value = now_iso()
             await cursor_repo.set_cursor(
                 tenant_id, connector_type,
                 cursor_value=cursor_value,
@@ -340,9 +389,38 @@ class ConnectorService:
             )
         except Exception as exc:  # pragma: no cover - best-effort, never break sync
             logger.warning(f"connector cursor upsert failed tenant={tenant_id} type={connector_type}: {exc}")
+        # Close the durable sync-run ledger entry with honest counts (§12.4).
+        if sync_run is not None and run_service is not None:
+            try:
+                from services.comms.sync_runs import derive_sync_counts
+                completed = await run_service.complete_run(
+                    sync_run,
+                    status="completed",
+                    cursor_after=cursor_value,
+                    counts=derive_sync_counts(events, ingest_counts, ingested=ingested),
+                )
+                # Billable sync-run-level metering for comms connectors (§20).
+                if any(o.startswith("comms.") for o in descriptor.manifest_data_outputs):
+                    from services.comms.metering import record_sync_usage
+                    await record_sync_usage(tenant_id, completed.model_dump())
+            except Exception as exc:  # pragma: no cover - best-effort
+                logger.warning(f"connector sync-run close(completed) failed: {exc}")
         return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
                           events_ingested=ingested, events=events,
                           detail=f"provider sync ({connector_type})")
+
+    async def list_sync_runs(
+        self, tenant_id: str, connector_type: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Durable sync-run history for one connector (customer progress + ops)."""
+        key = _key(tenant_id, connector_type)
+        cfg = await self.repo.find_by_id(key)
+        if not cfg:
+            return []
+        from services.comms.sync_runs import SyncRunService
+        return await SyncRunService().list_for_connector(
+            tenant_id, cfg["config_id"], limit=limit
+        )
 
     async def ingest_webhook(self, connector_type: str, tenant_id: str, *, raw_body: bytes,
                              signature: Optional[str] = None, timestamp: Optional[str] = None,

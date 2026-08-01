@@ -35,6 +35,12 @@ from .models import (
 
 logger = get_logger("aether.dsr_propagation.service")
 
+# Completion must cite the component's own receipt — one of these fields,
+# explicitly supplied by the caller (zero counts allowed, absence is not).
+_COMPLETION_EVIDENCE_FIELDS: frozenset[str] = frozenset({
+    "records_impacted", "artifacts_impacted", "audit_event_id", "policy_decision_id",
+})
+
 
 class DSRPropagationRepository(_ScopedRepo):
     """Tenant-scoped store of DSR propagation records (one row per request).
@@ -139,6 +145,15 @@ class DSRPropagationService:
         # not actionable for compliance review.
         if status == "blocked" and not (evidence.get("blocked_reason") or "").strip():
             raise BadRequestError("blocked status requires a non-empty blocked_reason")
+        # A completed step must carry the component's own receipt — a bare
+        # "completed" is a caller-asserted claim nobody can audit. Zero counts
+        # are fine (records_impacted=0 is a real receipt for an empty store);
+        # supplying *no* evidence at all is not.
+        if status == "completed" and not (_COMPLETION_EVIDENCE_FIELDS & set(evidence)):
+            raise BadRequestError(
+                "completed status requires component evidence: supply at least "
+                f"one of {sorted(_COMPLETION_EVIDENCE_FIELDS)}"
+            )
 
         record = await self._load(request_id, tenant_id)
         steps: list[dict] = record.get("steps", [])

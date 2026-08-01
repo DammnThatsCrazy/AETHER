@@ -1,0 +1,206 @@
+# =============================================================================
+# Aether Pilot Manifest — Financial observation-only cohort, shadow mode.
+#
+# Validated by: python scripts/validate_pilot_manifest.py \
+#                 config/pilot/examples/financial-observation.yaml --strict-providers
+# Schema:       config/pilot/manifest.schema.json
+#
+# This is a READ/COMPUTE-ONLY founding-tenant pilot for the FINANCIAL cohort:
+# the five payment-rail observers (Privy, Stripe crypto onramp, Coinbase,
+# MoonPay, Bridge) and the two stablecoin-chain observers (EVM + Solana). It
+# OBSERVES funding sessions and on-chain stablecoin receipts, computes derived
+# intelligence in shadow mode (nothing delivered externally, nothing executed,
+# nothing settled or signed), and is bounded by explicit retention, quotas,
+# consent, region policy, and kill switches.
+#
+# A founding tenant activates this pilot by PROVISIONING SECRETS — every
+# credential, RPC endpoint, and alert destination is referenced by NAME only
+# (env var name / secret:// / ssm:// / ARN); no secret material, PII, or float
+# amount appears anywhere. Reward/meter/quota amounts are integer counts.
+# =============================================================================
+
+schema_version: 1
+manifest_version: "1.0.0"
+tenant_id: "founding-financial-observer"
+mode: observation
+shadow_mode: true
+
+pilot:
+  start: "2026-08-01T00:00:00Z"
+  end: "2026-11-01T00:00:00Z"
+
+region_policy:
+  primary_region: us-east-1
+  allowed_regions: [us-east-1, us-west-2]
+  data_residency: strict
+
+backfill:
+  enabled: true
+  start: "2026-06-01T00:00:00Z"
+
+retention:
+  raw_days: 90
+  derived_days: 365
+  audit_days: 730
+
+enabled_features:
+  - payment_rail_observation
+  - stablecoin_ingestion
+  - reconciliation
+  - profile360_readonly
+  - measurement_shadow
+
+# Provider selections MUST resolve in the credentialless certification matrix.
+# Financial cohort: payments x5 + stablecoin_chain evm/svm (exact matrix tokens).
+providers:
+  - domain: payments
+    provider: privy
+    adapter: PrivyAdapter
+    credential_refs: [PAYMENT_PRIVY_WEBHOOK_SECRET]
+  - domain: payments
+    provider: stripe_onramp
+    adapter: StripeOnrampAdapter
+    credential_refs: [PAYMENT_STRIPE_ONRAMP_WEBHOOK_SECRET]
+  - domain: payments
+    provider: coinbase
+    adapter: CoinbaseAdapter
+    credential_refs: [PAYMENT_COINBASE_WEBHOOK_SECRET]
+  - domain: payments
+    provider: moonpay
+    adapter: MoonPayAdapter
+    credential_refs: [PAYMENT_MOONPAY_WEBHOOK_SECRET]
+  - domain: payments
+    provider: bridge
+    adapter: BridgeAdapter
+    credential_refs: [PAYMENT_BRIDGE_WEBHOOK_SECRET]
+  - domain: stablecoin_chain
+    provider: evm
+    adapter: StablecoinEVMReceiptVerifier
+    credential_refs: []
+  - domain: stablecoin_chain
+    provider: svm
+    adapter: StablecoinSolanaTransactionVerifier
+    credential_refs: []
+
+chains:
+  - chain: ethereum
+    network: mainnet
+    rpc_ref: ETHEREUM_MAINNET_RPC_REF
+    # Public USDC (FiatTokenProxy) contract on Ethereum mainnet.
+    contract_refs: ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"]
+    venues: [uniswap_v3, curve]
+  - chain: base
+    network: mainnet
+    rpc_ref: BASE_MAINNET_RPC_REF
+    # Public USDC contract on Base mainnet.
+    contract_refs: ["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"]
+    venues: [uniswap_v3, aerodrome]
+  - chain: solana
+    network: mainnet
+    rpc_ref: SOLANA_MAINNET_RPC_REF
+    # Public USDC SPL mint on Solana mainnet.
+    program_refs: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]
+    venues: [orca, raydium]
+
+secret_refs:
+  - PAYMENT_PRIVY_WEBHOOK_SECRET
+  - PAYMENT_STRIPE_ONRAMP_WEBHOOK_SECRET
+  - PAYMENT_COINBASE_WEBHOOK_SECRET
+  - PAYMENT_MOONPAY_WEBHOOK_SECRET
+  - PAYMENT_BRIDGE_WEBHOOK_SECRET
+  - ETHEREUM_MAINNET_RPC_REF
+  - BASE_MAINNET_RPC_REF
+  - SOLANA_MAINNET_RPC_REF
+  - ALERT_PAGERDUTY_ROUTING_KEY_REF
+  - ALERT_SLACK_WEBHOOK_REF
+
+consent:
+  consent_required: true
+  required_purposes:
+    - analytics_measurement
+    - fraud_and_risk
+    - commerce
+
+# Observe-only: NO delivery/execution/settlement entitlement is enabled. The
+# delivery-class entitlements are listed explicitly as disabled so the observe-
+# only posture is auditable, not merely absent.
+entitlements:
+  - name: payment_rail_observation
+    enabled: true
+    limit: 5000000
+  - name: stablecoin_ingestion
+    enabled: true
+    limit: 5000000
+  - name: reconciliation
+    enabled: true
+  - name: reward_delivery
+    enabled: false
+  - name: execution
+    enabled: false
+  - name: settlement
+    enabled: false
+
+meters:
+  - name: events_ingested
+    unit: count
+    aggregation: sum
+  - name: webhook_events_verified
+    unit: count
+    aggregation: sum
+  - name: rpc_calls
+    unit: count
+    aggregation: sum
+  - name: reconciliations_run
+    unit: count
+    aggregation: sum
+
+quotas:
+  events_ingested: 5000000
+  webhook_events_verified: 2000000
+  rpc_calls: 10000000
+  reconciliations_run: 100000
+
+rewards:
+  enabled: false
+  currency: USDC
+  budget_minor_units: 0
+  per_action_minor_units:
+    referral: 0
+
+alert_destinations:
+  - name: pager
+    type: pagerduty
+    target_ref: ALERT_PAGERDUTY_ROUTING_KEY_REF
+  - name: pilot-slack
+    type: slack
+    target_ref: ALERT_SLACK_WEBHOOK_REF
+
+# A pilot-scoped global halt plus per-provider halts fail the pilot closed.
+kill_switches:
+  - name: pilot_global_halt
+    scope: pilot
+    default_state: armed
+  - name: payments_privy_halt
+    scope: provider
+    default_state: armed
+  - name: payments_stripe_onramp_halt
+    scope: provider
+    default_state: armed
+  - name: payments_coinbase_halt
+    scope: provider
+    default_state: armed
+  - name: payments_moonpay_halt
+    scope: provider
+    default_state: armed
+  - name: payments_bridge_halt
+    scope: provider
+    default_state: armed
+  - name: stablecoin_chain_evm_halt
+    scope: provider
+    default_state: armed
+  - name: stablecoin_chain_svm_halt
+    scope: provider
+    default_state: armed
+  - name: reward_delivery_halt
+    scope: feature
+    default_state: armed

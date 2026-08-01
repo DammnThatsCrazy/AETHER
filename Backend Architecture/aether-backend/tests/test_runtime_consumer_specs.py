@@ -28,4 +28,11 @@ def test_role_replicas_share_stable_groups_and_pipelines_are_separate():
         first = consumer_specs_for_role(role, SETTINGS)
         second = consumer_specs_for_role(role, SETTINGS)
         assert [spec.group_id for spec in first] == [spec.group_id for spec in second]
-    assert len({spec.group_id for spec in CONSUMER_SPECS}) == len(CONSUMER_SPECS)
+    # Specs within one role may deliberately share a group (co-resident on one
+    # consumer, e.g. notification-intelligence with stream-ingestion-projection),
+    # but a group must never span roles — that would split one broker group
+    # across separate deployments.
+    roles_by_group: dict[str, set[str]] = {}
+    for spec in CONSUMER_SPECS:
+        roles_by_group.setdefault(spec.group_id, set()).add(spec.role)
+    assert all(len(roles) == 1 for roles in roles_by_group.values())

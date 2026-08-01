@@ -175,8 +175,10 @@ def test_dispatch_notify_only_calls_notification_adapter():
     tenant = _make_tenant()
     svc = _make_service(deliver_result=delivered)
 
+    # dispatcher imports deliver_suggestion_via_notification lazily from the
+    # notification adapter module at call time, so that's the real seam to patch.
     with patch(
-        "services.suggestions.dispatcher.deliver_suggestion_via_notification",
+        "services.suggestions.adapters.notification_adapter.deliver_suggestion_via_notification",
         AsyncMock(return_value=delivered),
     ) as mock_deliver:
         result = _run(dispatch(suggestion, tenant, svc))
@@ -200,7 +202,7 @@ def test_dispatch_notify_only_returns_delivered_record():
     svc = _make_service()
 
     with patch(
-        "services.suggestions.dispatcher.deliver_suggestion_via_notification",
+        "services.suggestions.adapters.notification_adapter.deliver_suggestion_via_notification",
         AsyncMock(return_value=delivered),
     ):
         result = _run(dispatch(suggestion, tenant, svc))

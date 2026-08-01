@@ -23,8 +23,25 @@ from sklearn.metrics import (
 )
 
 from common.src.base import AetherModel, DeploymentTarget, ModelMetadata, ModelType
+from common.src.artifact_preprocessing import load_artifact_preprocessing
 
 logger = logging.getLogger("aether.ml.edge")
+
+
+def _load_estimator(path: Path, legacy_name: str) -> Any:
+    """Load a serialized estimator from ``path``.
+
+    Accepts both the legacy per-model filename (e.g. ``intent_model.pkl``) and
+    the unified training-pipeline artifact name (``model.joblib``).
+    """
+    import joblib
+
+    for candidate in (path / legacy_name, path / "model.joblib"):
+        if candidate.exists():
+            return joblib.load(candidate)
+    raise FileNotFoundError(
+        f"No model artifact found in {path} (tried {legacy_name}, model.joblib)"
+    )
 
 
 # =============================================================================
@@ -54,9 +71,27 @@ class IntentPrediction(AetherModel):
 
     model_type_str: str = "intent_prediction"
 
+    @property
+    def model_type(self) -> str:
+        return ModelType.INTENT_PREDICTION.value
+
     def __init__(self, version: str = "1.0.0") -> None:
-        super().__init__(ModelType.INTENT_PREDICTION, version)
+        super().__init__(ModelMetadata(
+            name="intent_prediction",
+            model_id="intent_prediction",
+            model_type=ModelType.INTENT_PREDICTION,
+            version=version,
+            deployment_target=DeploymentTarget.EDGE_TFJS,
+            feature_columns=list(self.FEATURE_NAMES),
+        ))
         self._model: Optional[LogisticRegression] = None
+        self._preprocessing = None
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_NAMES].fillna(0)
 
     def train(
         self,
@@ -78,7 +113,7 @@ class IntentPrediction(AetherModel):
         if y is None:
             raise ValueError("IntentPrediction requires labels (y).")
 
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
 
         self._model = LogisticRegression(
             class_weight="balanced",
@@ -134,7 +169,7 @@ class IntentPrediction(AetherModel):
         """
         if self._model is None:
             raise RuntimeError("Model not trained. Call train() first.")
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
         return self._model.predict(X_features)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -149,7 +184,7 @@ class IntentPrediction(AetherModel):
         """
         if self._model is None:
             raise RuntimeError("Model not trained. Call train() first.")
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
         return self._model.predict_proba(X_features)
 
     def get_feature_names(self) -> list[str]:
@@ -169,15 +204,23 @@ class IntentPrediction(AetherModel):
         logger.info("IntentPrediction saved to %s", path)
 
     def load(self, path: Path) -> None:
-        """Load model artifacts from disk."""
-        import joblib
+        """Load model artifacts (estimator + trained preprocessing) from disk.
 
-        self._model = joblib.load(path / "intent_model.pkl")
+        Verifies the artifact's feature schema hash against the canonical
+        feature contract before serving (fail closed on mismatch).
+        """
+        self._model = _load_estimator(path, "intent_model.pkl")
+        self._preprocessing = load_artifact_preprocessing(path, model_id=self.model_type_str)
         self.is_trained = True
         if (path / "metadata.json").exists():
-            self.metadata = ModelMetadata.model_validate_json(
-                (path / "metadata.json").read_text()
-            )
+            try:
+                self.metadata = ModelMetadata.model_validate_json(
+                    (path / "metadata.json").read_text()
+                )
+            except Exception:
+                # Training-pipeline artifacts carry registry-format metadata,
+                # not the pydantic ModelMetadata schema.
+                self.metadata = None
         logger.info("IntentPrediction loaded from %s", path)
 
     def _compute_metrics(
@@ -219,9 +262,31 @@ class BotDetection(AetherModel):
 
     model_type_str: str = "bot_detection"
 
+    @property
+    def model_type(self) -> str:
+        return ModelType.BOT_DETECTION.value
+
     def __init__(self, version: str = "1.0.0") -> None:
-        super().__init__(ModelType.BOT_DETECTION, version)
+        super().__init__(ModelMetadata(
+            name="bot_detection",
+            model_id="bot_detection",
+            model_type=ModelType.BOT_DETECTION,
+            version=version,
+            deployment_target=DeploymentTarget.EDGE_TFJS,
+            feature_columns=list(self.FEATURE_NAMES),
+        ))
         self._model: Optional[RandomForestClassifier] = None
+        self._preprocessing = None
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_NAMES].fillna(0)
+
+    def get_feature_names(self) -> list[str]:
+        """Return the list of feature names used by this model."""
+        return list(self.FEATURE_NAMES)
 
     def train(
         self,
@@ -243,7 +308,7 @@ class BotDetection(AetherModel):
         if y is None:
             raise ValueError("BotDetection requires labels (y).")
 
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
 
         self._model = RandomForestClassifier(
             n_estimators=100,
@@ -294,7 +359,7 @@ class BotDetection(AetherModel):
         """
         if self._model is None:
             raise RuntimeError("Model not trained. Call train() first.")
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
         return self._model.predict(X_features)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -309,7 +374,7 @@ class BotDetection(AetherModel):
         """
         if self._model is None:
             raise RuntimeError("Model not trained. Call train() first.")
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
         return self._model.predict_proba(X_features)
 
     def get_feature_importance(self) -> dict[str, float]:
@@ -340,15 +405,21 @@ class BotDetection(AetherModel):
         logger.info("BotDetection saved to %s", path)
 
     def load(self, path: Path) -> None:
-        """Load model artifacts from disk."""
-        import joblib
+        """Load model artifacts (estimator + trained preprocessing) from disk.
 
-        self._model = joblib.load(path / "bot_model.pkl")
+        Verifies the artifact's feature schema hash against the canonical
+        feature contract before serving (fail closed on mismatch).
+        """
+        self._model = _load_estimator(path, "bot_model.pkl")
+        self._preprocessing = load_artifact_preprocessing(path, model_id=self.model_type_str)
         self.is_trained = True
         if (path / "metadata.json").exists():
-            self.metadata = ModelMetadata.model_validate_json(
-                (path / "metadata.json").read_text()
-            )
+            try:
+                self.metadata = ModelMetadata.model_validate_json(
+                    (path / "metadata.json").read_text()
+                )
+            except Exception:
+                self.metadata = None
         logger.info("BotDetection loaded from %s", path)
 
     def export_onnx(self, output_path: Path) -> None:
@@ -415,9 +486,31 @@ class SessionScorer(AetherModel):
 
     model_type_str: str = "session_scorer"
 
+    @property
+    def model_type(self) -> str:
+        return ModelType.SESSION_SCORER.value
+
     def __init__(self, version: str = "1.0.0") -> None:
-        super().__init__(ModelType.SESSION_SCORER, version)
+        super().__init__(ModelMetadata(
+            name="session_scorer",
+            model_id="session_scorer",
+            model_type=ModelType.SESSION_SCORER,
+            version=version,
+            deployment_target=DeploymentTarget.EDGE_TFJS,
+            feature_columns=list(self.FEATURE_NAMES),
+        ))
         self._model: Optional[LogisticRegression] = None
+        self._preprocessing = None
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_NAMES].fillna(0)
+
+    def get_feature_names(self) -> list[str]:
+        """Return the list of feature names used by this model."""
+        return list(self.FEATURE_NAMES)
 
     def train(
         self,
@@ -439,7 +532,7 @@ class SessionScorer(AetherModel):
         if y is None:
             raise ValueError("SessionScorer requires labels (y).")
 
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
 
         self._model = LogisticRegression(C=1.0, max_iter=1000, solver="lbfgs")
         self._model.fit(X_features, y)
@@ -478,7 +571,7 @@ class SessionScorer(AetherModel):
         """
         if self._model is None:
             raise RuntimeError("Model not trained. Call train() first.")
-        X_features = X[self.FEATURE_NAMES].fillna(0)
+        X_features = self._prepare(X)
         return self._model.predict_proba(X_features)[:, 1]
 
     def save(self, path: Path) -> None:
@@ -494,15 +587,21 @@ class SessionScorer(AetherModel):
         logger.info("SessionScorer saved to %s", path)
 
     def load(self, path: Path) -> None:
-        """Load model artifacts from disk."""
-        import joblib
+        """Load model artifacts (estimator + trained preprocessing) from disk.
 
-        self._model = joblib.load(path / "session_scorer.pkl")
+        Verifies the artifact's feature schema hash against the canonical
+        feature contract before serving (fail closed on mismatch).
+        """
+        self._model = _load_estimator(path, "session_scorer.pkl")
+        self._preprocessing = load_artifact_preprocessing(path, model_id=self.model_type_str)
         self.is_trained = True
         if (path / "metadata.json").exists():
-            self.metadata = ModelMetadata.model_validate_json(
-                (path / "metadata.json").read_text()
-            )
+            try:
+                self.metadata = ModelMetadata.model_validate_json(
+                    (path / "metadata.json").read_text()
+                )
+            except Exception:
+                self.metadata = None
         logger.info("SessionScorer loaded from %s", path)
 
     def _compute_metrics(

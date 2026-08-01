@@ -22,6 +22,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from common.src.artifact_preprocessing import load_artifact_preprocessing
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -81,19 +83,33 @@ class OnnxChurnModel:
         "lifetime_value",
     ]
 
-    def __init__(self, onnx_path: Path) -> None:
+    def __init__(self, onnx_path: Path, preprocessing: Any = None) -> None:
         self._session = _ort_session(onnx_path)
         self._input_name: str = self._session.get_inputs()[0].name
         self._output_names: list[str] = [o.name for o in self._session.get_outputs()]
+        self._preprocessing = preprocessing
 
     @classmethod
     def load(cls, model_dir: Path, model_name: str = "churn_prediction") -> "OnnxChurnModel | None":
-        """Return an instance if an ONNX artifact exists, else None."""
+        """Return an instance if an ONNX artifact exists, else None.
+
+        Also loads the trained preprocessing bundle (preprocessing.joblib) when
+        present, verifying the feature schema hash (fail closed on mismatch).
+        """
         onnx_path = _find_onnx(model_dir, model_name)
-        return cls(onnx_path) if onnx_path else None
+        if not onnx_path:
+            return None
+        preprocessing = load_artifact_preprocessing(model_dir, model_id=model_name)
+        return cls(onnx_path, preprocessing=preprocessing)
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_COLS].fillna(0)
 
     def _run(self, X: pd.DataFrame) -> np.ndarray:
-        arr = X[self.FEATURE_COLS].fillna(0).values.astype(np.float32)
+        arr = self._prepare(X).values.astype(np.float32)
         raw = self._session.run(self._output_names, {self._input_name: arr})
         # XGBClassifier ONNX: output[1] is a list of dicts {class: prob}
         proba_out = raw[1] if len(raw) > 1 else raw[0]
@@ -143,18 +159,32 @@ class OnnxLTVModel:
         "referral_count",
     ]
 
-    def __init__(self, onnx_path: Path) -> None:
+    def __init__(self, onnx_path: Path, preprocessing: Any = None) -> None:
         self._session = _ort_session(onnx_path)
         self._input_name: str = self._session.get_inputs()[0].name
         self._output_names: list[str] = [o.name for o in self._session.get_outputs()]
+        self._preprocessing = preprocessing
 
     @classmethod
     def load(cls, model_dir: Path, model_name: str = "ltv_prediction") -> "OnnxLTVModel | None":
-        """Return an instance if an ONNX artifact exists, else None."""
+        """Return an instance if an ONNX artifact exists, else None.
+
+        Also loads the trained preprocessing bundle (preprocessing.joblib) when
+        present, verifying the feature schema hash (fail closed on mismatch).
+        """
         onnx_path = _find_onnx(model_dir, model_name)
-        return cls(onnx_path) if onnx_path else None
+        if not onnx_path:
+            return None
+        preprocessing = load_artifact_preprocessing(model_dir, model_id=model_name)
+        return cls(onnx_path, preprocessing=preprocessing)
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the trained preprocessing when present, else legacy fillna(0)."""
+        if self._preprocessing is not None:
+            return self._preprocessing.transform(X)
+        return X[self.FEATURE_COLS].fillna(0)
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        arr = X[self.FEATURE_COLS].fillna(0).values.astype(np.float32)
+        arr = self._prepare(X).values.astype(np.float32)
         raw = self._session.run(self._output_names, {self._input_name: arr})
         return np.asarray(raw[0]).ravel()

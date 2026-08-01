@@ -187,6 +187,7 @@ def _unified_journey_unavailable(entity_id: str, tenant_id: str, reason: str) ->
         "pagination": {"limit": 0, "count": 0, "has_more": False},
         "computed_at": "",
         "provenance": {"sources": []},
+        "degraded_dimensions": [],
     }
 
 
@@ -730,6 +731,10 @@ class Profile360Aggregator:
         # Economic values are authoritative attribution-credit outputs, not
         # journey-step columns. Enrich the read model from active immutable
         # credits using the Silver touchpoint id captured in evidence_summary.
+        # A failed credit read must not silently zero attribution revenue on
+        # every step — that reads as "this journey earned nothing", a claim
+        # nobody verified — so the dimension is reported as degraded instead.
+        degraded_dimensions: list[str] = []
         conversion_ids = journey.get("conversion_ids") or []
         if isinstance(conversion_ids, str):
             try:
@@ -748,8 +753,18 @@ class Profile360Aggregator:
                 ),
             )
             credits = credits_read.value_or([])
-        except Exception:
+            if not credits_read.available:
+                degraded_dimensions.append("attribution_credits")
+        except Exception as exc:
+            logger.warning(
+                "profile360_aggregator_dimension_failed",
+                extra={
+                    "dimension": "unified_journey.attribution_credits",
+                    "error_code": type(exc).__name__,
+                },
+            )
             credits = []
+            degraded_dimensions.append("attribution_credits")
         revenue_by_touchpoint: defaultdict[str, Decimal] = defaultdict(
             lambda: Decimal("0")
         )
@@ -897,6 +912,9 @@ class Profile360Aggregator:
             "quality_status": quality_status,
             "excluded_source_noise_count": journey.get("excluded_source_noise_count", 0),
         }
+        # Served verbatim by GET /v1/profile/{id}/unified-journey — a consumer
+        # can tell "attribution revenue is unknown" apart from "zero revenue".
+        envelope["degraded_dimensions"] = degraded_dimensions
         return envelope
 
     async def rewards(self, entity_id: str, tenant_id: str, limit: int = 100) -> dict:

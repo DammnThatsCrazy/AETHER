@@ -40,6 +40,35 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+BACKLOG_PATH = ROOT / "config" / "docs_review_backlog.yaml"
+
+
+def load_review_backlog(path: Path = BACKLOG_PATH) -> dict[str, dict]:
+    """Load the documented review backlog: docs known-stale pending real review.
+
+    The registry is the honest ledger for docs whose sources moved after their
+    last genuine content review (mechanical restamps do not count). A listed
+    doc's staleness is reported but does not fail --strict; an UNLISTED stale
+    doc does. Entries are shrink-only: a listed doc that is no longer stale
+    must be removed, which strict mode enforces. Every entry requires path,
+    reason, and owner so no doc sits in the backlog anonymously.
+    """
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    entries = data.get("docs")
+    if not isinstance(entries, list):
+        raise SystemExit(f"error: {path} must contain a top-level 'docs' list")
+    backlog: dict[str, dict] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or not all(
+            entry.get(k) for k in ("path", "reason", "owner")
+        ):
+            raise SystemExit(
+                f"error: backlog entry needs path/reason/owner — bad entry: {entry!r}"
+            )
+        backlog[str(entry["path"])] = entry
+    return backlog
 DOCS_ROOT = ROOT / "docs"
 
 SKIP_DIRS = {
@@ -99,19 +128,25 @@ def extract_frontmatter(text: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def commits_touching_after(declared: str, paths: list[str]) -> list[str]:
+def commits_touching_after(declared: str, paths: list[str]) -> list[str] | None:
     """Return short SHAs of commits that touched any of `paths` after `declared`.
 
-    Uses ``git log <declared>..HEAD -- <paths>``. If `declared` is unknown
-    to git (e.g. force-push removed it), returns an empty list so the
-    caller can skip drift detection rather than false-positive.
+    Uses ``git log <declared>..HEAD -- <paths>``. Returns ``None`` when
+    ``declared`` cannot be resolved in this clone. That case must NOT be
+    treated as fresh: a stamp git cannot see (a pre-squash branch commit, a
+    force-pushed-away SHA, or plain garbage) proves nothing about review
+    recency, and treating it as clean quietly exempted the doc from drift
+    detection forever — the exact fail-open this validator exists to prevent.
+    The two answers a caller can act on are therefore "these commits came
+    after the stamp" and "the stamp is unverifiable"; only a resolvable stamp
+    with no newer commits is clean.
     """
     if not paths or not declared:
         return []
     cmd = ["git", "log", f"{declared}..HEAD", "--format=%h", "--"] + paths
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
     if result.returncode != 0:
-        return []
+        return None
     return [line for line in result.stdout.splitlines() if line]
 
 
@@ -140,21 +175,60 @@ def is_ancestor(older: str, newer: str) -> bool:
     ).returncode == 0
 
 
+def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
+    """True when the commit's change to this doc touches only its stamp line.
+
+    A mechanical ``last_synced_commit`` bump is bookkeeping, not review — if it
+    counted as review, any restamp (or typo edit) would silently clear real
+    staleness, which is exactly the hole that hid the 87-doc review backlog.
+    """
+    proc = subprocess.run(
+        ["git", "show", sha, "--format=", "--unified=0", "--", doc_rel],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return False
+    changed = [
+        line
+        for line in proc.stdout.splitlines()
+        if (line.startswith("+") or line.startswith("-"))
+        and not line.startswith(("+++", "---"))
+    ]
+    return bool(changed) and all("last_synced_commit" in line for line in changed)
+
+
 def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list[str]) -> bool:
-    """Return True when the doc changed in the same range at/after sources.
+    """Return True when the doc was REVIEWED in the same range at/after sources.
 
     This prevents false positives for PR commits that update source files and
     their reviewed source-linked docs in the same commit. Future source-only
     commits still become stale because their latest source commit will no longer
-    be an ancestor of the latest doc commit in the range.
+    be an ancestor of the latest doc commit in the range. A doc commit that only
+    bumps ``last_synced_commit`` is not evidence of review and is skipped.
     """
     try:
         doc_rel = str(doc_path.relative_to(ROOT))
     except ValueError:
         doc_rel = str(doc_path)
     latest_source = latest_commit_touching_after(declared, source_paths)
-    latest_doc = latest_commit_touching_after(declared, [doc_rel])
-    if not latest_source or not latest_doc:
+    if not latest_source:
+        return False
+    proc = subprocess.run(
+        ["git", "log", f"{declared}..HEAD", "--format=%H", "--", doc_rel],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return False
+    doc_commits = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    latest_doc = next(
+        (sha for sha in doc_commits if not _commit_is_restamp_only(sha, doc_rel)),
+        None,
+    )
+    if not latest_doc:
         return False
     return is_ancestor(latest_source, latest_doc)
 
@@ -194,7 +268,15 @@ def check_doc(path: Path) -> dict:
         # are older than the stamp should NOT be flagged stale.
         present_sources = [s for s in sources if (ROOT / s).exists()]
         newer = commits_touching_after(declared, present_sources)
-        if newer and not doc_reviewed_after_sources(declared, path, present_sources):
+        if newer is None:
+            stale = True
+            detail = (
+                f"last_synced_commit={declared} cannot be resolved in this "
+                "clone, so review recency is unverifiable. Re-review the doc "
+                "against its source_files and restamp with a commit that "
+                "exists on the branch."
+            )
+        elif newer and not doc_reviewed_after_sources(declared, path, present_sources):
             stale = True
             detail = (
                 f"last_synced_commit={declared}; sources have been modified "
@@ -298,29 +380,56 @@ def main() -> int:
         # current last_synced_commit. Stamping clean docs to HEAD is what causes
         # 60+ last_synced_commit conflicts on every rebase — both branches update
         # the same field to different SHAs on every docs-drift pass.
+        backlog = load_review_backlog()
         updated = 0
         skipped = 0
+        backlogged = 0
         for path in tracked_docs():
             report = check_doc(path)
             if report["stale"]:
+                if report["path"] in backlog:
+                    # A backlogged doc is cleared only by a real content
+                    # review plus removal from the registry — stamping it
+                    # here would mint exactly the false review claim the
+                    # backlog exists to record.
+                    backlogged += 1
+                    continue
                 if stamp_doc(path, sha):
                     updated += 1
                     print(f"  stamped {path.relative_to(ROOT)} -> {sha}")
             else:
                 skipped += 1
-        print(f"docs_drift --update: stamped {updated} docs at {sha} ({skipped} already clean, skipped).")
+        print(
+            f"docs_drift --update: stamped {updated} docs at {sha} "
+            f"({skipped} already clean, {backlogged} in the review backlog — "
+            "review + remove from config/docs_review_backlog.yaml to clear)."
+        )
         return 0
 
+    backlog = load_review_backlog()
     reports = [check_doc(p) for p in tracked_docs()]
 
     missing_reports = [r for r in reports if r["missing_paths"]]
-    stale_reports = [r for r in reports if r["stale"]]
-    clean_count = len(reports) - len(missing_reports) - len(stale_reports)
+    stale_reports = [r for r in reports if r["stale"] and r["path"] not in backlog]
+    backlogged_reports = [r for r in reports if r["stale"] and r["path"] in backlog]
+    clean_count = (
+        len(reports) - len(missing_reports) - len(stale_reports) - len(backlogged_reports)
+    )
+
+    # Shrink-only: a backlog entry whose doc is clean (someone reviewed it) or
+    # untracked must be removed, or the registry rots into a permanent bypass.
+    report_paths = {r["path"] for r in reports}
+    stale_backlogged = {r["path"] for r in backlogged_reports}
+    dead_entries = sorted(
+        p for p in backlog
+        if p not in stale_backlogged
+    )
 
     print(
         f"docs_drift: {len(reports)} docs scanned, "
         f"{clean_count} clean, "
         f"{len(stale_reports)} stale (advisory), "
+        f"{len(backlogged_reports)} in the documented review backlog, "
         f"{len(missing_reports)} with missing source paths."
     )
 
@@ -330,6 +439,19 @@ def main() -> int:
         for r in stale_reports:
             print(f"  - {r['path']}: {r['stale_detail']}")
 
+    if backlogged_reports:
+        print()
+        print("REVIEW BACKLOG (documented in config/docs_review_backlog.yaml):")
+        for r in backlogged_reports:
+            print(f"  - {r['path']} (owner: {backlog[r['path']].get('owner')})")
+
+    if dead_entries:
+        print()
+        print("BACKLOG ENTRIES TO REMOVE (doc reviewed/clean or no longer tracked):")
+        for p in dead_entries:
+            note = "untracked" if p not in report_paths else "no longer stale"
+            print(f"  - {p} ({note})")
+
     if missing_reports:
         print()
         print("MISSING SOURCE PATHS (always fatal):")
@@ -338,7 +460,7 @@ def main() -> int:
                 print(f"  - {r['path']}: source_files entry {mp!r} does not exist")
         return 1
 
-    if args.strict and stale_reports:
+    if args.strict and (stale_reports or dead_entries):
         return 1
 
     return 0

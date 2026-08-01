@@ -1,7 +1,7 @@
 """Runtime reader for the model-training semantics of the consent registry.
 
 `packages/shared/contracts/consent-registry.json` is the single source of truth
-for the 11 canonical consent purposes. Each purpose carries model-governance
+for the canonical consent purposes. Each purpose carries model-governance
 flags this module surfaces to the training/inference gates:
 
   - ``allowModelTraining``      — may data collected under this purpose ever feed

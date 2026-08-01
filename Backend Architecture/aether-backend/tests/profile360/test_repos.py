@@ -51,10 +51,10 @@ def test_delegation_grant_and_active_for():
         grantee_entity_id="grantee",
         scope={"actions": ["read"], "resources": ["*"]},
     ))
-    active = _run(repo.active_for("grantee"))
+    active = _run(repo.active_for("grantee", "t1"))
     assert len(active) == 1 and active[0]["delegation_id"] == "d1"
     _run(repo.revoke("d1", revoked_by_entity_id="grantor"))
-    active_after = _run(repo.active_for("grantee"))
+    active_after = _run(repo.active_for("grantee", "t1"))
     assert active_after == []
 
 

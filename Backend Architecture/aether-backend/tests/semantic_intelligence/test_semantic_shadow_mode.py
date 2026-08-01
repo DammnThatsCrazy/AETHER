@@ -26,8 +26,11 @@ from services.semantic_intelligence.models import IntentLabel, ObservationStatus
 from services.semantic_intelligence.providers import (
     DeterministicClassifierProvider,
     DisabledProvider,
+    SemanticClassificationRequest,
+    SemanticClassificationResult,
     SemanticClassifierProvider,
     get_shadow_provider,
+    provider_identity,
 )
 from services.semantic_intelligence.service import SemanticIntelligenceService
 from services.semantic_intelligence.store import DurableSemanticSentimentStore
@@ -41,6 +44,15 @@ class StubCandidateProvider(SemanticClassifierProvider):
 
     def available(self) -> bool:
         return True
+
+    def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
+        # Deterministic labels re-stamped with the stub's own identity — the
+        # divergence itself is injected per-test where needed.
+        base = DeterministicClassifierProvider().classify(request)
+        model_id, model_version = provider_identity(self.name)
+        return dataclasses.replace(
+            base, provider=self.name, model_id=model_id, model_version=model_version
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -160,7 +172,7 @@ async def test_failclosed_candidate_abstains_and_diverges(monkeypatch):
     data = divergences[0]["data"]
     assert data["candidate"]["status"] == "abstained"
     assert data["candidate"]["stance"] is None
-    assert data["candidate"]["abstention_reason"] == "provider_disabled_missing_credentials"
+    assert data["candidate"]["abstention_reason"] == "credential_waiting"
     assert data["agreement"]["stance"] is False
 
 

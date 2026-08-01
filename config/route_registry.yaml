@@ -73,6 +73,7 @@ known_prefixes:
   - /health
   - /ready
   - /sdk/identity
+  - /v1/activation
   - /v1/admin
   - /v1/account-lifecycle
   - /v1/account

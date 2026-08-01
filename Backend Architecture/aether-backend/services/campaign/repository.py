@@ -2,12 +2,25 @@
 
 These repositories bypass the generic JSONB BaseRepository and write to
 the structured Alembic-managed tables introduced in migration 20260627_campaign_registry.
-They require an asyncpg pool (no in-memory fallback) to enforce the production
-invariant that canonical campaign identity is never transient.
+
+Pool policy
+-----------
+Canonical campaign identity must never be transient: two processes must not mint
+different UUIDs for the same external campaign, and an identity must survive a
+restart. Outside local development that invariant is enforced by requiring a real
+pool — :func:`_require_pool` raises when one is absent rather than falling back.
+
+A DB-free in-memory path is retained for local development and tests only, and is
+structurally unreachable anywhere else. This module previously documented "no
+in-memory fallback" while implementing one in eleven places and hard-failing in a
+twelfth, which meant a misconfigured production process could silently fabricate
+campaign identity that vanished on restart. The guard below is what makes the
+stated invariant true, rather than a comment asserting it.
 """
 
 from __future__ import annotations
 
+import os
 import json
 import uuid
 from datetime import datetime, timezone
@@ -20,15 +33,83 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.campaign.repository")
 
-# In-memory fallbacks for local development — never used in production
+# In-memory stores backing the local-development path. Reachable only when
+# _require_pool() has confirmed the environment permits a DB-free run.
 _LOCAL_CAMPAIGNS: dict[str, dict] = {}
 _LOCAL_EXTERNAL_REFS: dict[str, dict] = {}
 _LOCAL_ALIASES: dict[str, dict] = {}
 _LOCAL_REVIEWS: dict[str, dict] = {}
 
+# Environments permitted to run without a database. Everything else — including
+# integration, which is deliberately production-shaped — must have a real pool.
+_POOL_OPTIONAL_ENVIRONMENTS = frozenset({"local", "dev", "test"})
+
 
 async def _pool():
     return await get_pool()
+
+
+def _pool_is_optional() -> bool:
+    """Whether this environment may run the campaign registry without a pool.
+
+    Read at call time rather than import time so a test or a process that sets
+    AETHER_ENV after import is still evaluated against the value in force.
+    """
+    return os.environ.get("AETHER_ENV", "local") in _POOL_OPTIONAL_ENVIRONMENTS
+
+
+def _require_pool(pool: Any, operation: str) -> None:
+    """Fail closed when a pool is absent in an environment that requires one.
+
+    Raising here is the point: the alternative is minting a campaign UUID in
+    process memory, which two workers would do differently for the same external
+    campaign and which would not survive a restart.
+    """
+    if pool is None and not _pool_is_optional():
+        raise RuntimeError(
+            f"campaign registry {operation} requires a database pool in "
+            f"AETHER_ENV={os.environ.get('AETHER_ENV', 'local')}; refusing to "
+            "fabricate transient campaign identity in memory"
+        )
+
+
+class _PoolBackedRepository:
+    """Base for the campaign repositories, allowing the pool to be injected.
+
+    These repositories originally reached the database only through the
+    module-level :func:`_pool` lookup and defined no ``__init__``, while callers
+    on both sides assumed constructor injection: ``routes.py`` constructs
+    ``ExternalRefRepository(None)`` and ``AliasRepository(None)``, and the test
+    suite constructs all four with a fake pool. Both raised
+    ``TypeError: ... takes no arguments`` — the routes ones at runtime, on any
+    request reaching those handlers.
+
+    That went unnoticed because ``Backend Architecture/aether-backend/tests/``
+    was executed by no gate.
+
+    Passing ``pool=None`` keeps the original behaviour (resolve lazily via
+    ``get_pool()``), so the no-argument call sites in ``resolver.py`` and
+    ``registry.py`` are unaffected.
+    """
+
+    def __init__(self, pool: Any = None) -> None:
+        self._injected_pool = pool
+
+    async def _acquire_pool(self) -> Any:
+        """Return the injected pool, or resolve the process-wide one.
+
+        Injection is checked first so a test double is never silently bypassed
+        in favour of a real connection.
+
+        The environment guard lives here rather than at each of the twelve call
+        sites so no future method can reach an in-memory store without passing
+        it. Returning ``None`` is only possible where a DB-free run is allowed.
+        """
+        pool = self._injected_pool
+        if pool is None:
+            pool = await _pool()
+        _require_pool(pool, type(self).__name__)
+        return pool
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -43,11 +124,11 @@ def _now() -> datetime:
 
 # ── CampaignRegistryRepository ────────────────────────────────────────────────
 
-class CampaignRegistryRepository:
+class CampaignRegistryRepository(_PoolBackedRepository):
     """Typed repository for the campaigns table."""
 
     async def get_by_id(self, tenant_id: str, campaign_id: UUID) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             record = _LOCAL_CAMPAIGNS.get(str(campaign_id))
             return record if record and record.get("tenant_id") == tenant_id else None
@@ -83,7 +164,7 @@ class CampaignRegistryRepository:
         last_seen_at: Optional[datetime] = None,
         properties: Optional[dict] = None,
     ) -> dict:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         now = _now()
         if pool is None:
             record = {
@@ -127,7 +208,7 @@ class CampaignRegistryRepository:
         last_seen_at: Optional[datetime] = None,
         archived_at: Optional[datetime] = None,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return None
         sets: list[str] = ["updated_at = NOW()"]
@@ -160,7 +241,7 @@ class CampaignRegistryRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return []
         conditions = ["tenant_id = $1", "archived_at IS NULL"]
@@ -191,7 +272,7 @@ class CampaignRegistryRepository:
 
 # ── ExternalRefRepository ─────────────────────────────────────────────────────
 
-class ExternalRefRepository:
+class ExternalRefRepository(_PoolBackedRepository):
     """Typed repository for campaign_external_refs."""
 
     async def get_exact(
@@ -201,7 +282,7 @@ class ExternalRefRepository:
         external_account_id: str,
         external_campaign_id: str,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             key = f"{tenant_id}::{platform}::{external_account_id}::{external_campaign_id}"
             return _LOCAL_EXTERNAL_REFS.get(key)
@@ -228,7 +309,7 @@ class ExternalRefRepository:
         source_connector_id: Optional[str] = None,
         raw_metadata: Optional[dict] = None,
     ) -> dict:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             key = f"{tenant_id}::{platform}::{external_account_id}::{external_campaign_id}"
             now = _now()
@@ -270,7 +351,7 @@ class ExternalRefRepository:
         return _row_to_dict(row)
 
     async def list_for_campaign(self, tenant_id: str, campaign_id: UUID) -> list[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return []
         rows = await pool.fetch(
@@ -282,7 +363,7 @@ class ExternalRefRepository:
 
 # ── AliasRepository ───────────────────────────────────────────────────────────
 
-class AliasRepository:
+class AliasRepository(_PoolBackedRepository):
     """Typed repository for campaign_aliases."""
 
     async def get_active(
@@ -291,8 +372,20 @@ class AliasRepository:
         alias_type: str,
         alias_value_normalized: str,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
+            # Mirrors the SQL predicate below. Returning None unconditionally
+            # here made every alias written to the local store invisible to
+            # resolution, so the resolver reported "unresolved" for aliases it
+            # had just been given.
+            for record in _LOCAL_ALIASES.values():
+                if (
+                    record["tenant_id"] == tenant_id
+                    and record["alias_type"] == alias_type
+                    and record["alias_value_normalized"] == alias_value_normalized
+                    and record["valid_until"] is None
+                ):
+                    return record
             return None
         row = await pool.fetchrow(
             """
@@ -312,9 +405,19 @@ class AliasRepository:
         """Batch lookup: lookups is list of (alias_type, alias_value_normalized)."""
         if not lookups:
             return {}
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
-            return {}
+            wanted = set(lookups)
+            result: dict[tuple[str, str], dict] = {}
+            for record in _LOCAL_ALIASES.values():
+                key = (record["alias_type"], record["alias_value_normalized"])
+                if (
+                    record["tenant_id"] == tenant_id
+                    and record["valid_until"] is None
+                    and key in wanted
+                ):
+                    result[key] = record
+            return result
         # Use unnest for a single round-trip
         types = [t for t, _ in lookups]
         values = [v for _, v in lookups]
@@ -353,9 +456,42 @@ class AliasRepository:
         provenance: Optional[dict] = None,
     ) -> Optional[dict]:
         """Create alias; returns None if an active alias already exists (conflict)."""
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
-            raise RuntimeError("Database pool unavailable")
+            now = _now()
+            # Mirror the table's partial unique constraint: an alias value may be
+            # reused only once its previous binding has been expired. Returning
+            # None rather than raising matches the SQL path, where a unique
+            # violation is a conflict signal and not an error.
+            for existing in _LOCAL_ALIASES.values():
+                if (
+                    existing["tenant_id"] == tenant_id
+                    and existing["alias_type"] == alias_type
+                    and existing["alias_value_normalized"] == alias_value_normalized
+                    and existing["valid_until"] is None
+                ):
+                    return None
+            record = {
+                "alias_id": uuid.uuid4(),
+                "tenant_id": tenant_id,
+                "campaign_id": campaign_id,
+                "alias_type": alias_type,
+                "alias_value": alias_value,
+                "alias_value_normalized": alias_value_normalized,
+                "platform": platform,
+                "external_account_id": external_account_id,
+                "source": source,
+                "medium": medium,
+                "valid_from": valid_from or now,
+                "valid_until": None,
+                "source_connector_id": source_connector_id,
+                "created_by": created_by,
+                "provenance": provenance or {},
+                "created_at": now,
+                "updated_at": now,
+            }
+            _LOCAL_ALIASES[str(record["alias_id"])] = record
+            return record
         try:
             row = await pool.fetchrow(
                 """
@@ -377,9 +513,22 @@ class AliasRepository:
             raise
 
     async def expire(self, tenant_id: str, alias_id: UUID) -> bool:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
-            return False
+            record = _LOCAL_ALIASES.get(str(alias_id))
+            # Only an active alias owned by this tenant can be expired, matching
+            # the WHERE clause below; returning False for anything else keeps the
+            # "did this actually change something" contract intact.
+            if (
+                record is None
+                or record["tenant_id"] != tenant_id
+                or record["valid_until"] is not None
+            ):
+                return False
+            now = _now()
+            record["valid_until"] = now
+            record["updated_at"] = now
+            return True
         result = await pool.execute(
             "UPDATE campaign_aliases SET valid_until = NOW(), updated_at = NOW() WHERE tenant_id = $1 AND alias_id = $2 AND valid_until IS NULL",
             tenant_id, alias_id,
@@ -387,9 +536,20 @@ class AliasRepository:
         return result.split()[-1] != "0"
 
     async def list_for_campaign(self, tenant_id: str, campaign_id: UUID) -> list[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
-            return []
+            # Previously returned [] unconditionally, so an alias written by
+            # create() was invisible to every reader — _LOCAL_ALIASES was
+            # declared but never actually read by anything.
+            return sorted(
+                (
+                    record
+                    for record in _LOCAL_ALIASES.values()
+                    if record["tenant_id"] == tenant_id
+                    and str(record["campaign_id"]) == str(campaign_id)
+                ),
+                key=lambda record: record["created_at"],
+            )
         rows = await pool.fetch(
             "SELECT * FROM campaign_aliases WHERE tenant_id = $1 AND campaign_id = $2 ORDER BY created_at",
             tenant_id, campaign_id,
@@ -399,7 +559,7 @@ class AliasRepository:
 
 # ── MappingReviewRepository ───────────────────────────────────────────────────
 
-class MappingReviewRepository:
+class MappingReviewRepository(_PoolBackedRepository):
     """Typed repository for campaign_resolution_reviews."""
 
     async def get_or_create_open(
@@ -410,7 +570,7 @@ class MappingReviewRepository:
         candidate_campaign_ids: list[UUID],
     ) -> dict:
         """Upsert: increment observed_count on existing open review, else create."""
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             key = f"{tenant_id}::open::{evidence_hash}"
             now = _now()
@@ -457,9 +617,17 @@ class MappingReviewRepository:
         resolved_by: str,
         note: Optional[str] = None,
     ) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
-            return None
+            return self._local_set_status(
+                tenant_id, review_id, "resolved",
+                extra={
+                    "resolved_campaign_id": campaign_id,
+                    "resolved_by": resolved_by,
+                    "resolved_at": _now(),
+                    "resolution_note": note,
+                },
+            )
         row = await pool.fetchrow(
             """
             UPDATE campaign_resolution_reviews
@@ -472,39 +640,83 @@ class MappingReviewRepository:
         )
         return _row_to_dict(row) if row else None
 
+    @staticmethod
+    def _local_set_status(
+        tenant_id: str, review_id: UUID, status: str, extra: Optional[dict] = None
+    ) -> Optional[dict]:
+        """Local-store status transition, mirroring the SQL semantics.
+
+        The store key embeds the status because the table's unique constraint is
+        partial — (tenant, evidence_hash, status='open') — so a resolved review
+        must vacate the open slot, letting the same evidence legitimately open a
+        fresh review later. Mutating status in place under the old key would
+        instead resurface the closed review as the open one.
+        """
+        for key, record in list(_LOCAL_REVIEWS.items()):
+            if (
+                record["tenant_id"] == tenant_id
+                and str(record["review_id"]) == str(review_id)
+            ):
+                del _LOCAL_REVIEWS[key]
+                record["status"] = status
+                record["updated_at"] = _now()
+                if extra:
+                    record.update(extra)
+                _LOCAL_REVIEWS[
+                    f"{tenant_id}::{status}::{record['evidence_hash']}"
+                ] = record
+                return record
+        return None
+
     async def set_status(self, tenant_id: str, review_id: UUID, status: str) -> Optional[dict]:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
-            return None
+            return self._local_set_status(tenant_id, review_id, status)
         row = await pool.fetchrow(
             "UPDATE campaign_resolution_reviews SET status = $3, updated_at = NOW() WHERE tenant_id = $1 AND review_id = $2 RETURNING *",
             tenant_id, review_id, status,
         )
         return _row_to_dict(row) if row else None
 
-    async def list_open(
+    async def list_by_status(
         self,
         tenant_id: str,
+        status: str = "open",
         limit: int = 50,
         cursor: Optional[datetime] = None,
     ) -> list[dict]:
-        pool = await _pool()
+        """List reviews in one status, newest first.
+
+        The status filter exists because the route has always exposed one
+        (``status: str = Query(default="open")``) while this layer could only
+        ever answer for open reviews, so a caller asking for resolved or ignored
+        reviews was answered with an unrelated result set at best.
+        """
+        pool = await self._acquire_pool()
         if pool is None:
-            return []
+            reviews = [
+                record
+                for record in _LOCAL_REVIEWS.values()
+                if record["tenant_id"] == tenant_id and record["status"] == status
+            ]
+            reviews.sort(key=lambda record: record["first_seen_at"], reverse=True)
+            if cursor:
+                reviews = [r for r in reviews if r["first_seen_at"] < cursor]
+            return reviews[:limit]
         if cursor:
             rows = await pool.fetch(
-                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = 'open' AND first_seen_at < $2 ORDER BY first_seen_at DESC LIMIT $3",
-                tenant_id, cursor, limit,
+                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = $2 AND first_seen_at < $3 ORDER BY first_seen_at DESC LIMIT $4",
+                tenant_id, status, cursor, limit,
             )
         else:
             rows = await pool.fetch(
-                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = 'open' ORDER BY first_seen_at DESC LIMIT $2",
-                tenant_id, limit,
+                "SELECT * FROM campaign_resolution_reviews WHERE tenant_id = $1 AND status = $2 ORDER BY first_seen_at DESC LIMIT $3",
+                tenant_id, status, limit,
             )
         return [_row_to_dict(r) for r in rows]
 
     async def increment_affected_touchpoints(self, tenant_id: str, evidence_hash: str, count: int = 1) -> None:
-        pool = await _pool()
+        pool = await self._acquire_pool()
         if pool is None:
             return
         await pool.execute(

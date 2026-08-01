@@ -54,6 +54,9 @@ DSRComponent = Literal[
     "sentiment_observations",
     "semantic_gold_state",
     "semantic_review_queue",
+    "continuation_records",
+    "mobile_installations",
+    "client_sync_records",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -76,6 +79,9 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "sentiment_observations",
     "semantic_gold_state",
     "semantic_review_queue",
+    "continuation_records",
+    "mobile_installations",
+    "client_sync_records",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

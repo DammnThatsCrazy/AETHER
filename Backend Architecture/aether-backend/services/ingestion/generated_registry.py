@@ -412,6 +412,7 @@ CONSENT_PURPOSES: frozenset[str] = frozenset({
     "cross_chain_observability",
     "economic_observability",
     "financial_activity",
+    "fraud_prevention",
     "location",
     "marketing",
     "personalization",

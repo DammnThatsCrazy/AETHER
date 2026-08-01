@@ -72,7 +72,7 @@ class TestCrossTenantForgery:
     def test_cross_tenant_external_ref_not_accessible(self):
         svc = _make_registry()
         resolver = _make_resolver()
-        _run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "shared-ext-id", "Camp A"))
+        _run(svc.upsert_external_campaign("tenant_a", "google_ads", "acc", "shared-ext-id", external_campaign_name="Camp A"))
         result = _run(resolver.resolve_one("tenant_b", platform="google_ads",
                                            external_account_id="acc", external_campaign_id="shared-ext-id"))
         assert result.status != "resolved"
@@ -81,7 +81,7 @@ class TestCrossTenantForgery:
         svc = _make_registry()
         resolver = _make_resolver()
         cid = _run(svc.create_custom_campaign("tenant_a", name="Camp"))
-        _run(svc.add_alias("tenant_a", cid, alias_type="utm_campaign", value="secret-alias"))
+        _run(svc.add_alias("tenant_a", cid, alias_type="utm_campaign", alias_value="secret-alias"))
         result = _run(resolver.resolve_one("tenant_b", utm_campaign="secret-alias"))
         # Must not resolve to tenant_a's campaign
         assert result.status != "resolved" or str(result.campaign_id) != str(cid)
@@ -105,17 +105,45 @@ class TestRoutePermissions:
             pass  # UnauthorizedError or similar is acceptable
 
     def test_mapping_review_resolve_forbidden_for_readonly(self):
-        """Only authorized operators may resolve mapping reviews."""
-        # This is enforced by route permission checks; test that missing tenant raises
-        req = MagicMock()
-        req.state.tenant = None
-        from services.campaign.routes import resolve_mapping_review, MappingReviewResolveRequest
-        fake_id = str(uuid.uuid4())
-        body = MappingReviewResolveRequest(campaign_id=str(uuid.uuid4()))
-        try:
-            _run(resolve_mapping_review(fake_id, req, body))
-        except Exception:
-            pass  # Expected: UnauthorizedError / ForbiddenError
+        """Only authorized operators may resolve mapping reviews.
+
+        The mapping-review router is mounted on a scoped app with a read-only
+        tenant injected; the route's ``campaign:manage`` permission gate must
+        reject the request with 403 before any registry mutation happens.
+        """
+        from fastapi import FastAPI, Request
+        from fastapi.responses import JSONResponse
+        from fastapi.testclient import TestClient
+
+        from shared.common.common import AetherError, ForbiddenError
+        from services.campaign.routes import mapping_router
+
+        class _ReadonlyTenant:
+            tenant_id = "readonly-tenant"
+
+            def require_permission(self, permission: str) -> None:
+                if permission != "campaign:read":
+                    raise ForbiddenError(f"missing permission: {permission}")
+
+        app = FastAPI()
+
+        @app.exception_handler(AetherError)
+        async def _error_handler(request: Request, exc: AetherError) -> JSONResponse:
+            return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
+
+        @app.middleware("http")
+        async def _inject_tenant(request: Request, call_next):
+            request.state.tenant = _ReadonlyTenant()
+            return await call_next(request)
+
+        app.include_router(mapping_router)
+        client = TestClient(app)
+
+        resp = client.post(
+            f"/v1/mapping-review/{uuid.uuid4()}/resolve",
+            json={"campaign_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 403
 
     def test_kyber_fleet_health_forbidden_for_tenant(self):
         """Tenant-level requests to Kyber routes must be rejected."""
@@ -167,11 +195,11 @@ class TestInputValidation:
         assert result.status in ("not_applicable", "unresolved")
 
     def test_campaign_alias_resolve_request_uuid_validated(self):
-        from services.campaign.routes import MappingReviewResolveRequest
+        from services.campaign.routes import ReviewResolve
         from pydantic import ValidationError
         # Should reject non-UUID strings
         with pytest.raises((ValidationError, ValueError)):
-            MappingReviewResolveRequest(campaign_id="not-a-uuid")
+            ReviewResolve(campaign_id="not-a-uuid")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -182,17 +210,18 @@ class TestDataInvariants:
     def test_upsert_always_returns_valid_uuid(self):
         svc = _make_registry()
         for i in range(10):
-            cid = _run(svc.upsert_external_campaign(
-                "inv-tenant", "google_ads", "acc", f"camp-{i}", f"Camp {i}"
+            campaign = _run(svc.upsert_external_campaign(
+                "inv-tenant", "google_ads", "acc", f"camp-{i}", external_campaign_name=f"Camp {i}"
             ))
-            uuid.UUID(str(cid))  # must be valid UUID, not provider ID
+            uuid.UUID(str(campaign["campaign_id"]))  # must be valid UUID, not provider ID
 
     def test_provider_ids_are_never_canonical(self):
         """Provider IDs (numeric strings) must differ from canonical UUIDs."""
         svc = _make_registry()
         provider_ids = ["12345678", "9876543210", "23847119283740001", "act_123456"]
         for pid in provider_ids:
-            cid = _run(svc.upsert_external_campaign("inv-tenant-2", "google_ads", "acc", pid, "Camp"))
+            campaign = _run(svc.upsert_external_campaign("inv-tenant-2", "google_ads", "acc", pid, external_campaign_name="Camp"))
+            cid = campaign["campaign_id"]
             assert str(cid) != pid
             uuid.UUID(str(cid))  # valid UUID format
 

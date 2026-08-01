@@ -19,6 +19,7 @@
 * - location: Precise or coarse location observations and geofence transitions. Always requires explicit opt-in. Always requires explicit opt-in.
 * - economic_observability: Read-only stablecoin economic intelligence: canonical asset and deployment identity, transfer/payment/mint/burn/bridge/swap observations, valuation and peg monitoring, support assertions, finality, flow aggregates, and reconciliation. Always requires explicit opt-in.
 * - cross_chain_observability: Read-only interoperability intelligence: cross-network message lifecycle, paths, gateways, applications, intents, asset legs, security policy snapshots, verification and delivery actors, and reconciliation. Aether never relays or routes. Always requires explicit opt-in.
+* - fraud_prevention: Bot detection, fraud and abuse signal analysis, and platform security monitoring. Always requires explicit opt-in. Always requires explicit opt-in.
         */
        export type ConsentPurpose =
          | 'analytics'
@@ -31,7 +32,8 @@
  | 'credit'
  | 'location'
  | 'economic_observability'
- | 'cross_chain_observability';
+ | 'cross_chain_observability'
+ | 'fraud_prevention';
 
        export const CONSENT_PURPOSES: readonly ConsentPurpose[] = [
          'analytics',
@@ -45,6 +47,7 @@
  'location',
  'economic_observability',
  'cross_chain_observability',
+ 'fraud_prevention',
        ] as const;
 
        /** Purposes that ALWAYS require explicit opt-in (never granted by accept-all). */
@@ -54,6 +57,7 @@
  'location',
  'economic_observability',
  'cross_chain_observability',
+ 'fraud_prevention',
        ] as const;
 
        /** Consent state stored locally by each SDK and stamped onto every event. */
@@ -69,6 +73,7 @@
  location: boolean;
  economic_observability: boolean;
  cross_chain_observability: boolean;
+ fraud_prevention: boolean;
          updatedAt: string;
          policyVersion: string;
        }
@@ -95,4 +100,5 @@
  location: false,
  economic_observability: false,
  cross_chain_observability: false,
+ fraud_prevention: false,
        };

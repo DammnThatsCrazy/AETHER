@@ -1366,7 +1366,7 @@ async def get_merge_history(
         "redirected": redirected,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "empty",
+        "source_status": await _event_source_status(items),
     }).to_dict()
 
 
@@ -1404,8 +1404,33 @@ async def get_split_history(
         "redirected": redirected,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "empty",
+        "source_status": await _event_source_status(items),
     }).to_dict()
+
+
+async def _event_source_status(items: list) -> str:
+    """Classify why a result set is what it is, without guessing.
+
+    Three outcomes that must stay distinct, because collapsing them is how a
+    surface reports confidence it has not earned:
+
+    - ``missing``   — the store could not be consulted, so nothing is known.
+    - ``empty``     — the store answered, and the entity genuinely has no events.
+    - ``available`` — the store answered with events.
+
+    The identity event stores return ``[]`` for both of the first two cases, so
+    reachability is established via the pool rather than inferred from an empty
+    list. Reporting ``empty`` for an unreachable store asserts that the entity
+    has no merge or split history — a claim nobody checked.
+    """
+    if items:
+        return "available"
+    try:
+        from repositories.repos import get_pool
+        reachable = await get_pool() is not None
+    except Exception:
+        reachable = False
+    return "empty" if reachable else "missing"
 
 
 # ── Attribution Endpoint ────────────────────────────────────────────
@@ -1739,7 +1764,7 @@ async def get_agent_executions(
         "entity_id": user_id,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "missing",
+        "source_status": await _event_source_status(items),
     }).to_dict()
 
 
@@ -1751,7 +1776,13 @@ async def get_profile_actions(
     request: Request,
     limit: int = Query(default=100, ge=1, le=500),
 ):
-    """Entity-level actions (decisions executed, operations initiated)."""
+    """Entity-level actions (decisions executed, operations initiated).
+
+    Response uses the sibling envelope ({entity_id, items, count,
+    source_status}) — this was the only sibling without one, so a failed
+    recommendation/decision read was indistinguishable from an entity that
+    genuinely executed no actions.
+    """
     tenant = request.state.tenant
     tenant.require_permission("read")
     try:
@@ -1770,12 +1801,18 @@ async def get_profile_actions(
             )
             items.extend(r for r in rows if r.get("tenant_id") == tenant.tenant_id)
         items = items[:limit]
-    except Exception:
+        degraded = False
+    except Exception as exc:
+        logger.warning("profile actions unavailable: %s", exc)
         items = []
+        degraded = True
     return APIResponse(data={
         "entity_id": user_id,
         "items": items,
         "count": len(items),
+        "source_status": (
+            "missing" if degraded else ("available" if items else "empty")
+        ),
     }).to_dict()
 
 
@@ -1787,14 +1824,32 @@ async def get_profile_events(
     event_type: str | None = Query(default=None),
     composer: ProfileComposer = Depends(_get_composer),
 ):
-    """Raw event stream for this entity (alias to timeline with event_type filter)."""
+    """Raw event stream for this entity (alias to timeline with event_type filter).
+
+    Response uses the sibling envelope ({entity_id, items, count, source_status})
+    so a failed read is distinguishable from an entity with no events. The one
+    frontend consumer of this route reads it with an unpinned schema, so the
+    envelope change breaks no pinned contract; /timeline retains its original
+    shape for the consumers that pin `events`.
+    """
     tenant = request.state.tenant
     tenant.require_permission("read")
-    events = await composer.get_timeline(user_id, tenant.tenant_id, limit=limit, event_type=event_type)
+    try:
+        items = await composer.get_timeline(
+            user_id, tenant.tenant_id, limit=limit, event_type=event_type
+        )
+        degraded = False
+    except Exception as exc:
+        logger.warning("profile events unavailable: %s", exc)
+        items = []
+        degraded = True
     return APIResponse(data={
         "entity_id": user_id,
-        "events": events,
-        "count": len(events),
+        "items": items,
+        "count": len(items),
+        "source_status": (
+            "missing" if degraded else ("available" if items else "empty")
+        ),
     }).to_dict()
 
 
@@ -1803,13 +1858,29 @@ async def get_profile_events(
 # Requires: consent enforcement for the relevant purpose.
 # Returns: {entity_id, items, count, source_status}
 
-def _silver_response(entity_id: str, items: list, source: str = "silver") -> dict:
+def _silver_response(
+    entity_id: str,
+    items: list,
+    source: str = "silver",
+    *,
+    degraded: bool = False,
+) -> dict:
+    """Envelope for the Silver-backed sub-resources.
+
+    ``degraded=True`` means the Silver store could not be consulted — the
+    caller's read raised — so the response reports ``missing`` rather than
+    asserting the entity genuinely has no facts (``empty``). Collapsing a
+    failed read into ``empty`` is how a store outage reads as confirmed
+    no-activity.
+    """
     return APIResponse(data={
         "entity_id": entity_id,
         "items": items,
         "count": len(items),
         "source": source,
-        "source_status": "available" if items else "empty",
+        "source_status": (
+            "missing" if degraded else ("available" if items else "empty")
+        ),
     }).to_dict()
 
 
@@ -1830,9 +1901,12 @@ async def get_entity_exposures(
         if content_type:
             filters["content_type"] = content_type
         items = await repo.query_silver("silver_exposure_facts", filters, limit=limit)
-    except Exception:
+        degraded = False
+    except Exception as exc:
+        logger.warning("entity exposures unavailable: %s", exc)
         items = []
-    return _silver_response(user_id, items)
+        degraded = True
+    return _silver_response(user_id, items, degraded=degraded)
 
 
 @router.get("/{user_id}/revenue")
@@ -1852,9 +1926,12 @@ async def get_entity_revenue(
         if revenue_type:
             filters["revenue_type"] = revenue_type
         items = await repo.query_silver("silver_revenue_facts", filters, limit=limit)
-    except Exception:
+        degraded = False
+    except Exception as exc:
+        logger.warning("entity revenue unavailable: %s", exc)
         items = []
-    return _silver_response(user_id, items)
+        degraded = True
+    return _silver_response(user_id, items, degraded=degraded)
 
 
 @router.get("/{user_id}/friction")
@@ -1874,9 +1951,12 @@ async def get_entity_friction(
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
             limit=limit,
         )
-    except Exception:
+        degraded = False
+    except Exception as exc:
+        logger.warning("entity friction unavailable: %s", exc)
         items = []
-    return _silver_response(user_id, items)
+        degraded = True
+    return _silver_response(user_id, items, degraded=degraded)
 
 
 @router.get("/{user_id}/accounts")
@@ -1896,9 +1976,12 @@ async def get_entity_accounts(
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
             limit=limit,
         )
-    except Exception:
+        degraded = False
+    except Exception as exc:
+        logger.warning("entity accounts unavailable: %s", exc)
         items = []
-    return _silver_response(user_id, items)
+        degraded = True
+    return _silver_response(user_id, items, degraded=degraded)
 
 
 @router.get("/{user_id}/communications")
@@ -2039,9 +2122,12 @@ async def get_entity_integrations(
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
             limit=limit,
         )
-    except Exception:
+        degraded = False
+    except Exception as exc:
+        logger.warning("entity integrations unavailable: %s", exc)
         items = []
-    return _silver_response(user_id, items)
+        degraded = True
+    return _silver_response(user_id, items, degraded=degraded)
 
 
 @router.get("/{user_id}/data-quality")
@@ -2061,9 +2147,12 @@ async def get_entity_data_quality(
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
             limit=limit,
         )
-    except Exception:
+        degraded = False
+    except Exception as exc:
+        logger.warning("entity data-quality unavailable: %s", exc)
         items = []
-    return _silver_response(user_id, items)
+        degraded = True
+    return _silver_response(user_id, items, degraded=degraded)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

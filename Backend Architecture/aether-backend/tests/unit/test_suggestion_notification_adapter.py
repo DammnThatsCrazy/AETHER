@@ -67,6 +67,27 @@ def _make_approved_suggestion(suggestion_id: str = None, delivery_eligible: bool
     }
 
 
+def _make_repos(channels: list[dict] = None):
+    """Fake channel/intent/job repos for deliver_suggestion_via_notification.
+
+    Mirrors the durable DeliveryIntent/DeliveryJob seam the adapter actually
+    writes to — it never calls service.deliver_suggestion() directly (see
+    tests/integration/test_defect_regressions.py::test_d1_no_premature_deliver_suggestion_call).
+    """
+    channel_repo = MagicMock()
+    channel_repo.list_for_tenant = AsyncMock(
+        return_value=channels if channels is not None else [
+            {"channel_type": "slack", "destination": "#aether", "credentials_ref": "vault-key", "config": {}},
+        ]
+    )
+    intent_repo = MagicMock()
+    intent_repo.find_by_idempotency_key = AsyncMock(return_value=None)
+    intent_repo.insert = AsyncMock()
+    job_repo = MagicMock()
+    job_repo.insert = AsyncMock()
+    return channel_repo, intent_repo, job_repo
+
+
 # ---------------------------------------------------------------------------
 # create_suggestion_from_notification()
 # ---------------------------------------------------------------------------
@@ -181,14 +202,22 @@ def test_deliver_skips_if_not_delivery_eligible():
 
 
 def test_deliver_calls_deliver_suggestion_when_eligible():
+    # The adapter never transitions the suggestion itself — it enqueues a
+    # DeliveryIntent + DeliveryJob and leaves DELIVERED to DeliveryWorker
+    # once a ProviderReceipt confirms real delivery (see module docstring).
     suggestion = _make_approved_suggestion(delivery_eligible=True)
-    delivered = {**suggestion, "status": SuggestionStatus.DELIVERED.value}
     svc = MagicMock()
-    svc.deliver_suggestion = AsyncMock(return_value=delivered)
+    svc.deliver_suggestion = AsyncMock()
+    channel_repo, intent_repo, job_repo = _make_repos()
 
-    result = _run(deliver_suggestion_via_notification(suggestion, svc))
-    svc.deliver_suggestion.assert_called_once()
-    assert result["status"] == SuggestionStatus.DELIVERED.value
+    result = _run(deliver_suggestion_via_notification(
+        suggestion, svc, channel_repo=channel_repo, intent_repo=intent_repo, job_repo=job_repo,
+    ))
+
+    intent_repo.insert.assert_called_once()
+    job_repo.insert.assert_called_once()
+    svc.deliver_suggestion.assert_not_called()
+    assert result == suggestion
 
 
 def test_deliver_skips_if_policy_blocked():
@@ -204,12 +233,17 @@ def test_deliver_skips_if_policy_blocked():
 def test_deliver_proceeds_when_policy_allowed():
     suggestion = _make_approved_suggestion()
     suggestion["policy_decision"] = {"allowed": True}
-    delivered = {**suggestion, "status": SuggestionStatus.DELIVERED.value}
     svc = MagicMock()
-    svc.deliver_suggestion = AsyncMock(return_value=delivered)
+    svc.deliver_suggestion = AsyncMock()
+    channel_repo, intent_repo, job_repo = _make_repos()
 
-    result = _run(deliver_suggestion_via_notification(suggestion, svc))
-    svc.deliver_suggestion.assert_called_once()
+    result = _run(deliver_suggestion_via_notification(
+        suggestion, svc, channel_repo=channel_repo, intent_repo=intent_repo, job_repo=job_repo,
+    ))
+
+    intent_repo.insert.assert_called_once()
+    job_repo.insert.assert_called_once()
+    svc.deliver_suggestion.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

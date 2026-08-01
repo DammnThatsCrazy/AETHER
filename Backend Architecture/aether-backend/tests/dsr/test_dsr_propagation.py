@@ -41,7 +41,7 @@ async def test_open_request_creates_all_component_steps_pending():
     components = status["components"]
     # One step per §3.11 component, in the canonical order.
     assert [c["component"] for c in components] == list(DSR_COMPONENTS)
-    assert len(components) == 20
+    assert len(components) == 23
     assert all(c["status"] == "pending" for c in components)
     # A freshly-opened request rolls up to pending, never completed.
     assert status["overall"] == "pending"
@@ -134,7 +134,10 @@ async def test_blocked_step_makes_overall_blocked():
         tenant_id="t1", subject_ref="user:alice", dsr_type="erasure",
     )
     # Complete a couple, then block one.
-    await svc.mark_step(request_id, "identity_aliases", "completed", tenant_id="t1")
+    await svc.mark_step(
+        request_id, "identity_aliases", "completed", tenant_id="t1",
+        records_impacted=3,
+    )
     await svc.mark_step(request_id, "graph_edges", "running", tenant_id="t1")
     await svc.mark_step(
         request_id, "model_artifacts", "blocked", tenant_id="t1",
@@ -172,7 +175,10 @@ async def test_skipped_legal_hold_counts_as_resolved():
                 blocked_reason="", policy_decision_id="pol_hold",
             )
         else:
-            await svc.mark_step(request_id, component, "completed", tenant_id="t1")
+            await svc.mark_step(
+                request_id, component, "completed", tenant_id="t1",
+                records_impacted=0,
+            )
 
     status = await svc.status(request_id, tenant_id="t1")
     # All completed / skipped_legal_hold -> overall completed.
@@ -215,7 +221,10 @@ async def test_tenant_isolation_on_status_and_mark():
         await svc.status(request_id, tenant_id="t2")
     # Another tenant cannot mutate it.
     with pytest.raises(Exception):
-        await svc.mark_step(request_id, "exports", "completed", tenant_id="t2")
+        await svc.mark_step(
+            request_id, "exports", "completed", tenant_id="t2",
+            records_impacted=1,
+        )
     # And the record is untouched from t1's view.
     exports = [
         c for c in (await svc.status(request_id, tenant_id="t1"))["components"]
@@ -242,7 +251,13 @@ async def test_overall_status_helper_precedence():
 
 
 async def test_status_constants_match_spec():
-    assert len(DSR_COMPONENTS) == 20
+    assert len(DSR_COMPONENTS) == 23
+    # The three mobile-plane components are registered at the tail (order preserved).
+    assert DSR_COMPONENTS[-3:] == (
+        "continuation_records",
+        "mobile_installations",
+        "client_sync_records",
+    )
     assert set(DSR_PROPAGATION_STATUSES) == {
         "pending", "running", "completed", "blocked", "failed",
         "skipped_legal_hold", "requires_manual_review",
@@ -255,3 +270,29 @@ async def test_status_constants_match_spec():
 
 async def test_repository_table_name():
     assert DSRPropagationRepository().table_name == "dsr_propagation_records"
+
+
+# ── completion requires the component's own receipt ───────────────────────────
+
+async def test_completed_without_evidence_rejected():
+    """A bare 'completed' is a caller-asserted claim with nothing to audit —
+    the step must carry the component's own receipt (a count or an audit
+    pointer). Zero counts are valid evidence; absence is not."""
+    svc = _svc()
+    request_id = await svc.open_request(
+        tenant_id="t1", subject_ref="user:alice", dsr_type="erasure",
+    )
+    with pytest.raises(Exception, match="evidence"):
+        await svc.mark_step(request_id, "exports", "completed", tenant_id="t1")
+
+
+async def test_completed_with_zero_count_is_valid_evidence():
+    svc = _svc()
+    request_id = await svc.open_request(
+        tenant_id="t1", subject_ref="user:alice", dsr_type="erasure",
+    )
+    step = await svc.mark_step(
+        request_id, "exports", "completed", tenant_id="t1", records_impacted=0,
+    )
+    assert step["status"] == "completed"
+    assert step["records_impacted"] == 0

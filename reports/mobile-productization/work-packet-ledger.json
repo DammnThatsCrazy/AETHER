@@ -1,0 +1,57 @@
+{
+  "$comment": "Bounded work packets for C0-C4. Each packet lists objective, reuse targets, allowed paths, contracts/invariants, acceptance, and required tests. Specialists work from these + context-index.json without rescanning the repo.",
+  "schema_version": 1,
+  "base_sha": "78562ddae28de01ec0fe3c59e42bb357baaffb1f",
+  "packets": [
+    {
+      "phase_id": "C0",
+      "objective": "Reconciliation + orchestration control plane; no runtime behavior change.",
+      "existing_systems_to_reuse": ["docs/integration-control-plane/PROGRAM_STATE.yaml (ledger precedent)", "shared/credentials/ (referenced by credential contracts)"],
+      "allowed_paths": ["reports/mobile-productization/**", "config/credential_contracts.yaml", "docs/source-of-truth/MOBILE_PLATFORM.md"],
+      "invariants": ["flags default OFF", "no route/behavior change", "credential registry references, not duplicates, the credential platform"],
+      "acceptance_criteria": ["make ci-check green", "ledgers + credential registry present", "bump_version.py --check aligns", "regenerated docs committed"],
+      "required_tests": ["make docs-check", "make ci-check"]
+    },
+    {
+      "phase_id": "C1",
+      "objective": "Continuation plane + client-sync feed + contract twins (continuation, sync-event, deep-link).",
+      "existing_systems_to_reuse": ["shared/exploration/models.py", "services/exploration/store.py", "services/noesis/conversations.py", "services/runtime/specs.py", "repositories/repos.py (as a NON-fit — use direct SQL)"],
+      "allowed_paths": ["services/continuation/**", "shared/continuation/**", "services/client_sync/**", "shared/client_sync/**", "alembic/versions/20260820_continuation_plane.py", "alembic/versions/20260821_client_sync.py", "packages/shared/{continuation,sync-event,deep-link}.ts", "tests/contracts/test_{continuation_contract,sync_event_contract}_parity.py"],
+      "shared_paths_requiring_orchestrator": ["main.py", "config/settings.py", "services/runtime/specs.py", "packages/shared/index.ts", "config/storage_policies.yaml"],
+      "contracts": ["ContinuationContext (snake_case)", "SyncEvent + 10 change types", "DeepLink shape"],
+      "invariants": ["direct-SQL CAS via state_revision (409 on stale)", "idempotent create ON CONFLICT DO NOTHING", "t:/o: scope isolation, 404 not 403 on cross-scope", "no whole-graph storage", "single alembic head", "snake_case fields"],
+      "acceptance_criteria": ["desktop<->mobile context resumable", "stale updates rejected", "cross-tenant leak tests pass", "parity tests pass", "storage_policies entries added", "make ci-check green"],
+      "required_tests": ["test_continuation_contract_parity.py", "test_sync_event_contract_parity.py", "continuation concurrency/isolation tests", "make ci-check"]
+    },
+    {
+      "phase_id": "C2",
+      "objective": "Notification control-plane branding + TS twins + coverage registry + collision fix.",
+      "existing_systems_to_reuse": ["services/notification_intelligence/*", "services/delivery/models.py"],
+      "allowed_paths": ["packages/shared/{notification,delivery-receipt}.ts", "services/notification_intelligence/coverage.py", "tests/contracts/test_{notification_contract,delivery_receipt,route_prefix_uniqueness}_parity.py", "docs/source-of-truth/NOTIFICATION_CONTROL_PLANE.md"],
+      "shared_paths_requiring_orchestrator": ["main.py (unmount legacy notification router)", "packages/shared/index.ts", "Makefile"],
+      "invariants": ["single canonical inbox (notification_inbox)", "no zero-channel false success", "unknown stays unknown", "delivery Enum parity via {e.value for e in Enum}"],
+      "acceptance_criteria": ["route-prefix uniqueness test passes", "desktop/mobile share records", "make notification-check + ci-check green"],
+      "required_tests": ["test_route_prefix_uniqueness.py", "notification/delivery parity tests", "make ci-check"]
+    },
+    {
+      "phase_id": "C3",
+      "objective": "Push/email provider adapters + local fakes + installation/push model + deep-link resolve.",
+      "existing_systems_to_reuse": ["services/delivery/adapters/base.py", "shared/credentials/", "services/auth/sessions/", "services/kyber/devices/"],
+      "allowed_paths": ["services/delivery/adapters/{apns,fcm,web_push,email}.py", "services/mobile/**", "shared/mobile/**", "alembic/versions/20260822_mobile_installations.py", "packages/shared/{installation,mobile-config}.ts", "docs/source-of-truth/CREDENTIAL_ACTIVATION.md"],
+      "shared_paths_requiring_orchestrator": ["services/delivery/models.py (add DeliveryChannel.PUSH)", "services/delivery/adapters/base.py (register adapters)", "config/storage_policies.yaml", "Makefile", "config/credential_contracts.yaml"],
+      "invariants": ["provider-accepted != delivered", "fakes impossible in production (env/profile guard)", "push tokens encrypted+hashed, never logged", "revoked installations receive nothing"],
+      "acceptance_criteria": ["credentials configuration-only", "receipt-semantics tests pass", "retry/idempotency tests pass", "full ci-check gate green (checkpoint)"],
+      "required_tests": ["provider-fake + receipt tests", "installation revocation test", "make credentials-preflight", "make ci-check"]
+    },
+    {
+      "phase_id": "C4",
+      "objective": "Shared mobile platform + native security + compiling app shells + workspace/CI wiring.",
+      "existing_systems_to_reuse": ["packages/react-native (observation SDK — preserve)", "packages/shared (contracts)", "publish-sdk.yml / sdk-release-validation.yml (CI patterns)"],
+      "allowed_paths": ["apps/aether-mobile/**", "apps/kyber-mobile/**", "packages/mobile-*/**", "docs/source-of-truth/{AETHER_MOBILE,KYBER_MOBILE,MOBILE_COMPLIANCE,MOBILE_DISTRIBUTION,KYBER_MOBILE_COMMAND_SECURITY}.md"],
+      "shared_paths_requiring_orchestrator": ["package.json (workspaces)", "scripts/bump_version.py", "scripts/check_version_consistency.py", ".github/workflows/*", "Makefile"],
+      "invariants": ["no Kyber code in Aether binary", "distinct bundle ids/audiences/storage", "production bypass impossible", "compiling shells only — full screens are C5-C6"],
+      "acceptance_criteria": ["both apps compile for iOS-sim + Android-emulator", "root workspace green", "version/workspace consistency green", "make ci-check green"],
+      "required_tests": ["mobile-typecheck", "mobile-build-check", "make ci-check"]
+    }
+  ]
+}

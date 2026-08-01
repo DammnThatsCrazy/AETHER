@@ -1,0 +1,36 @@
+# =============================================================================
+# Aether — Migration Destructive-Change Allowlist
+#
+# Enforced by scripts/validate_migration_safety.py.
+#
+# A destructive operation in an Alembic revision's upgrade() body
+# (op.drop_column, op.drop_table, op.drop_constraint, op.rename_table, or a
+# op.alter_column(nullable=False) with no server_default) must be justified
+# one of two ways:
+#
+#   1. The revision declares an expand/contract pair:
+#
+#        MIGRATION_PHASE = "contract"
+#        EXPAND_REVISION = "<id of the earlier revision that expanded the
+#                            schema this one is now contracting>"
+#
+#      EXPAND_REVISION must name a real revision that is a genuine ancestor
+#      (found by walking down_revision links, including merge points), and
+#      may not be the revision's own id.
+#
+#   2. The revision predates the gate and is grandfathered here:
+#
+#        allowlist:
+#          - revision: "<revision id>"
+#            reason: "<why this destructive op shipped without an expand/
+#                      contract pair, and why it's safe to leave as-is>"
+#
+# As of the gate's introduction, a full AST scan of every upgrade() body in
+# Backend Architecture/aether-backend/alembic/versions found zero destructive
+# operations outside of downgrade() — so there is nothing to grandfather yet.
+# Do not add entries here to silence a real violation; fix the migration (or
+# give it a proper expand/contract declaration) instead.
+# =============================================================================
+
+version: 1
+allowlist: []

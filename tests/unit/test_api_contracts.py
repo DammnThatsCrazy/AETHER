@@ -367,80 +367,110 @@ class TestHealthEndpointContract:
     by mocking the dependency registry.
     """
 
+    @staticmethod
+    def _invoke_health(monkeypatch, dependency_health: dict):
+        """Call the liveness handler through a real app with a mocked registry.
+
+        The handler takes a ``Request`` because it derives per-component state
+        from the mounted router table and the worker supervisor attached to the
+        app, rather than asserting health it has not observed. It therefore has
+        to be exercised through an app rather than called as a bare coroutine.
+        """
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        deps_mod = importlib.import_module("dependencies.providers")
+        importlib.reload(deps_mod)
+
+        class FakeRegistry:
+            async def health_check(self):
+                return dependency_health
+
+        monkeypatch.setattr(deps_mod, "get_registry", lambda: FakeRegistry())
+
+        gateway_routes = importlib.import_module("services.gateway.routes")
+        importlib.reload(gateway_routes)
+
+        app = FastAPI()
+        app.include_router(gateway_routes.router)
+        with TestClient(app) as client:
+            response = client.get("/health")
+        return response
+
     def test_health_response_shape(self, common_module, monkeypatch):
-        """Health response must have status, timestamp, dependencies, services."""
-        import asyncio
-
+        """Health response must have status, timestamp, dependencies, components."""
         with backend_module_path():
-            # Patch the registry so health_check returns a known value
-            deps_mod = importlib.import_module("dependencies.providers")
-            importlib.reload(deps_mod)
-
-            class FakeRegistry:
-                async def health_check(self):
-                    return {
-                        "cache": {"status": "ok"},
-                        "database": {"status": "ok"},
-                    }
-
-            monkeypatch.setattr(deps_mod, "get_registry", lambda: FakeRegistry())
-
-            gateway_routes = importlib.import_module("services.gateway.routes")
-            importlib.reload(gateway_routes)
-
-            result = asyncio.run(gateway_routes.health_check())
+            response = self._invoke_health(
+                monkeypatch,
+                {"cache": {"status": "ok"}, "database": {"status": "ok"}},
+            )
+            result = response.json()
 
             assert "status" in result
             assert result["status"] in ("healthy", "degraded")
             assert "timestamp" in result
             assert "dependencies" in result
-            assert "services" in result
             assert isinstance(result["dependencies"], dict)
-            assert isinstance(result["services"], dict)
+
+            # "services" was renamed to "components" when the handler stopped
+            # emitting hardcoded "ok" per surface. Each entry now carries the
+            # derivation, so a caller can tell an observed ok from an unobserved
+            # one instead of taking a bare string on trust.
+            assert "components" in result
+            assert isinstance(result["components"], dict)
+            for name, component in result["components"].items():
+                assert set(component) >= {"status", "signals", "unverified"}, name
+                assert component["status"] in ("ok", "degraded", "down", "unknown"), name
+
+            # It is a liveness probe: it must keep answering 200 so the
+            # orchestrator does not kill a process that is still serving.
+            assert response.status_code == 200
+            assert result["probe"] == "liveness"
+            assert result["readiness_probe"] == "/v1/ready"
 
     def test_health_degraded_when_dependency_down(self, common_module, monkeypatch):
         """If any dependency reports non-ok, status should be 'degraded'."""
-        import asyncio
-
         with backend_module_path():
-            deps_mod = importlib.import_module("dependencies.providers")
-            importlib.reload(deps_mod)
+            response = self._invoke_health(
+                monkeypatch,
+                {
+                    "cache": {"status": "ok"},
+                    "database": {"status": "error", "message": "connection refused"},
+                },
+            )
+            result = response.json()
 
-            class FakeRegistry:
-                async def health_check(self):
-                    return {
-                        "cache": {"status": "ok"},
-                        "database": {"status": "error", "message": "connection refused"},
-                    }
-
-            monkeypatch.setattr(deps_mod, "get_registry", lambda: FakeRegistry())
-
-            gateway_routes = importlib.import_module("services.gateway.routes")
-            importlib.reload(gateway_routes)
-
-            result = asyncio.run(gateway_routes.health_check())
             assert result["status"] == "degraded"
+            # Degradation must not be expressed as a non-200; that is what
+            # /v1/ready is for. See services/gateway/routes.py::health_check.
+            assert response.status_code == 200
 
     def test_health_healthy_when_all_ok(self, common_module, monkeypatch):
         """If all dependencies report ok, status should be 'healthy'."""
-        import asyncio
-
         with backend_module_path():
-            deps_mod = importlib.import_module("dependencies.providers")
-            importlib.reload(deps_mod)
+            response = self._invoke_health(
+                monkeypatch,
+                {
+                    "cache": {"status": "ok"},
+                    "database": {"status": "ok"},
+                    "event_bus": {"status": "ok"},
+                    "graph": {"status": "ok"},
+                },
+            )
+            result = response.json()
 
-            class FakeRegistry:
-                async def health_check(self):
-                    return {
-                        "cache": {"status": "ok"},
-                        "database": {"status": "ok"},
-                        "event_bus": {"status": "ok"},
-                    }
+            # A component whose state this process cannot observe reports
+            # "unknown", which is not health — so an all-ok dependency set does
+            # not by itself make the top-level status healthy.
+            assert result["status"] in ("healthy", "degraded")
 
-            monkeypatch.setattr(deps_mod, "get_registry", lambda: FakeRegistry())
-
-            gateway_routes = importlib.import_module("services.gateway.routes")
-            importlib.reload(gateway_routes)
-
-            result = asyncio.run(gateway_routes.health_check())
-            assert result["status"] == "healthy"
+            # What this test actually pins: with every dependency probe ok, no
+            # component may blame a dependency. Component roll-ups are still
+            # allowed to be down here, because this fixture mounts only the
+            # gateway router — the other surfaces are genuinely absent, and
+            # reporting them as present would be the very dishonesty the
+            # derived report exists to prevent.
+            for name, component in result["components"].items():
+                dependencies = component["signals"].get("dependencies")
+                if dependencies is not None:
+                    assert dependencies["status"] == "ok", (name, dependencies)

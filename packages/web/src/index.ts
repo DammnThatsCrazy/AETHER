@@ -578,6 +578,7 @@ class AetherSDK implements AetherSDKInterface {
         location: false,
         economic_observability: false,
         cross_chain_observability: false,
+        fraud_prevention: false,
         updatedAt: '',
         policyVersion: '',
       };

@@ -56,13 +56,13 @@
       "source_globs": ["**/*profile360*", "**/*Profile360*", "**/*profile-360*"],
       "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**"],
       "required_commands": ["python scripts/validate_contracts.py", "npm run typecheck", "python -m pytest tests/ -v --tb=short"],
-      "remediation": "Update Profile 360 docs, frontend types, tests, and Kyber/SHIKI-adjacent surfaces where applicable."
+      "remediation": "Update Profile 360 docs, frontend types, tests, and Kyber-adjacent surfaces where applicable."
     },
     {
       "id": "kyber_operator",
       "name": "Kyber operator route/model changed",
       "source_globs": ["frontend/kyber/**", "Backend Architecture/**/*operator*", "Backend Architecture/**/*kyber*"],
-      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**"],
+      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**", "Backend Architecture/**/tests/**"],
       "required_commands": ["npm run typecheck", "npm run build", "python -m pytest tests/ -v --tb=short"],
       "remediation": "Update Kyber operator docs, frontend types, and route/model tests."
     },

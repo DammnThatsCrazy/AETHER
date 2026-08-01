@@ -117,3 +117,26 @@ release_thresholds:
   checksum_mismatch_count: 0
   dsr_partial_count: 0
   route_unknown_decision_count: 0
+  # An alert name with no numeric trigger behind it is a control nobody can
+  # page on. These three were declared under required_controls.alerts with
+  # nothing operationalizing them; the supervisor telemetry they read
+  # (services/runtime/supervisor.py::status) now publishes the signals, so the
+  # triggers below are measurable rather than aspirational.
+  #
+  # Consumer lag is a backlog depth, not a rate: a worker that is behind but
+  # draining is healthy, so this is set well above normal burst depth and is
+  # paired with the age threshold above, which is what catches a stalled
+  # consumer whose depth happens to look flat.
+  consumer_lag_messages: 5000
+  consumer_lag_age_seconds: 900
+  # Any dead-letter arrival is a message the platform accepted and could not
+  # process. Non-zero is a defect, distinct from dlq_growth_per_minute which
+  # catches an accelerating failure.
+  dlq_depth_count: 0
+  # A release-critical worker role that is failed, stopped, or whose heartbeat
+  # has not advanced within this window fails /v1/ready. Must equal
+  # HEARTBEAT_TIMEOUT_S in services/runtime/supervisor.py, which is what
+  # role_state() actually compares heartbeat_age_s against — if the alert and
+  # the probe disagree about what "stale" means, one of them is lying.
+  worker_readiness_stale_seconds: 60
+  worker_readiness_failed_roles: 0

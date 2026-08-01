@@ -36,6 +36,22 @@ REJECT_CONSENT_DENIED = "consent_denied"
 REJECT_CONSENT_REQUIRED = "consent_required"
 REJECT_EXECUTION_CLAIM = "execution_by_aether_must_be_false"
 REJECT_DEPLOYMENT_CONTEXT = "deployment_context_invalid"
+REJECT_ENVELOPE_MISSING = "envelope_missing"
+
+# Canonical envelope v1 fields (packages/shared/events.ts) that release-critical
+# events must carry when enforcement is on. Order matters: the wire rejection
+# reason names the FIRST missing field in this order
+# (`envelope_missing:<field>`); the full list lands in audit_metadata.
+ENVELOPE_REQUIRED_FIELDS = ("sequence", "schemaVersion", "surface")
+
+# Event families the founding release train actually projects — the families
+# consumed by config/founding_tenant_release.yaml's release_surface.consumers
+# (stream-ingestion-projection, identity-signal-emission,
+# graph-profile-projection, measurement-identity-restatement,
+# semantic-classification). Families in the release's excluded domains
+# (payments/derivatives/stablecoin/rewards/agent-execution/...) keep today's
+# metrics-only posture until their domain enters a release surface.
+RELEASE_CRITICAL_EVENT_FAMILIES = frozenset({"core", "journey", "identity", "consent"})
 
 _CANONICAL_ENTITY_KEYS = frozenset({"canonical_entity_id", "canonicalentityid"})
 _FINGERPRINT_KEYS = frozenset({
@@ -198,13 +214,24 @@ def build_normalized_payload(
 def format_rejection(result: EventValidationResult, sdk_event: Any) -> str:
     """Render the stable wire reason while keeping result fields structured."""
     code = result.reason_code or "validation_failed"
-    if result.required_purpose:
-        return f"{code}:{result.required_purpose}"
+    # Class-specific details must win over the generic purpose suffix: a
+    # deployment rejection also carries the event's required_purpose, and
+    # rendering that first told operators "deployment_context_invalid:analytics"
+    # instead of the actual cause (deployment_not_found, deployment_not_active,
+    # event_family_not_allowed).
     if code == REJECT_UNKNOWN_TYPE:
         return f"{code}:{sdk_event.type}"
     if code == REJECT_DEPLOYMENT_CONTEXT:
         detail = result.audit_metadata.get("deployment_reason")
         return f"{code}:{detail}" if detail else code
+    if code == REJECT_ENVELOPE_MISSING:
+        # Per-field reason: name the first missing envelope field (canonical
+        # ENVELOPE_REQUIRED_FIELDS order) rather than the generic purpose
+        # suffix; audit_metadata carries the complete missing list.
+        missing = result.audit_metadata.get("envelope_missing_fields") or []
+        return f"{code}:{missing[0]}" if missing else code
+    if result.required_purpose:
+        return f"{code}:{result.required_purpose}"
     return code
 
 
@@ -249,6 +276,31 @@ async def validate_event(
             "ingestion_validation_failed_total", labels={"reason": "execution_by_aether"}
         )
         return reject(REJECT_EXECUTION_CLAIM, purpose=None)
+
+    # ── Envelope required-field enforcement (staged, release-profile-driven) ──
+    # Default OFF in local/dev/integration (older SDK payloads stay accepted
+    # exactly as today), ON in staging/production via
+    # settings.ingestion_v2.envelope_required_fields_enforced. Applies only to
+    # release-critical event families; rejection reason is
+    # `envelope_missing:<field>` via format_rejection.
+    if (
+        settings.ingestion_v2.envelope_required_fields_enforced
+        and get_event_family(sdk_event.type) in RELEASE_CRITICAL_EVENT_FAMILIES
+    ):
+        missing_fields = [
+            field_name
+            for field_name in ENVELOPE_REQUIRED_FIELDS
+            if getattr(sdk_event.context, field_name, None) is None
+        ]
+        if missing_fields:
+            audit["envelope_missing_fields"] = missing_fields
+            metrics.increment(
+                "ingestion_validation_failed_total",
+                labels={"reason": "envelope_missing"},
+            )
+            # required_purpose stays on the result for audit; format_rejection
+            # renders the per-field reason before any purpose suffix.
+            return reject(REJECT_ENVELOPE_MISSING)
 
     properties, props_sensitive = scrub_sensitive_fields(sdk_event.properties or {})
     context_dict, context_sensitive = scrub_sensitive_fields(
@@ -388,7 +440,10 @@ async def validate_event(
 
 
 __all__ = [
+    "ENVELOPE_REQUIRED_FIELDS",
     "EventValidationResult",
+    "REJECT_ENVELOPE_MISSING",
+    "RELEASE_CRITICAL_EVENT_FAMILIES",
     "RequestPrivacySignals",
     "build_normalized_payload",
     "format_rejection",

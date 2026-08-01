@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from shared.common.common import (
     APIResponse, BadRequestError, NotFoundError,
@@ -43,11 +43,31 @@ _explorer = CampaignPopulationExplorer(
 )
 
 
+def _list_source_status(degraded: bool, items: list) -> str:
+    """Distinguish "the read failed" from "there is genuinely nothing".
+
+    These handlers catch broadly and substitute an empty list, which without a
+    status makes a broken read indistinguishable from an empty result. That is
+    how GET /v1/campaigns/mapping-reviews returned an empty 200 to every caller
+    for as long as its service call raised TypeError — the endpoint looked
+    healthy and simply reported no work to do.
+
+    Matches the vocabulary already used by the profile360 endpoints:
+    ``missing`` (not consulted), ``empty`` (consulted, nothing there),
+    ``available`` (consulted, has rows).
+    """
+    if degraded:
+        return "missing"
+    return "available" if items else "empty"
+
+
 # ── Request Models ───────────────────────────────────────────────────
 
 class CampaignCreate(BaseModel):
-    name: str
-    channel: str = Field(..., description="e.g. email, social, paid_search, organic")
+    # An unnamed campaign cannot be identified by an operator in any surface
+    # that lists it, so an empty name is rejected rather than stored.
+    name: str = Field(..., min_length=1)
+    channel: str = Field(..., min_length=1, description="e.g. email, social, paid_search, organic")
     start_date: str
     end_date: Optional[str] = None
     budget_usd: Optional[float] = None
@@ -150,8 +170,13 @@ async def create_campaign(
     tenant.require_permission("campaign:manage")
     campaign_id = str(uuid.uuid4())
     campaign = await _repo.insert(campaign_id, {
+        "campaign_id": campaign_id,
         "tenant_id": tenant.tenant_id,
         **body.model_dump(),
+        # Operator-created campaigns are always custom-origin: the registry
+        # contract distinguishes them from provider-synced (external) campaigns,
+        # and a record without the label breaks that distinction downstream.
+        "origin": "custom",
         "status": "active",
     })
     await producer.publish(Event(
@@ -927,14 +952,20 @@ async def list_external_refs(campaign_id: str, request: Request):
 
     try:
         from services.campaign.repository import ExternalRefRepository
+        refs_degraded = False
         ref_repo = ExternalRefRepository(None)
         refs = await ref_repo.list_for_campaign(tenant.tenant_id, campaign_id)
     except Exception as exc:
         logger.warning("external-refs unavailable: %s", exc)
         refs = []
+        refs_degraded = True
 
     metrics.increment("campaign_external_refs_read")
-    return APIResponse(data={"campaign_id": campaign_id, "items": refs}).to_dict()
+    return APIResponse(data={
+        "campaign_id": campaign_id,
+        "items": refs,
+        "source_status": _list_source_status(refs_degraded, refs),
+    }).to_dict()
 
 
 class AliasCreate(BaseModel):
@@ -955,14 +986,20 @@ async def list_aliases(campaign_id: str, request: Request):
 
     try:
         from services.campaign.repository import AliasRepository
+        aliases_degraded = False
         alias_repo = AliasRepository(None)
         aliases = await alias_repo.list_for_campaign(tenant.tenant_id, campaign_id)
     except Exception as exc:
         logger.warning("aliases unavailable: %s", exc)
         aliases = []
+        aliases_degraded = True
 
     metrics.increment("campaign_aliases_read")
-    return APIResponse(data={"campaign_id": campaign_id, "items": aliases}).to_dict()
+    return APIResponse(data={
+        "campaign_id": campaign_id,
+        "items": aliases,
+        "source_status": _list_source_status(aliases_degraded, aliases),
+    }).to_dict()
 
 
 @router.post("/{campaign_id}/aliases")
@@ -978,7 +1015,7 @@ async def add_alias(campaign_id: str, body: AliasCreate, request: Request):
             tenant_id=tenant.tenant_id,
             campaign_id=campaign_id,
             alias_type=body.alias_type,
-            value=body.alias_value,
+            alias_value=body.alias_value,
             platform=body.platform,
             external_account_id=body.external_account_id,
             source=body.source,
@@ -1017,7 +1054,10 @@ sources_router = APIRouter(prefix="/v1/campaign-sources", tags=["Campaign Source
 
 
 class CampaignSourceCreate(BaseModel):
-    platform: str
+    # A source with an empty platform cannot be routed to a connector or
+    # reconciled against provider truth, so it is rejected at the edge rather
+    # than persisted as an unusable row.
+    platform: str = Field(..., min_length=1)
     display_name: Optional[str] = None
     config: dict[str, Any] = Field(default_factory=dict)
 
@@ -1027,6 +1067,7 @@ async def list_campaign_sources(request: Request):
     """List all connected campaign sources for the tenant."""
     tenant = request.state.tenant
     tenant.require_permission("campaign:read")
+    sources_degraded = False
     try:
         from repositories.repos import get_pool
         pool = await get_pool()
@@ -1038,7 +1079,11 @@ async def list_campaign_sources(request: Request):
     except Exception as exc:
         logger.warning("campaign sources list failed: %s", exc)
         items = []
-    return APIResponse(data={"items": items}).to_dict()
+        sources_degraded = True
+    return APIResponse(data={
+        "items": items,
+        "source_status": _list_source_status(sources_degraded, items),
+    }).to_dict()
 
 
 @sources_router.post("")
@@ -1140,8 +1185,16 @@ mapping_router = APIRouter(prefix="/v1/mapping-review", tags=["Mapping Review"])
 
 
 class ReviewResolve(BaseModel):
+    # campaign_id is persisted as a UUID column; a malformed value is rejected
+    # at the edge instead of surfacing as a database error mid-resolution.
     campaign_id: str
     note: Optional[str] = None
+
+    @field_validator("campaign_id")
+    @classmethod
+    def _campaign_id_must_be_uuid(cls, value: str) -> str:
+        uuid.UUID(value)
+        return value
 
 
 class ReviewIgnore(BaseModel):
@@ -1158,6 +1211,7 @@ async def list_mapping_reviews(
     """List campaign mapping reviews."""
     tenant = request.state.tenant
     tenant.require_permission("campaign:read")
+    reviews_degraded = False
     try:
         registry = _get_registry()
         reviews = await registry.list_mapping_reviews(
@@ -1169,10 +1223,12 @@ async def list_mapping_reviews(
     except Exception as exc:
         logger.warning("mapping reviews unavailable: %s", exc)
         reviews = []
+        reviews_degraded = True
     next_cursor = reviews[-1].get("review_id") if len(reviews) == limit else None
     return APIResponse(data={
         "items": reviews,
         "pagination": {"limit": limit, "next_cursor": next_cursor, "has_more": next_cursor is not None},
+        "source_status": _list_source_status(reviews_degraded, reviews),
     }).to_dict()
 
 

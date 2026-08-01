@@ -116,7 +116,7 @@ class VerificationEngine:
 
         if prefer_facilitator:
             facilitator = await self._facilitators.get(tenant_id, authorization.facilitator_id)
-            if facilitator and facilitator.health_status == "healthy":
+            if facilitator and facilitator.health_status != "down":
                 verified, error = await self._verify_via_facilitator(
                     tenant_id, facilitator, authorization, tx_hash
                 )
@@ -178,6 +178,9 @@ class VerificationEngine:
         """Delegate to facilitator. Local facilitator verifies deterministically;
         external facilitators receive a real HTTP POST to their endpoint."""
         if facilitator.facilitator_id == "fac_local_aether":
+            await self._facilitators.update_health(
+                tenant_id, facilitator.facilitator_id, "healthy", success=True
+            )
             return True, None
 
         decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
@@ -218,17 +221,31 @@ class VerificationEngine:
             async with httpx.AsyncClient(timeout=_FACILITATOR_TIMEOUT_S) as client:
                 resp = await client.post(endpoint, json=body)
             if resp.status_code == 200:
+                # A 200 is a real verdict either way — the facilitator is
+                # reachable and functioning even when the payment is invalid.
+                await self._facilitators.update_health(
+                    tenant_id, facilitator.facilitator_id, "healthy", success=True
+                )
                 data = resp.json()
                 verified = bool(data.get("isValid", data.get("verified", False)))
                 error_msg: Optional[str] = (
                     data.get("invalidReason") or data.get("error")
                 ) if not verified else None
                 return verified, error_msg
+            await self._facilitators.update_health(
+                tenant_id, facilitator.facilitator_id, "degraded", success=False
+            )
             return False, f"facilitator returned HTTP {resp.status_code}"
         except httpx.TimeoutException:
+            await self._facilitators.update_health(
+                tenant_id, facilitator.facilitator_id, "down", success=False
+            )
             return False, f"facilitator {facilitator.facilitator_id} timed out"
         except Exception as exc:
             logger.warning(f"facilitator {facilitator.facilitator_id} call failed: {exc}")
+            await self._facilitators.update_health(
+                tenant_id, facilitator.facilitator_id, "down", success=False
+            )
             return False, f"facilitator unreachable: {exc}"
 
     async def _verify_locally(

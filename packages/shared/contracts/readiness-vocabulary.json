@@ -1,0 +1,280 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical, machine-readable readiness vocabulary for the Aether platform. This is the single source of truth for every readiness/capability token used by the certification plane (Python) and the presentation plane (TypeScript). It exists to end a real split-brain: Backend Architecture/aether-backend/shared/certification/readiness.py and frontend/shared/src/status/capability-state.ts previously defined overlapping-but-disagreeing vocabularies. Neither file is generated — both stay hand-written for ergonomics — but scripts/validate_readiness_vocabulary.py fails CI whenever the Python enum, the TypeScript union, this file, or packages/shared/contracts/evidence-manifest.schema.json disagree on membership, rank ordering, precedence ordering, or the production_ready-is-never-inferred rule.",
+  "bindings": {
+    "python": {
+      "path": "Backend Architecture/aether-backend/shared/certification/readiness.py",
+      "enum": "CredentialReadiness",
+      "rankTable": "_READINESS_RANK",
+      "inferenceFunction": "ReadinessDimensions._coarse_state",
+      "honestyValidator": "ReadinessDimensions._enforce_honesty",
+      "statusProjection": "IMPLEMENTATION_STATUS_TO_READINESS",
+      "statusEnum": {
+        "path": "Backend Architecture/aether-backend/services/integrations/connectors/base.py",
+        "enum": "ImplementationStatus"
+      }
+    },
+    "typescript": {
+      "path": "frontend/shared/src/status/capability-state.ts",
+      "union": "CapabilityState",
+      "members": "capabilityStates",
+      "precedence": "capabilityStatePrecedence"
+    },
+    "evidenceManifest": {
+      "path": "packages/shared/contracts/evidence-manifest.schema.json",
+      "certificationStateEnumPointer": "#/$defs/certificationState/enum"
+    }
+  },
+  "rules": {
+    "singleSource": "No component may define a readiness token that is absent from this file, and no token here may lack a binding to at least one consumer (Python enum member or TypeScript union literal). A token with neither is dead vocabulary and must be deleted.",
+    "rankScale": "Certification ranks are spaced by 10 so future intermediate states can be inserted without renumbering. Only relative order is contractual; no consumer may depend on the absolute integers.",
+    "offRampBelowProgression": "Every certification token with progression=false must rank strictly below every token with progression=true, so that a `readiness_rank(x) >= readiness_rank(CREDENTIAL_WAITING)` gate can never admit an off-ramp state.",
+    "inferableIsExhaustive": "The set of tokens with inferable=true must equal EXACTLY the set of tokens that ReadinessDimensions._coarse_state can return. Adding a return to that function without flipping the flag here fails the validator, and vice versa.",
+    "productionReadyNeverInferred": "production_ready must have inferable=false permanently. It is a claim backed by live validation plus security review (plus external audit where required), never a shape the code deduces. The validator asserts this literally, asserts CredentialReadiness.PRODUCTION_READY never appears in _coarse_state, and asserts the honesty validator refuses state=production_ready without the evidence-backed production_ready claim.",
+    "presentationIsNotCertification": "Tokens in category=presentation describe the freshness/health of a rendered read (stale, partial, error, connection_testing, entitlement and credential-entry states). They never appear in the certification ladder, carry rank=null, and must never be written into a certification record or an evidence manifest.",
+    "aliasUniqueness": "An alias must not collide with any token id or with any other token's alias. Aliases exist so a mandated release-plan spelling can resolve onto the token the running code already serialises.",
+    "releasePlanCoverage": "Every token in releasePlanVocabulary must resolve to exactly one token id or alias in this file."
+  },
+  "releasePlanVocabulary": [
+    "implemented",
+    "configured",
+    "credential_waiting",
+    "replay_validated",
+    "sandbox_validated",
+    "partner_live",
+    "production_ready",
+    "externally_blocked",
+    "disabled_intentionally",
+    "not_in_release"
+  ],
+  "progressionOrder": [
+    "mocked_local",
+    "scaffolded",
+    "implemented",
+    "configured",
+    "credential_waiting",
+    "replay_validated",
+    "sandbox_validated",
+    "partner_live",
+    "production_ready"
+  ],
+  "tokens": [
+    {
+      "id": "not_in_release",
+      "category": "certification",
+      "description": "Deliberately out of scope for the current release. The capability may exist in the tree but is not shipped, not certified, and not counted by the readiness scorecard.",
+      "rank": -40,
+      "progression": false,
+      "inferable": false,
+      "python": { "member": "NOT_IN_RELEASE", "value": "not_in_release" },
+      "typescript": null
+    },
+    {
+      "id": "disabled",
+      "category": "certification",
+      "description": "Turned off on purpose by an operator, a compliance hold, or a deprecation. An off-ramp state: it is not a stage on the way to live.",
+      "rank": -30,
+      "progression": false,
+      "inferable": false,
+      "aliases": ["disabled_intentionally"],
+      "python": { "member": "DISABLED", "value": "disabled" },
+      "typescript": { "literal": "disabled", "precedence": 10 }
+    },
+    {
+      "id": "externally_blocked",
+      "category": "certification",
+      "description": "Progress is blocked by a third party Aether does not control — partner onboarding, regulator sign-off, or an unfulfilled provider agreement. Distinct from credential_waiting, where the credential path is open and only propagation is pending.",
+      "rank": -20,
+      "progression": false,
+      "inferable": false,
+      "python": { "member": "EXTERNALLY_BLOCKED", "value": "externally_blocked" },
+      "typescript": null
+    },
+    {
+      "id": "degraded",
+      "category": "certification",
+      "description": "Previously working, now regressed: a dependency failed and the capability serves reduced or last-known data. An off-ramp state ranked below the progression so it can never satisfy an at-least-credential-waiting gate.",
+      "rank": -10,
+      "progression": false,
+      "inferable": false,
+      "python": { "member": "DEGRADED", "value": "degraded" },
+      "typescript": { "literal": "degraded", "precedence": 11 }
+    },
+    {
+      "id": "mocked_local",
+      "category": "certification",
+      "description": "Runs entirely against local fixtures with no provider dependency. Honest for development; never presentable as live.",
+      "rank": 0,
+      "progression": true,
+      "inferable": true,
+      "python": { "member": "MOCKED_LOCAL", "value": "mocked_local" },
+      "typescript": null
+    },
+    {
+      "id": "scaffolded",
+      "category": "certification",
+      "description": "Descriptor only: decode and execution paths are not implemented. The forbidden-for-first-release marker.",
+      "rank": 10,
+      "progression": true,
+      "inferable": true,
+      "python": { "member": "SCAFFOLDED", "value": "scaffolded" },
+      "typescript": null
+    },
+    {
+      "id": "implemented",
+      "category": "certification",
+      "description": "Adapter code is complete and exercised by tests, but no deployment infrastructure is declared for it yet. Claimed explicitly against code-review evidence; never inferred, because passing tests do not prove a deployable surface.",
+      "rank": 12,
+      "progression": true,
+      "inferable": false,
+      "python": { "member": "IMPLEMENTED", "value": "implemented" },
+      "typescript": null
+    },
+    {
+      "id": "configured",
+      "category": "certification",
+      "description": "Code complete and deployment infrastructure declared, but no credential has been supplied. Claimed explicitly against an infrastructure review; never inferred. Deliberately has no TypeScript binding: the presentation layer already binds the bare string 'configured' to partner_live for PaymentProviderAccount.status, so a certification-plane 'configured' must never be handed to resolveCapabilityState as a raw string.",
+      "rank": 15,
+      "progression": true,
+      "inferable": false,
+      "python": { "member": "CONFIGURED", "value": "configured" },
+      "typescript": null
+    },
+    {
+      "id": "credential_waiting",
+      "category": "certification",
+      "description": "Everything Aether controls is done; the capability is waiting on a credential to be issued, accepted, or propagated. The honest ceiling for a credentialless release.",
+      "rank": 20,
+      "progression": true,
+      "inferable": true,
+      "python": { "member": "CREDENTIAL_WAITING", "value": "credential_waiting" },
+      "typescript": { "literal": "credential_waiting", "precedence": 5 }
+    },
+    {
+      "id": "replay_validated",
+      "category": "certification",
+      "description": "Verified end to end against recorded/replayed provider traffic. Proves decode and mapping correctness; proves nothing about the live provider.",
+      "rank": 30,
+      "progression": true,
+      "inferable": true,
+      "python": { "member": "REPLAY_VALIDATED", "value": "replay_validated" },
+      "typescript": { "literal": "replay_validated", "precedence": 2 }
+    },
+    {
+      "id": "sandbox_validated",
+      "category": "certification",
+      "description": "Verified end to end in the provider's sandbox with real credentials. Still not production: sandbox data, sandbox limits, sandbox failure modes.",
+      "rank": 40,
+      "progression": true,
+      "inferable": true,
+      "python": { "member": "SANDBOX_VALIDATED", "value": "sandbox_validated" },
+      "typescript": { "literal": "sandbox_validated", "precedence": 1 }
+    },
+    {
+      "id": "partner_live",
+      "category": "certification",
+      "description": "Executing against the production provider with production credentials. The highest state reachable by inference from evidence.",
+      "rank": 50,
+      "progression": true,
+      "inferable": true,
+      "python": { "member": "PARTNER_LIVE", "value": "partner_live" },
+      "typescript": { "literal": "partner_live", "precedence": 0 }
+    },
+    {
+      "id": "production_ready",
+      "category": "certification",
+      "description": "Live-validated AND security-reviewed AND (where the provider requires it) externally audited. This is a human-backed claim, not a computed shape. It is the only certification token that is structurally unreachable by design.",
+      "rank": 60,
+      "progression": true,
+      "inferable": false,
+      "guard": {
+        "pythonValidator": "ReadinessDimensions._enforce_honesty",
+        "rule": "state == CredentialReadiness.PRODUCTION_READY is rejected unless the evidence-backed production_ready claim is set, which in turn requires live_validated and security_reviewed (and externally_audited when requires_external_audit is set)."
+      },
+      "python": { "member": "PRODUCTION_READY", "value": "production_ready" },
+      "typescript": null
+    },
+    {
+      "id": "not_entitled",
+      "category": "presentation",
+      "description": "The tenant's plan or entitlement does not include this capability. A billing fact, not a build state.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "not_entitled", "precedence": 9 }
+    },
+    {
+      "id": "not_configured",
+      "category": "presentation",
+      "description": "No credentials or configuration have been supplied for this tenant yet.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "not_configured", "precedence": 8 }
+    },
+    {
+      "id": "credential_required",
+      "category": "presentation",
+      "description": "Configuration is present but provider credentials are still needed from the tenant. Requires user action.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "credential_required", "precedence": 7 }
+    },
+    {
+      "id": "credential_invalid",
+      "category": "presentation",
+      "description": "The provider rejected the supplied credentials.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "credential_invalid", "precedence": 12 }
+    },
+    {
+      "id": "connection_testing",
+      "category": "presentation",
+      "description": "A connection probe against the provider is in flight. Transient.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "connection_testing", "precedence": 6 }
+    },
+    {
+      "id": "stale",
+      "category": "presentation",
+      "description": "Data is present but older than its freshness SLA.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "stale", "precedence": 4 }
+    },
+    {
+      "id": "partial",
+      "category": "presentation",
+      "description": "Some expected inputs are present, not all.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "partial", "precedence": 3 }
+    },
+    {
+      "id": "error",
+      "category": "presentation",
+      "description": "The capability read failed.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "error", "precedence": 13 }
+    },
+    {
+      "id": "kill_switch_active",
+      "category": "presentation",
+      "description": "The capability is halted by an active kill switch.",
+      "rank": null,
+      "inferable": false,
+      "python": null,
+      "typescript": { "literal": "kill_switch_active", "precedence": 14 }
+    }
+  ]
+}

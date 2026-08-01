@@ -1,16 +1,31 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, useTimeContext } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, formatDateTime, resolveCapabilityState, useTimeContext, type CapabilityState } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 import { ConnectorConfigModal } from './connector-config-modal';
 
 type AnyRecord = Record<string, any>;
 
-const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
-  healthy: 'success', syncing: 'warning', degraded: 'warning', failed: 'danger',
-  disabled: 'default', never_synced: 'default',
-  error: 'danger', rate_limited: 'warning', permission_missing: 'warning',
-  revoked: 'danger', credentials_invalid: 'danger', credentials_missing: 'default',
-};
+// Honest capability-state for a connector row. Availability gates win first, then
+// the raw sync_status maps onto the canonical CapabilityState matrix. Nothing that
+// is not actually live may read green.
+function connectorCapabilityState(c: AnyRecord): CapabilityState {
+  if (!c.enabled) return 'disabled';
+  if (!c.secret_configured) return 'not_configured';
+  switch (String(c.sync_status)) {
+    case 'healthy': return 'partner_live';
+    case 'syncing': return 'connection_testing';
+    case 'degraded': return 'degraded';
+    case 'failed': return 'error';
+    case 'error': return 'error';
+    case 'rate_limited': return 'stale';
+    case 'permission_missing': return 'credential_required';
+    case 'revoked': return 'credential_invalid';
+    case 'credentials_invalid': return 'credential_invalid';
+    case 'credentials_missing': return 'not_configured';
+    case 'never_synced': return 'credential_waiting';
+    default: return resolveCapabilityState(String(c.sync_status)) ?? 'unavailable';
+  }
+}
 
 function healthLabel(c: AnyRecord): string {
   if (!c.enabled) return 'Disabled';
@@ -76,9 +91,11 @@ export function ConnectorsPage() {
                     </div>
                     <div className="flex items-center gap-2 ml-2 shrink-0">
                       <div className="text-right">
-                        <Badge variant={(!c.enabled || !c.secret_configured) ? 'default' : (STATUS_VARIANT[c.sync_status as string] ?? 'default')}>
-                          {healthLabel(c)}
-                        </Badge>
+                        <CapabilityStateBadge
+                          state={connectorCapabilityState(c)}
+                          label={healthLabel(c)}
+                          reason={c.last_error_message ?? undefined}
+                        />
                         {c.last_sync_at && (
                           <div className="text-xs text-text-muted mt-0.5">
                             {formatDateTime(c.last_sync_at as string, timeCtx)}

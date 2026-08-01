@@ -1,0 +1,68 @@
+{
+  "$schema": "aether/play-data-safety/v1",
+  "app": {
+    "app_kind": "aether",
+    "name": "Aether",
+    "package_name": "com.aether.mobile"
+  },
+  "collected_data": [
+    {
+      "classification": "confidential",
+      "collected": true,
+      "consent_purpose": "analytics",
+      "field": "continuation_activity",
+      "linked_to_identity": true,
+      "play_category": "App activity",
+      "play_data_type": "App interactions",
+      "processing_is_optional": false,
+      "purposes": [
+        "App functionality"
+      ],
+      "shared": false,
+      "used_for_tracking": false
+    },
+    {
+      "classification": "confidential",
+      "collected": true,
+      "consent_purpose": "analytics",
+      "field": "device_installation_id",
+      "linked_to_identity": true,
+      "play_category": "Device or other IDs",
+      "play_data_type": "Device or other IDs",
+      "processing_is_optional": false,
+      "purposes": [
+        "App functionality"
+      ],
+      "shared": false,
+      "used_for_tracking": false
+    },
+    {
+      "classification": "confidential",
+      "collected": true,
+      "consent_purpose": "analytics",
+      "field": "push_token",
+      "linked_to_identity": true,
+      "play_category": "Device or other IDs",
+      "play_data_type": "Device or other IDs",
+      "processing_is_optional": false,
+      "purposes": [
+        "App functionality"
+      ],
+      "shared": false,
+      "used_for_tracking": false
+    }
+  ],
+  "data_collection": {
+    "collects_data": true,
+    "shares_data": false
+  },
+  "generated_by": "scripts/generate_privacy_manifests.py",
+  "security_practices": {
+    "committed_to_play_families_policy": true,
+    "data_encrypted_in_transit": true,
+    "deletion_mechanism": "In-app account deletion / DSR erasure request; deletion follows each purpose's dsrDeleteScope in the consent registry.",
+    "independent_security_review": false,
+    "user_can_request_data_deletion": true
+  },
+  "source_declaration": "apps/aether-mobile/privacy-data-flows.yaml"
+}
