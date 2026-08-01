@@ -17,6 +17,29 @@ from typing import Any
 import pytest
 
 
+_SLACK_SECRET = "test-slack-signing-secret"
+
+
+def _signed_slack_record(body: str) -> dict:
+    """Headers + secret that pass the processor's real v0 HMAC verification."""
+    import hashlib
+    import hmac
+    import time
+
+    ts = str(int(time.time()))
+    sig = "v0=" + hmac.new(
+        _SLACK_SECRET.encode(), f"v0:{ts}:{body}".encode(), hashlib.sha256
+    ).hexdigest()
+    return {
+        "signing_secret": _SLACK_SECRET,
+        "headers": {
+            "content-type": "application/x-www-form-urlencoded",
+            "x-slack-request-timestamp": ts,
+            "x-slack-signature": sig,
+        },
+    }
+
+
 # ─── Minimal in-memory repo ─────────────────────────────────────────────────
 
 class _MemRepo:
@@ -49,6 +72,19 @@ class _MemRepo:
             self._store[record_id]["processed"] = True
             if error:
                 self._store[record_id]["processing_error"] = error
+
+    async def claim_pending(self, limit: int = 20) -> list[dict]:
+        # Mirrors WebhookInboxRepository.claim_pending's in-memory predicate:
+        # skip processed/processing rows, mark claimed rows as processing.
+        results = []
+        for record in self._store.values():
+            if record.get("processed") or record.get("processing"):
+                continue
+            record["processing"] = True
+            results.append(dict(record))
+            if len(results) >= limit:
+                break
+        return results
 
 
 class _SuggestionRepo:
@@ -111,7 +147,7 @@ async def test_slack_outcome_loop_full():
         "id": inbox_id,
         "tenant_id": tenant_id,
         "provider": "slack",
-        "headers": {"content-type": "application/x-www-form-urlencoded"},
+        **_signed_slack_record(encoded_body),
         "raw_body": encoded_body,
         "signature": "",
         "timestamp": "",
@@ -217,7 +253,7 @@ async def test_slack_loop_prevention_aether_origin():
         "id": inbox_id,
         "tenant_id": "t1",
         "provider": "slack",
-        "headers": {},
+        **_signed_slack_record(encoded),
         "raw_body": encoded,
         "processed": False,
     })
