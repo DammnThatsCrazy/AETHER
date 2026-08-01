@@ -57,3 +57,6 @@ export {
   isPushProvider,
   isSyncEvent,
 } from './validate';
+
+export type { CryptoProvider, PkcePair, SecureStore } from './auth';
+export { createPkcePair, SecureStoreAuthProvider } from './auth';
