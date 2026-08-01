@@ -62,7 +62,7 @@
       "id": "kyber_operator",
       "name": "Kyber operator route/model changed",
       "source_globs": ["frontend/kyber/**", "Backend Architecture/**/*operator*", "Backend Architecture/**/*kyber*"],
-      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**"],
+      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**", "Backend Architecture/**/tests/**"],
       "required_commands": ["npm run typecheck", "npm run build", "python -m pytest tests/ -v --tb=short"],
       "remediation": "Update Kyber operator docs, frontend types, and route/model tests."
     },
