@@ -241,7 +241,24 @@ async def emit_notification(body: EmitNotificationRequest, request: Request):
                       labels={"tenant_id": body.tenant_id,
                               "severity": body.severity.value,
                               "source_topic": body.source_topic})
+    # Producer-coverage heartbeat (additive, never affects emission): stamp the
+    # producer's last-emit, keyed by the top-level source_service/topic segment.
+    try:
+        from services.notification_intelligence.coverage import record_producer_emit
+        record_producer_emit((body.source_service or body.source_topic or "").split(".")[0])
+    except Exception:  # noqa: BLE001 — coverage is observability, never a failure path
+        pass
     return APIResponse(data=result).to_dict()
+
+
+@router.get("/coverage")
+async def producer_coverage(request: Request):
+    """Producer-coverage report for the notification plane. Honest states — never
+    'healthy' without a declared baseline, and a silent producer is surfaced as
+    unavailable/unknown rather than read as all-quiet-all-well."""
+    request.state.tenant.require_permission("read")
+    from services.notification_intelligence.coverage import build_coverage_report
+    return APIResponse(data=build_coverage_report().to_dict()).to_dict()
 
 
 @router.get("/intelligence")
