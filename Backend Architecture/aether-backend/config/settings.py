@@ -1215,6 +1215,16 @@ class PaymentRailsConfig:
     usage_metering_enabled: bool = _env_bool(
         "AETHER_PAYMENT_USAGE_METERING_ENABLED", False
     )
+    # Credential-authority-backed secret resolution (default OFF, opt-in). When
+    # enabled, payment-rail adapters resolve their webhook_signing_secret ONLY
+    # from the durable multi-slot CredentialAuthority (active + rotation-overlap
+    # previous, NO in-memory vault fallback); default-OFF preserves the legacy
+    # BYOKKeyVault read byte-for-byte until the cutover is proven. First step of
+    # retiring the in-memory BYOKKeyVault (polling-slot resolution + vault removal
+    # + default-on flip remain the sequenced follow-up).
+    credential_authority_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)

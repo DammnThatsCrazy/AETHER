@@ -1682,11 +1682,14 @@ items:
     affected_paths:
       - "Backend Architecture/aether-backend/shared/providers/key_vault.py"
       - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
+      - "Backend Architecture/aether-backend/config/settings.py"
     tests_required: ["tests/payment_rails/test_credential_read_path.py"]
-    evidence_required: ["adapters resolve slot-aware secrets from the authority; no in-memory credential store remains"]
+    evidence_required:
+      - "adapters resolve slot-aware secrets from the authority; no in-memory credential store remains"
+      - "PR-A (dormant, default OFF: AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED): payment-rail adapters resolve their webhook_signing_secret via PaymentRailAdapter._resolve_signing_secrets — flag-ON reads ONLY from CredentialAuthority.get_verification_secrets (active + rotation-overlap previous, NO vault fallback; an unconfigured slot yields an empty list so verify_webhook fails closed), flag-OFF preserves the legacy single BYOKKeyVault read byte-for-byte (every pinned vault/adapter contract stays green). verify_webhook now accepts a match against any resolved secret, so a rotation verifies a signature from either the new active or the still-valid previous. BYOKKeyVault is docstring-deprecated (no runtime change). NOT YET DONE: polling-slot (API-key/endpoint) resolution from the authority, the actual in-memory vault removal, per-request environment threading (flag-ON derives environment from process-global AETHER_ENV), and the default-on flip — so 'no in-memory credential store remains' is explicitly not yet satisfied"
     docs_required: []
     owner: financial
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [FIN-CRED-1-AUTHORITY]
     exception: null
     last_verified_commit: null
