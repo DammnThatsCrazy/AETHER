@@ -47,3 +47,12 @@ async def read(scope_key: str, cursor: Optional[str], limit: int = 200) -> dict:
         has_more=len(events) == limit,
         reset=False,
     ).model_dump(mode="json")
+
+
+async def erase_principal(scope: str, principal_id: str) -> int:
+    """DSR hook — remove every sync_change_log row for a subject.
+
+    The per-scope cursor counter is deliberately preserved (see the repository)
+    so the scope's monotonic sequence never rewinds after an erasure.
+    """
+    return await get_client_sync_repository().delete_by_principal(scope, principal_id)

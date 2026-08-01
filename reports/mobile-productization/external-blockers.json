@@ -65,7 +65,7 @@
     "signing certs + provisioning profiles",
     "App Store Connect app records"
    ],
-   "implementation_status": "distribution pipeline definition is C8 (staged); iOS simulator compile is C4 and does NOT require signing",
+   "implementation_status": "PrivacyInfo.xcprivacy generated per app (not yet signed/uploaded); signing + submission need the Apple Developer Program account.",
    "activation": "provision certs/profiles; configure App Store Connect; run signing pipeline",
    "evidence_required": "signed .ipa + TestFlight upload"
   },
@@ -79,7 +79,7 @@
     "upload/app-signing keys",
     "Play app records"
    ],
-   "implementation_status": "distribution pipeline definition is C8 (staged); Android emulator compile is C4 and does NOT require store signing",
+   "implementation_status": "data-safety.json generated per app (not yet uploaded); signing + submission need the Google Play Console account.",
    "activation": "configure signing keys; configure Play tracks; run signing pipeline",
    "evidence_required": "signed AAB + Play internal-track upload"
   },
@@ -135,7 +135,7 @@
     "Google Play Console",
     "signing credentials (apple_signing/google_play_signing)"
    ],
-   "implementation_status": "distribution pipeline is C8 (staged, not built this session)",
+   "implementation_status": "privacy artifacts DONE: generated Apple Privacy Manifest + Play Data Safety per app (scripts/generate_privacy_manifests.py, make privacy-manifest-check), drift-gated. Mobile DSR erasure end-to-end DONE. Distribution pipeline (signing + upload) is C8-remaining/staged.",
    "activation": "C8: signing + upload pipelines; out of this session scope",
    "evidence_required": "internal build available on TestFlight and Play internal track"
   }
