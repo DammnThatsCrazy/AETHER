@@ -5713,6 +5713,19 @@
       "canonical_owner": "platform-intelligence@aether"
     },
     {
+      "path": "docs/source-of-truth/AETHER_MOBILE.md",
+      "title": "Aether Mobile — App Architecture",
+      "slug": "mobile/aether-app",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "mobile",
+        "security"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md",
       "title": "AI and Agent Referral Attribution Source of Truth",
       "status": "stable"
@@ -6197,6 +6210,19 @@
         "ops"
       ],
       "status": "beta"
+    },
+    {
+      "path": "docs/source-of-truth/KYBER_MOBILE.md",
+      "title": "Kyber Mobile — App Architecture",
+      "slug": "mobile/kyber-app",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "mobile",
+        "security"
+      ],
+      "status": "alpha"
     },
     {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
