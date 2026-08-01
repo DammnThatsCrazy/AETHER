@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Kyber",
+    "slug": "kyber-mobile",
+    "scheme": "kyber",
+    "version": "8.12.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.aether.kyber",
+      "supportsTablet": false,
+      "associatedDomains": ["applinks:operator.aether.example"]
+    },
+    "android": {
+      "package": "com.aether.kyber",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "operator.aether.example" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": ["expo-secure-store"],
+    "extra": {
+      "appKind": "kyber"
+    }
+  }
+}

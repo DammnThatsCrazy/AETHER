@@ -1,0 +1,70 @@
+{
+  "schema": "aether.mobile-sdk-inventory/v1",
+  "note": "Machine-readable inventory of the mobile SDK packages, apps, and their permission/capability posture. Seed for `make mobile-security-check`. Hand-maintained per landing; not generated.",
+  "platform_version": "8.12.0",
+  "packages": [
+    {
+      "name": "@aether/mobile-core",
+      "path": "packages/mobile-core",
+      "kind": "shared_sdk",
+      "platform_agnostic": true,
+      "native_dependencies": [],
+      "dependencies": ["@aether/shared"],
+      "capabilities": [
+        "typed_api_client",
+        "pkce_auth_s256",
+        "secure_store_interface",
+        "installation_push_registration",
+        "deep_link_resolution",
+        "continuation_client",
+        "client_sync_client",
+        "runtime_contract_guards"
+      ],
+      "injected_by_host": ["fetch", "auth_token", "crypto", "secure_store"],
+      "verified_in_ci": ["typecheck", "unit_tests"]
+    }
+  ],
+  "apps": [
+    {
+      "name": "@aether/aether-mobile",
+      "path": "apps/aether-mobile",
+      "product_plane": "aether",
+      "bundle_id": "com.aether.mobile",
+      "scheme": "aether",
+      "auth_audience": "tenant",
+      "consumes": ["@aether/mobile-core"],
+      "declared_native_permissions": ["push_notifications", "secure_storage"],
+      "native_build_status": "externally_blocked",
+      "native_build_requires": ["macos", "xcode", "android_sdk", "expo_toolchain"],
+      "verified_here": ["scaffold_invariants", "distinct_plane_bundle"],
+      "feature_surfaces_status": "shell_only_c4 (Today/Copilot/Explore/... are C5-C7)"
+    },
+    {
+      "name": "@aether/kyber-mobile",
+      "path": "apps/kyber-mobile",
+      "product_plane": "kyber",
+      "bundle_id": "com.aether.kyber",
+      "scheme": "kyber",
+      "auth_audience": "workforce",
+      "consumes": ["@aether/mobile-core"],
+      "declared_native_permissions": ["push_notifications", "secure_storage"],
+      "native_build_status": "externally_blocked",
+      "native_build_requires": ["macos", "xcode", "android_sdk", "expo_toolchain"],
+      "verified_here": ["scaffold_invariants", "distinct_plane_bundle"],
+      "feature_surfaces_status": "shell_only_c4 (Pulse/Exceptions/Incidents/... are C5-C7)",
+      "governed_actions_status": "deferred_c5_c7 (reuse Kyber command plane; no new mutation channel)"
+    }
+  ],
+  "isolation_invariants": [
+    "distinct bundle ids per app (enforced by scripts/mobile_build_check.py)",
+    "distinct product planes per app (aether tenant vs kyber workforce)",
+    "no Aether tenant code in the Kyber binary and vice-versa",
+    "an Aether token cannot call Kyber (separate audiences)",
+    "push token / deep link / continuation id are not authorization",
+    "raw push tokens and access tokens are never logged; only token_hash is stored server-side"
+  ],
+  "externally_blocked": [
+    "native iOS-simulator / Android-emulator compile (no macOS/Xcode/Android SDK/Expo in the Linux CI container)",
+    "store distribution (TestFlight / Play internal track) — C8, staged"
+  ]
+}

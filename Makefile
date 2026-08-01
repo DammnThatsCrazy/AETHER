@@ -403,6 +403,9 @@ mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
 mobile-test: ## CI gate — unit tests for the mobile SDK packages
 	npm run test --workspace=packages/mobile-core --if-present
 
+mobile-build-check: ## Mobile app scaffold invariants + honest native-build posture (report; exit 0 unless a scaffold is broken)
+	python scripts/mobile_build_check.py
+
 mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Python contract parity
 	python -m pytest tests/contracts/test_continuation_contract_parity.py \
 		tests/contracts/test_sync_event_contract_parity.py \
