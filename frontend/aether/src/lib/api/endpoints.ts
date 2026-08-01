@@ -140,7 +140,7 @@ const paginationSchema = z.object({
   has_more: z.boolean(),
 });
 
-const customerWebhookSchema = z.object({
+const customerWebhookReadSchema = z.object({
   id: z.string(),
   tenant_id: z.string(),
   url: z.string(),
@@ -149,11 +149,14 @@ const customerWebhookSchema = z.object({
   secret_configured: z.boolean(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
-  secret: z.string().optional(),
+});
+
+const customerWebhookCreateResponseSchema = customerWebhookReadSchema.extend({
+  secret: z.string(),
 });
 
 const webhookPageSchema = z.object({
-  webhooks: z.array(customerWebhookSchema),
+  webhooks: z.array(customerWebhookReadSchema),
   pagination: paginationSchema,
 });
 
@@ -220,7 +223,8 @@ export type CustomerInvoice = z.infer<typeof invoiceSchema>;
 export type OrganizationProfile = z.infer<typeof organizationProfileSchema>;
 export type OrganizationMember = z.infer<typeof organizationMemberSchema>;
 export type OrganizationInvitation = z.infer<typeof organizationInvitationSchema>;
-export type CustomerWebhook = z.infer<typeof customerWebhookSchema>;
+export type CustomerWebhook = z.infer<typeof customerWebhookReadSchema>;
+export type CustomerWebhookCreated = z.infer<typeof customerWebhookCreateResponseSchema>;
 export type CustomerWebhookPage = z.infer<typeof webhookPageSchema>;
 export type CustomerWebhookTestResult = z.infer<typeof webhookTestResultSchema>;
 export type AccountDeletionWorkflow = z.infer<typeof deletionWorkflowSchema>;
@@ -1369,7 +1373,7 @@ export const api = {
 
     /** Register a new webhook; the signing secret is returned only once. */
     createWebhook: (body: { url: string; events: string[]; secret?: string; active?: boolean }) =>
-      restClient.post('/v1/notifications/webhooks', wrap(customerWebhookSchema), body).then(r => r.data),
+      restClient.post('/v1/notifications/webhooks', wrap(customerWebhookCreateResponseSchema), body).then(r => r.data),
 
     /** List all alert rules for this tenant. */
     alerts: (tenantId: string, limit = 50) =>

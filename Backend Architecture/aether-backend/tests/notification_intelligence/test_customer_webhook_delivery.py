@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import httpx
@@ -11,7 +13,10 @@ from services.notification_intelligence.customer_webhook_delivery import (
     CustomerWebhookDeliveryRepository,
     CustomerWebhookDeliveryService,
     CustomerWebhookSecretStore,
+    IN_FLIGHT_RECOVERY_SECONDS,
+    ProviderUnavailableError,
     ResolvedDestination,
+    WebhookDeliveryOutcome,
     WebhookPolicyError,
     make_idempotency_key,
     redact_webhook_record,
@@ -39,6 +44,7 @@ def test_secret_is_write_only_in_webhook_response():
         "url": "https://example.com/hook",
         "secret_ref": "customer_webhook:tenant-a:wh-1",
         "secret_hash": "hash-only",
+        "encrypted_api_key": "ciphertext",
         "secret": "never-return-this",
     }
 
@@ -48,10 +54,12 @@ def test_secret_is_write_only_in_webhook_response():
     assert "secret" not in response
     assert "secret_ref" not in response
     assert "secret_hash" not in response
+    assert "encrypted_api_key" not in response
 
 
 @pytest.mark.asyncio
-async def test_secret_store_returns_reference_and_hash_only():
+async def test_secret_store_returns_reference_and_hash_only(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "local")
     class ProviderDouble:
         def __init__(self):
             self.rows = {}
@@ -69,10 +77,32 @@ async def test_secret_store_returns_reference_and_hash_only():
 
     assert record["secret_ref"] == "customer_webhook:tenant-a:wh-1"
     assert "write-only-secret" not in record
-    assert providers.rows[record["secret_ref"]]["api_key"] == "write-only-secret"
+    stored = providers.rows[record["secret_ref"]]
+    assert stored["encrypted_api_key"] != "write-only-secret"
+    assert stored.get("api_key") is None
     assert await store.resolve("tenant-a", record["secret_ref"]) == "write-only-secret"
     with pytest.raises(RuntimeError, match="unavailable"):
         await store.resolve("tenant-b", record["secret_ref"])
+
+
+def test_secret_store_fails_closed_without_non_local_encryption_key(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "production")
+    monkeypatch.delenv("BYOK_ENCRYPTION_KEY", raising=False)
+    with pytest.raises(ProviderUnavailableError):
+        CustomerWebhookSecretStore(object())._get_cipher()
+
+
+@pytest.mark.asyncio
+async def test_legacy_raw_provider_secret_is_not_read_in_production(monkeypatch):
+    class ProviderDouble:
+        async def find_by_id(self, _key):
+            return {"tenant_id": "tenant-a", "api_key": "legacy-secret"}
+
+    monkeypatch.setenv("AETHER_ENV", "production")
+    with pytest.raises(ProviderUnavailableError, match="encrypted migration"):
+        await CustomerWebhookSecretStore(ProviderDouble()).resolve(
+            "tenant-a", "customer_webhook:tenant-a:wh-1"
+        )
 
 
 def test_signature_requires_fresh_timestamp_and_detects_tampering():
@@ -182,6 +212,52 @@ async def test_delivery_is_durable_idempotent_and_tenant_scoped(monkeypatch):
     rows = await service.attempts.find_for_webhook("tenant-a", "wh-1")
     assert rows[0]["status"] == "delivered"
     assert await service.attempts.find_for_webhook("tenant-b", "wh-1") == []
+
+
+@pytest.mark.asyncio
+async def test_delivery_claim_has_one_local_winner_and_recovers_stale_work(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "local")
+    repository = CustomerWebhookDeliveryRepository()
+    now = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    results = await asyncio.gather(*[
+        repository.claim("tenant-a", "wh-1", "event-key", now=now)
+        for _ in range(2)
+    ])
+
+    assert sum(acquired for _, acquired in results) == 1
+    recovered, acquired = await repository.claim(
+        "tenant-a", "wh-1", "event-key",
+        now=now + timedelta(seconds=IN_FLIGHT_RECOVERY_SECONDS + 1),
+    )
+    assert acquired is True
+    assert recovered["attempts"] == 2
+
+
+@pytest.mark.asyncio
+async def test_stale_worker_cannot_complete_over_recovered_claim(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "local")
+    repository = CustomerWebhookDeliveryRepository()
+    start = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    _, old_acquired = await repository.claim(
+        "tenant-a", "wh-1", "event-key", now=start, owner_token="old-owner"
+    )
+    _, new_acquired = await repository.claim(
+        "tenant-a", "wh-1", "event-key",
+        now=start + timedelta(seconds=IN_FLIGHT_RECOVERY_SECONDS + 1),
+        owner_token="new-owner",
+    )
+    assert old_acquired and new_acquired
+    stale = WebhookDeliveryOutcome(
+        "failed", False, "wh-1", "tenant-a", "event-key", 1, error="stale"
+    )
+    current = WebhookDeliveryOutcome(
+        "delivered", True, "wh-1", "tenant-a", "event-key", 2
+    )
+    await repository.complete_claim("tenant-a", "wh-1", "event-key", stale, "old-owner")
+    claim = repository.claims._store[repository.claims._claim_id("tenant-a", "wh-1", "event-key")]
+    assert claim["status"] == "in_flight"
+    await repository.complete_claim("tenant-a", "wh-1", "event-key", current, "new-owner")
+    assert claim["status"] == "delivered"
 
 
 @pytest.mark.asyncio

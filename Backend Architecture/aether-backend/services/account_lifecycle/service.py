@@ -367,6 +367,28 @@ class AccountLifecycleService:
             count = await public_ingest_service.revoke_all_for_tenant(tenant_id)
             self._mark_result(result, StorageResultStatus.REVOKED.value, "revoke", count)
             return
+        if name == "notification_webhooks":
+            from repositories.repos import WebhookRepository
+            count = await WebhookRepository().delete_by_entity("tenant_id", tenant_id)
+            self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
+            return
+        if name == "provider_credentials":
+            from repositories.repos import ProvidersRepository
+            count = await ProvidersRepository().delete_by_entity("tenant_id", tenant_id)
+            self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
+            return
+        if name == "webhook_delivery_claims":
+            from services.notification_intelligence.customer_webhook_delivery import (
+                CustomerWebhookDeliveryRepository,
+            )
+            count = await CustomerWebhookDeliveryRepository().claims.delete_by_tenant(tenant_id)
+            self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
+            return
+        if name == "webhook_delivery_attempts":
+            from repositories.delivery_repos import DeliveryAttemptRepository
+            count = await DeliveryAttemptRepository().delete_by_entity("tenant_id", tenant_id)
+            self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
+            return
         if name in {"billing", "audit"}:
             stub_id = f"ret_{workflow['id']}_{name}"
             await self._retention_repo.insert(stub_id, {

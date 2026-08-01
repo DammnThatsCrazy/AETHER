@@ -5,7 +5,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from repositories.account_deletion import AccountDeletionWorkflowRepository
-from repositories.repos import APIKeyRepository, AdminRepository, reset_in_memory_stores
+from repositories.delivery_repos import DeliveryAttemptRepository
+from repositories.repos import (
+    APIKeyRepository,
+    AdminRepository,
+    ProvidersRepository,
+    WebhookRepository,
+    reset_in_memory_stores,
+)
 from repositories.typed_repo import reset_typed_in_memory_stores
 from services.account_lifecycle.models import validate_step_up_evidence
 from services.account_lifecycle.service import AccountLifecycleService
@@ -116,6 +123,9 @@ async def test_recovery_cancellation_reactivates_tenant_but_keeps_audit_trail():
 async def test_processing_is_idempotent_and_retains_billing_and_audit_as_detached_stubs():
     start = datetime(2026, 8, 1, tzinfo=timezone.utc)
     await principal()
+    await WebhookRepository().insert("hook-a", {"tenant_id": "tenant-a", "url": "https://example.com"})
+    await ProvidersRepository().insert("provider-a", {"tenant_id": "tenant-a", "encrypted_api_key": "ciphertext"})
+    await DeliveryAttemptRepository().insert("attempt-a", {"tenant_id": "tenant-a", "webhook_id": "hook-a"})
     service = AccountLifecycleService(now_factory=lambda: start)
     workflow = await service.request_deletion(
         tenant_id="tenant-a", actor_id="user-a", idempotency_key="delete-3",
@@ -141,6 +151,9 @@ async def test_processing_is_idempotent_and_retains_billing_and_audit_as_detache
     stubs = await service._retention_repo.find_many(limit=10)
     assert {stub["domain"] for stub in stubs} == {"billing", "audit"}
     assert all("tenant_id" not in stub for stub in stubs)
+    assert await WebhookRepository().find_by_id("hook-a") is None
+    assert await ProvidersRepository().find_by_id("provider-a") is None
+    assert await DeliveryAttemptRepository().find_by_id("attempt-a") is None
     assert await AdminRepository().find_by_id("tenant-a") is None
 
 

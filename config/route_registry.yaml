@@ -32,6 +32,8 @@ public_paths_source: shared/rate_limit/feature_gate.py
 sensitive_domains:
   - admin
   - kyber
+  - account
+  - account-lifecycle
   - security
   - audit
   - dsr
@@ -52,6 +54,7 @@ sensitive_domains:
 high_risk_domains:
   - admin
   - kyber
+  - account-lifecycle
   - security
   - auth
   - billing
@@ -71,6 +74,8 @@ known_prefixes:
   - /ready
   - /sdk/identity
   - /v1/admin
+  - /v1/account-lifecycle
+  - /v1/account
   - /v1/agents
   - /v1/analytics
   - /v1/attribution

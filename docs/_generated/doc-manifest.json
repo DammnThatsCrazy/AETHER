@@ -5685,6 +5685,23 @@
       "canonical_owner": "platform-intelligence@aether"
     },
     {
+      "path": "docs/source-of-truth/ACCOUNT_LIFECYCLE.md",
+      "title": "Account Lifecycle and Erasure",
+      "slug": "source-of-truth/account-lifecycle",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "draft",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md",
       "title": "AI and Agent Referral Attribution Source of Truth",
       "status": "stable"

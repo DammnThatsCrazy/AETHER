@@ -12,12 +12,13 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError, ServiceUnavailableError
 from shared.logger.logger import get_logger
 from repositories.repos import AlertRepository, ProvidersRepository, WebhookRepository
 from services.notification_intelligence.customer_webhook_delivery import (
     CustomerWebhookDeliveryService,
     CustomerWebhookSecretStore,
+    ProviderUnavailableError,
     WebhookPolicyError,
     redact_webhook_record,
     resolve_safe_destination,
@@ -63,11 +64,14 @@ async def create_webhook(body: WebhookConfig, request: Request):
         raise BadRequestError(str(exc)) from exc
 
     wh_id = str(uuid.uuid4())
-    secret_info = await _webhook_secrets.store(
-        request.state.tenant.tenant_id,
-        wh_id,
-        body.secret,
-    )
+    try:
+        secret_info = await _webhook_secrets.store(
+            request.state.tenant.tenant_id,
+            wh_id,
+            body.secret,
+        )
+    except ProviderUnavailableError as exc:
+        raise ServiceUnavailableError("webhook credential provider") from exc
     webhook = await _webhook_repo.insert(wh_id, {
         "tenant_id": request.state.tenant.tenant_id,
         "url": body.url,
@@ -89,6 +93,7 @@ async def list_webhooks(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    request.state.tenant.require_permission("read")
     tenant_id = request.state.tenant.tenant_id
     hooks = await _webhook_repo.find_many(
         filters={"tenant_id": tenant_id}, limit=limit, offset=offset,
@@ -114,13 +119,16 @@ async def delete_webhook(webhook_id: str, request: Request):
         raise NotFoundError("Webhook")
     if webhook.get("tenant_id") != request.state.tenant.tenant_id:
         raise ForbiddenError("Webhook belongs to a different tenant")
+    secret_ref = webhook.get("secret_ref")
+    if secret_ref:
+        await _provider_repo.delete(str(secret_ref))
     await _webhook_repo.delete(webhook_id)
     return APIResponse(data={"deleted": True}).to_dict()
 
 
 @router.post("/webhooks/{webhook_id}/test")
 async def test_webhook(webhook_id: str, request: Request):
-    request.state.tenant.require_permission("read")
+    request.state.tenant.require_permission("write")
     webhook = await _webhook_repo.find_by_id(webhook_id)
     if not webhook:
         raise NotFoundError("Webhook")
@@ -133,14 +141,17 @@ async def test_webhook(webhook_id: str, request: Request):
             secret = await _webhook_secrets.resolve(
                 request.state.tenant.tenant_id, str(secret_ref)
             )
-        except Exception:
-            secret = ""
+        except ProviderUnavailableError as exc:
+            raise ServiceUnavailableError("webhook credential provider") from exc
     elif webhook.get("secret"):
         # Migrate legacy raw-secret records on first use and remove the raw
         # value from the webhook record. New writes never take this path.
-        secret_info = await _webhook_secrets.store(
-            request.state.tenant.tenant_id, webhook_id, str(webhook["secret"])
-        )
+        try:
+            secret_info = await _webhook_secrets.store(
+                request.state.tenant.tenant_id, webhook_id, str(webhook["secret"])
+            )
+        except ProviderUnavailableError as exc:
+            raise ServiceUnavailableError("webhook credential provider") from exc
         secret = str(webhook["secret"])
         await _webhook_repo.update(webhook_id, {
             "secret": None,
@@ -171,6 +182,7 @@ async def create_alert(body: AlertRule, request: Request):
 
 @router.get("/alerts")
 async def list_alerts(request: Request):
+    request.state.tenant.require_permission("read")
     tenant_id = request.state.tenant.tenant_id
     alerts = await _alert_repo.find_many(filters={"tenant_id": tenant_id})
     return APIResponse(data=alerts).to_dict()
