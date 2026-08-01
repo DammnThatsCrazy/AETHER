@@ -5354,6 +5354,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md",
+      "title": "Financial Credential-Readiness Runbook",
+      "slug": "runbooks/financial-credential-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/IDENTITY_REPAIR.md",
       "title": "Runbook — Identity Repair",
       "slug": "runbooks/identity-repair",

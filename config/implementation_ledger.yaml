@@ -1803,12 +1803,22 @@ items:
       pilot manifest; runbooks; chaos/rotation/rollback evidence; adversarial review.
     affected_paths:
       - "Makefile"
-      - "config/pilot/examples"
-    tests_required: ["tests/payment_rails/test_certification.py"]
-    evidence_required: ["fail-closed certification commands; secret-free evidence bundle"]
-    docs_required: []
+      - "scripts/financial_credential_readiness.py"
+      - "config/pilot/examples/financial-observation.yaml"
+      - "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md"
+      - "tests/unit/test_financial_credential_readiness.py"
+      - "tests/unit/test_pilot_manifests.py"
+    tests_required:
+      - "tests/unit/test_financial_credential_readiness.py"
+      - "tests/unit/test_pilot_manifests.py"
+      - "tests/payment_rails/test_certification.py"
+    evidence_required:
+      - "fail-closed certification commands; secret-free evidence bundle"
+      - "financial-cohort credential-readiness certification (make financial-credential-readiness[-strict], payment-rails-certification, stablecoin-observer-certification): a financial-scoped, fail-closed, offline reader over shared.certification resolving exactly 7 financial adapters (payments x5 + stablecoin_chain evm/svm) to CREDENTIAL_WAITING and asserting every run_certification check passes; a synthetic SCAFFOLDED / dishonest-PARTNER_LIVE descriptor fails the strict gate (fail-closed proven). A secret-free financial pilot manifest (config/pilot/examples/financial-observation.yaml, observation + shadow_mode, refs-by-name, delivery/execution/settlement/rewards entitlements disabled) validated by validate_pilot_manifest incl. the certification-matrix provider cross-check; make financial-pilot-preflight composes both fail-closed. Operator runbook added. chaos/rotation/rollback evidence + adversarial review remain pending (PR4b)"
+    docs_required:
+      - "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md"
     owner: financial
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [FIN-3-CANONICAL-DELIVERY]
     exception: null
     last_verified_commit: null
