@@ -212,6 +212,27 @@ class CommsConfig:
     suppression_write_back_enabled: bool = _env_bool("AETHER_COMMS_SUPPRESSION_WRITE_BACK", False)
 
 
+# ---------------------------------------------------------------------------
+# Tenant Activation — turnkey activation state (flag-gated OFF by default)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ActivationConfig:
+    """Feature flags for tenant activation state rollout."""
+    activation_enabled: bool = _env_bool("AETHER_ACTIVATION_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# Kyber Missions — mission control plane + monitoring loop (OFF by default)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class KyberMissionsConfig:
+    """Feature flags for Kyber missions control plane and monitoring loop."""
+    missions_enabled: bool = _env_bool("KYBER_MISSIONS_ENABLED", False)
+    monitoring_loop_enabled: bool = _env_bool("KYBER_MISSION_MONITORING_ENABLED", False)
+
+
 @dataclass(frozen=True)
 class QuickNodeConfig:
     """L6 Infrastructure Backbone — single shared RPC gateway."""
@@ -1478,6 +1499,12 @@ class Settings:
 
     # Communications Intelligence
     comms: CommsConfig = field(default_factory=CommsConfig)
+
+    # Tenant Activation
+    activation: ActivationConfig = field(default_factory=ActivationConfig)
+
+    # Kyber Missions
+    kyber_missions: KyberMissionsConfig = field(default_factory=KyberMissionsConfig)
 
     # Provider Gateway
     provider_gateway: ProviderGatewayConfig = field(default_factory=ProviderGatewayConfig)

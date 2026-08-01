@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "f64bfae1"
+last_synced_commit: "b10ef8a7e053"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -299,6 +299,24 @@ projected period total. Pricing reflects the active `PRICING_OPTION`
 Returns a per-service usage breakdown for the current billing period
 including total requests, remaining included requests, and per-service
 overage counts.
+
+## Activation (self-serve onboarding, flag-gated)
+
+Mounted at `/v1/activation` only when `AETHER_ACTIVATION_ENABLED=true` (default
+OFF). Drives a new tenant from plan selection to first proven value; additive to
+the CS-driven onboarding subsystem. Tenant scope comes from the authenticated API
+key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
+`docs/source-of-truth/ACTIVATION.md`.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET`  | `/v1/activation/status` | read | Current activation record + derived billing state. |
+| `POST` | `/v1/activation/select-plan` | write | Body `{ "plan_tier": "P1".."P4" }`. Records the tier; does not start checkout. |
+| `POST` | `/v1/activation/sdk-selection` | write | Body `{ "platforms": ["web", …] }`. |
+| `POST` | `/v1/activation/create-sdk-keys` | write | Body `{ "count": 1, "label": "…" }`. Returns raw key(s) **once**. |
+| `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
+| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
+| `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
 
 ## Event Ingestion
 

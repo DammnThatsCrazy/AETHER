@@ -70,6 +70,7 @@ known_prefixes:
   - /health
   - /ready
   - /sdk/identity
+  - /v1/activation
   - /v1/admin
   - /v1/agents
   - /v1/analytics
