@@ -48,4 +48,6 @@ def test_ddl_constants_match_migration():
 def test_migration_chains_single_head():
     consts = _migration_constants()
     assert consts["revision"] == "20260820_continuation_plane"
-    assert consts["down_revision"] == "20260812_credential_platform"
+    # Re-pointed onto the comms-intelligence head after merging origin/main (#499) to
+    # preserve the single-alembic-head invariant.
+    assert consts["down_revision"] == "20260813_comms_turnkey"
