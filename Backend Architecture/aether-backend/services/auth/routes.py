@@ -13,7 +13,7 @@ Public endpoints (no auth required):
   GET  /v1/auth/sso/providers         List available SSO providers
 
 Authenticated user endpoints:
-  DELETE /v1/me/account               Self-service permanent account deletion
+  DELETE /v1/me/account               Self-service account-deletion workflow alias
 
 Admin endpoints (require auth):
   POST   /v1/admin/tenants/{id}/deactivate  Evict Redis keys + mark inactive
@@ -48,6 +48,13 @@ admin_auth_router = APIRouter(tags=["Admin — Auth"])
 
 _repo = AdminRepository()
 _key_repo = APIKeyRepository()
+
+
+class AccountDeletionRequest(BaseModel):
+    """Trusted step-up evidence required by the recovery-window workflow."""
+
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    reauth_evidence: dict = Field(default_factory=dict)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -706,26 +713,24 @@ async def list_sso_providers():
 # ──────────────────────────────────────────────────────────────────────
 
 @router.delete("/v1/me/account")
-async def delete_my_account(request: Request):
-    """Self-service permanent account deletion.
-
-    Evicts all Redis auth entries immediately, cancels Stripe subscription,
-    and cascades deletion across all tenant-scoped tables. Irreversible.
-    """
+async def delete_my_account(body: AccountDeletionRequest, request: Request):
+    """Compatibility alias for the durable 30-day account-deletion workflow."""
     tenant = getattr(request.state, "tenant", None)
     if not tenant:
         raise UnauthorizedError("Authentication required.")
+    tenant.require_permission("admin")
 
-    tenant_id = tenant.tenant_id
-    deleted = await _cascade_delete_tenant(tenant_id)
+    from services.account_lifecycle.service import account_lifecycle_service
 
-    metrics.increment("tenant_deletions", labels={"method": "self_service"})
-    logger.info(f"Self-service account deleted: tenant={tenant_id}")
-
-    return APIResponse(data={
-        "message": "Your account and all associated data have been permanently deleted.",
-        "deleted": deleted,
-    }).to_dict()
+    workflow = await account_lifecycle_service.request_deletion(
+        tenant_id=tenant.tenant_id,
+        actor_id=str(getattr(tenant, "user_id", None) or tenant.tenant_id),
+        idempotency_key=body.idempotency_key,
+        reauth_evidence=body.reauth_evidence,
+    )
+    metrics.increment("tenant_deletion_workflows_requested", labels={"method": "self_service"})
+    logger.info("Self-service account deletion workflow requested: tenant=%s", tenant.tenant_id)
+    return APIResponse(data=workflow).to_dict()
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -228,6 +228,9 @@ class CustomerWebhookSecretStore:
             "secret_ref": secret_ref,
             "secret_hash": secret_fingerprint(value),
             "secret_configured": True,
+            # The caller may return this only in the create response. It is
+            # never persisted in the webhook record or included in reads.
+            "secret": value,
         }
 
     async def resolve(self, tenant_id: str, secret_ref: str) -> str:

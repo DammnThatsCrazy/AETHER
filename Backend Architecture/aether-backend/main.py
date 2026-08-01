@@ -217,6 +217,8 @@ from services.comms.routes import router as comms_router, admin_router as comms_
 from services.economic.routes import router as economic_router
 from services.consent.routes import router as consent_router
 from services.notification_intelligence.routes import router as notification_router
+from services.account_organization.routes import router as account_organization_router
+from services.account_lifecycle.routes import router as account_lifecycle_router
 from services.jobs.routes import router as jobs_router
 from services.jobs.kyber_routes import router as jobs_kyber_router
 from services.export import register_export_handlers
@@ -753,6 +755,8 @@ def create_app() -> FastAPI:
     app.include_router(stripe_webhook_router)
     app.include_router(registration_router)
     app.include_router(me_router)
+    app.include_router(account_organization_router)
+    app.include_router(account_lifecycle_router)
     app.include_router(billing_router)
     app.include_router(admin_overage_router)
     app.include_router(kyber_revops_router)

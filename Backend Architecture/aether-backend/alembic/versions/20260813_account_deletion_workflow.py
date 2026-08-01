@@ -5,7 +5,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260813_account_deletion_workflow"
-down_revision = "20260812_sdk_durability"
+down_revision = "20260813_account_organization"
 branch_labels = None
 depends_on = None
 
