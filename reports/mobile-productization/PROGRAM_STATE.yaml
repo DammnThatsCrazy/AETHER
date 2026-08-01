@@ -8,7 +8,7 @@ program:
   base_commit: "78562ddae28de01ec0fe3c59e42bb357baaffb1f"   # == origin/main at program start (feat: Unified Integration Control Plane — foundation (#497))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of base_commit
   platform_version: "8.12.0"
-  last_landed_checkpoint: C3
+  last_landed_checkpoint: C4
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -81,8 +81,25 @@ milestones:
   - id: C4
     name: shared-mobile-platform-native-security-build
     depends_on: [C3]
-    status: pending
-    lands: [apps-aether-mobile, apps-kyber-mobile, packages-mobile-core-set, workspace-ci-wiring, sdk-permission-inventory]
+    status: landed
+    landed: [packages-mobile-core, mobile-sdk-client, pkce-auth-secure-store, apps-aether-mobile, apps-kyber-mobile, workspace-ci-wiring, mobile-build-check, sdk-permission-inventory, mobile-app-docs]
+    externally_blocked: [native-ios-simulator-android-emulator-compile, store-distribution]
+    note: >
+      C4 landed the VERIFIABLE shared mobile platform: @aether/mobile-core (packages/
+      mobile-core) — a platform-agnostic typed SDK (API/continuation/sync/push clients,
+      PKCE S256 auth, SecureStore-backed token provider, runtime contract guards),
+      wired into npm workspaces + package-lock + the root typecheck chain + bump_version
+      + mobile-typecheck/mobile-test gates (typecheck + 9 tests green in make ci-check).
+      The two Expo app scaffolds (apps/aether-mobile plane=aether bundle=com.aether.mobile;
+      apps/kyber-mobile plane=kyber bundle=com.aether.kyber) consume the SDK with distinct
+      bundle ids / audiences / keystores — no Kyber code in the Aether binary. Structural
+      invariants (distinct planes/bundles, scaffold completeness, version pin) are enforced
+      by scripts/mobile_build_check.py (make mobile-build-check). SDK/permission inventory:
+      reports/mobile-productization/mobile-sdk-inventory.json. Docs: AETHER_MOBILE.md,
+      KYBER_MOBILE.md. HONEST CEILING: the native iOS-simulator/Android-emulator compile
+      needs macOS+Xcode+Android SDK+Expo (absent in this Linux CI container) →
+      externally_blocked, runs in hosted (macOS) CI; NOT a 'compiled' claim. Full feature
+      screens + governed mobile actions are C5-C7 (staged).
 
 # Wave / architecture rollup (reuse-first). "reuse" = exists complete; "extend" = exists, add surface;
 # "build" = net-new this program. Authoritative detail: reports/mobile-productization/repo-baseline.json.
@@ -144,7 +161,9 @@ open_pr_overlap:
     disposition: parallel
 
 quality:                                     # updated at each milestone boundary from real gate runs
-  ci_check: "make ci-check EXIT=0 confirmed green through the C3 mobile-gateway commit (fcc5b039/b676d2a7); C3 full-gate checkpoint re-run on the provider-adapters + deep-link + credentials tip"
+  ci_check: "make ci-check EXIT=0 (53 gates) confirmed green at the C3 full-gate checkpoint (5fbc8a63) and re-confirmed on the C4 mobile-core+auth tip (fd698679) — includes npm ci lockfile integrity for the new workspace"
+  mobile_sdk: "packages/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 9 tests (5 client + 4 PKCE/secure-store) green in ci-check via npm test --workspaces"
+  mobile_apps: "apps/aether-mobile + apps/kyber-mobile scaffolds; scripts/mobile_build_check.py enforces distinct planes/bundles + scaffold completeness (4 tests); native compile externally_blocked (no macOS/Xcode/Android SDK/Expo here)"
   unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability)"
   contract_tests: "34 contract parity tests pass (12 continuation + 5 sync-event + notification + delivery-receipt incl. push channel)"
   provider_adapters: "21 adapter tests (fake path + production guard + injected-transport real-path request/response mapping); registry registers apns/fcm/web_push/email"
@@ -156,9 +175,12 @@ quality:                                     # updated at each milestone boundar
 
 # Honest readiness verdict (per productization dimension). No fake production-ready claims.
 readiness:
-  implementation: "C0-C4 foundation targeted; C5-C9 staged"
+  implementation: "C0-C4 foundation landed + gated green; C5-C9 staged"
+  backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
+  mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store)"
+  mobile_apps: "shells scaffolded + structural invariants gated green; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
   credential: externally_blocked            # no AWS/APNs/FCM/email/Apple/Google; contracts + fakes + preflight only
   design_partner: partial
   store_submission: externally_blocked
   controlled_production: externally_blocked
-  overall_target: "CODE_COMPLETE_CREDENTIALS_BLOCKED + READY_FOR_LOCAL_INTEGRATED_DEMO"
+  overall: "CODE_COMPLETE_CREDENTIALS_BLOCKED + READY_FOR_LOCAL_INTEGRATED_DEMO (backend + SDK verifiable-green; native app compile + credentials + store distribution externally_blocked, not faked)"
