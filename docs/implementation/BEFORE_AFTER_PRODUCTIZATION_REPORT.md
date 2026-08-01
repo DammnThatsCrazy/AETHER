@@ -43,9 +43,10 @@ promotion criterion by design:
 - **Tested against in-memory / local fallbacks.** Consistent with the scorecard's
   standing rule, code tested only against fallbacks is capped at release-ready
   (4), never production-ready (5).
-- **One wave is scaffold, not a feature.** Kyber Missions is a migration plus a
-  flag-gated monitoring-loop scaffold; the orchestrator/aggregate is not yet in
-  the tree, so it cannot raise the Kyber area.
+- **The new capabilities are flag-gated OFF and fallback-tested.** The Kyber
+  Mission aggregate and the activation FSM both landed as real modules but ship
+  behind default-OFF flags with no live traffic, so — per the capping rule above —
+  neither can raise its area beyond release-ready.
 
 This is the intended outcome. Raising a score here without live/production
 evidence would be exactly the "optimistic readiness" the certification plane
@@ -59,7 +60,7 @@ exists to prevent.
 |------|--------|-------|--------------|--------------|
 | **Tenant routing fix** | Tenant resolution had the addressed defect | Correctness fix in the routing path | No score change | A correctness fix under an existing 4-rated surface does not add live traffic or scale evidence |
 | **Activation FSM** (`services/activation`, `/v1/activation/*`) | First value required operator SQL / manual key mint | Real self-serve FSM: plan → SDK → key mint (once) → test event via in-process `/v1/batch` → Bronze first-value proof → `complete` refused until `first_value_ready` | No score change (flag OFF) | New capability, but flag-gated OFF and unexercised by production traffic; reuses existing ingestion tested on fallbacks — capped below 5 until live |
-| **Kyber Missions** | No mission construct | Migration `20260815_kyber_missions` + flag-gated monitoring-loop scaffold in `main.py` (default OFF) | No score change | Scaffold + migration only; the aggregate/orchestrator is **not in the tree** — nothing to score yet |
+| **Kyber Missions** | No mission construct | Thin-root Mission aggregate + `MonitoringCondition` under `services/kyber/ops/` (contracts/repository/service/monitoring/routes) + migration `20260815_kyber_missions`, workforce-scoped `/v1/kyber/missions`, `completed != verified` enforced — all flag-gated OFF | No score change | Real aggregate, but flag-gated OFF with no live traffic and tested only on fallbacks — capped below 5 until exercised live |
 | **Dossiers** | Release-truth / readiness / acquisition dossiers absent | Eight authored, source-linked dossiers | No score change | Docs area is already 4; these are authored docs, not a validator or generated-doc improvement that would move the docs score |
 
 ---
@@ -117,7 +118,7 @@ So the "why not" is constructive, not just a refusal:
 | semantic intelligence (2) | A validated production model provider + durable store run in staging + live traffic |
 | card-linked payment rails (2) | A validated live provider before the flag is enabled |
 | activation path (surfaced by this branch) | Enable the flag in staging, exercise the FSM end to end under real ingestion, capture pilot evidence |
-| Kyber Missions (scaffold) | Land the mission aggregate/orchestrator, then validate the `completed != verified` invariant under the flag |
+| Kyber Missions (landed, flag-gated OFF) | Exercise the mission aggregate live under the flag and validate the `completed != verified` invariant against real objectives/verifications |
 
 Each of these is a P0/P1/P2 item already tracked in
 `docs/acquisition/RISK_AND_READINESS_REGISTER.md` and
@@ -131,8 +132,8 @@ new construction.
 ## 5. Net statement
 
 The four waves are an **honest surface-area expansion**: a self-serve activation
-path a tenant can walk to first value, a Kyber mission scaffold staged for a
-future wave, a tenant routing correctness fix, and the release-truth dossier set.
+path a tenant can walk to first value, a Kyber Mission aggregate landed behind a
+default-OFF flag, a tenant routing correctness fix, and the release-truth dossier set.
 They add capability and reduce the distance to production **without inflating a
 single score**. That is the correct result, and it is enforced — enabling any of
 these under real backends and validating it with evidence is what will move the

@@ -110,16 +110,18 @@ independently.
    proves Bronze first-value before `POST /v1/activation/complete` is allowed
    (`complete` is refused until `first_value_ready`). It mints raw SDK keys once
    and never echoes them again.
-3. **Kyber Mission scaffold** (`/v1/kyber/missions` intent, flag
-   `KYBER_MISSION_MONITORING_ENABLED`). What is actually in the tree today:
-   migration `20260815_kyber_missions.py` and a flag-gated monitoring-loop
-   **scaffold** wired into `main.py` (OFF by default). The `main.py` wiring
-   states plainly that the orchestrator classes do not exist until the missions
-   wave lands. The intended design — a thin-root Mission aggregate with
-   read-time composition, a `MonitoringCondition`, a `completed != verified`
-   invariant, and workforce-scoped access — is what the migration and flag
-   prepare for. **Do not describe the aggregate as implemented.** It is
-   scaffold + migration only at this SHA.
+3. **Kyber Mission aggregate** (`/v1/kyber/missions`, flags
+   `KYBER_MISSIONS_ENABLED` and `KYBER_MISSION_MONITORING_ENABLED`, both OFF by
+   default). Landed as real modules under `services/kyber/ops/`:
+   `mission_contracts.py`, `mission_repository.py`, `missions.py`,
+   `monitoring_service.py`, and `mission_routes.py`, plus migration
+   `20260815_kyber_missions.py`. It is a thin-root Mission aggregate with
+   read-time composition over the existing
+   Objective/Plan/WorkerRun/Evidence/Verification/Job/Command planes, a
+   first-class `MonitoringCondition`, a structural `completed != verified` gate,
+   and workforce-identity-scoped routes (capability `kyber.incident.read`, never
+   tenant auth). Flag-gated OFF and tested against in-memory/local fallbacks — so
+   it is release-shaped, not production-proven, and does not move the Kyber score.
 4. **These dossiers** (docs only).
 
 ---
@@ -218,7 +220,7 @@ The honest summary: a real, tested, unusually well-gated platform at ~3.77/5.
 The gap to production is operational and go-to-market (provisioned infra, live
 provider credentials, external audit, recorded scale baselines), not
 architectural. The four flag-gated waves on this branch extend the surface
-(self-serve activation, Kyber mission scaffolding) without inflating the score.
+(self-serve activation, Kyber Mission aggregate — both flag-gated OFF) without inflating the score.
 
 See also: `docs/productization/aether_productization_audit.md`,
 `docs/productization/staging-capstone/LIMITATIONS_AND_NON_GOALS.md`,
