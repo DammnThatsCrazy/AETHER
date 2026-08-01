@@ -47,6 +47,7 @@ NON_SURFACE: dict[str, str] = {
     "/legal/data-retention": "static legal copy, no tenant data",
     "/": "redirect only",
     "/onboarding": "tenant self-setup wizard; no operator equivalent",
+    "/activation": "tenant self-serve activation wizard; no operator mirror (same class as /onboarding)",
     "/me": "the caller's own account; an operator's own account is /v1/kyber/me",
     "/settings": "tenant self-configuration; operators must not mutate it from a mirror",
     "/settings/notifications": "tenant self-configuration",
