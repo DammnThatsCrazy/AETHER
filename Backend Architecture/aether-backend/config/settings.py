@@ -1332,6 +1332,19 @@ class ExplorationConfig:
 
 
 @dataclass(frozen=True)
+class ContinuationConfig:
+    # Cross-device continuation plane (/v1/continuations). Default OFF: a
+    # disabled surface answers 404, indistinguishable from an unmounted route.
+    enabled: bool = _env_bool("AETHER_CONTINUATION_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class ClientSyncConfig:
+    # Client-sync cursor feed (/v1/client-sync). Default OFF.
+    enabled: bool = _env_bool("AETHER_CLIENT_SYNC_ENABLED", False)
+
+
+@dataclass(frozen=True)
 class ComparisonConfig:
     enabled: bool = _env_bool("AETHER_COMPARISON_INTELLIGENCE_ENABLED", False)
 
@@ -1467,6 +1480,8 @@ class Settings:
     context_intelligence: ContextIntelligenceConfig = field(default_factory=ContextIntelligenceConfig)
     temporal_observatory: TemporalObservatoryConfig = field(default_factory=TemporalObservatoryConfig)
     exploration: ExplorationConfig = field(default_factory=ExplorationConfig)
+    continuation: ContinuationConfig = field(default_factory=ContinuationConfig)
+    client_sync: ClientSyncConfig = field(default_factory=ClientSyncConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
 
     def __post_init__(self):
