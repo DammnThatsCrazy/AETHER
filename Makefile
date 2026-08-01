@@ -395,7 +395,13 @@ generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts
 # ---------------------------------------------------------------------------
 # Mobile / continuity / notification productization gates (program C0-C4)
 # ---------------------------------------------------------------------------
-.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check
+.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test
+
+mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
+	npm run typecheck --workspace=packages/mobile-core --if-present
+
+mobile-test: ## CI gate — unit tests for the mobile SDK packages
+	npm run test --workspace=packages/mobile-core --if-present
 
 mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Python contract parity
 	python -m pytest tests/contracts/test_continuation_contract_parity.py \

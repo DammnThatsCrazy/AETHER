@@ -35,6 +35,7 @@ PACKAGE_JSONS = [
     ROOT / "packages" / "shared" / "package.json",
     ROOT / "packages" / "web" / "package.json",
     ROOT / "packages" / "react-native" / "package.json",
+    ROOT / "packages" / "mobile-core" / "package.json",
     ROOT / "frontend" / "aether" / "package.json",
     ROOT / "frontend" / "kyber" / "package.json",
     ROOT / "frontend" / "shared" / "package.json",

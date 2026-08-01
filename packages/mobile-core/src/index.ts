@@ -1,0 +1,59 @@
+/**
+ * @aether/mobile-core — the platform-agnostic mobile SDK core.
+ *
+ * Re-exports the `@aether/shared` contract twins the mobile apps consume, plus the
+ * typed API client, transport abstraction, config, and runtime guards. No React
+ * Native / Expo dependency lives here; the host app injects transport + auth.
+ */
+
+// Contract twins (snake_case wire types) shared with the backend.
+export type {
+  ClientSyncResponse,
+  ContinuationContext,
+  ContinuationSummary,
+  InstallationAppKind,
+  InstallationPlatform,
+  InstallationRegistration,
+  InstallationTrustState,
+  MobileInstallation,
+  PushProvider,
+  PushSubscription,
+  SyncChangeType,
+  SyncEvent,
+} from '@aether/shared';
+
+export {
+  installationAppKinds,
+  installationPlatforms,
+  installationTrustStates,
+  pushProviders,
+  syncChangeTypes,
+} from '@aether/shared';
+
+export type { MobileAppKind, MobileConfig } from './config';
+export { normalizeBaseUrl } from './config';
+
+export type {
+  AuthProvider,
+  FetchLike,
+  FetchRequestInit,
+  FetchResponseLike,
+  HttpClientDeps,
+} from './http';
+export { HttpClient, MobileApiError } from './http';
+
+export type {
+  DeepLinkContinuation,
+  DeepLinkResolution,
+  InstallationRegisterInput,
+  RegistrationResult,
+  SubscriptionInput,
+} from './client';
+export { AetherMobileClient } from './client';
+
+export {
+  assertMobileInstallation,
+  isMobileInstallation,
+  isPushProvider,
+  isSyncEvent,
+} from './validate';
