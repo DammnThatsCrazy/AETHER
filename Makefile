@@ -422,6 +422,15 @@ notification-provider-check: ## CI gate — mobile push/email provider adapters 
 		"$(BACKEND_DIR)/tests/unit/test_notification_provider_adapters.py" \
 		"$(BACKEND_DIR)/tests/unit/test_delivery_adapters.py" -q
 
+credentials-inventory: ## Credential registry inventory (report; never prints secrets; exit 0)
+	python scripts/credentials_status.py --mode inventory
+
+credentials-preflight: ## Credential preflight — no live send; --strict blocks missing required creds
+	python scripts/credentials_status.py --mode preflight
+
+credentials-activation-smoke: ## Credential activation posture — no live send; never reports "ready"
+	python scripts/credentials_status.py --mode activation-smoke
+
 validate-schema-parity: ## Check event-registry.json, TS, and Python are in parity
 	python scripts/validate_event_schema_parity.py
 

@@ -52,15 +52,23 @@ committed artifacts.
 
 ## Activation flow (no code change)
 
+0. Run `make credentials-inventory` — enumerates every registry slot, its required
+   deployment profiles, whether a provider-shaped local fake exists, and its current
+   provisioning state (presence-only; the secret value is never read or printed).
 1. Insert the secret into the credential backend (env `AETHER_CREDENTIAL_BACKEND`:
-   `local_encrypted` locally, `aws_secrets_manager` in staging/production).
+   `local_encrypted` locally, `aws_secrets_manager` in staging/production). A slot's
+   secret binds to a deterministic env var derived from its `secret_reference`
+   (`byok:notification:apns` → `AETHER_BYOK_NOTIFICATION_APNS`), so activation is a
+   configuration change, never a code change.
 2. Bind the environment (topic/bundle-id, FCM project, SES verified sender, VAPID
    subject).
 3. Run `make credentials-preflight` — reports each credential as
-   missing / invalid / unauthorized / unreachable / untested, never printing the
-   secret and never reporting "ready" when it is absent.
+   missing / invalid / configured (→ untested until live-verified), never printing the
+   secret and never reporting "ready" when it is absent. `--strict` exits non-zero
+   when a credential *required for the active deployment profile* is missing.
 4. Run `make credentials-activation-smoke` for a credentialed rehearsal (accept +
-   delivery receipt) where the provider allows it.
+   delivery receipt) where the provider allows it; in a credentialless environment it
+   reports `externally_blocked` and never performs a live send.
 
 ## Fakes are impossible in production
 
@@ -74,6 +82,9 @@ is not opened, and none of it is claimed without a real provider receipt.
 ## Status
 
 The credential registry (`config/credential_contracts.yaml`) landed in C0. The
-provider adapters + fakes and `make credentials-preflight` / `credentials-activation-smoke`
-land in C3. Until real credentials and accounts are supplied, every provider above is
-`externally_blocked` — see `reports/mobile-productization/external-blockers.json`.
+provider adapters + fakes and the `make credentials-inventory` /
+`credentials-preflight` / `credentials-activation-smoke` tooling
+(`scripts/credentials_status.py`) landed in C3. Until real credentials and accounts
+are supplied, every provider above reports `missing` / `externally_blocked` — see
+`reports/mobile-productization/external-blockers.json`. `externally_blocked` is
+neither implementation-incomplete nor production-ready.
