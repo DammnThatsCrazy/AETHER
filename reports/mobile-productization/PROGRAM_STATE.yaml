@@ -133,7 +133,7 @@ migration_reservation:
   chain_root_at_start: "20260812_credential_platform"
   reserved:
     - id: "20260820_continuation_plane"      # C1: tables continuations, continuation_selections
-      down_revision: "20260812_credential_platform"
+      down_revision: "20260813_comms_turnkey"   # re-pointed after merging origin/main (#499) to keep a single alembic head
       owner_milestone: C1
       status: landed
     - id: "20260821_client_sync"             # C1: tables sync_change_log, sync_cursor_counter

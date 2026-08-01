@@ -12,7 +12,7 @@ tests/unit/test_continuation_ddl_parity.py. Edit the migration first, then
 mirror it in the repository.
 
 Revision ID: 20260820_continuation_plane
-Revises: 20260812_credential_platform
+Revises: 20260813_comms_turnkey
 Create Date: 2026-08-01
 """
 
@@ -21,7 +21,10 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260820_continuation_plane"
-down_revision = "20260812_credential_platform"
+# Re-pointed onto the comms-intelligence head after merging origin/main (#499) to
+# preserve the single-alembic-head invariant: the chain is now
+# ... -> 20260813_comms_turnkey -> 20260820 -> 20260821 -> 20260822.
+down_revision = "20260813_comms_turnkey"
 branch_labels = None
 depends_on = None
 
