@@ -44,6 +44,7 @@ class DeliveryChannel(str, Enum):
     TICKETING = "ticketing"
     AGENT_ASSIST = "agent_assist"
     NOTIFICATION = "notification"
+    PUSH = "push"
 
 
 class DeliveryIntentStatus(str, Enum):

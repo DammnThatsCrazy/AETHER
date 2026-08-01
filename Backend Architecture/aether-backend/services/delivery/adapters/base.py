@@ -160,6 +160,10 @@ class ProviderAdapterRegistry:
         from services.delivery.adapters.agent_assist import AgentAssistAdapter
         from services.delivery.adapters.discord import DiscordAdapter
         from services.delivery.adapters.telegram import TelegramAdapter
+        from services.delivery.adapters.apns import APNsAdapter
+        from services.delivery.adapters.fcm import FCMAdapter
+        from services.delivery.adapters.web_push import WebPushAdapter
+        from services.delivery.adapters.email import EmailAdapter
 
         registry = cls()
         registry.register(SlackAdapter())
@@ -172,4 +176,10 @@ class ProviderAdapterRegistry:
         registry.register(AgentAssistAdapter())
         registry.register(DiscordAdapter())
         registry.register(TelegramAdapter())
+        # Mobile / notification providers (C3): APNs, FCM, Web Push, email. Each
+        # ships a provider-shaped local fake that is impossible in production.
+        registry.register(APNsAdapter())
+        registry.register(FCMAdapter())
+        registry.register(WebPushAdapter())
+        registry.register(EmailAdapter())
         return registry

@@ -395,7 +395,7 @@ generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts
 # ---------------------------------------------------------------------------
 # Mobile / continuity / notification productization gates (program C0-C4)
 # ---------------------------------------------------------------------------
-.PHONY: mobile-contracts-check continuity-check notification-check
+.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check
 
 mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Python contract parity
 	python -m pytest tests/contracts/test_continuation_contract_parity.py \
@@ -416,6 +416,11 @@ continuity-check: ## CI gate — cross-device continuation plane + client-sync f
 notification-check: ## CI gate — notification/delivery contract twins
 	python -m pytest tests/contracts/test_notification_contract_parity.py \
 		tests/contracts/test_delivery_receipt_parity.py -q
+
+notification-provider-check: ## CI gate — mobile push/email provider adapters + local fakes
+	python -m pytest \
+		"$(BACKEND_DIR)/tests/unit/test_notification_provider_adapters.py" \
+		"$(BACKEND_DIR)/tests/unit/test_delivery_adapters.py" -q
 
 validate-schema-parity: ## Check event-registry.json, TS, and Python are in parity
 	python scripts/validate_event_schema_parity.py

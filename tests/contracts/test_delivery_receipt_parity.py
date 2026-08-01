@@ -51,6 +51,13 @@ def test_delivery_channels_parity():
     assert _const_array("deliveryChannels") == _enum_values(DeliveryChannel)
 
 
+def test_push_channel_present_both_sides():
+    # The C3 mobile provider adapters (apns/fcm/web_push) deliver on the `push`
+    # channel; it must exist on both the Python enum and the TS twin.
+    assert "push" in _const_array("deliveryChannels")
+    assert DeliveryChannel.PUSH.value == "push"
+
+
 def test_delivery_job_states_parity():
     assert _const_array("deliveryJobStates") == _enum_values(DeliveryJobState)
 
