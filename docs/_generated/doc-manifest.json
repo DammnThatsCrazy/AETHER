@@ -5799,6 +5799,19 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md",
+      "title": "Cross-Device Continuity",
+      "slug": "mobile/cross-device-continuity",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
       "title": "Data Rights Ledger",
       "slug": "architecture/data-rights-ledger",

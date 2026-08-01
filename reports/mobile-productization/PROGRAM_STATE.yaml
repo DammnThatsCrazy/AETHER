@@ -25,8 +25,14 @@ milestones:
   - id: C1
     name: continuity-context-sync-contracts
     depends_on: [C0]
-    status: pending
-    lands: [continuation-contract-twins, continuation-plane, client-sync-feed, deep-link-contract]
+    status: in_progress
+    landed: [continuation-contract-twins, sync-event-contract-twins]   # snake_case, parity-green (17 tests)
+    pending: [continuation-plane-persistence-routes, client-sync-feed-impl, deep-link-contract]
+    note: >
+      Contract layer landed (packages/shared/{continuation,sync-event}.ts +
+      shared/{continuation,client_sync}/models.py + parity tests + CROSS_DEVICE_CONTINUITY.md).
+      The plane persistence/routes and client-sync feed impl need dual-mode
+      (asyncpg + in-memory) stores to be CI-testable — staged as the next commit.
   - id: C2
     name: notification-attention-control-plane
     depends_on: [C1]
@@ -104,11 +110,12 @@ open_pr_overlap:
     disposition: parallel
 
 quality:                                     # updated at each milestone boundary from real gate runs
-  ci_check: "baseline pending first C0 gate run"
-  unit_tests: unknown
-  contract_tests: unknown
-  frontend_tests: unknown
-  migration_single_head: "true at start (head=20260812_credential_platform)"
+  ci_check: "make ci-check EXIT=0 — 53 gates pass, 0 fail (C0 + C1 contract layer)"
+  unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability)"
+  contract_tests: "17 new parity tests pass (12 continuation + 5 sync-event)"
+  frontend_tests: "npm typecheck + build + test pass with new TS twins"
+  migration_single_head: "true (head=20260812_credential_platform; C1 contracts add no migration)"
+  environment_note: "clone was shallow -> unshallowed; docs_drift now 339 clean / 0 stale (the apparent main-red was a clone artifact)"
 
 # Honest readiness verdict (per productization dimension). No fake production-ready claims.
 readiness:
