@@ -1,0 +1,33 @@
+{
+  "$comment": "Shared-memory index: authoritative file(s) per topic so specialist packets read interfaces before trees and never rescan the whole repo. Paths relative to repo root; backend under 'Backend Architecture/aether-backend'.",
+  "schema_version": 1,
+  "topics": {
+    "app_mount_point": ["Backend Architecture/aether-backend/main.py"],
+    "settings_and_flags": ["Backend Architecture/aether-backend/config/settings.py"],
+    "worker_registration": ["Backend Architecture/aether-backend/services/runtime/specs.py", "Backend Architecture/aether-backend/services/runtime/supervisor.py", "Backend Architecture/aether-backend/services/runtime/roles.py"],
+    "base_repository": ["Backend Architecture/aether-backend/repositories/repos.py"],
+    "alembic_head_precedent": ["Backend Architecture/aether-backend/alembic/versions/20260812_credential_platform.py", "Backend Architecture/aether-backend/alembic/versions/20260713_platform_control_plane.py"],
+    "contract_parity_template": ["tests/contracts/test_exploration_contract_parity.py"],
+    "exploration_context": ["Backend Architecture/aether-backend/shared/exploration/models.py", "packages/shared/exploration-contract.ts", "frontend/shared/src/exploration/url-codec.ts"],
+    "saved_views": ["Backend Architecture/aether-backend/services/exploration/store.py", "Backend Architecture/aether-backend/services/exploration/routes.py"],
+    "noesis": ["Backend Architecture/aether-backend/services/noesis/conversations.py", "Backend Architecture/aether-backend/services/noesis/models.py", "frontend/aether/src/features/noesis/exploration-context.ts"],
+    "notification_intelligence": ["Backend Architecture/aether-backend/services/notification_intelligence/inbox.py", "Backend Architecture/aether-backend/services/notification_intelligence/models.py", "Backend Architecture/aether-backend/services/notification_intelligence/lifecycle.py", "Backend Architecture/aether-backend/services/notification_intelligence/policy_engine.py", "Backend Architecture/aether-backend/services/notification_intelligence/routes.py"],
+    "notification_collision": ["Backend Architecture/aether-backend/services/notification/routes.py", "Backend Architecture/aether-backend/main.py"],
+    "delivery": ["Backend Architecture/aether-backend/services/delivery/models.py", "Backend Architecture/aether-backend/services/delivery/worker.py", "Backend Architecture/aether-backend/services/delivery/adapters/base.py"],
+    "realtime": ["Backend Architecture/aether-backend/services/realtime/routes.py", "Backend Architecture/aether-backend/services/realtime/hub.py"],
+    "event_bus": ["Backend Architecture/aether-backend/shared/events/events.py", "Backend Architecture/aether-backend/services/ingestion/outbox_relay.py"],
+    "kyber_ops_command_plane": ["Backend Architecture/aether-backend/services/kyber/ops/registry.py", "Backend Architecture/aether-backend/services/kyber/ops/commands.py", "Backend Architecture/aether-backend/services/kyber/ops/verification.py", "Backend Architecture/aether-backend/services/kyber/ops/routes.py"],
+    "kyber_identity_device_session": ["Backend Architecture/aether-backend/services/kyber/identity/oidc.py", "Backend Architecture/aether-backend/services/kyber/devices/device_proof.py", "Backend Architecture/aether-backend/services/kyber/sessions/service.py", "Backend Architecture/aether-backend/services/kyber/sessions/step_up.py", "Backend Architecture/aether-backend/services/kyber/access/capabilities.py"],
+    "tenant_auth_authz": ["Backend Architecture/aether-backend/services/auth/routes.py", "Backend Architecture/aether-backend/services/auth/sessions/service.py", "Backend Architecture/aether-backend/middleware/middleware.py", "Backend Architecture/aether-backend/services/policy/engine.py"],
+    "credential_platform": ["Backend Architecture/aether-backend/shared/credentials/service.py", "Backend Architecture/aether-backend/shared/credentials/interface.py", "Backend Architecture/aether-backend/shared/credentials/factory.py"],
+    "storage_policies": ["config/storage_policies.yaml", "scripts/release/check_storage_policies.py"],
+    "feature_surface_manifest": ["scripts/generate_feature_surface_manifest.py"],
+    "temporal_integrity_single_head": ["scripts/validate_temporal_integrity.py"],
+    "ci_orchestrator": ["scripts/repo_doctor.py"],
+    "version_source": ["pyproject.toml", "scripts/bump_version.py", "scripts/check_version_consistency.py"],
+    "workspaces": ["package.json"],
+    "deployment_profiles": ["config/deployment_profiles.yaml", "docs/integration-control-plane/DEPLOYMENT_CONTRACT.yaml"],
+    "desktop_notification_center": ["frontend/kyber/src/features/notifications/notification-center.tsx", "frontend/kyber/NOTIFICATIONS.md"],
+    "react_native_observation_sdk": ["packages/react-native/src/index.tsx"]
+  }
+}

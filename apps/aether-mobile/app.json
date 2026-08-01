@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Aether",
+    "slug": "aether-mobile",
+    "scheme": "aether",
+    "version": "8.12.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.aether.mobile",
+      "supportsTablet": false,
+      "associatedDomains": ["applinks:app.aether.example"]
+    },
+    "android": {
+      "package": "com.aether.mobile",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "app.aether.example" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": ["expo-secure-store"],
+    "extra": {
+      "appKind": "aether"
+    }
+  }
+}

@@ -392,6 +392,54 @@ generate-contracts: ## Regenerate all contract artifacts from JSON canonical reg
 generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts differ from committed
 	python scripts/generate_contracts.py --check
 
+# ---------------------------------------------------------------------------
+# Mobile / continuity / notification productization gates (program C0-C4)
+# ---------------------------------------------------------------------------
+.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test
+
+mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
+	npm run typecheck --workspace=packages/mobile-core --if-present
+
+mobile-test: ## CI gate — unit tests for the mobile SDK packages
+	npm run test --workspace=packages/mobile-core --if-present
+
+mobile-build-check: ## Mobile app scaffold invariants + honest native-build posture (report; exit 0 unless a scaffold is broken)
+	python scripts/mobile_build_check.py
+
+mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Python contract parity
+	python -m pytest tests/contracts/test_continuation_contract_parity.py \
+		tests/contracts/test_sync_event_contract_parity.py \
+		tests/contracts/test_delivery_receipt_parity.py \
+		tests/contracts/test_notification_contract_parity.py -q
+
+continuity-check: ## CI gate — cross-device continuation plane + client-sync feed
+	python -m pytest \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_repo.py" \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_routes.py" \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_ddl_parity.py" \
+		"$(BACKEND_DIR)/tests/unit/test_client_sync_repo.py" \
+		"$(BACKEND_DIR)/tests/unit/test_client_sync_routes.py" \
+		"$(BACKEND_DIR)/tests/unit/test_client_sync_ddl_parity.py" \
+		"$(BACKEND_DIR)/tests/unit/test_continuation_sync_integration.py" -q
+
+notification-check: ## CI gate — notification/delivery contract twins
+	python -m pytest tests/contracts/test_notification_contract_parity.py \
+		tests/contracts/test_delivery_receipt_parity.py -q
+
+notification-provider-check: ## CI gate — mobile push/email provider adapters + local fakes
+	python -m pytest \
+		"$(BACKEND_DIR)/tests/unit/test_notification_provider_adapters.py" \
+		"$(BACKEND_DIR)/tests/unit/test_delivery_adapters.py" -q
+
+credentials-inventory: ## Credential registry inventory (report; never prints secrets; exit 0)
+	python scripts/credentials_status.py --mode inventory
+
+credentials-preflight: ## Credential preflight — no live send; --strict blocks missing required creds
+	python scripts/credentials_status.py --mode preflight
+
+credentials-activation-smoke: ## Credential activation posture — no live send; never reports "ready"
+	python scripts/credentials_status.py --mode activation-smoke
+
 validate-schema-parity: ## Check event-registry.json, TS, and Python are in parity
 	python scripts/validate_event_schema_parity.py
 
