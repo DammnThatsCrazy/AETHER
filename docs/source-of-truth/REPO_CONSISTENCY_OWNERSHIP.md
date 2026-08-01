@@ -31,7 +31,7 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | consent/tenant/auth behavior changed | source-linked docs, contract validation, tests |
 | SDK public method changed | package exports, `src/index.ts`, declaration output, SDK release alignment |
 | package public type changed | barrel exports, TypeScript build, declaration files |
-| Profile 360 route/model changed | docs, frontend types, tests, Kyber/SHIKI surfaces if applicable |
+| Profile 360 route/model changed | docs, frontend types, tests, Kyber-adjacent surfaces if applicable |
 | Kyber operator route/model changed | docs, frontend types, tests, operator docs |
 | generated docs source changed | `docs/_generated/`, `docs/REPO-INDEX.md`, `docs/AUTOMATION.md` |
 | docs source-linked content changed | frontmatter validation, drift validation, reviewed sync stamp |

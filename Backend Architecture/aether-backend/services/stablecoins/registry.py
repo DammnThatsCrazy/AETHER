@@ -84,6 +84,29 @@ class StablecoinConnectorRegistry:
 
         return StablecoinEVMIngestionConnector(deployment=deployment, rpc=rpc, registry=self.deployments, **kwargs)
 
+    async def build_tenant_ingestion_connector(
+        self,
+        deployment_id: str,
+        *,
+        tenant_id: str,
+        provider_gateway: Any = None,
+        vault: Any = None,
+        **kwargs: Any,
+    ) -> "StablecoinEVMIngestionConnector | StablecoinSolanaIngestionConnector":
+        """Build a chain ingestion connector whose RPC is scoped to the tenant's
+        BYOK endpoint+key (resolved atomically) when tenant BYOK is enabled — so
+        the connector, and its ``ConnectorCertificationMixin.preflight``, validate
+        THAT tenant's endpoint. Observe-only; identity behavior (global endpoint)
+        when ``AETHER_ONCHAIN_TENANT_BYOK_RPC_ENABLED`` is off.
+        """
+        deployment = self._deployment(deployment_id)
+        from services.onchain.rpc_gateway import RPCGateway
+
+        rpc = await RPCGateway.for_tenant(
+            tenant_id, deployment.chain_id, provider_gateway=provider_gateway, vault=vault
+        )
+        return self.build_ingestion_connector(deployment_id, rpc=rpc, **kwargs)
+
     def build_price_connector(
         self,
         deployment_id: str,

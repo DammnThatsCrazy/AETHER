@@ -12,6 +12,7 @@ interface ImportMetaEnv {
   readonly VITE_AUTH0_AUDIENCE: string;
   readonly VITE_AUTH0_REDIRECT_URI: string;
   readonly VITE_AUTH0_LOGOUT_URI: string;
+  readonly VITE_PAYMENT_CANONICAL_REPAIR_ENABLED: string;
   [key: string]: string | undefined;
 }
 

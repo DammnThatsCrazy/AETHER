@@ -2697,3 +2697,48 @@ The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/sem
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
 
 Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of mutating graph edges or merging semantic-mediated estimates into ordinary attribution.
+
+## Communications Intelligence APIs
+
+The Communications Intelligence plane ingests provider communications (Klaviyo is
+the certified reference adapter) through the generic connector framework and the
+canonical comms spine. All routes are tenant-scoped; operator routes require an
+explicit Kyber operator scope and are audited.
+
+Connector setup + synchronization (`/v1/integrations/connectors/*`):
+
+- `PUT /v1/integrations/connectors/{type}` — configure/enable a connector.
+  Enabling a communications connector is plan-gated (§20): an over-limit request
+  returns `403` with an explicit `upgrade_required` / `quota_reached` reason.
+- `POST /v1/integrations/connectors/{type}/sync?since=<ISO8601>` — start a sync;
+  `since` selects a historical backfill window, omitted for incremental.
+- `GET /v1/integrations/connectors/{type}/sync-runs` — durable sync-run history
+  (the customer-visible progress surface; §12.4 fields including cursor movement,
+  record counts, and a safe error classification on failure).
+
+Communications tenant surface (`/v1/comms/*`):
+
+- `GET /v1/comms/entitlement` — the tenant's comms plan entitlement, current
+  connection usage, and quota state (`allowed` / `quota_approaching` /
+  `quota_reached` / `upgrade_required`).
+- `GET /v1/comms/suppressions` — the canonical suppression ledger, exposing
+  provider-reported vs Aether-enforced state per row (write-back is a separately
+  authorized capability, off by default).
+- `GET /v1/comms/identities/provisional` — provider identities awaiting mapping
+  review; `POST /v1/comms/identities/{id}/resolve` maps one to a canonical entity.
+- `GET /v1/comms/health` — comms pipeline health plus turnkey activation signals
+  (provisional identities, active suppressions, latest sync-run).
+
+Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
+
+- `GET /v1/comms/admin/sync-runs?tenant_id=…` — sync-run history for a tenant.
+- `POST /v1/comms/admin/suppressions/reconcile` — observe-only reconciliation of
+  provider-reported suppressions against Aether's canonical set (reports drift;
+  never writes back unless write-back is separately authorized).
+- Existing audited remediation: `POST /v1/comms/admin/state/rebuild`,
+  `/graph/reproject`, `/dsr/erase`.
+
+Provider readiness is truthful: without a credential a provider reports
+`credential_missing`, is never marked connected, and the certification harness
+reports `credential_turnkey / staging_validation_pending` — never `provider_live`
+— until real infrastructure and credentials are supplied.

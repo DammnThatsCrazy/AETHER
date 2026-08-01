@@ -206,6 +206,10 @@ class CommsConfig:
     # Attribution policy switches (ADR-C8)
     reported_opens_as_view_through: bool = _env_bool("AETHER_COMMS_OPENS_VIEW_THROUGH", False)
     replies_attribution_eligible: bool = _env_bool("AETHER_COMMS_REPLIES_ELIGIBLE", True)
+    # Provider suppression write-back is a separately-authorized capability
+    # (read permission never implies suppression-write); OFF by default,
+    # observe-only per ADR-C1.
+    suppression_write_back_enabled: bool = _env_bool("AETHER_COMMS_SUPPRESSION_WRITE_BACK", False)
 
 
 @dataclass(frozen=True)
@@ -215,6 +219,11 @@ class QuickNodeConfig:
     endpoint: str = _env("QUICKNODE_ENDPOINT", "")
     x402_enabled: bool = _env_bool("QUICKNODE_X402_ENABLED", False)
     max_rps: int = _env_int("QUICKNODE_MAX_RPS", 100)
+    # Per-tenant BYOK RPC endpoint/credential resolution (default OFF, observe-only).
+    # When enabled, a tenant-scoped RPCGateway resolves the tenant's OWN read-only
+    # RPC endpoint+key as an ATOMIC pair from the BYOK vault; OFF resolves to this
+    # global endpoint (identity behavior). x402_enabled/max_rps stay platform-level.
+    tenant_byok_enabled: bool = _env_bool("AETHER_ONCHAIN_TENANT_BYOK_RPC_ENABLED", False)
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +252,20 @@ class ProviderGatewayConfig:
     circuit_breaker_timeout_s: int = _env_int("PROVIDER_CB_TIMEOUT_S", 30)
     # Metering
     meter_flush_interval_s: int = _env_int("PROVIDER_METER_FLUSH_S", 60)
+    # ── Durable credential authority ───────────────────────────────────────
+    # Encryption cipher for the durable multi-slot provider-credential store.
+    # "local"   → AES-256-GCM (non-production, for local/test only)
+    # "aws_kms" → KMS envelope encryption (customer-managed CMK)
+    # Fail-closed: staging/production MUST be "aws_kms" with a key id set (see
+    # CredentialCipherStartupValidator).
+    credential_cipher: str = _env("CREDENTIAL_CIPHER", "local")
+    credential_kms_key_id: str = _env("CREDENTIAL_KMS_KEY_ID", "")
+    aws_region: str = _env("AWS_REGION", "us-east-1")
+    # Bounded caches for decrypted values / metadata (Redis is never the sole
+    # authority — the durable table is). TTLs in seconds; overlap window in hours.
+    credential_decrypt_cache_ttl_s: int = _env_int("CREDENTIAL_DECRYPT_CACHE_TTL_S", 60)
+    credential_metadata_cache_ttl_s: int = _env_int("CREDENTIAL_METADATA_CACHE_TTL_S", 30)
+    credential_rotation_overlap_hours: int = _env_int("CREDENTIAL_ROTATION_OVERLAP_HOURS", 24)
 
 
 # ---------------------------------------------------------------------------
@@ -1116,6 +1139,14 @@ class StablecoinIntelligenceConfig:
     olympus_benchmarks_enabled: bool = _env_bool("OLYMPUS_STABLECOIN_BENCHMARKS_ENABLED", False)
     kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
     shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
+    # Usage metering on the stablecoin observation path (default OFF, opt-in).
+    # Accept-then-meter, fail-open: records a RevOps usage-metering event AFTER an
+    # observation is persisted, keyed by the deterministic observation_id so
+    # replays dedupe; a metering-store failure never rejects/drops the
+    # observation. Aether writes only its own billing bookkeeping.
+    usage_metering_enabled: bool = _env_bool(
+        "AETHER_STABLECOIN_USAGE_METERING_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)
@@ -1148,6 +1179,61 @@ class PaymentRailsConfig:
     moonpay_enabled: bool = _env_bool("AETHER_PROVIDER_MOONPAY_ENABLED", False)
     bridge_enabled: bool = _env_bool("AETHER_PROVIDER_BRIDGE_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_PAYMENT_RAILS_ENABLED", False)
+
+    # Webhook admission controls (public endpoint hardening). Rate limiting is a
+    # per-endpoint fixed-minute-window budget enforced before signature
+    # verification so a flood of unverifiable bodies can't burn CPU on crypto;
+    # denied webhooks (bad/stale signature, oversized body) are quarantined
+    # metadata-only (sha256 + size, never the raw body) for forensics.
+    webhook_rate_limit_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_RATE_LIMIT_ENABLED", True
+    )
+    webhook_rate_limit_per_minute: int = _env_int(
+        "AETHER_PAYMENT_WEBHOOK_RATE_LIMIT_PER_MINUTE", 600
+    )
+    webhook_quarantine_denied: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_QUARANTINE_DENIED", True
+    )
+    # Consent gate on the payment-rails observation path (default OFF, opt-in).
+    # When enabled, a normalized funding session is persisted/emitted only when
+    # its subject (user_id) has granted the ``commerce`` consent purpose; a denied
+    # observation is dropped (never persisted) and recorded metadata-only. A
+    # session with no resolvable subject is allowed (there is no subject whose
+    # consent could be evaluated). Fails closed: a missing consent record or an
+    # unavailable consent store denies the observation.
+    webhook_consent_gate_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_WEBHOOK_CONSENT_GATE_ENABLED", False
+    )
+    # Canonical-event delivery path (default OFF, opt-in). When enabled, implied
+    # payment_* canonical events are written atomically to the durable Bronze +
+    # event_outbox spine (ingest_many) — the supervised outbox relay publishes
+    # them to the validated-events bus — instead of a direct EventProducer.publish.
+    # The deterministic canonical event id is the Bronze/outbox key, so a retry is
+    # a no-op (ingest_many writes an outbox row only for a newly-accepted Bronze
+    # row). Default OFF keeps the direct-publish path until the relay is validated
+    # end-to-end for this source.
+    canonical_outbox_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_CANONICAL_OUTBOX_ENABLED", False
+    )
+    # Usage metering on the observation path (default OFF, opt-in). When enabled,
+    # an accept-then-meter, fail-open hook records a RevOps usage-metering event
+    # AFTER a payment_* canonical event is emitted — keyed by the deterministic
+    # canonical event id so replays dedupe. A metering-store failure is swallowed
+    # and never rejects or drops the observation (billing-outage-safe). Aether
+    # only writes its own billing bookkeeping — never provider state.
+    usage_metering_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_USAGE_METERING_ENABLED", False
+    )
+    # Credential-authority-backed secret resolution (default OFF, opt-in). When
+    # enabled, payment-rail adapters resolve their webhook_signing_secret ONLY
+    # from the durable multi-slot CredentialAuthority (active + rotation-overlap
+    # previous, NO in-memory vault fallback); default-OFF preserves the legacy
+    # BYOKKeyVault read byte-for-byte until the cutover is proven. First step of
+    # retiring the in-memory BYOKKeyVault (polling-slot resolution + vault removal
+    # + default-on flip remain the sequenced follow-up).
+    credential_authority_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED", False
+    )
 
 
 @dataclass(frozen=True)

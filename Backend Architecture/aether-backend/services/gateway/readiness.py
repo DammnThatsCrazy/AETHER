@@ -242,6 +242,20 @@ async def readiness_report(
             "workers": supervisor.status() if supervisor is not None else {},
         }
 
+    # ── communications subsystem (§21) ──────────────────────────────────────
+    # A dedicated comms dimension: storage reachability + comms-required worker
+    # dependency (a dead projector/relay fails comms readiness) + backlog. Never
+    # fails on a single tenant's credential — that truth is per-connector.
+    try:
+        from services.comms.readiness import comms_subsystem_readiness
+        checks["communications"] = await comms_subsystem_readiness(
+            pool=pool, worker_capabilities=capabilities, is_local=is_local,
+        )
+    except Exception as exc:
+        checks["communications"] = _failed(
+            f"comms readiness error: {type(exc).__name__}"
+        )
+
     # ── auth config (non-local only; never echo values) ─────────────────────
     if is_local:
         checks["auth_config"] = _skipped("local environment")

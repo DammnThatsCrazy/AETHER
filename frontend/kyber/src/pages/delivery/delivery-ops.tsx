@@ -1,20 +1,28 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatInstant, useTimeContext } from '@aether/ui';
-import type { TimeContext } from '@aether/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, formatInstant, resolveCapabilityState, useTimeContext } from '@aether/ui';
+import type { CapabilityState, TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 
 type AnyRecord = Record<string, unknown>;
 
-const STATE_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
-  succeeded: 'success',
-  queued: 'default',
-  running: 'warning',
-  leased: 'warning',
-  failed: 'warning',
-  dead_letter: 'danger',
-  cancelled: 'default',
+// Delivery jobs run on a queue lifecycle (a different axis from the connector
+// credential lifecycle), so map each state explicitly onto the shared honest
+// matrix. The raw state stays the badge label; tones remain truthful — only a
+// completed job reads live, in-flight states are progress, terminal failures error.
+const DELIVERY_STATE_CAPABILITY: Record<string, CapabilityState> = {
+  succeeded: 'partner_live',
+  queued: 'credential_waiting',
+  running: 'connection_testing',
+  leased: 'connection_testing',
+  failed: 'error',
+  dead_letter: 'error',
+  cancelled: 'disabled',
 };
+
+function deliveryStateCapability(state: string): CapabilityState {
+  return DELIVERY_STATE_CAPABILITY[state] ?? resolveCapabilityState(state) ?? 'unavailable';
+}
 
 function formatTs(ts: string | null | undefined, timeCtx: TimeContext): string {
   if (!ts) return '—';
@@ -229,7 +237,9 @@ export function DeliveryOpsPage() {
                               <td className="py-1.5 px-2 text-text-muted">{truncate(j.id)}</td>
                               <td className="py-1.5 px-2 text-text-primary">{truncate(j.tenant_id, 16)}</td>
                               <td className="py-1.5 px-2">{String(j.provider_adapter ?? '—')}</td>
-                              <td className="py-1.5 px-2"><Badge variant={STATE_VARIANT[state] ?? 'default'}>{state}</Badge></td>
+                              <td className="py-1.5 px-2">{j.state == null
+                                ? <span className="text-text-muted">—</span>
+                                : <CapabilityStateBadge state={deliveryStateCapability(state)} label={state} />}</td>
                               <td className="py-1.5 px-2 text-right">{String(j.attempt_count ?? 0)}/{String(j.max_attempts ?? '—')}</td>
                               <td className="py-1.5 px-2 text-text-muted">{formatTs(j.created_at as string, timeCtx)}</td>
                               <td className="py-1.5 px-2">

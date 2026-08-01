@@ -489,6 +489,24 @@ credentialless-certification: ## Provider certification matrix + honest Credenti
 credentialless-certification-strict: ## Enforce every first-release provider >= CREDENTIAL_WAITING (no SCAFFOLDED); PR7-time gate
 	python scripts/credentialless_certification.py --strict
 
+.PHONY: financial-credential-readiness financial-credential-readiness-strict payment-rails-certification stablecoin-observer-certification financial-pilot-preflight
+
+financial-credential-readiness: ## Financial cohort (payments + stablecoin_chain) credential-readiness truth (report; exit 0)
+	python scripts/financial_credential_readiness.py
+
+financial-credential-readiness-strict: ## Fail-closed: every financial adapter READY (>= CREDENTIAL_WAITING, checks pass); NOT wired into ci-check
+	python scripts/financial_credential_readiness.py --strict
+
+payment-rails-certification: ## Fail-closed payment-rail cohort certification (Privy/Stripe/Coinbase/MoonPay/Bridge)
+	python scripts/financial_credential_readiness.py --domain payments --strict
+
+stablecoin-observer-certification: ## Fail-closed stablecoin-chain observer certification (EVM + Solana)
+	python scripts/financial_credential_readiness.py --domain stablecoin_chain --strict
+
+financial-pilot-preflight: ## Compose: strict financial readiness gate + validate the financial observation pilot manifest (fail-closed)
+	python scripts/financial_credential_readiness.py --strict
+	python scripts/validate_pilot_manifest.py config/pilot/examples/financial-observation.yaml --strict-providers
+
 audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with --check)
 	python scripts/smart_contract_audit_prep.py
 

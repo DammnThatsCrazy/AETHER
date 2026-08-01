@@ -160,7 +160,19 @@ class KlaviyoConnector(BaseConnector):
     supports_pull = True
     requires_secret = True
     supports_historical_backfill = True
+    supports_reconciliation = True          # reconcile() below
+    supports_account_discovery = True       # Klaviyo account is provider-scoped
     implementation_status = ImplementationStatus.CREDENTIAL_GATED
+    # Canonical comms capability surface projected onto the ProviderManifest
+    # (§9). Expressed as data-output/destination tokens because the manifest
+    # models capabilities as its typed outputs, not free-form booleans.
+    manifest_data_outputs = (
+        "comms.campaigns", "comms.flows", "comms.messages", "comms.profiles",
+        "comms.delivery_events", "comms.open_events", "comms.click_events",
+        "comms.bounces", "comms.complaints", "comms.unsubscribes",
+        "comms.suppressions", "comms.replies",
+    )
+    manifest_product_destinations = ("campaign_360", "profile_360")
     ingest_event_types = (
         "email_sent", "email_delivered", "email_opened", "email_clicked",
         "email_bounced", "email_dropped", "email_replied",

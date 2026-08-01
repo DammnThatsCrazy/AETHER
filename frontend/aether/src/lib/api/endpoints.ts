@@ -222,7 +222,10 @@ export const api = {
     get: (t: string) => restClient.get(`/v1/integrations/connectors/${t}`, wrap(unknownSchema)).then(r => r.data),
     configure: (t: string, body: Record<string, unknown>) => restClient.put(`/v1/integrations/connectors/${t}`, wrap(unknownSchema), body).then(r => r.data),
     test: (t: string) => restClient.post(`/v1/integrations/connectors/${t}/test`, wrap(unknownSchema), {}).then(r => r.data),
-    sync: (t: string) => restClient.post(`/v1/integrations/connectors/${t}/sync`, wrap(unknownSchema), {}).then(r => r.data),
+    sync: (t: string, opts?: { since?: string }) => restClient.post(`/v1/integrations/connectors/${t}/sync${opts?.since ? `?since=${encodeURIComponent(opts.since)}` : ''}`, wrap(unknownSchema), {}).then(r => r.data),
+    /** Durable sync-run history — the customer-visible sync progress surface (§12.4). */
+    syncRuns: (t: string, limit = 50) =>
+      restClient.get(`/v1/integrations/connectors/${t}/sync-runs?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Profile — full + all contextual sub-resources ─────────────────────────
@@ -637,6 +640,22 @@ export const api = {
 
     initiativeRollup: (initiativeId: string) =>
       restClient.get(`/v1/comms/initiatives/${initiativeId}/rollup`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Tenant comms plan entitlement + current usage + quota state (§20). */
+    entitlement: () =>
+      restClient.get('/v1/comms/entitlement', wrap(unknownSchema)).then(r => r.data),
+
+    /** Canonical suppression ledger (provider-reported vs Aether-enforced) (§16). */
+    suppressions: (limit = 200) =>
+      restClient.get(`/v1/comms/suppressions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Provider identities awaiting mapping review (§13). */
+    provisionalIdentities: (limit = 100) =>
+      restClient.get(`/v1/comms/identities/provisional?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Map a provisional provider identity to a canonical entity (§13). */
+    resolveIdentity: (identityId: string, canonicalEntityId: string) =>
+      restClient.post(`/v1/comms/identities/${identityId}/resolve`, wrap(unknownSchema), { canonical_entity_id: canonicalEntityId }).then(r => r.data),
   },
 
   // ── Campaign Sources (paid-media connectors) ───────────────────────────────

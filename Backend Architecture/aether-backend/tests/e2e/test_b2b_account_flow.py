@@ -46,6 +46,96 @@ PROFILE_EVALUATOR = f"profile-{uuid4().hex[:8]}"
 
 CONVERSION_ID = str(uuid4())
 
+# Stable identity so a re-seed (see _ensure_seeded) is an idempotent replay,
+# never a duplicate touchpoint/conversion under a fresh key. The repos dedup
+# on (tenant_id, idempotency_key) / (tenant_id, deduplication_key).
+_TP_KEYS = {
+    PROFILE_CHAMPION: f"b2b-tp-champion-{PROFILE_CHAMPION}",
+    PROFILE_ECONOMIC_BUYER: f"b2b-tp-buyer-{PROFILE_ECONOMIC_BUYER}",
+    PROFILE_EVALUATOR: f"b2b-tp-evaluator-{PROFILE_EVALUATOR}",
+}
+_TP_IDS = {p: str(uuid4()) for p in _TP_KEYS}
+DEDUP_KEY = f"crm-won-{uuid4().hex}"
+
+
+def _touchpoint_payloads() -> list[dict]:
+    return [
+        {
+            "touchpoint_id": _TP_IDS[PROFILE_CHAMPION],
+            "tenant_id": TENANT_ID,
+            "profile_id": PROFILE_CHAMPION,
+            "account_id": ACCOUNT_ID,
+            "campaign_id": CAMPAIGN_ID,
+            "touchpoint_type": "click",
+            "channel": "paid_search",
+            "occurred_at": _now_iso(),
+            "received_at": _now_iso(),
+            "idempotency_key": _TP_KEYS[PROFILE_CHAMPION],
+        },
+        {
+            "touchpoint_id": _TP_IDS[PROFILE_ECONOMIC_BUYER],
+            "tenant_id": TENANT_ID,
+            "profile_id": PROFILE_ECONOMIC_BUYER,
+            "account_id": ACCOUNT_ID,
+            "campaign_id": CAMPAIGN_ID,
+            "touchpoint_type": "impression",
+            "channel": "display",
+            "occurred_at": _now_iso(),
+            "received_at": _now_iso(),
+            "idempotency_key": _TP_KEYS[PROFILE_ECONOMIC_BUYER],
+        },
+        {
+            "touchpoint_id": _TP_IDS[PROFILE_EVALUATOR],
+            "tenant_id": TENANT_ID,
+            "profile_id": PROFILE_EVALUATOR,
+            "account_id": ACCOUNT_ID,
+            "campaign_id": CAMPAIGN_ID,
+            "touchpoint_type": "click",
+            "channel": "organic_search",
+            "occurred_at": _now_iso(),
+            "received_at": _now_iso(),
+            "idempotency_key": _TP_KEYS[PROFILE_EVALUATOR],
+        },
+    ]
+
+
+def _conversion_payload() -> dict:
+    return {
+        "conversion_id": CONVERSION_ID,
+        "tenant_id": TENANT_ID,
+        "conversion_type": "opportunity_closed_won",
+        "profile_id": PROFILE_CHAMPION,
+        "account_id": ACCOUNT_ID,
+        "gross_value": "25000.00",
+        "net_value": "22500.00",
+        "currency": "USD",
+        "occurred_at": _now_iso(),
+        "observed_at": _now_iso(),
+        "conversion_status": "confirmed",
+        "authority_rank": 90,
+        "attribution_eligible": True,
+        "deduplication_key": DEDUP_KEY,
+    }
+
+
+def _ensure_seeded() -> None:
+    """Idempotently (re)establish the account touchpoint + conversion graph.
+
+    The in-process stores are global; a foreign test calling
+    reset_in_memory_stores() (or a worker split under pytest-xdist
+    ``--dist load``) can drop this class's earlier writes between its ordered
+    methods. Every upsert is keyed by a stable module-level idempotency /
+    deduplication key, so re-seeding is a no-op replay when state survived and
+    a clean restore when it did not.
+    """
+    from services.measurement.repositories.conversion_repo import ConversionRepository
+    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+
+    tp_repo = TouchpointRepository()
+    for tp in _touchpoint_payloads():
+        _run(tp_repo.upsert(tp))
+    _run(ConversionRepository().upsert(_conversion_payload()))
+
 
 class TestB2BAccountFlow:
     """E2E: multi-user account journey → single closed-won conversion → attribution."""
@@ -58,45 +148,7 @@ class TestB2BAccountFlow:
             pytest.skip("TouchpointRepository not available")
 
         repo = TouchpointRepository()
-        touchpoints = [
-            {
-                "touchpoint_id": str(uuid4()),
-                "tenant_id": TENANT_ID,
-                "profile_id": PROFILE_CHAMPION,
-                "account_id": ACCOUNT_ID,
-                "campaign_id": CAMPAIGN_ID,
-                "touchpoint_type": "click",
-                "channel": "paid_search",
-                "occurred_at": _now_iso(),
-                "received_at": _now_iso(),
-                "idempotency_key": f"b2b-tp-champion-{uuid4().hex}",
-            },
-            {
-                "touchpoint_id": str(uuid4()),
-                "tenant_id": TENANT_ID,
-                "profile_id": PROFILE_ECONOMIC_BUYER,
-                "account_id": ACCOUNT_ID,
-                "campaign_id": CAMPAIGN_ID,
-                "touchpoint_type": "impression",
-                "channel": "display",
-                "occurred_at": _now_iso(),
-                "received_at": _now_iso(),
-                "idempotency_key": f"b2b-tp-buyer-{uuid4().hex}",
-            },
-            {
-                "touchpoint_id": str(uuid4()),
-                "tenant_id": TENANT_ID,
-                "profile_id": PROFILE_EVALUATOR,
-                "account_id": ACCOUNT_ID,
-                "campaign_id": CAMPAIGN_ID,
-                "touchpoint_type": "click",
-                "channel": "organic_search",
-                "occurred_at": _now_iso(),
-                "received_at": _now_iso(),
-                "idempotency_key": f"b2b-tp-evaluator-{uuid4().hex}",
-            },
-        ]
-        for tp in touchpoints:
+        for tp in _touchpoint_payloads():
             result = _run(repo.upsert(tp))
             assert result is not None, f"Touchpoint upsert failed for profile {tp['profile_id']}"
 
@@ -108,23 +160,7 @@ class TestB2BAccountFlow:
             pytest.skip("ConversionRepository not available")
 
         repo = ConversionRepository()
-        conv = {
-            "conversion_id": CONVERSION_ID,
-            "tenant_id": TENANT_ID,
-            "conversion_type": "opportunity_closed_won",
-            "profile_id": PROFILE_CHAMPION,
-            "account_id": ACCOUNT_ID,
-            "gross_value": "25000.00",
-            "net_value": "22500.00",
-            "currency": "USD",
-            "occurred_at": _now_iso(),
-            "observed_at": _now_iso(),
-            "conversion_status": "confirmed",
-            "authority_rank": 90,
-            "attribution_eligible": True,
-            "deduplication_key": f"crm-won-{uuid4().hex}",
-        }
-        result = _run(repo.upsert(conv))
+        result = _run(repo.upsert(_conversion_payload()))
         assert result is not None
 
     def test_journey_compiled_per_profile(self):
@@ -134,6 +170,7 @@ class TestB2BAccountFlow:
         except ImportError:
             pytest.skip("JourneyCompiler not available")
 
+        _ensure_seeded()
         compiler = JourneyCompiler()
         for profile_id in [PROFILE_CHAMPION, PROFILE_ECONOMIC_BUYER, PROFILE_EVALUATOR]:
             journey = _run(compiler.compile_for_profile(TENANT_ID, profile_id))
@@ -147,6 +184,7 @@ class TestB2BAccountFlow:
         except ImportError:
             pytest.skip("AttributionEngine not available")
 
+        _ensure_seeded()
         engine = AttributionEngine()
         run = _run(engine.run_for_conversion(
             TENANT_ID,
@@ -172,6 +210,7 @@ class TestB2BAccountFlow:
         except ImportError:
             pytest.skip("TouchpointRepository not available")
 
+        _ensure_seeded()
         repo = TouchpointRepository()
         # Query under a different tenant — should return empty
         results = _run(repo.list_by_profile("different-tenant", PROFILE_CHAMPION))

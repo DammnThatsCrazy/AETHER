@@ -177,6 +177,10 @@ class TestFirstReleaseFlagsDefaultOff:
         assert cfg.moonpay_enabled is False
         assert cfg.bridge_enabled is False
         assert cfg.kyber_enabled is False
+        # observation-path rollout flags all default OFF (dormant until proven)
+        assert cfg.canonical_outbox_enabled is False
+        assert cfg.usage_metering_enabled is False
+        assert cfg.credential_authority_enabled is False
 
     def test_ai_economics_defaults(self):
         from config.settings import AIEconomicsConfig
