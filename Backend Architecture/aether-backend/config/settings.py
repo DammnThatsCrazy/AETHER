@@ -222,6 +222,12 @@ class ActivationConfig:
     activation_enabled: bool = _env_bool("AETHER_ACTIVATION_ENABLED", False)
 
 
+@dataclass(frozen=True)
+class CommandCenterConfig:
+    """Feature flag for the read-only tenant Command Center aggregator."""
+    command_center_enabled: bool = _env_bool("AETHER_COMMAND_CENTER_ENABLED", False)
+
+
 # ---------------------------------------------------------------------------
 # Kyber Missions — mission control plane + monitoring loop (OFF by default)
 # ---------------------------------------------------------------------------
@@ -1502,6 +1508,9 @@ class Settings:
 
     # Tenant Activation
     activation: ActivationConfig = field(default_factory=ActivationConfig)
+
+    # Tenant Command Center (read-only aggregator)
+    command_center: CommandCenterConfig = field(default_factory=CommandCenterConfig)
 
     # Kyber Missions
     kyber_missions: KyberMissionsConfig = field(default_factory=KyberMissionsConfig)

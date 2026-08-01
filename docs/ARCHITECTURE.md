@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "41c79d4"
+last_synced_commit: "b1511d2490b2"
 ---
 # Aether vNext — Architecture Guide
 
@@ -278,6 +278,7 @@ Resolution Consumer (real-time)
 | `/v1/config/sdk/manifest` | GET | SDK remote config (signed manifests + rollouts) |
 | `/v1/activation/*` | GET/POST | Self-serve tenant activation FSM (flag-gated `AETHER_ACTIVATION_ENABLED`, default OFF) |
 | `/v1/kyber/missions[/*]` | GET/POST | Kyber Mission aggregate + monitoring read plane (operator; flag-gated `KYBER_MISSIONS_ENABLED`, default OFF) |
+| `/v1/command-center` | GET | Read-only tenant Command Center aggregate — composes nine tenant-safe reads in-process (flag-gated `AETHER_COMMAND_CENTER_ENABLED`, default OFF) |
 | `/v1/ml/predict` | POST | ML inference (single; 9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
 | `/v1/ml/predict/batch` | POST | Batch ML inference |
 | `/v1/rewards/evaluate` | POST | Evaluate reward eligibility (A6 no-custody) |

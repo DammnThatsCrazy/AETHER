@@ -904,6 +904,14 @@ def create_app() -> FastAPI:
         logger.info("Tenant Activation: routes mounted (/v1/activation)")
     else:
         logger.info("Tenant Activation: disabled (set AETHER_ACTIVATION_ENABLED=true to enable)")
+
+    # ── Tenant Command Center (feature-flagged, OFF by default) ─────────
+    if settings.command_center.command_center_enabled:
+        from services.command_center.routes import router as command_center_router
+        app.include_router(command_center_router)   # /v1/command-center
+        logger.info("Tenant Command Center: routes mounted (/v1/command-center)")
+    else:
+        logger.info("Tenant Command Center: disabled (set AETHER_COMMAND_CENTER_ENABLED=true to enable)")
     app.include_router(reliability_admin_router)  # Kyber reliability command center
     app.include_router(reliability_status_router) # Tenant-safe system status
 

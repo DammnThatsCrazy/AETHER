@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/config/settings.py
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "b1511d2490b2"
 ---
 
 # Target Architecture
