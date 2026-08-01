@@ -135,9 +135,19 @@ async def test_worker_executes_erasure_and_marks_step_with_evidence():
     assert step["records_impacted"] == 5
     assert step["audit_event_id"] == job_id
     assert step["requires_recompute"] is False
-    # Only the store this handler actually erased was marked.
-    others = [c for c in status["components"] if c["component"] != MEASUREMENT_COMPONENT]
-    assert all(c["status"] == "pending" for c in others)
+    # The three mobile stores were also erased end-to-end and marked with their
+    # OWN real erased-row receipts (0 here — nothing was seeded for this subject).
+    mobile_components = {"continuation_records", "mobile_installations", "client_sync_records"}
+    for c in status["components"]:
+        if c["component"] in mobile_components:
+            assert c["status"] == "completed"
+            assert c["records_impacted"] == 0
+            assert c["audit_event_id"] == job_id
+        elif c["component"] == MEASUREMENT_COMPONENT:
+            assert c["status"] == "completed"
+        else:
+            # Every other registry component is untouched by this handler.
+            assert c["status"] == "pending"
 
     # The DSR record reflects real completion state.
     record = await ConsentRepository().find_by_id(f"dsr_{dsr['dsr_id']}")

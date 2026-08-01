@@ -6,14 +6,19 @@ record and durably enqueues a ``consent.erasure`` job, and this handler executes
 the measurement erasure — so a process death between request and completion is
 recovered by the jobs worker (lease sweep + retry) instead of silently lost.
 
-Evidence contract: the handler marks the propagation step ONLY for the store it
-actually erased, carrying that store's own receipt (tombstone counts, the job id
-as the audit pointer). ``MeasurementPrivacyHandler.handle_erasure`` decomposes
-into per-store try blocks (touchpoint tombstones, conversion tombstones, journey
-rebuild) that all live in the measurement/attribution store, so exactly one
-registry component — ``attribution_records`` — is marked here. Marking any other
-component would fabricate completion evidence for stores this handler never
-touched.
+Evidence contract: the handler marks a propagation step ONLY for a store it
+actually erased, carrying that store's own receipt (row counts, the job id as the
+audit pointer). ``MeasurementPrivacyHandler.handle_erasure`` decomposes into
+per-store try blocks (touchpoint tombstones, conversion tombstones, journey
+rebuild) that all live in the measurement/attribution store, so the
+``attribution_records`` component is marked from that store's tombstone counts.
+
+The handler then reaches the mobile plane, erasing three more stores — each in
+its own isolated try/except and each marked with its OWN real erased-row count:
+``continuation_records`` (continuations + selections), ``mobile_installations``
+(installations + push_subscriptions), and ``client_sync_records``
+(sync_change_log). A store is never marked with a fabricated count; a per-store
+failure marks that component ``failed`` and keeps the whole job retryable.
 """
 
 from __future__ import annotations
@@ -34,6 +39,15 @@ ERASURE_JOB_TYPE = "consent.erasure"
 # The single dsr_propagation component the measurement erasure produces real
 # evidence for (see module docstring).
 MEASUREMENT_COMPONENT = "attribution_records"
+
+# The mobile-plane dsr_propagation components this handler now erases and marks
+# with each store's own real erased-row receipt:
+#   continuation_records → continuations + selections
+#   mobile_installations → installations + push_subscriptions
+#   client_sync_records  → sync_change_log
+MOBILE_CONTINUATION_COMPONENT = "continuation_records"
+MOBILE_INSTALLATION_COMPONENT = "mobile_installations"
+MOBILE_CLIENT_SYNC_COMPONENT = "client_sync_records"
 
 
 def register_consent_erasure_handler() -> None:
@@ -81,6 +95,53 @@ def register_consent_erasure_handler() -> None:
                 requires_recompute=not bool(result.get("journey_rebuild_triggered")),
                 audit_event_id=ctx.job_id,
             )
+
+        # ── Mobile continuation / installation / client-sync stores ──────────
+        # Each store is erased in its OWN try/except so one store's failure never
+        # blocks the others, and each component is marked with that store's REAL
+        # erased-row count (never a fabricated receipt). Only marked when a
+        # propagation record exists (mirrors the measurement guard above).
+        if propagation_request_id:
+            from services.client_sync import service as client_sync_service
+            from services.continuation import service as continuation_service
+            from services.mobile import service as mobile_service
+
+            # All three mobile stores isolate by ``t:{tenant_id}`` (installations +
+            # push_subscriptions, continuations + selections, sync_change_log).
+            scope = mobile_service.tenant_scope(ctx.tenant_id)
+            mobile_erasers = (
+                (MOBILE_CONTINUATION_COMPONENT, continuation_service.erase_principal),
+                (MOBILE_INSTALLATION_COMPONENT, mobile_service.erase_principal),
+                (MOBILE_CLIENT_SYNC_COMPONENT, client_sync_service.erase_principal),
+            )
+            for component, erase in mobile_erasers:
+                try:
+                    erased = await erase(scope, user_id)
+                except Exception as exc:  # noqa: BLE001 — isolate per-store failure
+                    errors.append(f"{component}: {exc}")
+                    try:
+                        await dsr_propagation_service.mark_step(
+                            propagation_request_id,
+                            component,
+                            "failed",
+                            tenant_id=ctx.tenant_id,
+                            audit_event_id=ctx.job_id,
+                        )
+                    except Exception:  # noqa: BLE001 — never let evidence-marking abort the loop
+                        logger.warning(
+                            "failed to mark DSR component %s failed", component, exc_info=True
+                        )
+                    continue
+                # Evidence is the store's OWN receipt: the rows it erased + the
+                # durable job id as the audit pointer for this execution.
+                await dsr_propagation_service.mark_step(
+                    propagation_request_id,
+                    component,
+                    "completed",
+                    tenant_id=ctx.tenant_id,
+                    records_impacted=int(erased),
+                    audit_event_id=ctx.job_id,
+                )
 
         if dsr_id:
             repo = ConsentRepository()
