@@ -1032,6 +1032,52 @@ async def delete_webhook(webhook_id: str, request: Request):
     return APIResponse(data={"deleted": True}).to_dict()
 
 
+@router.post("/webhooks/{webhook_id}/test")
+async def test_webhook(webhook_id: str, request: Request):
+    """Send a test payload to a configured webhook (migrated from the retired legacy
+    notification router). Unlike the legacy handler this fails closed on SSRF: the
+    target URL is checked against private/loopback ranges before any request."""
+    import time
+
+    from repositories.repos import WebhookRepository
+    from shared.common.common import ForbiddenError, NotFoundError
+    from services.delivery.adapters.base import SSRFBlockedError
+    from services.delivery.adapters.webhook import _check_ssrf
+
+    request.state.tenant.require_permission("read")
+    wh_repo = WebhookRepository()
+    webhook = await wh_repo.find_by_id(webhook_id)
+    if not webhook:
+        raise NotFoundError("Webhook")
+    if webhook.get("tenant_id") != request.state.tenant.tenant_id:
+        raise ForbiddenError("Webhook belongs to a different tenant")
+    url = webhook.get("url", "")
+    try:
+        _check_ssrf(url)
+    except SSRFBlockedError as exc:
+        return APIResponse(data={"success": False, "error": f"blocked: {exc}", "latency_ms": 0}).to_dict()
+
+    import httpx
+
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                url,
+                json={"event": "test", "source": "aether"},
+                headers={"X-Aether-Event": "test"},
+            )
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return APIResponse(data={
+            "success": resp.status_code < 400,
+            "status_code": resp.status_code,
+            "latency_ms": latency_ms,
+        }).to_dict()
+    except httpx.RequestError as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return APIResponse(data={"success": False, "error": str(exc), "latency_ms": latency_ms}).to_dict()
+
+
 @router.post("/alerts")
 async def create_alert(body: _AlertRule, request: Request):
     from repositories.repos import AlertRepository

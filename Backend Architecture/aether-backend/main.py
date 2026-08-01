@@ -302,7 +302,10 @@ from services.billing.routes import router as billing_router, admin_overage_rout
 from services.auth.routes import router as auth_router, admin_auth_router
 from services.contact.routes import router as contact_router
 from services.recommendations.routes import router as recommendations_router
-from services.notification.routes import router as notification_alerts_router
+# Legacy notification router retired: notification_intelligence is canonical and
+# first-match-shadowed all its endpoints except POST /webhooks/{id}/test, which was
+# migrated into notification_intelligence (with SSRF protection). See the route-
+# conflict ratchet in tests/unit/test_route_conflicts.py.
 from services.pnl.routes import router as pnl_router
 from services.resolution.routes import router as resolution_router
 from services.signals.routes import router as signals_router
@@ -782,7 +785,6 @@ def create_app() -> FastAPI:
     _mount_demo_seed_routes(app, settings.env.value)
     app.include_router(contact_router)
     app.include_router(recommendations_router)
-    app.include_router(notification_alerts_router)
     app.include_router(resolution_router)
     app.include_router(signals_router)
     app.include_router(geo_router)
