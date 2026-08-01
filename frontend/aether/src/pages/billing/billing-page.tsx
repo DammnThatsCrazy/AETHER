@@ -25,6 +25,7 @@ import {
 } from '@aether/ui';
 import {
   useBillingPlans,
+  useBillingCapability,
   useCreateCheckout,
   useBillingPortal,
   useInvoices,
@@ -32,6 +33,7 @@ import {
   useMeProfile,
 } from '@aether-app/features/account';
 import { env } from '@aether-app/lib/env';
+import type { CustomerBillingPlan } from '@aether-app/lib/api/endpoints';
 
 const PLAN_ORDER = ['P1', 'P2', 'P3', 'P4'];
 
@@ -40,11 +42,13 @@ function PlanCard({
   isCurrent,
   onUpgrade,
   loading,
+  disabled,
 }: {
-  plan: { plan_id: string; display_name: string; price_monthly: number; monthly_quota: number; burst_rpm: number; features: string[] };
+  plan: CustomerBillingPlan;
   isCurrent: boolean;
   onUpgrade: () => void;
   loading: boolean;
+  disabled: boolean;
 }) {
   const timeCtx = useTimeContext();
   const isHighTier = ['P3', 'P4'].includes(plan.plan_id);
@@ -65,16 +69,15 @@ function PlanCard({
           <div>{formatCount(plan.monthly_quota, timeCtx)} events/mo</div>
           <div>{formatCount(plan.burst_rpm, timeCtx)} req/min burst</div>
         </div>
-        <ul className="space-y-1">
-          {plan.features.map(f => (
-            <li key={f} className="text-xs text-text-secondary flex items-center gap-1.5">
-              <GlyphIcon glyph="[+]" className="text-success text-xs" />
-              {f}
-            </li>
-          ))}
-        </ul>
+        <div className="text-xs text-text-secondary space-y-1">
+          <div className="flex items-center gap-1.5">
+            <GlyphIcon glyph="[+]" className="text-success text-xs" />
+            {formatCount(plan.service_count, timeCtx)} included services
+          </div>
+          <p>{plan.target_user}</p>
+        </div>
         {!isCurrent && (
-          <Button variant="primary" size="sm" className="w-full" onClick={onUpgrade} disabled={loading}>
+          <Button variant="primary" size="sm" className="w-full" onClick={onUpgrade} disabled={loading || disabled}>
             {loading ? '[···]' : 'Upgrade'}
           </Button>
         )}
@@ -89,13 +92,20 @@ interface EnterpriseModalProps {
   prefill: { name: string; email: string };
 }
 
-const COMPANY_TYPES = ['startup', 'smb', 'enterprise', 'agency', 'other'];
+const COMPANY_TYPES = ['startup', 'smb', 'enterprise', 'government', 'nonprofit'] as const;
+type CompanyType = (typeof COMPANY_TYPES)[number];
 const MAX_MESSAGE = 500;
 
 function EnterpriseContactModal({ open, onClose, prefill }: EnterpriseModalProps) {
   const { toast } = useToast();
   const { mutate, isLoading } = useEnterpriseContact();
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    email: string;
+    company_name: string;
+    company_type: CompanyType | '';
+    message: string;
+  }>({
     name: prefill.name,
     email: prefill.email,
     company_name: '',
@@ -105,7 +115,9 @@ function EnterpriseContactModal({ open, onClose, prefill }: EnterpriseModalProps
   const [success, setSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function setField(field: string, value: string) {
+  function setField(field: 'name' | 'email' | 'company_name' | 'message', value: string): void;
+  function setField(field: 'company_type', value: CompanyType | ''): void;
+  function setField(field: keyof typeof form, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
     if (submitError) setSubmitError(null);
   }
@@ -113,7 +125,11 @@ function EnterpriseContactModal({ open, onClose, prefill }: EnterpriseModalProps
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
-    const result = await mutate(form);
+    if (!form.company_type) {
+      setSubmitError('Select a company type');
+      return;
+    }
+    const result = await mutate({ ...form, company_type: form.company_type });
     if (result !== null) {
       setSuccess(true);
       toast.success("Message sent — we'll be in touch within 2 business days");
@@ -161,7 +177,7 @@ function EnterpriseContactModal({ open, onClose, prefill }: EnterpriseModalProps
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="ent-type" className="text-xs text-text-secondary">Company type</label>
-              <select id="ent-type" required value={form.company_type} onChange={e => setField('company_type', e.target.value)} className="bg-surface-raised text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus">
+              <select id="ent-type" required value={form.company_type} onChange={e => setField('company_type', e.target.value as CompanyType | '')} className="bg-surface-raised text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus">
                 <option value="">Select…</option>
                 {COMPANY_TYPES.map(t => (
                   <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
@@ -246,6 +262,7 @@ export function BillingPage() {
   const { toast } = useToast();
   const timeCtx = useTimeContext();
   const { data: plans, isLoading: plansLoading, error: plansError } = useBillingPlans();
+  const { data: billingCapability } = useBillingCapability();
   const { data: profile } = useMeProfile();
   const { data: invoices, isLoading: invoicesLoading, error: invoicesError } = useInvoices();
   const { mutate: createCheckout, isLoading: checkoutLoading } = useCreateCheckout();
@@ -254,8 +271,13 @@ export function BillingPage() {
   const [checkoutingPlan, setCheckoutingPlan] = useState<string | null>(null);
 
   const enterpriseEmailVerified = env.VITE_ENTERPRISE_EMAIL_VERIFIED === 'true';
+  const billingAvailable = billingCapability?.status === 'available';
 
   async function handleUpgrade(planId: string) {
+    if (!billingAvailable) {
+      toast.error('Billing is not configured for this deployment');
+      return;
+    }
     setCheckoutingPlan(planId);
     const result = await createCheckout(planId);
     setCheckoutingPlan(null);
@@ -267,6 +289,10 @@ export function BillingPage() {
   }
 
   async function handlePortal() {
+    if (!billingAvailable) {
+      toast.error('Billing is not configured for this deployment');
+      return;
+    }
     const result = await openPortal(undefined);
     if (!result?.url) {
       toast.error('Billing portal unavailable — please try again');
@@ -281,12 +307,18 @@ export function BillingPage() {
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <span className="text-sm font-mono text-text-muted">Billing</span>
-        <Button variant="ghost" size="sm" onClick={() => { void handlePortal(); }} disabled={portalLoading}>
+        <Button variant="ghost" size="sm" onClick={() => { void handlePortal(); }} disabled={portalLoading || !billingAvailable}>
           {portalLoading ? '[···]' : 'Manage billing →'}
         </Button>
       </div>
 
       <TerminalSeparator label="plans" className="mb-4" />
+
+      {billingCapability && !billingAvailable && (
+        <p className="mb-4 text-xs font-mono text-warning" role="status">
+          Billing provider unavailable: {billingCapability.detail}
+        </p>
+      )}
 
       {plansLoading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -307,6 +339,7 @@ export function BillingPage() {
                 isCurrent={plan.plan_id === currentPlanId}
                 onUpgrade={() => { void handleUpgrade(plan.plan_id); }}
                 loading={checkoutLoading && checkoutingPlan === plan.plan_id}
+                disabled={!billingAvailable}
               />
             ))}
           <EnterpriseCard
@@ -334,7 +367,7 @@ export function BillingPage() {
                 {formatDate(inv.period_start, timeCtx)}
               </span>
               <span className="text-text-primary font-mono">
-                {formatCurrency(inv.amount / 100, inv.currency, timeCtx)}
+                {formatCurrency(inv.amount_due / 100, inv.currency, timeCtx)}
               </span>
               <Badge
                 variant={inv.status === 'paid' ? 'default' : 'default'}
@@ -343,9 +376,9 @@ export function BillingPage() {
               >
                 {inv.status}
               </Badge>
-              {inv.invoice_url && (
+              {inv.hosted_invoice_url && (
                 <button
-                  onClick={() => window.open(inv.invoice_url!, '_blank', 'noopener')}
+                  onClick={() => window.open(inv.hosted_invoice_url!, '_blank', 'noopener')}
                   className="text-accent underline"
                 >
                   Download

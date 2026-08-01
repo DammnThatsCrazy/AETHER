@@ -178,11 +178,16 @@ async def test_detect_silent_sdks_flags_stale(sdk_health_service):
     svc, svc_mod = sdk_health_service
 
     old_time = (datetime.now(timezone.utc) - timedelta(seconds=600)).isoformat()
-    await svc._heartbeat_store.set(
-        svc._heartbeat_key("tenant-silent", "sdk-stale"),
-        {"tenant_id": "tenant-silent", "sdk_id": "sdk-stale",
-         "platform": "web", "sdk_version": "7.0.0", "reported_at": old_time},
-    )
+    await svc._installations.upsert({
+        "tenant_id": "tenant-silent",
+        "installation_id": "sdk-stale",
+        "platform": "web",
+        "sdk_version": "7.0.0",
+        "last_seen": old_time,
+        "status": "healthy",
+        "disabled": False,
+        "uninstalled": False,
+    })
 
     silent = await svc.detect_silent_sdks("tenant-silent")
     assert "sdk-stale" in [s["sdk_id"] for s in silent]
@@ -193,11 +198,16 @@ async def test_recent_sdk_not_flagged_silent(sdk_health_service):
     svc, svc_mod = sdk_health_service
 
     recent_time = datetime.now(timezone.utc).isoformat()
-    await svc._heartbeat_store.set(
-        svc._heartbeat_key("tenant-recent", "sdk-recent"),
-        {"tenant_id": "tenant-recent", "sdk_id": "sdk-recent",
-         "platform": "web", "sdk_version": "7.0.0", "reported_at": recent_time},
-    )
+    await svc._installations.upsert({
+        "tenant_id": "tenant-recent",
+        "installation_id": "sdk-recent",
+        "platform": "web",
+        "sdk_version": "7.0.0",
+        "last_seen": recent_time,
+        "status": "healthy",
+        "disabled": False,
+        "uninstalled": False,
+    })
 
     silent = await svc.detect_silent_sdks("tenant-recent")
     assert "sdk-recent" not in [s["sdk_id"] for s in silent]

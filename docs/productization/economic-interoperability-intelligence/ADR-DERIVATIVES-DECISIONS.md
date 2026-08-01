@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/streams.py
   - Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py
 canonical_owner: platform@aether
-last_synced_commit: "03ab3a6"
+last_synced_commit: "41c79d4"
 ---
 
 # Derivatives Intelligence — Domain Decisions

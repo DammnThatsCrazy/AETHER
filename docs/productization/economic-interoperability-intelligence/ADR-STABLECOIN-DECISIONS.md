@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/stablecoin/valuation.py
   - Backend Architecture/aether-backend/services/stablecoin/finality.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "41c79d4"
 ---
 
 # Stablecoin Intelligence — Domain Decisions

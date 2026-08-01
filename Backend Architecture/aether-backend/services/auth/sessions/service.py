@@ -186,7 +186,53 @@ class SessionService:
             await self._mark_expired(record.get("id"))
             raise SessionValidationError("session idle expiry reached")
 
+        # Activity is durable operational evidence.  Do not extend the absolute
+        # or idle deadlines here: expiry policy remains fixed and predictable.
+        # Failure to record activity must not turn a valid session into an
+        # authentication outage.
+        try:
+            last_seen_at = now.isoformat()
+            await self._repo.update(record["id"], {"last_seen_at": last_seen_at})
+            record["last_seen_at"] = last_seen_at
+        except Exception:
+            pass
         return record
+
+    async def list_for_tenant(
+        self, tenant_id: str, *, limit: int = 20, offset: int = 0
+    ) -> tuple[list[dict], int]:
+        """List a tenant's sessions without ever exposing token hashes."""
+        sessions = await self._repo.find_many(
+            filters={"tenant_id": tenant_id}, limit=limit, offset=offset
+        )
+        total = await self._repo.count(filters={"tenant_id": tenant_id})
+        safe = [
+            {key: value for key, value in session.items() if key != "token_hash"}
+            for session in sessions
+        ]
+        return safe, total
+
+    async def revoke_for_tenant(self, tenant_id: str, session_id: str) -> bool:
+        """Revoke a session only when it belongs to the authenticated tenant."""
+        record = await self._repo.find_by_id(session_id)
+        if not record or record.get("tenant_id") != tenant_id:
+            return False
+        return await self.revoke_session(session_id)
+
+    async def revoke_other_sessions(self, tenant_id: str, current_session_id: str) -> int:
+        """Revoke all active tenant sessions except the caller's session."""
+        revoked = 0
+        sessions = await self._repo.find_many(filters={"tenant_id": tenant_id}, limit=1000)
+        for record in sessions:
+            session_id = record.get("id")
+            if (
+                session_id
+                and session_id != current_session_id
+                and record.get("status") == "active"
+                and await self.revoke_session(session_id)
+            ):
+                revoked += 1
+        return revoked
 
     async def revoke_session(self, session_id: str) -> bool:
         try:
@@ -316,6 +362,29 @@ class ServiceCredentialService:
         except Exception:
             return False
 
+    async def revoke_all_for_tenant(self, tenant_id: str) -> int:
+        """Revoke every service credential and account owned by a tenant."""
+        revoked = 0
+        credentials = await self._creds.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        for record in credentials:
+            credential_id = record.get("id")
+            if credential_id and record.get("status") == "active":
+                if await self.revoke_credential(credential_id):
+                    revoked += 1
+        accounts = await self._accounts.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        for account in accounts:
+            account_id = account.get("id")
+            if account_id and account.get("status") == "active":
+                try:
+                    await self._accounts.update(account_id, {"status": "suspended"})
+                except Exception:
+                    pass
+        return revoked
+
 
 # ── Public ingest identifiers ───────────────────────────────────────────────
 
@@ -367,6 +436,19 @@ class PublicIngestService:
             return True
         except Exception:
             return False
+
+    async def revoke_all_for_tenant(self, tenant_id: str) -> int:
+        """Revoke every public ingest identifier owned by a tenant."""
+        revoked = 0
+        identifiers = await self._repo.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        for record in identifiers:
+            identifier_id = record.get("id")
+            if identifier_id and record.get("status") == "active":
+                if await self.revoke_identifier(identifier_id):
+                    revoked += 1
+        return revoked
 
 
 # Module-level singletons (mirrors the repo's singleton pattern).

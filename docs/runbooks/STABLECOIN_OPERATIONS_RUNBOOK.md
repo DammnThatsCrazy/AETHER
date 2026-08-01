@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/services/stablecoin/admin_routes.py
 canonical_owner: platform@aether
-last_synced_commit: "ac6ffc9"
+last_synced_commit: "41c79d4"
 ---
 
 # Stablecoin Operations Runbook

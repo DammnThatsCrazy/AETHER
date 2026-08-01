@@ -13,7 +13,7 @@ Public endpoints (no auth required):
   GET  /v1/auth/sso/providers         List available SSO providers
 
 Authenticated user endpoints:
-  DELETE /v1/me/account               Self-service permanent account deletion
+  DELETE /v1/me/account               Self-service account-deletion workflow alias
 
 Admin endpoints (require auth):
   POST   /v1/admin/tenants/{id}/deactivate  Evict Redis keys + mark inactive
@@ -48,6 +48,13 @@ admin_auth_router = APIRouter(tags=["Admin — Auth"])
 
 _repo = AdminRepository()
 _key_repo = APIKeyRepository()
+
+
+class AccountDeletionRequest(BaseModel):
+    """Trusted step-up evidence required by the recovery-window workflow."""
+
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    reauth_evidence: dict = Field(default_factory=dict)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -369,6 +376,12 @@ async def verify_email(body: VerifyEmailRequest, response: Response = None):
             "status": "active",
             "email_verified": True,
             "auth_method": "password",
+            # Authorization is hydrated from this durable principal record on
+            # every session-authenticated request.  The tenant creator is the
+            # explicit owner; sessions themselves carry no mutable authority.
+            "role": "admin",
+            "permissions": ["read", "write", "ingest", "analytics", "billing", "admin"],
+            "membership_status": "active",
         })
         verified_user_id = user_id
         await user_repo.delete(f"pending:{email}")
@@ -571,6 +584,7 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
 
     # Look up existing tenant by Auth0 sub
     tenant_id: Optional[str] = None
+    principal_user_id: Optional[str] = None
     plan_tier_value = plan_tier.value
 
     try:
@@ -578,6 +592,7 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
         user = await UserRepository().find_by_auth0_sub(sub)
         if user:
             tenant_id = user.get("tenant_id")
+            principal_user_id = user.get("user_id") or user.get("id")
             if tenant_id:
                 rec = await _repo.find_by_id(tenant_id) or {}
                 if rec.get("status") == "inactive":
@@ -610,6 +625,7 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
         try:
             from repositories.repos import UserRepository
             user_id = str(uuid.uuid4())
+            principal_user_id = user_id
             await UserRepository().insert(user_id, {
                 "user_id": user_id,
                 "tenant_id": tenant_id,
@@ -619,6 +635,9 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
                 "status": "active",
                 "email_verified": claims.get("email_verified", False),
                 "auth_method": "sso",
+                "role": "admin",
+                "permissions": ["read", "write", "ingest", "analytics", "billing", "admin"],
+                "membership_status": "active",
             })
         except Exception as e:
             logger.warning(f"SSO user record creation failed: tenant={tenant_id} error={e}")
@@ -652,7 +671,7 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
 
     if settings.trust_plane.human_sessions_enabled:
         return await _issue_human_session(
-            response, tenant_id, sub,
+            response, tenant_id, principal_user_id,
             "Authenticated via SSO. A secure session has been created.",
         )
 
@@ -694,26 +713,24 @@ async def list_sso_providers():
 # ──────────────────────────────────────────────────────────────────────
 
 @router.delete("/v1/me/account")
-async def delete_my_account(request: Request):
-    """Self-service permanent account deletion.
-
-    Evicts all Redis auth entries immediately, cancels Stripe subscription,
-    and cascades deletion across all tenant-scoped tables. Irreversible.
-    """
+async def delete_my_account(body: AccountDeletionRequest, request: Request):
+    """Compatibility alias for the durable 30-day account-deletion workflow."""
     tenant = getattr(request.state, "tenant", None)
     if not tenant:
         raise UnauthorizedError("Authentication required.")
+    tenant.require_permission("admin")
 
-    tenant_id = tenant.tenant_id
-    deleted = await _cascade_delete_tenant(tenant_id)
+    from services.account_lifecycle.service import account_lifecycle_service
 
-    metrics.increment("tenant_deletions", labels={"method": "self_service"})
-    logger.info(f"Self-service account deleted: tenant={tenant_id}")
-
-    return APIResponse(data={
-        "message": "Your account and all associated data have been permanently deleted.",
-        "deleted": deleted,
-    }).to_dict()
+    workflow = await account_lifecycle_service.request_deletion(
+        tenant_id=tenant.tenant_id,
+        actor_id=str(getattr(tenant, "user_id", None) or tenant.tenant_id),
+        idempotency_key=body.idempotency_key,
+        reauth_evidence=body.reauth_evidence,
+    )
+    metrics.increment("tenant_deletion_workflows_requested", labels={"method": "self_service"})
+    logger.info("Self-service account deletion workflow requested: tenant=%s", tenant.tenant_id)
+    return APIResponse(data=workflow).to_dict()
 
 
 # ──────────────────────────────────────────────────────────────────────

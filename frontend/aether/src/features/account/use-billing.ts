@@ -8,9 +8,16 @@ export function useBillingPlans() {
   });
 }
 
+export function useBillingCapability() {
+  return useQuery({
+    key: 'billing-capability',
+    fetcher: () => api.billing.capability(),
+  });
+}
+
 export function useCreateCheckout() {
   return useMutation({
-    mutationFn: (priceId: string) => api.billing.createCheckout(priceId),
+    mutationFn: (planTier: string) => api.billing.createCheckout(planTier),
   });
 }
 
@@ -33,7 +40,7 @@ export function useEnterpriseContact() {
       name: string;
       email: string;
       company_name: string;
-      company_type: string;
+      company_type: 'startup' | 'smb' | 'enterprise' | 'government' | 'nonprofit';
       message: string;
     }) => {
       return api.contact.enterprise(payload);

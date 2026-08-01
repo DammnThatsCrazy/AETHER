@@ -6,6 +6,7 @@ export { useApiKeys, useCreateApiKey, useRevokeApiKey } from './use-api-keys';
 export type { ApiKey } from './use-api-keys';
 export {
   useBillingPlans,
+  useBillingCapability,
   useCreateCheckout,
   useBillingPortal,
   useInvoices,

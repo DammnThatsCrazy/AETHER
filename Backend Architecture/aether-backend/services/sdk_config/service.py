@@ -10,8 +10,8 @@ Security model:
     the same SDK instance always gets the same rollout decision.
 
 Manifest versioning:
-  - Each publish increments the semantic version stored in Redis.
-  - The previous manifest is retained under a "previous" key for rollback.
+  - Each publish appends an immutable durable version in PostgreSQL.
+  - Active and previous pointers are durable; Redis is only a delivery cache.
 
 Staged rollouts:
   - rollout_percentage (0–100) controls what fraction of SDK instances receive
@@ -32,6 +32,7 @@ from typing import Any, Optional
 
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
+from repositories.sdk_repos import SDKManifestStateRepository, SDKManifestVersionRepository
 
 logger = get_logger("aether.service.sdk_config")
 
@@ -57,6 +58,8 @@ class SDKManifest:
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     signature: str = ""                       # HMAC-SHA256 over canonical payload
+    source: str = "tenant_published"
+    publisher_id: str = "system"
 
     def canonical_payload(self) -> str:
         """Deterministic JSON string used for HMAC signing (excludes signature field)."""
@@ -69,6 +72,8 @@ class SDKManifest:
             "endpoints": self.endpoints,
             "flags": self.flags,
             "published_at": self.published_at,
+            "source": self.source,
+            "publisher_id": self.publisher_id,
         }
         return json.dumps(data, sort_keys=True)
 
@@ -84,12 +89,17 @@ class SDKConfigService:
     """
     Remote config lifecycle manager.
 
-    Stores manifests in Redis; uses a "current" and "previous" slot per tenant.
+    Stores immutable manifests and active/previous pointers durably, with Redis
+    used only as an expiring delivery cache.
     """
 
     def __init__(self) -> None:
         self._manifest_store = get_store("sdk_manifests")
         self._secret = os.getenv(_CONFIG_SECRET_ENV, "default-dev-secret-change-in-production")
+        if os.getenv("AETHER_ENV", "local").lower() != "local" and self._secret == "default-dev-secret-change-in-production":
+            raise RuntimeError(f"{_CONFIG_SECRET_ENV} must be a non-default secret outside local development")
+        self._versions = SDKManifestVersionRepository()
+        self._states = SDKManifestStateRepository()
 
     # ── Manifest Delivery ─────────────────────────────────────────────────
 
@@ -107,10 +117,9 @@ class SDKConfigService:
         If the instance falls outside the rollout percentage, returns the stable
         (previous) manifest instead of the canary.
         """
-        current_raw = await self._manifest_store.get(self._current_key(tenant_id))
+        current_raw = await self._load_active(tenant_id)
         if current_raw is None:
-            # No manifest published — return default
-            return self._default_manifest()
+            return None
 
         manifest = SDKManifest(**{
             k: current_raw[k]
@@ -123,7 +132,8 @@ class SDKConfigService:
             cohort_bucket = self._cohort_bucket(tenant_id, sdk_id)
             if cohort_bucket >= manifest.rollout_percentage:
                 # This instance is outside the rollout — serve previous stable manifest
-                prev_raw = await self._manifest_store.get(self._previous_key(tenant_id))
+                state = await self._states.get(tenant_id) or {}
+                prev_raw = await self._versions.get_version(tenant_id, str(state.get("previous_version"))) if state.get("previous_version") else None
                 if prev_raw:
                     manifest = SDKManifest(**{
                         k: prev_raw[k]
@@ -143,12 +153,12 @@ class SDKConfigService:
 
         Used by the tenant settings UI (and other admin surfaces) which must
         always see the latest published manifest they are managing — never the
-        cohort-gated view an individual SDK instance would receive. Returns the
-        default manifest when nothing has been published yet.
+        cohort-gated view an individual SDK instance would receive. Returns
+        ``None`` when the tenant has never published configuration.
         """
-        current_raw = await self._manifest_store.get(self._current_key(tenant_id))
+        current_raw = await self._load_active(tenant_id)
         if current_raw is None:
-            return self._default_manifest()
+            return None
         return SDKManifest(**{
             k: current_raw[k]
             for k in SDKManifest.__dataclass_fields__
@@ -173,11 +183,8 @@ class SDKConfigService:
         The current manifest is demoted to "previous" for rollback support.
         """
         # Demote current → previous
-        current_raw = await self._manifest_store.get(self._current_key(tenant_id))
-        if current_raw:
-            await self._manifest_store.set(
-                self._previous_key(tenant_id), current_raw, ttl_seconds=_MANIFEST_TTL_SECONDS * 24
-            )
+        state = await self._states.get(tenant_id) or {}
+        current_raw = await self._load_active(tenant_id)
 
         # Compute new version
         prev_version = int(current_raw.get("manifest_version", "0")) if current_raw else 0
@@ -193,6 +200,14 @@ class SDKConfigService:
             flags=flags,
         )
         manifest.signature = self._sign(manifest.canonical_payload())
+
+        durable = {**manifest.to_dict(), "tenant_id": tenant_id, "deployment_state": "active"}
+        await self._versions.create_version(durable)
+        await self._states.upsert(tenant_id, {
+            "active_version": new_version,
+            "previous_version": state.get("active_version"),
+            "updated_at": manifest.published_at,
+        })
 
         await self._manifest_store.set(
             self._current_key(tenant_id),
@@ -227,12 +242,14 @@ class SDKConfigService:
 
     async def rollback_manifest(self, tenant_id: str) -> Optional[SDKManifest]:
         """Restore the previous manifest as the active version."""
-        prev_raw = await self._manifest_store.get(self._previous_key(tenant_id))
+        state = await self._states.get(tenant_id) or {}
+        previous_version = state.get("previous_version")
+        prev_raw = await self._versions.get_version(tenant_id, str(previous_version)) if previous_version else None
         if prev_raw is None:
             return None
 
         # Swap previous → current (keep a copy of what was current in previous)
-        current_raw = await self._manifest_store.get(self._current_key(tenant_id))
+        current_raw = await self._load_active(tenant_id)
         if current_raw:
             await self._manifest_store.set(
                 self._previous_key(tenant_id), current_raw, ttl_seconds=_MANIFEST_TTL_SECONDS * 24
@@ -241,6 +258,11 @@ class SDKConfigService:
         await self._manifest_store.set(
             self._current_key(tenant_id), prev_raw, ttl_seconds=_MANIFEST_TTL_SECONDS * 24
         )
+        await self._states.upsert(tenant_id, {
+            "active_version": previous_version,
+            "previous_version": state.get("active_version"),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
 
         manifest = SDKManifest(**{
             k: prev_raw[k]
@@ -258,8 +280,9 @@ class SDKConfigService:
 
     async def get_rollout_status(self, tenant_id: str) -> dict[str, Any]:
         """Return rollout metadata for operator visibility."""
-        current_raw = await self._manifest_store.get(self._current_key(tenant_id))
-        prev_raw = await self._manifest_store.get(self._previous_key(tenant_id))
+        state = await self._states.get(tenant_id) or {}
+        current_raw = await self._load_active(tenant_id)
+        prev_raw = await self._versions.get_version(tenant_id, str(state.get("previous_version"))) if state.get("previous_version") else None
 
         return {
             "tenant_id": tenant_id,
@@ -286,6 +309,15 @@ class SDKConfigService:
             hashlib.sha256,
         ).hexdigest()
 
+    async def _load_active(self, tenant_id: str) -> Optional[dict[str, Any]]:
+        state = await self._states.get(tenant_id)
+        if not state or not state.get("active_version"):
+            return None
+        durable = await self._versions.get_version(tenant_id, str(state["active_version"]))
+        if durable:
+            await self._manifest_store.set(self._current_key(tenant_id), durable, ttl_seconds=_MANIFEST_TTL_SECONDS)
+        return durable
+
     @staticmethod
     def _cohort_bucket(tenant_id: str, sdk_id: str) -> int:
         """Deterministic 0–99 bucket for rollout gating."""
@@ -299,15 +331,6 @@ class SDKConfigService:
     @staticmethod
     def _previous_key(tenant_id: str) -> str:
         return f"manifest:previous:{tenant_id}"
-
-    @staticmethod
-    def _default_manifest() -> SDKManifest:
-        return SDKManifest(
-            manifest_version="0",
-            features={"analytics": True, "web3": True, "commerce": True},
-            endpoints={},
-            flags={"heartbeat_interval_seconds": 60},
-        )
 
     async def _publish_config_event(self, tenant_id: str, manifest: SDKManifest) -> None:
         try:

@@ -56,6 +56,179 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+// Customer settings responses are validated at the transport boundary.  Keep
+// these schemas aligned with the explicit DTOs returned by services/me and
+// services/billing; callers must never guess between legacy field names.
+const apiKeySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  tier: z.string(),
+  permissions: z.array(z.string()),
+  platform: z.string().nullable(),
+  last_used_at: z.string().nullable(),
+});
+
+const billingPlanSchema = z.object({
+  plan_id: z.string(),
+  display_name: z.string(),
+  price_monthly: z.number(),
+  currency: z.string(),
+  contact_sales: z.boolean(),
+  included_usage: z.number(),
+  rate_limit_rpm: z.number(),
+  monthly_quota: z.number(),
+  burst_rpm: z.number(),
+  service_count: z.number(),
+  target_user: z.string(),
+});
+
+const invoiceSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  currency: z.string(),
+  amount_due: z.number(),
+  amount_paid: z.number(),
+  amount_remaining: z.number(),
+  period_start: z.string(),
+  period_end: z.string(),
+  created_at: z.string(),
+  hosted_invoice_url: z.string().url().nullable(),
+  invoice_pdf_url: z.string().url().nullable(),
+});
+
+const organizationProfileSchema = z.object({
+  organization_id: z.string(),
+  tenant_id: z.string(),
+  name: z.string(),
+  slug: z.string().nullable(),
+  description: z.string().nullable(),
+  owner_user_id: z.string().nullable(),
+  status: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+const organizationMemberSchema = z.object({
+  member_id: z.string(),
+  tenant_id: z.string(),
+  user_id: z.string(),
+  email: z.string().nullable(),
+  display_name: z.string().nullable(),
+  role: z.enum(['owner', 'admin', 'member', 'viewer']),
+  status: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+const organizationInvitationSchema = z.object({
+  invitation_id: z.string(),
+  tenant_id: z.string(),
+  email: z.string(),
+  role: z.enum(['owner', 'admin', 'member', 'viewer']),
+  status: z.string(),
+  invited_by: z.string(),
+  expires_at: z.string(),
+  revoked_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+const paginationSchema = z.object({
+  limit: z.number(),
+  offset: z.number(),
+  total: z.number(),
+  has_more: z.boolean(),
+});
+
+const customerWebhookReadSchema = z.object({
+  id: z.string(),
+  tenant_id: z.string(),
+  url: z.string(),
+  events: z.array(z.string()),
+  active: z.boolean(),
+  secret_configured: z.boolean(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+});
+
+const customerWebhookCreateResponseSchema = customerWebhookReadSchema.extend({
+  secret: z.string(),
+});
+
+const webhookPageSchema = z.object({
+  webhooks: z.array(customerWebhookReadSchema),
+  pagination: paginationSchema,
+});
+
+const webhookTestResultSchema = z.object({
+  status: z.string(),
+  success: z.boolean(),
+  webhook_id: z.string(),
+  tenant_id: z.string(),
+  idempotency_key: z.string(),
+  attempts: z.number(),
+  status_code: z.number().nullable().optional(),
+  latency_ms: z.number().nullable().optional(),
+  error: z.string().nullable().optional(),
+  attempt_id: z.string().nullable().optional(),
+});
+
+const deletionDomainSchema = z.object({
+  domain: z.string(),
+  repository: z.string(),
+  mode: z.string(),
+  status: z.string(),
+  action: z.string(),
+  reason: z.string().nullable().optional(),
+  records_affected: z.number(),
+  completed_at: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+const deletionWorkflowSchema = z.object({
+  id: z.string(),
+  tenant_id: z.string(),
+  requested_at: z.string(),
+  recovery_until: z.string(),
+  status: z.enum(['recovery', 'processing', 'completed', 'failed', 'cancelled']),
+  actor_id: z.string(),
+  actor_type: z.string(),
+  reauth_evidence: z.object({
+    verified: z.boolean(),
+    method: z.string(),
+    verified_at: z.string(),
+    assurance_level: z.string(),
+    provider: z.string().nullable().optional(),
+  }),
+  storage_results: z.object({
+    domains: z.record(z.string(), deletionDomainSchema),
+    registry_version: z.number(),
+  }),
+  retry_count: z.number(),
+  completed_at: z.string().nullable(),
+  failed_at: z.string().nullable(),
+  cancelled_at: z.string().nullable(),
+  erasure_manifest: z.object({
+    version: z.number(),
+    recovery_window_days: z.number(),
+    fully_erased: z.boolean(),
+    domains: z.record(z.string(), deletionDomainSchema),
+    completion: z.string().optional(),
+  }),
+});
+
+export type CustomerApiKey = z.infer<typeof apiKeySchema>;
+export type CustomerBillingPlan = z.infer<typeof billingPlanSchema>;
+export type CustomerInvoice = z.infer<typeof invoiceSchema>;
+export type OrganizationProfile = z.infer<typeof organizationProfileSchema>;
+export type OrganizationMember = z.infer<typeof organizationMemberSchema>;
+export type OrganizationInvitation = z.infer<typeof organizationInvitationSchema>;
+export type CustomerWebhook = z.infer<typeof customerWebhookReadSchema>;
+export type CustomerWebhookCreated = z.infer<typeof customerWebhookCreateResponseSchema>;
+export type CustomerWebhookPage = z.infer<typeof webhookPageSchema>;
+export type CustomerWebhookTestResult = z.infer<typeof webhookTestResultSchema>;
+export type AccountDeletionWorkflow = z.infer<typeof deletionWorkflowSchema>;
+
 const demoSeedStatusSchema = z.object({
   seeded: z.boolean(),
   is_demo_tenant: z.boolean(),
@@ -1215,11 +1388,11 @@ export const api = {
   notifications: {
     /** List all webhook configs for this tenant. */
     webhooks: (tenantId: string, limit = 50) =>
-      restClient.get(`/v1/notifications/webhooks${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/notifications/webhooks${buildQS({ tenant_id: tenantId, limit })}`, wrap(webhookPageSchema)).then(r => r.data),
 
-    /** Register a new webhook. */
-    createWebhook: (body: Record<string, unknown>) =>
-      restClient.post('/v1/notifications/webhooks', wrap(unknownSchema), body).then(r => r.data),
+    /** Register a new webhook; the signing secret is returned only once. */
+    createWebhook: (body: { url: string; events: string[]; secret?: string; active?: boolean }) =>
+      restClient.post('/v1/notifications/webhooks', wrap(customerWebhookCreateResponseSchema), body).then(r => r.data),
 
     /** List all alert rules for this tenant. */
     alerts: (tenantId: string, limit = 50) =>
@@ -1227,11 +1400,11 @@ export const api = {
 
     /** Delete a webhook config. */
     deleteWebhook: (webhookId: string) =>
-      restClient.delete(`/v1/notifications/webhooks/${webhookId}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.delete(`/v1/notifications/webhooks/${webhookId}`, wrap(z.object({ deleted: z.boolean() }))).then(r => r.data),
 
     /** Send a test ping to a webhook endpoint. */
     testWebhook: (webhookId: string) =>
-      restClient.post(`/v1/notifications/webhooks/${webhookId}/test`, wrap(unknownSchema), {}).then(r => r.data),
+      restClient.post(`/v1/notifications/webhooks/${webhookId}/test`, wrap(webhookTestResultSchema), {}).then(r => r.data),
 
     /** Create a new alert rule. */
     createAlert: (body: Record<string, unknown>) =>
@@ -1454,16 +1627,68 @@ export const api = {
         days_remaining: number;
       }),
 
-    /** Permanently delete account and all associated data. */
-    deleteAccount: () =>
-      restClient.delete('/v1/me/account', wrap(unknownSchema)),
+    /** Begin the durable 30-day account-deletion recovery workflow. */
+    deleteAccount: (body: { idempotency_key: string; reauth_evidence: {
+      verified: true;
+      method: 'password' | 'mfa' | 'webauthn' | 'identity_provider';
+      evidence_id: string;
+      verified_at: string;
+      assurance_level: 'step_up' | 'high' | 'aal2' | 'aal3';
+      provider?: string;
+    } }) =>
+      restClient.post('/v1/account-lifecycle/deletion', wrap(deletionWorkflowSchema), body).then(r => r.data),
+
+    /** Read a previously requested deletion workflow. */
+    deletionStatus: (workflowId: string) =>
+      restClient.get(`/v1/account-lifecycle/deletion/${encodeURIComponent(workflowId)}`, wrap(deletionWorkflowSchema)).then(r => r.data),
+
+    /** Cancel deletion while the 30-day recovery window is open. */
+    cancelDeletion: (workflowId: string, reauth_evidence: {
+      verified: true;
+      method: 'password' | 'mfa' | 'webauthn' | 'identity_provider';
+      evidence_id: string;
+      verified_at: string;
+      assurance_level: 'step_up' | 'high' | 'aal2' | 'aal3';
+      provider?: string;
+    }) =>
+      restClient.post(`/v1/account-lifecycle/deletion/${encodeURIComponent(workflowId)}/cancel`, wrap(deletionWorkflowSchema), { reauth_evidence }).then(r => r.data),
+  },
+
+  // ── Organization management (tenant-scoped) ──────────────────────────────
+  organization: {
+    profile: () =>
+      restClient.get('/v1/account/organization/profile', wrap(organizationProfileSchema)).then(r => r.data),
+    updateProfile: (body: { name?: string; slug?: string; description?: string | null }) =>
+      restClient.patch('/v1/account/organization/profile', wrap(organizationProfileSchema), body).then(r => r.data),
+    members: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/account/organization/members${buildQS({ ...params })}`, z.object({
+        data: z.array(organizationMemberSchema),
+        pagination: paginationSchema,
+        meta: z.object({ request_id: z.string(), timestamp: z.string() }),
+      })),
+    invitations: () =>
+      restClient.get('/v1/account/organization/invitations', wrap(z.array(organizationInvitationSchema))).then(r => r.data),
+    invite: (body: { email: string; role?: 'admin' | 'member' | 'viewer'; expires_in_hours?: number }) =>
+      restClient.post('/v1/account/organization/invitations', wrap(organizationInvitationSchema.extend({ token: z.string() })), body).then(r => r.data),
+    revokeInvitation: (invitationId: string) =>
+      restClient.post(`/v1/account/organization/invitations/${encodeURIComponent(invitationId)}/revoke`, wrap(organizationInvitationSchema)).then(r => r.data),
+    changeMemberRole: (memberId: string, role: 'owner' | 'admin' | 'member' | 'viewer') =>
+      restClient.patch(`/v1/account/organization/members/${encodeURIComponent(memberId)}/role`, wrap(organizationMemberSchema), { role }).then(r => r.data),
+    removeMember: (memberId: string) =>
+      restClient.delete(`/v1/account/organization/members/${encodeURIComponent(memberId)}`, wrap(z.object({ member_id: z.string(), removed: z.boolean() }))).then(r => r.data),
   },
 
   // ── API key management ─────────────────────────────────────────────────────
   settings: {
     listKeys: () =>
-      restClient.get('/v1/me/api-keys', wrap(unknownSchema))
-        .then(r => r.data as { keys: Array<{ id: string; name: string; tier: string; permissions: string[]; platform: string | null; last_used_at: string | null }> }),
+      restClient.get('/v1/me/api-keys', wrap(z.object({
+        tenant_id: z.string(),
+        api_keys: z.array(apiKeySchema),
+        count: z.number(),
+        total: z.number(),
+        limit: z.number(),
+        offset: z.number(),
+      }))).then(r => r.data),
 
     createKey: (payload: { name: string; tier?: string; permissions?: string[]; platform?: string | null }) =>
       restClient.post('/v1/me/api-keys', wrap(unknownSchema), payload)
@@ -1504,21 +1729,35 @@ export const api = {
 
   // ── Billing & plans ────────────────────────────────────────────────────────
   billing: {
-    plans: () =>
-      restClient.get('/v1/billing/plans', wrap(unknownSchema))
-        .then(r => r.data as { plans: Array<{ plan_id: string; display_name: string; price_monthly: number; monthly_quota: number; burst_rpm: number; features: string[] }> }),
+    capability: () =>
+      restClient.get('/v1/billing/capability', wrap(z.object({
+        provider: z.literal('stripe'),
+        status: z.enum(['not_configured', 'degraded', 'available']),
+        enabled: z.boolean(),
+        required: z.boolean(),
+        detail: z.string(),
+      }))).then(r => r.data),
 
-    createCheckout: (priceId: string) =>
-      restClient.post('/v1/billing/checkout', wrap(unknownSchema), { price_id: priceId })
-        .then(r => r.data as { url: string | null }),
+    plans: () =>
+      restClient.get('/v1/billing/plans', wrap(z.object({ plans: z.array(billingPlanSchema) })))
+        .then(r => r.data),
+
+    createCheckout: (planTier: string) =>
+      restClient.post('/v1/billing/checkout', wrap(z.object({
+        session_id: z.string(),
+        url: z.string().url(),
+      })), { plan_tier: planTier }).then(r => r.data),
 
     portal: () =>
       restClient.post('/v1/billing/portal', wrap(unknownSchema))
         .then(r => r.data as { url: string | null }),
 
     invoices: () =>
-      restClient.get('/v1/billing/invoices', wrap(unknownSchema))
-        .then(r => r.data as { invoices: Array<{ id: string; amount: number; currency: string; status: string; period_start: string; period_end: string; invoice_url: string | null }> }),
+      restClient.get('/v1/billing/invoices', wrap(z.object({
+        tenant_id: z.string(),
+        invoices: z.array(invoiceSchema),
+        count: z.number(),
+      }))).then(r => r.data),
 
     plan: () =>
       restClient.get('/v1/billing/plan', wrap(unknownSchema)).then(r => r.data),
@@ -1540,7 +1779,7 @@ export const api = {
 
   // ── Enterprise contact ─────────────────────────────────────────────────────
   contact: {
-    enterprise: (payload: { name: string; email: string; company_name: string; company_type: string; message: string }) =>
+    enterprise: (payload: { name: string; email: string; company_name: string; company_type: 'startup' | 'smb' | 'enterprise' | 'government' | 'nonprofit'; message: string }) =>
       restClient.post('/v1/contact/enterprise', wrap(unknownSchema), payload).then(r => r.data),
   },
 

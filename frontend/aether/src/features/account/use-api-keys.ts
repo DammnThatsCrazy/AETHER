@@ -1,12 +1,13 @@
 import { useMutation, useQuery } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
+import type { CustomerApiKey } from '@aether-app/lib/api/endpoints';
 
-export type ApiKey = { id: string; name: string; tier: string; permissions: string[]; platform: string | null; last_used_at: string | null };
+export type ApiKey = CustomerApiKey;
 
 export function useApiKeys() {
   return useQuery<ApiKey[]>({
     key: 'api-keys',
-    fetcher: () => api.settings.listKeys().then(r => (r as unknown as { api_keys?: ApiKey[]; keys?: ApiKey[] }).api_keys ?? (r as unknown as { keys: ApiKey[] }).keys),
+    fetcher: () => api.settings.listKeys().then(r => r.api_keys),
   });
 }
 

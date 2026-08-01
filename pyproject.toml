@@ -52,6 +52,14 @@ backend = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "httpx>=0.27",
+    # Outbound delivery adapters (services/delivery/adapters/{slack,linear,jira,
+    # webhook}.py) import aiohttp directly for provider dispatch. It was only ever
+    # present transitively (via gremlinpython), so any resolver change or narrower
+    # install left the adapters — and their integration tests that patch
+    # aiohttp.ClientSession — unable to import it. Declare it explicitly: it is
+    # genuine production behavior for the delivery pipeline, not a transitive
+    # accident.
+    "aiohttp>=3.9",
     "redis>=5.0.0",
     "cryptography>=42.0",
     "aiokafka>=0.10.0",

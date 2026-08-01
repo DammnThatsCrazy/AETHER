@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/repositories/typed_repo.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "41c79d4"
 ---
 
 # ADR-005: Typed Financial Repositories over JSONB

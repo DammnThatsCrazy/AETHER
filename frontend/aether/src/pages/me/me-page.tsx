@@ -20,12 +20,9 @@ import {
   formatCount,
   formatDate as sharedFormatDate,
   useTimeContext,
-  useToast,
   type TimeContext,
 } from '@aether/ui';
 import { useMeProfile, useUsage } from '@aether-app/features/account';
-import { api } from '@aether-app/lib/api/endpoints';
-import { useAuth } from '@aether-app/features/auth';
 
 function planBadgeVariant(planId: string): 'default' | 'accent' {
   return ['P3', 'P4', 'protocol-plus'].includes(planId) ? 'accent' : 'default';
@@ -39,15 +36,15 @@ function formatDate(iso: string | null | undefined, ctx: TimeContext): string {
 interface DeleteModalProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => Promise<void>;
-  isLoading: boolean;
+  available: boolean;
 }
 
-function DeleteAccountModal({ open, onClose, onConfirm, isLoading }: DeleteModalProps) {
+function DeleteAccountModal({ open, onClose, available }: DeleteModalProps) {
   const [confirmValue, setConfirmValue] = useState('');
 
   function handleClose() {
-    if (!isLoading) { setConfirmValue(''); onClose(); }
+    setConfirmValue('');
+    onClose();
   }
 
   return (
@@ -69,9 +66,15 @@ function DeleteAccountModal({ open, onClose, onConfirm, isLoading }: DeleteModal
           </span>
         </div>
         <p className="text-text-secondary text-xs">
-          This will immediately revoke all API keys and remove all data associated with your account.
-          <strong className="text-text-primary"> This action cannot be undone.</strong>
+          This will immediately suspend the account and revoke its credentials. Permanent erasure
+          runs after the 30-day recovery window.
         </p>
+        {!available && (
+          <p className="text-xs text-warning font-mono border border-warning/30 rounded p-3">
+            Account deletion is unavailable until a trusted step-up verification provider is
+            configured for this deployment. No deletion request was sent.
+          </p>
+        )}
         <div className="flex flex-col gap-1">
           <label htmlFor="delete-confirm" className="text-xs text-text-secondary">
             Type <span className="font-mono text-text-primary">DELETE</span> to confirm
@@ -89,14 +92,13 @@ function DeleteAccountModal({ open, onClose, onConfirm, isLoading }: DeleteModal
         </div>
       </ModalBody>
       <ModalFooter>
-        <Button variant="ghost" size="sm" onClick={handleClose} disabled={isLoading}>Cancel</Button>
+        <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
         <Button
           variant="danger"
           size="sm"
-          disabled={confirmValue !== 'DELETE' || isLoading}
-          onClick={() => { void onConfirm(); }}
+          disabled
         >
-          {isLoading ? '[···]' : 'Delete account'}
+          Delete account unavailable
         </Button>
       </ModalFooter>
     </Modal>
@@ -105,27 +107,10 @@ function DeleteAccountModal({ open, onClose, onConfirm, isLoading }: DeleteModal
 
 export function MePage() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
-  const { toast } = useToast();
   const timeCtx = useTimeContext();
   const { data: profile, isLoading: profileLoading, error: profileError, refetch: refetchProfile } = useMeProfile();
   const { data: usage, isLoading: usageLoading, error: usageError, refetch: refetchUsage } = useUsage();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  async function handleDelete() {
-    if (deleting) return;
-    setDeleting(true);
-    try {
-      await api.me.deleteAccount();
-      await logout();
-      void navigate('/login', { replace: true });
-    } catch {
-      toast.error('Delete failed — please try again');
-      setDeleting(false);
-    }
-  }
-
   if (profileLoading) return <LoadingState lines={6} className="p-8" />;
   if (profileError) return <ErrorState message="Failed to load profile" onRetry={refetchProfile} className="p-8" />;
   if (!profile) return null;
@@ -281,9 +266,12 @@ export function MePage() {
               View data retention policy →
             </button>
           </div>
-          <p className="text-xs text-text-muted">Permanently delete your account and all data.</p>
-          <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
-            Delete account
+          <p className="text-xs text-text-muted">
+            Account deletion requires trusted step-up verification, which is not configured for
+            this deployment.
+          </p>
+          <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)} disabled>
+            Delete account unavailable
           </Button>
         </CardContent>
       </Card>
@@ -291,8 +279,7 @@ export function MePage() {
       <DeleteAccountModal
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
-        onConfirm={handleDelete}
-        isLoading={deleting}
+        available={false}
       />
     </div>
   );

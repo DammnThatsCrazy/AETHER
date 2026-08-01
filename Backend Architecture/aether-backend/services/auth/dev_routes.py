@@ -73,6 +73,9 @@ async def create_development_session(request: Request, response: Response):
             "name": "Local developer",
             "status": "active",
             "auth_provider": "development_session",
+            "role": "admin",
+            "permissions": _PERMISSIONS,
+            "membership_status": "active",
         },
     )
     issue = await session_service.create_session(

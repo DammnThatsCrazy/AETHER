@@ -11,7 +11,7 @@ source_files:
   - frontend/kyber/src/pages/derivatives/kyber-derivatives-ops-page.tsx
   - frontend/kyber/src/pages/interop/kyber-interop-ops-page.tsx
 canonical_owner: platform@aether
-last_synced_commit: "03ab3a6"
+last_synced_commit: "41c79d4"
 ---
 
 # Kyber Operator Surfaces

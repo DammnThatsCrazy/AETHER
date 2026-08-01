@@ -78,6 +78,10 @@ async def list_plans():
             "plan_id": plan.plan_id,
             "display_name": plan.display_name,
             "price_monthly": int(plan.pricing.option_a),
+            "currency": "USD",
+            "contact_sales": False,
+            "included_usage": plan.monthly_quota,
+            "rate_limit_rpm": plan.burst_rpm,
             "monthly_quota": plan.monthly_quota,
             "burst_rpm": plan.burst_rpm,
             "service_count": plan.service_count,
@@ -86,6 +90,12 @@ async def list_plans():
         for plan in PLAN_CATALOG.values()
     ]
     return APIResponse(data={"plans": plans}).to_dict()
+
+
+@router.get("/capability")
+async def get_billing_capability():
+    """Expose provider readiness without leaking configuration or secrets."""
+    return APIResponse(data=stripe_client.capability_status()).to_dict()
 
 
 @router.post("/checkout")
@@ -158,9 +168,23 @@ async def get_invoice(invoice_id: str, request: Request):
 
 
 def _serialize_invoice(inv: dict) -> dict:
-    result = {k: v for k, v in inv.items()}
+    # Provider fields remain an internal persistence detail.  This stable DTO
+    # lets the customer UI remain independent of Stripe naming.
+    result = {
+        "id": inv.get("stripe_invoice_id"),
+        "status": inv.get("status"),
+        "currency": inv.get("currency"),
+        "amount_due": inv.get("amount_due"),
+        "amount_paid": inv.get("amount_paid"),
+        "amount_remaining": inv.get("amount_remaining"),
+        "period_start": inv.get("period_start"),
+        "period_end": inv.get("period_end"),
+        "created_at": inv.get("created_at"),
+        "hosted_invoice_url": inv.get("hosted_invoice_url"),
+        "invoice_pdf_url": inv.get("invoice_pdf"),
+    }
     # Convert datetime objects to ISO strings for JSON serialisation
-    for field in ("period_start", "period_end", "created_at", "updated_at"):
+    for field in ("period_start", "period_end", "created_at"):
         val = result.get(field)
         if isinstance(val, datetime):
             result[field] = val.isoformat()
