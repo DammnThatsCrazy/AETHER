@@ -580,6 +580,44 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.worker_supervisor = supervisor
         await supervisor.start_all()
 
+    # ── Kyber Missions monitoring loop (feature-flagged, OFF by default) ──
+    # Clearly-marked flag-gated hook: periodically invokes
+    # MonitoringService.check_due. Safe no-op when the flag is disabled — the
+    # service module is imported lazily *inside* the flag block so it need not
+    # exist until the missions wave lands. When the wave lands the orchestrator
+    # should confirm the MonitoringService constructor + check_due signature.
+    app.state.kyber_mission_monitor_task = None
+    if settings.kyber_missions.monitoring_loop_enabled:
+        _mission_monitor_interval = float(
+            os.getenv("KYBER_MISSION_MONITORING_INTERVAL_SECONDS", "60").strip() or "60"
+        )
+
+        async def _kyber_mission_monitor_loop() -> None:
+            from services.kyber.ops.monitoring_service import MonitoringService
+
+            monitor = MonitoringService()
+            while True:
+                try:
+                    await monitor.check_due()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — loop must survive one bad tick
+                    logger.exception("Kyber Missions: monitoring tick failed")
+                await asyncio.sleep(_mission_monitor_interval)
+
+        app.state.kyber_mission_monitor_task = asyncio.create_task(
+            _kyber_mission_monitor_loop()
+        )
+        logger.info(
+            "Kyber Missions: monitoring loop started (interval=%ss)",
+            _mission_monitor_interval,
+        )
+    else:
+        logger.info(
+            "Kyber Missions: monitoring loop disabled "
+            "(set KYBER_MISSION_MONITORING_ENABLED=true to enable)"
+        )
+
     from services.demo_seed.startup import maybe_seed_demo_on_start
 
     if await maybe_seed_demo_on_start(app, environment=settings.env.value):
@@ -598,6 +636,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Graceful shutdown: stop workers, drain connections, close backends
     logger.info("Initiating graceful shutdown...")
+    _mission_monitor_task = getattr(app.state, "kyber_mission_monitor_task", None)
+    if _mission_monitor_task is not None:
+        _mission_monitor_task.cancel()
+        try:
+            await _mission_monitor_task
+        except asyncio.CancelledError:
+            pass
     if supervisor is not None:
         await supervisor.stop_all()
     if provider_gateway:
@@ -742,6 +787,15 @@ def create_app() -> FastAPI:
     # services/kyber/ops/routes.py: a command's capability and action class come
     # from its own spec, which is not known until the body has been read.
     app.include_router(kyber_ops_router)
+
+    # ── Kyber Missions control plane (feature-flagged, OFF by default) ──
+    if settings.kyber_missions.missions_enabled:
+        from services.kyber.ops.mission_routes import router as kyber_mission_router
+        app.include_router(kyber_mission_router)   # /v1/kyber missions
+        logger.info("Kyber Missions: routes mounted (/v1/kyber)")
+    else:
+        logger.info("Kyber Missions: disabled (set KYBER_MISSIONS_ENABLED=true to enable)")
+
     app.include_router(customer_success_admin_router)
     app.include_router(value_review_router)
     app.include_router(extraction_intel_router)
@@ -835,6 +889,14 @@ def create_app() -> FastAPI:
     app.include_router(noesis_router)        # Noesis: graph-native natural-language intelligence
     app.include_router(onboarding_router)      # Customer onboarding center
     app.include_router(onboarding_admin_router) # Kyber implementation lifecycle
+
+    # ── Tenant Activation (feature-flagged, OFF by default) ─────────────
+    if settings.activation.activation_enabled:
+        from services.activation.routes import router as activation_router
+        app.include_router(activation_router)   # /v1/activation
+        logger.info("Tenant Activation: routes mounted (/v1/activation)")
+    else:
+        logger.info("Tenant Activation: disabled (set AETHER_ACTIVATION_ENABLED=true to enable)")
     app.include_router(reliability_admin_router)  # Kyber reliability command center
     app.include_router(reliability_status_router) # Tenant-safe system status
 
