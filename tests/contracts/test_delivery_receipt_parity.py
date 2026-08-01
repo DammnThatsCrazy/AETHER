@@ -70,7 +70,9 @@ def test_provider_receipt_field_parity():
 
 
 def test_delivery_attempt_field_parity():
-    ts = _interface_fields("DeliveryAttempt")
+    # TS interface is NotificationDeliveryAttempt (renamed to avoid a collision with
+    # the unrelated interop DeliveryAttempt); parity is by field set.
+    ts = _interface_fields("NotificationDeliveryAttempt")
     py = set(DeliveryAttempt.model_fields.keys())
     assert ts == py, f"DeliveryAttempt drift: TS-only={ts - py}, PY-only={py - ts}"
 

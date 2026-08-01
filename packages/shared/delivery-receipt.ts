@@ -75,7 +75,9 @@ export interface ProviderReceipt {
   created_at: string;
 }
 
-export interface DeliveryAttempt {
+// Named to avoid a collision with the (unrelated) interop DeliveryAttempt; this is
+// the notification-delivery attempt. Parity is by field set, not by type name.
+export interface NotificationDeliveryAttempt {
   id: string;
   job_id: string;
   intent_id: string;

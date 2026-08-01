@@ -6236,6 +6236,19 @@
       "path": "docs/source-of-truth/MODEL_GOVERNANCE.md"
     },
     {
+      "path": "docs/source-of-truth/NOTIFICATION_CONTROL_PLANE.md",
+      "title": "Notification Control Plane",
+      "slug": "mobile/notification-control-plane",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
       "title": "Olympus Provider Source Catalog",
       "slug": "architecture/olympus-provider-source-catalog",
