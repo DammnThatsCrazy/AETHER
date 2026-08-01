@@ -370,7 +370,7 @@ class StripeBillingConfig:
     In non-local environments with enabled=True, secret_key, webhook_secret,
     price_p1..price_p4, and checkout/portal URLs are required (validated in
     Settings.__post_init__). In AETHER_ENV=local, missing values are tolerated
-    and admin Stripe routes return mocked URLs.
+    and provider operations return an explicit unavailable response.
 
     overage_price_id is OPTIONAL. It is only required when charging Aether
     overage through Stripe invoices. When absent, Stripe overage invoicing is

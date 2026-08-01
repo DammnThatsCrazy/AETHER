@@ -8,6 +8,7 @@ status: stable
 since_version: "8.8.0"
 source_files:
   - Backend Architecture/aether-backend/shared/billing/stripe_client.py
+  - Backend Architecture/aether-backend/services/billing/routes.py
   - Backend Architecture/aether-backend/shared/plans/catalog.py
 canonical_owner: billing@aether
 estimated_read_minutes: 6
@@ -76,8 +77,9 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    - Use Stripe **test mode** keys.
    - Forward events with the Stripe CLI:
      `stripe listen --forward-to localhost:8000/v1/admin/billing/stripe/webhook`
-   - Run Aether with `AETHER_ENV=local`. If Stripe keys/Price IDs are missing,
-     the Checkout/Portal endpoints return mocked URLs instead of failing
+   - Run Aether with `AETHER_ENV=local`. If Stripe keys or Price IDs are missing,
+     `GET /v1/billing/capability` reports `not_configured` and Checkout/Portal
+     fail explicitly; the runtime never manufactures provider URLs.
      (see "Local mocked mode" below).
 
 ---
@@ -109,6 +111,11 @@ go through normal Aether auth, rate-limit, and quota middleware.
 
 | Method | Route | Notes |
 | --- | --- | --- |
+| `GET` | `/v1/billing/capability` | Secret-free provider readiness: `not_configured`, `degraded`, or `available`. |
+| `GET` | `/v1/billing/plans` | Customer-safe plan catalog; Stripe Price IDs are never exposed. |
+| `POST` | `/v1/billing/checkout` | Tenant-scoped Checkout. Body: `{ "plan_tier": "P2" }`; the backend owns the Price mapping. |
+| `POST` | `/v1/billing/portal` | Tenant-scoped portal creation for an existing billing customer. |
+| `GET` | `/v1/billing/invoices` | Locally persisted invoices normalized to provider-independent customer fields. |
 | `POST` | `/v1/admin/tenants/{tenant_id}/billing/checkout-session` | Creates a subscription Checkout Session. Body: `{ "plan_tier": "P3", "contact_email": "..." }`. Local plan_tier is **not** changed here. |
 | `POST` | `/v1/admin/tenants/{tenant_id}/billing/portal-session` | Stripe Billing Portal session for an existing customer. |
 | `GET`  | `/v1/admin/tenants/{tenant_id}/billing/invoices` | Locally synced Stripe invoices for the tenant. |
@@ -144,17 +151,13 @@ on first receipt; duplicate deliveries return 200 with `duplicate: true`.
 
 ---
 
-## Local mocked mode
+## Unconfigured provider behavior
 
-When `AETHER_ENV=local` and Stripe configuration is incomplete (missing
-`STRIPE_SECRET_KEY` or any `STRIPE_PRICE_P*`), the client returns mocked
-URLs so the flows can be exercised without real Stripe:
-
-- Checkout: `cs_mock_<tenant_id>_<plan_tier>` →
-  `http://localhost:3000/mock-stripe/checkout?tenant_id=...&plan_tier=...`
-- Portal: `http://localhost:3000/mock-stripe/portal?tenant_id=...`
-
-Mocked mode is **never** used outside `AETHER_ENV=local`.
+There is no runtime mocked billing mode. Incomplete Stripe configuration is an
+explicit capability state, and provider operations fail with a dependency
+error rather than fabricated success. Automated tests inject a test-only
+provider fixture when they need to exercise successful Checkout or Portal
+behavior without a live Stripe account.
 
 ---
 

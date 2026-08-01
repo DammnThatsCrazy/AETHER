@@ -114,6 +114,11 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
 }));
 
 vi.mock('@aether-app/features/account', () => ({
+  useBillingCapability: () => ({
+    data: { provider: 'stripe', status: 'not_configured', enabled: false, required: false, detail: 'Stripe is not configured' },
+    isLoading: false,
+    error: null,
+  }),
   useBillingPlans: () => ({
     data: providerState.account === 'empty' ? [] : undefined,
     isLoading: false,

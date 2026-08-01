@@ -1234,17 +1234,47 @@ async def _resolve_session_token(token: str) -> Optional[TenantContext]:
         rec = await session_service.validate_session(token)
     except Exception:
         return None
+    # The opaque session identifies the principal, but mutable authorization
+    # comes from durable tenant/user records on every request.  A role or plan
+    # captured when the session was issued would remain valid after downgrade,
+    # suspension, or permission removal.
+    tenant_record: dict = {}
+    user_record: dict = {}
+    try:
+        from repositories.repos import AdminRepository, UserRepository
+        tenant_record = await AdminRepository().find_by_id(rec.get("tenant_id", "")) or {}
+        principal_id = rec.get("principal_id")
+        if principal_id:
+            user_record = await UserRepository().find_by_id(principal_id) or {}
+    except Exception as e:
+        logger.warning("session authority hydration failed (%s) — failing closed", type(e).__name__)
+        return None
+
+    try:
+        plan_tier = PlanTier(tenant_record.get("plan_tier") or tenant_record.get("plan"))
+    except (TypeError, ValueError):
+        # Unknown/missing plan evidence is not silently promoted or defaulted.
+        return None
+    try:
+        role = Role(user_record.get("role", Role.VIEWER.value))
+    except ValueError:
+        role = Role.VIEWER
+    permissions = user_record.get("permissions")
+    if not isinstance(permissions, list):
+        permissions = []
+
     return TenantContext(
         tenant_id=rec.get("tenant_id", ""),
         user_id=rec.get("principal_id"),
-        role=Role.EDITOR,
-        permissions=list(rec.get("permissions", ["read", "write", "ingest", "analytics"])),
+        role=role,
+        plan_tier=plan_tier,
+        permissions=[str(permission) for permission in permissions],
         credential_class=rec.get("credential_class", "human_session"),
         credential_status=rec.get("status", "inactive"),
-        tenant_status=await _current_tenant_status(rec),
-        organization_id=rec.get("organization_id"),
-        organization_status=rec.get("organization_status", "active"),
-        membership_status=rec.get("membership_status", "active"),
+        tenant_status=str(tenant_record.get("status", "inactive")),
+        organization_id=user_record.get("organization_id") or tenant_record.get("organization_id"),
+        organization_status=str(user_record.get("organization_status", "active")),
+        membership_status=str(user_record.get("membership_status", user_record.get("status", "inactive"))),
     )
 
 

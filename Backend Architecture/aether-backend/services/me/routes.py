@@ -11,6 +11,9 @@ Endpoints:
     POST   /v1/me/api-keys          Create a new API key
     PATCH  /v1/me/api-keys/{id}     Rename a key
     DELETE /v1/me/api-keys/{id}     Revoke a key
+    GET    /v1/me/sessions          List active and historical human sessions
+    DELETE /v1/me/sessions/{id}     Revoke one human session
+    POST   /v1/me/sessions/revoke-others  Revoke every session except this one
     DELETE /v1/me/account           Self-service account deletion
 """
 
@@ -305,3 +308,61 @@ async def revoke_my_api_key(key_id: str, request: Request):
     metrics.increment("api_keys_revoked_self_service")
     logger.info(f"API key revoked (self-service): tenant={tenant.tenant_id} key_id={key_id}")
     return APIResponse(data={"revoked": True, "id": key_id}).to_dict()
+
+
+@router.get("/sessions")
+async def list_my_sessions(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """List durable human sessions for the authenticated tenant."""
+    tenant = _require_tenant(request)
+    from services.auth.sessions import session_service
+
+    sessions, total = await session_service.list_for_tenant(
+        tenant.tenant_id, limit=limit, offset=offset
+    )
+    return APIResponse(data={
+        "sessions": sessions,
+        "count": len(sessions),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }).to_dict()
+
+
+@router.delete("/sessions/{session_id}")
+async def revoke_my_session(session_id: str, request: Request):
+    """Revoke a tenant-owned session; cross-tenant identifiers are not revealed."""
+    tenant = _require_tenant(request)
+    from services.auth.sessions import session_service
+
+    if not await session_service.revoke_for_tenant(tenant.tenant_id, session_id):
+        raise NotFoundError(f"Session {session_id}")
+    metrics.increment("human_sessions_revoked")
+    return APIResponse(data={"revoked": True, "id": session_id}).to_dict()
+
+
+@router.post("/sessions/revoke-others")
+async def revoke_my_other_sessions(request: Request):
+    """Revoke all other sessions using the caller's validated session identity."""
+    tenant = _require_tenant(request)
+    raw_token = request.cookies.get("aether_session") or request.headers.get("X-Session-Token")
+    if not raw_token:
+        from shared.common.common import BadRequestError
+        raise BadRequestError("A human session credential is required")
+    from services.auth.sessions import session_service
+
+    try:
+        current = await session_service.validate_session(raw_token)
+    except Exception as exc:
+        raise ForbiddenError("Current session is invalid") from exc
+    if current.get("tenant_id") != tenant.tenant_id:
+        raise ForbiddenError("Current session does not belong to this tenant")
+    current_session_id = current["id"]
+    revoked = await session_service.revoke_other_sessions(
+        tenant.tenant_id, current_session_id
+    )
+    metrics.increment("human_sessions_revoked", value=revoked)
+    return APIResponse(data={"revoked_count": revoked}).to_dict()

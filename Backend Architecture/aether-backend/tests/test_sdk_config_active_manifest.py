@@ -20,17 +20,23 @@ from services.sdk_config.service import SDKConfigService  # noqa: E402
 def svc() -> SDKConfigService:
     # In-memory store (no REDIS configured under AETHER_ENV=local).
     s = SDKConfigService()
-    # Isolate state per test by pointing at a fresh in-memory namespace.
+    # Isolate cache and durable local repositories per test.
     from shared.store import InMemoryStore
     s._manifest_store = InMemoryStore(f"sdk_manifests_test_{id(s)}")
+    from repositories.sdk_repos import SDKManifestStateRepository, SDKManifestVersionRepository
+    s._versions = SDKManifestVersionRepository()
+    s._versions.table_name = f"sdk_manifest_versions_{id(s)}"
+    s._versions._store = {}
+    s._states = SDKManifestStateRepository()
+    s._states.table_name = f"sdk_manifest_states_{id(s)}"
+    s._states._store = {}
     return s
 
 
 @pytest.mark.asyncio
-async def test_active_manifest_returns_default_when_unpublished(svc: SDKConfigService):
+async def test_active_manifest_returns_none_when_unpublished(svc: SDKConfigService):
     manifest = await svc.get_active_manifest("tenant-a")
-    assert manifest is not None
-    assert manifest.manifest_version == "0"  # default manifest
+    assert manifest is None
 
 
 @pytest.mark.asyncio

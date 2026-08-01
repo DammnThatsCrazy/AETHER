@@ -29,6 +29,41 @@ except ImportError:
     STRIPE_SDK_AVAILABLE = False
 
 
+def capability_status() -> dict[str, Any]:
+    """Return a secret-free, deterministic Stripe readiness description.
+
+    ``not_configured`` is intentionally distinct from ``degraded``: operators
+    can leave billing disabled before provisioning Stripe, while an enabled but
+    incomplete integration is an actionable configuration error.
+    """
+    cfg = settings.stripe_billing
+    if not cfg.enabled:
+        return {"provider": "stripe", "status": "not_configured", "enabled": False}
+
+    missing: list[str] = []
+    if not STRIPE_SDK_AVAILABLE:
+        missing.append("stripe_sdk")
+    for field, value in (
+        ("secret_key", cfg.secret_key),
+        ("webhook_secret", cfg.webhook_secret),
+        ("price_p1", cfg.price_p1),
+        ("price_p2", cfg.price_p2),
+        ("price_p3", cfg.price_p3),
+        ("price_p4", cfg.price_p4),
+        ("checkout_success_url", cfg.checkout_success_url),
+        ("checkout_cancel_url", cfg.checkout_cancel_url),
+        ("portal_return_url", cfg.portal_return_url),
+    ):
+        if not value:
+            missing.append(field)
+    return {
+        "provider": "stripe",
+        "status": "degraded" if missing else "available",
+        "enabled": True,
+        "missing": missing,
+    }
+
+
 def _ensure_real_stripe() -> None:
     """Raise if Stripe SDK or configuration is unavailable."""
     if not STRIPE_SDK_AVAILABLE:

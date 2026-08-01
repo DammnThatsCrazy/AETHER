@@ -56,6 +56,50 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+// Customer settings responses are validated at the transport boundary.  Keep
+// these schemas aligned with the explicit DTOs returned by services/me and
+// services/billing; callers must never guess between legacy field names.
+const apiKeySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  tier: z.string(),
+  permissions: z.array(z.string()),
+  platform: z.string().nullable(),
+  last_used_at: z.string().nullable(),
+});
+
+const billingPlanSchema = z.object({
+  plan_id: z.string(),
+  display_name: z.string(),
+  price_monthly: z.number(),
+  currency: z.string(),
+  contact_sales: z.boolean(),
+  included_usage: z.number(),
+  rate_limit_rpm: z.number(),
+  monthly_quota: z.number(),
+  burst_rpm: z.number(),
+  service_count: z.number(),
+  target_user: z.string(),
+});
+
+const invoiceSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  currency: z.string(),
+  amount_due: z.number(),
+  amount_paid: z.number(),
+  amount_remaining: z.number(),
+  period_start: z.string(),
+  period_end: z.string(),
+  created_at: z.string(),
+  hosted_invoice_url: z.string().url().nullable(),
+  invoice_pdf_url: z.string().url().nullable(),
+});
+
+export type CustomerApiKey = z.infer<typeof apiKeySchema>;
+export type CustomerBillingPlan = z.infer<typeof billingPlanSchema>;
+export type CustomerInvoice = z.infer<typeof invoiceSchema>;
+
 const demoSeedStatusSchema = z.object({
   seeded: z.boolean(),
   is_demo_tenant: z.boolean(),
@@ -1443,8 +1487,14 @@ export const api = {
   // ── API key management ─────────────────────────────────────────────────────
   settings: {
     listKeys: () =>
-      restClient.get('/v1/me/api-keys', wrap(unknownSchema))
-        .then(r => r.data as { keys: Array<{ id: string; name: string; tier: string; permissions: string[]; platform: string | null; last_used_at: string | null }> }),
+      restClient.get('/v1/me/api-keys', wrap(z.object({
+        tenant_id: z.string(),
+        api_keys: z.array(apiKeySchema),
+        count: z.number(),
+        total: z.number(),
+        limit: z.number(),
+        offset: z.number(),
+      }))).then(r => r.data),
 
     createKey: (payload: { name: string; tier?: string; permissions?: string[]; platform?: string | null }) =>
       restClient.post('/v1/me/api-keys', wrap(unknownSchema), payload)
@@ -1485,21 +1535,35 @@ export const api = {
 
   // ── Billing & plans ────────────────────────────────────────────────────────
   billing: {
-    plans: () =>
-      restClient.get('/v1/billing/plans', wrap(unknownSchema))
-        .then(r => r.data as { plans: Array<{ plan_id: string; display_name: string; price_monthly: number; monthly_quota: number; burst_rpm: number; features: string[] }> }),
+    capability: () =>
+      restClient.get('/v1/billing/capability', wrap(z.object({
+        provider: z.literal('stripe'),
+        status: z.enum(['not_configured', 'degraded', 'available']),
+        enabled: z.boolean(),
+        required: z.boolean(),
+        detail: z.string(),
+      }))).then(r => r.data),
 
-    createCheckout: (priceId: string) =>
-      restClient.post('/v1/billing/checkout', wrap(unknownSchema), { price_id: priceId })
-        .then(r => r.data as { url: string | null }),
+    plans: () =>
+      restClient.get('/v1/billing/plans', wrap(z.object({ plans: z.array(billingPlanSchema) })))
+        .then(r => r.data),
+
+    createCheckout: (planTier: string) =>
+      restClient.post('/v1/billing/checkout', wrap(z.object({
+        session_id: z.string(),
+        url: z.string().url(),
+      })), { plan_tier: planTier }).then(r => r.data),
 
     portal: () =>
       restClient.post('/v1/billing/portal', wrap(unknownSchema))
         .then(r => r.data as { url: string | null }),
 
     invoices: () =>
-      restClient.get('/v1/billing/invoices', wrap(unknownSchema))
-        .then(r => r.data as { invoices: Array<{ id: string; amount: number; currency: string; status: string; period_start: string; period_end: string; invoice_url: string | null }> }),
+      restClient.get('/v1/billing/invoices', wrap(z.object({
+        tenant_id: z.string(),
+        invoices: z.array(invoiceSchema),
+        count: z.number(),
+      }))).then(r => r.data),
 
     plan: () =>
       restClient.get('/v1/billing/plan', wrap(unknownSchema)).then(r => r.data),
@@ -1521,7 +1585,7 @@ export const api = {
 
   // ── Enterprise contact ─────────────────────────────────────────────────────
   contact: {
-    enterprise: (payload: { name: string; email: string; company_name: string; company_type: string; message: string }) =>
+    enterprise: (payload: { name: string; email: string; company_name: string; company_type: 'startup' | 'smb' | 'enterprise' | 'government' | 'nonprofit'; message: string }) =>
       restClient.post('/v1/contact/enterprise', wrap(unknownSchema), payload).then(r => r.data),
   },
 

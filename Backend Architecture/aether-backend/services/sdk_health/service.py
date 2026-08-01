@@ -11,14 +11,13 @@ Health score (0–100) is composed of 5 weighted sub-scores:
   auth_consent   0.15  — auth valid + consent valid flags
   freshness      0.15  — recency of last heartbeat
 
-Heartbeats are stored in Redis (TTL = 2× heartbeat interval = 300 s).
+Heartbeats are cached in Redis (TTL = 2× heartbeat interval = 300 s), while
+installation identity and last-known health are persisted durably.
 Fleet state changes are published to Kafka topic SDK_HEALTH_STATE_CHANGED.
 """
 
 from __future__ import annotations
 
-import hashlib
-import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -26,6 +25,7 @@ from typing import Any, Optional
 
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
+from repositories.sdk_repos import SDKInstallationRepository
 
 logger = get_logger("aether.service.sdk_health")
 
@@ -114,13 +114,14 @@ class SDKHealthService:
     """
     Core SDK health monitoring service.
 
-    Uses shared DurableStore (Redis-backed) for heartbeat storage.
+    Uses Redis for recent heartbeat latency and PostgreSQL for fleet inventory.
     Publishes Kafka events for state changes.
     """
 
     def __init__(self) -> None:
         self._heartbeat_store = get_store("sdk_heartbeats")
         self._score_store = get_store("sdk_health_scores")
+        self._installations = SDKInstallationRepository()
 
     # ── Heartbeat Ingestion ───────────────────────────────────────────────
 
@@ -135,6 +136,27 @@ class SDKHealthService:
             score.to_dict(),
             ttl_seconds=_HEARTBEAT_TTL_SECONDS,
         )
+
+        # Redis is only the recent-health cache.  Preserve the installation and
+        # its last known state durably so a silent client never disappears.
+        existing = await self._installations.get(hb.tenant_id, hb.sdk_id)
+        now = datetime.now(timezone.utc).isoformat()
+        await self._installations.upsert({
+            "tenant_id": hb.tenant_id,
+            "installation_id": hb.sdk_id,
+            "platform": hb.platform,
+            "sdk_version": hb.sdk_version,
+            "application_version": hb.app_version,
+            "environment": hb.rollout_cohort,
+            "first_seen": (existing or {}).get("first_seen", now),
+            "last_seen": hb.reported_at,
+            "status": score.status,
+            "disabled": (existing or {}).get("disabled", False),
+            "uninstalled": (existing or {}).get("uninstalled", False),
+            "current_configuration_version": hb.config_version,
+            "health_summary": score.to_dict(),
+            "updated_at": now,
+        })
 
         # Prometheus counters
         metrics.increment(
@@ -255,38 +277,35 @@ class SDKHealthService:
 
     async def get_fleet_status(self, tenant_id: str) -> SDKFleetStatus:
         """Compute fleet-level health summary for all SDK instances in a tenant."""
-        scores = await self._score_store.find(tenant_id=tenant_id)
-        heartbeats = await self._heartbeat_store.find(tenant_id=tenant_id)
+        installations = await self._installations.list_for_tenant(tenant_id)
 
-        now_ts = time.time()
         platforms: dict[str, int] = {}
         versions: dict[str, int] = {}
         healthy = degraded = unhealthy = silent = 0
         composite_sum = 0.0
 
-        # Track silent SDKs from heartbeat store (may have no score if TTL expired)
-        for hb_raw in heartbeats:
-            platform = hb_raw.get("platform", "unknown")
-            version = hb_raw.get("sdk_version", "unknown")
+        for installation in installations:
+            platform = installation.get("platform", "unknown")
+            version = installation.get("sdk_version", "unknown")
             platforms[platform] = platforms.get(platform, 0) + 1
             versions[version] = versions.get(version, 0) + 1
-
-        for score_raw in scores:
-            s = score_raw.get("composite", 0.0)
-            st = score_raw.get("status", "unknown")
+            if installation.get("disabled") or installation.get("uninstalled"):
+                continue
+            health = installation.get("health_summary") or {}
+            s = health.get("composite", 0.0)
+            st = self._effective_status(installation)
             composite_sum += s
             if st == "healthy":
                 healthy += 1
             elif st == "degraded":
                 degraded += 1
+            elif st == "silent":
+                silent += 1
             else:
                 unhealthy += 1
-
-        silent_list = await self.detect_silent_sdks(tenant_id)
-        silent = len(silent_list)
-
-        total = len(scores) + silent
-        avg_score = (composite_sum / len(scores)) if scores else 0.0
+        active = [i for i in installations if not i.get("disabled") and not i.get("uninstalled")]
+        total = len(installations)
+        avg_score = (composite_sum / len(active)) if active else 0.0
 
         return SDKFleetStatus(
             tenant_id=tenant_id,
@@ -302,17 +321,18 @@ class SDKHealthService:
 
     async def detect_silent_sdks(self, tenant_id: str) -> list[dict[str, Any]]:
         """Return SDK IDs that have not sent a heartbeat within the silence threshold."""
-        heartbeats = await self._heartbeat_store.find(tenant_id=tenant_id)
+        installations = await self._installations.list_for_tenant(tenant_id)
         silent = []
-        now_ts = time.time()
-        for hb_raw in heartbeats:
+        for hb_raw in installations:
+            if hb_raw.get("disabled") or hb_raw.get("uninstalled"):
+                continue
             try:
-                reported_str = hb_raw.get("reported_at", "")
+                reported_str = hb_raw.get("last_seen", "")
                 reported_dt = datetime.fromisoformat(reported_str.replace("Z", "+00:00"))
                 age = (datetime.now(timezone.utc) - reported_dt).total_seconds()
                 if age > _SILENT_THRESHOLD_SECONDS:
                     silent.append({
-                        "sdk_id": hb_raw.get("sdk_id"),
+                        "sdk_id": hb_raw.get("installation_id"),
                         "tenant_id": tenant_id,
                         "last_seen": reported_str,
                         "age_seconds": age,
@@ -320,6 +340,20 @@ class SDKHealthService:
             except Exception:
                 continue
         return silent
+
+    @staticmethod
+    def _effective_status(installation: dict[str, Any]) -> str:
+        if installation.get("uninstalled"):
+            return "uninstalled"
+        if installation.get("disabled"):
+            return "disabled"
+        try:
+            last_seen = datetime.fromisoformat(str(installation.get("last_seen", "")).replace("Z", "+00:00"))
+            if (datetime.now(timezone.utc) - last_seen).total_seconds() > _SILENT_THRESHOLD_SECONDS:
+                return "silent"
+        except (TypeError, ValueError):
+            return "silent"
+        return str(installation.get("status") or "unhealthy")
 
     # ── Internal Helpers ──────────────────────────────────────────────────
 
