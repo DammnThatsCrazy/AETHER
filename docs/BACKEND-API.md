@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "e89b94fc"
+last_synced_commit: "f64bfae1"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2291,6 +2291,7 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 | PATCH | `/v1/notifications/intelligence/{id}/escalate` | Operator escalate |
 | PATCH | `/v1/notifications/intelligence/{id}/annotate` | Add annotation |
 | POST | `/v1/notifications/intelligence/{id}/replay` | Re-deliver to all active channels |
+| GET | `/v1/notifications/coverage` | Producer-coverage report (honest states; never "healthy" without a declared baseline) |
 
 ### Tenant Configuration
 
