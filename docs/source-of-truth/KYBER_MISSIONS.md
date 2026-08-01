@@ -15,6 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 3
+last_synced_commit: "fffcd7dc5f02"
 ---
 
 # Kyber Mission Aggregate & Monitoring
