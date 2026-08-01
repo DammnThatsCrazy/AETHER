@@ -1,7 +1,7 @@
 """communications intelligence — credential-turnkey spine
 
 Revision ID: 20260813_comms_turnkey
-Revises: 20260812_credential_platform
+Revises: 20260813_payment_webhook_endpoints
 Create Date: 2026-08-13
 
 Additive-only schema for the credential-turnkey communications reference
@@ -24,7 +24,7 @@ tables and columns.
 from alembic import op
 
 revision = "20260813_comms_turnkey"
-down_revision = "20260812_credential_platform"
+down_revision = "20260813_payment_webhook_endpoints"
 branch_labels = None
 depends_on = None
 

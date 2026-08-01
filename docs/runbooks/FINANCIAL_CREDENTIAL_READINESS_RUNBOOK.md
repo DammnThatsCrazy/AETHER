@@ -10,7 +10,7 @@ source_files:
   - scripts/financial_credential_readiness.py
   - Backend Architecture/aether-backend/shared/certification/registry.py
 canonical_owner: platform@aether
-last_synced_commit: "2b2c6b1f"
+last_synced_commit: "792eb8de"
 ---
 
 # Financial Credential-Readiness Runbook
