@@ -13,7 +13,7 @@ source_files:
   - scripts/lib/preflight_env.py
   - scripts/lib/preflight_results.py
   - Backend Architecture/aether-backend/services/gateway/readiness.py
-last_synced_commit: "d11ce69"
+last_synced_commit: "146e1603"
 ---
 
 # Runbook — Staging Preflight & Readiness
@@ -95,10 +95,16 @@ never echoes secret values. Checks:
     counts as unavailable. Absence of a signal is never treated as health.
   A pure `api` task supervises no roles, so this check is `skipped` there and the
   worker fleet is gated by the worker tasks' own endpoints (see below).
+- **communications** — comms subsystem readiness (`services/comms/readiness.py`):
+  storage reachability, comms-required release-critical worker dependency (a dead
+  ingestion projector via `stream-worker`, or a stopped `outbox-relay`, fails
+  comms readiness), and webhook-inbox backlog (`degraded`, not `failed`). It is a
+  subsystem signal, never per-tenant: a single tenant's revoked credential does
+  not fail comms readiness — that truth is per-connector in the comms health card.
 - **auth_config** — non-local only; JWT secret present and not the default.
 
 `ready` is the AND of every check being `ok`, `skipped`, or `degraded`
-(`degraded` is emitted only by `workers`). The response also carries a top-level
+(`degraded` is emitted by `workers` and `communications`). The response also carries a top-level
 `capabilities` map — `{capability: {available, state, role, release_critical,
 detail}}` — which is what to read when deciding whether a degraded environment
 still serves the path you care about.

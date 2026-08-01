@@ -181,13 +181,26 @@ def _webhooks_for(desc: ConnectorDescriptor) -> Webhooks:
 
 
 def _sync_for(desc: ConnectorDescriptor) -> Sync:
-    """Backfill/incremental sync shape; a cursor is set whenever incremental."""
+    """Backfill/incremental sync shape; a cursor is set whenever incremental.
+
+    ``reconciliation`` is projected from the descriptor: a connector only claims
+    provider/Aether reconciliation when its adapter genuinely implements it
+    (e.g. Klaviyo's ``reconcile()``); the default stays ``False``.
+    """
     incremental = desc.supports_pull
     return Sync(
         initial_backfill=desc.supports_historical_backfill,
         incremental=incremental,
-        reconciliation=False,
+        reconciliation=desc.supports_reconciliation,
         cursor=DEFAULT_INCREMENTAL_CURSOR if incremental else None,
+    )
+
+
+def _accounts_for(desc: ConnectorDescriptor) -> Accounts:
+    """Provider-account discovery/selection, projected from the descriptor."""
+    return Accounts(
+        discovery_supported=desc.supports_account_discovery,
+        selection_required=desc.supports_account_selection,
     )
 
 
@@ -205,6 +218,12 @@ def manifest_from_connector_descriptor(desc: ConnectorDescriptor) -> ProviderMan
     authentication = _authentication_for(desc)
     required_secrets = [field.name for field in authentication.credential_schema]
 
+    # Connectors that declare a richer capability surface (e.g. comms adapters)
+    # project it here; everything else falls back to the connector-generic
+    # defaults. The connector class stays the single source of truth.
+    data_outputs = list(desc.manifest_data_outputs) or list(DEFAULT_DATA_OUTPUTS)
+    product_destinations = list(desc.manifest_product_destinations)
+
     return ProviderManifest(
         provider_family=desc.connector_type,
         product_id=PRODUCT_ID,
@@ -215,11 +234,11 @@ def manifest_from_connector_descriptor(desc: ConnectorDescriptor) -> ProviderMan
         availability=_availability_for(readiness.level),
         authentication=authentication,
         configuration=Configuration(),
-        accounts=Accounts(),
+        accounts=_accounts_for(desc),
         webhooks=_webhooks_for(desc),
         sync=_sync_for(desc),
-        data_outputs=list(DEFAULT_DATA_OUTPUTS),
-        product_destinations=[],
+        data_outputs=data_outputs,
+        product_destinations=product_destinations,
         deployment=Deployment(required_secrets=required_secrets),
     )
 

@@ -1,6 +1,7 @@
 """Route flag-gating + handler roundtrips (handlers called directly, fake request)."""
 from __future__ import annotations
 
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -13,9 +14,16 @@ import services.product_catalog.routes as pc_routes
 from services.product_catalog.models import CatalogNode, MappingRule
 
 
-def _request(tenant_id: str = "t1", permissions: list[str] | None = None):
+# Each test gets a fresh tenant (rotated by the autouse `_clean_stores` fixture).
+# `list_nodes`/`list_*` are tenant-scoped, so a unique tenant keeps the emptiness
+# assertions robust even if an unrelated module seeds a node into the shared
+# in-memory store under a different tenant.
+_CURRENT_TENANT = {"id": "t1"}
+
+
+def _request(tenant_id: str | None = None, permissions: list[str] | None = None):
     tenant = TenantContext(
-        tenant_id=tenant_id,
+        tenant_id=tenant_id if tenant_id is not None else _CURRENT_TENANT["id"],
         user_id="u1",
         permissions=permissions if permissions is not None else ["read", "write"],
     )
@@ -33,6 +41,7 @@ def _enable(monkeypatch, enabled: bool = True) -> None:
 @pytest.fixture(autouse=True)
 def _clean_stores():
     reset_in_memory_stores()
+    _CURRENT_TENANT["id"] = f"t-{uuid.uuid4().hex[:8]}"
     yield
     reset_in_memory_stores()
 
@@ -88,7 +97,7 @@ class TestHandlerRoundtrip:
         created = await pc_routes.upsert_node(
             request, CatalogNode(kind="feature", stable_id="one-click", display_name="One-Click"),
         )
-        assert created.data["node"]["tenant_id"] == "t1"
+        assert created.data["node"]["tenant_id"] == _CURRENT_TENANT["id"]
 
         fetched = await pc_routes.get_node(request, "one-click")
         assert fetched.data["node"]["display_name"] == "One-Click"
@@ -110,7 +119,7 @@ class TestHandlerRoundtrip:
             precedence_class="tenant_catalog", target_feature_id="one-click",
         )
         created = await pc_routes.upsert_mapping_rule(request, rule)
-        assert created.data["rule"]["tenant_id"] == "t1"
+        assert created.data["rule"]["tenant_id"] == _CURRENT_TENANT["id"]
         listed = await pc_routes.list_mapping_rules(request, match_kind="event_name", limit=100, offset=0)
         assert [r["rule_id"] for r in listed.data["rules"]] == ["r-1"]
 

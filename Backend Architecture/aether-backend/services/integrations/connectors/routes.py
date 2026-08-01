@@ -158,6 +158,28 @@ async def configure_connector(connector_type: str, body: ConnectorConfigure, req
     tenant_id = _tenant_id(request, "write")
     if get_connector(connector_type) is None:
         raise NotFoundError("connector")
+    # Comms connectors are plan-gated (§20): enforce entitlement on enable, with
+    # an explicit upgrade_required / quota_reached reason (never a silent drop).
+    if body.enabled:
+        from services.comms.entitlements import CommsEntitlementPolicy, is_comms_connector
+        if is_comms_connector(connector_type):
+            from shared.auth.auth import PlanTier
+            from shared.common.common import ForbiddenError
+            plan = getattr(getattr(request.state, "tenant", None), "plan_tier",
+                           PlanTier.P1_HOBBYIST)
+            existing = await connector_service.list_for_tenant(tenant_id)
+            current = sum(
+                1 for c in existing
+                if c.get("enabled") and c.get("connector_type") != connector_type
+                and is_comms_connector(c.get("connector_type", ""))
+            )
+            decision = CommsEntitlementPolicy().evaluate_connection(
+                plan, current_connections=current,
+            )
+            if not decision.allowed:
+                raise ForbiddenError(
+                    f"comms entitlement {decision.state}: {decision.reason}"
+                )
     stored = await connector_service.configure(
         tenant_id, connector_type, name=body.name or "", config=body.config,
         enabled=body.enabled, secret_configured=body.secret_configured,
@@ -176,12 +198,28 @@ async def test_connector(connector_type: str, request: Request):
 
 
 @router.post("/{connector_type}/sync")
-async def sync_connector(connector_type: str, request: Request):
+async def sync_connector(connector_type: str, request: Request, since: Optional[str] = None):
+    """Trigger a sync. ``since`` (ISO-8601) selects a historical backfill window;
+    omit it for an incremental sync from the connector's last cursor."""
     tenant_id = _tenant_id(request, "write")
     if get_connector(connector_type) is None:
         raise NotFoundError("connector")
-    result = await connector_service.sync(tenant_id, connector_type, actor_id=_actor(request))
+    result = await connector_service.sync(
+        tenant_id, connector_type, actor_id=_actor(request), since=since,
+    )
     return APIResponse(data=result.model_dump()).to_dict()
+
+
+@router.get("/{connector_type}/sync-runs")
+async def list_connector_sync_runs(connector_type: str, request: Request, limit: int = 50):
+    """Durable sync-run history — the customer-visible sync progress surface."""
+    tenant_id = _tenant_id(request, "read")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    runs = await connector_service.list_sync_runs(
+        tenant_id, connector_type, limit=max(1, min(limit, 200))
+    )
+    return APIResponse(data={"items": runs}).to_dict()
 
 
 @router.post("/{connector_type}/webhook")

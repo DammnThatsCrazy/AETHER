@@ -11,10 +11,18 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/descriptor.py
 canonical_owner: platform@aether
-last_synced_commit: "9fde074"
+last_synced_commit: "146e1603"
 ---
 
 # Provider Capability Matrix Guide
+
+> v8.12.0: the matrix now includes the `communications` domain. Klaviyo is the
+> certified reference communications adapter at `credential_waiting`
+> (first-release), resolved from the live connector via
+> `services/comms/conformance.py::comms_certification_descriptor`. It certifies
+> offline through the shared framework (18 generic checks + 9 comms-domain
+> checks) and reports `credential_turnkey / staging_validation_pending` — never
+> `provider_live` — until real credentials and infrastructure are supplied.
 
 The canonical, machine-readable capability matrix is generated, not authored:
 

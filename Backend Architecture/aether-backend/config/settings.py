@@ -206,6 +206,10 @@ class CommsConfig:
     # Attribution policy switches (ADR-C8)
     reported_opens_as_view_through: bool = _env_bool("AETHER_COMMS_OPENS_VIEW_THROUGH", False)
     replies_attribution_eligible: bool = _env_bool("AETHER_COMMS_REPLIES_ELIGIBLE", True)
+    # Provider suppression write-back is a separately-authorized capability
+    # (read permission never implies suppression-write); OFF by default,
+    # observe-only per ADR-C1.
+    suppression_write_back_enabled: bool = _env_bool("AETHER_COMMS_SUPPRESSION_WRITE_BACK", False)
 
 
 @dataclass(frozen=True)

@@ -2305,6 +2305,14 @@ export const api = {
 
     commsDsrErase: (body: { tenant_id: string; entity_id: string; confirm: boolean }) =>
       restClient.post('/v1/comms/admin/dsr/erase', wrap(unknownSchema), body).then(r => r.data),
+
+    // Communications Intelligence — durable sync-run history (§12.4)
+    commsSyncRuns: (tenantId: string, limit = 100) =>
+      restClient.get(`/v1/comms/admin/sync-runs?tenant_id=${encodeURIComponent(tenantId)}&limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    // Communications Intelligence — observe-only suppression reconciliation (§16)
+    commsReconcileSuppressions: (body: { tenant_id: string; provider: string; provider_reported?: Array<Record<string, unknown>> }) =>
+      restClient.post('/v1/comms/admin/suppressions/reconcile', wrap(unknownSchema), body).then(r => r.data),
   },
 
   conversions: {

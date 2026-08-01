@@ -1,6 +1,7 @@
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, GlyphIcon, LoadingState, StatusIndicator, TerminalSeparator } from '@aether/ui';
 import { useEventRequirements, useGoLiveReadiness, useOnboardingChecklist, useOnboardingStatus, usePatchOnboardingStep, useSdkInstructions } from '@aether-app/features/onboarding';
 import type { ImplementationBlocker, ImplementationStep } from '@aether/shared';
+import { CommsConnectOnboardingStep } from './comms-connect-onboarding-step';
 
 function scoreColor(score: number | null) {
   if (score == null) return 'text-text-muted';
@@ -69,6 +70,8 @@ export function OnboardingPage() {
         <CardHeader><CardTitle>Completion Progress</CardTitle></CardHeader>
         <CardContent className="space-y-2"><ProgressBar value={completion} /><div className="text-xs text-text-muted">{completion}% complete across {steps.length} onboarding steps.</div></CardContent>
       </Card>
+
+      <CommsConnectOnboardingStep />
 
       <div className="grid gap-6 lg:grid-cols-[1.3fr_.7fr]">
         <Card>

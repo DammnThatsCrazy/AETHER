@@ -205,6 +205,84 @@ async def comms_health(request: Request) -> dict:
     return APIResponse(data=data).to_dict()
 
 
+# ── Commercial entitlements + quotas (§20) ───────────────────────────────────
+
+@router.get("/entitlement")
+async def comms_entitlement(request: Request) -> dict:
+    """The tenant's comms plan entitlement + current usage + quota state.
+
+    Consumed by the connection wizard to show availability, limits, and any
+    ``upgrade_required`` / ``quota_reached`` state BEFORE a connection is made.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from shared.auth.auth import PlanTier
+    from services.comms.entitlements import CommsEntitlementPolicy, is_comms_connector
+    from services.integrations.connectors.service import connector_service
+
+    plan = getattr(tenant, "plan_tier", PlanTier.P1_HOBBYIST)
+    policy = CommsEntitlementPolicy()
+    connectors = await connector_service.list_for_tenant(tenant.tenant_id)
+    comms_conns = [c for c in connectors if is_comms_connector(c.get("connector_type", ""))]
+    decision = policy.evaluate_connection(plan, current_connections=len(comms_conns))
+    return APIResponse(data={
+        "summary": policy.summary(plan),
+        "current_connections": len(comms_conns),
+        "connection_state": decision.state,
+        "connection_allowed": decision.allowed,
+        "reason": decision.reason,
+    }).to_dict()
+
+
+# ── Canonical suppression authority (§16) ────────────────────────────────────
+
+@router.get("/suppressions")
+async def list_suppressions(request: Request, limit: int = 200) -> dict:
+    """Tenant-visible canonical suppression ledger (provider-reported vs
+    Aether-enforced state visible per row)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.suppression_authority import SuppressionAuthorityService
+    items = await SuppressionAuthorityService().list_for_tenant(
+        tenant.tenant_id, limit=max(1, min(limit, 1000))
+    )
+    return APIResponse(data={"items": items}).to_dict()
+
+
+# ── Provider identity bridge — provisional/unresolved queue (§13) ────────────
+
+class IdentityResolveBody(BaseModel):
+    canonical_entity_id: str = Field(..., min_length=1, max_length=200)
+
+
+@router.get("/identities/provisional")
+async def list_provisional_identities(request: Request, limit: int = 100) -> dict:
+    """Provider identities awaiting resolution — the mapping-review queue."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.identity_bridge import ProviderIdentityRepository
+    items = await ProviderIdentityRepository().list_provisional(
+        tenant.tenant_id, limit=max(1, min(limit, 500))
+    )
+    return APIResponse(data={"items": items}).to_dict()
+
+
+@router.post("/identities/{identity_id}/resolve")
+async def resolve_provisional_identity(
+    identity_id: str, request: Request, body: IdentityResolveBody
+) -> dict:
+    """Map a provisional provider identity to a canonical entity (mapping review)."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from services.comms.identity_bridge import ProviderIdentityBridge
+    row = await ProviderIdentityBridge().mark_resolved(
+        tenant.tenant_id, identity_id, body.canonical_entity_id,
+    )
+    if row is None:
+        raise BadRequestError("unknown provider identity")
+    return APIResponse(data=row).to_dict()
+
+
 # ── Cross-channel initiatives (Phase 10, ADR-C9) ─────────────────────────────
 
 class InitiativeCreateBody(BaseModel):
@@ -419,6 +497,87 @@ async def operator_dsr_erase(request: Request, body: OperatorDsrEraseBody) -> di
     return APIResponse(data={"facts_removed": removed}).to_dict()
 
 
+@admin_router.get("/sync-runs")
+async def operator_sync_runs(
+    request: Request, tenant_id: str, limit: int = 100
+) -> dict:
+    """Durable sync-run history for a tenant (Kyber Communications Operations)."""
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    from services.comms.sync_runs import SyncRunService
+    items = await SyncRunService().list_for_tenant(
+        tenant_id, limit=max(1, min(limit, 500))
+    )
+    return APIResponse(data={"items": items}).to_dict()
+
+
+class OperatorSuppressionReconcileBody(BaseModel):
+    tenant_id: str
+    provider: str
+    provider_reported: list[dict[str, Any]] = Field(default_factory=list, max_length=5000)
+
+
+@admin_router.post("/suppressions/reconcile")
+async def operator_reconcile_suppressions(
+    request: Request, body: OperatorSuppressionReconcileBody
+) -> dict:
+    """Reconcile provider-reported suppressions against Aether's canonical set.
+
+    Observe-only: reports drift and stamps reconciliation; never writes back to
+    the provider unless suppression write-back is separately authorized.
+    """
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    from services.comms.suppression_authority import SuppressionAuthorityService
+    result = await SuppressionAuthorityService().reconcile(
+        body.tenant_id, provider=body.provider,
+        provider_reported=body.provider_reported,
+    )
+    await _audit_operator_action(
+        request, action="reconcile_suppressions", tenant_id=body.tenant_id,
+        resource_id=body.provider, outcome="allowed",
+        metadata={"in_sync": result.get("in_sync")},
+    )
+    return APIResponse(data=result).to_dict()
+
+
+async def _activation_signals(tenant_id: str) -> dict[str, Any]:
+    """Best-effort turnkey/activation signals for the comms health card.
+
+    Bounded, never raises — additive to the base health snapshot so the golden
+    scenario's core assertions (facts/resolution) stay stable.
+    """
+    signals: dict[str, Any] = {}
+    try:
+        from services.comms.identity_bridge import ProviderIdentityRepository
+        signals["provisional_identities"] = len(
+            await ProviderIdentityRepository().list_provisional(tenant_id, limit=1000)
+        )
+    except Exception:  # pragma: no cover - best-effort
+        pass
+    try:
+        from services.comms.suppression_authority import SuppressionAuthorityService
+        signals["active_suppressions"] = len(
+            await SuppressionAuthorityService().list_for_tenant(tenant_id, limit=1000)
+        )
+    except Exception:  # pragma: no cover - best-effort
+        pass
+    try:
+        from services.comms.sync_runs import SyncRunService
+        runs = await SyncRunService().list_for_tenant(tenant_id, limit=1)
+        if runs:
+            r = runs[0]
+            signals["last_sync_run"] = {
+                "status": r.get("status"), "mode": r.get("mode"),
+                "completed_at": r.get("completed_at"),
+                "records_received": r.get("records_received"),
+                "safe_error_code": r.get("safe_error_code"),
+            }
+    except Exception:  # pragma: no cover - best-effort
+        pass
+    return signals
+
+
 async def _health_snapshot(tenant_id: str) -> dict[str, Any]:
     from repositories.repos import get_pool
     pool = await get_pool()
@@ -427,13 +586,15 @@ async def _health_snapshot(tenant_id: str) -> dict[str, Any]:
         rows = [r for r in _local_facts.values() if r.get("tenant_id") == tenant_id]
         resolved = sum(1 for r in rows if r.get("campaign_id"))
         machine = sum(1 for r in rows if r.get("suspected_machine_activity"))
-        return {
+        base = {
             "tenant_id": tenant_id,
             "communication_facts": len(rows),
             "campaign_resolution_rate": round(resolved / len(rows), 4) if rows else None,
             "machine_event_rate": round(machine / len(rows), 4) if rows else None,
             "last_event_at": max((str(r.get("occurred_at")) for r in rows), default=None),
         }
+        base.update(await _activation_signals(tenant_id))
+        return base
     async with pool.acquire() as conn:
         rec = await conn.fetchrow(
             """
@@ -446,13 +607,15 @@ async def _health_snapshot(tenant_id: str) -> dict[str, Any]:
             tenant_id,
         )
     total = rec["communication_facts"] or 0
-    return {
+    base = {
         "tenant_id": tenant_id,
         "communication_facts": total,
         "campaign_resolution_rate": round((rec["resolved"] or 0) / total, 4) if total else None,
         "machine_event_rate": round((rec["machine"] or 0) / total, 4) if total else None,
         "last_event_at": str(rec["last_event_at"]) if rec["last_event_at"] else None,
     }
+    base.update(await _activation_signals(tenant_id))
+    return base
 
 
 async def _fleet_snapshot() -> dict[str, Any]:

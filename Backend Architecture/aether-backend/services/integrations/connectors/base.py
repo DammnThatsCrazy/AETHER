@@ -208,6 +208,16 @@ class ConnectorDescriptor(BaseModel):
     supports_warehouse_datashare: bool = False
     supports_query_execution: bool = False
     supports_push_action: bool = False
+    # Sync/account capability flags projected onto the canonical ProviderManifest.
+    supports_reconciliation: bool = False
+    supports_account_discovery: bool = False
+    supports_account_selection: bool = False
+    # Manifest enrichment — richer capability surface for the derived
+    # ProviderManifest. Empty lists fall back to the connector-generic defaults
+    # in shared.integration_contracts.catalog (single source of truth stays the
+    # connector class; the catalog is a pure projection).
+    manifest_data_outputs: List[str] = Field(default_factory=list)
+    manifest_product_destinations: List[str] = Field(default_factory=list)
     # Governance requirements
     requires_contract_grant: bool = False
     requires_user_consent: bool = False
@@ -301,6 +311,11 @@ class BaseConnector:
     supports_warehouse_datashare: bool = False
     supports_query_execution: bool = False
     supports_push_action: bool = False
+    supports_reconciliation: bool = False
+    supports_account_discovery: bool = False
+    supports_account_selection: bool = False
+    manifest_data_outputs: tuple[str, ...] = ()
+    manifest_product_destinations: tuple[str, ...] = ()
     requires_contract_grant: bool = False
     requires_user_consent: bool = False
     requires_admin_install: bool = False
@@ -344,6 +359,11 @@ class BaseConnector:
             supports_warehouse_datashare=self.supports_warehouse_datashare,
             supports_query_execution=self.supports_query_execution,
             supports_push_action=self.supports_push_action,
+            supports_reconciliation=self.supports_reconciliation,
+            supports_account_discovery=self.supports_account_discovery,
+            supports_account_selection=self.supports_account_selection,
+            manifest_data_outputs=list(self.manifest_data_outputs),
+            manifest_product_destinations=list(self.manifest_product_destinations),
             requires_contract_grant=self.requires_contract_grant,
             requires_user_consent=self.requires_user_consent,
             requires_admin_install=self.requires_admin_install,

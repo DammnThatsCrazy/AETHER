@@ -332,7 +332,9 @@ function CommsOperatorActions() {
   const [tenantId, setTenantId] = useState('');
   const [entityId, setEntityId] = useState('');
   const [campaignId, setCampaignId] = useState('');
+  const [provider, setProvider] = useState('klaviyo');
   const [result, setResult] = useState<string | null>(null);
+  const [syncRuns, setSyncRuns] = useState<Row[] | null>(null);
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     try {
@@ -365,6 +367,11 @@ function CommsOperatorActions() {
           <input id="comms-campaign" type="text" value={campaignId} onChange={e => setCampaignId(e.target.value)}
                  className="w-full text-sm font-mono bg-surface-secondary border border-border rounded px-2 py-1" />
         </div>
+        <div>
+          <label className="text-xs text-text-muted block mb-1" htmlFor="comms-provider">Provider</label>
+          <input id="comms-provider" type="text" value={provider} onChange={e => setProvider(e.target.value)}
+                 className="w-full text-sm font-mono bg-surface-secondary border border-border rounded px-2 py-1" />
+        </div>
       </div>
       <div className="flex flex-wrap gap-2">
         <ConfirmButton
@@ -378,11 +385,47 @@ function CommsOperatorActions() {
           onConfirm={() => run('Reproject', () => api.measurement.commsReprojectGraph({ tenant_id: tenantId.trim(), campaign_id: campaignId.trim() }))}
         />
         <ConfirmButton
+          label="Reconcile suppressions"
+          disabled={!tenantId.trim() || !provider.trim()}
+          onConfirm={() => run('Reconcile', () => api.measurement.commsReconcileSuppressions({ tenant_id: tenantId.trim(), provider: provider.trim() }))}
+        />
+        <ConfirmButton
           label="DSR erase entity comms"
           disabled={!tenantId.trim() || !entityId.trim()}
           onConfirm={() => run('DSR erase', () => api.measurement.commsDsrErase({ tenant_id: tenantId.trim(), entity_id: entityId.trim(), confirm: true }))}
         />
+        <button
+          type="button"
+          disabled={!tenantId.trim()}
+          onClick={() => {
+            void (async () => {
+              try {
+                const r = await api.measurement.commsSyncRuns(tenantId.trim(), 25) as { items?: Row[] };
+                setSyncRuns(r?.items ?? []);
+              } catch (e) {
+                setResult(`Sync runs failed: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            })();
+          }}
+          className="text-xs px-3 py-1.5 rounded border border-border bg-surface-secondary hover:bg-surface disabled:opacity-50"
+        >
+          Load sync runs
+        </button>
       </div>
+      {syncRuns && (
+        <div className="mt-2 text-xs">
+          <p className="text-text-muted mb-1">Sync runs ({syncRuns.length})</p>
+          <div className="max-h-40 overflow-auto space-y-1">
+            {syncRuns.length === 0 && <p className="text-text-muted">No sync runs recorded for this tenant.</p>}
+            {syncRuns.map((r, i) => (
+              <div key={String(r['sync_run_id'] ?? i)} className="font-mono text-text-secondary">
+                {String(r['status'] ?? '?')} · {String(r['mode'] ?? '?')} · recv {String(r['records_received'] ?? 0)}
+                {r['safe_error_code'] ? ` · ${String(r['safe_error_code'])}` : ''}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {result && <p className="text-xs font-mono text-text-secondary break-all" role="status">{result}</p>}
     </div>
   );
