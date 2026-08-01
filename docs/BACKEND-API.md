@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "b10ef8a7e053"
+last_synced_commit: "b1511d2490b2"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -317,6 +317,22 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
 | `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
 | `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
+
+## Command Center (read-only tenant aggregate, flag-gated)
+
+Mounted at `/v1/command-center` only when `AETHER_COMMAND_CENTER_ENABLED=true`
+(default OFF). A read-only aggregator that composes nine existing tenant-scoped
+reads in-process into one envelope-per-section view; it owns no state and adds
+no table. Each section carries the underlying sub-service payload verbatim plus
+an honest state (`live | no_data | not_configured | unavailable | error`) — a
+failed or timed-out read degrades to `unavailable`/`error` with `data=null`, and
+an empty tenant degrades to `no_data`, never a fabricated value. Tenant scope
+comes from the authenticated API key. It forwards only `tenant_id` downstream and
+imports no operator-only service, so no operator field can leak into a tenant view.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET` | `/v1/command-center` | read | Aggregated view. Sections: `activation`, `value_strip`, `ops_feed`, `graph_snapshot`, `campaign_movement`, `data_confidence`, `integration_health`, `outcomes`, `next_best_actions`. |
 
 ## Event Ingestion
 
