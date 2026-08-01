@@ -84,11 +84,28 @@ returns `reset: true`, forcing a bounded resync rather than a silent gap. The
 realtime SSE/WS transport remains an optional low-latency push; client-sync is the
 durable catch-up and the polling fallback.
 
+## Tenant API surface
+
+The tenant (Aether) continuation router is mounted at `/v1/continuations`
+(`services/continuation/routes.py`), gated by `settings.continuation.enabled`:
+
+- `POST /v1/continuations` — create (server forces `principal_id` / `tenant_id` /
+  `app_kind`; optional `?idempotency_key=`).
+- `GET /v1/continuations/recent` — recent continuations for the authenticated principal.
+- `GET /v1/continuations/{id}` — fetch one (404 when absent in scope).
+- `PATCH /v1/continuations/{id}` — compare-and-swap update carrying
+  `expected_state_revision` (409 on mismatch).
+- `POST /v1/continuations/{id}/handoff` — mint the backend selection token.
+- `DELETE /v1/continuations/{id}`.
+
+The operator (Kyber) router `/v1/kyber/continuations` is deferred to the Kyber-mobile
+milestone, where it composes the Kyber access plane.
+
 ## Status
 
-Milestone C1 lands the **contract twins** (parity-green) and this design of record.
-The continuation-plane persistence/routes and the client-sync feed
-implementation follow within the same program (see
-`reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default OFF
-(`continuation.enabled`, `client_sync.enabled`), so disabled surfaces answer 404 —
-no runtime behavior change until enabled.
+Milestone C1 lands the **contract twins** (parity-green), the **dual-mode persistence
+engine**, and the **tenant continuation routes** (above) — this page is the design of
+record. The client-sync feed implementation and the operator router follow within the
+same program (see `reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default OFF
+(`continuation.enabled`, `client_sync.enabled`), so disabled surfaces answer 404 — no
+runtime behavior change until enabled.

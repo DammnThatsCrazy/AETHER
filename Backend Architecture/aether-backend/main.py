@@ -1236,6 +1236,13 @@ def create_app() -> FastAPI:
     else:
         logger.info("Exploration Fabric disabled (AETHER_EXPLORATION_ENABLED=false)")
 
+    if settings.continuation.enabled:
+        from services.continuation.routes import router as continuation_router
+        app.include_router(continuation_router, tags=["Continuation Plane"])
+        logger.info("Continuation plane mounted (/v1/continuations)")
+    else:
+        logger.info("Continuation plane disabled (AETHER_CONTINUATION_ENABLED=false)")
+
     return app
 
 
