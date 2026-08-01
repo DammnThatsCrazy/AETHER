@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
+from typing import Any, Optional
+
+from shared.common.common import utc_now
+from shared.temporal.instant import try_parse_instant
 
 from repositories.installation_repo import get_installation_repository
+from services.continuation import service as continuation_service
 
 APP_KIND = "aether"
 
@@ -84,3 +88,93 @@ async def add_subscription(
 
 async def erase_principal(scope: str, principal_id: str) -> int:
     return await get_installation_repository().delete_by_principal(scope, principal_id)
+
+
+# ── Deep-link resolution ─────────────────────────────────────────────────────
+#
+# A mobile deep link carries only an opaque continuation id — never PII or a graph.
+# Resolution is fail-closed: every failure that could leak the existence of a
+# continuation (unknown installation, unowned installation, revoked installation,
+# cross-scope / cross-plane / expired continuation) returns the SAME "unresolved"
+# result, so a caller cannot probe for continuations it does not own. Only a
+# resolvable continuation the caller owns can distinguish "resolved" from
+# "step-up required".
+
+_RESOLVED_UNRESOLVABLE = {"resolved": False, "reason": "unresolvable"}
+
+
+def _is_expired(expires_at: Any) -> bool:
+    if not expires_at:
+        return False
+    dt, _err = try_parse_instant(str(expires_at))
+    if dt is None:
+        return False
+    return dt <= utc_now()
+
+
+def _projection(ctx: dict) -> dict:
+    """The bounded, reference-only projection returned to the client. Carries the
+    summary + canonical_context references (saved_view_id / query_id / notification
+    id / …) — never a materialized graph or raw payload."""
+    return {
+        "id": ctx.get("id"),
+        "app_kind": ctx.get("app_kind"),
+        "surface": ctx.get("surface"),
+        "summary": ctx.get("summary"),
+        "canonical_context": ctx.get("canonical_context"),
+        "sensitivity": ctx.get("sensitivity", "standard"),
+        "freshness": ctx.get("freshness"),
+        "state_revision": ctx.get("state_revision"),
+        "updated_at": ctx.get("updated_at"),
+        "expires_at": ctx.get("expires_at"),
+    }
+
+
+async def resolve_deep_link(
+    *,
+    scope: str,
+    principal_id: str,
+    installation_id: str,
+    continuation_id: str,
+    elevated: bool = False,
+) -> dict:
+    """Resolve an opaque deep link to a bounded continuation projection.
+
+    Ordered, fail-closed checks. All existence-revealing failures collapse to the
+    same ``{"resolved": False, "reason": "unresolvable"}`` result.
+    """
+    repo = get_installation_repository()
+
+    # 1) Installation must exist in scope, be owned by the caller, and not be revoked.
+    installation = await repo.get(scope, installation_id)
+    if (
+        installation is None
+        or installation.get("principal_id") != principal_id
+        or installation.get("trust_state") == "revoked"
+    ):
+        return dict(_RESOLVED_UNRESOLVABLE)
+
+    # 2) The installation plane must match this gateway (aether tenant plane).
+    if installation.get("app_kind") != APP_KIND:
+        return dict(_RESOLVED_UNRESOLVABLE)
+
+    # 3) Continuation must resolve within the caller's scope (no cross-scope leak).
+    ctx = await continuation_service.get(scope, continuation_id)
+    if ctx is None:
+        return dict(_RESOLVED_UNRESOLVABLE)
+
+    # 4) Continuation plane must match; a Kyber continuation is not resolvable here.
+    if ctx.get("app_kind") != APP_KIND:
+        return dict(_RESOLVED_UNRESOLVABLE)
+
+    # 5) Expired continuations are unresolvable.
+    if _is_expired(ctx.get("expires_at")):
+        return dict(_RESOLVED_UNRESOLVABLE)
+
+    # 6) Restricted continuations require step-up. The caller has already proven
+    #    installation ownership + scope, so surfacing "step up required" to the
+    #    legitimate owner is not an existence leak.
+    if ctx.get("sensitivity") == "restricted" and not elevated:
+        return {"resolved": False, "reason": "step_up_required", "requires_step_up": True}
+
+    return {"resolved": True, "continuation": _projection(ctx)}

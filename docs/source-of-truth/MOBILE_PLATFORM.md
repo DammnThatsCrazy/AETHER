@@ -84,6 +84,15 @@ goes to every channel. Provider-accepted ≠ delivered ≠ opened ≠ read ≠ a
   `GET/DELETE /v1/mobile/installations/{id}`, `POST /v1/mobile/installations/{id}/subscriptions`.
   Registration forces `app_kind=aether`; only a token's `token_hash` is stored. The Kyber
   operator gateway is deferred to the Kyber-mobile milestone.
+- **Deep-link resolution** (C3) — `POST /v1/mobile/deep-links/resolve` turns an opaque
+  continuation id (the only thing a deep link carries — never PII or a graph) into a bounded,
+  reference-only continuation projection. Resolution is **fail-closed**: an unknown / unowned /
+  revoked installation and a cross-scope / cross-plane / expired continuation all collapse to the
+  same `{"resolved": false, "reason": "unresolvable"}` body, so a caller cannot probe for
+  continuations it does not own. A `restricted` continuation requires a stepped-up session
+  (`step_up` permission on the tenant plane; the Kyber device-proof step-up is the operator plane,
+  deferred). It reuses the continuation records as the payload store — the link never carries the
+  data itself.
 - **Mobile apps + shared packages** (C4) — `apps/aether-mobile`, `apps/kyber-mobile` (Expo +
   prebuild) and `packages/mobile-*`. C4 lands compiling app shells with auth / API / notification /
   continuation / sync clients and a navigation skeleton; full feature screens are C5–C6.

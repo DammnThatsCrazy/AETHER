@@ -58,6 +58,15 @@ class SubscriptionRequest(BaseModel):
     environment: str
 
 
+class DeepLinkResolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Only opaque ids travel — never PII / graph. Principal, scope and elevation are
+    # derived server-side from the session, never trusted from the client.
+    installation_id: str
+    continuation_id: str
+
+
 @router.post("/installations")
 async def register_installation(request: Request, payload: RegistrationRequest) -> APIResponse:
     tenant = _tenant(request, "write")
@@ -104,6 +113,25 @@ async def revoke_installation(request: Request, installation_id: str = Path(...)
     if row is None:
         raise NotFoundError("installation not found")
     return APIResponse(data=row)
+
+
+@router.post("/deep-links/resolve")
+async def resolve_deep_link(request: Request, payload: DeepLinkResolveRequest) -> APIResponse:
+    """Resolve an opaque mobile deep link to a bounded continuation projection.
+
+    Fail-closed: every failure that could leak a continuation's existence returns the
+    same ``{"resolved": false, "reason": "unresolvable"}`` body. Restricted
+    continuations require a stepped-up session (``step_up`` permission on the tenant
+    plane; the Kyber device-proof step-up is the operator plane, deferred)."""
+    tenant = _tenant(request, "read")
+    result = await mobile_service.resolve_deep_link(
+        scope=mobile_service.tenant_scope(tenant.tenant_id),
+        principal_id=_principal(tenant),
+        installation_id=payload.installation_id,
+        continuation_id=payload.continuation_id,
+        elevated=tenant.has_permission("step_up"),
+    )
+    return APIResponse(data=result)
 
 
 @router.post("/installations/{installation_id}/subscriptions")
