@@ -29,6 +29,17 @@ inputs in the Terraform root, so a `production-lean` plan structurally cannot
 contain a forbidden resource. See
 [Terraform enforcement](#terraform-enforcement) for exactly how that is proven.
 
+### Pending module: `kms_credentials`
+
+The `terraform/modules/kms_credentials` module (a customer-managed KMS CMK +
+alias + least-privilege IAM for provider-credential envelope encryption, surfaced
+as `CREDENTIAL_KMS_KEY_ID`) is **defined but not yet wired into the profile root**.
+Wiring it adds `aws_kms_key`/`aws_kms_alias` to the plan, which the
+provider-mocked `profile_plan.tftest.hcl` asserts against exactly; it is left
+unwired until that plan assertion is updated in the same change (with a terraform
+binary available to validate). The staging/production credential cipher reads the
+key id from `CREDENTIAL_KMS_KEY_ID` once the module is wired and applied.
+
 ## Profile summary
 
 | Profile | Class | Selectable in Terraform | Cost-capped | Runtime execution mode | NAT gateways |

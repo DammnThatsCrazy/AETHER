@@ -17,7 +17,7 @@ ContractStatus = Literal['draft','active','pending_signature','expired','cancell
 BillingModel = Literal['flat_subscription','usage_based','hybrid','enterprise_contract','value_based','pilot']
 BillingPeriod = Literal['monthly','quarterly','annual','custom']
 ResetPeriod = Literal['monthly','quarterly','annual','never']
-MeteringEventType = Literal['event_ingested','entity_resolved','graph_operation','profile_query','recommendation_generated','recommendation_previewed','decision_recorded','confidence_updated','action_logged','action_dispatched','outcome_observed','playbook_run','investigation_opened','audit_export_generated','integration_delivery','connector_sync','webhook_ingested','sdk_event_ingested','premium_connector_used','deployment_mode_active','managed_workflow_triggered','value_created','stablecoin_observation_ingested','stablecoin_flow_materialized','derivatives_event_ingested','derivatives_reconciliation_run','derivatives_stream_gap_detected','interop_observation_ingested','interop_message_correlated','interop_reconciliation_run']
+MeteringEventType = Literal['event_ingested','entity_resolved','graph_operation','profile_query','recommendation_generated','recommendation_previewed','decision_recorded','confidence_updated','action_logged','action_dispatched','outcome_observed','playbook_run','investigation_opened','audit_export_generated','integration_delivery','connector_sync','webhook_ingested','sdk_event_ingested','premium_connector_used','deployment_mode_active','managed_workflow_triggered','value_created','stablecoin_observation_ingested','stablecoin_flow_materialized','derivatives_event_ingested','derivatives_reconciliation_run','derivatives_stream_gap_detected','interop_observation_ingested','interop_message_correlated','interop_reconciliation_run','payment_rail_observation_ingested']
 InvoiceStatus = Literal['draft','review_ready','approved','exported']
 ValueSourceType = Literal['outcome','playbook','recommendation_family','integration_action','manual_adjustment']
 ValueType = Literal['retained_revenue','expansion_revenue','avoided_loss','campaign_waste_reduced','operational_savings','agent_failure_cost_reduced','manual_review_savings']
@@ -43,6 +43,7 @@ DIMENSION_LABELS = {
     'interop_observation_ingested': 'Interop observations ingested',
     'interop_message_correlated': 'Interop messages correlated',
     'interop_reconciliation_run': 'Interop reconciliation runs',
+    'payment_rail_observation_ingested': 'Payment rail observations ingested',
 }
 PREMIUM_DIMENSIONS = {'premium_connector_used','deployment_mode_active','managed_workflow_triggered'}
 

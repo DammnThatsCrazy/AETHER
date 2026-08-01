@@ -50,6 +50,82 @@ CONVERSION_ID = str(uuid4())
 HUMAN_TP_ID = str(uuid4())
 AGENT_TP_ID = str(uuid4())
 
+# Stable so a re-seed (see _ensure_seeded) is an idempotent replay, never a
+# duplicate conversion under a fresh key.
+DEDUP_KEY = f"x402-{uuid4().hex}"
+
+
+def _human_tp_payload() -> dict:
+    return {
+        "touchpoint_id": HUMAN_TP_ID,
+        "tenant_id": TENANT_ID,
+        "profile_id": PROFILE_ID,
+        "campaign_id": CAMPAIGN_ID,
+        "touchpoint_type": "click",
+        "channel": "organic_search",
+        "source": "google",
+        "occurred_at": _now_iso(),
+        "received_at": _now_iso(),
+        "idempotency_key": f"agent-tp-human-{HUMAN_TP_ID}",
+    }
+
+
+def _agent_tp_payload() -> dict:
+    return {
+        "touchpoint_id": AGENT_TP_ID,
+        "tenant_id": TENANT_ID,
+        "profile_id": PROFILE_ID,
+        "agent_id": AGENT_ID,
+        "wallet_id": WALLET_ID,
+        "campaign_id": CAMPAIGN_ID,
+        "touchpoint_type": "click",
+        "channel": "paid_display",
+        "source": "programmatic",
+        "occurred_at": _now_iso(),
+        "received_at": _now_iso(),
+        "idempotency_key": f"agent-tp-agent-{AGENT_TP_ID}",
+    }
+
+
+def _conversion_payload() -> dict:
+    return {
+        "conversion_id": CONVERSION_ID,
+        "tenant_id": TENANT_ID,
+        "conversion_type": "x402_settlement",
+        "profile_id": PROFILE_ID,
+        "agent_id": AGENT_ID,
+        "wallet_id": WALLET_ID,
+        "gross_value": "50.00",
+        "net_value": "47.50",
+        "currency": "USD",
+        "occurred_at": _now_iso(),
+        "observed_at": _now_iso(),
+        "conversion_status": "confirmed",
+        "authority_rank": 90,
+        "attribution_eligible": True,
+        "deduplication_key": DEDUP_KEY,
+    }
+
+
+def _ensure_seeded() -> None:
+    """Idempotently (re)establish the touchpoint + conversion graph.
+
+    The in-process stores are global, and any interleaved test that calls
+    reset_in_memory_stores() can wipe this class's state between its ordered
+    methods (pytest-xdist ``--dist load`` interleaves modules on a worker, so
+    an ordered flow cannot assume its earlier steps' writes survive). Every
+    upsert here is keyed by a stable module-level idempotency / deduplication
+    key, so this is a no-op replay when state survived and a clean restore
+    when it did not — either way the dependent step sees a complete graph.
+    """
+    from services.measurement.repositories.conversion_repo import ConversionRepository
+    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+
+    tp_repo = TouchpointRepository()
+    _run(tp_repo.upsert(_human_tp_payload()))
+    _run(tp_repo.upsert(_agent_tp_payload()))
+    _run(ConversionRepository().upsert(_conversion_payload()))
+
 
 class TestAgentWeb3AttributionFlow:
     """E2E: human touchpoint + agent touchpoint → actor_weighted attribution."""
@@ -62,18 +138,7 @@ class TestAgentWeb3AttributionFlow:
             pytest.skip("TouchpointRepository not available")
 
         repo = TouchpointRepository()
-        result = _run(repo.upsert({
-            "touchpoint_id": HUMAN_TP_ID,
-            "tenant_id": TENANT_ID,
-            "profile_id": PROFILE_ID,
-            "campaign_id": CAMPAIGN_ID,
-            "touchpoint_type": "click",
-            "channel": "organic_search",
-            "source": "google",
-            "occurred_at": _now_iso(),
-            "received_at": _now_iso(),
-            "idempotency_key": f"agent-tp-human-{HUMAN_TP_ID}",
-        }))
+        result = _run(repo.upsert(_human_tp_payload()))
         assert result is not None
 
     def test_02_store_agent_touchpoint_with_wallet(self):
@@ -84,20 +149,7 @@ class TestAgentWeb3AttributionFlow:
             pytest.skip("TouchpointRepository not available")
 
         repo = TouchpointRepository()
-        result = _run(repo.upsert({
-            "touchpoint_id": AGENT_TP_ID,
-            "tenant_id": TENANT_ID,
-            "profile_id": PROFILE_ID,
-            "agent_id": AGENT_ID,
-            "wallet_id": WALLET_ID,
-            "campaign_id": CAMPAIGN_ID,
-            "touchpoint_type": "click",
-            "channel": "paid_display",
-            "source": "programmatic",
-            "occurred_at": _now_iso(),
-            "received_at": _now_iso(),
-            "idempotency_key": f"agent-tp-agent-{AGENT_TP_ID}",
-        }))
+        result = _run(repo.upsert(_agent_tp_payload()))
         assert result is not None
 
     def test_03_store_x402_conversion(self):
@@ -108,23 +160,7 @@ class TestAgentWeb3AttributionFlow:
             pytest.skip("ConversionRepository not available")
 
         repo = ConversionRepository()
-        result = _run(repo.upsert({
-            "conversion_id": CONVERSION_ID,
-            "tenant_id": TENANT_ID,
-            "conversion_type": "x402_settlement",
-            "profile_id": PROFILE_ID,
-            "agent_id": AGENT_ID,
-            "wallet_id": WALLET_ID,
-            "gross_value": "50.00",
-            "net_value": "47.50",
-            "currency": "USD",
-            "occurred_at": _now_iso(),
-            "observed_at": _now_iso(),
-            "conversion_status": "confirmed",
-            "authority_rank": 90,
-            "attribution_eligible": True,
-            "deduplication_key": f"x402-{uuid4().hex}",
-        }))
+        result = _run(repo.upsert(_conversion_payload()))
         assert result is not None
 
     def test_04_journey_includes_both_human_and_agent_touchpoints(self):
@@ -134,6 +170,7 @@ class TestAgentWeb3AttributionFlow:
         except ImportError:
             pytest.skip("JourneyCompiler not available")
 
+        _ensure_seeded()
         compiler = JourneyCompiler()
         journey = _run(compiler.compile_for_profile(TENANT_ID, PROFILE_ID))
         assert isinstance(journey, dict)
@@ -146,6 +183,7 @@ class TestAgentWeb3AttributionFlow:
         except ImportError:
             pytest.skip("AttributionEngine not available")
 
+        _ensure_seeded()
         engine = AttributionEngine()
         run = _run(engine.run_for_conversion(
             TENANT_ID,
@@ -171,6 +209,7 @@ class TestAgentWeb3AttributionFlow:
         except ImportError:
             pytest.skip("AttributionRunRepository not available")
 
+        _ensure_seeded()
         repo = AttributionRunRepository()
         credits = _run(repo.list_credits_for_conversion(TENANT_ID, CONVERSION_ID))
         # Credits should exist and at least one should carry agent context
@@ -183,6 +222,10 @@ class TestAgentWeb3AttributionFlow:
         except ImportError:
             pytest.skip("TouchpointRepository not available")
 
+        # Seed the real tenant so the isolation assertion is meaningful: the
+        # profile's touchpoints exist under TENANT_ID but must never surface
+        # for a different tenant.
+        _ensure_seeded()
         repo = TouchpointRepository()
         results = _run(repo.list_by_profile("attacker-tenant", PROFILE_ID))
         assert results == [], "Cross-tenant agent touchpoint access must return empty"

@@ -53,7 +53,12 @@ def _get_gateway(request: Request):
 @router.post("/keys")
 @api_response
 async def store_key(body: ProviderKeyCreate, request: Request):
-    """Store or update an encrypted BYOK API key."""
+    """Store or update an encrypted BYOK API key.
+
+    Deprecated for financial providers: this generic single-key API predates the
+    durable, multi-slot credential authority. New payment/stablecoin integrations
+    should use the slot-aware API under ``/v1/providers/credentials`` instead.
+    """
     request.state.tenant.require_permission("admin")
     tenant_id = request.state.tenant.tenant_id
     gateway = _get_gateway(request)
@@ -61,6 +66,7 @@ async def store_key(body: ProviderKeyCreate, request: Request):
     await gateway.key_vault.store_key(
         tenant_id=tenant_id,
         provider_name=body.provider_name,
+        category=body.category,
         api_key=body.api_key,
         endpoint=body.endpoint or "",
     )
@@ -81,15 +87,18 @@ async def list_keys(request: Request):
     tenant_id = request.state.tenant.tenant_id
     gateway = _get_gateway(request)
 
+    # BYOKKeyVault.list_keys returns list[dict] (never StoredKey objects); the
+    # masked identifier is derived separately and never exposes key bytes.
     keys = await gateway.key_vault.list_keys(tenant_id)
     result = []
     for sk in keys:
+        provider_name = sk["provider_name"]
         result.append(ProviderKeyResponse(
-            provider_name=sk.provider_name,
-            masked_key=sk.masked_key,
-            endpoint=sk.endpoint or None,
-            enabled=sk.enabled,
-            stored_at=sk.stored_at,
+            provider_name=provider_name,
+            masked_key=gateway.key_vault.masked_identifier(tenant_id, provider_name),
+            endpoint=sk.get("endpoint") or None,
+            enabled=bool(sk.get("enabled", True)),
+            stored_at=sk.get("created_at") or sk.get("updated_at") or "",
         ).model_dump())
 
     return result

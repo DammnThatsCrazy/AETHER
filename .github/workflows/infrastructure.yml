@@ -108,7 +108,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~1.7'
+          terraform_version: '~1.9'
 
       - name: Prepare checked-in profile and CI-only variables
         env:
@@ -203,7 +203,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~1.7'
+          terraform_version: '~1.9'
 
       - uses: actions/setup-python@v5
         with:

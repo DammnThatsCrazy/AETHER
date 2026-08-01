@@ -10,6 +10,14 @@ Storage is delegated to the provider-neutral credential platform
 in production, in-memory under tests). This module keeps the historical
 ``BYOKKeyVault`` surface intact so existing callers (provider registry, provider
 routes, payment-rails, card-linked feed) need no changes.
+
+DEPRECATED for payment-rail secret resolution: superseded by the durable,
+multi-slot :class:`~services.providers.credentials.authority.CredentialAuthority`.
+Payment-rail adapters resolve their webhook signing secret from the authority
+when ``AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED`` is set; this vault is slated
+for removal once that flag defaults on and all payment-rail callers have cut over
+(polling-slot resolution + vault removal are the sequenced follow-up). No runtime
+behavior change here — it remains the default read path until cutover.
 """
 
 from __future__ import annotations

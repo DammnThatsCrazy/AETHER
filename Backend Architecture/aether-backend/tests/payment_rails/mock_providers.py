@@ -61,7 +61,13 @@ class MockServer:
 
 _SENSITIVE_COINBASE = {
     "card_number": "4111111111111111",
-    "cvv": "cvv-leak-sentinel",
+    # Sentinel carries a non-hex char ('v') on purpose: leak markers are matched
+    # as substrings of the stored records' JSON, which also contains random
+    # lowercase-hex UUIDs/hashes. A bare "321" spuriously matches ~3% of runs
+    # (e.g. an event id like "...-4321-..."), so the sentinel must be impossible
+    # to form from [0-9a-f]. Redaction strips by key name, not value, so the
+    # value's shape does not affect whether the field is redacted.
+    "cvv": "cvv-321",
     "ssn": "123-45-6789",
 }
 _SENSITIVE_BRIDGE = {
@@ -208,9 +214,7 @@ def bridge_activity(activity_id: str, status: str) -> dict:
     }
 
 
-# Distinctive multi-char sentinels only. A short numeric marker (e.g. a bare
-# 3-digit CVV like "321") would false-positive: it can appear by chance as a
-# substring of a random hex id (tenant/event ids) in the serialized store,
-# flaking the leak-detection assertions. Keep every marker long / non-hex so
-# `m in flat` only matches a genuine value leak.
-SENSITIVE_MARKERS = ("4111111111111111", "cvv-leak-sentinel", "123-45-6789", "9876543210", "021000021")
+# Leak markers are searched as substrings of the stored records' JSON. Every
+# marker must be impossible to form from a random lowercase-hex id/hash — the
+# CVV sentinel carries a non-hex 'v' for exactly this reason (see _SENSITIVE_*).
+SENSITIVE_MARKERS = ("4111111111111111", "cvv-321", "123-45-6789", "9876543210", "021000021")

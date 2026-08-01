@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider, queryCache } from '@aether/ui';
 import { PaymentRailsPage } from '@aether-app/pages/payment-rails';
 
@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   fetchPaymentRailHealth: vi.fn(),
   fetchProviderStatus: vi.fn(),
   syncProviderStatus: vi.fn(),
+  repairCanonicalBacklog: vi.fn(),
 }));
 
 vi.mock('@aether-app/features/payment-rails/api', () => mocks);
@@ -308,5 +309,70 @@ describe('Aether Payment Rails page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Failed to load funding sessions')).toBeInTheDocument());
     expect(screen.getByText('boom')).toBeInTheDocument();
+  });
+
+  it('hides the canonical delivery repair control by default (flag off)', async () => {
+    // No env stub → VITE_PAYMENT_CANONICAL_REPAIR_ENABLED defaults to 'false'.
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Reconciliation summary')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Repair backlog' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Canonical delivery — Repair backlog')).not.toBeInTheDocument();
+    expect(mocks.repairCanonicalBacklog).not.toHaveBeenCalled();
+  });
+});
+
+describe('Canonical delivery repair', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_PAYMENT_CANONICAL_REPAIR_ENABLED', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('repairs the backlog and renders the returned counts on success', async () => {
+    mocks.repairCanonicalBacklog.mockResolvedValue({
+      status: 'repaired',
+      result: { scanned: 128, repaired: 64, events_reemitted: 96 },
+    });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Repair backlog' })).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Repair backlog' }));
+    // Default limit (500) is sent; server clamps and enforces admin permission.
+    await waitFor(() => expect(mocks.repairCanonicalBacklog).toHaveBeenCalledWith(500));
+    await waitFor(() => expect(screen.getByText('Canonical backlog repair complete')).toBeInTheDocument());
+    expect(screen.getByText('128')).toBeInTheDocument();
+    expect(screen.getByText('64')).toBeInTheDocument();
+    expect(screen.getByText('96')).toBeInTheDocument();
+  });
+
+  it('shows an admin-permission error toast when the repair is forbidden', async () => {
+    mocks.repairCanonicalBacklog.mockResolvedValue({ status: 'forbidden' });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Repair backlog' })).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Repair backlog' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('Admin permission is required to repair the canonical backlog'),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('shows the not-configured note when observability is not enabled', async () => {
+    mocks.repairCanonicalBacklog.mockResolvedValue({ status: 'not_configured' });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Repair backlog' })).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Repair backlog' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Canonical backlog repair is unavailable/),
+      ).toBeInTheDocument(),
+    );
   });
 });

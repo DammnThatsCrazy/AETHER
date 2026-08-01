@@ -17,6 +17,7 @@ const baseEnvSchema = z.object({
   VITE_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   VITE_ENTERPRISE_EMAIL_VERIFIED: z.string().default('false'),
   VITE_ENTERPRISE_EMAIL: z.string().default('sales@aether.dev'),
+  VITE_PAYMENT_CANONICAL_REPAIR_ENABLED: z.string().default('false'),
   // Build identity (injected by vite define at build; 'dev' locally).
   VITE_APP_VERSION: z.string().default('dev'),
   VITE_GIT_SHA: z.string().default('dev'),
@@ -108,4 +109,14 @@ export function isEnvExplicit() {
 
 export function isProduction() {
   return env.VITE_AETHER_ENV === 'production';
+}
+
+/**
+ * Whether the dormant, default-off Payment Rails "Repair backlog" admin control
+ * is surfaced. Reads `import.meta.env` lazily (not the frozen `env` const) so
+ * per-test `vi.stubEnv` toggles it; there is no `??`/`||` profile-literal
+ * fallback, keeping the frontend data-truth gate satisfied.
+ */
+export function isPaymentCanonicalRepairEnabled(): boolean {
+  return import.meta.env.VITE_PAYMENT_CANONICAL_REPAIR_ENABLED === 'true';
 }

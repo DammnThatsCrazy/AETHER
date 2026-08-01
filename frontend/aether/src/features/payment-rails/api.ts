@@ -240,3 +240,42 @@ export function syncProviderStatus(provider: PaymentRailProvider | string): Prom
     .post(`/v1/integrations/providers/${encodeURIComponent(provider)}/sync`, wrap(unknownSchema), {})
     .then(r => r.data);
 }
+
+// ── Canonical delivery — repair backlog ──────────────────────────────────────────
+// Admin action that re-drives Aether's OWN canonical payment_* emission for
+// observed funding sessions whose canonical events are missing. Observe-only:
+// it never executes, settles, signs, or writes provider state, is idempotent
+// server-side, and carries no tenant id (auth context supplies it).
+
+export const canonicalBacklogRepairSchema = z.object({
+  scanned: z.number(),
+  repaired: z.number(),
+  events_reemitted: z.number(),
+}).passthrough();
+
+export type CanonicalBacklogRepairResult = z.infer<typeof canonicalBacklogRepairSchema>;
+
+/** Discriminated outcome — honest UI mapping of the backend response/status. */
+export type CanonicalBacklogRepairOutcome =
+  | { readonly status: 'repaired'; readonly result: CanonicalBacklogRepairResult }
+  | { readonly status: 'not_configured' }
+  | { readonly status: 'forbidden' }
+  | { readonly status: 'error'; readonly message: string };
+
+export async function repairCanonicalBacklog(limit?: number): Promise<CanonicalBacklogRepairOutcome> {
+  try {
+    const r = await restClient.post(
+      `${BASE}/canonical-backlog/repair${buildQS({ limit })}`,
+      wrap(canonicalBacklogRepairSchema),
+      {},
+    );
+    return { status: 'repaired', result: r.data };
+  } catch (err) {
+    if (err instanceof RestClientError) {
+      if (err.status === 404 || err.status === 501) return { status: 'not_configured' };
+      if (err.status === 403) return { status: 'forbidden' };
+      return { status: 'error', message: err.message };
+    }
+    throw err;
+  }
+}

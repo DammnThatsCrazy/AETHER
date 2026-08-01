@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping, Optional, Protocol, runtime_checkable
@@ -76,6 +77,21 @@ CONNECTOR_BAD_RESPONSE = "bad_response"
 CONNECTOR_CHAIN_MISMATCH = "chain_mismatch"
 
 _HEALTHY_CONNECTOR_STATES = frozenset({CONNECTOR_OK})
+
+
+@dataclass(frozen=True)
+class ConnectorPreflightResult:
+    """Typed, fail-closed outcome of a read-only connector preflight.
+
+    ``status`` is one of the ``CONNECTOR_*`` tokens; ``detail`` is a short,
+    secret-free note. Every preflight returns one of these — it never raises.
+    """
+
+    provider: str
+    ok: bool
+    status: str
+    detail: str = ""
+    checked_at: str = ""
 
 
 class StablecoinConnectorError(Exception):
@@ -357,10 +373,43 @@ class ConnectorCertificationMixin:
         state = str(ctx.get("provider_health") or CONNECTOR_OK)
         return {"healthy": state in _HEALTHY_CONNECTOR_STATES, "state": state}
 
+    async def preflight(self) -> ConnectorPreflightResult:
+        """Read-only reachability + identity preflight — a typed, fail-closed
+        wrapper around the connector's own ``test_connection()`` probe.
+
+        It runs exactly that probe (EVM ``eth_chainId``, Solana ``sol_getSlot`` +
+        genesis, price ``decimals()`` — all whitelisted read methods) and NEVER
+        raises: every outcome is returned as one of the ``CONNECTOR_*`` status
+        tokens (``ok`` / ``not_configured`` / ``chain_mismatch`` / ``rate_limited``
+        / ``auth_error`` / ``timeout`` / ``network_error`` / …), so a caller can
+        gate observation on a reachable, correctly-scoped endpoint before any
+        observation begins. Observe-only: it issues no writes and mutates no
+        cursor / Bronze / Silver / provider-health state — only the connector's
+        in-memory ``_chain_verified`` / ``_genesis_verified`` flags.
+        """
+        checked_at = to_iso_utc(utc_now())
+        try:
+            await self.test_connection()  # type: ignore[attr-defined]
+        except StablecoinConnectorError as exc:
+            return ConnectorPreflightResult(
+                provider=self.provider, ok=False,
+                status=exc.classification, detail=str(exc), checked_at=checked_at,
+            )
+        except Exception as exc:  # noqa: BLE001 — classify, never leak or raise
+            return ConnectorPreflightResult(
+                provider=self.provider, ok=False,
+                status=classify_rpc_error(exc), detail=type(exc).__name__,
+                checked_at=checked_at,
+            )
+        return ConnectorPreflightResult(
+            provider=self.provider, ok=True, status=CONNECTOR_OK, checked_at=checked_at,
+        )
+
 
 __all__ = [
     "StablecoinRpcClient",
     "StablecoinConnectorError",
+    "ConnectorPreflightResult",
     "classify_rpc_error",
     "guarded_rpc",
     "CONNECTOR_OK",
