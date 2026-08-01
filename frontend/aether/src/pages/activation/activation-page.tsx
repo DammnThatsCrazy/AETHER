@@ -417,7 +417,7 @@ function CompleteStep({ status }: StepProps) {
             variant="primary"
             size="sm"
             disabled={!canComplete || complete.isLoading}
-            onClick={() => void complete.mutate()}
+            onClick={() => void complete.mutate(undefined)}
           >
             {complete.isLoading ? '[···]' : 'Complete activation'}
           </Button>

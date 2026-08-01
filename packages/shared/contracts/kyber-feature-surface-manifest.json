@@ -43,6 +43,22 @@
       "minimum_disclosure": "D0"
     },
     {
+      "feature_id": "activation",
+      "aether_route": "/activation",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/activation",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
       "feature_id": "users",
       "aether_route": "/users",
       "tenant_parity_required": true,
