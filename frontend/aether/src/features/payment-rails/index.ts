@@ -5,10 +5,12 @@ export {
   fetchPaymentRailHealth,
   fetchProviderStatus,
   syncProviderStatus,
+  repairCanonicalBacklog,
   fundingSessionSchema,
   reconciliationRecordSchema,
   paymentRailHealthSchema,
   providerAdapterStatusSchema,
+  canonicalBacklogRepairSchema,
 } from './api';
 export type {
   FundingSessionRecord,
@@ -18,6 +20,8 @@ export type {
   PaymentRailHealthRecord,
   PaymentRailHealthResult,
   ProviderAdapterStatusRecord,
+  CanonicalBacklogRepairResult,
+  CanonicalBacklogRepairOutcome,
 } from './api';
 export {
   useFundingSessions,
@@ -26,4 +30,5 @@ export {
   usePaymentRailHealth,
   useProviderStatus,
   useSyncProvider,
+  useRepairCanonicalBacklog,
 } from './use-payment-rails';
