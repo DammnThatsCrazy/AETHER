@@ -581,11 +581,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await supervisor.start_all()
 
     # ── Kyber Missions monitoring loop (feature-flagged, OFF by default) ──
-    # Clearly-marked flag-gated hook: periodically invokes
-    # MonitoringService.check_due. Safe no-op when the flag is disabled — the
-    # service module is imported lazily *inside* the flag block so it need not
-    # exist until the missions wave lands. When the wave lands the orchestrator
-    # should confirm the MonitoringService constructor + check_due signature.
+    # Periodically invokes MonitoringService.check_due() to evaluate due
+    # MonitoringConditions and escalate breaches. The service module is imported
+    # lazily *inside* the flag block. Signature confirmed against the landed
+    # missions wave: MonitoringService() takes no required args and
+    # check_due(now=None) is a coroutine. The task is supervised via
+    # app.state.kyber_mission_monitor_task and cancelled on shutdown (below).
     app.state.kyber_mission_monitor_task = None
     if settings.kyber_missions.monitoring_loop_enabled:
         _mission_monitor_interval = float(

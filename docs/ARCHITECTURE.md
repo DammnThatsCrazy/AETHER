@@ -276,6 +276,8 @@ Resolution Consumer (real-time)
 | `/v1/batch` | POST | Canonical batched raw events (ALL SDKs — web, iOS, Android, RN) |
 | `/v1/ingest/events[/batch]` | POST | Deprecated server-to-server connector aliases |
 | `/v1/config/sdk/manifest` | GET | SDK remote config (signed manifests + rollouts) |
+| `/v1/activation/*` | GET/POST | Self-serve tenant activation FSM (flag-gated `AETHER_ACTIVATION_ENABLED`, default OFF) |
+| `/v1/kyber/missions[/*]` | GET/POST | Kyber Mission aggregate + monitoring read plane (operator; flag-gated `KYBER_MISSIONS_ENABLED`, default OFF) |
 | `/v1/ml/predict` | POST | ML inference (single; 9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
 | `/v1/ml/predict/batch` | POST | Batch ML inference |
 | `/v1/rewards/evaluate` | POST | Evaluate reward eligibility (A6 no-custody) |

@@ -5853,6 +5853,23 @@
       "canonical_owner": "platform-intelligence@aether"
     },
     {
+      "path": "docs/source-of-truth/ACTIVATION.md",
+      "title": "Self-Serve Tenant Activation",
+      "slug": "concepts/activation",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md",
       "title": "AI and Agent Referral Attribution Source of Truth",
       "status": "stable"
@@ -6311,6 +6328,23 @@
         "ops"
       ],
       "status": "beta"
+    },
+    {
+      "path": "docs/source-of-truth/KYBER_MISSIONS.md",
+      "title": "Kyber Mission Aggregate & Monitoring",
+      "slug": "kyber/missions",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
