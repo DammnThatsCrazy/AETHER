@@ -8,13 +8,14 @@ or MFA assertions must never be persisted here.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any, Mapping
 
 from pydantic import BaseModel, Field
 
 from shared.common.common import BadRequestError
+from shared.temporal import SYSTEM_CLOCK, TemporalError, ensure_aware_utc, parse_instant_strict, to_iso_utc
 
 RECOVERY_WINDOW_DAYS = 30
 STEP_UP_MAX_AGE_SECONDS = 15 * 60
@@ -54,14 +55,15 @@ def _parse_verified_at(value: Any) -> datetime:
         parsed = value
     elif isinstance(value, str):
         try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError as exc:
+            parsed = parse_instant_strict(value)
+        except TemporalError as exc:
             raise BadRequestError("reauth_evidence.verified_at must be ISO-8601") from exc
     else:
         raise BadRequestError("reauth_evidence.verified_at is required")
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    try:
+        return ensure_aware_utc(parsed)
+    except TemporalError as exc:
+        raise BadRequestError("reauth_evidence.verified_at must include a timezone") from exc
 
 
 def validate_step_up_evidence(
@@ -93,10 +95,11 @@ def validate_step_up_evidence(
     if not evidence_id:
         raise BadRequestError("reauth_evidence.evidence_id is required")
     verified_at = _parse_verified_at(raw.get("verified_at"))
-    current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    age = (current.astimezone(timezone.utc) - verified_at).total_seconds()
+    try:
+        current = ensure_aware_utc(now or SYSTEM_CLOCK.now())
+    except TemporalError as exc:
+        raise BadRequestError("current time must include a timezone") from exc
+    age = (current - verified_at).total_seconds()
     if age < -60 or age > STEP_UP_MAX_AGE_SECONDS:
         raise BadRequestError("step-up re-authentication evidence is expired")
     assurance = str(raw.get("assurance_level", "step_up")).strip().lower()
@@ -107,7 +110,7 @@ def validate_step_up_evidence(
         "verified": True,
         "method": method,
         "evidence_id": evidence_id,
-        "verified_at": verified_at.isoformat(),
+        "verified_at": to_iso_utc(verified_at),
         "assurance_level": assurance,
         "provider": str(raw["provider"]) if raw.get("provider") else None,
     }

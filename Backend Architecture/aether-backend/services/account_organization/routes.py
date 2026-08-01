@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -19,6 +19,7 @@ from shared.common.common import (
     PaginationMeta,
     UnauthorizedError,
 )
+from shared.temporal import SYSTEM_CLOCK, parse_instant_strict, to_iso_utc
 
 from .models import (
     InvitationCreateRequest,
@@ -139,14 +140,12 @@ def _invitation_response(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _is_expired(record: dict[str, Any], now: datetime | None = None) -> bool:
-    now = now or datetime.now(timezone.utc)
+    current = to_iso_utc(now or SYSTEM_CLOCK.now())
     try:
-        expires_at = datetime.fromisoformat(str(record["expires_at"]).replace("Z", "+00:00"))
+        expires_at = parse_instant_strict(str(record["expires_at"]))
     except (KeyError, TypeError, ValueError):
         return True
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    return expires_at <= now
+    return expires_at <= parse_instant_strict(current)
 
 
 async def _expire_pending(record: dict[str, Any], tenant_id: str, repo: OrganizationRepository) -> dict[str, Any]:
@@ -154,7 +153,7 @@ async def _expire_pending(record: dict[str, Any], tenant_id: str, repo: Organiza
         return await repo.update_invitation(
             tenant_id,
             record["id"],
-            {"status": "expired", "expired_at": datetime.now(timezone.utc).isoformat()},
+            {"status": "expired", "expired_at": to_iso_utc(SYSTEM_CLOCK.now())},
         )
     return record
 
@@ -223,7 +222,7 @@ async def create_organization_invitation(
             raise ConflictError("An active invitation already exists for this email")
 
     raw_token = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
+    now = SYSTEM_CLOCK.now()
     record = {
         "tenant_id": tenant.tenant_id,
         "email": body.email,
@@ -276,7 +275,7 @@ async def revoke_organization_invitation(request: Request, invitation_id: str) -
         invitation_id,
         {
             "status": "revoked",
-            "revoked_at": datetime.now(timezone.utc).isoformat(),
+            "revoked_at": to_iso_utc(SYSTEM_CLOCK.now()),
             "token_hash": None,
         },
     )

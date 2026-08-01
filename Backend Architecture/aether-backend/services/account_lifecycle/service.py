@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from repositories.account_deletion import (
@@ -27,28 +27,25 @@ from services.account_lifecycle.storage_registry import (
 from shared.cache.cache import CacheKey
 from shared.common.common import BadRequestError, ConflictError, NotFoundError
 from shared.logger.logger import get_logger
+from shared.temporal import SYSTEM_CLOCK, ensure_aware_utc, parse_instant_strict, to_iso_utc
 
 logger = get_logger("aether.account_lifecycle")
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return SYSTEM_CLOCK.now()
 
 
 def _iso(value: datetime) -> str:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).isoformat()
+    return to_iso_utc(value)
 
 
 def _parse_time(value: Any) -> datetime:
     if isinstance(value, datetime):
         parsed = value
     else:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parse_instant_strict(str(value))
+    return ensure_aware_utc(parsed)
 
 
 class AccountLifecycleService:
