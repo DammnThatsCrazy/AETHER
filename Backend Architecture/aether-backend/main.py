@@ -1250,6 +1250,13 @@ def create_app() -> FastAPI:
     else:
         logger.info("Client-sync feed disabled (AETHER_CLIENT_SYNC_ENABLED=false)")
 
+    if settings.mobile.enabled:
+        from services.mobile.routes import router as mobile_router
+        app.include_router(mobile_router, tags=["Mobile Gateway"])
+        logger.info("Mobile gateway mounted (/v1/mobile)")
+    else:
+        logger.info("Mobile gateway disabled (AETHER_MOBILE_ENABLED=false)")
+
     return app
 
 

@@ -79,6 +79,11 @@ goes to every channel. Provider-accepted ≠ delivered ≠ opened ≠ read ≠ a
   impossible in production.
 - **Installation & push model** (C3) — extends the tenant session and Kyber device planes with
   native installations and push subscriptions; push tokens are encrypted and hashed, never logged.
+  The tenant mobile gateway is mounted at `/v1/mobile` (`services/mobile/routes.py`, flag
+  `settings.mobile.enabled`, default OFF → 404): `POST/GET /v1/mobile/installations`,
+  `GET/DELETE /v1/mobile/installations/{id}`, `POST /v1/mobile/installations/{id}/subscriptions`.
+  Registration forces `app_kind=aether`; only a token's `token_hash` is stored. The Kyber
+  operator gateway is deferred to the Kyber-mobile milestone.
 - **Mobile apps + shared packages** (C4) — `apps/aether-mobile`, `apps/kyber-mobile` (Expo +
   prebuild) and `packages/mobile-*`. C4 lands compiling app shells with auth / API / notification /
   continuation / sync clients and a navigation skeleton; full feature screens are C5–C6.

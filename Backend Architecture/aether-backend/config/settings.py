@@ -1345,6 +1345,12 @@ class ClientSyncConfig:
 
 
 @dataclass(frozen=True)
+class MobileConfig:
+    # Mobile gateway (/v1/mobile — installations + push subscriptions). Default OFF.
+    enabled: bool = _env_bool("AETHER_MOBILE_ENABLED", False)
+
+
+@dataclass(frozen=True)
 class ComparisonConfig:
     enabled: bool = _env_bool("AETHER_COMPARISON_INTELLIGENCE_ENABLED", False)
 
@@ -1482,6 +1488,7 @@ class Settings:
     exploration: ExplorationConfig = field(default_factory=ExplorationConfig)
     continuation: ContinuationConfig = field(default_factory=ContinuationConfig)
     client_sync: ClientSyncConfig = field(default_factory=ClientSyncConfig)
+    mobile: MobileConfig = field(default_factory=MobileConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
 
     def __post_init__(self):
