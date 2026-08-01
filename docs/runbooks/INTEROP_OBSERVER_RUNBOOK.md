@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/interop/correlation.py
   - Backend Architecture/aether-backend/services/interop/admin_routes.py
 canonical_owner: platform@aether
-last_synced_commit: "ac900d5"
+last_synced_commit: "41c79d4"
 ---
 
 # Interoperability Observer Runbook

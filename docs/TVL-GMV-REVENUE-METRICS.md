@@ -11,7 +11,7 @@ source_files:
 related:
   - concepts/economic-value-framing
   - concepts/unified-economic-graph
-last_synced_commit: "3283497"
+last_synced_commit: "41c79d4"
 ---
 
 # Aether — TVL vs. GMV vs. Revenue Metric Guide

@@ -7,7 +7,7 @@ audience: [dev-senior, ops]
 source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py
   - scripts/campaign/backfill_campaign_ids.py
-last_synced_commit: "3283497"
+last_synced_commit: "41c79d4"
 ---
 
 # Campaign Registry Migration Guide

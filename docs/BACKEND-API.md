@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "b10ef8a7e053"
+last_synced_commit: "41c79d4"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification

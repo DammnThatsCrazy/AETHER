@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/stablecoins/rpc_observer.py
   - Backend Architecture/aether-backend/services/stablecoins/solana_observer.py
 canonical_owner: platform@aether
-last_synced_commit: "ac900d5"
+last_synced_commit: "41c79d4"
 ---
 
 # Stablecoin Observer Runbook
