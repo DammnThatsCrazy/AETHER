@@ -1,0 +1,26 @@
+{
+  "name": "@aether/kyber-mobile",
+  "version": "8.12.0",
+  "private": true,
+  "description": "Kyber Mobile — the operator companion app (Expo). Consumes @aether/mobile-core; distinct bundle id and workforce auth audience from Aether Mobile. No Aether tenant code ships in this binary.",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "prebuild": "expo prebuild",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aether/mobile-core": "^8.12.0",
+    "expo": "^51.0.0",
+    "expo-secure-store": "^13.0.0",
+    "react": "18.2.0",
+    "react-native": "0.74.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.0",
+    "typescript": "^5.3.0"
+  },
+  "license": "UNLICENSED"
+}

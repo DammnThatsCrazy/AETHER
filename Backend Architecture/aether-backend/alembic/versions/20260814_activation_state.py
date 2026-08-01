@@ -12,7 +12,7 @@ selection, hashed key-ids, and first-value evidence references. It never stores
 raw API keys and never writes billing state (billing is read-only-derived).
 
 Revision ID: 20260814_activation_state
-Revises: 20260813_comms_turnkey
+Revises: 20260822_mobile_installations
 Create Date: 2026-08-14
 """
 
@@ -21,7 +21,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260814_activation_state"
-down_revision = "20260813_comms_turnkey"
+down_revision = "20260822_mobile_installations"
 branch_labels = None
 depends_on = None
 

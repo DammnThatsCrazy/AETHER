@@ -5870,6 +5870,19 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/AETHER_MOBILE.md",
+      "title": "Aether Mobile — App Architecture",
+      "slug": "mobile/aether-app",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "mobile",
+        "security"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md",
       "title": "AI and Agent Referral Attribution Source of Truth",
       "status": "stable"
@@ -5954,6 +5967,32 @@
       "path": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md",
       "title": "Contextual Session Intelligence Source of Truth",
       "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/CREDENTIAL_ACTIVATION.md",
+      "title": "Credential Activation",
+      "slug": "mobile/credential-activation",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
+    },
+    {
+      "path": "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md",
+      "title": "Cross-Device Continuity",
+      "slug": "mobile/cross-device-continuity",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
     },
     {
       "path": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
@@ -6347,6 +6386,19 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/KYBER_MOBILE.md",
+      "title": "Kyber Mobile — App Architecture",
+      "slug": "mobile/kyber-app",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "mobile",
+        "security"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
     },
     {
@@ -6381,7 +6433,33 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/MOBILE_PLATFORM.md",
+      "title": "Mobile Platform & Productization Baseplate",
+      "slug": "mobile/platform",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/MODEL_GOVERNANCE.md"
+    },
+    {
+      "path": "docs/source-of-truth/NOTIFICATION_CONTROL_PLANE.md",
+      "title": "Notification Control Plane",
+      "slug": "mobile/notification-control-plane",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "ops"
+      ],
+      "status": "alpha"
     },
     {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",

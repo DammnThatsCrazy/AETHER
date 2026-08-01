@@ -1313,6 +1313,27 @@ def create_app() -> FastAPI:
     else:
         logger.info("Exploration Fabric disabled (AETHER_EXPLORATION_ENABLED=false)")
 
+    if settings.continuation.enabled:
+        from services.continuation.routes import router as continuation_router
+        app.include_router(continuation_router, tags=["Continuation Plane"])
+        logger.info("Continuation plane mounted (/v1/continuations)")
+    else:
+        logger.info("Continuation plane disabled (AETHER_CONTINUATION_ENABLED=false)")
+
+    if settings.client_sync.enabled:
+        from services.client_sync.routes import router as client_sync_router
+        app.include_router(client_sync_router, tags=["Client Sync"])
+        logger.info("Client-sync feed mounted (/v1/client-sync)")
+    else:
+        logger.info("Client-sync feed disabled (AETHER_CLIENT_SYNC_ENABLED=false)")
+
+    if settings.mobile.enabled:
+        from services.mobile.routes import router as mobile_router
+        app.include_router(mobile_router, tags=["Mobile Gateway"])
+        logger.info("Mobile gateway mounted (/v1/mobile)")
+    else:
+        logger.info("Mobile gateway disabled (AETHER_MOBILE_ENABLED=false)")
+
     return app
 
 
