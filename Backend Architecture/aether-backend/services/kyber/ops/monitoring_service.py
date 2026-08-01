@@ -37,6 +37,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger, metrics
+from shared.temporal.instant import ensure_aware_utc
 
 from .contracts import IncidentSignal
 from .exceptions import report_operational_signal
@@ -79,9 +80,7 @@ class MonitoringService:
             A small summary — how many conditions were checked, how many failed
             and how many escalated on this tick — for the caller's telemetry.
         """
-        reference = now or datetime.now(timezone.utc)
-        if reference.tzinfo is None:
-            reference = reference.replace(tzinfo=timezone.utc)
+        reference = ensure_aware_utc(now) if now is not None else datetime.now(timezone.utc)
         stamp = reference.isoformat()
 
         due = await self._conditions.list_due(reference)

@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
+from shared.temporal.instant import ensure_aware_utc
 
 from .mission_contracts import MONITORING_ACTIVE_STATUSES, MissionStatus
 
@@ -67,8 +68,8 @@ def _to_dt(value: Any) -> Optional[datetime]:
             dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
         except (ValueError, TypeError):
             return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return None
     return dt.astimezone(timezone.utc)
 
 
@@ -212,9 +213,7 @@ class MonitoringConditionRepository(BaseRepository):
         an escalated condition has already raised its signal and a second sweep
         must not raise a second one.
         """
-        reference = now or datetime.now(timezone.utc)
-        if reference.tzinfo is None:
-            reference = reference.replace(tzinfo=timezone.utc)
+        reference = ensure_aware_utc(now) if now is not None else datetime.now(timezone.utc)
 
         due: list[dict[str, Any]] = []
         for status in sorted(MONITORING_ACTIVE_STATUSES):
