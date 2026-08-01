@@ -22,6 +22,7 @@ from shared.auth.auth import TenantContext
 from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
+from services.client_sync.emitter import enqueue_sync_change
 from services.continuation import service as continuation_service
 from shared.continuation.models import (
     ContinuationCanonicalContext,
@@ -122,6 +123,14 @@ async def create_continuation(
         idempotency_key=idempotency_key,
     )
     metrics.increment("continuation_created_total", labels={"replayed": str(result.get("replayed", False))})
+    await enqueue_sync_change(
+        scope_key=continuation_service.tenant_scope(tenant.tenant_id),
+        principal_id=principal,
+        change_type="continuation_changed",
+        resource_kind="continuation",
+        resource_id=result.get("id"),
+        revision=str(result.get("state_revision", 0)),
+    )
     return APIResponse(data=result)
 
 
@@ -170,6 +179,14 @@ async def update_continuation(
     if row is None:
         raise NotFoundError("continuation not found")
     metrics.increment("continuation_updated_total")
+    await enqueue_sync_change(
+        scope_key=continuation_service.tenant_scope(tenant.tenant_id),
+        principal_id=principal,
+        change_type="continuation_changed",
+        resource_kind="continuation",
+        resource_id=continuation_id,
+        revision=str(row.get("state_revision", 0)),
+    )
     return APIResponse(data=row)
 
 
@@ -206,4 +223,11 @@ async def delete_continuation(request: Request, continuation_id: str = Path(...)
     )
     if not deleted:
         raise NotFoundError("continuation not found")
+    await enqueue_sync_change(
+        scope_key=continuation_service.tenant_scope(tenant.tenant_id),
+        principal_id=_principal(tenant),
+        change_type="continuation_changed",
+        resource_kind="continuation",
+        resource_id=continuation_id,
+    )
     return APIResponse(data={"deleted": True, "id": continuation_id})

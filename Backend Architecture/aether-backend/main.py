@@ -1243,6 +1243,13 @@ def create_app() -> FastAPI:
     else:
         logger.info("Continuation plane disabled (AETHER_CONTINUATION_ENABLED=false)")
 
+    if settings.client_sync.enabled:
+        from services.client_sync.routes import router as client_sync_router
+        app.include_router(client_sync_router, tags=["Client Sync"])
+        logger.info("Client-sync feed mounted (/v1/client-sync)")
+    else:
+        logger.info("Client-sync feed disabled (AETHER_CLIENT_SYNC_ENABLED=false)")
+
     return app
 
 

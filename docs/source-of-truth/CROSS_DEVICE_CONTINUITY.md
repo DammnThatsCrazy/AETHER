@@ -101,11 +101,20 @@ The tenant (Aether) continuation router is mounted at `/v1/continuations`
 The operator (Kyber) router `/v1/kyber/continuations` is deferred to the Kyber-mobile
 milestone, where it composes the Kyber access plane.
 
+The client-sync feed is mounted at `GET /v1/client-sync?cursor=`
+(`services/client_sync/routes.py`), gated by `settings.client_sync.enabled`. It
+returns `{events, cursor, has_more, reset}` — an ordered, gap-free slice of the
+per-scope change log since the cursor. Producers append via
+`services/client_sync/emitter.py::enqueue_sync_change`; the continuation routes are
+the first wired producer (`continuation_changed`), with the remaining producers
+wired incrementally.
+
 ## Status
 
 Milestone C1 lands the **contract twins** (parity-green), the **dual-mode persistence
-engine**, and the **tenant continuation routes** (above) — this page is the design of
-record. The client-sync feed implementation and the operator router follow within the
-same program (see `reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default OFF
-(`continuation.enabled`, `client_sync.enabled`), so disabled surfaces answer 404 — no
+engine**, the **tenant continuation routes**, and the **client-sync feed** (durable log
++ gap-free cursor + `continuation_changed` as the first wired producer) — this page is
+the design of record. The operator router and the remaining sync producers follow within
+the same program (see `reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default
+OFF (`continuation.enabled`, `client_sync.enabled`), so disabled surfaces answer 404 — no
 runtime behavior change until enabled.

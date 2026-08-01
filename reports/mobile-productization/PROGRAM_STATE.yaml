@@ -8,7 +8,7 @@ program:
   base_commit: "78562ddae28de01ec0fe3c59e42bb357baaffb1f"   # == origin/main at program start (feat: Unified Integration Control Plane — foundation (#497))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of base_commit
   platform_version: "8.12.0"
-  last_landed_checkpoint: C0
+  last_landed_checkpoint: C1
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -25,18 +25,20 @@ milestones:
   - id: C1
     name: continuity-context-sync-contracts
     depends_on: [C0]
-    status: in_progress
-    landed: [continuation-contract-twins, sync-event-contract-twins, continuation-persistence-engine]
-    pending: [continuation-routes, client-sync-feed-impl, deep-link-contract]
+    status: landed
+    landed: [continuation-contract-twins, sync-event-contract-twins, continuation-persistence-engine, continuation-routes, client-sync-feed]
+    deferred_to_later_milestones: [operator-continuation-router (C6/Kyber-mobile), remaining-sync-producers (incremental), deep-link-resolve (C3)]
     note: >
-      Landed: contract twins (packages/shared/{continuation,sync-event}.ts +
-      shared/{continuation,client_sync}/models.py + parity tests + CROSS_DEVICE_CONTINUITY.md)
-      AND the dual-mode continuation persistence engine (repositories/continuation_repo.py,
-      alembic 20260820_continuation_plane, config/storage_policies.yaml, ContinuationConfig +
-      ClientSyncConfig flags OFF, 14 in-memory + DDL-parity tests). CAS optimistic concurrency,
-      idempotent create, t:/o: scope isolation, TTL sweep, DSR delete-by-principal, and the
-      backend selection token all implemented. Next: continuation routes (/v1/continuations
-      tenant + /v1/kyber/continuations operator) + client-sync feed impl.
+      Core C1 landed: contract twins, the dual-mode continuation persistence engine
+      (repositories/continuation_repo.py, alembic 20260820), the tenant continuation
+      routes (/v1/continuations, services/continuation/*), and the client-sync feed
+      (repositories/client_sync_repo.py, alembic 20260821, /v1/client-sync,
+      enqueue_sync_change emitter with continuation_changed as the first wired producer).
+      All flag-gated OFF (continuation.enabled, client_sync.enabled) → 404 when disabled;
+      no runtime behavior change. 45+ tests (contract parity, repo CAS/idempotency/scope,
+      routes, producer→feed integration). The operator (Kyber) continuation router,
+      remaining sync producers, and deep-link resolution are reassigned to their owning
+      milestones.
   - id: C2
     name: notification-attention-control-plane
     depends_on: [C1]
