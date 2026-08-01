@@ -26,13 +26,17 @@ milestones:
     name: continuity-context-sync-contracts
     depends_on: [C0]
     status: in_progress
-    landed: [continuation-contract-twins, sync-event-contract-twins]   # snake_case, parity-green (17 tests)
-    pending: [continuation-plane-persistence-routes, client-sync-feed-impl, deep-link-contract]
+    landed: [continuation-contract-twins, sync-event-contract-twins, continuation-persistence-engine]
+    pending: [continuation-routes, client-sync-feed-impl, deep-link-contract]
     note: >
-      Contract layer landed (packages/shared/{continuation,sync-event}.ts +
-      shared/{continuation,client_sync}/models.py + parity tests + CROSS_DEVICE_CONTINUITY.md).
-      The plane persistence/routes and client-sync feed impl need dual-mode
-      (asyncpg + in-memory) stores to be CI-testable — staged as the next commit.
+      Landed: contract twins (packages/shared/{continuation,sync-event}.ts +
+      shared/{continuation,client_sync}/models.py + parity tests + CROSS_DEVICE_CONTINUITY.md)
+      AND the dual-mode continuation persistence engine (repositories/continuation_repo.py,
+      alembic 20260820_continuation_plane, config/storage_policies.yaml, ContinuationConfig +
+      ClientSyncConfig flags OFF, 14 in-memory + DDL-parity tests). CAS optimistic concurrency,
+      idempotent create, t:/o: scope isolation, TTL sweep, DSR delete-by-principal, and the
+      backend selection token all implemented. Next: continuation routes (/v1/continuations
+      tenant + /v1/kyber/continuations operator) + client-sync feed impl.
   - id: C2
     name: notification-attention-control-plane
     depends_on: [C1]
@@ -114,7 +118,8 @@ quality:                                     # updated at each milestone boundar
   unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability)"
   contract_tests: "17 new parity tests pass (12 continuation + 5 sync-event)"
   frontend_tests: "npm typecheck + build + test pass with new TS twins"
-  migration_single_head: "true (head=20260812_credential_platform; C1 contracts add no migration)"
+  migration_single_head: "true (head=20260820_continuation_plane; chains from 20260812_credential_platform)"
+  continuation_persistence: "14 tests pass (in-memory + DDL parity); storage-policy 332 checks; temporal OK"
   environment_note: "clone was shallow -> unshallowed; docs_drift now 339 clean / 0 stale (the apparent main-red was a clone artifact)"
 
 # Honest readiness verdict (per productization dimension). No fake production-ready claims.
