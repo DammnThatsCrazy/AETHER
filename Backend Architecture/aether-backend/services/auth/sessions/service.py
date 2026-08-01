@@ -362,6 +362,29 @@ class ServiceCredentialService:
         except Exception:
             return False
 
+    async def revoke_all_for_tenant(self, tenant_id: str) -> int:
+        """Revoke every service credential and account owned by a tenant."""
+        revoked = 0
+        credentials = await self._creds.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        for record in credentials:
+            credential_id = record.get("id")
+            if credential_id and record.get("status") == "active":
+                if await self.revoke_credential(credential_id):
+                    revoked += 1
+        accounts = await self._accounts.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        for account in accounts:
+            account_id = account.get("id")
+            if account_id and account.get("status") == "active":
+                try:
+                    await self._accounts.update(account_id, {"status": "suspended"})
+                except Exception:
+                    pass
+        return revoked
+
 
 # ── Public ingest identifiers ───────────────────────────────────────────────
 
@@ -413,6 +436,19 @@ class PublicIngestService:
             return True
         except Exception:
             return False
+
+    async def revoke_all_for_tenant(self, tenant_id: str) -> int:
+        """Revoke every public ingest identifier owned by a tenant."""
+        revoked = 0
+        identifiers = await self._repo.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        for record in identifiers:
+            identifier_id = record.get("id")
+            if identifier_id and record.get("status") == "active":
+                if await self.revoke_identifier(identifier_id):
+                    revoked += 1
+        return revoked
 
 
 # Module-level singletons (mirrors the repo's singleton pattern).
