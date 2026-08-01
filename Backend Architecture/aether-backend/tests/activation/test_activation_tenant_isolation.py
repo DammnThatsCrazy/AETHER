@@ -53,10 +53,11 @@ async def test_tenant_b_actions_do_not_mutate_tenant_a(svc, onboard_with_keys):
     await onboard_with_keys(svc, "tenant-A", count=1, plan_tier="P2")
     a_before = await svc.get_status("tenant-A")
 
-    # A full independent flow on B, including its own evaluation.
+    # A full independent flow on B, including its own evaluation. (B's own legal
+    # select_plan happens inside onboard_with_keys; re-selecting after
+    # waiting_for_event is an illegal FSM move, so we don't force one here.)
     await onboard_with_keys(svc, "tenant-B", count=1, plan_tier="P1")
     await svc.evaluate_first_value("tenant-B")
-    await svc.select_plan("tenant-B", "P4")
 
     # A is entirely unchanged by anything B did.
     a_after = await svc.get_status("tenant-A")
