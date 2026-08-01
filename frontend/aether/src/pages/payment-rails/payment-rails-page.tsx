@@ -27,8 +27,14 @@ import {
   usePaymentRailHealth,
   useProviderStatus,
   useSyncProvider,
+  useRepairCanonicalBacklog,
 } from '@aether-app/features/payment-rails';
-import type { FundingSessionRecord, PaymentRailHealthRecord } from '@aether-app/features/payment-rails';
+import type {
+  FundingSessionRecord,
+  PaymentRailHealthRecord,
+  CanonicalBacklogRepairResult,
+} from '@aether-app/features/payment-rails';
+import { isPaymentCanonicalRepairEnabled } from '@aether-app/lib/env';
 import { CardLinkedActivitySection } from './card-linked-section';
 import {
   OBSERVABILITY_COPY,
@@ -377,6 +383,109 @@ function ReconciliationSummary({ loading, error, refresh, counts, total }: Recon
   );
 }
 
+const CANONICAL_REPAIR_DEFAULT_LIMIT = 500;
+
+const CANONICAL_REPAIR_NOT_CONFIGURED =
+  'Canonical backlog repair is unavailable: the payment rail observability plane is not enabled for this workspace.';
+const CANONICAL_REPAIR_FORBIDDEN =
+  'Admin permission is required to repair the canonical backlog';
+
+interface RepairCountProps {
+  readonly label: string;
+  readonly value: string;
+}
+
+function RepairCount({ label, value }: RepairCountProps) {
+  return (
+    <div className="flex items-center justify-between rounded border border-border-default px-2 py-1.5">
+      <span className="text-xs text-text-muted">{label}</span>
+      <span className="text-xs font-mono text-text-primary">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Dormant, default-off admin control (behind VITE_PAYMENT_CANONICAL_REPAIR_ENABLED).
+ * Observe-only: re-drives Aether's OWN canonical payment event emission via the
+ * existing admin route — it never executes, settles, signs, or writes provider
+ * state, sends no tenant id (auth context supplies it), and is idempotent
+ * server-side. Server still enforces the tenant admin permission (403) and the
+ * rails feature flag (404/501), both surfaced honestly here.
+ */
+function CanonicalDeliveryCard() {
+  const timeCtx = useTimeContext();
+  const { toast } = useToast();
+  const { repair, loading } = useRepairCanonicalBacklog();
+  const [limit, setLimit] = useState(CANONICAL_REPAIR_DEFAULT_LIMIT);
+  const [result, setResult] = useState<CanonicalBacklogRepairResult | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
+
+  const handleRepair = async () => {
+    setResult(null);
+    setNotConfigured(false);
+    const outcome = await repair(limit);
+    if (!outcome) {
+      toast.error('Failed to repair the canonical backlog');
+      return;
+    }
+    switch (outcome.status) {
+      case 'repaired':
+        setResult(outcome.result);
+        toast.success('Canonical backlog repair complete');
+        break;
+      case 'not_configured':
+        setNotConfigured(true);
+        break;
+      case 'forbidden':
+        toast.error(CANONICAL_REPAIR_FORBIDDEN);
+        break;
+      case 'error':
+        toast.error(outcome.message);
+        break;
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Canonical delivery — Repair backlog</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-text-muted">
+          Re-drives Aether&rsquo;s own canonical payment event emission for observed funding
+          sessions whose canonical events are missing. Observe-only — it never executes,
+          settles, or writes provider state, and is idempotent, so repeated runs are safe.
+        </p>
+        <div className="flex items-center gap-3">
+          <label htmlFor="canonical-repair-limit" className="text-xs text-text-muted font-mono">
+            Limit
+          </label>
+          <input
+            id="canonical-repair-limit"
+            type="number"
+            min={1}
+            value={limit}
+            onChange={e => setLimit(Number(e.target.value))}
+            className={selectClass}
+            aria-label="Repair backlog limit"
+          />
+          <Button variant="secondary" size="sm" disabled={loading} onClick={() => void handleRepair()}>
+            {loading ? 'Repairing…' : 'Repair backlog'}
+          </Button>
+        </div>
+        {notConfigured && <p className="text-xs text-text-muted">{CANONICAL_REPAIR_NOT_CONFIGURED}</p>}
+        {result && (
+          <div className="grid gap-2 md:grid-cols-3">
+            <RepairCount label="Scanned" value={formatCount(result.scanned, timeCtx)} />
+            <RepairCount label="Repaired" value={formatCount(result.repaired, timeCtx)} />
+            <RepairCount label="Events re-emitted" value={formatCount(result.events_reemitted, timeCtx)} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PaymentRailsPage() {
   const timeCtx = useTimeContext();
   const { toast } = useToast();
@@ -509,6 +618,8 @@ export function PaymentRailsPage() {
         counts={reconciliationCounts}
         total={reconciliation.records.length}
       />
+
+      {isPaymentCanonicalRepairEnabled() && <CanonicalDeliveryCard />}
 
       {/* Funding sessions */}
       <div className="space-y-3">

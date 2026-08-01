@@ -48,6 +48,77 @@ CONVERSION_ID = str(uuid4())
 TOUCHPOINT_1_ID = str(uuid4())
 TOUCHPOINT_2_ID = str(uuid4())
 
+# Stable so a re-seed (see _seed_graph) is an idempotent replay, never a
+# duplicate conversion under a fresh key.
+DEDUP_KEY = f"privacy-order-{uuid4().hex}"
+
+
+def _touchpoint_payloads() -> list[dict]:
+    return [
+        {
+            "touchpoint_id": tp_id,
+            "tenant_id": TENANT_ID,
+            "profile_id": PROFILE_ID,
+            "campaign_id": CAMPAIGN_ID,
+            "touchpoint_type": "click",
+            "channel": channel,
+            "consent_snapshot_id": "consent-v1",
+            "privacy_class": "marketing",
+            "occurred_at": _now_iso(),
+            "received_at": _now_iso(),
+            "idempotency_key": f"privacy-tp-{tp_id}",
+        }
+        for tp_id, channel in [(TOUCHPOINT_1_ID, "paid_social"), (TOUCHPOINT_2_ID, "email")]
+    ]
+
+
+def _conversion_payload() -> dict:
+    return {
+        "conversion_id": CONVERSION_ID,
+        "tenant_id": TENANT_ID,
+        "conversion_type": "purchase",
+        "profile_id": PROFILE_ID,
+        "gross_value": "80.00",
+        "net_value": "72.00",
+        "currency": "USD",
+        "occurred_at": _now_iso(),
+        "observed_at": _now_iso(),
+        "conversion_status": "confirmed",
+        "authority_rank": 80,
+        "attribution_eligible": True,
+        "deduplication_key": DEDUP_KEY,
+    }
+
+
+def _seed_graph() -> None:
+    """Idempotently (re)establish the consented touchpoint + eligible conversion.
+
+    The in-process stores are global; a foreign test calling
+    reset_in_memory_stores() (or a worker split under pytest-xdist
+    ``--dist load``) can drop this class's earlier writes between its ordered
+    methods. Keyed by stable module-level idempotency / deduplication keys, so
+    this is a no-op replay when state survived and a clean restore when it did
+    not. Each hard-asserting step re-seeds (and, where the scenario requires,
+    re-erases) its own precondition rather than trusting cross-method ordering.
+    """
+    from services.measurement.repositories.conversion_repo import ConversionRepository
+    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+
+    tp_repo = TouchpointRepository()
+    for tp in _touchpoint_payloads():
+        _run(tp_repo.upsert(tp))
+    _run(ConversionRepository().upsert(_conversion_payload()))
+
+
+def _erase() -> dict:
+    """Run the canonical DSR erasure for this subject; returns the handler result."""
+    from services.measurement.privacy import MeasurementPrivacyHandler
+
+    return _run(MeasurementPrivacyHandler().handle_erasure(
+        tenant_id=TENANT_ID,
+        user_id=PROFILE_ID,
+    ))
+
 
 class TestPrivacyConsentFlow:
     """E2E: consent → touchpoints → attribution → revoke → rebuild → recompute."""
@@ -60,20 +131,8 @@ class TestPrivacyConsentFlow:
             pytest.skip("TouchpointRepository not available")
 
         repo = TouchpointRepository()
-        for tp_id, channel in [(TOUCHPOINT_1_ID, "paid_social"), (TOUCHPOINT_2_ID, "email")]:
-            result = _run(repo.upsert({
-                "touchpoint_id": tp_id,
-                "tenant_id": TENANT_ID,
-                "profile_id": PROFILE_ID,
-                "campaign_id": CAMPAIGN_ID,
-                "touchpoint_type": "click",
-                "channel": channel,
-                "consent_snapshot_id": "consent-v1",
-                "privacy_class": "marketing",
-                "occurred_at": _now_iso(),
-                "received_at": _now_iso(),
-                "idempotency_key": f"privacy-tp-{tp_id}",
-            }))
+        for tp in _touchpoint_payloads():
+            result = _run(repo.upsert(tp))
             assert result is not None
 
     def test_02_store_conversion(self):
@@ -84,21 +143,7 @@ class TestPrivacyConsentFlow:
             pytest.skip("ConversionRepository not available")
 
         repo = ConversionRepository()
-        result = _run(repo.upsert({
-            "conversion_id": CONVERSION_ID,
-            "tenant_id": TENANT_ID,
-            "conversion_type": "purchase",
-            "profile_id": PROFILE_ID,
-            "gross_value": "80.00",
-            "net_value": "72.00",
-            "currency": "USD",
-            "occurred_at": _now_iso(),
-            "observed_at": _now_iso(),
-            "conversion_status": "confirmed",
-            "authority_rank": 80,
-            "attribution_eligible": True,
-            "deduplication_key": f"privacy-order-{uuid4().hex}",
-        }))
+        result = _run(repo.upsert(_conversion_payload()))
         assert result is not None
 
     def test_03_initial_attribution_run(self):
@@ -108,6 +153,9 @@ class TestPrivacyConsentFlow:
         except ImportError:
             pytest.skip("AttributionEngine not available")
 
+        # Self-contained: the eligible conversion must exist on this worker
+        # before attribution, independent of whether test_02 ran here.
+        _seed_graph()
         engine = AttributionEngine()
         run = _run(engine.run_for_conversion(
             TENANT_ID,
@@ -123,15 +171,14 @@ class TestPrivacyConsentFlow:
     def test_04_consent_revocation_tombstones_touchpoints(self):
         """MeasurementPrivacyHandler tombstones touchpoints after consent revoke."""
         try:
-            from services.measurement.privacy import MeasurementPrivacyHandler
+            from services.measurement.privacy import MeasurementPrivacyHandler  # noqa: F401
         except ImportError:
             pytest.skip("MeasurementPrivacyHandler not available")
 
-        handler = MeasurementPrivacyHandler()
-        result = _run(handler.handle_erasure(
-            tenant_id=TENANT_ID,
-            user_id=PROFILE_ID,
-        ))
+        # Seed first so the erasure has real data to tombstone regardless of
+        # cross-worker distribution.
+        _seed_graph()
+        result = _erase()
         assert isinstance(result, dict), "DSR handler should return a result dict"
 
     def test_05_journey_rebuild_after_consent_change(self):
@@ -156,6 +203,12 @@ class TestPrivacyConsentFlow:
         except ImportError:
             pytest.skip("AttributionEngine not available")
 
+        # Establish the erased precondition on this worker: seed the graph then
+        # run the DSR erasure, so the refusal is exercised regardless of whether
+        # test_04's erasure landed here (pytest-xdist --dist load may split the
+        # class across workers).
+        _seed_graph()
+        _erase()
         engine = AttributionEngine()
         with pytest.raises(ValueError, match="not attribution-eligible|not found"):
             _run(engine.run_for_conversion(

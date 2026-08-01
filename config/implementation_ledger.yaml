@@ -1600,3 +1600,232 @@ items:
     blocked_by: []
     exception: null
     last_verified_commit: 4754082
+
+  # ---- Financial-observability credential-ready release (PR 1..4) --------
+  # PR 1 (durable multi-slot credential authority) is implemented this session;
+  # PR 2..4 are sequenced follow-ups landing as later commit groups on the same
+  # branch. Nothing here is marked terminal that is not actually in-repo.
+  - id: FIN-CRED-1-AUTHORITY
+    title: Durable, encrypted, multi-slot provider-credential authority + API + KMS-ready cipher
+    domain: financial-observability
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Tenant provider credentials become durable, encrypted, multi-slot and
+      tenant-isolated — the prerequisite for enabling any payment/stablecoin
+      integration. Replaces the process-local, single-key in-memory vault as the
+      credential authority for the financial cohort.
+    current_behavior: >
+      BYOKKeyVault stored one undifferentiated api_key per (tenant, provider) in a
+      process-memory dict (lost on restart, not shared across replicas), with
+      Fernet/base64 and no KMS. The generic key API disagreed with the vault
+      (dict-as-object AttributeError; missing category TypeError). Coinbase/MoonPay/
+      Bridge each need two credentials the single-slot vault could not hold.
+    required_behavior: >
+      A durable provider_credential_versions table (JSONB, partial-unique
+      active/previous/version indexes) backs a CredentialAuthority state machine
+      (create_pending/test/activate/rotate/revoke/delete/purge) with bounded
+      webhook-secret overlap, optimistic concurrency, and a version-keyed decrypt
+      cache. A CredentialCipher abstraction (LocalCredentialCipher AES-GCM +
+      AwsKmsEnvelopeCredentialCipher) binds tenant/provider/environment/slot/version
+      as authenticated context and fails closed in staging/production. A slot-aware,
+      write-only /v1/providers/credentials API (idempotency, optimistic concurrency,
+      tenant-admin authz, sanitized audit) never returns a secret. Tenant deletion
+      cascades credential rows. KMS IaC (terraform modules/kms_credentials) is
+      defined. The legacy generic key API is repaired and deprecated.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/providers/credentials/authority.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/repository.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/slot_registry.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/schema.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/routes.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/models.py"
+      - "Backend Architecture/aether-backend/services/providers/credentials/startup.py"
+      - "Backend Architecture/aether-backend/shared/providers/credential_cipher.py"
+      - "Backend Architecture/aether-backend/alembic/versions/20260812_provider_credential_versions.py"
+      - "Backend Architecture/aether-backend/services/providers/routes.py"
+      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
+      - "config/storage_policies.yaml"
+      - "AWS Deployment/aether-aws/terraform/modules/kms_credentials"
+    tests_required:
+      - "tests/unit/test_credential_cipher.py"
+      - "tests/unit/test_credential_slot_registry.py"
+      - "tests/unit/test_credential_authority.py"
+      - "tests/unit/test_credential_startup.py"
+      - "tests/dsr/test_credential_tenant_deletion.py"
+    evidence_required:
+      - "29 credential cipher/registry/authority/startup/dsr tests pass"
+      - "storage-policy coverage gate 330/330 (provider_credential_versions inventoried)"
+      - "alembic single head 20260812_provider_credential_versions; upgrade/downgrade/upgrade"
+    docs_required: []
+    owner: platform
+    status: implemented
+    blocked_by: []
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-CRED-1-VAULT-RETIRE
+    title: Retire the in-memory BYOKKeyVault; migrate payment adapters to the authority
+    domain: financial-observability
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: >
+      Removes the last process-memory credential path so no financial credential
+      is ever memory-only.
+    current_behavior: >
+      BYOKKeyVault remains in-memory and is still read by the payment-rail adapters
+      and the RPC gateway; only the new authority is durable.
+    required_behavior: >
+      Payment adapters read slot-aware secrets from CredentialAuthority
+      (webhook_signing_secret for verification; the API-key slot for polling); the
+      in-memory vault is removed or made a durable shim, leaving a single authority.
+    affected_paths:
+      - "Backend Architecture/aether-backend/shared/providers/key_vault.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
+      - "Backend Architecture/aether-backend/config/settings.py"
+    tests_required: ["tests/payment_rails/test_credential_read_path.py"]
+    evidence_required:
+      - "adapters resolve slot-aware secrets from the authority; no in-memory credential store remains"
+      - "PR-A (dormant, default OFF: AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED): payment-rail adapters resolve their webhook_signing_secret via PaymentRailAdapter._resolve_signing_secrets — flag-ON reads ONLY from CredentialAuthority.get_verification_secrets (active + rotation-overlap previous, NO vault fallback; an unconfigured slot yields an empty list so verify_webhook fails closed), flag-OFF preserves the legacy single BYOKKeyVault read byte-for-byte (every pinned vault/adapter contract stays green). verify_webhook now accepts a match against any resolved secret, so a rotation verifies a signature from either the new active or the still-valid previous. BYOKKeyVault is docstring-deprecated (no runtime change). NOT YET DONE: polling-slot (API-key/endpoint) resolution from the authority, the actual in-memory vault removal, per-request environment threading (flag-ON derives environment from process-global AETHER_ENV), and the default-on flip — so 'no in-memory credential store remains' is explicitly not yet satisfied"
+    docs_required: []
+    owner: financial
+    status: implementation_in_progress
+    blocked_by: [FIN-CRED-1-AUTHORITY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-2-WEBHOOK-AUTHORITY
+    title: Durable webhook endpoint registry + provider-native verification + admission controls
+    domain: financial-observability
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      A public webhook request can no longer select which tenant's credential is
+      consulted; each provider's signature is verified with its real protocol.
+    current_behavior: >
+      Payment webhook routes trust an X-Aether-Tenant-ID header, and one generic
+      HMAC verifier mishandles Stripe's compound t=,v1= signature.
+    required_behavior: >
+      A durable, high-entropy webhook endpoint registry resolves the tenant
+      server-side; per-provider native verifiers (Stripe/Privy/Coinbase/MoonPay/
+      Bridge) with golden fixtures; body-size/rate/timestamp/replay/duplicate
+      controls; consent + metadata-only quarantine on the payment-rails path;
+      read-only polling connection tests using the polling slot.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/signature_verify.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/webhook_endpoints.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/rate_limit.py"
+      - "Backend Architecture/aether-backend/alembic/versions/20260813_payment_webhook_endpoints.py"
+      - "config/storage_policies.yaml"
+      - "Backend Architecture/aether-backend/config/settings.py"
+    tests_required:
+      - "tests/payment_rails/test_signature_verify.py"
+      - "tests/payment_rails/test_signature_golden.py"
+      - "tests/payment_rails/test_webhook_endpoints.py"
+      - "tests/payment_rails/test_native_webhook_flow.py"
+      - "tests/payment_rails/test_webhook_admission.py"
+      - "tests/payment_rails/test_connection_probe.py"
+      - "tests/payment_rails/test_consent_gate.py"
+      - "tests/payment_rails/test_service_and_routes.py"
+    evidence_required:
+      - "Stripe compound t=,v1= verified natively (golden vectors); tampered/stale/missing/multi-sig/rotation-overlap covered"
+      - "per-provider frozen golden vectors wired through each adapter's native_signature_scheme(): stripe (compound v1=), moonpay (compound s=), coinbase (body_hex) CONFIRMED; scheme-isolation + one-byte-tamper + wrong-secret rejection locked"
+      - "bridge + privy honestly classified externally_blocked (real headers — Bridge t=,v0= / Privy Svix base64 — unconfirmed vs the declared timestamped_hex placeholder); guard test fails if reclassified without a confirmed vector, and if any registered adapter lacks a golden entry"
+      - "durable endpoint registry resolves tenant server-side; X-Aether-Tenant-ID no longer selects tenant on the new route"
+      - "per-endpoint webhook rate limiting (fixed-minute window, atomic incr_if_under, fails open) enforced before signature verification, surfacing a retryable 429"
+      - "denied webhooks (bad/stale signature, oversized body) quarantined metadata-only (sha256 + size + reason, never the raw body)"
+      - "read-only polling connection-probe contract proven uniformly across the three pull rails (coinbase/moonpay/bridge): each _live_connection_test issues exactly one bounded, GET-only health ping through the injectable mock transport with no live network; ok / auth_error / rate-limit-exhaustion / timeout / not_configured outcomes covered with the GET-only invariant asserted on every path, plus test_connection mode routing (local-mode skip, non-local live probe, not_configured short-circuit)"
+      - "consent gate on the observation path (default OFF, AETHER_PAYMENT_WEBHOOK_CONSENT_GATE_ENABLED): a normalized funding session is persisted/emitted only when its subject (user_id) has granted the `commerce` consent purpose via ConsentPolicyEngine; denied observations are dropped (never persisted) and recorded metadata-only on the audit trail; a session with no resolvable subject is allowed (nothing to gate); fails closed on a missing consent record or an unavailable consent store"
+      - "legacy header-resolved route POST /{provider} (service.handle_webhook) migrated from the generic HMAC verifier to provider-native verification (signature_verify.verify_signature + native_signature_scheme with freshness), so compound Stripe/MoonPay signatures verify correctly on that path — not just the endpoint-registry route; the pinned wire-contract tests were updated to the native compound scheme and a generic-form signature is now rejected for a compound provider. adapter.verify_webhook is retained as a unit-tested utility, no longer on the request path"
+    docs_required: []
+    owner: financial
+    status: implementation_in_progress
+    blocked_by: [FIN-CRED-1-AUTHORITY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-3-CANONICAL-DELIVERY
+    title: Durable receipt ledger + atomic Bronze/outbox + repair worker + stablecoins + UI + meters
+    domain: financial-observability
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: >
+      Verified provider events are durably accepted, deterministically identified,
+      projected exactly once to the correct tenant, and metered without loss.
+    current_behavior: >
+      payment_rails/service.py emits canonical events via direct EventProducer.publish
+      with a fresh uuid4 per retry, bypassing the durable bronze/outbox spine.
+    required_behavior: >
+      A durable provider-receipt ledger with deterministic IDs; atomic Bronze +
+      event_outbox insertion via ingest_many; a supervised repair worker; EVM/Solana
+      credential preflight; Aether setup/result UI; Kyber diagnostics; entitlements +
+      usage meters with billing-outage-safe acceptance.
+    affected_paths:
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py"
+      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py"
+      - "Backend Architecture/aether-backend/services/ingestion/bronze_bulk.py"
+      - "Backend Architecture/aether-backend/config/settings.py"
+      - "Backend Architecture/aether-backend/services/stablecoins/connector_base.py"
+      - "Backend Architecture/aether-backend/services/stablecoins/ingestion.py"
+      - "Backend Architecture/aether-backend/services/billing/revops.py"
+      - "Backend Architecture/aether-backend/services/onchain/rpc_gateway.py"
+      - "Backend Architecture/aether-backend/services/stablecoins/registry.py"
+      - "frontend/aether/src/pages/payment-rails/payment-rails-page.tsx"
+      - "frontend/aether/src/features/payment-rails/api.ts"
+      - "frontend/aether/src/lib/env/config.ts"
+    tests_required: ["tests/payment_rails/test_canonical_delivery.py", "tests/payment_rails/test_repair_worker.py", "tests/payment_rails/test_canonical_event_ids.py", "tests/payment_rails/test_canonical_outbox.py", "tests/unit/test_stablecoin_intelligence_connectors.py", "tests/payment_rails/test_usage_metering.py", "tests/unit/test_stablecoin_usage_metering.py", "tests/unit/test_stablecoin_byok_rpc_scoping.py", "frontend/aether/src/test/unit/payment-rails-page.test.tsx"]
+    evidence_required:
+      - "retry creates no duplicate projection/billing; relay outage produces repairable backlog that recovers"
+      - "canonical event ids are deterministic uuid5 over (tenant, funding session, event_type) replacing the fresh uuid4 per publish: a provider redelivery or a crash between publish and the emitted_canonical checkpoint re-emits the SAME id, so the validated-events bus dedupes downstream instead of double-counting"
+      - "atomic Bronze + event_outbox delivery path (default OFF, AETHER_PAYMENT_CANONICAL_OUTBOX_ENABLED): when enabled, _emit_canonical_events writes each canonical payment_* event to the durable Bronze + event_outbox spine via ingest_many (the supervised outbox relay publishes it) instead of a direct EventProducer.publish; the deterministic canonical id is the Bronze/outbox key so a retry writes no second outbox row (ingest_many enqueues only for a newly-accepted Bronze row) — proven no-duplicate-on-replay"
+      - "canonical-backlog repair (service.repair_canonical_backlog): scans a tenant's funding sessions and re-drives _emit_canonical_events for any whose implied payment_* event types are not all recorded in emitted_canonical — recovering a session whose canonical events were never delivered (crash before emission, or an outbox relay outage). Idempotent on both delivery paths: direct publish dedupes on emitted_canonical, the outbox path dedupes on the accepted Bronze row, so repeated runs never double-emit. Exposed on-demand as admin route POST /v1/integrations/providers/payment-rails/canonical-backlog/repair (per-tenant, limit-bounded 1..2000). A periodic supervisor WorkerSpec and a durable provider-receipt ledger remain pending"
+      - "usage meters with billing-outage-safe acceptance (default OFF: AETHER_PAYMENT_USAGE_METERING_ENABLED, AETHER_STABLECOIN_USAGE_METERING_ENABLED): after a payment_* canonical event is emitted and after a stablecoin observation is persisted, a fail-open accept-then-meter hook records a RevOps UsageMeteringEvent via services.billing.revops.MeteringService.record_event into the existing usage_metering_events store (NOT a new shared.logger metric — the canonical-meter-name gate is untouched). The meter source_id is the deterministic canonical event id / observation id, so RevOps find_idempotent dedupes on replay (no double-count on redelivery, repair, or crash-retry). A metering-store failure is swallowed (logger.warning) and never rejects or drops the observation. The billing UNIT (one meter row per emitted canonical event; a payment event implying N canonical events records N rows) needs billing-owner confirmation before it counts toward any invoice — the meter ships default-OFF until then. A meter-backfill for the rare emit-succeeded/meter-failed gap and a durable provider-receipt ledger remain future surface"
+      - "stablecoin observer preflight (ConnectorCertificationMixin.preflight): a typed, fail-closed, READ-ONLY reachability + chain-identity probe shared by the EVM/Solana/price connectors. Wraps each connector's existing test_connection (EVM eth_chainId, Solana sol_getSlot+genesis — all whitelisted read methods) and never raises: every outcome returns a ConnectorPreflightResult with a CONNECTOR_* status token (ok/not_configured/chain_mismatch/rate_limited/auth_error/timeout/network_error), so observation can be gated on a reachable, correctly-scoped endpoint before it begins. Observe-only — no writes, no cursor/Bronze/Silver mutation. Validated against the shared RPC gateway endpoint by default; per-tenant BYOK-RPC scoping is available (see the next bullet, default OFF)"
+      - "Aether tenant UI — canonical-delivery Repair card (default OFF, VITE_PAYMENT_CANONICAL_REPAIR_ENABLED): the existing Aether Payment Rails page gains a dormant admin 'Repair backlog' control that calls the landed admin route POST /v1/integrations/providers/payment-rails/canonical-backlog/repair and renders the returned {scanned, repaired, events_reemitted}; the card is absent unless the flag is 'true' and the action is observe-only (re-drives Aether's own canonical emission, sends no tenant id, is server-enforced admin-only → 403 surfaces a permission note; 404/501 → not_configured). Frontend feature api + hook + env flag/helper + CanonicalDeliveryCard, mirroring the existing useSyncProvider pattern; funding-session/reconciliation/health/stablecoin surfaces already existed and were not rebuilt. Kyber operator repair surface + connector-preflight UI are deferred (no HTTP route yet / operator-auth). Frontend-only — no source-linked doc affected"
+      - "per-tenant BYOK-RPC endpoint/credential scoping (default OFF, AETHER_ONCHAIN_TENANT_BYOK_RPC_ENABLED): RPCGateway.for_tenant / resolve_tenant_rpc_endpoint resolve a tenant's read-only RPC (endpoint, api_key) as an ATOMIC pair from the BYOK vault, and StablecoinConnectorRegistry.build_tenant_ingestion_connector builds a tenant-scoped connector so its ConnectorCertificationMixin.preflight validates THAT tenant's endpoint. A tenant endpoint is NEVER paired with the platform's global key (the atomic-pairing security invariant is unit-proven); flag OFF resolves to the global endpoint byte-for-byte (identity). Observe-only: reads the vault only, execute() still gates on the read-only method allowlist. A per-request environment/tenant thread through the connector runtime and tenant price-connector wiring remain follow-ups"
+    docs_required: []
+    owner: financial
+    status: implementation_in_progress
+    blocked_by: [FIN-2-WEBHOOK-AUTHORITY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FIN-4-CERTIFICATION
+    title: Financial credential-readiness certification, pilot manifest, runbooks, hardening
+    domain: financial-observability
+    severity: P1
+    release_class: audit_readiness_blocker
+    customer_impact: >
+      An honest, fail-closed readiness verdict and a secret-free pilot manifest so a
+      staging tenant can be activated by configuration, not code changes.
+    current_behavior: >
+      No financial-credential-readiness / payment-rails / stablecoin certification
+      commands or pilot manifest exist for this cohort.
+    required_behavior: >
+      make financial-credential-readiness / payment-rails-certification /
+      stablecoin-observer-certification / financial-pilot-preflight (fail-closed);
+      pilot manifest; runbooks; chaos/rotation/rollback evidence; adversarial review.
+    affected_paths:
+      - "Makefile"
+      - "scripts/financial_credential_readiness.py"
+      - "config/pilot/examples/financial-observation.yaml"
+      - "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md"
+      - "tests/unit/test_financial_credential_readiness.py"
+      - "tests/unit/test_pilot_manifests.py"
+    tests_required:
+      - "tests/unit/test_financial_credential_readiness.py"
+      - "tests/unit/test_pilot_manifests.py"
+      - "tests/payment_rails/test_certification.py"
+    evidence_required:
+      - "fail-closed certification commands; secret-free evidence bundle"
+      - "financial-cohort credential-readiness certification (make financial-credential-readiness[-strict], payment-rails-certification, stablecoin-observer-certification): a financial-scoped, fail-closed, offline reader over shared.certification resolving exactly 7 financial adapters (payments x5 + stablecoin_chain evm/svm) to CREDENTIAL_WAITING and asserting every run_certification check passes; a synthetic SCAFFOLDED / dishonest-PARTNER_LIVE descriptor fails the strict gate (fail-closed proven). A secret-free financial pilot manifest (config/pilot/examples/financial-observation.yaml, observation + shadow_mode, refs-by-name, delivery/execution/settlement/rewards entitlements disabled) validated by validate_pilot_manifest incl. the certification-matrix provider cross-check; make financial-pilot-preflight composes both fail-closed. Operator runbook added. chaos/rotation/rollback evidence + adversarial review remain pending (PR4b)"
+    docs_required:
+      - "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md"
+    owner: financial
+    status: implementation_in_progress
+    blocked_by: [FIN-3-CANONICAL-DELIVERY]
+    exception: null
+    last_verified_commit: null

@@ -17,6 +17,7 @@ class ProviderKeyCreate(BaseModel):
     """Store or update a BYOK API key for a provider."""
     provider_name: str = Field(..., description="Provider name (e.g. 'alchemy', 'etherscan')")
     api_key: str = Field(..., min_length=1, description="The raw API key")
+    category: str = Field("api", description="Credential category (e.g. 'llm', 'rpc', 'api')")
     endpoint: Optional[str] = Field(None, description="Custom endpoint URL (optional)")
 
 

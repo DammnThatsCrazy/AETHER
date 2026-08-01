@@ -79,7 +79,7 @@ append-only immutable revisions (raw evidence never mutated); dry-run supported.
 | React Native | Fully implemented, tested (vitest) | `Aether.attribution.*`, AetherPressable/useTrackedPress |
 | Deferred attribution + AdAttributionKit | Fully implemented, tested | deterministic resolve-once; postbacks idempotent, `platform_verified`, separate from user evidence |
 
-## 10. SHIKI / Aether surface status
+## 10. Aether surface status
 
 `frontend/aether` user-profile touchpoints render canonical `source_class` labels
 via `@aether/shared` (`SOURCE_CLASS_DEFAULTS`, `canonicalSourceClass`) with a local
