@@ -1,11 +1,12 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { LoadingState } from '@aether/ui';
 import { RequireAuth } from '@aether-app/features/auth';
 import { AppShell } from '@aether-app/components/app-shell';
 import { CallbackPage } from '@aether-app/pages/callback';
 import { LoginPage } from '@aether-app/pages/login/login-page';
 import { DataRetentionPage } from '@aether-app/pages/legal/data-retention-page';
+import { TenantLanding, TenantNotFound } from './tenant-landing';
 import { ErrorBoundary } from './error-boundary';
 
 const SignupPage = lazy(() => import('@aether-app/pages/signup/signup-page').then(m => ({ default: m.SignupPage })));
@@ -28,6 +29,7 @@ const UsagePlanPage = lazy(() => import('@aether-app/pages/usage-plan').then(m =
 const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ default: m.MePage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));
+const ActivationPage = lazy(() => import('@aether-app/pages/activation/activation-page').then(m => ({ default: m.ActivationPage })));
 const AuditExportsPage = lazy(() => import('@aether-app/pages/audit-exports').then(m => ({ default: m.AuditExportsPage })));
 const ValueReviewPage = lazy(() => import('@aether-app/pages/value-review').then(m => ({ default: m.ValueReviewPage })));
 const SecurityPage = lazy(() => import('@aether-app/pages/security').then(m => ({ default: m.SecurityPage })));
@@ -92,7 +94,8 @@ export function AppRouter() {
           <RequireAuth>
             <AppShell>
               <Routes>
-                <Route path="/" element={<Navigate to="/settings" replace />} />
+                <Route path="/" element={<TenantLanding />} />
+                <Route path="/activation" element={<PageSuspense><ActivationPage /></PageSuspense>} />
                 <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
                 <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
                 <Route path="/users/:profileId/journey" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
@@ -143,7 +146,7 @@ export function AppRouter() {
                 <Route path="/agent-access" element={<PageSuspense><AgentAccessPage /></PageSuspense>} />
                 <Route path="/interoperability" element={<PageSuspense><InteropPage /></PageSuspense>} />
                 <Route path="/interoperability/messages/:messageId" element={<PageSuspense><InteropMessagePage /></PageSuspense>} />
-                <Route path="*" element={<Navigate to="/settings" replace />} />
+                <Route path="*" element={<TenantNotFound />} />
               </Routes>
             </AppShell>
           </RequireAuth>
