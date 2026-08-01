@@ -92,3 +92,45 @@ def test_service_read_only_10_change_types_accepted():
     _run(repo.enqueue(scope_key=A, principal_id="u", change_type="continuation_changed"))
     resp = _run(sync_service.read(A, cursor=None))
     assert resp["events"][0]["change_type"] in SYNC_CHANGE_TYPES
+
+
+def test_delete_by_principal_dsr():
+    """DSR erasure removes only the subject's change rows, in-scope, and returns
+    the real deleted count; other principals + other scopes are untouched."""
+    repo = get_client_sync_repository()
+    # Two rows for user-1 in scope A, one row for user-2 in A, one for user-1 in B.
+    _run(repo.enqueue(scope_key=A, principal_id="user-1", change_type="continuation_changed",
+                      resource_id="c1"))
+    _run(repo.enqueue(scope_key=A, principal_id="user-1", change_type="continuation_changed",
+                      resource_id="c2"))
+    _run(repo.enqueue(scope_key=A, principal_id="user-2", change_type="continuation_changed",
+                      resource_id="c3"))
+    _run(repo.enqueue(scope_key=B, principal_id="user-1", change_type="continuation_changed",
+                      resource_id="b1"))
+
+    removed = _run(repo.delete_by_principal(A, "user-1"))
+    assert removed == 2  # only user-1's two rows in scope A
+
+    # user-2's row in A survives; user-1's row in scope B survives (scope isolation).
+    a_rows = _run(repo.read_since(A, 0, 200))
+    assert [r["resource_id"] for r in a_rows] == ["c3"]
+    b_rows = _run(repo.read_since(B, 0, 200))
+    assert [r["resource_id"] for r in b_rows] == ["b1"]
+
+
+def test_delete_by_principal_preserves_cursor_counter():
+    """The per-scope cursor counter is NOT deleted, so the monotonic sequence
+    never rewinds after an erasure (a reused seq would corrupt cursors)."""
+    repo = get_client_sync_repository()
+    _run(repo.enqueue(scope_key=A, principal_id="user-1", change_type="continuation_changed",
+                      resource_id="c1"))
+    _run(repo.enqueue(scope_key=A, principal_id="user-1", change_type="continuation_changed",
+                      resource_id="c2"))
+    assert _run(repo.max_seq(A)) == 2
+
+    assert _run(repo.delete_by_principal(A, "user-1")) == 2
+    # Counter preserved: the log is empty but the sequence continues past 2.
+    assert _run(repo.max_seq(A)) == 2
+    nxt = _run(repo.enqueue(scope_key=A, principal_id="user-9", change_type="continuation_changed",
+                            resource_id="c3"))
+    assert nxt["seq"] == 3

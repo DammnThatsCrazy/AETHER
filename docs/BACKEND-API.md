@@ -2309,6 +2309,7 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 | PATCH | `/v1/notifications/intelligence/{id}/escalate` | Operator escalate |
 | PATCH | `/v1/notifications/intelligence/{id}/annotate` | Add annotation |
 | POST | `/v1/notifications/intelligence/{id}/replay` | Re-deliver to all active channels |
+| GET | `/v1/notifications/coverage` | Producer-coverage report (honest states; never "healthy" without a declared baseline) |
 
 ### Tenant Configuration
 

@@ -8,7 +8,7 @@ program:
   base_commit: "78562ddae28de01ec0fe3c59e42bb357baaffb1f"   # == origin/main at program start (feat: Unified Integration Control Plane — foundation (#497))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of base_commit
   platform_version: "8.12.0"
-  last_landed_checkpoint: C4
+  last_landed_checkpoint: C8   # C0-C4 foundation + C8 compliance slice (DSR + privacy manifests); C5/C6/C7/C9 staged
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -42,22 +42,23 @@ milestones:
   - id: C2
     name: notification-attention-control-plane
     depends_on: [C1]
-    status: in_progress
-    landed: [notification-delivery-ts-twins, notification-control-plane-doc]
-    pending: [coverage-registry, mobile-notification-projection, notification-make-targets]
-    deferred_with_reason:
-      collision-resolution: >
-        The /v1/notifications legacy router (services/notification/routes.py) is
-        mounted after notification_intelligence, which first-match-shadows its
-        /webhooks and /alerts paths — EXCEPT one non-overlapping legacy endpoint,
-        POST /v1/notifications/webhooks/{webhook_id}/test, which a plain unmount
-        would drop. A safe fix must migrate that endpoint or re-prefix the legacy
-        router; deferred rather than risk a nuanced change to a production service.
+    status: landed
+    landed: [notification-delivery-ts-twins, notification-control-plane-doc, notifications-collision-resolution, producer-coverage-registry]
+    pending: [mobile-notification-projection, unsafe-routing-validator]
     note: >
       Landed: notification.ts + delivery-receipt.ts TS twins (13 parity tests;
       NotificationDeliveryAttempt renamed to avoid a TS2308 collision with the interop
-      DeliveryAttempt) + NOTIFICATION_CONTROL_PLANE.md. Python-only models now have
-      drift-guarded TS twins. No backend/runtime change.
+      DeliveryAttempt) + NOTIFICATION_CONTROL_PLANE.md.
+      COLLISION RESOLVED (was deferred): the legacy services/notification router was
+      retired — its one non-shadowed endpoint (POST /webhooks/{id}/test) was migrated
+      into notification_intelligence WITH an SSRF guard (both already share
+      WebhookRepository), the router was unmounted, and the 5 resolved pairs were
+      removed from the route-conflict ratchet (tests/unit/test_route_conflicts.py).
+      PRODUCER-COVERAGE REGISTRY landed: services/notification_intelligence/coverage.py
+      + GET /v1/notifications/coverage — honest states, NEVER 'healthy' without a
+      declared baseline, in-process heartbeat, seeded with real producers at
+      required=False (operators declare the baseline). ~20 tests. Remaining C2 (mobile
+      notification projection with redacted push, unsafe-routing validator) still staged.
   - id: C3
     name: delivery-providers-installations-push-email-deeplinks
     depends_on: [C2]
@@ -100,6 +101,31 @@ milestones:
       needs macOS+Xcode+Android SDK+Expo (absent in this Linux CI container) →
       externally_blocked, runs in hosted (macOS) CI; NOT a 'compiled' claim. Full feature
       screens + governed mobile actions are C5-C7 (staged).
+  - id: C8
+    name: dsr-compliance-completeness
+    depends_on: [C4]
+    status: partial-landed
+    landed: [mobile-dsr-erasure-end-to-end, dsr-mobile-coverage-gate, apple-privacy-manifests, play-data-safety, privacy-manifest-drift-gate, mobile-compliance-doc]
+    externally_blocked: [store-submission]
+    note: >
+      C8 (verifiable slice) landed the mobile compliance completeness: a data-subject
+      erasure now reaches mobile data end-to-end with REAL evidence — the consent.erasure
+      job erases continuations/selections, installations/push_subscriptions, and
+      sync_change_log by principal and marks 3 new DSR_COMPONENTS
+      (continuation_records/mobile_installations/client_sync_records) with real erased-row
+      counts, each store isolated + retryable (fixed the gap where the mobile
+      erase-by-principal hooks existed + were tested but no DSR flow reached them, and
+      client_sync had no erase hook). A fail-closed coverage gate
+      (scripts/release/check_dsr_coverage.py, make dsr-coverage-check) binds
+      erase-hook↔DSR_COMPONENT↔handler↔storage-policy so no future mobile table silently
+      escapes DSR. Each shipping app gained a generated, drift-gated Apple Privacy Manifest
+      (PrivacyInfo.xcprivacy) + Play Data Safety (data-safety.json) derived from an auditable
+      privacy-data-flows.yaml validated against the 12-purpose consent registry + PII
+      classification (scripts/generate_privacy_manifests.py, make privacy-manifest-check).
+      ~90 tests. HONEST CEILING: manifest GENERATION + DSR erasure are done + gated; store
+      SUBMISSION (App Store / Play review) remains externally_blocked (developer accounts +
+      signing). C5/C6/C7/C9 (feature screens, continue-on-phone, governed actions, adversarial
+      review) remain staged.
 
 # Wave / architecture rollup (reuse-first). "reuse" = exists complete; "extend" = exists, add surface;
 # "build" = net-new this program. Authoritative detail: reports/mobile-productization/repo-baseline.json.

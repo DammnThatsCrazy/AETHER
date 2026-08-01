@@ -6433,6 +6433,20 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/MOBILE_COMPLIANCE.md",
+      "title": "Mobile Compliance — DSR Erasure & Privacy Manifests",
+      "slug": "mobile/compliance",
+      "section": "mobile",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "compliance",
+        "mobile"
+      ],
+      "status": "alpha"
+    },
+    {
       "path": "docs/source-of-truth/MOBILE_PLATFORM.md",
       "title": "Mobile Platform & Productization Baseplate",
       "slug": "mobile/platform",

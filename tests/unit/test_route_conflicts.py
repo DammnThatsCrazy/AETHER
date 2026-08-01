@@ -31,11 +31,9 @@ KNOWN_CONFLICTS: frozenset[tuple[str, str]] = frozenset(
         ("/v1/admin/kyber/tenant-value-health", "GET"),
         ("/v1/admin/kyber/vertical-solution-signals", "GET"),
         ("/v1/attribution/models", "GET"),
-        ("/v1/notifications/alerts", "GET"),
-        ("/v1/notifications/alerts", "POST"),
-        ("/v1/notifications/webhooks", "GET"),
-        ("/v1/notifications/webhooks", "POST"),
-        ("/v1/notifications/webhooks/{webhook_id}", "DELETE"),
+        # The 5 /v1/notifications/{alerts,webhooks} conflicts were resolved by
+        # retiring the legacy notification router (its one non-shadowed endpoint,
+        # POST /webhooks/{id}/test, was migrated into notification_intelligence).
     }
 )
 

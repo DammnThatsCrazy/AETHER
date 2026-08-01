@@ -225,6 +225,35 @@ class ClientSyncRepository:
         row = await pool.fetchrow("SELECT MIN(seq) AS m FROM sync_change_log WHERE scope_key = $1", scope_key)
         return (row["m"] or 0) if row is not None else 0
 
+    async def delete_by_principal(self, scope_key: str, principal_id: str) -> int:
+        """DSR erasure — remove every ``sync_change_log`` row for a subject.
+
+        Only the subject-identifying change rows are deleted. The
+        ``sync_cursor_counter`` row is per-scope (not principal-identifying) and
+        is left intact so the scope's monotonic sequence never rewinds — a reused
+        seq would corrupt other principals' cursors in the same scope.
+        """
+        pool = await self._backend()
+        if pool is None:
+            async with _mem_lock():
+                keys = [k for k, r in _MEM_LOG.items()
+                        if r["scope_key"] == scope_key and r["principal_id"] == principal_id]
+                for k in keys:
+                    del _MEM_LOG[k]
+                return len(keys)
+        result = await pool.execute(
+            "DELETE FROM sync_change_log WHERE scope_key = $1 AND principal_id = $2",
+            scope_key, principal_id,
+        )
+        return _rowcount(result)
+
+
+def _rowcount(result: Any) -> int:
+    try:
+        return int(str(result).split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
 
 _repo: Optional[ClientSyncRepository] = None
 

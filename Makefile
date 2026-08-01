@@ -406,6 +406,13 @@ mobile-test: ## CI gate — unit tests for the mobile SDK packages
 mobile-build-check: ## Mobile app scaffold invariants + honest native-build posture (report; exit 0 unless a scaffold is broken)
 	python scripts/mobile_build_check.py
 
+.PHONY: privacy-manifest-check dsr-coverage-check
+privacy-manifest-check: ## CI gate — regenerate app privacy manifests (Apple + Play) and fail on drift
+	python scripts/generate_privacy_manifests.py --check
+
+dsr-coverage-check: ## CI gate — every principal-scoped mobile table is reachable by a DSR erasure
+	python scripts/release/check_dsr_coverage.py
+
 mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Python contract parity
 	python -m pytest tests/contracts/test_continuation_contract_parity.py \
 		tests/contracts/test_sync_event_contract_parity.py \

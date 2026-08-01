@@ -65,11 +65,34 @@ recorded as delivered.
 terminal off-ramps `suppressed` and `expired`. Transitions are forward-only
 (`LIFECYCLE_TRANSITIONS`).
 
+## Route-prefix collision resolution (landed)
+
+`notification_intelligence` is the single canonical `/v1/notifications` router. The
+legacy `services/notification` router — whose 6 endpoints were all first-match-shadowed
+except `POST /webhooks/{id}/test` — was **retired**: that one endpoint was migrated into
+`notification_intelligence` (gaining the SSRF guard the legacy handler lacked; both
+already shared `WebhookRepository`), and the legacy router was unmounted. The route
+`(method, path)`-uniqueness ratchet (`tests/unit/test_route_conflicts.py`) enforces that
+the collision stays fixed — the 5 resolved pairs were removed from its allowlist.
+
+## Producer-coverage registry (landed)
+
+`services/notification_intelligence/coverage.py` reports, honestly, whether each known
+producer (by `source_service`) is emitting within its freshness window, via
+`GET /v1/notifications/coverage`. The states are
+`healthy | degraded | stale | unavailable | unknown | coverage_incomplete |
+disabled_intentionally | externally_blocked`. Honesty guards: overall is **never
+`healthy`** without a declared baseline (no `required` producer → `coverage_incomplete`);
+a never-observed producer is `unavailable`/`unknown`, never silently healthy; and no
+last-emit timestamp is ever fabricated. The registry declares the framework, not
+service-level objectives — producers ship `required=False`; declaring a producer
+`required=True` with a real cadence is the operator's coverage baseline. The backing
+heartbeat is in-process (reflects the serving process's observed emissions); a durable
+cross-process store is a later increment.
+
 ## Staged (this program, later increments)
 
-A producer-coverage registry (never report "healthy" when required coverage is
-missing), the `/v1/notifications` route-prefix collision resolution, mobile
-notification projection with redacted push content, and an unsafe-routing
+Mobile notification projection with redacted push content and an unsafe-routing
 validator (no zero-channel/zero-recipient false success, no simulated receipts, no
 provider-acceptance-as-delivery) follow within the same program. See
 `reports/mobile-productization/PROGRAM_STATE.yaml`.

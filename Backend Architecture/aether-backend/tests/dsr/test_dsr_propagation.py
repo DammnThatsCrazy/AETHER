@@ -41,7 +41,7 @@ async def test_open_request_creates_all_component_steps_pending():
     components = status["components"]
     # One step per §3.11 component, in the canonical order.
     assert [c["component"] for c in components] == list(DSR_COMPONENTS)
-    assert len(components) == 20
+    assert len(components) == 23
     assert all(c["status"] == "pending" for c in components)
     # A freshly-opened request rolls up to pending, never completed.
     assert status["overall"] == "pending"
@@ -251,7 +251,13 @@ async def test_overall_status_helper_precedence():
 
 
 async def test_status_constants_match_spec():
-    assert len(DSR_COMPONENTS) == 20
+    assert len(DSR_COMPONENTS) == 23
+    # The three mobile-plane components are registered at the tail (order preserved).
+    assert DSR_COMPONENTS[-3:] == (
+        "continuation_records",
+        "mobile_installations",
+        "client_sync_records",
+    )
     assert set(DSR_PROPAGATION_STATUSES) == {
         "pending", "running", "completed", "blocked", "failed",
         "skipped_legal_hold", "requires_manual_review",
