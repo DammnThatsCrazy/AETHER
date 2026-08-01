@@ -42,8 +42,22 @@ milestones:
   - id: C2
     name: notification-attention-control-plane
     depends_on: [C1]
-    status: pending
-    lands: [notification-branding, notification-delivery-ts-twins, coverage-registry, collision-resolution, mobile-notification-projection]
+    status: in_progress
+    landed: [notification-delivery-ts-twins, notification-control-plane-doc]
+    pending: [coverage-registry, mobile-notification-projection, notification-make-targets]
+    deferred_with_reason:
+      collision-resolution: >
+        The /v1/notifications legacy router (services/notification/routes.py) is
+        mounted after notification_intelligence, which first-match-shadows its
+        /webhooks and /alerts paths — EXCEPT one non-overlapping legacy endpoint,
+        POST /v1/notifications/webhooks/{webhook_id}/test, which a plain unmount
+        would drop. A safe fix must migrate that endpoint or re-prefix the legacy
+        router; deferred rather than risk a nuanced change to a production service.
+    note: >
+      Landed: notification.ts + delivery-receipt.ts TS twins (13 parity tests;
+      NotificationDeliveryAttempt renamed to avoid a TS2308 collision with the interop
+      DeliveryAttempt) + NOTIFICATION_CONTROL_PLANE.md. Python-only models now have
+      drift-guarded TS twins. No backend/runtime change.
   - id: C3
     name: delivery-providers-installations-push-email-deeplinks
     depends_on: [C2]
