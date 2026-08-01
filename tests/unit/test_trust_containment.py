@@ -324,7 +324,21 @@ class TestTenantStatusRehydration:
             mw = importlib.import_module("middleware.middleware")
 
             _run(repos.AdminRepository().insert(
-                "t-deact", {"name": "T", "contact_email": "d@x.io", "status": "active"}
+                "t-deact", {
+                    "name": "T",
+                    "contact_email": "d@x.io",
+                    "plan_tier": "P1",
+                    "status": "active",
+                }
+            ))
+            _run(repos.UserRepository().insert(
+                "p-1", {
+                    "user_id": "p-1",
+                    "tenant_id": "t-deact",
+                    "status": "active",
+                    "role": "viewer",
+                    "permissions": ["read", "ingest"],
+                }
             ))
             issue = _run(sessions.SessionService().create_session("t-deact", "p-1"))
 
@@ -349,9 +363,9 @@ class TestTenantStatusRehydration:
 
             issue = _run(sessions.SessionService().create_session("t-ghost", "p-1"))
             ctx = _run(mw._resolve_session_token(issue.token))
-            assert ctx.tenant_status == "inactive"
-            denial = mw._evaluate_route_policy(_PolicyRequest(), "/v1/batch", ctx)
-            assert denial is not None
+            # Missing durable tenant and plan authority must fail closed rather
+            # than manufacturing an inactive context with a default plan.
+            assert ctx is None
 
     def test_service_credential_rehydrates_tenant_status(self):
         with trust_flags(**_ON):
