@@ -3,7 +3,14 @@
 from alembic import op
 
 revision = "20260812_sdk_durability"
-down_revision = "20260811_demo_seed_core"
+# Re-pointed onto main's migration head after merging origin/main: the turnkey
+# settings/account chain (sdk_durability -> account_organization ->
+# account_deletion_workflow -> customer_webhook_delivery_claims) originally
+# branched from 20260811_demo_seed_core alongside main's activation/kyber chain,
+# producing two heads. Stacking this chain after 20260815_kyber_missions
+# linearizes to a single head. These tables are independent of the main chain's,
+# so ordering is a no-op for the DDL itself.
+down_revision = "20260815_kyber_missions"
 branch_labels = None
 depends_on = None
 
