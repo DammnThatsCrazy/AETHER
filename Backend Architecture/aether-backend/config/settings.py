@@ -215,6 +215,11 @@ class QuickNodeConfig:
     endpoint: str = _env("QUICKNODE_ENDPOINT", "")
     x402_enabled: bool = _env_bool("QUICKNODE_X402_ENABLED", False)
     max_rps: int = _env_int("QUICKNODE_MAX_RPS", 100)
+    # Per-tenant BYOK RPC endpoint/credential resolution (default OFF, observe-only).
+    # When enabled, a tenant-scoped RPCGateway resolves the tenant's OWN read-only
+    # RPC endpoint+key as an ATOMIC pair from the BYOK vault; OFF resolves to this
+    # global endpoint (identity behavior). x402_enabled/max_rps stay platform-level.
+    tenant_byok_enabled: bool = _env_bool("AETHER_ONCHAIN_TENANT_BYOK_RPC_ENABLED", False)
 
 
 # ---------------------------------------------------------------------------
