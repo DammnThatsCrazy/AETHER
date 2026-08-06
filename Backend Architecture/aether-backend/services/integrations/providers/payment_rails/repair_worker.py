@@ -85,6 +85,8 @@ async def run_repair_cycle(
     # receipt age). Recomputed from the ledger so a stalled relay/repair surfaces.
     from datetime import datetime, timezone
 
+    from shared.temporal.instant import ensure_aware_utc
+
     from services.integrations.providers.payment_rails.receipts import (
         COMPLETE_STAGES, TERMINAL_STATES,
     )
@@ -103,9 +105,7 @@ async def run_repair_cycle(
         if not ts:
             continue
         try:
-            parsed = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = ensure_aware_utc(datetime.fromisoformat(str(ts).replace("Z", "+00:00")))
             oldest_age = max(oldest_age, (now - parsed).total_seconds())
         except (ValueError, TypeError):
             continue

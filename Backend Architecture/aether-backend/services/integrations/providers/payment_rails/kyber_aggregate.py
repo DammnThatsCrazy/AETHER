@@ -13,6 +13,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from shared.temporal.instant import ensure_aware_utc
+
 from services.integrations.providers.payment_rails import ADAPTERS
 from services.integrations.providers.payment_rails.kyber_contract import (
     CredentialSlotState,
@@ -40,9 +42,7 @@ def _age_seconds(iso_value: Optional[str], now: datetime) -> Optional[float]:
     if not iso_value:
         return None
     try:
-        parsed = datetime.fromisoformat(str(iso_value).replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = ensure_aware_utc(datetime.fromisoformat(str(iso_value).replace("Z", "+00:00")))
     except (ValueError, TypeError):
         return None
     return max(0.0, (now - parsed).total_seconds())
