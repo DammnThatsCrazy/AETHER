@@ -213,6 +213,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_payment_rail_sync_coro()
 
+    def _payment_canonical_repair() -> Coroutine[Any, Any, None]:
+        from services.integrations.providers.payment_rails.repair_worker import (
+            build_payment_canonical_repair_coro,
+        )
+
+        return build_payment_canonical_repair_coro()
+
     def _bronze_object_compaction() -> Coroutine[Any, Any, None]:
         from services.storage_lifecycle.worker import build_bronze_compaction_coro
 
@@ -331,6 +338,19 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="payment_rail_sync",
             factory=_payment_rail_sync,
             enabled=lambda: bool(settings.payment_rails.enabled),
+        ),
+        # Financial canonical-repair safety net: scans the durable receipt ledger
+        # for incomplete deliveries and idempotently re-drives canonical emission
+        # / outbox enqueue. Gated on both the payment-rails master flag and the
+        # canonical-repair flag (default ON outside local) so it self-heals
+        # delivery gaps in staging/production but stays off in local dev.
+        WorkerSpec(
+            name="payment_canonical_repair",
+            factory=_payment_canonical_repair,
+            enabled=lambda: bool(
+                settings.payment_rails.enabled
+                and settings.payment_rails.canonical_repair_enabled
+            ),
         ),
         # Object-backed Bronze compaction (FT-8): packs cold Bronze payloads
         # into externalized objects (hot searchable metadata stays in Postgres)

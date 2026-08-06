@@ -71,6 +71,12 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_sync_provider_pulled_total",
     "payment_rail_sync_transitioned_total",
     "payment_rail_sync_error_total",
+    # Payment Rail canonical-repair worker (services/.../payment_rails/repair_worker.py)
+    "payment_rail_repair_cycle_total",
+    "payment_rail_repair_error_total",
+    "payment_rail_repair_dead_lettered_total",
+    # Payment Rail durable webhook endpoint routing (services/.../payment_rails/routes.py)
+    "payment_rail_webhook_unknown_endpoint_total",
     # Payment Rail provider polling health (services/.../payment_rails/service.py)
     "payment_rail_provider_poll_degraded_total",
     # Card-linked payment rails (services/card_linked_payments)

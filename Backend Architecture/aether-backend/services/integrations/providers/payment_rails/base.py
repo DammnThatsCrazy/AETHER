@@ -222,12 +222,41 @@ def _credential_authority_enabled() -> bool:
     return getattr(settings.payment_rails, "credential_authority_enabled", False)
 
 
-def _credential_environment() -> str:
-    """CredentialAuthority environment for the current process. Single-environment
-    per process (founding-tenant posture); the follow-up cutover threads a
-    per-request environment before the flag defaults on."""
+def _resolve_environment(explicit: Optional[str] = None) -> str:
+    """Authoritative CredentialAuthority environment (``sandbox`` | ``live``).
+
+    An environment threaded from the durable webhook endpoint, the tenant
+    connection, or the provider configuration ALWAYS wins — provider credentials
+    are never selected solely from a process-wide ``AETHER_ENV`` when the
+    request/endpoint/connection carries the authoritative environment. Only when
+    nothing is threaded (e.g. a process-initiated sweep with no per-connection
+    environment) do we fall back to the deployment env: production/live → live,
+    everything else → sandbox. Deployment-style names are mapped so a value
+    threaded as ``production``/``staging`` still lands on the right credential
+    environment (staging validates against sandbox provider credentials).
+    """
+    from services.providers.credentials.schema import CredentialEnvironment
+
+    if explicit:
+        e = str(explicit).strip().lower()
+        if e in (CredentialEnvironment.SANDBOX, CredentialEnvironment.LIVE):
+            return e
+        if e in ("production", "prod"):
+            return CredentialEnvironment.LIVE
+        if e in ("sandbox", "sbx", "test", "staging", "dev", "development",
+                 "integration", "local"):
+            return CredentialEnvironment.SANDBOX
     env = (os.getenv("AETHER_ENV") or "").strip().lower()
-    return "live" if env in ("production", "prod", "live") else "sandbox"
+    return (
+        CredentialEnvironment.LIVE
+        if env in ("production", "prod", "live")
+        else CredentialEnvironment.SANDBOX
+    )
+
+
+def _credential_environment(explicit: Optional[str] = None) -> str:
+    """Back-compat alias for :func:`_resolve_environment`."""
+    return _resolve_environment(explicit)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -299,9 +328,13 @@ class PaymentRailAdapter(ABC):
 
     # ── Certification / polling declaration (honest, per-adapter) ─────────
     adapter_version: str = "1.0.0"
-    # Default provider API base for the pull path; a tenant vault endpoint
-    # override wins. Empty for webhook-only providers.
+    # Default provider API base for the pull path (production/live host). Empty
+    # for webhook-only providers.
     poll_base_url: str = ""
+    # Sandbox provider API base, selected when the threaded credential
+    # environment is ``sandbox``. Empty → the live host is used (providers that
+    # share one host across environments and distinguish only by the API key).
+    poll_base_url_sandbox: str = ""
     # Bounded pagination: never fetch more than this many pages in one sweep.
     poll_max_pages: int = 10
     poll_page_size: int = 50
@@ -355,13 +388,44 @@ class PaymentRailAdapter(ABC):
             vault_provider_name=self.vault_provider_name,
         )
 
-    async def is_configured(self, tenant_id: str) -> bool:
-        """Whether the tenant has stored provider credentials in the vault."""
+    def polling_slot(self) -> Optional[str]:
+        """The read-only polling credential slot for this adapter — the required
+        credential that is not the webhook signing secret — or ``None`` for a
+        webhook-only provider. Derived from ``cert_required_credentials`` so the
+        adapter, the slot registry, and the authority cannot disagree."""
+        for slot in self.cert_required_credentials:
+            if slot != self.WEBHOOK_SLOT:
+                return slot
+        return None
+
+    async def _vault_configured(self, tenant_id: str) -> bool:
         try:
             key = await get_payment_rails_vault().get_key(tenant_id, self.vault_provider_name)
         except ValueError:
             return False
         return bool(key)
+
+    async def is_configured(self, tenant_id: str, environment: Optional[str] = None) -> bool:
+        """Whether the tenant has provisioned this provider's required credentials.
+
+        Flag-ON (``credential_authority_enabled``): configured iff the durable
+        CredentialAuthority reports no missing required slots for the threaded
+        environment (webhook-only providers need only the signing secret; pull
+        providers need the polling slot too). A local-development compatibility
+        path falls back to the legacy vault when the authority is unreachable.
+        Flag-OFF: the legacy vault check, byte-for-byte.
+        """
+        if _credential_authority_enabled():
+            try:
+                from services.providers.credentials.authority import credential_authority
+
+                missing = await credential_authority.missing_required_slots(
+                    tenant_id, self.provider_name, _resolve_environment(environment)
+                )
+                return not missing
+            except Exception:  # noqa: BLE001 — authority unreachable
+                return await self._vault_configured(tenant_id) if _is_local_env() else False
+        return await self._vault_configured(tenant_id)
 
     def masked_identifier(self, tenant_id: str) -> str:
         """Masked credential reference for display — never key material."""
@@ -391,17 +455,20 @@ class PaymentRailAdapter(ABC):
             ),
         )
 
-    async def test_connection(self, tenant_id: str) -> ConnectionTestResult:
+    async def test_connection(
+        self, tenant_id: str, environment: Optional[str] = None
+    ) -> ConnectionTestResult:
         """Offline-safe connection test. Local mode never performs network IO.
 
         Webhook-only providers resolve to a typed ``webhook_only`` result once a
         signing secret is configured — that is a finished, supported terminal
-        state, not an unimplemented adapter.
+        state, not an unimplemented adapter. ``environment`` threads the
+        sandbox/live credential environment from the caller (connection/probe).
         """
-        if not await self.is_configured(tenant_id):
+        if not await self.is_configured(tenant_id, environment):
             return ConnectionTestResult(
                 provider=self.provider_name, ok=False, status="not_configured",
-                detail="missing credential (configure the key vault)",
+                detail="missing credential (provision the required slots)",
             )
         if self.webhook_only:
             return self._webhook_only_result()
@@ -410,9 +477,11 @@ class PaymentRailAdapter(ABC):
                 provider=self.provider_name, ok=True, status="ok",
                 detail="credential present; live check skipped (local mode)",
             )
-        return await self._live_connection_test(tenant_id)
+        return await self._live_connection_test(tenant_id, environment)
 
-    async def _live_connection_test(self, tenant_id: str) -> ConnectionTestResult:
+    async def _live_connection_test(
+        self, tenant_id: str, environment: Optional[str] = None
+    ) -> ConnectionTestResult:
         """Real provider health ping. Pull adapters override with an authenticated
         GET via the injectable client; webhook-only providers return the typed
         ``webhook_only`` result (there is nothing live to probe)."""
@@ -428,21 +497,25 @@ class PaymentRailAdapter(ABC):
     # Credential-authority slot name for the webhook signing secret.
     WEBHOOK_SLOT = "webhook_signing_secret"
 
-    async def _resolve_signing_secrets(self, tenant_id: str) -> list[str]:
+    async def _resolve_signing_secrets(
+        self, tenant_id: str, environment: Optional[str] = None
+    ) -> list[str]:
         """Acceptable webhook signing secrets, active first.
 
         Flag-ON (``credential_authority_enabled``): resolve ONLY from the durable
         CredentialAuthority — the active secret plus a valid rotation-overlap
         previous secret — with NO vault fallback (an unconfigured slot yields an
         empty list, so verification fails closed). Flag-OFF: the legacy single
-        BYOKKeyVault secret, byte-for-byte as before.
+        BYOKKeyVault secret, byte-for-byte as before. ``environment`` threads the
+        sandbox/live credential environment from the receiving endpoint.
         """
         if _credential_authority_enabled():
             try:
                 from services.providers.credentials.authority import credential_authority
 
                 return await credential_authority.get_verification_secrets(
-                    tenant_id, self.provider_name, _credential_environment(), self.WEBHOOK_SLOT
+                    tenant_id, self.provider_name,
+                    _resolve_environment(environment), self.WEBHOOK_SLOT,
                 )
             except Exception:  # noqa: BLE001 — authority unavailable → fail closed
                 return []
@@ -458,6 +531,7 @@ class PaymentRailAdapter(ABC):
         payload: bytes,
         signature: Optional[str],
         timestamp: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> bool:
         """Verify a provider webhook signature against the tenant's signing secret.
 
@@ -468,7 +542,7 @@ class PaymentRailAdapter(ABC):
         """
         if not signature:
             return False
-        secrets = await self._resolve_signing_secrets(tenant_id)
+        secrets = await self._resolve_signing_secrets(tenant_id, environment)
         if not secrets:
             return False
         if self.signature_scheme == "timestamped_hex":
@@ -571,7 +645,8 @@ class PaymentRailAdapter(ABC):
             return self._parse_poll_records(tenant_id, records, **params)
         if not self.polling_supported:
             return []
-        if not await self.is_configured(tenant_id):
+        environment = params.get("environment")
+        if not await self.is_configured(tenant_id, environment):
             return []
         if _is_local_env():
             return []
@@ -685,21 +760,69 @@ class PaymentRailAdapter(ABC):
         if isinstance(poll_state, dict):
             poll_state["health"] = value
 
-    async def _require_secret(self, tenant_id: str) -> Optional[str]:
-        """Tenant BYOK secret for this provider, or None when unconfigured."""
+    async def _vault_polling_secret(self, tenant_id: str) -> Optional[str]:
         try:
             return await get_payment_rails_vault().get_key(tenant_id, self.vault_provider_name)
         except ValueError:
             return None
 
-    async def _resolve_base_url(self, tenant_id: str) -> str:
-        """Provider API base — a tenant vault endpoint override wins over the
-        adapter default (supports sandbox/regional hosts without code change)."""
-        try:
-            endpoint = await get_payment_rails_vault().get_endpoint(tenant_id, self.vault_provider_name)
-        except Exception:  # pragma: no cover - defensive
-            endpoint = None
-        return (endpoint or self.poll_base_url or "").rstrip("/")
+    async def _require_secret(
+        self, tenant_id: str, environment: Optional[str] = None
+    ) -> Optional[str]:
+        """Tenant polling secret for this provider's read-only API slot.
+
+        Flag-ON (``credential_authority_enabled``): resolve the ACTIVE polling-slot
+        secret (``onramp_api_key`` / ``server_api_key`` / ``api_key``) from the
+        durable CredentialAuthority for the threaded environment, with NO vault
+        fallback outside local development — an absent slot yields ``None`` so the
+        pull path degrades to ``not_configured`` (never a legacy-vault read). In
+        local development the authority may be unprovisioned, so a vault read
+        preserves dev ergonomics. Flag-OFF: the legacy BYOK vault secret.
+        """
+        if _credential_authority_enabled():
+            slot = self.polling_slot()
+            if not slot:
+                return None
+            try:
+                from services.providers.credentials.authority import credential_authority
+
+                return await credential_authority.get_active_secret(
+                    tenant_id, self.provider_name, _resolve_environment(environment), slot
+                )
+            except Exception:  # noqa: BLE001 — no active slot / authority down
+                # Local-development-only compatibility read; outside local the
+                # authority is the sole source and this fails closed.
+                return await self._vault_polling_secret(tenant_id) if _is_local_env() else None
+        return await self._vault_polling_secret(tenant_id)
+
+    async def _resolve_base_url(
+        self, tenant_id: str, environment: Optional[str] = None
+    ) -> str:
+        """Provider API base resolved BY ENVIRONMENT (server-owned).
+
+        The sandbox/live host is selected from the threaded credential
+        environment — never a caller-controlled URL. In local development a tenant
+        vault endpoint override still wins (dev ergonomics); outside local the
+        server-declared per-environment host is authoritative.
+        """
+        from services.providers.credentials.schema import CredentialEnvironment
+
+        env = _resolve_environment(environment)
+        server_base = (
+            self.poll_base_url_sandbox
+            if env == CredentialEnvironment.SANDBOX and self.poll_base_url_sandbox
+            else self.poll_base_url
+        )
+        if _is_local_env():
+            try:
+                endpoint = await get_payment_rails_vault().get_endpoint(
+                    tenant_id, self.vault_provider_name
+                )
+            except Exception:  # pragma: no cover - defensive
+                endpoint = None
+            if endpoint:
+                return endpoint.rstrip("/")
+        return (server_base or "").rstrip("/")
 
     def _degraded(self, poll_state: Optional[dict], exc: "ProviderPollError") -> None:
         """Record a classified poll failure without crashing the sweep."""

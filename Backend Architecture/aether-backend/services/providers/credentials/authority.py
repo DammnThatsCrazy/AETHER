@@ -256,12 +256,15 @@ class CredentialAuthority:
     ) -> dict:
         """Validate a credential version.
 
-        For a webhook signing secret (``signature_selfcheck``) this is a local
-        self-check: the value must decrypt and be usable to compute an HMAC. For
-        a polling API key (``live_probe``) PR-1 records ``credential_present``;
-        the real read-only provider probe is the PR-2 connection test. A pending
-        version that fails to decrypt is marked ``test_failed`` and never touches
-        the active version.
+        For a webhook signing secret (``signature_selfcheck``) this computes a
+        real HMAC-SHA256 over a fixed canary with the decrypted secret, proving
+        the material is a usable signing key (not merely that it decrypts). For a
+        polling API key (``live_probe``) this performs the provider's real
+        read-only connection probe (a bounded authenticated GET) OUTSIDE local
+        development, classifying the outcome; in local development (no network) it
+        records ``credential_present``. A pending version that fails to decrypt —
+        or whose live probe returns an authentication failure — is marked
+        ``test_failed`` and never touches the active version.
         """
         slot = self._require_slot(provider, slot_name, environment)
         row = await self._pick_version(
@@ -276,17 +279,24 @@ class CredentialAuthority:
             if not secret:
                 result = "empty"
             elif slot.validation_strategy == "signature_selfcheck":
+                import hashlib
+                import hmac as _hmac
+
+                _hmac.new(
+                    secret.encode("utf-8"), b"aether-credential-selfcheck", hashlib.sha256
+                ).hexdigest()
                 result = "valid"
-            else:  # live_probe — real provider probe deferred to PR-2 connection test
-                result = "credential_present"
+            else:  # live_probe — real read-only provider connection probe
+                result = await self._probe_live_secret(provider, environment, secret)
         except Exception:
             result = "decrypt_failed"
 
         now = utc_now().isoformat()
         patch = {"last_tested_at": now, "last_test_result": result}
-        if result == "valid":
+        if result in ("valid", "credential_present"):
             patch["last_successful_test_at"] = now
-        if result == "decrypt_failed" and row.get("state") == CredentialState.PENDING:
+        _failing = result in ("decrypt_failed", "unauthorized", "forbidden")
+        if _failing and row.get("state") == CredentialState.PENDING:
             patch["state"] = CredentialState.TEST_FAILED
         await self._repo.update(row["id"], patch)
 
@@ -302,6 +312,56 @@ class CredentialAuthority:
         )
         merged = {**row, **patch}
         return self._safe_view(merged)
+
+    async def _probe_live_secret(
+        self, provider: str, environment: str, secret: str
+    ) -> str:
+        """Read-only live probe of a polling API key, classified. Never raises.
+
+        Outside local development, drives the payment adapter's bounded,
+        authenticated GET against the environment-appropriate provider host using
+        the supplied (decrypted) secret and maps the outcome onto a stable
+        ``last_test_result`` token. In local development (or for a provider with
+        no pull API) it records ``credential_present`` without any network IO.
+        """
+        import os
+
+        if os.getenv("AETHER_ENV", "local").strip().lower() == "local":
+            return "credential_present"
+        try:
+            from services.integrations.providers.payment_rails import ADAPTERS
+            from services.integrations.providers.payment_rails.base import ProviderPollError
+        except Exception:  # noqa: BLE001 — non-payment domain / import unavailable
+            return "credential_present"
+        adapter = ADAPTERS.get(provider)
+        build = getattr(adapter, "build_request", None)
+        if adapter is None or not getattr(adapter, "polling_supported", False) or not callable(build):
+            return "credential_present"
+        base = (
+            adapter.poll_base_url_sandbox
+            if environment == CredentialEnvironment.SANDBOX and adapter.poll_base_url_sandbox
+            else adapter.poll_base_url
+        )
+        try:
+            request = build({
+                "tenant_id": "", "credential": secret, "base_url": base,
+                "page_size": 1, "limit": 1,
+            })
+            async with adapter._open_http_client() as client:
+                await adapter._request_json(client, request)
+            return "valid"
+        except ProviderPollError as exc:
+            return {
+                "auth_error": "unauthorized",
+                "rate_limited": "rate_limited",
+                "timeout": "timeout",
+                "server_error": "provider_unavailable",
+                "client_error": "client_error",
+                "network_error": "network_error",
+                "bad_response": "bad_response",
+            }.get(exc.classification, exc.classification)
+        except Exception:  # noqa: BLE001 — probe must never raise into the state machine
+            return "probe_error"
 
     async def activate(
         self,

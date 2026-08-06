@@ -187,6 +187,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `OUTCOME-LEDGER.md`
 - `OUTCOME-PRICING-DIMENSIONS.md`
 - `PAYMENT-OPERATIONS.md`
+- `PAYMENT-RAILS-ACTIVATION.md`
 - `PENETRATION-TEST-READINESS.md`
 - `PERFORMANCE-BASELINES.md`
 - `PHASE-20-GAP-LEDGER.md`

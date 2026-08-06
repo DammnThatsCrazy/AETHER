@@ -2123,6 +2123,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/PAYMENT-RAILS-ACTIVATION.md",
+      "title": "Payment-Rail Financial Plane — Activation, Operations & Rollback",
+      "slug": "operations/payment-rails-activation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/PENETRATION-TEST-READINESS.md",
       "title": "Penetration-Test Readiness",
       "slug": "security/penetration-test-readiness",

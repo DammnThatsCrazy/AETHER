@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { restClient } from './rest/client';
 import { log } from '@kyber/lib/logging';
+import { fleetHealthResponseSchema, tenantDiagnosticsResponseSchema } from '@kyber/types/payment-rails';
 import type {
   SessionsResponse, DevicesResponse, JourneysResponse, WalletsResponse,
   RelationshipsResponse, DelegationsResponse,
@@ -1810,9 +1811,9 @@ export const api = {
 
       // ── Payment rail observability (fleet health, aggregate-only) ─────────
       paymentRailsHealth: () =>
-        restClient.get('/v1/admin/kyber/payment-rails/health', wrap(unknownSchema)).then(r => r.data),
+        restClient.get('/v1/admin/kyber/payment-rails/health', wrap(fleetHealthResponseSchema)).then(r => r.data),
       paymentRailsTenant: (tenantId: string) =>
-        restClient.get(`/v1/admin/kyber/payment-rails/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+        restClient.get(`/v1/admin/kyber/payment-rails/${encodeURIComponent(tenantId)}`, wrap(tenantDiagnosticsResponseSchema)).then(r => r.data),
 
       // ── Card-linked payment rail observability (diagnostics, aggregate-only) ──
       cardLinkedDiagnostics: (tenantId: string) =>

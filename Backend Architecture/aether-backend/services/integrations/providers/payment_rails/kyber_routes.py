@@ -14,10 +14,8 @@ from config.settings import settings
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger
 
-from services.integrations.providers.payment_rails import ADAPTERS
 from services.integrations.providers.payment_rails.service import (
     get_payment_rails_service,
-    provider_enabled,
 )
 
 logger = get_logger("aether.payment_rails.kyber")
@@ -42,56 +40,40 @@ def _require_kyber_enabled() -> None:
 
 @kyber_router.get("/health")
 async def fleet_health(request: Request):
-    """Cross-tenant payment-rail fleet aggregates (no tenant-private payloads)."""
+    """Cross-tenant payment-rail fleet aggregates (typed operator contract).
+
+    Returns the shared, versioned :class:`FleetHealthResponse` — fleet totals,
+    per-provider fleet rows, and per-tenant fleet rows — with sanitized counters
+    and health only (never tenant-private payment payloads). Unknown values are
+    ``null`` (distinguished from a real 0); provider state distinguishes
+    healthy / degraded / error / not_configured / disabled / unknown.
+    """
     _require_kyber_enabled()
     _require_operator(request)
-    service = get_payment_rails_service()
+    from services.integrations.providers.payment_rails.kyber_aggregate import (
+        build_fleet_health,
+    )
 
-    sessions = await service.repos.sessions.list_all()
-    tenants = sorted({s.get("tenant_id") for s in sessions if s.get("tenant_id")})
-
-    providers = []
-    for name in ADAPTERS:
-        p_sessions = [s for s in sessions if s.get("provider") == name]
-        by_status: dict[str, int] = {}
-        for s in p_sessions:
-            by_status[s.get("status", "unresolved")] = (
-                by_status.get(s.get("status", "unresolved"), 0) + 1
-            )
-        by_recon: dict[str, int] = {}
-        for s in p_sessions:
-            state = s.get("reconciliation_state", "sdk_only")
-            by_recon[state] = by_recon.get(state, 0) + 1
-        providers.append({
-            "provider": name,
-            "enabled": provider_enabled(name),
-            "tenants_observed": len({s.get("tenant_id") for s in p_sessions}),
-            "sessions_total": len(p_sessions),
-            "sessions_by_status": by_status,
-            "sessions_by_reconciliation_state": by_recon,
-        })
-
-    return APIResponse(data={
-        "tenants_observed": len(tenants),
-        "providers": providers,
-    }).to_dict()
+    response = await build_fleet_health(get_payment_rails_service())
+    return APIResponse(data=response.model_dump(mode="json")).to_dict()
 
 
 @kyber_router.get("/{tenant_id}")
 async def tenant_diagnostics(tenant_id: str, request: Request, provider: Optional[str] = None):
-    """Per-tenant adapter/config/reconciliation diagnostics for operators."""
+    """Per-tenant operator diagnostics (typed contract).
+
+    Returns the shared :class:`TenantDiagnosticsResponse`: per-provider adapter +
+    health (nested), credential-slot states (no secret values), webhook-endpoint
+    registration state, delivery backlogs, recent safe audit records, and recent
+    repair outcomes.
+    """
     _require_kyber_enabled()
     _require_operator(request)
-    service = get_payment_rails_service()
-
-    health = await service.health(tenant_id)
-    if provider:
-        health = [h for h in health if h.provider == provider]
-    audits = await service.repos.audit.list_for_tenant(
-        tenant_id, provider=provider, limit=50
+    from services.integrations.providers.payment_rails.kyber_aggregate import (
+        build_tenant_diagnostics,
     )
-    return APIResponse(data={
-        "tenant_id": tenant_id,
-        "providers": [h.model_dump(mode="json") for h in health],
-        "recent_audit": audits,
-    }).to_dict()
+
+    response = await build_tenant_diagnostics(
+        get_payment_rails_service(), tenant_id, provider
+    )
+    return APIResponse(data=response.model_dump(mode="json")).to_dict()

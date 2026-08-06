@@ -9,6 +9,7 @@ per-currency native totals with explicit currency labels.
 from __future__ import annotations
 
 from collections import defaultdict
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from services.integrations.providers.payment_rails.repository import (
@@ -28,8 +29,11 @@ async def get_payment_rails_profile_summary(tenant_id: str, entity_id: str) -> d
     by_rail: dict[str, int] = defaultdict(int)
     by_status: dict[str, int] = defaultdict(int)
     by_reconciliation: dict[str, int] = defaultdict(int)
-    # Native totals keyed by currency/asset — never merged into one scalar.
-    completed_native_totals: dict[str, float] = defaultdict(float)
+    # Native totals keyed by currency/asset — never merged into one scalar, and
+    # summed with Decimal (never binary float) so per-currency totals are exact
+    # and preserve provider-native precision. A malformed amount is skipped, never
+    # coerced to zero into the running total.
+    completed_native_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
 
     for s in attributed:
         by_provider[s.get("provider", "unknown")] += 1
@@ -41,8 +45,8 @@ async def get_payment_rails_profile_summary(tenant_id: str, entity_id: str) -> d
             amount = s.get("destination_amount") or s.get("source_amount")
             if currency and amount is not None:
                 try:
-                    completed_native_totals[str(currency)] += float(amount)
-                except (TypeError, ValueError):
+                    completed_native_totals[str(currency)] += Decimal(str(amount))
+                except (InvalidOperation, ValueError):
                     pass
 
     recent = sorted(attributed, key=lambda s: s.get("occurred_at") or "", reverse=True)[:10]
@@ -54,7 +58,7 @@ async def get_payment_rails_profile_summary(tenant_id: str, entity_id: str) -> d
         "by_status": dict(by_status),
         "by_reconciliation_state": dict(by_reconciliation),
         "completed_native_totals": {
-            currency: f"{total:.8f}".rstrip("0").rstrip(".")
+            currency: format(total.normalize(), "f")
             for currency, total in completed_native_totals.items()
         },
         "recent_sessions": [
