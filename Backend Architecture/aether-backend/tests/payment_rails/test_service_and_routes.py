@@ -309,7 +309,14 @@ class TestRoutes:
         await service.repos.sessions.save(tenant, record)
 
         response = await rails_routes.repair_canonical_backlog(FakeRequest(tenant))
-        assert response["data"] == {"scanned": 1, "repaired": 1, "events_reemitted": 2}
+        data = response["data"]
+        # The manual endpoint now drives the fuller receipt+session repair.
+        assert data["sessions_scanned"] == 1
+        assert data["sessions_repaired"] == 1
+        assert data["events_reemitted"] == 2
+        # ...and the manual action is audited (tenant-scoped).
+        audits = await service.repos.audit.list_for_tenant(tenant, action="canonical_repair_manual")
+        assert len(audits) == 1
 
     async def test_repair_route_rejected_when_master_flag_off(self, monkeypatch):
         patched = dataclasses.replace(settings.payment_rails, enabled=False)

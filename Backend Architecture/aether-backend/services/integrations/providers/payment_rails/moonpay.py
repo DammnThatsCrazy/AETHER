@@ -305,15 +305,24 @@ def _failure_reason(data: dict[str, Any]) -> Optional[str]:
 
 
 def _sum_fee(data: dict[str, Any]) -> Optional[str]:
-    total = 0.0
-    seen = False
+    """Exact-decimal sum of MoonPay's fee components.
+
+    Uses ``Decimal`` (never binary float) so fractional fee amounts sum exactly
+    and provider-native precision is preserved. A present-but-malformed component
+    makes the total unreliable, so we return ``None`` (no fee reported) rather
+    than silently coercing it to zero and understating the fee. ``None`` is also
+    returned when no fee component is present.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    total: Optional[Decimal] = None
     for key in ("feeAmount", "extraFeeAmount", "networkFeeAmount"):
         value = data.get(key)
         if value in (None, ""):
             continue
         try:
-            total += float(value)
-            seen = True
-        except (TypeError, ValueError):
-            continue
-    return f"{total:.8f}".rstrip("0").rstrip(".") if seen else None
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        total = amount if total is None else total + amount
+    return str(total) if total is not None else None

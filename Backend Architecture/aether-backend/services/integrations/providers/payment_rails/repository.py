@@ -458,6 +458,10 @@ class PaymentRailsRepositories:
     """Bundle of the payment-rail stores used by the service layer."""
 
     def __init__(self) -> None:
+        from services.integrations.providers.payment_rails.receipts import (
+            ProviderReceiptRepository,
+        )
+
         self.sessions = FundingSessionRepository()
         self.events = ProviderEventRepository()
         self.accounts = ProviderAccountRepository()
@@ -465,6 +469,7 @@ class PaymentRailsRepositories:
         self.virtual_accounts = VirtualAccountRepository()
         self.reconciliation = ReconciliationRepository()
         self.audit = PaymentRailsAuditRepository()
+        self.receipts = ProviderReceiptRepository()
 
 
 _repositories: Optional[PaymentRailsRepositories] = None

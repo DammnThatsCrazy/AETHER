@@ -334,17 +334,25 @@ async def payment_rails_health(request: Request):
 
 @router.post("/payment-rails/canonical-backlog/repair")
 async def repair_canonical_backlog(request: Request, limit: int = 500):
-    """On-demand (admin) recovery of funding sessions with a canonical-delivery
-    gap — implied ``payment_*`` events never delivered because of a crash before
-    emission or an outbox relay outage. Re-drives emission idempotently (the
-    deterministic canonical id dedupes on both delivery paths), so the call is
-    safe to repeat. ``limit`` bounds the per-call scan (clamped to 1..2000).
-    Returns ``{scanned, repaired, events_reemitted}``.
+    """On-demand (admin) canonical-delivery repair for this tenant.
+
+    Scans the durable receipt ledger for incomplete deliveries AND funding
+    sessions with an emission gap (a crash before emission or an outbox-relay
+    outage), and idempotently re-drives canonical emission / outbox enqueue — the
+    deterministic canonical id dedupes on both delivery paths, so the call is safe
+    to repeat and never double-emits or double-bills. Tenant-scoped, authorized
+    (admin), idempotent, and audited. ``limit`` bounds the per-call scan (clamped
+    to 1..2000). Returns the per-run repair counters.
     """
     _require_rails_enabled()
     tenant_id = _tenant_id(request, "admin")
     bounded = max(1, min(int(limit), 2000))
-    stats = await get_payment_rails_service().repair_canonical_backlog(
-        tenant_id, limit=bounded
-    )
+    service = get_payment_rails_service()
+    stats = await service.run_canonical_repair(tenant_id, limit=bounded)
+    await service.repos.audit.record(tenant_id, {
+        "action": "canonical_repair_manual",
+        "provider": "*",
+        "actor": _endpoint_actor(request),
+        "detail": stats,
+    })
     return APIResponse(data=stats).to_dict()
