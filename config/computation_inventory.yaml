@@ -200,10 +200,10 @@ computations:
     unit: score
     grain: subject
     time_semantics: as-of evidence
-    missing_input_behavior: absent evidence treated as trustworthy (should be low/unknown)
+    missing_input_behavior: absent risk evidence -> low prior + evidence_coverage (fixed); score_kind=heuristic
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [missing_evidence_as_benign, single_composite_scalar, unversioned_weights]
+    known_defects: [single_composite_scalar, unversioned_weights]
     priority: P0
     proposed_definition_id: null
     migration_state: not_started

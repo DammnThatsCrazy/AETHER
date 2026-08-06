@@ -34,6 +34,13 @@ except ImportError:
 # TRUST SCORE RESULT
 # ═══════════════════════════════════════════════════════════════════════════
 
+# The prior used when a component has NO observed evidence. Absent risk
+# evidence is NOT benign — trust is not inferred from silence, so the component
+# defaults to a conservative LOW prior (matching the identity/behavioral absent
+# defaults) and the gap is disclosed via ``evidence_coverage``.
+ABSENT_EVIDENCE_PRIOR = 0.1
+
+
 @dataclass
 class TrustScore:
     entity_id: str
@@ -43,6 +50,10 @@ class TrustScore:
     behavioral_trust: float    # 0.0 – 1.0
     composite: float           # Weighted average
     components: dict           # Raw model outputs used
+    # Which components had real evidence vs a low prior from absence. This is a
+    # HeuristicScore composite, not a calibrated probability.
+    evidence_coverage: Optional[dict] = None
+    score_kind: str = "heuristic"
 
     def to_dict(self) -> dict:
         return {
@@ -53,6 +64,8 @@ class TrustScore:
             "behavioral_trust": round(self.behavioral_trust, 4),
             "composite": round(self.composite, 4),
             "components": self.components,
+            "evidence_coverage": self.evidence_coverage or {},
+            "score_kind": self.score_kind,
         }
 
 
@@ -133,9 +146,18 @@ class TrustScoreComposite:
             if ml_result:
                 anomaly_score = ml_result.get("anomaly_score", 0.0)
 
-        fraud_score = fraud_score if fraud_score is not None else 0.0
-        anomaly_score = anomaly_score if anomaly_score is not None else 0.0
-        transaction_trust = max(0.0, 1.0 - (fraud_score / 100.0)) * (1.0 - anomaly_score)
+        fraud_observed = fraud_score is not None
+        anomaly_observed = anomaly_score is not None
+        fraud_score = fraud_score if fraud_observed else 0.0
+        anomaly_score = anomaly_score if anomaly_observed else 0.0
+        if not fraud_observed and not anomaly_observed:
+            # No risk evidence at all — do NOT read absence as full trust
+            # (the prior bug produced transaction_trust = 1.0 from zero evidence).
+            transaction_trust = ABSENT_EVIDENCE_PRIOR
+            transaction_evidence = "missing"
+        else:
+            transaction_trust = max(0.0, 1.0 - (fraud_score / 100.0)) * (1.0 - anomaly_score)
+            transaction_evidence = "complete" if (fraud_observed and anomaly_observed) else "partial"
         components["fraud_score"] = fraud_score
         components["anomaly_score"] = anomaly_score
 
@@ -150,6 +172,7 @@ class TrustScoreComposite:
             if ml_result:
                 bot_score = ml_result.get("confidence", 0.0)
 
+        identity_observed = identity_confidence is not None or bot_score is not None
         identity_confidence = identity_confidence if identity_confidence is not None else 0.1
         bot_score = bot_score if bot_score is not None else 0.0
         identity_trust = identity_confidence * (1.0 - bot_score)
@@ -174,6 +197,7 @@ class TrustScoreComposite:
             if ml_result:
                 churn_risk = ml_result.get("churn_probability", 0.0)
 
+        behavioral_observed = session_score is not None or churn_risk is not None
         session_score = session_score if session_score is not None else 0.1
         churn_risk = churn_risk if churn_risk is not None else 0.0
         behavioral_trust = session_score * (1.0 - churn_risk)
@@ -188,6 +212,15 @@ class TrustScoreComposite:
         )
         composite = max(0.0, min(1.0, composite))
 
+        evidence_coverage = {
+            "transaction": transaction_evidence,
+            "identity": "complete" if identity_observed else "missing",
+            "behavioral": "complete" if behavioral_observed else "missing",
+            "observed_components": int(transaction_evidence != "missing")
+            + int(identity_observed)
+            + int(behavioral_observed),
+            "total_components": 3,
+        }
         score = TrustScore(
             entity_id=entity_id,
             entity_type=entity_type,
@@ -196,6 +229,7 @@ class TrustScoreComposite:
             behavioral_trust=behavioral_trust,
             composite=composite,
             components=components,
+            evidence_coverage=evidence_coverage,
         )
 
         metrics.increment("trust_score_computed", labels={"entity_type": entity_type})
