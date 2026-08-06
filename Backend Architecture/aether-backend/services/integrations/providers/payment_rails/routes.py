@@ -26,7 +26,7 @@ from shared.common.common import (
     ForbiddenError,
     NotFoundError,
 )
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 
 from services.integrations.providers.payment_rails import ADAPTERS, get_adapter
 from services.integrations.providers.payment_rails.service import (
@@ -138,6 +138,11 @@ async def payment_rail_webhook_by_endpoint(provider: str, endpoint_id: str, requ
 
     endpoint = await webhook_endpoint_registry.resolve(endpoint_id, provider)
     if endpoint is None:
+        # Unknown/revoked/cross-provider/cross-tenant/cross-environment endpoint id.
+        # Metered (metadata only) so repeated probing is alertable; the external
+        # response is a uniform 404 that never reveals which dimension mismatched.
+        metrics.increment("payment_rail_webhook_unknown_endpoint_total",
+                          labels={"provider": provider})
         raise NotFoundError("webhook endpoint")
 
     payload = await request.body()

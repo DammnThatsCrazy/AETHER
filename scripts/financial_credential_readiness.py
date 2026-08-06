@@ -142,6 +142,97 @@ def evaluate(descriptors, run_certification, readiness_rank, CredentialReadiness
     }
 
 
+def payment_operational_checks() -> list[dict]:
+    """Fail-closed, code+config-level operational readiness checks for the
+    payment-rail cohort. Each returns ``{name, ok, detail}`` with a SPECIFIC
+    detail identifying the exact missing configuration when it fails — never a
+    generic pass/fail. These assert the delivery-integrity plumbing has landed
+    (migrations, workers, release flags, typed contract); the live-evidence
+    dimensions (migration APPLIED, credential ACTIVE, endpoint registered,
+    sandbox evidence, staging soak) are gated separately by the pilot preflight +
+    evidence bundle, which fail closed when their artifacts are absent.
+    """
+    checks: list[dict] = []
+
+    def _add(name: str, ok: bool, detail: str) -> None:
+        checks.append({"name": name, "ok": bool(ok), "detail": detail})
+
+    # 1. Migrations present + a single Alembic head.
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        cfg = Config()
+        cfg.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+        heads = ScriptDirectory.from_config(cfg).get_heads()
+        _add("single_alembic_head", len(heads) == 1,
+             f"expected exactly one head, found {list(heads)}")
+        versions = {p.name for p in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
+        _add("receipt_migration_present",
+             any("payment_provider_receipts" in v for v in versions),
+             "migration 20260817_payment_provider_receipts.py is missing")
+        _add("endpoint_unique_migration_present",
+             any("payment_webhook_endpoint_active_unique" in v for v in versions),
+             "migration 20260816_payment_webhook_endpoint_active_unique.py is missing")
+    except Exception as exc:  # pragma: no cover
+        _add("migrations_loadable", False, f"could not resolve migrations: {exc}")
+
+    # 2. Supervised workers registered + claimed by a runtime role.
+    try:
+        from services.runtime.roles import ROLE_TO_SPEC_NAMES
+
+        class _S:  # a stand-in settings with the attrs build_worker_specs reads
+            def __getattr__(self, _):  # pragma: no cover - never actually read
+                return None
+
+        claimed = set().union(*ROLE_TO_SPEC_NAMES.values())
+        for worker in ("payment_rail_sync", "payment_canonical_repair", "event_outbox_relay"):
+            _add(f"worker_role_claimed:{worker}", worker in claimed,
+                 f"worker {worker!r} is not claimed by any runtime role in ROLE_TO_SPEC_NAMES")
+    except Exception as exc:  # pragma: no cover
+        _add("workers_registered", False, f"could not resolve worker roles: {exc}")
+
+    # 3. Release feature flags exist on the settings object.
+    try:
+        from config.settings import settings
+
+        pr = settings.payment_rails
+        for flag in ("credential_authority_enabled", "canonical_outbox_enabled",
+                     "canonical_repair_enabled", "usage_metering_enabled",
+                     "legacy_webhook_route_enabled"):
+            _add(f"flag_present:{flag}", hasattr(pr, flag),
+                 f"settings.payment_rails.{flag} is not defined")
+        # Outbox relay flag (separate config namespace).
+        _add("flag_present:outbox_relay_enabled",
+             hasattr(settings.ingestion_v2, "outbox_relay_enabled"),
+             "settings.ingestion_v2.outbox_relay_enabled is not defined")
+    except Exception as exc:  # pragma: no cover
+        _add("settings_flags", False, f"could not resolve settings flags: {exc}")
+
+    # 4. Typed operator contract + receipt/repair modules importable.
+    for mod, label in (
+        ("services.integrations.providers.payment_rails.kyber_contract", "kyber_contract"),
+        ("services.integrations.providers.payment_rails.receipts", "receipt_lifecycle"),
+        ("services.integrations.providers.payment_rails.repair_worker", "repair_worker"),
+    ):
+        try:
+            __import__(mod)
+            _add(f"module_present:{label}", True, "importable")
+        except Exception as exc:  # pragma: no cover
+            _add(f"module_present:{label}", False, f"{mod} failed to import: {exc}")
+
+    return checks
+
+
+def _print_operational(checks: list[dict]) -> None:
+    print()
+    print("Operational readiness (code + configuration invariants)")
+    print("-" * 78)
+    for c in checks:
+        mark = "PASS" if c["ok"] else "FAIL"
+        print(f"  [{mark}] {c['name']}" + ("" if c["ok"] else f" — {c['detail']}"))
+
+
 def _print_report(verdict: dict, domain: str | None) -> None:
     scope = domain or "+".join(FINANCIAL_DOMAINS)
     print("Financial credential-readiness certification — readiness truth")
@@ -208,12 +299,28 @@ def main(argv: list[str] | None = None) -> int:
 
     _print_report(verdict, args.domain)
 
+    # Operational (code+config) checks apply to the payment-rail cohort.
+    payments_in_scope = args.domain in (None, "payments")
+    op_checks = payment_operational_checks() if payments_in_scope else []
+    op_failures = [c for c in op_checks if not c["ok"]]
+    if op_checks:
+        _print_operational(op_checks)
+
     print()
+    failed = False
     if verdict["not_ready"]:
+        failed = True
         print(f"{len(verdict['not_ready'])} financial provider(s) not READY:")
         for p in verdict["not_ready"]:
             reason = ",".join(p["failed_checks"]) or f"state={p['state']}"
             print(f"  - {p['domain']}:{p['provider']} ({reason})")
+    if op_failures:
+        failed = True
+        print(f"{len(op_failures)} operational readiness check(s) FAILED:")
+        for c in op_failures:
+            print(f"  - {c['name']}: {c['detail']}")
+
+    if failed:
         if args.strict:
             print("strict gate: FAIL", file=sys.stderr)
             return 1
@@ -222,7 +329,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         "all financial providers are READY "
-        "(>= CREDENTIAL_WAITING, not SCAFFOLDED, all certification checks pass)."
+        "(>= CREDENTIAL_WAITING, not SCAFFOLDED, all certification checks pass); "
+        "operational code+config invariants satisfied."
     )
     return 0
 

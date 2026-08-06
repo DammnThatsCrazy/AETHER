@@ -81,6 +81,35 @@ async def run_repair_cycle(
 
     metrics.increment("payment_rail_repair_cycle_total")
     metrics.gauge("payment_rail_repair_heartbeat", 1.0)
+    # Post-cycle backlog gauges for alerting (canonical backlog, oldest incomplete
+    # receipt age). Recomputed from the ledger so a stalled relay/repair surfaces.
+    from datetime import datetime, timezone
+
+    from services.integrations.providers.payment_rails.receipts import (
+        COMPLETE_STAGES, TERMINAL_STATES,
+    )
+
+    post = await service.repos.receipts.list_all()
+    incomplete = [
+        r for r in post
+        if r.get("current_stage") not in COMPLETE_STAGES
+        and r.get("current_stage") not in TERMINAL_STATES
+    ]
+    metrics.gauge("payment_rail_canonical_backlog", float(len(incomplete)))
+    now = datetime.now(timezone.utc)
+    oldest_age = 0.0
+    for r in incomplete:
+        ts = r.get("received_at")
+        if not ts:
+            continue
+        try:
+            parsed = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            oldest_age = max(oldest_age, (now - parsed).total_seconds())
+        except (ValueError, TypeError):
+            continue
+    metrics.gauge("payment_rail_oldest_incomplete_receipt_seconds", oldest_age)
     if stats["receipts_dead_lettered"]:
         metrics.increment(
             "payment_rail_repair_dead_lettered_total",

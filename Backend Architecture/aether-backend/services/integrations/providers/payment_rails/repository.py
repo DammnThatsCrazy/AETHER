@@ -277,6 +277,10 @@ class ProviderEventRepository:
             filters["provider"] = provider
         return await self._store.find(**filters)
 
+    async def list_all(self) -> list[dict]:
+        """Cross-tenant listing — Kyber operator aggregates only."""
+        return await self._store.find()
+
 
 class ProviderAccountRepository:
     """One connection-metadata record per (tenant_id, provider)."""
@@ -452,6 +456,10 @@ class PaymentRailsAuditRepository:
         records = await self._store.find(**filters)
         records.sort(key=lambda r: r.get("occurred_at") or "", reverse=True)
         return records[:limit]
+
+    async def list_all(self) -> list[dict]:
+        """Cross-tenant listing — Kyber operator aggregates only."""
+        return await self._store.find()
 
 
 class PaymentRailsRepositories:

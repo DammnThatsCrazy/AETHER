@@ -624,3 +624,139 @@ groups:
         annotations:
           summary: "Semantic replay jobs active for 2+ hours"
           description: "{{ $value }} replay job(s) have been active continuously for 2+ hours. Check job progress and pause/cancel controls — replay reads only Bronze and must never contend with live ingestion."
+
+  # ── Payment-rail financial plane ──────────────────────────────────────────
+  # Thresholds below are the default (staging) tuning; production overlays a
+  # per-environment rules file that adjusts them. No secrets or provider payloads
+  # ever appear in an alert — labels carry provider/health tokens only.
+  - name: aether_payment_rails
+    rules:
+      - alert: PaymentRailNoWebhookInWindow
+        expr: max by (provider) (payment_rail_provider_freshness_seconds{mode="webhook_only"}) > 86400
+        for: 15m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "No verified webhook for {{ $labels.provider }} in >24h"
+          description: "Provider freshness is {{ $value }}s; a webhook-only provider has gone silent."
+
+      - alert: PaymentRailRepeatedSignatureFailures
+        expr: sum by (provider) (rate(payment_rail_webhook_rejected_total[15m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Repeated payment webhook signature rejections for {{ $labels.provider }}"
+          description: "Sustained rejected-webhook rate ({{ $value }}/s) — rotated/misconfigured secret or a probing caller."
+
+      - alert: PaymentRailUnknownEndpointBurst
+        expr: sum by (provider) (rate(payment_rail_webhook_unknown_endpoint_total[10m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Burst of unknown-endpoint webhook requests for {{ $labels.provider }}"
+          description: "Requests to unknown/revoked endpoint ids ({{ $value }}/s) — enumeration attempt or stale provider config."
+
+      - alert: PaymentRailProviderAuthFailure
+        expr: increase(payment_rail_provider_poll_degraded_total{health="auth_error"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Provider polling authentication failure for {{ $labels.provider }}"
+          description: "The polling API key for {{ $labels.provider }} is rejected (revoked/rotated/wrong environment)."
+
+      - alert: PaymentRailProviderRateLimited
+        expr: increase(payment_rail_provider_poll_degraded_total{health="rate_limited"}[15m]) > 3
+        for: 10m
+        labels:
+          severity: info
+          plane: payment_rails
+        annotations:
+          summary: "Provider rate limiting {{ $labels.provider }}"
+          description: "Repeated 429s from {{ $labels.provider }} polling."
+
+      - alert: PaymentRailProviderUnavailable
+        expr: increase(payment_rail_provider_poll_degraded_total{health=~"server_error|timeout|network_error"}[15m]) > 3
+        for: 10m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Provider API unavailable {{ $labels.provider }}"
+          description: "Repeated 5xx/timeout/network errors polling {{ $labels.provider }}."
+
+      - alert: PaymentRailStalePollingCursor
+        expr: max by (provider) (payment_rail_provider_freshness_seconds{mode="poll"}) > 7200
+        for: 30m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Stale polling cursor for {{ $labels.provider }}"
+          description: "No successful poll for {{ $labels.provider }} in >2h ({{ $value }}s)."
+
+      - alert: PaymentRailSyncWorkerHeartbeatLoss
+        expr: increase(payment_rail_sync_cycle_total[2h]) < 1
+        for: 15m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Payment-rail sync worker heartbeat lost"
+          description: "No sync cycle completed in >2h — provider-truth pull + staleness reconciliation are stalled."
+
+      - alert: PaymentRailRepairWorkerHeartbeatLoss
+        expr: absent(payment_rail_repair_heartbeat) or increase(payment_rail_repair_cycle_total[2h]) < 1
+        for: 15m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Payment-rail canonical-repair worker heartbeat lost"
+          description: "No repair cycle in >2h — incomplete deliveries will not self-heal."
+
+      - alert: PaymentRailOldestIncompleteReceipt
+        expr: payment_rail_oldest_incomplete_receipt_seconds > 3600
+        for: 15m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "A payment receipt has been incomplete >1h"
+          description: "Oldest incomplete receipt age is {{ $value }}s — a delivery is stuck short of completed."
+
+      - alert: PaymentRailCanonicalBacklog
+        expr: payment_rail_canonical_backlog > 100
+        for: 15m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Payment canonical-delivery backlog is high"
+          description: "{{ $value }} incomplete receipts — emission/outbox delivery is falling behind."
+
+      - alert: PaymentRailOutboxDeadLetterGrowth
+        expr: sum(increase(ingestion_outbox_relay_dead_lettered_total[1h])) > 0 or sum(increase(payment_rail_repair_dead_lettered_total[1h])) > 0
+        for: 5m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Payment delivery dead-letters are growing"
+          description: "Outbox relay or canonical repair dead-lettered records in the last hour — manual replay required."
+
+      - alert: PaymentRailProviderPollDegraded
+        expr: max by (provider) (payment_rail_provider_poll_health) < 1
+        for: 30m
+        labels:
+          severity: info
+          plane: payment_rails
+        annotations:
+          summary: "Provider poll health degraded for {{ $labels.provider }}"
+          description: "Provider {{ $labels.provider }} poll health has been non-ok for >30m."
