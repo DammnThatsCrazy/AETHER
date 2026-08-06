@@ -10,7 +10,7 @@ source_files:
   - scripts/financial_credential_readiness.py
   - Backend Architecture/aether-backend/shared/certification/registry.py
 canonical_owner: platform@aether
-last_synced_commit: "792eb8de"
+last_synced_commit: "380de9d"
 ---
 
 # Financial Credential-Readiness Runbook
@@ -33,7 +33,7 @@ anywhere, including CI.
 |---|---|---|
 | `make financial-credential-readiness` | Print the financial readiness table + certification summary (report). | 0 always |
 | `make financial-credential-readiness-strict` | Fail-closed gate: every financial adapter must be READY. **Not** wired into `make ci-check` (mirrors `credentialless-certification-strict`). | 0 / 1 |
-| `make payment-rails-certification` | Fail-closed gate for the payment-rail cohort only (`--domain payments --strict`). | 0 / 1 |
+| `make payment-rails-certification` | Fail-closed gate for the payment-rail cohort only (`--domain payments --strict`). Also runs code+config **operational** checks (single Alembic head, receipt/endpoint migrations present, sync/repair/relay workers claimed by a runtime role, release flags defined, typed operator contract + receipt/repair modules importable) and fails with a **specific** missing-item message. | 0 / 1 |
 | `make stablecoin-observer-certification` | Fail-closed gate for the stablecoin-chain observers only (`--domain stablecoin_chain --strict`). | 0 / 1 |
 | `make financial-pilot-preflight` | Composition: strict readiness gate **then** validate `config/pilot/examples/financial-observation.yaml --strict-providers`. Both fail-closed. | 0 / 1 |
 

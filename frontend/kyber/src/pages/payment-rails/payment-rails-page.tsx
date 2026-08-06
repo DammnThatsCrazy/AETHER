@@ -4,8 +4,13 @@ import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 import { isFeatureEnabled } from '@kyber/lib/featureFlags';
 import { CardLinkedDiagnosticsSection } from './card-linked-diagnostics-section';
-
-type AnyRecord = Record<string, unknown>;
+import type {
+  FleetHealthResponse,
+  ProviderFleetRow,
+  TenantFleetRow,
+  TenantDiagnosticsResponse,
+  TenantProviderDiagnostics,
+} from '../../types/payment-rails';
 
 const OBSERVABILITY_COPY =
   'Aether observes payment rails — it does not execute or settle payments, or custody funds.';
@@ -20,30 +25,6 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider] ?? provider;
-}
-
-interface ProviderFleetRow {
-  readonly provider: string;
-  readonly status: string;
-  readonly configured_tenants: number;
-  readonly webhook_verified_24h: number;
-  readonly webhook_rejected_24h: number;
-  readonly sessions_observed_24h: number;
-  readonly sessions_completed_24h: number;
-  readonly sessions_failed_24h: number;
-  readonly sessions_unresolved: number;
-  readonly reconciliation_matched_rate: number | null;
-  readonly reconciliation_conflicts: number;
-}
-
-interface TenantFleetRow {
-  readonly tenant_id: string;
-  readonly providers_configured: number;
-  readonly providers_degraded: number;
-  readonly sessions_observed_24h: number;
-  readonly sessions_unresolved: number;
-  readonly reconciliation_conflicts: number;
-  readonly status: string;
 }
 
 function Metric({ label, value }: { readonly label: string; readonly value: unknown }) {
@@ -118,7 +99,7 @@ interface TenantDrawerProps {
 }
 
 function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
-  const [detail, setDetail] = useState<AnyRecord | null>(null);
+  const [detail, setDetail] = useState<TenantDiagnosticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const timeCtx = useTimeContext();
@@ -129,13 +110,13 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
     setError(null);
     setDetail(null);
     api.admin.kyber.paymentRailsTenant(tenantId)
-      .then((d) => { if (!cancelled) setDetail(d as AnyRecord); })
+      .then((d) => { if (!cancelled) setDetail(d); })
       .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [tenantId]);
 
-  const providers = (detail?.providers ?? []) as AnyRecord[];
+  const providers: readonly TenantProviderDiagnostics[] = detail?.providers ?? [];
 
   return (
     <div className="fixed inset-y-0 right-0 z-40 w-[480px] max-w-full border-l border-border-default bg-surface-sunken shadow-xl overflow-y-auto p-4 space-y-4">
@@ -157,34 +138,33 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
         <EmptyState title="No payment rail adapters" description="This tenant has no payment rail providers configured." />
       ) : (
         providers.map((entry) => {
-          const provider = String(entry.provider ?? 'unknown');
-          const adapter = (entry.adapter ?? {}) as AnyRecord;
-          const health = (entry.health ?? {}) as AnyRecord;
-          const healthStatus = String(health.status ?? 'not_configured');
+          const provider = entry.provider;
+          const adapter = entry.adapter;
+          const health = entry.health;
           return (
             <Card key={provider}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{providerLabel(provider)}</CardTitle>
-                  <HealthBadge status={healthStatus} />
+                  <HealthBadge status={health.status} />
                 </div>
               </CardHeader>
               <CardContent className="text-xs font-mono space-y-1">
-                <DiagnosticsRow label="Adapter status" value={statusLabel(String(adapter.status ?? '—'))} />
-                <DiagnosticsRow label="Environment" value={String(adapter.environment ?? '—')} />
+                <DiagnosticsRow label="Adapter status" value={statusLabel(adapter.status)} />
+                <DiagnosticsRow label="Environment" value={adapter.environment ?? '—'} />
                 <DiagnosticsRow label="Webhook configured" value={formatBool(adapter.webhook_configured)} />
                 <DiagnosticsRow label="Polling configured" value={formatBool(adapter.polling_configured)} />
-                <DiagnosticsRow label="Sessions 24h" value={String(health.sessions_observed_24h ?? 0)} />
-                <DiagnosticsRow label="Completed 24h" value={String(health.sessions_completed_24h ?? 0)} tone="success" />
-                <DiagnosticsRow label="Failed 24h" value={String(health.sessions_failed_24h ?? 0)} tone="danger" />
+                <DiagnosticsRow label="Sessions 24h" value={String(health.sessions_observed_24h)} />
+                <DiagnosticsRow label="Completed 24h" value={String(health.sessions_completed_24h)} tone="success" />
+                <DiagnosticsRow label="Failed 24h" value={String(health.sessions_failed_24h)} tone="danger" />
                 <DiagnosticsRow
                   label="Webhooks 24h"
-                  value={`${String(health.webhook_verified_24h ?? 0)} ok / ${String(health.webhook_rejected_24h ?? 0)} rejected`}
+                  value={`${String(health.webhook_verified_24h)} ok / ${String(health.webhook_rejected_24h)} rejected`}
                 />
-                <DiagnosticsRow label="Unresolved" value={String(health.sessions_unresolved ?? 0)} tone={Number(health.sessions_unresolved ?? 0) > 0 ? 'warning' : 'default'} />
+                <DiagnosticsRow label="Unresolved" value={String(health.sessions_unresolved)} tone={health.sessions_unresolved > 0 ? 'warning' : 'default'} />
                 <DiagnosticsRow label="Matched rate" value={formatRate(health.reconciliation_matched_rate)} />
-                <DiagnosticsRow label="Conflicts" value={String(health.reconciliation_conflicts ?? 0)} tone={Number(health.reconciliation_conflicts ?? 0) > 0 ? 'danger' : 'default'} />
-                <DiagnosticsRow label="Last event" value={formatTs(health.last_event_at as string | null, timeCtx)} />
+                <DiagnosticsRow label="Conflicts" value={String(health.reconciliation_conflicts)} tone={health.reconciliation_conflicts > 0 ? 'danger' : 'default'} />
+                <DiagnosticsRow label="Last event" value={formatTs(health.last_event_at, timeCtx)} />
               </CardContent>
             </Card>
           );
@@ -196,7 +176,7 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
 
 export function PaymentRailsPage() {
   const enabled = isFeatureEnabled('enablePaymentRails');
-  const [data, setData] = useState<AnyRecord | null>(null);
+  const [data, setData] = useState<FleetHealthResponse | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
@@ -204,7 +184,7 @@ export function PaymentRailsPage() {
   useEffect(() => {
     if (!enabled) return;
     api.admin.kyber.paymentRailsHealth()
-      .then((d) => setData(d as AnyRecord))
+      .then((d) => setData(d))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, [enabled]);
@@ -223,10 +203,9 @@ export function PaymentRailsPage() {
   if (loading) return <PageWrapper title="Payment Rails"><LoadingState lines={6} /></PageWrapper>;
   if (error) return <PageWrapper title="Payment Rails"><EmptyState title="Unable to load payment rail health" description={error} /></PageWrapper>;
 
-  const d = data ?? {};
-  const totals = (d.totals ?? {}) as AnyRecord;
-  const providers = (d.providers ?? []) as ProviderFleetRow[];
-  const tenants = (d.tenants ?? []) as TenantFleetRow[];
+  const totals = data?.totals;
+  const providers: readonly ProviderFleetRow[] = data?.providers ?? [];
+  const tenants: readonly TenantFleetRow[] = data?.tenants ?? [];
 
   return (
     <PageWrapper
@@ -234,10 +213,10 @@ export function PaymentRailsPage() {
       subtitle={`Fleet-wide, cross-tenant payment rail health. ${OBSERVABILITY_COPY}`}
     >
       <div className="grid gap-3 md:grid-cols-4">
-        <Metric label="Configured tenants" value={totals.configured_tenants} />
-        <Metric label="Sessions observed 24h" value={totals.sessions_observed_24h} />
-        <Metric label="Unresolved sessions" value={totals.sessions_unresolved} />
-        <Metric label="Reconciliation conflicts" value={totals.reconciliation_conflicts} />
+        <Metric label="Configured tenants" value={totals?.configured_tenants} />
+        <Metric label="Sessions observed 24h" value={totals?.sessions_observed_24h} />
+        <Metric label="Unresolved sessions" value={totals?.sessions_unresolved} />
+        <Metric label="Reconciliation conflicts" value={totals?.reconciliation_conflicts} />
       </div>
 
       <Card>
