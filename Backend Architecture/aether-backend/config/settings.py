@@ -41,6 +41,16 @@ def _env_list(key: str, default: str = "", sep: str = ",") -> list[str]:
     return [item.strip() for item in raw.split(sep) if item.strip()] if raw else []
 
 
+def _is_local_default() -> bool:
+    """True when the process runs in the LOCAL deployment environment.
+
+    Used to make production-grade defaults (e.g. the durable payment-rail
+    credential authority) mandatory OUTSIDE local while preserving a
+    local-development compatibility path. An explicit env var always overrides.
+    """
+    return _env("AETHER_ENV", "local").strip().lower() == Environment.LOCAL.value
+
+
 # ---------------------------------------------------------------------------
 # Database connections
 # ---------------------------------------------------------------------------
@@ -1251,15 +1261,33 @@ class PaymentRailsConfig:
     usage_metering_enabled: bool = _env_bool(
         "AETHER_PAYMENT_USAGE_METERING_ENABLED", False
     )
-    # Credential-authority-backed secret resolution (default OFF, opt-in). When
-    # enabled, payment-rail adapters resolve their webhook_signing_secret ONLY
-    # from the durable multi-slot CredentialAuthority (active + rotation-overlap
-    # previous, NO in-memory vault fallback); default-OFF preserves the legacy
-    # BYOKKeyVault read byte-for-byte until the cutover is proven. First step of
-    # retiring the in-memory BYOKKeyVault (polling-slot resolution + vault removal
-    # + default-on flip remain the sequenced follow-up).
+    # Credential-authority-backed secret resolution. MANDATORY outside local
+    # development (default = not-local): payment-rail adapters resolve their
+    # webhook signing secret AND their read-only polling API key ONLY from the
+    # durable multi-slot CredentialAuthority (active + rotation-overlap previous,
+    # NO in-memory vault fallback). In LOCAL the default is OFF so the legacy
+    # BYOKKeyVault preserves developer ergonomics; an explicit env var overrides
+    # in either direction. This is the completed cutover: the in-memory
+    # BYOKKeyVault is no longer a financial-provider credential source outside
+    # local development.
     credential_authority_enabled: bool = _env_bool(
-        "AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED", False
+        "AETHER_PAYMENT_CREDENTIAL_AUTHORITY_ENABLED", not _is_local_default()
+    )
+    # Canonical-repair worker enablement. The supervised financial canonical
+    # repair worker (scan incomplete receipts / funding sessions missing
+    # canonical events / canonical events missing outbox rows / unpublished
+    # outbox rows and re-drive idempotently) runs only when this is set. Default
+    # ON outside local so staging/production self-heal delivery gaps; OFF in local.
+    canonical_repair_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_CANONICAL_REPAIR_ENABLED", not _is_local_default()
+    )
+    # Legacy header-tenant webhook route (/{provider} + X-Aether-Tenant-ID). It
+    # lets a public caller choose the tenant via a header and is unsafe outside
+    # local development. Mounted ONLY in local development AND only when this flag
+    # is set; the durable /{provider}/{endpoint_id} route is authoritative
+    # everywhere. Default OFF — opt-in for local backward compatibility only.
+    legacy_webhook_route_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED", False
     )
 
 

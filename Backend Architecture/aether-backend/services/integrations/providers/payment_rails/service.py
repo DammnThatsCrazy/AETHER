@@ -330,31 +330,40 @@ class PaymentRailsService:
     async def _webhook_secrets(
         self, tenant_id: str, provider: str, environment: str, adapter: Any
     ) -> list[str]:
-        """Active + valid-previous webhook signing secrets, credential authority
-        first, then the legacy vault as a migration fallback."""
-        secrets: list[str] = []
+        """Active + valid-previous webhook signing secrets for the durable
+        endpoint-id route.
+
+        The durable CredentialAuthority is always consulted first (it is the
+        production path). The retired in-memory vault is read ONLY as a
+        local-development compatibility fallback when the authority yields
+        nothing: outside local development there is NO authority→legacy-vault
+        fallback, so an unconfigured slot fails closed (empty list → verification
+        fails) rather than silently reading the vault.
+        """
+        from services.integrations.providers.payment_rails.base import _is_local_env
+
         try:
             from services.providers.credentials.authority import credential_authority
 
             secrets = await credential_authority.get_verification_secrets(
                 tenant_id, provider, environment, "webhook_signing_secret"
             )
-        except Exception:  # authority not configured for this slot yet
+        except Exception:  # noqa: BLE001 — authority unavailable
             secrets = []
-        if not secrets:
-            try:
-                from services.integrations.providers.payment_rails.base import (
-                    get_payment_rails_vault,
-                )
+        if secrets or not _is_local_env():
+            return secrets
+        # Local-development-only compatibility read against the legacy vault.
+        try:
+            from services.integrations.providers.payment_rails.base import (
+                get_payment_rails_vault,
+            )
 
-                legacy = await get_payment_rails_vault().get_key(
-                    tenant_id, adapter.vault_provider_name
-                )
-                if legacy:
-                    secrets = [legacy]
-            except Exception:
-                secrets = []
-        return secrets
+            legacy = await get_payment_rails_vault().get_key(
+                tenant_id, adapter.vault_provider_name
+            )
+            return [legacy] if legacy else []
+        except Exception:  # noqa: BLE001
+            return []
 
     # ── Polling / status sync ─────────────────────────────────────────────
 
@@ -378,6 +387,21 @@ class PaymentRailsService:
         adapter = require_provider_enabled(provider)
         account = await self.repos.accounts.get(tenant_id, adapter.provider_name) or {}
 
+        # Authoritative credential environment for this pull: an explicit caller
+        # value wins, else the deployment-derived default (sandbox everywhere but
+        # production). Threaded into credential + endpoint resolution so a sandbox
+        # connection never pulls with live credentials. Mapped onto the sandbox|live
+        # credential vocabulary (a stored connection "environment" is accepted too).
+        from services.integrations.providers.payment_rails.base import _resolve_environment
+
+        _account_env = account.get("environment")
+        # The legacy account default is the string "production"; only honor a stored
+        # environment that was explicitly narrowed to a credential vocabulary token.
+        if _account_env in ("sandbox", "live"):
+            environment = _resolve_environment(params.pop("environment", None) or _account_env)
+        else:
+            environment = _resolve_environment(params.pop("environment", None))
+
         poll_state: Optional[dict[str, Any]] = None
         if records is None and adapter.polling_supported:
             scope = str(params.get("partner_user_ref") or params.get("customer_id") or "default")
@@ -386,14 +410,19 @@ class PaymentRailsService:
                 "cursor": cursors.get(scope), "scope": scope,
                 "health": "ok", "next_cursor": None, "pages": 0,
             }
-            events = await adapter.status_sync(tenant_id, poll_state=poll_state, **params)
+            events = await adapter.status_sync(
+                tenant_id, poll_state=poll_state, environment=environment, **params
+            )
         else:
             events = await adapter.status_sync(tenant_id, records=records)
 
         results = [await self._process_event(tenant_id, adapter, event) for event in events]
 
         # Persist sync cursor + provider poll health on the account record.
-        account_changes: dict[str, Any] = {"last_poll_at": utc_now_iso()}
+        account_changes: dict[str, Any] = {
+            "last_poll_at": utc_now_iso(),
+            "environment": environment,
+        }
         if poll_state is not None:
             health = poll_state.get("health") or "ok"
             account_changes["provider_poll_health"] = health
@@ -419,6 +448,7 @@ class PaymentRailsService:
         await self.repos.audit.record(tenant_id, adapter.audit_record(
             tenant_id, "status_sync",
             {"event_count": len(events),
+             "environment": environment,
              "poll_health": (poll_state or {}).get("health"),
              "poll_pages": (poll_state or {}).get("pages")},
         ))

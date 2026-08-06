@@ -167,11 +167,12 @@ class CoinbaseAdapter(PaymentRailAdapter):
         failure degrades provider health and returns what was gathered.
         """
         poll_state = params.get("poll_state")
-        secret = await self._require_secret(tenant_id)
+        environment = params.get("environment")
+        secret = await self._require_secret(tenant_id, environment)
         if not secret:
             self._mark_health(poll_state, "not_configured")
             return []
-        base = await self._resolve_base_url(tenant_id)
+        base = await self._resolve_base_url(tenant_id, environment)
         ref = params.get("partner_user_ref") or params.get("partnerUserRef")
         page_size = params.get("page_size", self.poll_page_size)
 
@@ -203,15 +204,17 @@ class CoinbaseAdapter(PaymentRailAdapter):
         self._finish_poll(poll_state, next_cursor=None, pages=pages, records=records)
         return records
 
-    async def _live_connection_test(self, tenant_id: str) -> ConnectionTestResult:
+    async def _live_connection_test(
+        self, tenant_id: str, environment: Optional[str] = None
+    ) -> ConnectionTestResult:
         """Authenticated health ping: a bounded transaction-status GET."""
-        secret = await self._require_secret(tenant_id)
+        secret = await self._require_secret(tenant_id, environment)
         if not secret:
             return ConnectionTestResult(
                 provider=self.provider_name, ok=False, status="not_configured",
-                detail="missing credential (configure the key vault)",
+                detail="missing credential (provision the required slots)",
             )
-        base = await self._resolve_base_url(tenant_id)
+        base = await self._resolve_base_url(tenant_id, environment)
         request = self.build_request({
             "tenant_id": tenant_id, "credential": secret, "base_url": base, "page_size": 1,
         })

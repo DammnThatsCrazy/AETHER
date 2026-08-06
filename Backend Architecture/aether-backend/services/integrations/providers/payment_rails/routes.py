@@ -50,6 +50,23 @@ def _require_rails_enabled() -> None:
         )
 
 
+def _require_legacy_header_route() -> None:
+    """Guard the unsafe legacy header-tenant webhook route.
+
+    The ``/{provider}`` route lets a public caller select the tenant via an
+    ``X-Aether-Tenant-ID`` header. It is available ONLY in local development AND
+    only when explicitly opted in (``AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED``).
+    Everywhere else it returns a uniform 404 — indistinguishable from a route that
+    does not exist — so a public caller can never select a tenant by header in
+    staging or production. The durable ``/{provider}/{endpoint_id}`` route is the
+    authoritative path.
+    """
+    from services.integrations.providers.payment_rails.base import _is_local_env
+
+    if not (settings.payment_rails.legacy_webhook_route_enabled and _is_local_env()):
+        raise NotFoundError("not found")
+
+
 def _tenant_id(request: Request, permission: str = "read") -> str:
     request.state.tenant.require_permission(permission)
     tid = getattr(request.state.tenant, "tenant_id", None)
@@ -62,15 +79,17 @@ def _tenant_id(request: Request, permission: str = "read") -> str:
 
 @webhook_router.post("/{provider}")
 async def payment_rail_webhook(provider: str, request: Request):
-    """Public webhook receiver for the five named payment rail providers.
+    """LEGACY, local-development-only webhook receiver (header-selected tenant).
 
-    - No API key; the provider's native signature (compound Stripe/MoonPay
-      headers, Coinbase body-hex, etc.) is verified against the tenant's vault
-      secret before anything is parsed or persisted.
-    - Tenant resolved from the ``X-Aether-Tenant-ID`` header. The
-      ``/{provider}/{endpoint_id}`` route is the server-resolved-tenant path.
+    Retained ONLY for local development behind
+    ``AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED``; returns a uniform 404 in
+    every non-local environment (see :func:`_require_legacy_header_route`). It
+    resolves the tenant from ``X-Aether-Tenant-ID``, which a public caller must
+    never control — use the durable ``/{provider}/{endpoint_id}`` route in
+    staging/production, where the tenant and environment are server-resolved.
     """
     _require_rails_enabled()
+    _require_legacy_header_route()
     tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
     if not tenant_id:
         raise BadRequestError("X-Aether-Tenant-ID header is required")
@@ -140,8 +159,14 @@ async def payment_rail_webhook_by_endpoint(provider: str, endpoint_id: str, requ
 # ── Tenant provider controls ──────────────────────────────────────────────
 
 class SyncRequest(BaseModel):
-    """Optional provider-shaped records for deterministic (non-network) sync."""
+    """Optional provider-shaped records for deterministic (non-network) sync.
+
+    ``environment`` threads the sandbox/live credential environment explicitly so
+    the pull resolves the correct credential version and provider host; when
+    omitted the service derives it from the deployment environment.
+    """
     records: Optional[list[dict[str, Any]]] = None
+    environment: Optional[str] = None
 
 
 @router.post("/{provider}/sync")
@@ -149,8 +174,11 @@ async def sync_provider(provider: str, body: SyncRequest, request: Request):
     """Trigger provider status polling for open funding sessions."""
     _require_rails_enabled()
     tenant_id = _tenant_id(request, "write")
+    kwargs: dict[str, Any] = {"records": body.records}
+    if body.environment:
+        kwargs["environment"] = body.environment
     result = await get_payment_rails_service().status_sync(
-        tenant_id, provider, records=body.records
+        tenant_id, provider, **kwargs
     )
     return APIResponse(data=result).to_dict()
 
