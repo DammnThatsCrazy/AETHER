@@ -1,0 +1,281 @@
+# =============================================================================
+# Aether — Computation Inventory (discovery + migration ledger)
+#
+# The machine-readable inventory of material computations across AETHER and their
+# migration state onto the Computation Substrate (shared/computation +
+# services/computation). Seeded from the repository-wide computation audit; it is
+# SHRINK-ONLY for un-migrated debt — new ungoverned P0 computations must not be
+# added, and a `migrated` entry must reference a real registered definition.
+#
+# Validated by scripts/validate_computation_substrate.py (wired into
+# `make ci-check` via scripts/repo_doctor.py).
+#
+# migration_state: migrated | in_progress | not_started
+# priority:        P0 (money/billing/access/identity/financial reporting)
+#                  P1 (customer-facing performance / operational / ranking)
+#                  P2 (exploratory / convenience)
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/computation_inventory.yaml
+enforcement_status: enforced
+description: >-
+  Inventory of material computations and their migration onto the AETHER
+  Computation Substrate. Every `migrated` entry maps to a registered canonical
+  definition; un-migrated entries record the debt and its authoritative fix site.
+
+computations:
+  # ---- Campaign / gold materialization (P0) — migrated ---------------------
+  - computation_id: gold.ad_spend.ctr
+    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    symbol: materialize_campaign_performance_daily
+    domain: campaign
+    current_formula: clicks / impressions (zero-denominator persisted as 0.0)
+    output: rate
+    math_type: rate
+    unit: ratio
+    grain: campaign_day
+    time_semantics: event-time day window
+    missing_input_behavior: was 0.0 on zero impressions; now missing_inputs (null)
+    aggregation_behavior: ratio_of_sums
+    currency_behavior: n/a
+    known_defects: [zero_denominator_as_zero]
+    priority: P0
+    proposed_definition_id: campaign.ctr
+    migration_state: in_progress
+
+  - computation_id: gold.ad_spend.cpc
+    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    symbol: materialize_campaign_performance_daily
+    domain: campaign
+    current_formula: media_spend / clicks
+    output: rate
+    math_type: rate
+    unit: currency
+    grain: campaign_day
+    time_semantics: event-time day window
+    missing_input_behavior: was 0.0 on zero clicks; now missing_inputs (null)
+    aggregation_behavior: ratio_of_sums
+    currency_behavior: native currency preserved
+    known_defects: [zero_denominator_as_zero, float_money]
+    priority: P0
+    proposed_definition_id: campaign.cpc
+    migration_state: in_progress
+
+  - computation_id: gold.ad_spend.roas
+    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    symbol: materialize_campaign_performance_daily
+    domain: campaign
+    current_formula: total_attributed_revenue / total_spend
+    output: rate
+    math_type: rate
+    unit: ratio
+    grain: campaign_day
+    time_semantics: event-time day window
+    missing_input_behavior: was 0.0 on zero spend; now missing_inputs (null)
+    aggregation_behavior: ratio_of_sums
+    currency_behavior: revenue/spend windows matched
+    known_defects: [zero_denominator_as_zero, float_money]
+    priority: P0
+    proposed_definition_id: campaign.gross_roas
+    migration_state: in_progress
+
+  - computation_id: gold.ad_spend.attributed_conversions
+    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    symbol: materialize_campaign_performance_daily
+    domain: campaign
+    current_formula: int(total_attributed_conversions) (fractional truncation)
+    output: fractional_count
+    math_type: fractional_count
+    unit: count
+    grain: campaign_day
+    time_semantics: event-time day window
+    missing_input_behavior: preserved fractional (never int-truncated)
+    aggregation_behavior: sum
+    currency_behavior: n/a
+    known_defects: [fractional_conversion_truncated_to_int]
+    priority: P0
+    proposed_definition_id: campaign.attributed_conversions
+    migration_state: in_progress
+
+  - computation_id: gold.journey_economics.allocated_cost
+    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    symbol: materialize_journey_economics
+    domain: journey
+    current_formula: sum(full campaign spend per campaign) attributed to each journey
+    output: money
+    math_type: money
+    unit: currency
+    grain: journey
+    time_semantics: journey window
+    missing_input_behavior: allocated (estimated), conserved; never observed
+    aggregation_behavior: sum
+    currency_behavior: native currency preserved
+    known_defects: [campaign_spend_duplicated_per_journey]
+    priority: P0
+    proposed_definition_id: campaign.journey_allocated_cost
+    migration_state: in_progress
+
+  # ---- Financial value package (P0) — unpriced subtrahend fixes ------------
+  - computation_id: value.portfolio.net_worth_usd
+    file: Backend Architecture/aether-backend/services/value/portfolio_rules.py
+    symbol: net_worth_usd
+    domain: financial
+    current_formula: total_portfolio_usd - (liabilities_usd or 0)
+    output: money
+    math_type: money
+    unit: currency
+    grain: account
+    time_semantics: as-of valuation
+    missing_input_behavior: unpriced liabilities -> partial (not inflated net worth)
+    aggregation_behavior: non_aggregatable
+    currency_behavior: USD reporting with lineage
+    known_defects: [unpriced_subtrahend_as_zero]
+    priority: P0
+    proposed_definition_id: null
+    migration_state: in_progress
+
+  - computation_id: value.tvl.net_tvl
+    file: Backend Architecture/aether-backend/services/value/tvl_rules.py
+    symbol: net_tvl
+    domain: financial
+    current_formula: gross_tvl - (debt or 0)
+    output: money
+    math_type: money
+    unit: currency
+    grain: account
+    time_semantics: as-of valuation
+    missing_input_behavior: unpriced debt -> partial (not inflated net TVL)
+    aggregation_behavior: non_aggregatable
+    currency_behavior: USD reporting with lineage
+    known_defects: [unpriced_subtrahend_as_zero]
+    priority: P0
+    proposed_definition_id: null
+    migration_state: in_progress
+
+  # ---- Un-migrated debt (recorded; roadmap tracks the fix) -----------------
+  - computation_id: pnl.tvl_delta_as_daily_pnl
+    file: Backend Architecture/aether-backend/services/pnl/pnl_calculator.py
+    symbol: compute / _best_worst_day
+    domain: financial
+    current_formula: tvl_end - tvl_start labeled as P&L (balance snapshot delta)
+    output: money
+    math_type: money
+    unit: currency
+    grain: account_day
+    time_semantics: daily snapshots
+    missing_input_behavior: catch-and-return Decimal(0)
+    aggregation_behavior: non_aggregatable
+    currency_behavior: hardcoded USD
+    known_defects: [tvl_delta_mislabeled_pnl, windowed_fifo_no_opening_lots, catch_return_zero]
+    priority: P0
+    proposed_definition_id: null
+    migration_state: not_started
+
+  - computation_id: billing.revops.usage_summary
+    file: Backend Architecture/aether-backend/services/billing/revops.py
+    symbol: UsageSummaryService.calculate
+    domain: billing
+    current_formula: sum(quantity) over find_many(limit=10000) then python period filter
+    output: quantity
+    math_type: quantity
+    unit: unit
+    grain: tenant_period
+    time_semantics: billing period
+    missing_input_behavior: bounded read undercounts silently
+    aggregation_behavior: sum
+    currency_behavior: mixed-currency float sums
+    known_defects: [bounded_read_no_truncation_disclosure, float_money, mixed_currency_sum]
+    priority: P0
+    proposed_definition_id: null
+    migration_state: not_started
+
+  - computation_id: trust.composite_scalar
+    file: Backend Architecture/aether-backend/shared/scoring/trust_score.py
+    symbol: TrustScoreComposite.compute
+    domain: trust
+    current_formula: zero risk-evidence -> transaction_trust = 1.0 (max trust)
+    output: heuristic_score
+    math_type: heuristic_score
+    unit: score
+    grain: subject
+    time_semantics: as-of evidence
+    missing_input_behavior: absent evidence treated as trustworthy (should be low/unknown)
+    aggregation_behavior: non_aggregatable
+    currency_behavior: n/a
+    known_defects: [missing_evidence_as_benign, single_composite_scalar, unversioned_weights]
+    priority: P0
+    proposed_definition_id: null
+    migration_state: not_started
+
+  - computation_id: fraud.evaluation.risk_score
+    file: Backend Architecture/aether-backend/services/fraud/evaluation.py
+    symbol: _run_evaluation
+    domain: fraud
+    current_formula: distinct_signal_count * 10 (+25 circular) labeled toward probability
+    output: heuristic_score
+    math_type: heuristic_score
+    unit: score
+    grain: subject
+    time_semantics: as-of evidence
+    missing_input_behavior: evaluation failure -> risk_score 0 (benign)
+    aggregation_behavior: non_aggregatable
+    currency_behavior: n/a
+    known_defects: [hitcount_as_probability, fail_open_benign, correlated_signals_double_counted]
+    priority: P0
+    proposed_definition_id: null
+    migration_state: not_started
+
+  - computation_id: ml_serving.prediction_cache_key
+    file: Backend Architecture/aether-backend/services/ml_serving/routes.py
+    symbol: predict
+    domain: ml
+    current_formula: cache key = model + entity_id (omits feature digest / consent / tenant)
+    output: probability
+    math_type: probability
+    unit: probability
+    grain: subject
+    time_semantics: feature as-of
+    missing_input_behavior: same-entity different-features collide; hardcoded grounded=1
+    aggregation_behavior: non_aggregatable
+    currency_behavior: n/a
+    known_defects: [cache_key_omits_feature_digest, hardcoded_grounded]
+    priority: P1
+    proposed_definition_id: null
+    migration_state: not_started
+
+  - computation_id: behavioral.staleness_hardcoded_date
+    file: Backend Architecture/aether-backend/services/behavioral/engines.py
+    symbol: compute_source_shadow
+    domain: behavioral
+    current_formula: staleness vs hardcoded calendar date "2026-03-01"
+    output: heuristic_score
+    math_type: heuristic_score
+    unit: score
+    grain: subject
+    time_semantics: hardcoded calendar date (defect)
+    missing_input_behavior: everything before literal date is "stale" forever
+    aggregation_behavior: non_aggregatable
+    currency_behavior: n/a
+    known_defects: [hardcoded_staleness_date, record_position_window, probability_labeled_heuristic]
+    priority: P1
+    proposed_definition_id: null
+    migration_state: not_started
+
+  - computation_id: cluster.rollup.revenue_spend
+    file: Backend Architecture/aether-backend/services/cluster/routes.py
+    symbol: cluster economics rollup
+    domain: cluster
+    current_formula: sum(float(member revenue/spend)) currency-blind, USD-labeled
+    output: money
+    math_type: money
+    unit: currency
+    grain: cluster
+    time_semantics: as-of membership
+    missing_input_behavior: float snapshot sums, USD-labeled
+    aggregation_behavior: sum
+    currency_behavior: hardcoded USD
+    known_defects: [float_money, hardcoded_usd, snapshot_sum]
+    priority: P1
+    proposed_definition_id: null
+    migration_state: not_started
