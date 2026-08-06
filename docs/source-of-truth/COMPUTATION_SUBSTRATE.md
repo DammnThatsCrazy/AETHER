@@ -120,10 +120,35 @@ tolerance and rationale; a value is not "reconciled" merely because a formula ra
 scores that are not empirically calibrated are typed `OrdinalScore` /
 `HeuristicScore` / `UncalibratedScore` and must not claim to be probabilities.
 
+## Persistence & runs (`services/computation/repositories.py`)
+
+Canonical results are stored immutably in `computed_results` (Alembic migration
+`20260815_computation_substrate`), with at most one *active* row per
+`(tenant_id, definition_id, definition_version, context_hash)` (partial unique
+index). `computation_runs` records the run that produced a result;
+`computation_restatements` is the supersession audit trail. The repo follows the
+DDL-parity idiom (repo constants asserted equal to the migration) and the dual
+local/asyncpg backend.
+
+## Explain API (`services/computation/routes.py`, mounted at `/v1/computations`)
+
+Read-only, tenant-scoped endpoints:
+
+- `GET /v1/computations/definitions` and `/definitions/{id}` — the canonical
+  registry;
+- `GET /v1/computations/results` and `/results/{id}` — stored canonical results;
+- `GET /v1/computations/results/{id}/explain` — answers *what is this number?*
+  (definition version, formula/kind, inputs, window, observed vs allocated vs
+  estimated vs reconciled, completeness, staleness, uncertainty, supersession
+  chain);
+- `GET /v1/computations/runs/{id}` — the producing run.
+
 ## Restatement
 
 Corrections create a new result that supersedes the prior one (`supersedes_result_id`
 + `restatement_reason`), reusing the measurement plane's supersession discipline.
+The repository's `supersede()` stamps the prior active row and records a
+restatement, so historical truth is preserved and `/explain` can show the chain.
 
 ## Presentation rules (`serialization.py`)
 
