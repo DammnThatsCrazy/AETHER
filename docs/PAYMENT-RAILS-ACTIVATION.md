@@ -1,3 +1,18 @@
+---
+title: "Payment-Rail Financial Plane — Activation, Operations & Rollback"
+slug: operations/payment-rails-activation
+section: operations
+visibility: I
+audience: [ops, dev-senior]
+status: beta
+since_version: "8.12.0"
+canonical_owner: platform@aether
+related:
+  - docs/runbooks/PAYMENT_RAILS_RUNBOOK.md
+  - docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md
+  - docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md
+---
+
 # Payment-Rail Financial Plane — Activation, Operations & Rollback
 
 Aether **observes** payment rails. It never executes, settles, originates, or
