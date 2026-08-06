@@ -119,7 +119,13 @@ def predicted_ltv(
 
 
 def net_ltv(gross_usd: Optional[str], cost_usd: Optional[str]) -> Optional[str]:
-    """Gross lifetime value minus cost. ``None`` when ``gross_usd`` is ``None``."""
-    if gross_usd is None:
+    """Gross lifetime value minus cost.
+
+    ``None`` when EITHER side is unknown: an unknown gross has no value, and an
+    unknown cost makes net LTV unknown too (coercing an unpriced cost to 0 would
+    overstate net LTV as the gross). Pass an explicit ``"0"`` cost for a genuine
+    zero-cost basis.
+    """
+    if gross_usd is None or cost_usd is None:
         return None
-    return format(Decimal(gross_usd) - Decimal(cost_usd or "0"), "f")
+    return format(Decimal(gross_usd) - Decimal(cost_usd), "f")

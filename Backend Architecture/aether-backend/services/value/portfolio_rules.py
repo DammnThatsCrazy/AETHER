@@ -116,6 +116,10 @@ def portfolio(holdings: Iterable[dict]) -> dict:
     total_portfolio_usd = _sum_optional(bucket_usd.values())
     if total_portfolio_usd is None:
         net_worth_usd: Optional[str] = None
+    elif liabilities and liabilities_usd is None:
+        # Liabilities exist but are unpriced: net worth is UNKNOWN, not the gross
+        # portfolio. Coercing an unpriced liability to 0 would inflate net worth.
+        net_worth_usd = None
     else:
         net_worth_usd = format(
             Decimal(total_portfolio_usd) - Decimal(liabilities_usd or "0"), "f"
