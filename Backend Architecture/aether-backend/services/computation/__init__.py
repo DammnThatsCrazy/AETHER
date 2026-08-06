@@ -17,9 +17,17 @@ from services.computation.campaign import (
     canonical_campaign_metrics,
     canonical_journey_allocated_cost,
 )
+from services.computation.repositories import (
+    ComputationConflictError,
+    ComputedResultsRepository,
+    get_computation_repository,
+)
 
 __all__ = [
     "CampaignAggregates",
     "canonical_campaign_metrics",
     "canonical_journey_allocated_cost",
+    "ComputationConflictError",
+    "ComputedResultsRepository",
+    "get_computation_repository",
 ]
