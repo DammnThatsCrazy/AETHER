@@ -5951,6 +5951,21 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/COMPUTATION_SUBSTRATE.md",
+      "title": "Computation Substrate",
+      "slug": "source-of-truth/computation-substrate",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/CONNECTOR_LAKE_POLICY.md",
       "title": "Connector Lake Policy",
       "slug": "architecture/connector-lake-policy",

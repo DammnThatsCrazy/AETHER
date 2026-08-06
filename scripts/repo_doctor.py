@@ -542,6 +542,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="use shared/temporal (Py) or frontend/shared/src/time (TS); shrink scripts/allowlists/* only",
     )
     run(
+        [sys.executable, "scripts/validate_computation_substrate.py"],
+        name="Computation substrate governance (registry parity + version discipline, active-def owner/tests, inventory consistency, money-as-float ban)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="regenerate the registry twin (python scripts/generate_computation_registry.py), keep config/computation_inventory.yaml consistent, and shrink scripts/allowlists/computation_money_float.json only",
+    )
+    run(
         [sys.executable, "scripts/validate_graph_write_paths.py"],
         name="Graph write-path freeze (direct writers pending mutation-gateway migration)",
         results=results,

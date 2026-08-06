@@ -83,11 +83,20 @@ def net_tvl(positions: Iterable[dict]) -> dict:
     borrowed = safe_rollup(liabilities, metric_kind="balance")
     borrowed_usd = borrowed["total_usd"]
 
+    # Liabilities exist but are unpriced: net TVL is UNKNOWN, not gross. Coercing
+    # an unpriced borrowed leg to 0 would inflate net TVL.
+    if liabilities and borrowed_usd is None:
+        net_usd: Optional[str] = None
+        rollup_status = "partial"
+    else:
+        net_usd = _sub(gross_usd, borrowed_usd)
+        rollup_status = gross["rollup_status"]
+
     return {
         "gross_usd": gross_usd,
         "borrowed_usd": borrowed_usd,
-        "net_usd": _sub(gross_usd, borrowed_usd),
-        "rollup_status": gross["rollup_status"],
+        "net_usd": net_usd,
+        "rollup_status": rollup_status,
         "unpriced_count": gross["unpriced_count"] + borrowed["unpriced_count"],
         "excluded_count": gross["excluded_count"] + borrowed["excluded_count"],
     }

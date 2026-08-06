@@ -150,7 +150,10 @@ def test_predicted_ltv_not_zero_on_absence():
 def test_net_ltv():
     assert ltv_rules.net_ltv("1000", "300") == "700"
     assert ltv_rules.net_ltv(None, "300") is None
-    assert ltv_rules.net_ltv("1000", None) == "1000"
+    # Unknown cost => unknown net LTV (never the gross). A genuine zero-cost
+    # basis must be passed explicitly as "0".
+    assert ltv_rules.net_ltv("1000", None) is None
+    assert ltv_rules.net_ltv("1000", "0") == "1000"
 
 
 # --------------------------------------------------------------------- PORTFOLIO
@@ -241,3 +244,30 @@ def test_account_fx_asset_and_unpriced():
     })
     assert unknown["usd_value"] is None  # unpriced -> None, never 0
     assert unknown["display"]["primary"] == "Value unavailable"
+
+
+# ------------------- unpriced-subtrahend regression (net inflation) -------------
+def test_net_tvl_unpriced_liability_does_not_inflate_net():
+    # Assets priced (2 ETH = 6000), but the borrowed leg is unpriced. Net TVL
+    # must be UNKNOWN, not the gross 6000 (coercing the unpriced debt to 0 would
+    # inflate net TVL).
+    positions = [
+        {"amount": "2", "currency": "ETH"},                              # 6000
+        {"amount": "5", "currency": "UNKNOWNTOK", "is_borrowed": True},  # unpriced debt
+    ]
+    net = tvl_rules.net_tvl(positions)
+    assert net["gross_usd"] == "6000"
+    assert net["borrowed_usd"] is None
+    assert net["net_usd"] is None  # not "6000"
+    assert net["rollup_status"] == "partial"
+
+
+def test_portfolio_net_worth_unpriced_liability_does_not_inflate():
+    holdings = [
+        {"amount": "500", "currency": "USD"},  # priced asset
+        {"amount": "9", "currency": "UNKNOWNTOK", "metric_kind": "liability"},  # unpriced debt
+    ]
+    p = portfolio_rules.portfolio(holdings)
+    assert p["total_portfolio_usd"] == "500"
+    assert p["liabilities_usd"] is None
+    assert p["net_worth_usd"] is None  # not "500"
