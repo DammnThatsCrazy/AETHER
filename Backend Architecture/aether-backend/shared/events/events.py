@@ -774,6 +774,48 @@ class EventProducer:
     def mode(self) -> str:
         return self._mode
 
+    async def pump_local(self, consumer: "EventConsumer", stop: asyncio.Event) -> None:
+        """Deliver in-memory published events to an in-process consumer.
+
+        In ``AETHER_ENV=local`` with no broker reachable, :meth:`publish`
+        appends to the in-memory ``_published`` list and
+        :meth:`EventConsumer.receive_loop` returns immediately — nothing
+        outside a broker poll ever invokes ``EventConsumer.process``. A
+        ``POST /v1/batch`` therefore reached Bronze and stopped: the local
+        stack's Bronze→Silver projection pipeline silently did not run.
+
+        This pump is the missing bridge: it drains ``_published`` into
+        ``consumer.process``, the same canonical handler path the Kafka and
+        SQS loops drive, giving the single-process local stack real
+        Bronze→Silver delivery. Wired by the ``main.py`` lifespan only when the
+        producer actually connected in-memory, so a broker-connected producer
+        is never double-delivered. Cursor-based: each event is delivered at
+        most once per process; events published by handlers while pumping are
+        picked up on the next tick.
+        """
+        if self._mode != "in-memory":
+            logger.info("EventProducer.pump_local skipped (mode=%s)", self._mode)
+            return
+        cursor = 0
+        while not stop.is_set():
+            end = len(self._published)
+            while cursor < end:
+                event = self._published[cursor]
+                cursor += 1
+                try:
+                    await consumer.process(event)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — pump survives one bad event
+                    metrics.increment(
+                        "events_local_pump_failed", labels={"topic": event.topic.value}
+                    )
+                    logger.error(
+                        "Local bus pump delivery failed for event %s (%s: %s)",
+                        event.event_id, type(exc).__name__, exc,
+                    )
+            await asyncio.sleep(0.01)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CONSUMER — auto-selects Kafka or in-memory

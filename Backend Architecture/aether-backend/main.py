@@ -523,6 +523,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 raise RuntimeError(f"required {_role} consumer failed to start") from e
             logger.warning(f"Kafka consumer start skipped: {e}")
 
+    # Local in-memory event-bus delivery bridge.
+    # In AETHER_ENV=local the EventProducer connects in-memory and the
+    # EventConsumer.receive_loop returns immediately, so a published event was
+    # never delivered to a consumer without this pump: Bronze-validated events
+    # (e.g. POST /v1/batch) reached Bronze and stopped before Silver
+    # projection. When the producer is actually in-memory, drain its list into
+    # the canonical consumer.process() path so the local single-process stack
+    # mirrors the broker topology. Skipped when a real broker is connected
+    # (never double-delivered) or when this process attaches no consumers.
+    app.state.local_bus_pump_task = None
+    if _start_consumers and registry.producer.mode == "in-memory":
+        app.state.local_bus_pump_task = asyncio.create_task(
+            registry.producer.pump_local(registry.consumer, asyncio.Event()),
+            name="aether-local-bus-pump",
+        )
+        logger.info(
+            "Local in-memory event bus pump started "
+            "(Bronze→Silver delivery bridge, role=%s)",
+            _role,
+        )
+
     # Provider Gateway (feature-flagged)
     from dependencies.providers import _init_provider_gateway
     provider_gateway = _init_provider_gateway()
@@ -651,6 +672,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             pass
     if supervisor is not None:
         await supervisor.stop_all()
+    # Stop the local in-memory bus pump before the registry closes so no
+    # in-flight local delivery is left against torn-down resources.
+    _pump_task = getattr(app.state, "local_bus_pump_task", None)
+    if _pump_task is not None:
+        _pump_task.cancel()
+        try:
+            await _pump_task
+        except asyncio.CancelledError:
+            pass
     if provider_gateway:
         await provider_gateway.shutdown()
     await registry.shutdown()
