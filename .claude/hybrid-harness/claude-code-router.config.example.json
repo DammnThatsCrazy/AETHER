@@ -1,0 +1,30 @@
+{
+  "_readme": "AETHER hybrid harness — EXAMPLE claude-code-router config. Copy to ~/.claude-code-router/config.json, replace every REPLACE_* value, then run: chmod 600 ~/.claude-code-router/config.json. NEVER commit a filled-in copy — your real Anthropic and DeepSeek keys live ONLY in that local file. See ./README.md.",
+  "APIKEY": "REPLACE_WITH_A_LOCAL_ROUTER_SECRET",
+  "HOST": "127.0.0.1",
+  "PORT": 3456,
+  "Providers": [
+    {
+      "name": "anthropic",
+      "api_base_url": "https://api.anthropic.com/v1/messages",
+      "api_key": "REPLACE_WITH_ANTHROPIC_API_KEY",
+      "models": ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
+      "transformer": { "use": ["Anthropic"] }
+    },
+    {
+      "name": "deepseek",
+      "api_base_url": "https://api.deepseek.com/chat/completions",
+      "api_key": "REPLACE_WITH_DEEPSEEK_API_KEY",
+      "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+      "transformer": { "use": ["deepseek"] }
+    }
+  ],
+  "Router": {
+    "default": "anthropic,claude-sonnet-5",
+    "think": "anthropic,claude-opus-4-8",
+    "longContext": "anthropic,claude-sonnet-5",
+    "longContextThreshold": 60000,
+    "webSearch": "anthropic,claude-sonnet-5",
+    "background": "deepseek,deepseek-v4-flash"
+  }
+}

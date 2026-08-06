@@ -104,3 +104,38 @@ Never blindly stamp stale docs to silence CI.
 (`docs/productization/aether_productization_audit.md` is its dated
 narrative snapshot). Do not claim an area is production-ready in any doc
 unless the scorecard supports it; update both together.
+
+---
+
+## Hybrid Harness Rules (Claude Main / DeepSeek Sub-Agent)
+
+This repo can run a hybrid harness: **Claude** is the main orchestrator/driver;
+**DeepSeek** executes well-scoped, mechanical sub-tasks. DeepSeek is reached
+through a local Anthropic-compatible router — never a direct base-URL swap,
+because `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` are global and would send
+the orchestrator to DeepSeek too. Setup, verification, and example configs live
+in [`.claude/hybrid-harness/README.md`](.claude/hybrid-harness/README.md); the
+executor is the `deepseek-executor` sub-agent
+([`.claude/agents/deepseek-executor.md`](.claude/agents/deepseek-executor.md)).
+This harness is opt-in and local: with no router running, `deepseek-executor`
+simply falls back to a Claude model, so nothing here changes shared CI behavior.
+
+- **Orchestration**: Claude (main model) owns git operations, architectural
+  decisions, and ultimate task review.
+- **DeepSeek sub-agent delegation**: delegate to the `deepseek-executor`
+  sub-agent to handle:
+  - Repetitive data parsing or migration tasks.
+  - Large-scale regex refactoring across multiple files.
+  - Generating boilerplate, unit tests, or basic CRUD code.
+  - Scanning logs, dependency trees, or long error stack traces.
+- **Prompting DeepSeek**: instruct the sub-agent with precise, mechanical,
+  step-by-step constraints. Do not issue highly abstract or conceptual prompts
+  to DeepSeek — give it concrete inputs, exact file paths, and a verifiable done
+  condition.
+- **Handoff verification**: Claude reviews every file DeepSeek modified in the
+  primary environment before staging a commit. DeepSeek output is never
+  committed unreviewed and never bypasses `make ci-check`.
+- **Repo-safety scope**: keep DeepSeek off surfaces this repo's gates own —
+  generated docs (`docs/_generated/`, `REPO-INDEX.md`, `AUTOMATION.md`),
+  source-linked docs, contract registries, and the `pyproject.toml` version.
+  Those stay with Claude, per the rules above.
