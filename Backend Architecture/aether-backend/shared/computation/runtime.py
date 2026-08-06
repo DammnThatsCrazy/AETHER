@@ -78,6 +78,20 @@ def rate_result(
             **base,
         )
 
+    if num is None:
+        # An undefined numerator (e.g. unpriced revenue) is a missing input, NOT
+        # a zero — never let 'unknown' collapse to 0 via `num or 0`.
+        return CanonicalResult(
+            status=ResultStatus.MISSING_INPUTS,
+            value=None,
+            quality=Quality().with_dimension(
+                QualityDimensionName.COMPLETENESS,
+                state="degraded",
+                reason="undefined numerator",
+            ),
+            **base,
+        )
+
     if den < definition.minimum_sample_size:
         return CanonicalResult(
             status=ResultStatus.INSUFFICIENT_DATA,
@@ -92,7 +106,7 @@ def rate_result(
             **base,
         )
 
-    value = float((num or 0) / den)
+    value = float(num / den)
     uncertainty: Optional[Uncertainty] = None
     # Attach a Wilson band only for bounded [0,1] proportions.
     if (

@@ -81,6 +81,9 @@ async def materialize_campaign_performance_daily(
                 "clicks": 0,
                 "revenue_attributed_usd": Decimal("0"),
                 "conversions": 0,
+                # Fractional attributed-conversion credit, preserved for the
+                # integrity feed (the ClickHouse column stays integer).
+                "conversions_fractional": Decimal("0"),
             }
         rec = by_campaign[key]
         rec["spend_usd"] += _to_decimal(sr.get("total_cost")) or Decimal("0")
@@ -99,7 +102,14 @@ async def materialize_campaign_performance_daily(
             end_date=period_end,
         )
         rec["revenue_attributed_usd"] = summary.get("total_attributed_net_revenue") or Decimal("0")
-        rec["conversions"] = int(summary.get("total_attributed_conversions") or 0)
+        # Preserve the FRACTIONAL attributed conversions. The gold ClickHouse
+        # column keeps an integer for schema compatibility, but the measurement
+        # plane (the integrity source of truth) must not truncate credit — a
+        # int() here previously understated CPA and conversion_rate.
+        rec["conversions_fractional"] = (
+            _to_decimal(summary.get("total_attributed_conversions")) or Decimal("0")
+        )
+        rec["conversions"] = int(rec["conversions_fractional"])
 
     now = datetime.now(timezone.utc)
     gold_rows = []
@@ -148,7 +158,15 @@ async def materialize_campaign_performance_daily(
             from shared.measurement.registry import REGISTRY_VERSION
 
             total_clicks = sum(int(r["clicks"]) for r in gold_rows)
-            total_conversions = sum(int(r["conversions"]) for r in gold_rows)
+            # Feed the plane the FRACTIONAL attributed conversions, not the
+            # integer gold-column projection, so conversion_rate is not
+            # understated by per-campaign truncation.
+            total_conversions = float(
+                sum(
+                    (_to_decimal(r["conversions_fractional"]) or Decimal("0"))
+                    for r in by_campaign.values()
+                )
+            )
             ctx = MeasurementContext(
                 tenant_id=tenant_id,
                 window_start=period_start.isoformat(),
