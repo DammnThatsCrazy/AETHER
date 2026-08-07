@@ -2831,3 +2831,259 @@ Provider readiness is truthful: without a credential a provider reports
 `credential_missing`, is never marked connected, and the certification harness
 reports `credential_turnkey / staging_validation_pending` — never `provider_live`
 — until real infrastructure and credentials are supplied.
+
+---
+
+## Continuation Plane & Client-Sync Feed (v8.12.0)
+
+Cross-device context-handoff and catch-up surfaces from the mobile/continuity
+productization program. The design stance is deliberate: a **continuation** is a
+durable context-handoff token — a bounded `summary`, `canonical_context`, and
+`resource_references` describing where a principal left off — never a whole
+graph. The **client-sync** feed carries change rows with ids + a revision only;
+clients re-fetch full objects through their normal scoped endpoints, so the
+graph is never replicated over the feed.
+
+Both surfaces are flag-gated inside every handler — `AETHER_CONTINUATION_ENABLED`
+and `AETHER_CLIENT_SYNC_ENABLED` (default OFF). When off they answer 404,
+indistinguishable from an unmounted route. Server identity always overrides the
+request body: a client cannot forge `principal_id`, `tenant_id`, or `app_kind`.
+
+### Continuation plane — tenant (`/v1/continuations`)
+
+Scope is `t:{tenant_id}`; the principal is the authenticated user (or the tenant
+itself for API-key auth). GETs require `read`, writes `write`. Creating,
+updating, or deleting a continuation emits a `continuation_changed` sync event.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/continuations` | Create a continuation (optional `idempotency_key` query param). Body: `source_client`, `surface`, `summary`, `canonical_context`, `resource_references`, `sensitivity` (default `standard`), `freshness`, `expires_at`. Returns the row with `state_revision` (0 on create). |
+| GET | `/v1/continuations/recent` | Recent continuations for the principal (`limit` 1–100, default 25). Response `{ "continuations": [...] }`. |
+| GET | `/v1/continuations/{id}` | One continuation. |
+| PATCH | `/v1/continuations/{id}` | Compare-and-swap update. Body is the continuation fields plus the required `expected_state_revision`; a `state_revision` mismatch returns HTTP 409. |
+| POST | `/v1/continuations/{id}/handoff` | Mint the backend selection token for a handoff. Body: `mode` (`explicit` \| `query`), `resource_ids`, `saved_view_id`, `query_id`, `as_of`, `expires_at`. The token resolves the same subject set for Noesis exact-handoff and mobile deep-links. |
+| DELETE | `/v1/continuations/{id}` | Delete. Response `{ "deleted": true, "id": ... }`. |
+
+### Operator continuation twins (`/v1/kyber/continuations`)
+
+The same durable continuation plane exposed to Kyber operators, scoped to
+`o:{operator_id}` and reusing the same `continuations` / `continuation_selections`
+tables and the same `client_sync` feed — there is no second continuation store.
+The operator identity is always taken from the authenticated Kyber session
+(`KyberAccessContext.operator_id`), never from the request body, and every route
+is gated by `require_kyber_access(SELF_CAPABILITY)` so only a live, device-bound
+workforce session can reach the surface. An operator may only read, update, or
+delete their own continuations (the row's `principal_id` must equal the
+authenticated `operator_id`; absent and foreign rows both read as 404).
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/kyber/continuations/recent` | Recent continuations for the operator (mirror of the tenant shape; `limit` 1–100, default 25). |
+| GET | `/v1/kyber/continuations/{id}` | One operator continuation (mirror of the tenant shape). |
+
+The operator router also mirrors the tenant plane's `POST`, `PATCH`
+(CAS-guarded via `expected_state_revision`), `POST /{id}/handoff`, and `DELETE`
+routes behind the same flag gate and `require_kyber_access(SELF_CAPABILITY)`.
+
+### Client-sync feed — tenant (`/v1/client-sync`)
+
+`AETHER_CLIENT_SYNC_ENABLED` gate; requires `read`. Returns an ordered, gap-free
+slice of the durable per-scope change log since `cursor`.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/client-sync` | Query params: `cursor` (opaque; omit to start from the head) and `limit` (1–500, default 200). Response: `{ "events": [SyncEvent...], "cursor", "has_more", "reset" }`. Each `SyncEvent` carries `id`, `scope_key`, `seq`, `change_type`, `resource_kind`, `resource_id`, `revision`, `created_at` — ids + a revision only, never a resource body. |
+
+### Operator client-sync feed (`/v1/kyber/client-sync`)
+
+The operator read-path twin of the tenant feed, reading the SAME
+`sync_change_log` / `sync_cursor_counter` — no second feed. Scope is always
+`o:{context.operator_id}` from the authenticated session. Gated by
+`AETHER_CLIENT_SYNC_ENABLED` and `require_kyber_access(SELF_CAPABILITY)`.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/kyber/client-sync` | Same `cursor` / `limit` contract as the tenant feed, scoped to the authenticated operator. M5 producers emit operator-scoped changes for command receipts, incident updates, Kyber session revocations, and operator continuations. |
+
+### Sync event types
+
+The sync-event type registry (`shared/client_sync/models.py`, drift-guarded by
+`tests/contracts/test_sync_event_contract_parity.py`) defines exactly ten
+snake_case change types emitted by the feed:
+
+`notification_changed`, `continuation_changed`, `saved_view_changed`,
+`conversation_changed`, `watchlist_changed`, `incident_changed`,
+`command_receipt_changed`, `preference_changed`, `session_revoked`,
+`installation_revoked`.
+
+Producer coverage: notification intelligence (`notification_changed`),
+continuation plane (`continuation_changed`), exploration saved views
+(`saved_view_changed`), Noesis conversations (`conversation_changed`),
+intelligence comparison watchlists (`watchlist_changed`), Kyber ops incidents
+and command receipts (`incident_changed`, `command_receipt_changed`), self-service
+and Kyber session revocation (`session_revoked`), and mobile installation
+revocation (`installation_revoked`).
+
+---
+
+## Mobile Gateway (v8.12.0)
+
+Native installation and push-subscription gateway. Flag-gated inside every
+handler via `AETHER_MOBILE_ENABLED` (default OFF → 404). Scope is `t:{tenant_id}`;
+`app_kind` is forced to `aether`. Only the hash of a push token is stored — never
+the raw token. GETs require `read`, writes `write`. Revoking an installation
+emits an `installation_revoked` sync event.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/mobile/installations` | Register an installation. Body: `installation_id` (optional), `platform`, `bundle_id`, `environment`, `device_name`, `push_token`, `push_provider`, `app_version`, `distribution_profile`. Response `{ "installation": {...}, "subscription": {...} }`. |
+| GET | `/v1/mobile/installations` | List the caller's installations. Response `{ "installations": [...] }`. |
+| GET | `/v1/mobile/installations/{id}` | One installation. |
+| DELETE | `/v1/mobile/installations/{id}` | Revoke an installation (emits `installation_revoked`). |
+| POST | `/v1/mobile/installations/{id}/subscriptions` | Add a push subscription to an installation. Body: `platform`, `provider`, `push_token`, `environment`. 404 if the installation is absent. |
+| POST | `/v1/mobile/deep-links/resolve` | Resolve an opaque deep link (body: `installation_id`, `continuation_id`) to a bounded continuation projection. Fail-closed: every failure that could leak a continuation's existence returns the same `{ "resolved": false, "reason": "unresolvable" }`; a restricted continuation owned by the caller returns `{ "resolved": false, "reason": "step_up_required", "requires_step_up": true }` unless the caller holds `step_up`; success returns `{ "resolved": true, "continuation": {...} }`. |
+| GET | `/v1/mobile/config` | Typed `MobileConfig` for an installation (`installation_id` query param required; 404 when the installation is absent). |
+
+`GET /v1/mobile/config` returns `{ "app_kind", "environment", "min_version",
+"latest_version", "upgrade_policy", "distribution_profile", "feature_flags",
+"service_capabilities", "externally_blocked_providers" }`. `upgrade_policy` is
+derived from the installation's `app_version`: `required` below the support
+floor, `suggested` between floor and latest, `none` at or above latest (unknown
+version fails safe to `required`). `distribution_profile` values are snake_case:
+iOS `dev` / `testflight` / `app_store`; Android `dev` / `play_internal` /
+`managed`. `service_capabilities` is a read-only projection of existing
+`settings.py` flags; `externally_blocked_providers` honestly mirrors the
+external-blockers report and never claims a blocked provider is live.
+
+**Bounded redacted projections** (M3a, decision-log D12): `GET /v1/mobile/today`
+(alert counts + redacted titles + profile peek), `GET /v1/mobile/profile`
+(`user_id` query param), `GET /v1/mobile/campaign` (`campaign_id` query param),
+`GET /v1/mobile/alerts` (`unread`, `limit`, `offset`), and `GET /v1/mobile/briefing`
+(`views_limit`, `conversations_limit`). Each composes owning-service truth
+(profile-360, campaign-360, the single canonical notification inbox, the
+saved-views store, Noesis) into a bounded, redacted projection and never
+re-calculates it. Wire fields are snake_case. All require `read`.
+
+---
+
+## Kyber Workforce Sessions & Step-Up (v8.12.0)
+
+Session inspection, elevation, and revocation for the Kyber workforce plane
+(`/v1/kyber/auth/*`). These routes only inspect and end what the identity-plane
+sign-in flow produced, plus raise and verify a step-up elevation — there is no
+route that mints, extends, or returns a raw session handle.
+
+### GET /v1/kyber/auth/session
+
+The caller's current session state, plus step-up state and a fresh CSRF token.
+Requires a live Kyber presence (`require_kyber_presence`). The CSRF token is
+returned in the response body **and** set as an HttpOnly cookie; the application
+echoes the body value in `X-Kyber-CSRF`, so a cross-site request cannot produce
+a matching pair. Response body includes the session fields (`session_id`,
+`operator_id`, `device_id`, `status`, `authentication_strength`,
+`authentication_methods`, `environment`, `presence_expires_at`,
+`authority_expires_at`, `idle_expires_at`, `created_at`, `last_seen_at`,
+`rotated_at`, `revoked_at`, `risk_state`), the step-up state (`stepped_up`,
+`step_up_expires_at`, `step_up_capability_id`), and
+`meta: { "csrf_token", "granted_disclosure" }`.
+
+### POST /v1/kyber/auth/step-up/options
+
+Issues an authenticator challenge for the session's bound device. Requires
+`require_kyber_access(SELF_CAPABILITY)`; 403 if the session is not device-bound.
+Body: optional `capability_id`. Response: `{ "challenge_id", "challenge",
+"device_id", "capability_id" }`. The challenge is a single-use, server-issued,
+device-bound ECDSA P-256 proof challenge (32 CSPRNG bytes, 120 s TTL).
+
+### POST /v1/kyber/auth/step-up/verify
+
+Verifies a signed assertion and elevates the session. Requires
+`require_kyber_access(SELF_CAPABILITY)`. Body: `challenge_id`, `signature`,
+optional `capability_id`, `reason`, `ttl_minutes`. The `signature` is a
+base64url ECDSA-SHA256 over the issued challenge bytes and may be either the raw
+64-byte IEEE P1363 form (`r||s`, as WebCrypto emits) **or** DER; both are
+accepted and verified. A successful elevation **rotates the session handle** (the
+response sets a new session cookie and a fresh CSRF token), so a handle captured
+before the elevation cannot ride it. Response: `{ "grant_id", "capability_id",
+"expires_at", "session" }` plus `meta: { "csrf_token" }`. Step-up TTL is clamped
+to 1–60 minutes (shortest role-template `step_up_minutes`, default 5); grants
+are session- and device-bound, single-purpose when a capability is named, and
+consumable.
+
+### Additional session routes
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/kyber/auth/sessions` | Every session the caller holds — self only, never another operator's. `meta`: `{ "count", "current_session_id" }`. |
+| POST | `/v1/kyber/auth/sessions/{session_id}/revoke` | End a session. Callers may always end their own; ending another operator's requires `kyber.workforce.manage`. Emits a `session_revoked` sync event. |
+
+---
+
+## Kyber Command Receipts — Read (v8.12.0)
+
+Read-only surfaces for the governed command lifecycle at `/v1/kyber/ops/*`. Both
+routes require `kyber.audit.read` (AUDIT_READ) at disclosure
+`D4_EVENT_EVIDENCE` and read action class. `verification: null` on the describe
+payload is a real answer — "not verified" — and must be rendered as such, never
+omitted: that is the difference between a question nobody asked and one that is
+still open, and the whole point of the `executed_unverified` status.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/kyber/ops/commands` | List commands. Query params: `status` (default `open`), `command_type`, `limit` (1–500, default 100). `status=open` **includes `executed_unverified`** — a command whose postconditions were never confirmed is still an open question. Response `{ "commands": [...], "count", "status_filter" }`. |
+| GET | `/v1/kyber/ops/commands/{command_id}` | One command with its execution and its verification. `verification: null` means the postconditions were never confirmed. |
+
+---
+
+## Kyber Mobile Action Digest (v8.12.0)
+
+`GET /v1/kyber/mobile/actions` — a **read-only** action-availability digest for
+the authenticated operator, gated by `require_kyber_access(SELF_CAPABILITY)`.
+It reports what a governed action *exists for*, which capability that action
+would require, and whether step-up is fresh. It performs **no mutations and
+dispatches nothing** — the governed command lifecycle stays at
+`/v1/kyber/ops/commands/*`, and there is no second command plane.
+
+Everything is composed from the owning services (the exception queue, the open
+command list, and session step-up state) and never re-derives their priority,
+verification, or correlation logic.
+
+Response shape:
+
+```json
+{
+  "data": {
+    "tiers": { "tier0": [], "tier1": [], "tier2": [], "tier3": [] },
+    "counts": { "tier0": 0, "tier1": 0, "tier2": 0, "tier3": 0 },
+    "step_up_required": false,
+    "step_up": { "fresh": true, "grant_id": null, "expires_at": null },
+    "generated_at": "..."
+  }
+}
+```
+
+Tier items carry `kind` (`exception` | `command`), `id`, `title`, `severity`,
+`status`, `action_class`, `available_action`, `capability_id`,
+`requires_step_up`, `priority_score`, `signal_count`, `last_seen_at`. Tier
+vocabulary is presentational: `tier0` = act now (critical exceptions + open
+high-impact/fleet-destructive commands), `tier1` = needs action, `tier2` = watch,
+`tier3` = informational.
+
+---
+
+## Kyber Mobile Proof Keys (v8.12.0)
+
+Mobile-bound ECDSA P-256 proof-key enrollment for Kyber operators
+(`/v1/kyber/mobile/proof-keys/*`). Uses the **same** device-proof store, key
+validation, and verify path as the browser-profile mechanism — not a second
+proof system. Every route is gated by `require_kyber_access(SELF_CAPABILITY)`.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/kyber/mobile/proof-keys` | Register or re-enroll a proof key. Body: `device_id`, `public_key` (base64url SPKI ECDSA P-256; `algorithm` must be `ES256`, anything else is HTTP 400), optional `label`. Idempotent upsert: re-enrolling a device with a different key replaces the stored key in place; an identical key is a no-op. An absent or foreign `device_id` reads as 404 (never 403). Response is the full record, including the SPKI `public_key`, so the client can confirm the exact key stored. |
+| GET | `/v1/kyber/mobile/proof-keys` | List the caller's live registered proof keys. **Redacted** — never returns `public_key`; only `proof_key_id`, `device_id`, `operator_id`, `algorithm`, `created_at`, `last_verified_at`. Response `{ "operator_id", "proof_keys": [...] }`. |
+| DELETE | `/v1/kyber/mobile/proof-keys/{proof_key_id}` | Revoke a proof key (sets `revoked_at`; the row stays for forensics). Idempotent; absent and foreign keys both read as 404. Response is the full record. |
+
+The `label` field is accepted on the wire for contract stability but is not
+persisted on the `DeviceProofKey` row; it is carried in the re-key audit event
+instead.

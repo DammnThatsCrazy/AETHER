@@ -1,12 +1,16 @@
 /**
- * Kyber Mobile root — typed navigator wiring the seven M4a operator-companion
- * screens (Pulse / Exceptions / Incidents / Runs / Reviews / Briefings / Account).
+ * Kyber Mobile root — typed navigator wiring the nine operator-companion
+ * screens (Pulse / Exceptions / Incidents / Runs / Reviews / Briefings /
+ * Actions / Receipts / Account).
  *
  * Navigation uses `createNavigator<KyberRoutes>()` from `@aether/mobile-ui`: the
  * app holds the active tab, pushes typed routes through the navigator, and
  * renders the matching screen inside the shared `Screen` shell. All screens are
  * read-only (M2 "no offline mutation" invariant); governed actions (approve /
- * suspend / revoke / resolve / suppress / acknowledge) are M5/M6.
+ * suspend / revoke / resolve / suppress / acknowledge) live on the desktop
+ * command plane and are never dispatched from this binary. M6b adds the
+ * read-only Actions (tier 0-3 availability digest + device-bound step-up) and
+ * Receipts (durable command-receipt visibility) surfaces.
  */
 import React, { useState } from 'react';
 import { SafeAreaView, StyleSheet, View } from 'react-native';
@@ -17,10 +21,12 @@ import { TabBar } from './components/TabBar';
 import { navigate } from './navigator';
 import type { KyberTab } from './routes';
 import AccountScreen from './screens/AccountScreen';
+import ActionsScreen from './screens/ActionsScreen';
 import BriefingsScreen from './screens/BriefingsScreen';
 import ExceptionsScreen from './screens/ExceptionsScreen';
 import IncidentsScreen from './screens/IncidentsScreen';
 import PulseScreen from './screens/PulseScreen';
+import ReceiptsScreen from './screens/ReceiptsScreen';
 import ReviewsScreen from './screens/ReviewsScreen';
 import RunsScreen from './screens/RunsScreen';
 
@@ -43,6 +49,8 @@ export default function App(): React.JSX.Element {
         {tab === 'Runs' && <RunsScreen />}
         {tab === 'Reviews' && <ReviewsScreen />}
         {tab === 'Briefings' && <BriefingsScreen />}
+        {tab === 'Actions' && <ActionsScreen />}
+        {tab === 'Receipts' && <ReceiptsScreen />}
         {tab === 'Account' && <AccountScreen />}
       </View>
       <TabBar active={tab} onSelect={selectTab} />

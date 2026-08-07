@@ -8,7 +8,7 @@ program:
   base_commit: "ead4ba6c7b53783958bebc03bddcede1a2ea7429"   # == origin/main at completion-program start (feat: payment-rails financial-plane provider readiness (#509))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of the original C0 base
   platform_version: "8.12.0"
-  last_landed_checkpoint: C6   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4), C6 (M5); C7/C9 remaining
+  last_landed_checkpoint: C7   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4), C6 (M5), C7 (M6); C9 remaining
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -200,14 +200,26 @@ milestones:
   - id: C7
     name: governed-mobile-actions
     depends_on: [C6]
-    status: active
-    lands: [mobile-action-adapter, kyber-mobile-tier-0-3-ui, mobile-step-up-flow, command-receipt-visibility, mobile-bound-device-attestation]
+    status: landed
+    landed: [mobile-action-adapter, kyber-mobile-tier-0-3-ui, mobile-step-up-flow, command-receipt-visibility, mobile-bound-device-attestation]
     note: >
-      C7 adds a mobile action adapter on the gateway (exposes action availability + adapts mobile
-      step-up challenges to the EXISTING services/kyber/ops command plane — no second command
-      plane, no generic mutation channel), Kyber Mobile Tier 0/1/2/3 UI + step-up via the existing
-      StepUpService/device_proof, durable command-receipt visibility, and mobile-bound device
-      signature/attestation where feasible. No offline mutation. Driven by M6 of the completion program.
+      C7 is LANDED via M6 of the completion program. The mobile action adapter
+      (services/kyber/ops/mobile_actions.py, GET /v1/kyber/mobile/actions) is a READ-ONLY
+      action-availability digest composing the OWNING services — exception queue buckets + open
+      command list + session step-up freshness — tier0-tier3, with available_action/capability_id/
+      requires_step_up as availability pointers only. NO second command plane, NO generic mutation
+      channel, NO endpoint naming an arbitrary action: dispatch and verify stay on the desktop
+      command plane. Kyber Mobile gained Actions (tier0-3) + Receipts (durable command receipts
+      via the SDK's typed getCommandReceipts/getCommandReceipt) tabs with step-up via the EXISTING
+      StepUpService/device_proof challenge path; verification:null renders "Not verified", never
+      omitted. Mobile-bound device attestation landed as proof-key enrollment
+      (services/kyber/devices/mobile_proof_routes.py, /v1/kyber/mobile/proof-keys): SAME store,
+      SAME verify path, SAME key validation as the browser-proof path (DeviceProofKeyRepository /
+      DeviceProofService.verify_proof / load_p256_public_key), one live row per device, redacted
+      inventory list, 404-never-403 for absent/foreign device ids. SDK: 9 typed methods + zero-import
+      pure-TS P256Signer (RFC 6979 A.2.5 KAT byte-exact). 23 backend tests + 46 mobile-core tests +
+      app typecheck/test green. No offline mutation. All surfaces read-only except the step-up verify
+      / proof-key register (the governed step-up path).
   - id: C9
     name: adversarial-review-remediation
     depends_on: [C7, M7]
@@ -247,16 +259,19 @@ architecture:
   mobile_offline_cache: build               # NET-NEW: M2 (read-only offline cache framework in packages/mobile-core)
   gateway_projections: build                # NET-NEW: M3 landed (services/mobile/projections.py reusing owning services, never re-calculating Profile360/Campaign360/graph truth)
   operator_continuation_router: build       # NET-NEW: M5 (services/continuation/ operator router)
-  mobile_action_adapter: build              # NET-NEW: M6 (gateway adapter -> existing services/kyber/ops, no second plane)
+  mobile_action_adapter: build              # NET-NEW: M6 landed (gateway adapter -> existing services/kyber/ops, no second plane)
   demo_seed_extensions: extend              # NET-NEW: M7 (notifications/continuations/exceptions/incidents/runs/reviews in demo_seed)
   release_readiness_machinery: reuse        # scripts/production_status.py, repo_doctor.py, deployment_profiles.yaml
 
 # Alembic revision reservation. Single-head invariant is enforced by
-# scripts/validate_temporal_integrity.py. Current DB head: 20260822_mobile_installations
-# (C1/C3 landed chain 20260820 -> 20260821 -> 20260822 from 20260812_credential_platform).
-# Completion-program migrations (M2 app-version on mobile_installations; M6 mobile-bound
-# attestation; M7 demo-seed if it needs tables) will be namespaced 20260830+ and registered
-# here as they land. down_revision must always re-point to the real single head on rebase.
+# scripts/validate_temporal_integrity.py. Current DB head: 20260830_app_version_registration
+# (C1/C3 landed chain 20260820 -> 20260821 -> 20260822 -> [20260830 M2 app-version], single head;
+# 20260814_activation_state / 20260817_payment_provider_receipts already descend from
+# 20260822_mobile_installations, so 20260830 chains from 20260817 — the real head — to keep one
+# head, not 20260822). M6 mobile-bound attestation needed NO migration (mobile proof keys reuse the
+# existing DeviceProofKey table via DeviceProofKeyRepository — same store as the browser-proof path).
+# M7 demo-seed will register here if it needs tables. down_revision must always re-point to the real
+# single head on rebase.
 migration_reservation:
   chain_root_at_start: "20260812_credential_platform"
   reserved:
@@ -271,6 +286,10 @@ migration_reservation:
     - id: "20260822_mobile_installations"    # C3: tables mobile_installations, push_subscriptions
       down_revision: "20260821_client_sync"
       owner_milestone: C3
+      status: landed
+    - id: "20260830_app_version_registration" # M2: app_version + distribution_profile on mobile_installations
+      down_revision: "20260817_payment_provider_receipts"   # the real head at M2; chained from 20260817 to keep a single head
+      owner_milestone: M2
       status: landed
 
 # Coordination with in-flight open PRs (do NOT merge wholesale; reuse-in-place).
@@ -308,28 +327,28 @@ open_pr_overlap:
 
 quality:                                     # updated at each milestone boundary from real gate runs
   ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the C6 (M5) tip — sync producers + operator continuation router + operator client-sync read route + desktop/mobile continue-on-phone surfaces all integrated and gated"
-  mobile_sdk: "packages/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 9 tests (5 client + 4 PKCE/secure-store) green in ci-check via npm test --workspaces"
+  mobile_sdk: "packages/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 46 tests green (client/PKCE/secure-store/offline + 11 kyber-client step-up/proof-keys/actions/receipts + 12 P256 signer incl. RFC 6979 A.2.5 KAT + derivePublicKey round-trip) via npm test --workspaces"
   mobile_apps: "apps/aether-mobile + apps/kyber-mobile scaffolds; scripts/mobile_build_check.py enforces distinct planes/bundles + scaffold completeness (4 tests); native compile externally_blocked (no macOS/Xcode/Android SDK/Expo here)"
   unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability) — backend 3517 passed incl. 21 producer-coverage + 15 operator-continuation + 3 operator-client-sync tests"
   contract_tests: "190 contract parity tests pass (12 continuation + 5 sync-event + notification + delivery-receipt incl. push channel + route/capability/ownership)"
   provider_adapters: "21 adapter tests (fake path + production guard + injected-transport real-path request/response mapping); registry registers apns/fcm/web_push/email"
   deep_link_resolve: "12 tests (fail-closed unknown/unowned/revoked/cross-scope/cross-plane/expired all uniform; step-up gate)"
   credentials_tooling: "9 tests (env-var derivation, missing/invalid/configured states, --strict blocks required-profile creds, no secret leak)"
-  frontend_tests: "npm typecheck + build + test pass — frontend/aether 55 files/314 tests, frontend/kyber 57 files/498 tests, packages/mobile-core 23 tests (operator continuation SDK + barrel surface); ownership validator + ts public exports green"
-  migration_single_head: "true (head=20260822_mobile_installations; chains 20260820->20260821->20260822 from 20260812_credential_platform)"
+  frontend_tests: "npm typecheck + build + test pass — frontend/aether 55 files/314 tests, frontend/kyber 57 files/498 tests, packages/mobile-core 46 tests (operator continuation SDK + M6 step-up/proof-keys/actions/receipts + P256 signer); ownership validator + ts public exports green"
+  migration_single_head: "true (head=20260830_app_version_registration; M2 app-version chained from 20260817_payment_provider_receipts to keep a single head; C1/C3 chain 20260820->20260821->20260822 from 20260812_credential_platform)"
   completion_baseline: "completion program re-based on origin/main head ead4ba6c (#509); pre-existing stale REPO-INDEX (591->592 docs count) repaired (0707e8cb) + 2 pre-existing source-linked stamps reviewed+updated (9d25c42b); make docs-check 38/38 green at completion start"
   ci_note: "intermediate superseded SHAs show a `validate` failure caused solely by E2E_TENANT_RESULT=cancelled (concurrency cancellation from the next push); every real gate passed. Only the final tip SHA is authoritative."
 
 # Honest readiness verdict (per productization dimension). No fake production-ready claims.
-# Completion program is IN FLIGHT (M0-M8): C6/C7 surfaces + M4/M7 additions are not yet
-# landed; update this section only where evidence (make ci-check / gates / review) supports it.
+# Completion program is IN FLIGHT (M0-M8): C9 (M8 review) + M7 demo/distribution additions are not
+# yet landed; update this section only where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7/C9 remaining on claude/aether-turnkey-completion-7m3x9"
+  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7 LANDED via M6 (mobile action adapter — read-only availability digest reusing services/kyber/ops, NO second command plane; Kyber Mobile Tier 0-3 Actions + durable Receipts tabs with step-up via existing StepUpService/device_proof; mobile-bound proof-key attestation reusing the browser-proof store/verify path); C9 (M8 review) + M7 demo remaining on claude/aether-turnkey-completion-7m3x9"
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
-  mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store)"
-  mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth; M5: continue-on-desktop/resume via ContinueOnDesktopPanel) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client; M5: OperatorContinuationsPanel with 404-safe resume); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
+  mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store; M6: step-up/proof-key/actions/receipts typed methods + zero-import pure-TS P256Signer verified against RFC 6979 A.2.5 + Node crypto)"
+  mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth; M5: continue-on-desktop/resume via ContinueOnDesktopPanel) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client; M5: OperatorContinuationsPanel with 404-safe resume; M6: Actions Tier 0-3 + durable Receipts tabs, step-up via attestation.ts ensureProofKey/elevate, verification:null rendered as 'Not verified' — never omitted); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
   credential: externally_blocked            # no AWS/APNs/FCM/email/Apple/Google; contracts + fakes + preflight only
   design_partner: partial
   store_submission: externally_blocked
   controlled_production: externally_blocked
-  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 + C6 landed; C7/C9 building to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"
+  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 + C6 + C7 landed; C9/M8 review + M7 demo/distribution remaining to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"

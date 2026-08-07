@@ -359,6 +359,8 @@ from services.kyber.access.routes import emergency_router as kyber_emergency_rou
 from services.kyber.graph.routes import router as kyber_graph_router
 from services.kyber.mirror.routes import router as kyber_mirror_router
 from services.kyber.ops.routes import router as kyber_ops_router
+from services.kyber.ops.mobile_actions import mobile_actions_router
+from services.kyber.devices.mobile_proof_routes import mobile_proof_router
 from services.cluster.routes import router as cluster_router
 
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
@@ -824,6 +826,14 @@ def create_app() -> FastAPI:
     # services/kyber/ops/routes.py: a command's capability and action class come
     # from its own spec, which is not known until the body has been read.
     app.include_router(kyber_ops_router)
+    # M6 — Kyber mobile governed-action surfaces. READ-ONLY action-availability
+    # digest (reuses the ops command plane — never a second plane) and mobile-bound
+    # device proof-key attestation (reuses DeviceProofService/DeviceProofKey). Both
+    # are guarded per-call by require_kyber_access(SELF_CAPABILITY) like the ops and
+    # devices routers above; no new feature flag, since the Kyber workforce plane is
+    # the established product surface and every route here authorizes individually.
+    app.include_router(mobile_actions_router)
+    app.include_router(mobile_proof_router)
 
     # ── Kyber Missions control plane (feature-flagged, OFF by default) ──
     if settings.kyber_missions.missions_enabled:

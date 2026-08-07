@@ -18,6 +18,18 @@ import type {
 import type { MobileConfig } from './config';
 import { normalizeBaseUrl } from './config';
 import { HttpClient, type HttpClientDeps } from './http';
+import type {
+  CommandReceiptDetail,
+  CommandReceiptList,
+  KyberSessionView,
+  MobileActionsDigest,
+  MobileProofKey,
+  MobileProofKeyListEntry,
+  ProofKeyRegisterInput,
+  StepUpGrant,
+  StepUpOptions,
+  StepUpVerifyInput,
+} from './kyber';
 
 /** Body of `POST /v1/mobile/installations` (the server forces `app_kind`). */
 export interface InstallationRegisterInput {
@@ -151,5 +163,84 @@ export class AetherMobileClient {
   clientSync(cursor?: string): Promise<ClientSyncResponse> {
     const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
     return this.http.request<ClientSyncResponse>('GET', `/v1/client-sync${query}`);
+  }
+
+  // ── Kyber auth: session & step-up ────────────────────────────────────
+  /** GET /v1/kyber/auth/session — the caller's current Kyber session. */
+  getSession(): Promise<KyberSessionView> {
+    return this.http.request<KyberSessionView>('GET', '/v1/kyber/auth/session');
+  }
+
+  /**
+   * POST /v1/kyber/auth/step-up/options — request an authenticator challenge.
+   *
+   * The server binds the device from the authenticated session, so the wire body
+   * carries only the optional `capability_id`; `deviceId` is accepted for
+   * symmetry with the `device_id` the server echoes back.
+   */
+  requestStepUpOptions(deviceId: string, capabilityId?: string): Promise<StepUpOptions> {
+    return this.http.request<StepUpOptions>('POST', '/v1/kyber/auth/step-up/options', {
+      capability_id: capabilityId,
+    });
+  }
+
+  /** POST /v1/kyber/auth/step-up/verify — verify a signed challenge assertion. */
+  verifyStepUp(input: StepUpVerifyInput): Promise<StepUpGrant> {
+    return this.http.request<StepUpGrant>('POST', '/v1/kyber/auth/step-up/verify', input);
+  }
+
+  // ── Kyber mobile actions ─────────────────────────────────────────────
+  /** GET /v1/kyber/mobile/actions — read-only mobile action digest. */
+  getActions(): Promise<MobileActionsDigest> {
+    return this.http.request<MobileActionsDigest>('GET', '/v1/kyber/mobile/actions');
+  }
+
+  // ── Kyber mobile proof keys ──────────────────────────────────────────
+  /** POST /v1/kyber/mobile/proof-keys — register a device-bound ES256 proof key. */
+  registerProofKey(input: ProofKeyRegisterInput): Promise<MobileProofKey> {
+    return this.http.request<MobileProofKey>('POST', '/v1/kyber/mobile/proof-keys', input);
+  }
+
+  /** GET /v1/kyber/mobile/proof-keys — the caller's live proof keys (redacted). */
+  async listProofKeys(): Promise<MobileProofKeyListEntry[]> {
+    const data = await this.http.request<{ proof_keys: MobileProofKeyListEntry[] }>(
+      'GET',
+      '/v1/kyber/mobile/proof-keys',
+    );
+    return data.proof_keys;
+  }
+
+  /** DELETE /v1/kyber/mobile/proof-keys/{id} — revoke a proof key (idempotent). */
+  revokeProofKey(proofKeyId: string): Promise<MobileProofKey> {
+    return this.http.request<MobileProofKey>(
+      'DELETE',
+      `/v1/kyber/mobile/proof-keys/${encodeURIComponent(proofKeyId)}`,
+    );
+  }
+
+  // ── Kyber ops: command receipts ──────────────────────────────────────
+  /**
+   * GET /v1/kyber/ops/commands — command receipts, filtered by status/limit.
+   *
+   * Only the query params that are set are emitted: `?status=&limit=`, either,
+   * or neither.
+   */
+  async getCommandReceipts(opts?: { status?: string; limit?: number }): Promise<CommandReceiptList> {
+    const query: string[] = [];
+    if (opts?.status !== undefined) query.push(`status=${encodeURIComponent(opts.status)}`);
+    if (opts?.limit !== undefined) query.push(`limit=${encodeURIComponent(String(opts.limit))}`);
+    const qs = query.join('&');
+    return this.http.request<CommandReceiptList>('GET', `/v1/kyber/ops/commands${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * GET /v1/kyber/ops/commands/{id} — one command receipt with execution and
+   * verification (`verification: null` means "not verified", never omitted).
+   */
+  getCommandReceipt(commandId: string): Promise<CommandReceiptDetail> {
+    return this.http.request<CommandReceiptDetail>(
+      'GET',
+      `/v1/kyber/ops/commands/${encodeURIComponent(commandId)}`,
+    );
   }
 }

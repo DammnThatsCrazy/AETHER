@@ -52,6 +52,25 @@ export type {
 } from './client';
 export { AetherMobileClient } from './client';
 
+// Kyber mobile contracts (D6 snake_case wire twins) + pure-TS ES256 signer.
+export type {
+  CommandReceipt,
+  CommandReceiptDetail,
+  CommandReceiptList,
+  KyberSession,
+  KyberSessionView,
+  MobileActionItem,
+  MobileActionsDigest,
+  MobileProofKey,
+  MobileProofKeyListEntry,
+  ProofKeyRegisterInput,
+  StepUpGrant,
+  StepUpOptions,
+  StepUpVerifyInput,
+} from './kyber';
+export type { RandomBytesSource } from './p256';
+export { derivePublicKey, generateP256KeyPair, P256Signer, signChallenge } from './p256';
+
 export {
   assertMobileInstallation,
   isMobileInstallation,

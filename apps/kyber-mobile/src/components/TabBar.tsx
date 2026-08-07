@@ -1,5 +1,5 @@
 /**
- * Bottom tab bar for the seven Kyber Mobile root tabs (M4a).
+ * Bottom tab bar for the nine Kyber Mobile root tabs (M4a, extended M6b).
  *
  * App-local composition: `@aether/mobile-ui` ships no tab bar, so this reuses
  * the theme tokens directly. Tabs are typed against the route map (`KyberTab`)
@@ -19,6 +19,8 @@ const TABS: Array<{ key: KyberTab; label: string }> = [
   { key: 'Runs', label: 'Runs' },
   { key: 'Reviews', label: 'Reviews' },
   { key: 'Briefings', label: 'Briefings' },
+  { key: 'Actions', label: 'Actions' },
+  { key: 'Receipts', label: 'Receipts' },
   { key: 'Account', label: 'Account' },
 ];
 
