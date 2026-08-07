@@ -111,6 +111,7 @@ async def get_mobile_config(request: Request, installation_id: str = Query(...))
     result = await mobile_service.get_config(
         scope=mobile_service.tenant_scope(tenant.tenant_id),
         installation_id=installation_id,
+        principal_id=_principal(tenant),
     )
     if result is None:
         raise NotFoundError("installation not found")
@@ -130,7 +131,7 @@ async def list_installations(request: Request) -> APIResponse:
 async def get_installation(request: Request, installation_id: str = Path(...)) -> APIResponse:
     tenant = _tenant(request, "read")
     row = await mobile_service.get(
-        mobile_service.tenant_scope(tenant.tenant_id), installation_id
+        mobile_service.tenant_scope(tenant.tenant_id), installation_id, _principal(tenant)
     )
     if row is None:
         raise NotFoundError("installation not found")
@@ -141,7 +142,7 @@ async def get_installation(request: Request, installation_id: str = Path(...)) -
 async def revoke_installation(request: Request, installation_id: str = Path(...)) -> APIResponse:
     tenant = _tenant(request, "write")
     row = await mobile_service.revoke(
-        mobile_service.tenant_scope(tenant.tenant_id), installation_id
+        mobile_service.tenant_scope(tenant.tenant_id), installation_id, _principal(tenant)
     )
     if row is None:
         raise NotFoundError("installation not found")

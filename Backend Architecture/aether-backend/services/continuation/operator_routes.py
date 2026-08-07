@@ -81,9 +81,9 @@ async def _require_owned(operator_id: str, continuation_id: str) -> dict:
     exactly like the tenant router's not-found semantics.
     """
     row = await continuation_service.get(
-        continuation_service.operator_scope(operator_id), continuation_id
+        continuation_service.operator_scope(operator_id), continuation_id, operator_id
     )
-    if row is None or row.get("principal_id") != operator_id:
+    if row is None:
         raise NotFoundError("continuation not found")
     return row
 
@@ -140,7 +140,9 @@ async def get_operator_continuation(
 ) -> APIResponse:
     _require_enabled()
     row = await continuation_service.get(
-        continuation_service.operator_scope(context.operator_id), continuation_id
+        continuation_service.operator_scope(context.operator_id),
+        continuation_id,
+        context.operator_id,
     )
     if row is None:
         raise NotFoundError("continuation not found")
@@ -163,6 +165,7 @@ async def update_operator_continuation(
         continuation_id=continuation_id,
         expected_revision=payload.expected_state_revision,
         body=ctx,
+        principal_id=operator_id,
     )
     if row is None:
         raise NotFoundError("continuation not found")
@@ -213,7 +216,7 @@ async def delete_operator_continuation(
     operator_id = context.operator_id
     await _require_owned(operator_id, continuation_id)
     deleted = await continuation_service.delete(
-        continuation_service.operator_scope(operator_id), continuation_id
+        continuation_service.operator_scope(operator_id), continuation_id, operator_id
     )
     if not deleted:
         raise NotFoundError("continuation not found")

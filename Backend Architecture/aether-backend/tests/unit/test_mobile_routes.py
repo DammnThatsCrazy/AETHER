@@ -97,3 +97,54 @@ def test_add_subscription_ok():
         installation_id="dev-1",
     )).data
     assert sub["provider"] == "fcm"
+
+
+# ── Intra-tenant ownership isolation (A2 IDOR remediation) ────────────────────
+#
+# A second tenant user must never read / revoke / configure / subscribe a device
+# registered by another principal. Absent and foreign installations read
+# identically as 404 — no existence leak, no 403 (which would reveal the row).
+
+class _OtherTenant(_Tenant):
+    user_id = "user-2"
+
+
+def _other_req():
+    return SimpleNamespace(state=SimpleNamespace(tenant=_OtherTenant()))
+
+
+def test_foreign_principal_get_installation_404():
+    _run(mobile_routes.register_installation(_req(), _reg(installation_id="dev-1")))
+    with pytest.raises(NotFoundError):
+        _run(mobile_routes.get_installation(_other_req(), installation_id="dev-1"))
+    # The owner can still read it — the probe never touched the row.
+    got = _run(mobile_routes.get_installation(_req(), installation_id="dev-1")).data
+    assert got["id"] == "dev-1"
+
+
+def test_foreign_principal_revoke_404():
+    _run(mobile_routes.register_installation(_req(), _reg(installation_id="dev-1")))
+    with pytest.raises(NotFoundError):
+        _run(mobile_routes.revoke_installation(_other_req(), installation_id="dev-1"))
+    # Owner's installation survives the foreign revoke attempt, still active.
+    got = _run(mobile_routes.get_installation(_req(), installation_id="dev-1")).data
+    assert got["trust_state"] != "revoked"
+
+
+def test_foreign_principal_get_config_404():
+    _run(mobile_routes.register_installation(_req(), _reg(installation_id="dev-1")))
+    with pytest.raises(NotFoundError):
+        _run(mobile_routes.get_mobile_config(_other_req(), installation_id="dev-1"))
+    # The owner still gets a typed config.
+    cfg = _run(mobile_routes.get_mobile_config(_req(), installation_id="dev-1")).data
+    assert cfg["app_kind"] == "aether"
+
+
+def test_foreign_principal_add_subscription_404():
+    _run(mobile_routes.register_installation(_req(), _reg(installation_id="dev-1")))
+    with pytest.raises(NotFoundError):
+        _run(mobile_routes.add_subscription(
+            _other_req(),
+            SubscriptionRequest(platform="ios", provider="apns", push_token="foreign-token", environment="production"),
+            installation_id="dev-1",
+        ))
