@@ -1377,6 +1377,18 @@ class PaymentRailsConfig:
     alert_webhook_verification_failure_critical: int = _env_int(
         "AETHER_PAYMENT_ALERT_WEBHOOK_VERIFICATION_FAILURE_CRITICAL", 25
     )
+    # Derived-condition alert evaluator worker (services/.../payment_rails/
+    # alert_worker.py). The Prometheus rules fire on their own, but the derived
+    # conditions with no single-series PromQL form (reconciliation-conflict
+    # backlog, backlog growth, outbox stalling, provider silence) are only
+    # surfaced by the in-process evaluator — which does nothing unless a worker
+    # runs it. Default OFF like every payment-rails rollout flag; enable in
+    # staging/prod once the plane is live so the derived alerts actually fire.
+    # The interval is the evaluator cadence in seconds (per-environment tunable).
+    alert_eval_enabled: bool = _env_bool("AETHER_PAYMENT_ALERT_EVAL_ENABLED", False)
+    alert_eval_interval_seconds: int = _env_int(
+        "AETHER_PAYMENT_ALERT_EVAL_INTERVAL_SECONDS", 5 * 60
+    )
 
 
 @dataclass(frozen=True)

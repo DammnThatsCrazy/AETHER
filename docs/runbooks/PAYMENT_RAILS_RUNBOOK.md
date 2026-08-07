@@ -85,7 +85,11 @@ steps live in `docs/PAYMENT-RAILS-ACTIVATION.md`.
    with no single-series PromQL form (reconciliation-conflict backlog, backlog
    *growth*, outbox stalling, provider silence) are classified by an in-process
    evaluator (`alert_eval.py`) with env-tunable `AETHER_PAYMENT_ALERT_*`
-   thresholds; it reports `unknown` (no data) distinctly from `ok`.
+   thresholds; it reports `unknown` (no data) distinctly from `ok`. The evaluator
+   runs only when the supervised `payment_alert_eval` worker is enabled
+   (`AETHER_PAYMENT_ALERT_EVAL_ENABLED=true`, default off) — if the derived
+   alerts never fire on a live plane, check that flag first. It publishes a
+   `payment_rail_alert_condition_severity` gauge per condition plus a heartbeat.
 4. **Ledger truth on the durable-outbox path.** When the canonical outbox is on,
    ingestion parks a receipt at `outbox_enqueued`/`"enqueued"` and the relay
    drains the row out of band. The supervised repair sweep records the

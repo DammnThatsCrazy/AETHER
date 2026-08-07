@@ -127,3 +127,34 @@ async def test_sync_action_rate_limited(monkeypatch):
     await rails_routes.sync_provider("moonpay", body, _Request(tenant))  # first: allowed
     with pytest.raises(RateLimitedError):
         await rails_routes.sync_provider("moonpay", body, _Request(tenant))  # second: 429
+
+
+async def test_connection_probe_result_reflects_poll_health(monkeypatch):
+    """connection_probe_result is wired from the stored poll health, honestly.
+
+    A real probe classification is surfaced verbatim; `not_configured` /
+    `webhook_only` / a missing value stays null — an honest "unknown / N-A",
+    never a fabricated "ok".
+    """
+    reset_in_memory_stores()
+    svc, tenant = PaymentRailsService(PaymentRailsRepositories(), producer=_Producer()), _tenant()
+    _use(monkeypatch, svc)
+    await _observe(svc, tenant)  # creates a moonpay health row + account record
+
+    # A last poll that failed auth → surfaced as the probe result.
+    await svc.repos.accounts.upsert(tenant, "moonpay", {"provider_poll_health": "auth_error"})
+    resp = await rails_routes.tenant_diagnostics(_Request(tenant))
+    moonpay = next(p for p in resp["data"]["providers"] if p["provider"] == "moonpay")
+    assert moonpay["health"]["connection_probe_result"] == "auth_error"
+
+    # not_configured is unknown, not a probe result → null (never a fake "ok").
+    await svc.repos.accounts.upsert(tenant, "moonpay", {"provider_poll_health": "not_configured"})
+    resp2 = await rails_routes.tenant_diagnostics(_Request(tenant))
+    moonpay2 = next(p for p in resp2["data"]["providers"] if p["provider"] == "moonpay")
+    assert moonpay2["health"]["connection_probe_result"] is None
+
+    # A healthy poll IS a positive connectivity probe → surfaced as "ok".
+    await svc.repos.accounts.upsert(tenant, "moonpay", {"provider_poll_health": "ok"})
+    resp3 = await rails_routes.tenant_diagnostics(_Request(tenant))
+    moonpay3 = next(p for p in resp3["data"]["providers"] if p["provider"] == "moonpay")
+    assert moonpay3["health"]["connection_probe_result"] == "ok"

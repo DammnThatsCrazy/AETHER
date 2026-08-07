@@ -262,7 +262,18 @@ async def build_tenant_diagnostics(
             last_failed_poll_at=(h.last_poll_at if poll_health not in (None, "ok", "webhook_only") else None),
             polling_cursor_age_seconds=_age_seconds(h.last_poll_at, now),
             provider_poll_health=poll_health,
-            connection_probe_result=None,
+            # The last connection-probe outcome, derived from the stored poll
+            # health: a real classification (`ok` = last poll authenticated and
+            # reached the provider; `auth_error`/`rate_limited`/`timeout`/…= the
+            # last failure class) is surfaced verbatim. `not_configured`,
+            # `webhook_only` and a missing value stay null — an honest "unknown /
+            # not applicable", never a fabricated "ok". No probe classification
+            # ever carries a secret or provider payload.
+            connection_probe_result=(
+                poll_health
+                if poll_health not in (None, "not_configured", "webhook_only")
+                else None
+            ),
         )
         diagnostics.append(TenantProviderDiagnostics(
             provider=name, adapter=adapter, health=health,
