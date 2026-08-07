@@ -410,17 +410,40 @@ async def get_cluster_economic(
     v = await _get_cluster_vertex(cluster_id, tenant_id, graph)
     members = await _get_cluster_member_vertices(cluster_id, tenant_id, graph)
 
-    total_revenue = 0.0
-    total_spend = 0.0
+    # Sum with Decimal for accuracy and treat ABSENT member economics as unknown
+    # (skipped), not 0 — coercing missing revenue/spend to 0 understates the
+    # rollup. Graph properties are JSON numbers, so parse leniently via str().
+    from decimal import Decimal, InvalidOperation
+
+    def _dec(value: object):
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            d = Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError):
+            return None
+        return d if d.is_finite() else None
+
+    total_revenue_d = Decimal("0")
+    total_spend_d = Decimal("0")
     member_summaries = []
     for m in members:
-        rev = float(m.properties.get("revenue", 0) or 0)
-        spd = float(m.properties.get("spend", 0) or 0)
-        total_revenue += rev
-        total_spend += spd
-        member_summaries.append({"entity_id": m.vertex_id, "revenue": rev, "spend": spd})
+        rev = _dec(m.properties.get("revenue"))
+        spd = _dec(m.properties.get("spend"))
+        if rev is not None:
+            total_revenue_d += rev
+        if spd is not None:
+            total_spend_d += spd
+        member_summaries.append({
+            "entity_id": m.vertex_id,
+            "revenue": float(rev) if rev is not None else None,
+            "spend": float(spd) if spd is not None else None,
+        })
 
-    ltv = float(v.properties.get("ltv_estimate", total_revenue - total_spend))
+    total_revenue = float(total_revenue_d)
+    total_spend = float(total_spend_d)
+    _ltv_d = _dec(v.properties.get("ltv_estimate"))
+    ltv = float(_ltv_d) if _ltv_d is not None else float(total_revenue_d - total_spend_d)
     transaction_count = int(v.properties.get("transaction_count", 0))
     if ltv >= 10000:
         value_tier = "high"

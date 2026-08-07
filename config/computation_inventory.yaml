@@ -272,10 +272,10 @@ computations:
     unit: currency
     grain: cluster
     time_semantics: as-of membership
-    missing_input_behavior: float snapshot sums, USD-labeled
+    missing_input_behavior: Decimal summation; absent member economics skipped (not 0)
     aggregation_behavior: sum
-    currency_behavior: hardcoded USD
-    known_defects: [float_money, hardcoded_usd, snapshot_sum]
+    currency_behavior: hardcoded USD (contract change + parity remaining)
+    known_defects: [hardcoded_usd, mixed_currency_sum]
     priority: P1
     proposed_definition_id: null
     migration_state: not_started
