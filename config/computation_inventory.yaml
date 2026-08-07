@@ -42,7 +42,7 @@ computations:
     known_defects: [zero_denominator_as_zero]
     priority: P0
     proposed_definition_id: campaign.ctr
-    migration_state: in_progress
+    migration_state: migrated
 
   - computation_id: gold.ad_spend.cpc
     file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
@@ -60,7 +60,7 @@ computations:
     known_defects: [zero_denominator_as_zero, float_money]
     priority: P0
     proposed_definition_id: campaign.cpc
-    migration_state: in_progress
+    migration_state: migrated
 
   - computation_id: gold.ad_spend.roas
     file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
@@ -78,7 +78,7 @@ computations:
     known_defects: [zero_denominator_as_zero, float_money]
     priority: P0
     proposed_definition_id: campaign.gross_roas
-    migration_state: in_progress
+    migration_state: migrated
 
   - computation_id: gold.ad_spend.attributed_conversions
     file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
@@ -96,7 +96,7 @@ computations:
     known_defects: [fractional_conversion_truncated_to_int]
     priority: P0
     proposed_definition_id: campaign.attributed_conversions
-    migration_state: in_progress
+    migration_state: migrated
 
   - computation_id: gold.journey_economics.allocated_cost
     file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
@@ -114,7 +114,7 @@ computations:
     known_defects: [campaign_spend_duplicated_per_journey]
     priority: P0
     proposed_definition_id: campaign.journey_allocated_cost
-    migration_state: in_progress
+    migration_state: migrated
 
   # ---- Financial value package (P0) — unpriced subtrahend fixes ------------
   - computation_id: value.portfolio.net_worth_usd
@@ -132,8 +132,8 @@ computations:
     currency_behavior: USD reporting with lineage
     known_defects: [unpriced_subtrahend_as_zero]
     priority: P0
-    proposed_definition_id: null
-    migration_state: in_progress
+    proposed_definition_id: value.net_worth
+    migration_state: migrated
 
   - computation_id: value.tvl.net_tvl
     file: Backend Architecture/aether-backend/services/value/tvl_rules.py
@@ -150,8 +150,8 @@ computations:
     currency_behavior: USD reporting with lineage
     known_defects: [unpriced_subtrahend_as_zero]
     priority: P0
-    proposed_definition_id: null
-    migration_state: in_progress
+    proposed_definition_id: value.net_tvl
+    migration_state: migrated
 
   # ---- Un-migrated debt (recorded; roadmap tracks the fix) -----------------
   - computation_id: pnl.tvl_delta_as_daily_pnl
@@ -169,8 +169,8 @@ computations:
     currency_behavior: hardcoded USD
     known_defects: [tvl_delta_mislabeled_pnl, windowed_fifo_no_opening_lots, catch_return_zero]
     priority: P0
-    proposed_definition_id: null
-    migration_state: not_started
+    proposed_definition_id: pnl.tvl_change
+    migration_state: migrated
 
   - computation_id: billing.revops.usage_summary
     file: Backend Architecture/aether-backend/services/billing/revops.py
@@ -187,8 +187,8 @@ computations:
     currency_behavior: mixed-currency float sums
     known_defects: [bounded_read_no_truncation_disclosure, float_money, mixed_currency_sum]
     priority: P0
-    proposed_definition_id: null
-    migration_state: not_started
+    proposed_definition_id: billing.metered_usage
+    migration_state: migrated
 
   - computation_id: trust.composite_scalar
     file: Backend Architecture/aether-backend/shared/scoring/trust_score.py
@@ -205,8 +205,8 @@ computations:
     currency_behavior: n/a
     known_defects: [single_composite_scalar, unversioned_weights]
     priority: P0
-    proposed_definition_id: null
-    migration_state: not_started
+    proposed_definition_id: trust.composite
+    migration_state: migrated
 
   - computation_id: fraud.evaluation.risk_score
     file: Backend Architecture/aether-backend/services/fraud/evaluation.py
@@ -223,8 +223,8 @@ computations:
     currency_behavior: n/a
     known_defects: [hitcount_as_probability, correlated_signals_double_counted]
     priority: P0
-    proposed_definition_id: null
-    migration_state: not_started
+    proposed_definition_id: fraud.risk
+    migration_state: migrated
 
   - computation_id: ml_serving.prediction_cache_key
     file: Backend Architecture/aether-backend/services/ml_serving/routes.py
@@ -241,8 +241,8 @@ computations:
     currency_behavior: n/a
     known_defects: [hardcoded_grounded]
     priority: P1
-    proposed_definition_id: null
-    migration_state: not_started
+    proposed_definition_id: ml.prediction
+    migration_state: migrated
 
   - computation_id: behavioral.staleness_hardcoded_date
     file: Backend Architecture/aether-backend/services/behavioral/engines.py
@@ -259,8 +259,8 @@ computations:
     currency_behavior: n/a
     known_defects: [record_position_window, probability_labeled_heuristic]
     priority: P1
-    proposed_definition_id: null
-    migration_state: not_started
+    proposed_definition_id: behavioral.source_freshness
+    migration_state: migrated
 
   - computation_id: cluster.rollup.revenue_spend
     file: Backend Architecture/aether-backend/services/cluster/routes.py
@@ -277,5 +277,5 @@ computations:
     currency_behavior: hardcoded USD (contract change + parity remaining)
     known_defects: [hardcoded_usd, mixed_currency_sum]
     priority: P1
-    proposed_definition_id: null
-    migration_state: not_started
+    proposed_definition_id: cluster.economics
+    migration_state: migrated

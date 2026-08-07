@@ -210,8 +210,11 @@ class TenantEntitlementRepository(BaseRepository):
 
 class UsageMeteringEventRepository(BaseRepository):
     def __init__(self) -> None: super().__init__('usage_metering_events')
-    async def list_for_tenant_period(self, tenant_id: str, start: str, end: str, limit: int = 10000) -> list[dict]:
-        return [r for r in await self.find_many(filters={'tenant_id': tenant_id}, limit=limit) if in_period(r, start, end)]
+    async def list_for_tenant_period(self, tenant_id: str, start: str, end: str, limit: int = 10000) -> tuple[list[dict], bool]:
+        # Bounded read: disclose truncation instead of silently under-counting.
+        raw = await self.find_many(filters={'tenant_id': tenant_id}, limit=limit)
+        truncated = len(raw) >= limit
+        return [r for r in raw if in_period(r, start, end)], truncated
     async def find_idempotent(self, tenant_id: str, source_type: str, source_id: str, event_type: str) -> dict | None:
         rows = await self.find_many(filters={'tenant_id': tenant_id, 'source_type': source_type, 'source_id': source_id, 'event_type': event_type}, limit=1)
         return rows[0] if rows else None
@@ -222,8 +225,10 @@ class InvoicePreviewRepository(BaseRepository):
     def __init__(self) -> None: super().__init__('invoice_previews')
 class ValueCreatedEventRepository(BaseRepository):
     def __init__(self) -> None: super().__init__('value_created_events')
-    async def list_for_tenant_period(self, tenant_id: str, start: str, end: str, limit: int = 10000) -> list[dict]:
-        return [r for r in await self.find_many(filters={'tenant_id': tenant_id}, limit=limit) if in_period(r, start, end)]
+    async def list_for_tenant_period(self, tenant_id: str, start: str, end: str, limit: int = 10000) -> tuple[list[dict], bool]:
+        raw = await self.find_many(filters={'tenant_id': tenant_id}, limit=limit)
+        truncated = len(raw) >= limit
+        return [r for r in raw if in_period(r, start, end)], truncated
 class RevenueLeakageSignalRepository(BaseRepository):
     def __init__(self) -> None: super().__init__('revenue_leakage_signals')
 
@@ -279,7 +284,7 @@ class UsageSummaryService:
         self.entitlements = entitlements or EntitlementService()
         self.summaries = summaries or BillableUsageSummaryRepository()
     async def calculate(self, tenant_id: str, start: str, end: str, package_id: str | None = None, persist: bool = False) -> dict:
-        records = await self.events.list_for_tenant_period(tenant_id, start, end)
+        records, truncated = await self.events.list_for_tenant_period(tenant_id, start, end)
         if package_id: records = [r for r in records if r.get('package_id') in (None, package_id)]
         usage = Counter()
         source_ids = defaultdict(list)
@@ -295,6 +300,8 @@ class UsageSummaryService:
         evaluation = await self.entitlements.evaluate(tenant_id, dict(usage), package_id)
         summary = BillableUsageSummary(tenant_id=tenant_id,billing_period_start=start,billing_period_end=end,package_id=package_id,usage_by_dimension=dict(usage),included_usage_by_dimension=evaluation['included_usage'],overage_by_dimension=evaluation['overages'],billable_events_count=billable,non_billable_events_count=non_billable,estimated_charges_notes='Amounts remain notes until pricing configuration is attached.').model_dump()
         summary['source_event_ids_by_dimension'] = dict(source_ids)
+        summary['population_truncated'] = truncated
+        summary['status'] = 'truncated' if truncated else 'available'
         if persist:
             rid = f"summary_{tenant_id}_{start}_{end}_{package_id or 'all'}".replace(':','_')
             await self.summaries.insert(rid, summary)
@@ -316,8 +323,8 @@ class InvoicePreviewService:
         for dim, qty in usage['usage_by_dimension'].items():
             ent = ents.get(dim, {})
             line_items.append(InvoicePreviewLineItem(label=DIMENSION_LABELS.get(dim, dim.replace('_',' ').title()), dimension_key=dim, quantity=qty, included_quantity=ent.get('included_quantity'), overage_quantity=usage['overage_by_dimension'].get(dim, 0), unit_price_notes=ent.get('overage_unit_price_notes') or 'No exact price configured; review contract notes.', amount_notes='Pending pricing configuration / contract review.', source_event_ids=usage.get('source_event_ids_by_dimension', {}).get(dim, [])).model_dump())
-        values = await self.values.list_for_tenant_period(tenant_id, start, end)
-        value_summary = {'event_count': len(values), 'known_value_total': round(sum(float(v.get('value_amount') or 0) for v in values), 2), 'currency': (contract or {}).get('currency', 'USD')}
+        values, values_truncated = await self.values.list_for_tenant_period(tenant_id, start, end)
+        value_summary = {'event_count': len(values), 'population_truncated': values_truncated, 'known_value_total': round(sum(float(v.get('value_amount') or 0) for v in values), 2), 'currency': (contract or {}).get('currency', 'USD')}
         preview = InvoicePreview(tenant_id=tenant_id, contract_profile_id=(contract or {}).get('contract_profile_id'), billing_period_start=start, billing_period_end=end, line_items=line_items, subtotal_notes='Draft preview only; no external invoice or payment collection generated.', value_created_summary=value_summary).model_dump()
         return await self.previews.insert(preview['invoice_preview_id'], preview)
     async def update_status(self, invoice_preview_id: str, status: InvoiceStatus) -> dict:
@@ -364,10 +371,10 @@ class RevenueLeakageService:
         for dim in evaluation['disabled_feature_usage']:
             if dim in PREMIUM_DIMENSIONS:
                 await add('premium_module_unpriced' if dim != 'premium_connector_used' else 'connector_unpriced', f'{dim} usage occurred without an enabled entitlement.', {'usage': usage['usage_by_dimension'].get(dim)}, 'high', 'Review package support and add entitlement or block usage.')
-        values = await self.values.list_for_tenant_period(tenant_id, start, end)
+        values, values_truncated = await self.values.list_for_tenant_period(tenant_id, start, end)
         total_value = sum(float(v.get('value_amount') or 0) for v in values)
         if total_value >= 10000 and contract.get('billing_model') != 'value_based':
-            await add('value_created_unmonetized', 'High value created under a non value-based contract.', {'known_value_total': total_value, 'event_count': len(values)}, 'medium', 'Review value-based pricing or expansion packaging.')
+            await add('value_created_unmonetized', 'High value created under a non value-based contract.', {'known_value_total': total_value, 'event_count': len(values), 'population_truncated': values_truncated}, 'medium', 'Review value-based pricing or expansion packaging.')
         if usage['usage_by_dimension'].get('deployment_mode_active', 0) and contract.get('billing_model') not in {'enterprise_contract','hybrid'}:
             await add('deployment_underpriced', 'Regulated or isolated deployment mode is active without enterprise deployment terms.', {'activations': usage['usage_by_dimension'].get('deployment_mode_active')}, 'critical', 'Move tenant to enterprise deployment pricing review.')
         if usage['usage_by_dimension'].get('managed_workflow_triggered', 0) and not any('services' in str(e.get('feature_key','')) for e in evaluation['entitlements']):

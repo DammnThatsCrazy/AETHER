@@ -225,9 +225,121 @@ def _campaign_definitions() -> tuple[ComputationDefinition, ...]:
     )
 
 
+def _governance_definitions() -> tuple[ComputationDefinition, ...]:
+    """Canonical definitions for the migrated cross-domain P0/P1 computations.
+
+    These pin the mathematical TYPE and decision-impact of each governed number
+    (money is Decimal+currency; trust/fraud are heuristic scores, NOT
+    probabilities; a prediction is a probability; TVL change is a balance delta,
+    NOT P&L) so the inventory entries can reference a real, typed definition.
+    """
+
+    def make(
+        did: str,
+        name: str,
+        desc: str,
+        *,
+        domain: str,
+        owner: str,
+        kind: ComputationKind,
+        output: MathType,
+        unit: str,
+        impact: DecisionImpactClass,
+        agg: AggregationType = AggregationType.NON_AGGREGATABLE,
+        low: float | None = None,
+        high: float | None = None,
+        tests: list[str] | None = None,
+    ) -> ComputationDefinition:
+        return ComputationDefinition(
+            definition_id=did,
+            definition_version="1",
+            display_name=name,
+            description=desc,
+            owner=owner,
+            domain=domain,
+            lifecycle_state=LifecycleState.ACTIVE,
+            computation_kind=kind,
+            output_type=output,
+            unit=unit,
+            valid_range_low=low,
+            valid_range_high=high,
+            null_policy="null_not_zero",
+            zero_policy="evidence_backed",
+            aggregation_type=agg,
+            decision_impact_class=impact,
+            tests=tests or ["tests/computation/"],
+        )
+
+    fin = DecisionImpactClass.FINANCIAL
+    return (
+        # ── Financial value (net-of-subtrahend, unpriced => partial) ──────────
+        make("value.net_worth", "Net Worth (USD)",
+             "total_portfolio_usd - liabilities_usd; unpriced liabilities => partial, never inflated.",
+             domain="financial", owner="value@aether", kind=ComputationKind.DETERMINISTIC_METRIC,
+             output=MathType.MONEY, unit="currency", impact=fin,
+             tests=["tests/value/test_tvl_ltv_portfolio_account.py"]),
+        make("value.net_tvl", "Net TVL (USD)",
+             "gross_tvl - borrowed; unpriced debt => partial, never inflated.",
+             domain="financial", owner="value@aether", kind=ComputationKind.DETERMINISTIC_METRIC,
+             output=MathType.MONEY, unit="currency", impact=fin,
+             tests=["tests/value/test_tvl_ltv_portfolio_account.py"]),
+        make("value.net_ltv", "Net LTV (USD)",
+             "gross_ltv - cost; unknown cost => unknown (null), never gross.",
+             domain="financial", owner="value@aether", kind=ComputationKind.DETERMINISTIC_METRIC,
+             output=MathType.MONEY, unit="currency", impact=fin,
+             tests=["tests/value/test_tvl_ltv_portfolio_account.py"]),
+        # ── P&L (flows vs performance; TVL change is NOT P&L) ─────────────────
+        make("pnl.realized", "Realized P&L (USD)",
+             "FIFO realized P&L with opening lots; missing basis => insufficient_data.",
+             domain="financial", owner="pnl@aether", kind=ComputationKind.DETERMINISTIC_METRIC,
+             output=MathType.MONEY, unit="currency", impact=fin,
+             tests=["tests/computation/test_pnl_semantics.py"]),
+        make("pnl.tvl_change", "TVL Change (USD)",
+             "Balance-snapshot delta (deposits+withdrawals+price). NOT P&L; a flow, not performance.",
+             domain="financial", owner="pnl@aether", kind=ComputationKind.OBSERVED_FACT,
+             output=MathType.MONEY, unit="currency", impact=fin,
+             tests=["tests/computation/test_pnl_semantics.py"]),
+        # ── Billing (metered usage; truncation disclosed) ────────────────────
+        make("billing.metered_usage", "Metered Usage",
+             "Billable metered quantity over a period; bounded reads disclose truncation.",
+             domain="billing", owner="billing@aether", kind=ComputationKind.OBSERVED_FACT,
+             output=MathType.QUANTITY, unit="unit", impact=fin, agg=AggregationType.SUM,
+             tests=["tests/computation/test_billing_usage.py"]),
+        # ── Trust / fraud (HEURISTIC scores, not probabilities) ──────────────
+        make("trust.composite", "Trust Composite (heuristic)",
+             "Weighted heuristic composite in [0,1]; absent risk evidence => low prior + coverage. NOT calibrated.",
+             domain="trust", owner="trust@aether", kind=ComputationKind.HEURISTIC_SCORE,
+             output=MathType.HEURISTIC_SCORE, unit="score", impact=DecisionImpactClass.ACCESS_CONTROL,
+             low=0.0, high=1.0, tests=["tests/computation/test_trust_evidence.py"]),
+        make("fraud.risk", "Fraud Risk (heuristic)",
+             "Rule/detector heuristic risk in [0,100]; evaluation failure fails closed to review. NOT a probability.",
+             domain="fraud", owner="fraud@aether", kind=ComputationKind.HEURISTIC_SCORE,
+             output=MathType.HEURISTIC_SCORE, unit="score", impact=DecisionImpactClass.ACCESS_CONTROL,
+             low=0.0, high=100.0, tests=["tests/computation/test_fraud_failclosed.py"]),
+        # ── ML prediction (probability, cache-bound to features/consent) ─────
+        make("ml.prediction", "ML Prediction (probability)",
+             "Model probability in [0,1]; cache key binds tenant+feature digest+consent.",
+             domain="ml", owner="ml@aether", kind=ComputationKind.STATISTICAL_ESTIMATE,
+             output=MathType.PROBABILITY, unit="probability", impact=DecisionImpactClass.OPERATIONAL,
+             low=0.0, high=1.0, tests=["tests/computation/test_ml_cache_key.py"]),
+        # ── Behavioral source freshness (dynamic SLA) ────────────────────────
+        make("behavioral.source_freshness", "Source Freshness",
+             "Whether a source is stale vs a dynamic freshness SLA (unknown when timestamp absent).",
+             domain="behavioral", owner="behavioral@aether", kind=ComputationKind.DETERMINISTIC_METRIC,
+             output=MathType.TRISTATE, unit="tristate", impact=DecisionImpactClass.OPERATIONAL,
+             tests=["tests/computation/test_behavioral_staleness.py"]),
+        # ── Cluster economics (Decimal; absent = unknown) ────────────────────
+        make("cluster.economics", "Cluster Economics (USD)",
+             "Decimal rollup of member revenue/spend; absent member economics are unknown, not 0.",
+             domain="cluster", owner="cluster@aether", kind=ComputationKind.DETERMINISTIC_METRIC,
+             output=MathType.MONEY, unit="currency", impact=DecisionImpactClass.CUSTOMER_FACING,
+             agg=AggregationType.SUM, tests=["tests/computation/"]),
+    )
+
+
 def _build_registry() -> dict[str, ComputationDefinition]:
     registry: dict[str, ComputationDefinition] = {}
-    for d in (*_measurement_bridge(), *_campaign_definitions()):
+    for d in (*_measurement_bridge(), *_campaign_definitions(), *_governance_definitions()):
         registry[d.key()] = d
     return registry
 
