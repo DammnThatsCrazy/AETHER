@@ -29,7 +29,13 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function fmtUSD(n: number, ctx: TimeContext) {
+// A canonical USD figure that is absent is unknown, not zero. Render "—"
+// instead of coercing a missing value into a misleading "$0.00". A real,
+// priced zero still formats as "$0.00".
+function fmtUSD(v: unknown, ctx: TimeContext) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return '—';
   return `$${formatDecimal(n, ctx, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -93,12 +99,12 @@ function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { cam
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <Metric label="Spend" value={fmtUSD(Number(d.spend_usd ?? 0), timeCtx)} />
+        <Metric label="Spend" value={fmtUSD(d.spend_usd, timeCtx)} />
         <Metric label="Impressions" value={formatCount(Number(d.impressions ?? 0), timeCtx)} />
         <Metric label="Clicks" value={formatCount(Number(d.clicks ?? 0), timeCtx)} />
         <Metric label="ROAS" value={d.roas != null ? `${Number(d.roas).toFixed(2)}x` : '—'} />
-        <Metric label="Gross revenue" value={fmtUSD(Number(d.gross_attributed_revenue ?? 0), timeCtx)} />
-        <Metric label="Net revenue" value={fmtUSD(Number(d.net_attributed_revenue ?? 0), timeCtx)} />
+        <Metric label="Gross revenue" value={fmtUSD(d.gross_attributed_revenue, timeCtx)} />
+        <Metric label="Net revenue" value={fmtUSD(d.net_attributed_revenue, timeCtx)} />
       </div>
 
       <div>
@@ -162,7 +168,7 @@ function PopulationTab({ campaignId, timeStart, timeEnd }: { campaignId: string;
                     { key: 'entity_type', header: 'Type', render: r => String(r.entity_type ?? '—') },
                     { key: 'touchpoint_count', header: 'Touchpoints', render: r => formatCount(Number(r.touchpoint_count ?? 0), timeCtx) },
                     { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
-                    { key: 'attributed_revenue', header: 'Attributed $', render: r => fmtUSD(Number(r.attributed_revenue ?? 0), timeCtx) },
+                    { key: 'attributed_revenue', header: 'Attributed $', render: r => fmtUSD(r.attributed_revenue, timeCtx) },
                     { key: 'last_activity_at', header: 'Last active', render: r => r.last_activity_at ? formatDate(String(r.last_activity_at), timeCtx) : '—' },
                     {
                       key: 'journey',
@@ -208,8 +214,8 @@ function ClustersTab({ campaignId }: { campaignId: string }) {
               columns={[
                 { key: 'cluster_id', header: 'Cluster', render: r => r.cluster_id ? <span className="font-mono text-xs">{String(r.cluster_id).slice(0, 16)}…</span> : <span className="text-text-muted text-xs">unresolved</span> },
                 { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
-                { key: 'attributed_gross_revenue', header: 'Gross $', render: r => fmtUSD(Number(r.attributed_gross_revenue ?? 0), timeCtx) },
-                { key: 'attributed_net_revenue', header: 'Net $', render: r => fmtUSD(Number(r.attributed_net_revenue ?? 0), timeCtx) },
+                { key: 'attributed_gross_revenue', header: 'Gross $', render: r => fmtUSD(r.attributed_gross_revenue, timeCtx) },
+                { key: 'attributed_net_revenue', header: 'Net $', render: r => fmtUSD(r.attributed_net_revenue, timeCtx) },
               ]}
             />
           )
@@ -246,8 +252,8 @@ function ConversionsTab({ campaignId, timeStart, timeEnd }: { campaignId: string
               columns={[
                 { key: 'conversion_id', header: 'ID', render: r => <span className="font-mono text-xs">{String(r.conversion_id ?? '').slice(0, 16)}…</span> },
                 { key: 'conversion_type', header: 'Type', render: r => String(r.conversion_type ?? '—') },
-                { key: 'gross_value', header: 'Gross $', render: r => fmtUSD(Number(r.gross_value ?? 0), timeCtx) },
-                { key: 'net_value', header: 'Net $', render: r => fmtUSD(Number(r.net_value ?? 0), timeCtx) },
+                { key: 'gross_value', header: 'Gross $', render: r => fmtUSD(r.gross_value, timeCtx) },
+                { key: 'net_value', header: 'Net $', render: r => fmtUSD(r.net_value, timeCtx) },
                 { key: 'occurred_at', header: 'Date', render: r => r.occurred_at ? formatDate(String(r.occurred_at), timeCtx) : '—' },
               ]}
             />
@@ -667,7 +673,7 @@ function AttributionTab({ campaignId }: { campaignId: string }) {
                   { key: 'role', header: 'Journey role', render: r => String(r.journey_role ?? r.role ?? '—') },
                   { key: 'verification', header: 'Verification', render: r => String(r.verification_level ?? '—') },
                   { key: 'conversions', header: 'Conversions', render: r => formatCount(Number(r.conversions ?? r.attributed_conversions ?? 0), timeCtx) },
-                  { key: 'net_revenue', header: 'Net revenue', render: r => fmtUSD(Number(r.attributed_net_revenue ?? r.net_revenue ?? 0), timeCtx) },
+                  { key: 'net_revenue', header: 'Net revenue', render: r => fmtUSD(r.attributed_net_revenue ?? r.net_revenue, timeCtx) },
                 ]}
               />
             )

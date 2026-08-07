@@ -3,9 +3,50 @@
 All functions are stateless and take only primitive Python types.
 No I/O, no async, no side effects. Scores are in range [0, 100] for
 risk_score and [0, 1] for confidence_score.
+
+IMPORTANT — semantics of these numbers:
+    Every score in this module is a HANDCRAFTED, UNCALIBRATED heuristic. The
+    ``risk_score`` values (0-100) are weighted sums of rule contributions, and
+    ``score_confidence`` (0-1) is a weighted *evidence-count* — NOT an
+    empirically calibrated probability of fraud. They express relative
+    suspicion ordering, not P(fraud). A calibrated probability would require
+    fitting against real labeled fraud outcomes (see ``score_confidence``).
+    Do not threshold or report any of these as a probability.
 """
 
 from __future__ import annotations
+
+# Version of the handcrafted weight vectors used by the confidence heuristic
+# below. Bump whenever any weight or normalisation constant changes so that
+# persisted scores remain traceable to the formula that produced them.
+CONFIDENCE_WEIGHTS_VERSION = "1.0.0"
+
+
+class UncalibratedConfidence(float):
+    """A confidence value in [0, 1] that is explicitly NOT a calibrated probability.
+
+    Behaves exactly like a ``float`` (arithmetic, comparisons, JSON/pydantic
+    serialisation all coerce to a plain number), so existing callers that store
+    or compare it are unaffected. It additionally carries truthful provenance
+    markers so downstream code (and reviewers) can tell that the number is a
+    handcrafted heuristic — a weighted evidence-count — rather than an
+    empirically calibrated P(fraud):
+
+        ``calibrated``      -> always ``False``
+        ``kind``            -> ``"uncalibrated_heuristic"``
+        ``score_kind``      -> ``"uncalibrated_heuristic"`` (registry vocabulary)
+        ``weights_version`` -> the weight-vector version that produced it
+    """
+
+    __slots__ = ()
+
+    calibrated: bool = False
+    kind: str = "uncalibrated_heuristic"
+    score_kind: str = "uncalibrated_heuristic"
+    weights_version: str = CONFIDENCE_WEIGHTS_VERSION
+
+    def __new__(cls, value: float) -> "UncalibratedConfidence":
+        return super().__new__(cls, value)
 
 
 def score_entity_risk(
@@ -168,12 +209,25 @@ def score_confidence(
     member_count: int,
     has_circular_transfer: bool,
     has_shared_device: bool,
-) -> float:
-    """Compute a confidence score in [0, 1] for a fraud cluster hypothesis.
+) -> UncalibratedConfidence:
+    """Compute an UNCALIBRATED confidence heuristic in [0, 1] for a fraud cluster.
 
-    Higher confidence when more independent signals corroborate each other.
+    .. warning::
+        Despite the name, this is **not** a calibrated probability of fraud. It
+        is a handcrafted, weighted **evidence-count** heuristic: it goes up when
+        more (and more corroborating) evidence is present, but the mapping from
+        this number to an actual likelihood of fraud has never been fit against
+        real labeled outcomes. Treat it as a relative "how much do the signals
+        pile up" score for ranking/triage, never as ``P(fraud)``. The returned
+        value is an :class:`UncalibratedConfidence` and carries
+        ``calibrated=False`` plus a ``weights_version`` marker so this cannot be
+        silently mistaken for a probability downstream.
 
-    Weights:
+    To turn this into a genuine calibrated probability you would need a labeled
+    dataset of confirmed / cleared clusters and a fitting/calibration step
+    (e.g. isotonic or Platt scaling); that data is out of scope here.
+
+    Weights (handcrafted, version ``CONFIDENCE_WEIGHTS_VERSION``):
         evidence breadth (0-20 items) → 30%
         signal overlap (independent signals)→ 25%
         member count (2-50)           → 20%
@@ -193,4 +247,4 @@ def score_confidence(
     device_contrib = 0.10 if has_shared_device else 0.0
 
     total = evidence_contrib + signal_contrib + member_contrib + circular_contrib + device_contrib
-    return round(min(total, 1.0), 4)
+    return UncalibratedConfidence(round(min(total, 1.0), 4))
