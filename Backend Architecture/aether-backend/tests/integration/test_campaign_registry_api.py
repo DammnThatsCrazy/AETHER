@@ -8,9 +8,11 @@ the reward API suite uses. Handlers are never called directly, because their
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import uuid
+from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("AETHER_ENV", "local")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -365,5 +367,104 @@ class TestCampaignOverviewQuality:
         quality = resp.json()["data"]["data_quality"]
         assert quality["reconciliation_status"] == "unknown"
         assert quality["reconciliation_status"] != "ok"
+        # No touchpoints and no spend/reach recorded for this brand-new
+        # campaign -> both computed fields must stay honestly null, never a
+        # fabricated 0 or hardcoded placeholder.
         assert quality["projection_lag_hours"] is None
         assert quality["completeness_pct"] is None
+
+    def test_projection_lag_hours_reflects_newest_touchpoint_watermark(self, client):
+        # Finding J: projection_lag_hours must be computed as
+        # now(UTC) - max(occurred_at) across the campaign's touchpoints, not
+        # left null once touchpoint data actually exists. Seeding one old and
+        # one recent touchpoint also proves it is the max (freshest) that
+        # drives the lag, not the first-seen or oldest row.
+        campaign_id = _create_campaign(client, "Overview Lag Camp")["campaign_id"]
+        now = datetime.now(timezone.utc)
+        old_ts = (now - timedelta(hours=50)).isoformat()
+        recent_ts = (now - timedelta(hours=5)).isoformat()
+
+        for ts, uid in ((old_ts, "user-old"), (recent_ts, "user-recent")):
+            resp = client.post(f"/v1/campaigns/{campaign_id}/touchpoints", json={
+                "source": "newsletter",
+                "event_type": "click",
+                "user_id": uid,
+                "timestamp": ts,
+            })
+            assert resp.status_code == 200, resp.text
+
+        resp = client.get(f"/v1/campaigns/{campaign_id}/overview")
+        assert resp.status_code == 200, resp.text
+        quality = resp.json()["data"]["data_quality"]
+
+        lag = quality["projection_lag_hours"]
+        assert lag is not None
+        # Tolerance absorbs test execution time; the ~50h-old touchpoint would
+        # fail this assertion if the lag were computed from the wrong (older,
+        # or first-seen) row instead of the true watermark.
+        assert 4.9 <= lag <= 5.2
+
+    def test_completeness_pct_computed_from_spend_reach(self, client):
+        # Finding J: completeness_pct compares observed distinct entities
+        # (population_summary) against the campaign's connector-reported
+        # reach (SpendRecord.reach) — the only tenant-scoped, source-reported
+        # "expected entities" figure this service can read for a campaign.
+        # Formula: min(100.0, observed / expected * 100).
+        campaign_id = _create_campaign(client, "Overview Completeness Camp")["campaign_id"]
+
+        for uid in ("user-1", "user-2", "user-3"):
+            resp = client.post(f"/v1/campaigns/{campaign_id}/touchpoints", json={
+                "source": "newsletter",
+                "event_type": "click",
+                "user_id": uid,
+            })
+            assert resp.status_code == 200, resp.text
+
+        # No HTTP endpoint for seeding spend in this scoped test app (the spend
+        # router is not mounted here) — go straight to the repository, the same
+        # dual-mode in-memory store get_overview() reads through _get_spend_summary.
+        from services.measurement.repositories.spend_repo import SpendRepository
+
+        now = datetime.now(timezone.utc)
+        asyncio.run(SpendRepository().upsert({
+            "tenant_id": _DEFAULT_TENANT,
+            "campaign_id": campaign_id,
+            "platform": "meta_ads",
+            "period_start": now - timedelta(days=1),
+            "period_end": now,
+            "impressions": 1000,
+            "reach": 10,
+            "clicks": 50,
+            "media_spend": "100.00",
+            "idempotency_key": f"test-reach-{campaign_id}",
+        }))
+
+        resp = client.get(f"/v1/campaigns/{campaign_id}/overview")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        quality = data["data_quality"]
+
+        assert data["observed_count"] == 3
+        # 3 observed / 10 reach * 100 == 30.0
+        assert quality["completeness_pct"] == pytest.approx(30.0)
+
+    def test_completeness_pct_null_without_reach_even_with_touchpoints(self, client):
+        # No connector reported a nonzero reach for this campaign -> null, not
+        # a fabricated denominator (e.g. never silently divide by impressions
+        # or clicks, which are event counts, not distinct-entity counts).
+        campaign_id = _create_campaign(client, "Overview No Reach Camp")["campaign_id"]
+        resp = client.post(f"/v1/campaigns/{campaign_id}/touchpoints", json={
+            "source": "newsletter",
+            "event_type": "click",
+            "user_id": "user-solo",
+        })
+        assert resp.status_code == 200, resp.text
+
+        resp = client.get(f"/v1/campaigns/{campaign_id}/overview")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["observed_count"] == 1
+        assert data["data_quality"]["completeness_pct"] is None
+        # But the freshness watermark IS computed, since a touchpoint exists —
+        # confirms the two fields fail independently of each other.
+        assert data["data_quality"]["projection_lag_hours"] is not None

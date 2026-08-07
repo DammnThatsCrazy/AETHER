@@ -105,12 +105,14 @@ economics, and data quality indicators.
   "data_quality": {
     "connector_freshness": "ok | warn | error | unknown",
     "attribution_run_freshness": "fresh | stale | error",
-    "projection_lag_hours": null,
+    "projection_lag_hours": "number (hours since newest touchpoint watermark) | null",
     "reconciliation_status": "unknown | inconsistent",
-    "completeness_pct": null
+    "completeness_pct": "number 0–100 | null"
   }
 }
 ```
+
+> **`data_quality` computed fields.** `projection_lag_hours` is `now − max(touchpoint.occurred_at)` in hours (the pipeline-freshness watermark); `completeness_pct` is `observed distinct entities ÷ connector-reported reach × 100`, capped at 100. Both are `null` — never a fabricated `0` — when their inputs are absent (no touchpoints, or no connector-reported reach), and `reconciliation_status` stays `unknown` until a reconciliation signal exists.
 
 **Errors:**
 - `404` — campaign not found or belongs to another tenant
