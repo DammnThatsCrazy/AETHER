@@ -81,5 +81,8 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "overrides": {
+    "shell-quote": "1.10.0"
+  }
 }
