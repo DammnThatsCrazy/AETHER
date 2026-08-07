@@ -541,7 +541,7 @@ async def get_campaign_message_detail(
 
     from services.comms.repository import CampaignMessageRepository, CommsFactsRepository
     facts_repo = CommsFactsRepository()
-    provider = campaign.get("primary_platform") or "klaviyo"
+    provider = campaign.get("primary_platform")
     dim = await CampaignMessageRepository().get_by_external_id(
         tenant.tenant_id, provider, external_message_id,
     )

@@ -6,11 +6,16 @@ makes a network call or needs a real credential: every check asserts on the
 provider's honest declaration (its :class:`ProviderManifest` + certification
 descriptor) or on offline behavioral hooks.
 
-``CommsCertificationAdapter`` wraps the Klaviyo reference adapter and exposes the
-framework's duck-typed hooks (``normalize``, ``dedupe_key``, ``sanitize_payload``,
-``build_request``, ``sequence_of``, ``health``) so the generic checks
-(secret-redaction, duplicate/out-of-order handling, schema drift, malformed
-input, idempotent replay, health, tenant isolation, auth injection) all apply.
+``CommsCertificationAdapter`` wraps ANY registered comms connector (Klaviyo is
+the reference) and exposes the framework's duck-typed hooks (``normalize``,
+``dedupe_key``, ``sanitize_payload``, ``build_request``, ``sequence_of``,
+``health``) so the generic checks (secret-redaction, duplicate/out-of-order
+handling, schema drift, malformed input, idempotent replay, health, tenant
+isolation, auth injection) all apply. Webhook-only connectors (SendGrid,
+Customer.io, Mailchimp, Postmark) expose no ``build_request`` hook, so the
+pull-centric generic checks skip honestly; the comms-domain checks likewise skip
+a capability the provider does not declare (reconciliation, backfill,
+provider-account discovery) rather than failing it.
 
 ``COMMS_CONFORMANCE_CHECKS`` = the generic ``ALL_CHECKS`` + comms-domain checks
 (manifest completeness, credential absence, provider-account discovery, event
@@ -28,12 +33,45 @@ from typing import Any, Callable, Optional
 from shared.certification.checks import ALL_CHECKS, CertificationCheckResult, run_certification
 from shared.certification.descriptor import AdapterCertificationDescriptor
 from shared.certification.readiness import to_readiness
-from services.integrations.connectors.klaviyo import (
-    KlaviyoConnector, normalize_klaviyo_event,
-)
+from services.integrations.connectors.base import BaseConnector
+from services.integrations.providers.payment_rails.signature_verify import ENDPOINT_SECRET
 
 _SECRET_KEY_MARKERS = ("secret", "token", "api_key", "apikey", "authorization",
                        "password", "credential")
+
+# Reference comms provider for calls that don't name a specific connector.
+# Named so the reference semantics are explicit without a bare provider string
+# in the conformance path (ADR-C11: no provider-name branching downstream).
+_REFERENCE_COMMS_PROVIDER = "klaviyo"
+
+# Operations every comms connector genuinely supports: each observes webhooks,
+# carries recipient identity into the identity bridge, and maps suppression
+# signals (bounce/unsubscribe/complaint/suppressed) into the canonical authority.
+_COMMS_BASE_OPERATIONS = ("webhook_ingest", "suppression_observe", "identity_evidence")
+
+# Canonical comms data output → certification operation. A provider's
+# supported_operations are derived from what its manifest actually declares, so
+# a webhook-only provider never claims pull/backfill/campaign-sync it does not
+# have. ``COMMS_SUPPORTED_OPERATIONS`` (Klaviyo reference) is the union of these
+# with the pull/backfill/reconciliation flags below.
+_COMMS_OPERATION_BY_OUTPUT = {
+    "comms.delivery_events": "delivery_events",
+    "comms.open_events": "engagement_events",
+    "comms.click_events": "engagement_events",
+    "comms.campaigns": "campaign_sync",
+    "comms.flows": "flow_sync",
+    "comms.messages": "message_sync",
+    "comms.replies": "reply_ingest",
+}
+
+# Pull-centric capabilities declared by connector capability flags, not by a
+# data output. Klaviyo (the reference) declares all three; the webhook-only
+# cohort declares none.
+_COMMS_FLAG_OPERATIONS = (
+    ("supports_pull", "incremental_pull"),
+    ("supports_historical_backfill", "historical_backfill"),
+    ("supports_reconciliation", "reconciliation"),
+)
 
 COMMS_SUPPORTED_OPERATIONS = [
     "campaign_sync", "flow_sync", "message_sync", "webhook_ingest",
@@ -42,25 +80,168 @@ COMMS_SUPPORTED_OPERATIONS = [
     "delivery_events", "engagement_events",
 ]
 
+# Native webhook signature headers a verifier reads, per provider scheme. Unlisted
+# schemes (Klaviyo, generic Aether HMAC) expect Aether's own headers;
+# ``endpoint_secret`` providers carry no signature headers at all.
+_NATIVE_WEBHOOK_HEADERS: dict[str, list[str]] = {
+    "sendgrid_ecdsa": [
+        "X-Twilio-Email-Event-Webhook-Signature",
+        "X-Twilio-Email-Event-Webhook-Timestamp",
+    ],
+    "customerio_hmac_v0": ["X-CIO-Signature", "X-CIO-Timestamp"],
+    "hubspot_signature_v3": ["X-HubSpot-Signature-v3", "X-HubSpot-Request-Timestamp"],
+    # Iterable signs with ``signature``/``ts`` carried in the webhook URL's
+    # query params (not HTTP headers); the generic comms route merges them into
+    # the headers mapping a native verifier reads, so the channel is named here.
+    "iterable_hmac_query": ["signature", "ts"],
+    ENDPOINT_SECRET: [],
+}
 
-def comms_certification_descriptor(
-    provider: str = "klaviyo",
-) -> AdapterCertificationDescriptor:
+# A realistic offline event record per provider → the canonical type it must
+# normalize to. Kept in conformance so the reference suite and the per-provider
+# cert suites share one fixture source.
+_EVENT_FIXTURES: dict[str, tuple[dict[str, Any], str]] = {
+    "klaviyo": (
+        {
+            "id": "kl-ev-1",
+            "attributes": {
+                "metric": {"name": "Clicked Email"},
+                "datetime": "2026-07-01T10:00:00+00:00",
+                "event_properties": {"$email": "person@example.com", "URL": "https://x"},
+            },
+        },
+        "email_clicked",
+    ),
+    "sendgrid": (
+        {
+            "event": "click",
+            "sg_event_id": "sg-ev-1",
+            "email": "person@example.com",
+            "url": "https://x",
+            "timestamp": 1750000000,
+            "useragent": "Mozilla/5.0",
+        },
+        "email_clicked",
+    ),
+    "customerio": (
+        {
+            "event": "email_opened",
+            "event_id": "cio-ev-1",
+            "timestamp": 1750000000,
+            "data": {"email_address": "person@example.com", "campaign_id": "c1"},
+        },
+        "email_opened",
+    ),
+    "mailchimp": (
+        {
+            "type": "unsubscribe",
+            "data[email]": "person@example.com",
+            "data[id]": "mc-ev-1",
+            "data[list_id]": "L1",
+        },
+        "unsubscribe_observed",
+    ),
+    "postmark": (
+        {
+            "RecordType": "Click",
+            "MessageID": "pm-ev-1",
+            "Recipient": "person@example.com",
+            "Link": "https://x",
+            "ClickedAt": "2026-07-01T10:00:00Z",
+        },
+        "email_clicked",
+    ),
+    "hubspot": (
+        {
+            "eventType": "CLICK",
+            "id": "hs-ev-1",
+            "email": "person@example.com",
+            "recipient": "person@example.com",
+            "campaignId": 123,
+            "portalId": 62515,
+            "created": 1750000000,
+            "url": "https://x",
+        },
+        "email_clicked",
+    ),
+    "iterable": (
+        {
+            "eventType": "emailClick",
+            "email": "person@example.com",
+            "campaignId": 42,
+            "templateId": 7,
+            "messageId": "iter-ev-1",
+            "url": "https://x",
+            "userAgent": "Mozilla/5.0",
+            "createdAt": "2026-07-01T10:00:00.000Z",
+        },
+        "email_clicked",
+    ),
+    "braze": (
+        {
+            "id": "br-ev-1",
+            "event_type": "users.messages.email.Click",
+            "time": 1750000000,
+            "user": {"braze_id": "user-1", "email_address": "person@example.com",
+                     "external_id": "ext-1"},
+            "campaign_id": "camp-1",
+            "dispatch_id": "disp-1",
+            "link_url": "https://x",
+            "link_id": "link-1",
+        },
+        "email_clicked",
+    ),
+}
+
+
+def _comms_connector(provider: str) -> BaseConnector:
+    from services.integrations.connectors.registry import get_connector
+    conn = get_connector(provider)
+    if conn is None:
+        raise ValueError(f"no registered connector {provider!r}")
+    return conn
+
+
+def _comms_supported_operations(conn: BaseConnector) -> list[str]:
+    """Honest operation set for a comms connector: base webhook ops + operations
+    the connector's declared ``comms.*`` data outputs actually emit + pull/backfill/
+    reconciliation ops its capability flags declare. No provider inherits an
+    operation it does not declare (ADR-C11)."""
+    ops = set(_COMMS_BASE_OPERATIONS)
+    for output in conn.manifest_data_outputs:
+        op = _COMMS_OPERATION_BY_OUTPUT.get(output)
+        if op:
+            ops.add(op)
+    for attr, op in _COMMS_FLAG_OPERATIONS:
+        if getattr(conn, attr, False):
+            ops.add(op)
+    return sorted(ops)
+
+
+def comms_certification_descriptor(provider: str) -> AdapterCertificationDescriptor:
     """Honest certification descriptor for a comms provider (read from source)."""
-    state = to_readiness(KlaviyoConnector.implementation_status)
+    conn = _comms_connector(provider)
+    state = to_readiness(conn.implementation_status)
+    scheme = conn.signature_scheme
+    expected_headers = (
+        _NATIVE_WEBHOOK_HEADERS.get(scheme, ["X-Aether-Signature", "X-Aether-Timestamp"])
+        if scheme else ["X-Aether-Signature", "X-Aether-Timestamp"]
+    )
     return AdapterCertificationDescriptor(
         provider=provider,
         domain="communications",
-        adapter="KlaviyoConnector",
+        adapter=type(conn).__name__,
         adapter_version="1.0.0",
-        supported_operations=list(COMMS_SUPPORTED_OPERATIONS),
+        supported_operations=_comms_supported_operations(conn),
         unsupported_operations=["send", "template_edit", "suppression_write"],
-        required_credentials=["api_key"],
+        required_credentials=list(conn.required_credentials),
         secret_ref_names=[f"connector:{{tenant}}:{provider}"],
-        expected_webhook_headers=["X-Aether-Signature", "X-Aether-Timestamp"],
-        pagination_model="cursor",
+        expected_webhook_headers=expected_headers,
+        pagination_model="cursor" if conn.supports_pull else "none",
         streaming_model="webhook",
-        rate_limit_behavior="429_backoff_cursor_hold",
+        rate_limit_behavior=(
+            "429_backoff_cursor_hold" if conn.supports_pull else "none"
+        ),
         retry_policy="exponential_backoff_jitter",
         implementation_state=state,
         fixture_schema_version="1",
@@ -84,17 +265,26 @@ def _sanitize(value: Any) -> Any:
 
 
 class CommsCertificationAdapter:
-    """Offline certification surface for the Klaviyo comms reference adapter."""
+    """Offline certification surface for any registered comms connector."""
 
-    provider = "klaviyo"
+    def __init__(self, connector_type: str = _REFERENCE_COMMS_PROVIDER):
+        self.provider = connector_type
+        self.connector = _comms_connector(connector_type)
+        # Webhook-only connectors have no pull request to build; with no
+        # build_request hook the generic request-construction / auth-injection /
+        # tenant-isolation checks skip honestly (their checks are pull-centric).
+        if not self.connector.supports_pull:
+            self.build_request = None  # type: ignore[assignment]
 
     def certification_descriptor(self) -> AdapterCertificationDescriptor:
         return comms_certification_descriptor(self.provider)
 
     # ── offline behavioral hooks probed by the generic checks ────────────────
     def normalize(self, payload: Any) -> Any:
-        event = normalize_klaviyo_event(payload)
-        return event.model_dump() if event is not None else None
+        events = self.connector.parse_webhook(
+            payload if isinstance(payload, dict) else {"items": payload}
+        )
+        return events[0].model_dump() if events else None
 
     def dedupe_key(self, event: dict) -> str:
         return hashlib.sha256(
@@ -110,16 +300,24 @@ class CommsCertificationAdapter:
         return _sanitize(payload)
 
     def build_request(self, ctx: dict) -> dict:
+        # Synthetic probe built from the connector's declared pull-API protocol
+        # facts (auth header + base URL), so the generic checks exercise the real
+        # auth-injection seam without conformance branching on provider name.
+        import importlib
+        mod = importlib.import_module(self.connector.__class__.__module__)
+        api_base = self.connector.pull_api_base or getattr(mod, "_API_BASE", None)
         cred = ctx.get("credential") or {}
         api_key = cred.get("api_key") or cred.get("secret") or ""
         tenant = ctx.get("tenant_id", "")
+        headers: dict[str, str] = {"X-Aether-Tenant": tenant}
+        if self.connector.pull_auth_header:
+            headers[self.connector.pull_auth_header] = api_key
+        else:
+            headers["Authorization"] = f"Bearer {api_key}"
         return {
-            "url": "https://a.klaviyo.com/api/events/",
+            "url": f"{api_base}/events/" if api_base else "/api/events/",
             "method": "GET",
-            "headers": {
-                "Authorization": f"Klaviyo-API-Key {api_key}",
-                "X-Aether-Tenant": tenant,
-            },
+            "headers": headers,
             "params": {"page[size]": 200, "sort": "datetime"},
         }
 
@@ -140,6 +338,10 @@ def _fail(name: str, detail: str) -> CertificationCheckResult:
     return CertificationCheckResult(name=name, passed=False, detail=detail)
 
 
+def _skip(name: str, detail: str) -> CertificationCheckResult:
+    return CertificationCheckResult(name=name, passed=True, skipped=True, detail=detail)
+
+
 def _run(coro):
     """Run an async coroutine from a synchronous check (no loop running)."""
     loop = asyncio.new_event_loop()
@@ -153,7 +355,7 @@ def check_manifest_completeness(adapter: Any, ctx: dict) -> CertificationCheckRe
     name = "comms_manifest_completeness"
     from shared.integration_contracts.catalog import manifest_by_family
     from shared.integration_contracts.manifest import validate_manifest
-    m = manifest_by_family.get(getattr(adapter, "provider", "klaviyo"))
+    m = manifest_by_family.get(adapter.provider)
     if m is None:
         return _fail(name, "no provider manifest registered")
     try:
@@ -168,11 +370,24 @@ def check_manifest_completeness(adapter: Any, ctx: dict) -> CertificationCheckRe
 def check_credential_absence(adapter: Any, ctx: dict) -> CertificationCheckResult:
     name = "comms_credential_absence"
     from services.integrations.connectors.base import ConnectorConfig
-    conn = KlaviyoConnector()
+    conn = adapter.connector
     cfg = ConnectorConfig(
-        tenant_id="cert", connector_type="klaviyo", enabled=True,
+        tenant_id="cert", connector_type=adapter.provider, enabled=True,
         secret_configured=False,
     )
+    if conn.signature_scheme == ENDPOINT_SECRET:
+        # Mailchimp/Postmark carry no vault secret — the durable endpoint id is
+        # the credential. Absence of a vault secret is *expected*; assert the
+        # adapter honestly declares that (no required credentials, no secret
+        # gate) and reports ready once enabled.
+        if conn.required_credentials:
+            return _fail(name, "endpoint_secret connector declares vault credentials")
+        if conn.requires_secret:
+            return _fail(name, "endpoint_secret connector still requires a vault secret")
+        res = _run(conn.test_connection(cfg, secret=None))
+        if not res.ok:
+            return _fail(name, f"endpoint_secret connector not ready without a secret: {res.status}")
+        return _ok(name, "no vault secret needed; durable endpoint id is the credential")
     res = _run(conn.test_connection(cfg, secret=None))
     if res.ok:
         return _fail(name, "adapter reported ok with no credential")
@@ -182,40 +397,31 @@ def check_credential_absence(adapter: Any, ctx: dict) -> CertificationCheckResul
 def check_provider_account_discovery(adapter: Any, ctx: dict) -> CertificationCheckResult:
     name = "comms_provider_account_discovery"
     from shared.integration_contracts.catalog import manifest_by_family
-    m = manifest_by_family.get(getattr(adapter, "provider", "klaviyo"))
+    m = manifest_by_family.get(adapter.provider)
     if not (m and m.accounts.discovery_supported):
-        return _fail(name, "provider-account discovery not declared")
+        return _skip(name, "provider-account discovery not declared (webhook-only)")
     return _ok(name, "provider-account discovery declared")
 
 
 def check_event_normalization(adapter: Any, ctx: dict) -> CertificationCheckResult:
     name = "comms_event_normalization"
-    record = {
-        "id": "kl-ev-1",
-        "attributes": {
-            "metric": {"name": "Clicked Email"},
-            "datetime": "2026-07-01T10:00:00+00:00",
-            "event_properties": {"$email": "person@example.com", "URL": "https://x"},
-        },
-    }
-    event = normalize_klaviyo_event(record)
-    if event is None or event.event_type != "email_clicked":
+    record, expected = ctx.get("event_fixture") or _EVENT_FIXTURES.get(
+        adapter.provider, _EVENT_FIXTURES["klaviyo"]
+    )
+    event = adapter.normalize(record)
+    if event is None or event.get("event_type") != expected:
         return _fail(name, f"unexpected normalization: {event}")
-    if "person@example.com" in json.dumps(event.model_dump()):
-        # recipient_email is carried in-memory for the pipeline to hash; it must
-        # not be treated as a stored fact here — but normalization may include it
-        # transiently. We only assert the canonical type + provider are correct.
-        pass
-    if event.properties.get("provider") != "klaviyo":
+    if event.get("properties", {}).get("provider") != adapter.provider:
         return _fail(name, "normalized event missing provider")
-    return _ok(name, "provider event normalizes to canonical email_clicked")
+    return _ok(name, f"provider event normalizes to canonical {expected}")
 
 
 def check_stable_event_identity(adapter: Any, ctx: dict) -> CertificationCheckResult:
     name = "comms_stable_event_identity"
     from services.comms.contracts import canonical_activity_key
-    args = dict(tenant_id="t", source_system="klaviyo", provider_account_id="acct",
-                provider_event_id="ev-1", semantic_event_type="email_clicked")
+    args = dict(tenant_id="t", source_system=adapter.provider,
+                provider_account_id="acct", provider_event_id="ev-1",
+                semantic_event_type="email_clicked")
     k1 = canonical_activity_key(**args)
     k2 = canonical_activity_key(**args)
     k3 = canonical_activity_key(**{**args, "provider_event_id": "ev-2"})
@@ -228,6 +434,8 @@ def check_stable_event_identity(adapter: Any, ctx: dict) -> CertificationCheckRe
 
 def check_webhook_verification(adapter: Any, ctx: dict) -> CertificationCheckResult:
     name = "comms_webhook_verification"
+    if getattr(adapter.connector, "signature_scheme", None) == ENDPOINT_SECRET:
+        return _skip(name, "endpoint_secret providers send no signature; endpoint id is the auth")
     try:
         from services.security.integration_security import sign_payload, verify_signature
     except Exception:
@@ -250,7 +458,7 @@ def check_suppression_mapping(adapter: Any, ctx: dict) -> CertificationCheckResu
     from services.comms.suppression_authority import SuppressionAuthorityService
     rec = _run(SuppressionAuthorityService().record_from_event("cert-t", {
         "event_type": "unsubscribe_observed",
-        "properties": {"provider": "klaviyo", "recipient_email": "u@example.com",
+        "properties": {"provider": adapter.provider, "recipient_email": "u@example.com",
                        "unsubscribe_scope": "marketing_channel"},
     }))
     if not rec or rec.get("reason") != "unsubscribe":
@@ -260,9 +468,11 @@ def check_suppression_mapping(adapter: Any, ctx: dict) -> CertificationCheckResu
 
 def check_reconciliation(adapter: Any, ctx: dict) -> CertificationCheckResult:
     name = "comms_reconciliation"
+    conn = adapter.connector
+    if not conn.supports_reconciliation:
+        return _skip(name, "reconciliation not supported (webhook-only)")
     from services.integrations.connectors.base import ConnectorConfig
-    conn = KlaviyoConnector()
-    cfg = ConnectorConfig(tenant_id="cert", connector_type="klaviyo")
+    cfg = ConnectorConfig(tenant_id="cert", connector_type=adapter.provider)
     out = _run(conn.reconcile(cfg, secret=None, external_campaign_id="c1"))
     # Offline: reconciliation must honestly report unavailable, never fake counts.
     if out.get("available") is not False:
@@ -272,8 +482,11 @@ def check_reconciliation(adapter: Any, ctx: dict) -> CertificationCheckResult:
 
 def check_backfill_boundary(adapter: Any, ctx: dict) -> CertificationCheckResult:
     name = "comms_backfill_boundary"
+    conn = adapter.connector
+    if not conn.supports_historical_backfill:
+        return _skip(name, "historical backfill not supported (webhook-only)")
     from shared.integration_contracts.catalog import manifest_by_family
-    m = manifest_by_family.get(getattr(adapter, "provider", "klaviyo"))
+    m = manifest_by_family.get(adapter.provider)
     if not (m and m.sync.initial_backfill and m.sync.incremental and m.sync.cursor):
         return _fail(name, "backfill/incremental/cursor not fully declared")
     return _ok(name, f"backfill + incremental declared with cursor {m.sync.cursor!r}")
@@ -298,14 +511,8 @@ def _comms_conformance_ctx() -> dict:
     """Deterministic offline ctx exercising the generic behavioral checks."""
     return {
         "timeout_seconds": 15,
-        "normalize_sample": {
-            "id": "kl-ev-9",
-            "attributes": {
-                "metric": {"name": "Opened Email"},
-                "datetime": "2026-07-01T09:00:00+00:00",
-                "event_properties": {"$email": "a@example.com"},
-            },
-        },
+        "normalize_sample": _EVENT_FIXTURES["klaviyo"][0],
+        "event_fixture": _EVENT_FIXTURES["klaviyo"],
         "events": [
             {"id": "evt_1", "seq": 1, "value": "a"},
             {"id": "evt_1", "seq": 1, "value": "a"},
@@ -318,10 +525,24 @@ def _comms_conformance_ctx() -> dict:
 def certify_comms(
     adapter: Optional[CommsCertificationAdapter] = None,
     ctx: Optional[dict] = None,
+    connector_type: Optional[str] = None,
 ) -> list[CertificationCheckResult]:
-    """Run the full comms conformance suite offline. Returns one result/check."""
+    """Run the full comms conformance suite offline. Returns one result/check.
+
+    ``connector_type`` certifies a specific registered comms connector with its
+    provider-appropriate fixture ctx; when neither ``adapter`` nor
+    ``connector_type`` is given the Klaviyo reference adapter is used.
+    """
+    if adapter is None:
+        adapter = CommsCertificationAdapter(
+            connector_type or _REFERENCE_COMMS_PROVIDER
+        )
+    if ctx is None and connector_type:
+        ctx = dict(_comms_conformance_ctx())
+        ctx["normalize_sample"] = _EVENT_FIXTURES[connector_type][0]
+        ctx["event_fixture"] = _EVENT_FIXTURES[connector_type]
     return run_certification(
-        adapter or CommsCertificationAdapter(),
+        adapter,
         ctx or _comms_conformance_ctx(),
         checks=COMMS_CONFORMANCE_CHECKS,
     )

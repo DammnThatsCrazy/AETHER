@@ -385,6 +385,7 @@ class EmailConfig:
     from_name: str = _env("EMAIL_FROM_NAME", "AETHER")
     aws_region: str = _env("EMAIL_AWS_REGION", "us-east-1")
     sendgrid_api_key: str = _env("SENDGRID_API_KEY", "")
+    enterprise_inquiry_email: str = _env("ENTERPRISE_INQUIRY_EMAIL", "sales@aether.dev")
     app_url: str = _env("APP_URL", "http://localhost:3000")
 
 

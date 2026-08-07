@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "41c7a80"
+last_synced_commit: "559be979"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -787,7 +787,7 @@ The `healthLabel(connector)` function maps `sync_status` + `secret_configured` t
 | `never_synced` | any | Never Synced |
 | (other) | any | Unconfigured |
 
-The `STATUS_VARIANT` map covers all states above with appropriate badge colors.
+The `connectorCapabilityState` helper maps every state above onto the shared `CapabilityState` matrix, rendered via `CapabilityStateBadge` with honest tones.
 
 ### Kyber (operator) — Delivery Operations
 

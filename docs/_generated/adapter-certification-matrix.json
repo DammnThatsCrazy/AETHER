@@ -1,6 +1,136 @@
 {
   "generated_from": "Backend Architecture/aether-backend/shared/certification/registry.py",
   "providers": {
+    "communications:braze": {
+      "adapter": "BrazeConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "campaign_sync",
+        "delivery_events",
+        "engagement_events",
+        "historical_backfill",
+        "identity_evidence",
+        "incremental_pull",
+        "message_sync",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "provider": "braze",
+      "required_credentials": [
+        "api_key"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:braze"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
+    "communications:customerio": {
+      "adapter": "CustomerIOConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "delivery_events",
+        "engagement_events",
+        "identity_evidence",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "customerio",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:customerio"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
+    "communications:hubspot": {
+      "adapter": "HubSpotConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "campaign_sync",
+        "delivery_events",
+        "engagement_events",
+        "identity_evidence",
+        "incremental_pull",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "provider": "hubspot",
+      "required_credentials": [
+        "api_key",
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:hubspot"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
+    "communications:iterable": {
+      "adapter": "IterableConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "delivery_events",
+        "engagement_events",
+        "historical_backfill",
+        "identity_evidence",
+        "incremental_pull",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "provider": "iterable",
+      "required_credentials": [
+        "api_key",
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:iterable"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
     "communications:klaviyo": {
       "adapter": "KlaviyoConnector",
       "adapter_version": "1.0.0",
@@ -22,12 +152,94 @@
       "first_release": true,
       "pagination_model": "cursor",
       "provider": "klaviyo",
-      "required_credentials": [
-        "api_key"
-      ],
+      "required_credentials": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:klaviyo"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
+    "communications:mailchimp": {
+      "adapter": "MailchimpConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "identity_evidence",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "mailchimp",
+      "required_credentials": [],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:mailchimp"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
+    "communications:postmark": {
+      "adapter": "PostmarkConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "delivery_events",
+        "engagement_events",
+        "identity_evidence",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "postmark",
+      "required_credentials": [],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:postmark"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
+    "communications:sendgrid": {
+      "adapter": "SendGridConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "delivery_events",
+        "engagement_events",
+        "identity_evidence",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "sendgrid",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:sendgrid"
       ],
       "state": "credential_waiting",
       "state_rank": 2,
@@ -489,17 +701,17 @@
   },
   "summary": {
     "by_domain": {
-      "communications": 1,
+      "communications": 8,
       "derivatives": 4,
       "interop": 7,
       "payments": 5,
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 19
+      "credential_waiting": 26
     },
-    "first_release": 19,
-    "total": 19
+    "first_release": 26,
+    "total": 26
   },
   "version": "8.12.0"
 }

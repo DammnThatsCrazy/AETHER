@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "5e9e186"
+last_synced_commit: "99da74c0"
 ---
 # Aether Profile360 Frontend Architecture
 
@@ -38,7 +38,7 @@ Reusable building blocks retained:
 - `EntityScoreCard` for trust/risk/anomaly continuity.
 - `NeedsHelpPanel` for intervention/action explanations.
 - `GraphCanvas` for node/edge visualization.
-- Existing mocked fixtures in `apps/kyber/src/fixtures/entities.ts` and graph fixtures for local development.
+- Runtime fixture files were removed as part of the fail-closed data-truth work; edge-case coverage now lives inline in the Profile360 component tests (`frontend/kyber/src/test/component/profile360.test.ts`).
 
 No stable component was replaced. The new implementation layers Profile360 components above and alongside the existing `Entity360View` detail tabs.
 
@@ -167,7 +167,7 @@ The following files implement the complete Profile360 frontend product:
 
 ### Fixtures and tests
 
-- `frontend/kyber/src/fixtures/entities.ts`: Includes edge-case fixtures — `mockConsentRestrictedEntity`, `mockStaleEntity`, `mockHighConfidenceEntity`, `mockAgentEntity`, `mockKyberInternalProfile`.
+- The runtime `frontend/kyber/src/fixtures/entities.ts` fixture file was removed (fail-closed data truth); edge-case fixtures now live inline in `frontend/kyber/src/test/component/profile360.test.ts`.
 - `frontend/kyber/src/test/component/profile360.test.ts`: Unit tests for `profile360Actions` (upsertPayload, drill stack, quality/consent upsert, loading/error/stale), `applyLiveMessage` (graph deduplication, timeline prepend), and `toTimelineEvent` normalizer.
 
 ## 12. Window propagation

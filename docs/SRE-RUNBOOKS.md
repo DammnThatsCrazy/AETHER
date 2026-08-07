@@ -14,7 +14,7 @@ related:
   - reliability/incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 5
-last_synced_commit: "3283497"
+last_synced_commit: "559be979"
 ---
 # SRE Runbooks
 
@@ -45,7 +45,7 @@ the Kyber admin API. Custom runbooks can also be created.
 `rb_action_dispatch_failure`, `rb_outcome_feedback_failure`,
 `rb_audit_export_failure`, `rb_billing_metering_failure`,
 `rb_security_audit_event_failure`, `rb_kyber_dashboard_degraded`,
-`rb_aether_tenant_app_degraded`.
+`rb_aether_tenant_app_degraded`, `rb_semantic_classification_degraded`.
 
 ## APIs
 

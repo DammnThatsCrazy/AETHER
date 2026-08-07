@@ -9,7 +9,7 @@ since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/flow_trace/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: "41c79d4"
+last_synced_commit: "99da74c0"
 ---
 
 # Flow of Funds Trace
