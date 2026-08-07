@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
-last_synced_commit: "9682617"
+last_synced_commit: "2ad2218"
 ---
 
 # Campaign 360 API Reference
@@ -106,7 +106,7 @@ economics, and data quality indicators.
     "connector_freshness": "ok | warn | error | unknown",
     "attribution_run_freshness": "fresh | stale | error",
     "projection_lag_hours": null,
-    "reconciliation_status": "ok | warn | error",
+    "reconciliation_status": "unknown | inconsistent",
     "completeness_pct": null
   }
 }

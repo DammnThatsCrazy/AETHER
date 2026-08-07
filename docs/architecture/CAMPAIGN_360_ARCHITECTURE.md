@@ -15,7 +15,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py
   - Backend Architecture/aether-backend/services/traffic/repair.py
-last_synced_commit: "9682617"
+last_synced_commit: "2ad2218"
 ---
 
 # Campaign 360 Architecture
