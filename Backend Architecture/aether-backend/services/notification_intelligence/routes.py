@@ -508,7 +508,7 @@ async def inbox_read_all(request: Request):
     count = await _inbox_mark_all_read(tenant_id)
     await enqueue_sync_change(
         scope_key=f"t:{tenant_id}",
-        principal_id=tenant_id,
+        principal_id=request.state.tenant.user_id or tenant_id,
         change_type="notification_changed",
         resource_kind="notification_inbox",
     )
@@ -523,7 +523,7 @@ async def inbox_mark_read(notification_id: str, request: Request):
     row = await _inbox_mark_read(tenant_id, notification_id)
     await enqueue_sync_change(
         scope_key=f"t:{tenant_id}",
-        principal_id=tenant_id,
+        principal_id=request.state.tenant.user_id or tenant_id,
         change_type="notification_changed",
         resource_kind="notification_inbox",
         resource_id=notification_id,
@@ -539,7 +539,7 @@ async def inbox_archive(notification_id: str, request: Request):
     row = await _inbox_archive(tenant_id, notification_id)
     await enqueue_sync_change(
         scope_key=f"t:{tenant_id}",
-        principal_id=tenant_id,
+        principal_id=request.state.tenant.user_id or tenant_id,
         change_type="notification_changed",
         resource_kind="notification_inbox",
         resource_id=notification_id,
@@ -592,7 +592,7 @@ async def update_config(body: UpdateConfigRequest, request: Request, tenantId: s
     result.pop("slack_bot_token_ref", None)
     await enqueue_sync_change(
         scope_key=f"t:{tenantId}",
-        principal_id=tenantId,
+        principal_id=request.state.tenant.user_id or tenantId,
         change_type="preference_changed",
         resource_kind="notification_config",
         resource_id=tenantId,

@@ -8,15 +8,15 @@ enforced by scripts/mobile_build_check.py. Values are validated by
 services/mobile/config.py (DistributionProfile vocabulary).
 
 Revision ID: 20260830_app_version_registration
-Revises: 20260817_payment_provider_receipts
+Revises: 20260818_computation_substrate
 Create Date: 2026-08-07
 
-NOTE on chaining: down_revision is the CURRENT alembic head
-(20260817_payment_provider_receipts). The packet specified
-20260822_mobile_installations, but that revision is NOT a head —
-20260814_activation_state and 20260817_payment_provider_receipts already
-descend from it, so chaining there would branch the DAG and violate the
-single-head invariant (scripts/validate_temporal_integrity.py).
+NOTE on chaining: down_revision is the CURRENT alembic head after rebasing
+onto origin/main — the computation-substrate migration
+(20260818_computation_substrate) landed upstream after this migration was
+authored, so it is re-chained to it to preserve the single-head invariant
+(scripts/validate_temporal_integrity.py). This migration only touches
+mobile_installations and is independent of the computation domain.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260830_app_version_registration"
-down_revision = "20260817_payment_provider_receipts"
+down_revision = "20260818_computation_substrate"
 branch_labels = None
 depends_on = None
 

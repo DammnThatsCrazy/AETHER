@@ -18,6 +18,7 @@ publish failure is swallowed — the inbox write is the source of truth.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -43,6 +44,77 @@ class NotificationInboxRepository(BaseRepository):
 
     def __init__(self) -> None:
         super().__init__("notification_inbox")
+
+    async def set_flags(
+        self, record_id: str, tenant_id: str, flags: dict[str, Any]
+    ) -> Optional[dict]:
+        """Atomically merge a targeted set of flag fields onto an inbox row.
+
+        Merges ONLY the changed fields (``data || $2::jsonb``) instead of the
+        read-modify-write whole-row overwrite that ``BaseRepository.update``
+        performs — a concurrent mutation of a DIFFERENT field is never clobbered
+        (M8-B5: no lost update between concurrent read/archive from devices).
+
+        Returns the updated row, or None when the row is absent or belongs to
+        another tenant.
+        """
+        pool = await self._ensure_pool()
+        if pool is None:
+            row = self._store.get(record_id)
+            if not row or row.get("tenant_id") != tenant_id:
+                return None
+            row.update(flags)
+            row["updated_at"] = utc_now().isoformat()
+            return dict(row)
+        await self._ensure_table()
+        rows = await pool.fetch(
+            f"""
+            UPDATE {self.table_name}
+            SET data = data || $2::jsonb, updated_at = NOW()
+            WHERE id = $1 AND data->>'tenant_id' = $3
+            RETURNING data
+            """,
+            record_id,
+            json.dumps(flags, default=str),
+            tenant_id,
+        )
+        return json.loads(rows[0]["data"]) if rows else None
+
+    async def increment_count(
+        self, record_id: str, tenant_id: str, last_seen_at: str
+    ) -> Optional[dict]:
+        """Atomically increment a dedupe row's count (no lost increment when two
+        producers dedupe onto the same open row at once)."""
+        pool = await self._ensure_pool()
+        if pool is None:
+            row = self._store.get(record_id)
+            if not row or row.get("tenant_id") != tenant_id:
+                return None
+            row["count"] = int(row.get("count", 1) or 1) + 1
+            row["last_seen_at"] = last_seen_at
+            row["updated_at"] = utc_now().isoformat()
+            return dict(row)
+        await self._ensure_table()
+        rows = await pool.fetch(
+            f"""
+            UPDATE {self.table_name}
+            SET data = jsonb_set(
+                    jsonb_set(
+                        data,
+                        '{{count}}',
+                        to_jsonb((COALESCE((data->>'count')::int, 1)) + 1)
+                    ),
+                    '{{last_seen_at}}', to_jsonb($2::text)
+                ),
+                updated_at = NOW()
+            WHERE id = $1 AND data->>'tenant_id' = $3
+            RETURNING data
+            """,
+            record_id,
+            last_seen_at,
+            tenant_id,
+        )
+        return json.loads(rows[0]["data"]) if rows else None
 
 
 _repo: Optional[NotificationInboxRepository] = None
@@ -156,14 +228,16 @@ async def create_inbox_notification(
     if dedupe_key:
         existing = await _find_dedupe_target(repo, tenant_id, dedupe_key, now)
         if existing is not None:
-            existing["count"] = int(existing.get("count", 1) or 1) + 1
-            existing["last_seen_at"] = now.isoformat()
-            updated = await repo.update(existing["id"], existing)
+            # Atomic increment — two producers deduping onto the same open row
+            # can never lose a count (M8-B5).
+            updated = await repo.increment_count(
+                existing["id"], tenant_id, now.isoformat()
+            )
             metrics.increment(
                 "aether_notification_inbox_total",
                 labels={"tenant_id": tenant_id, "outcome": "deduplicated"},
             )
-            return updated
+            return updated or existing
 
     notification_id = str(uuid.uuid4())
     row = {
@@ -248,16 +322,57 @@ async def unread_notification_count(tenant_id: str) -> int:
     return sum(1 for r in rows if not r.get("read") and not r.get("archived"))
 
 
+async def inbox_snapshot(
+    tenant_id: str,
+    *,
+    unread_only: bool = False,
+    include_archived: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Single-snapshot inbox listing + unread count.
+
+    M8-B5: the returned rows AND ``unread_count`` are derived from ONE
+    ``find_many`` read. Projection surfaces that pair a listing with a count
+    must use this instead of two back-to-back calls, which can straddle a
+    concurrent create/read/archive and present a count from a different moment
+    than the listed rows.
+    """
+    repo = get_inbox_repository()
+    rows = await repo.find_many(
+        filters={"tenant_id": tenant_id},
+        limit=_SCAN_LIMIT,
+        sort_by="created_at",
+        sort_order="desc",
+    )
+    unread = sum(1 for r in rows if not r.get("read") and not r.get("archived"))
+    filtered = [
+        r for r in rows
+        if (include_archived or not r.get("archived"))
+        and (not unread_only or not r.get("read"))
+    ]
+    return {
+        "rows": filtered[offset: offset + limit],
+        "unread_count": unread,
+    }
+
+
 async def mark_notification_read(tenant_id: str, notification_id: str) -> dict:
-    """Mark one notification read (tenant-scoped). Idempotent."""
+    """Mark one notification read (tenant-scoped). Idempotent.
+
+    M8-B5: uses an atomic flag merge (``data || flags``) instead of the blind
+    read-modify-write whole-row overwrite, so a concurrent archive/flag change
+    from another device is never clobbered (no lost update).
+    """
     repo = get_inbox_repository()
     row = await repo.find_by_id(notification_id)
     if not row or row.get("tenant_id") != tenant_id:
         raise NotFoundError(f"Inbox notification {notification_id!r} not found")
     if not row.get("read"):
-        row["read"] = True
-        row["read_at"] = utc_now().isoformat()
-        row = await repo.update(notification_id, row)
+        updated = await repo.set_flags(
+            notification_id, tenant_id, {"read": True, "read_at": utc_now().isoformat()}
+        )
+        row = updated or row
         await publish_notification_event(
             "NOTIFICATION_READ", tenant_id, {"notification_id": notification_id}
         )
@@ -273,9 +388,8 @@ async def mark_all_notifications_read(tenant_id: str) -> int:
     for row in rows:
         if row.get("read") or row.get("archived"):
             continue
-        row["read"] = True
-        row["read_at"] = now_iso
-        await repo.update(row["id"], row)
+        # Atomic merge (M8-B5): never clobbers a concurrent archive/flag change.
+        await repo.set_flags(row["id"], tenant_id, {"read": True, "read_at": now_iso})
         updated += 1
     if updated:
         await publish_notification_event(
@@ -292,7 +406,11 @@ async def archive_notification(tenant_id: str, notification_id: str) -> dict:
     if not row or row.get("tenant_id") != tenant_id:
         raise NotFoundError(f"Inbox notification {notification_id!r} not found")
     if not row.get("archived"):
-        row["archived"] = True
-        row["archived_at"] = utc_now().isoformat()
-        row = await repo.update(notification_id, row)
+        # Atomic merge (M8-B5): never clobbers a concurrent read/flag change.
+        updated = await repo.set_flags(
+            notification_id,
+            tenant_id,
+            {"archived": True, "archived_at": utc_now().isoformat()},
+        )
+        row = updated or row
     return row

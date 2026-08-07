@@ -93,7 +93,9 @@ def test_inbox_mark_read_emits_notification_changed(monkeypatch):
     assert kw["resource_kind"] == "notification_inbox"
     assert kw["resource_id"] == nid
     assert kw["scope_key"] == "t:tenant-a"
-    assert kw["principal_id"] == "tenant-a"
+    # M8-B4: emitted under the ACTUAL user principal so the DSR client-sync
+    # erasure (delete_by_principal on user_id) clears it.
+    assert kw["principal_id"] == "user-1"
 
 
 def test_inbox_archive_emits_notification_changed(monkeypatch):
@@ -166,13 +168,30 @@ def test_record_turn_emits_conversation_changed(monkeypatch):
     req = NoesisQueryRequest(message="hello", surface="aether", conversation_id="conv-1")
     resp = NoesisResponse(answer="hi", mode="deterministic", intent="greeting", confidence=0.9)
     emit = _emit(monkeypatch, __import__("services.noesis.conversations", fromlist=["enqueue_sync_change"]))
-    cid = _run(store.record_turn(req, resp, "tenant-a"))
+    cid = _run(store.record_turn(req, resp, "tenant-a", principal_id="user-1"))
     emit.assert_awaited_once()
     kw = emit.await_args.kwargs
     assert kw["change_type"] == "conversation_changed"
     assert kw["resource_kind"] == "conversation"
     assert kw["resource_id"] == cid
     assert kw["scope_key"] == "t:tenant-a"
+    # M8-B4: the sync event is emitted under the ACTUAL user principal so the
+    # DSR client-sync erasure (delete_by_principal on user_id) clears it — a
+    # tenant-id principal would survive the user's erasure.
+    assert kw["principal_id"] == "user-1"
+
+
+def test_record_turn_falls_back_to_tenant_principal(monkeypatch):
+    store = NoesisConversationStore()
+    req = NoesisQueryRequest(message="hello", surface="aether", conversation_id="conv-2")
+    resp = NoesisResponse(answer="hi", mode="deterministic", intent="greeting", confidence=0.9)
+    emit = _emit(monkeypatch, __import__("services.noesis.conversations", fromlist=["enqueue_sync_change"]))
+    cid = _run(store.record_turn(req, resp, "tenant-a"))
+    emit.assert_awaited_once()
+    kw = emit.await_args.kwargs
+    assert kw["resource_id"] == cid
+    # No user principal known → tenant-id principal (backward compatible).
+    assert kw["principal_id"] == "tenant-a"
 
 
 # ── watchlist_changed ───────────────────────────────────────────────────────

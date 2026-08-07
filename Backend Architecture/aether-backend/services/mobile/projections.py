@@ -300,6 +300,7 @@ class MobileProjectionService:
         campaign_explorer: Any = None,
         inbox_list: Any = None,
         inbox_unread: Any = None,
+        inbox_snapshot: Any = None,
         views_repo: Any = None,
         noesis_store: Any = None,
         noesis_status: Any = None,
@@ -309,6 +310,7 @@ class MobileProjectionService:
         self._campaign_explorer = campaign_explorer
         self._inbox_list = inbox_list
         self._inbox_unread = inbox_unread
+        self._inbox_snapshot_fn = inbox_snapshot
         self._views = views_repo
         self._noesis = noesis_store
         self._noesis_status = noesis_status
@@ -354,19 +356,12 @@ class MobileProjectionService:
             tenant_id=tenant_id, campaign_id=campaign_id, campaign=campaign or {}
         )
 
-    async def _list_inbox(self, tenant_id: str, **kwargs: Any) -> list[dict]:
-        if self._inbox_list is None:
-            from services.notification_intelligence.inbox import list_inbox_notifications
+    async def _inbox_snapshot(self, tenant_id: str, **kwargs: Any) -> dict:
+        if self._inbox_snapshot_fn is None:
+            from services.notification_intelligence.inbox import inbox_snapshot
 
-            self._inbox_list = list_inbox_notifications
-        return await self._inbox_list(tenant_id=tenant_id, **kwargs)
-
-    async def _unread_count(self, tenant_id: str) -> int:
-        if self._inbox_unread is None:
-            from services.notification_intelligence.inbox import unread_notification_count
-
-            self._inbox_unread = unread_notification_count
-        return await self._inbox_unread(tenant_id=tenant_id)
+            self._inbox_snapshot_fn = inbox_snapshot
+        return await self._inbox_snapshot_fn(tenant_id=tenant_id, **kwargs)
 
     async def _list_views(self, tenant_id: str, limit: int, offset: int) -> list[dict]:
         if self._views is None:
@@ -394,10 +389,14 @@ class MobileProjectionService:
 
     async def today_digest(self, *, tenant_id: str, profile_user_id: Optional[str] = None) -> dict:
         """Today digest — alert counts + recent redacted titles + profile peek."""
-        alerts = await self._list_inbox(
+        # M8-B5: single-snapshot read — the unread count and the listed rows
+        # come from the SAME find_many, so a concurrent create/read/archive
+        # between two separate calls can never present a stale count.
+        snapshot = await self._inbox_snapshot(
             tenant_id, unread_only=True, limit=DIGEST_ALERT_SCAN_LIMIT
         )
-        unread = await self._unread_count(tenant_id)
+        alerts = snapshot["rows"]
+        unread = snapshot["unread_count"]
         top_severity = sum(1 for a in alerts if (a.get("severity") or "") in TOP_SEVERITIES)
         recent = [
             {
@@ -443,14 +442,18 @@ class MobileProjectionService:
         limit: int = INBOX_DEFAULT_LIMIT,
         offset: int = 0,
     ) -> dict:
-        rows = await self._list_inbox(
-            tenant_id, unread_only=unread_only, limit=min(limit, INBOX_MAX_LIMIT), offset=offset
+        # M8-B5: single-snapshot read — the unread count and the listed rows
+        # come from the SAME find_many (never two calls straddling a mutation).
+        snapshot = await self._inbox_snapshot(
+            tenant_id,
+            unread_only=unread_only,
+            limit=min(limit, INBOX_MAX_LIMIT),
+            offset=offset,
         )
-        unread = await self._unread_count(tenant_id)
         return {
-            "alerts": [project_alert(row) for row in rows],
-            "unread_count": unread,
-            "count": len(rows),
+            "alerts": [project_alert(row) for row in snapshot["rows"]],
+            "unread_count": snapshot["unread_count"],
+            "count": len(snapshot["rows"]),
         }
 
     async def explore_briefing(

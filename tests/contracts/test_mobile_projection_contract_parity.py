@@ -8,7 +8,6 @@ emit (M8 architecture-1 remediation).
 """
 from __future__ import annotations
 
-import asyncio
 import re
 import sys
 from pathlib import Path
@@ -80,6 +79,18 @@ class _FakeCount:
         return self._n
 
 
+class _FakeSnapshot:
+    """M8-B5: the projection service reads rows AND unread count from ONE
+    single-snapshot call — the fakes must provide that, not separate calls."""
+
+    def __init__(self, rows, unread=0):
+        self._rows = rows
+        self._unread = unread
+
+    async def __call__(self, **kwargs):
+        return {"rows": self._rows, "unread_count": self._unread}
+
+
 class _FakeViews:
     def __init__(self, rows):
         self._rows = rows
@@ -99,8 +110,8 @@ class _FakeConversations:
 def _service(rows=None, views=None, conversations=None):
     return MobileProjectionService(
         profile_aggregator=_FakeProfile(),
-        inbox_list=_FakeRows(rows or []),
-        inbox_unread=_FakeCount(0),
+        # M8-B5: single-snapshot injection (rows + unread count from one read).
+        inbox_snapshot=_FakeSnapshot(rows or []),
         views_repo=_FakeViews(views or []),
         noesis_store=_FakeConversations(conversations or []),
         noesis_status=lambda degraded, items: "available",
@@ -109,14 +120,14 @@ def _service(rows=None, views=None, conversations=None):
 
 # ── surface parity ───────────────────────────────────────────────────────────
 
-def test_today_digest_parity():
-    result = asyncio.run(_service().today_digest(tenant_id="t1"))
+async def test_today_digest_parity():
+    result = await _service().today_digest(tenant_id="t1")
     assert set(result.keys()) == _interface_fields("MobileTodayProjection")
 
 
-def test_recent_alert_parity():
+async def test_recent_alert_parity():
     svc = _service(rows=[{"id": "a1", "title": "T", "category": "alert", "severity": "P1", "created_at": "now"}])
-    result = asyncio.run(svc.today_digest(tenant_id="t1"))
+    result = await svc.today_digest(tenant_id="t1")
     assert len(result["recent_alerts"]) == 1
     assert set(result["recent_alerts"][0].keys()) == _interface_fields("MobileRecentAlert")
 
@@ -151,8 +162,8 @@ def test_alert_item_parity():
     assert set(result.keys()) == _interface_fields("MobileAlertItem")
 
 
-def test_alerts_inbox_parity():
-    result = asyncio.run(_service().alerts_inbox(tenant_id="t1"))
+async def test_alerts_inbox_parity():
+    result = await _service().alerts_inbox(tenant_id="t1")
     assert set(result.keys()) == _interface_fields("MobileAlertsProjection")
 
 
@@ -168,8 +179,8 @@ def test_conversation_parity():
     assert set(result.keys()) == _interface_fields("MobileConversation")
 
 
-def test_explore_briefing_parity():
-    result = asyncio.run(_service().explore_briefing(tenant_id="t1"))
+async def test_explore_briefing_parity():
+    result = await _service().explore_briefing(tenant_id="t1")
     assert set(result.keys()) == _interface_fields("MobileBriefingProjection")
 
 

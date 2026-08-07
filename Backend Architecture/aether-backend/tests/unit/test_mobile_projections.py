@@ -28,6 +28,7 @@ from services.mobile import routes as mobile_routes
 from services.mobile.projections import (
     BRIEFING_CONVERSATIONS_DEFAULT,
     BRIEFING_VIEWS_DEFAULT,
+    DIGEST_ALERT_SCAN_LIMIT,
     ENTITY_NAME_MAX_CHARS,
     INBOX_DEFAULT_LIMIT,
     MobileProjectionService,
@@ -380,8 +381,9 @@ def test_today_digest_composes_owning_truth_and_redacts():
     rows = _inbox_rows()
     profile_summary = _profile_summary()
     svc = MobileProjectionService(
-        inbox_list=_async_value(rows),
-        inbox_unread=_async_value(3),
+        # M8-B5: single-snapshot read — rows and unread count come from the
+        # SAME inbox read, never two back-to-back calls straddling a mutation.
+        inbox_snapshot=_async_value({"rows": rows, "unread_count": 3}),
         profile_aggregator=SimpleNamespace(summary=_async_value(profile_summary)),
     )
     digest = _run(svc.today_digest(tenant_id="tenant-a", profile_user_id="ent-1"))
@@ -406,8 +408,7 @@ def test_today_digest_composes_owning_truth_and_redacts():
 
 def test_today_digest_omits_profile_peek_when_not_requested():
     svc = MobileProjectionService(
-        inbox_list=_async_value(_inbox_rows()),
-        inbox_unread=_async_value(3),
+        inbox_snapshot=_async_value({"rows": _inbox_rows(), "unread_count": 3}),
     )
     digest = _run(svc.today_digest(tenant_id="tenant-a"))
     assert digest["profile_peek"] is None
@@ -469,20 +470,62 @@ def test_campaign_summary_404_for_unowned_or_missing_campaign():
 
 def test_alerts_inbox_forwarded_limit_and_redacts_rows():
     rows = _inbox_rows()
-    fake_list = _async_value(rows)
-    svc = MobileProjectionService(
-        inbox_list=fake_list, inbox_unread=_async_value(1)
-    )
+    fake_snapshot = _async_value({"rows": rows, "unread_count": 1})
+    svc = MobileProjectionService(inbox_snapshot=fake_snapshot)
     result = _run(svc.alerts_inbox(tenant_id="tenant-a", unread_only=True, limit=INBOX_DEFAULT_LIMIT))
 
     assert result["count"] == len(rows)
     assert result["unread_count"] == 1
-    assert fake_list.calls == [
+    # M8-B5: a single snapshot read supplies BOTH the rows and the unread count
+    # — never two back-to-back calls straddling a concurrent mutation.
+    assert fake_snapshot.calls == [
         {"tenant_id": "tenant-a", "unread_only": True, "limit": INBOX_DEFAULT_LIMIT, "offset": 0}
     ]
     joined = json.dumps(result["alerts"])
     assert "4111111111111111" not in joined
     assert "bob@example.com" not in joined
+
+
+def test_alerts_inbox_rows_and_count_share_one_snapshot_read():
+    """M8-B5 regression: the unread count and the listed rows MUST come from the
+    same underlying read. If a caller pairs two separate calls, a concurrent
+    create/read/archive between them yields a stale count vs. the listed rows.
+    """
+    snapshot_rows = [
+        {"id": "n1", "read": False, "archived": False, "tenant_id": "tenant-a"},
+        {"id": "n2", "read": False, "archived": False, "tenant_id": "tenant-a"},
+        {"id": "n3", "read": True, "archived": False, "tenant_id": "tenant-a"},
+    ]
+    fake_snapshot = _async_value({"rows": snapshot_rows, "unread_count": 2})
+    svc = MobileProjectionService(inbox_snapshot=fake_snapshot)
+
+    result = _run(svc.alerts_inbox(tenant_id="tenant-a"))
+
+    # The count the projection reports is EXACTLY the count computed on the
+    # same rows it lists — a mutation between two separate calls could never
+    # be observed, because only one call is made.
+    assert result["unread_count"] == 2
+    assert len(result["alerts"]) == 3
+    assert fake_snapshot.calls == [{
+        "tenant_id": "tenant-a", "unread_only": False, "limit": INBOX_DEFAULT_LIMIT, "offset": 0,
+    }]
+
+
+def test_today_digest_rows_and_count_share_one_snapshot_read():
+    """M8-B5 regression for the digest surface (same single-snapshot contract)."""
+    snapshot_rows = [
+        {"id": "n1", "read": False, "archived": False, "tenant_id": "tenant-a"},
+        {"id": "n2", "read": False, "archived": False, "tenant_id": "tenant-a"},
+    ]
+    fake_snapshot = _async_value({"rows": snapshot_rows, "unread_count": 2})
+    svc = MobileProjectionService(inbox_snapshot=fake_snapshot)
+
+    digest = _run(svc.today_digest(tenant_id="tenant-a"))
+
+    assert digest["unread_alert_count"] == 2
+    assert fake_snapshot.calls == [{
+        "tenant_id": "tenant-a", "unread_only": True, "limit": DIGEST_ALERT_SCAN_LIMIT,
+    }]
 
 
 def test_briefing_composes_views_and_conversations():
