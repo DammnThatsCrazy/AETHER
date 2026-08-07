@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/auth/auth.py
   - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
 canonical_owner: platform@aether
-last_synced_commit: "75edbd7d"
+last_synced_commit: "9d95900c"
 ---
 
 # Governance and Consent
@@ -33,8 +33,10 @@ registry-derived (root fix in 8.12.0 removed the stale hardcoded set).
 `derivatives:read|connect|export|investigate|manage_policy|operator`,
 `interoperability:read|connect|export|investigate|manage_policy|operator`.
 Read permissions grant at VIEWER+; operator permissions at OPERATOR+ in
-`KYBER_ROLE_PERMISSIONS`. Kyber admin routers additionally require
-platform-admin gating.
+`KYBER_ROLE_PERMISSIONS`. Kyber admin routers additionally require the canonical
+fail-closed Kyber-operator gate (a workforce session, the
+`kyber:operator` grant, or the operator tenant allowlist);
+Aether tenants including `Role.ADMIN` are denied.
 
 ## DSR
 

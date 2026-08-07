@@ -99,7 +99,7 @@ async def _ingest_communication(
         # Provider-reported occurrence time; providers that send no timestamp
         # (Mailchimp) emit the empty "unknown" sentinel — fall back to received
         # time so Bronze never stores an empty occurrence.
-        "timestamp": data.get("occurred_at") or received_at,
+        "timestamp": data.get("occurred_at") or _now(),
         "received_at": _now(),
         "ingested_at": _now(),
         "batch_id": f"connector:{provider}",

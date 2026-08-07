@@ -10,14 +10,14 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/registry.py
   - docs/SECRETS-MANAGEMENT.md
 canonical_owner: platform@aether
-last_synced_commit: "c3323a5c"
+last_synced_commit: "9d95900c"
 ---
 
 # Credential & Secret Reference
 
-> v8.12.0 — communications: the five-provider cohort (Klaviyo, SendGrid,
-> Customer.io, Mailchimp, Postmark) resolves its secrets through the connector
-> vault, per-provider as indexed below. The Klaviyo reference adapter requires a
+> v8.12.0 — communications: the eight-provider cohort (Klaviyo, SendGrid,
+> Customer.io, Mailchimp, Postmark, Braze, HubSpot, Iterable) resolves its
+> secrets through the connector vault, per-provider as indexed below. The Klaviyo reference adapter requires a
 > provider **API key**, stored per-tenant under the reference
 > `connector:{tenant_id}:klaviyo` (backend `aws_secrets_manager` maps this to
 > `aether/credentials/{tenant_id}/connector:{tenant_id}:klaviyo`).
@@ -58,7 +58,7 @@ signed-VAA endpoint) — see the provider adapter.
 The EVM and SVM observers require a `json_rpc` endpoint per observed chain. No
 API credential; live finality/price feeds are separately credential-gated.
 
-### Communications (5) — webhook-primary
+### Communications (8) — webhook-primary
 Each comms provider resolves its credential through the connector vault
 (`required_credentials` on the adapter); Aether never sends through any of them
 (observe-only, ADR-C1).
@@ -77,6 +77,15 @@ Each comms provider resolves its credential through the connector vault
   a GET that must 200.
 - **Postmark** — webhook-only, **endpoint-secret**: no vault secret. The durable
   server-controlled endpoint id (`whe_`) is the credential, as with Mailchimp.
+- **Braze** — pull + webhook. Requires a provider **API key** (`api_key`),
+  resolved through the connector vault `connector:{tenant_id}:braze`.
+- **HubSpot** — pull + webhook. Requires a provider **API key** and a **webhook
+  signing secret** (`api_key`, `webhook_signing_secret`) used to verify
+  `hubspot_signature_v3` signatures on the event webhook.
+- **Iterable** — pull + webhook. Requires a provider **API key** and a **webhook
+  signing secret** (`api_key`, `webhook_signing_secret`); Iterable signs with
+  `signature`/`ts` carried in the webhook URL's query params
+  (`iterable_hmac_query`).
 
 ## Rules
 
