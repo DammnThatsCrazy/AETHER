@@ -44,13 +44,25 @@ class FCMAdapter(NotificationProviderAdapter):
         project_id = provider_config.get("project_id")
         if not project_id:
             raise ConfigurationError("fcm: provider_config missing project_id")
-        title, body = self._push_alert(payload, provider_config)
+        # M1a (decision-log D11): the push carries ONLY the redacted projection.
+        projection = self._push_projection(payload, provider_config)
+        title = projection.push_title or "Aether notification"
+        body = projection.push_body or projection.push_summary or "You have a new update."
         message: dict[str, Any] = {
             "token": provider_config["registration_token"],
             "notification": {"title": title, "body": body},
         }
+        data: dict[str, Any] = {
+            # Redacted projection routing fields — the mobile app routes on the
+            # continuation-plane deep-link class + category; never raw payload.
+            "push_summary": projection.push_summary or "",
+            "push_deep_link_class": projection.push_deep_link_class,
+            "push_category": projection.push_category,
+        }
         if payload.get("deep_link_id"):
-            message["data"] = {"deep_link_id": str(payload["deep_link_id"])}
+            # Only an opaque id travels — never PII / graph.
+            data["deep_link_id"] = str(payload["deep_link_id"])
+        message["data"] = data
         headers = {
             "authorization": f"Bearer {token}",
             "content-type": "application/json",

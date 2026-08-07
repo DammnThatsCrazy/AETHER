@@ -235,6 +235,11 @@ async def _create_notification_delivery_jobs(notif: Any, intent_repo: Any = None
             "tenant_id": tenant_id,
             "source": "notification",
         }
+        # M1a (decision-log D11): attach the redacted projection so dispatch uses
+        # the explicit-projection path — a push carries ONLY these derived fields,
+        # never raw payload / PII.
+        projection_fields = notif.attach_projection().as_payload()
+        payload.update(projection_fields)
 
         for ch in channels:
             channel_type = ch.get("channel_type", "notification")

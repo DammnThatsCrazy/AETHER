@@ -162,6 +162,11 @@ async def _create_delivery_jobs_for_replay(notif: Any) -> int:
             "tenant_id": tenant_id,
             "source": "notification-replay",
         }
+        # M1a (decision-log D11): attach the redacted projection so replay dispatch
+        # uses the explicit-projection path — a push carries ONLY these derived
+        # fields, never raw payload / PII.
+        projection_fields = notif.attach_projection().as_payload()
+        payload.update(projection_fields)
 
         count = 0
         for ch in channels:

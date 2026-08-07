@@ -46,11 +46,20 @@ class APNsAdapter(NotificationProviderAdapter):
         device_token = provider_config["device_token"]
         host = _SANDBOX_HOST if provider_config.get("environment") == "sandbox" else _PROD_HOST
         topic = provider_config.get("topic") or provider_config.get("bundle_id", "")
-        title, body = self._push_alert(payload, provider_config)
+        # M1a (decision-log D11): the push carries ONLY the redacted projection.
+        projection = self._push_projection(payload, provider_config)
+        title = projection.push_title or "Aether notification"
+        body = projection.push_body or projection.push_summary or "You have a new update."
         aps: dict[str, Any] = {"alert": {"title": title, "body": body}}
+        if projection.push_summary:
+            aps["alert"]["subtitle"] = projection.push_summary
         if provider_config.get("sound") is not False:
             aps["sound"] = "default"
         message = {"aps": aps}
+        # Redacted projection routing fields — the mobile app routes on the
+        # continuation-plane deep-link class + category; never raw payload.
+        message["push_deep_link_class"] = projection.push_deep_link_class
+        message["push_category"] = projection.push_category
         if payload.get("deep_link_id"):
             # Only an opaque id travels — never PII / graph.
             message["deep_link_id"] = payload["deep_link_id"]

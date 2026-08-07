@@ -624,6 +624,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="add a policy for every persistent resource type to config/storage_policies.yaml (inventory: repositories/repos.py stores + alembic-created tables)",
     )
     run(
+        [sys.executable, "scripts/release/validate_delivery_safety.py"],
+        name="Delivery safety validator (D11 unsafe-delivery patterns)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="fix the reported delivery-path violation (direct adapter dispatch, fire-and-forget critical task, unconfigured router, zero-channel success, or unguarded simulated receipt) in services/delivery/** or services/notification_intelligence/**",
+    )
+    run(
         [sys.executable, "scripts/staging_capability_matrix.py"],
         name="Deploy-profile capability matrix + join layer (facet references resolve; bidirectional coverage)",
         results=results,

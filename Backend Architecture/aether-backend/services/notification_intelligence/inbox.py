@@ -182,6 +182,21 @@ async def create_inbox_notification(
         "count": 1,
         "created_at": now.isoformat(),
     }
+    # Redacted mobile push projection (M1a, decision-log D11): derived, redacted,
+    # bounded fields — never raw payload/PII. Populated at creation so the
+    # canonical inbox record always carries a safe push surface.
+    from services.notification_intelligence.projection import build_projection
+
+    projection = build_projection(
+        title=title,
+        body=body,
+        category=_coerce_category(category),
+        notification_class=_coerce_category(category),
+        severity=_coerce_severity(severity),
+        deep_link=link,
+        link=link,
+    )
+    row.update(projection.as_payload())
     created = await repo.insert(notification_id, row)
     metrics.increment(
         "aether_notification_inbox_total",
