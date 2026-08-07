@@ -31,6 +31,7 @@ tenants. Aether observes; this worker never executes, settles, or custodies.
 from __future__ import annotations
 
 import asyncio
+import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -52,7 +53,10 @@ logger = get_logger("aether.payment_rails.sync_worker")
 # Default cadence for the supervised loop. Sessions age into ``stale`` over a
 # 24h window (reconciliation.STALE_AFTER_SECONDS), so a few sweeps per hour is
 # ample; a shorter interval only adds provider-poll pressure with no benefit.
-PAYMENT_RAIL_SYNC_INTERVAL_SECONDS = 15 * 60
+# Environment-tunable so ops can tighten/loosen the cadence per deployment.
+PAYMENT_RAIL_SYNC_INTERVAL_SECONDS = int(
+    os.getenv("AETHER_PAYMENT_SYNC_INTERVAL_SECONDS", str(15 * 60))
+)
 
 
 def _open_sessions(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:

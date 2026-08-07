@@ -143,7 +143,8 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # supervised loop specs here.
     "semantic-worker": frozenset(),
     "materializer": frozenset(
-        {"export_expiry_sweep", "payment_rail_sync", "bronze_object_compaction"}
+        {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
+         "bronze_object_compaction"}
     ),
     "maintenance": frozenset(
         {

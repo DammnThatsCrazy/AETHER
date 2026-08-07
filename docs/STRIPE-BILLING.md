@@ -13,7 +13,7 @@ source_files:
 canonical_owner: billing@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "3283497"
+last_synced_commit: "380de9d"
 ---
 # Stripe Billing — Aether P1–P4 Integration
 

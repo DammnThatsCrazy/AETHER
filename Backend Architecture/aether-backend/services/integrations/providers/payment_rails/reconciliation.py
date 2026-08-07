@@ -18,6 +18,7 @@ instruments can never surface through a reconciliation record.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -28,8 +29,11 @@ from services.integrations.providers.payment_rails.models import (
 )
 
 # A session with an SDK-side signal but no provider confirmation within this
-# window is considered stale (configurable constant).
-STALE_AFTER_SECONDS: int = 24 * 60 * 60
+# window is considered stale. Environment-tunable (alerting + reconciliation use
+# the same window), defaulting to 24h.
+STALE_AFTER_SECONDS: int = int(
+    os.getenv("AETHER_PAYMENT_RECON_STALE_AFTER_SECONDS", str(24 * 60 * 60))
+)
 
 # Fields compared between the SDK view and provider truth.
 RECONCILIATION_COMPARE_FIELDS: tuple[str, ...] = (

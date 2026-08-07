@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py
   - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/reconciliation.py
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "380de9d"
 ---
 
 # Payment Rail Observability Runbook
@@ -28,8 +28,14 @@ credential-gated, with no live provider validated in staging yet.
 `AETHER_PAYMENT_RAILS_ENABLED` is the master switch; per-provider gates are
 `AETHER_PROVIDER_{PRIVY,STRIPE,COINBASE,MOONPAY,BRIDGE}_ENABLED`; the Kyber
 surface is `KYBER_PAYMENT_RAILS_ENABLED`. Do not enable a provider until it has
-a verified webhook signing secret in the vault and one session has been
-reconciled end to end in staging (see `CREDENTIAL_WAITING_PROMOTION_GUIDE`).
+an **active** webhook signing secret in the durable CredentialAuthority (the
+in-memory BYOK vault is retired for payment providers outside local dev) and one
+session has been reconciled end to end in staging (see
+`CREDENTIAL_WAITING_PROMOTION_GUIDE`). Full activation/rollback/certification
+steps live in `docs/PAYMENT-RAILS-ACTIVATION.md`.
+
+`STALE_AFTER_SECONDS` and the sync cadence are environment-tunable
+(`AETHER_PAYMENT_RECON_STALE_AFTER_SECONDS`, `AETHER_PAYMENT_SYNC_INTERVAL_SECONDS`).
 
 ## Sessions stuck in `sdk_only` / ageing to `stale`
 
@@ -58,6 +64,24 @@ reconciled end to end in staging (see `CREDENTIAL_WAITING_PROMOTION_GUIDE`).
 3. Duplicate webhook deliveries are idempotent (keyed per session); a webhook
    storm must not double-emit `payment_*` canonical events. If it does, treat as
    a P2 idempotency bug.
+
+## Delivery integrity: receipts, canonical delivery & repair
+
+1. Every delivery (verified webhook or polled record) has one durable, metadata-
+   only **receipt** (`payment_provider_receipts`) tracking it through the stage
+   machine (`received → … → completed`) plus terminal states (`rejected`,
+   `quarantined`, `retry_pending`, `repair_pending`, `dead_lettered`). Inspect a
+   receipt to see exactly where a delivery stopped and its linked funding
+   session / canonical event id(s) / outbox record.
+2. The supervised **canonical-repair worker** (`payment_canonical_repair`,
+   `AETHER_PAYMENT_CANONICAL_REPAIR_ENABLED`) idempotently re-drives incomplete
+   deliveries; the admin `canonical-backlog/repair` endpoint does the same on
+   demand (audited). Repair never double-emits or double-bills (deterministic
+   canonical id). A growing `PaymentRailCanonicalBacklog` /
+   `PaymentRailOutboxDeadLetterGrowth` alert means delivery is falling behind —
+   confirm the outbox relay is enabled **with** the canonical outbox.
+3. Alerts live in the `aether_payment_rails` Prometheus group; alert meanings are
+   catalogued in `docs/PAYMENT-RAILS-ACTIVATION.md#alerts`.
 
 ## Never do
 

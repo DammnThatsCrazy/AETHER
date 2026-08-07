@@ -264,7 +264,21 @@ class TestRoutes:
         with pytest.raises(BadRequestError):
             await rails_routes.payment_rails_health(FakeRequest(_tenant()))
 
-    async def test_webhook_route_requires_tenant_header(self):
+    async def test_legacy_header_route_404_unless_local_optin(self, monkeypatch):
+        # The header-tenant route is retired: unavailable (uniform 404) unless
+        # explicitly opted in for local development. Default OFF → 404.
+        request = FakeRequest(_tenant(), headers={"X-Aether-Tenant-ID": "t"}, body=b"{}")
+        with pytest.raises(NotFoundError):
+            await rails_routes.payment_rail_webhook("moonpay", request)
+
+    async def test_webhook_route_requires_tenant_header(self, monkeypatch):
+        # With the local-dev compatibility flag enabled, the legacy route is
+        # reachable and still requires a tenant header (a public caller cannot
+        # reach this route at all outside local development).
+        patched = dataclasses.replace(
+            settings.payment_rails, legacy_webhook_route_enabled=True
+        )
+        monkeypatch.setattr(settings, "payment_rails", patched)
         request = FakeRequest(_tenant(), headers={}, body=b"{}")
         with pytest.raises(BadRequestError):
             await rails_routes.payment_rail_webhook("moonpay", request)
@@ -295,7 +309,14 @@ class TestRoutes:
         await service.repos.sessions.save(tenant, record)
 
         response = await rails_routes.repair_canonical_backlog(FakeRequest(tenant))
-        assert response["data"] == {"scanned": 1, "repaired": 1, "events_reemitted": 2}
+        data = response["data"]
+        # The manual endpoint now drives the fuller receipt+session repair.
+        assert data["sessions_scanned"] == 1
+        assert data["sessions_repaired"] == 1
+        assert data["events_reemitted"] == 2
+        # ...and the manual action is audited (tenant-scoped).
+        audits = await service.repos.audit.list_for_tenant(tenant, action="canonical_repair_manual")
+        assert len(audits) == 1
 
     async def test_repair_route_rejected_when_master_flag_off(self, monkeypatch):
         patched = dataclasses.replace(settings.payment_rails, enabled=False)

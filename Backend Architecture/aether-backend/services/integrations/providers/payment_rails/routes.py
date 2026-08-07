@@ -26,7 +26,7 @@ from shared.common.common import (
     ForbiddenError,
     NotFoundError,
 )
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 
 from services.integrations.providers.payment_rails import ADAPTERS, get_adapter
 from services.integrations.providers.payment_rails.service import (
@@ -50,6 +50,23 @@ def _require_rails_enabled() -> None:
         )
 
 
+def _require_legacy_header_route() -> None:
+    """Guard the unsafe legacy header-tenant webhook route.
+
+    The ``/{provider}`` route lets a public caller select the tenant via an
+    ``X-Aether-Tenant-ID`` header. It is available ONLY in local development AND
+    only when explicitly opted in (``AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED``).
+    Everywhere else it returns a uniform 404 — indistinguishable from a route that
+    does not exist — so a public caller can never select a tenant by header in
+    staging or production. The durable ``/{provider}/{endpoint_id}`` route is the
+    authoritative path.
+    """
+    from services.integrations.providers.payment_rails.base import _is_local_env
+
+    if not (settings.payment_rails.legacy_webhook_route_enabled and _is_local_env()):
+        raise NotFoundError("not found")
+
+
 def _tenant_id(request: Request, permission: str = "read") -> str:
     request.state.tenant.require_permission(permission)
     tid = getattr(request.state.tenant, "tenant_id", None)
@@ -62,15 +79,17 @@ def _tenant_id(request: Request, permission: str = "read") -> str:
 
 @webhook_router.post("/{provider}")
 async def payment_rail_webhook(provider: str, request: Request):
-    """Public webhook receiver for the five named payment rail providers.
+    """LEGACY, local-development-only webhook receiver (header-selected tenant).
 
-    - No API key; the provider's native signature (compound Stripe/MoonPay
-      headers, Coinbase body-hex, etc.) is verified against the tenant's vault
-      secret before anything is parsed or persisted.
-    - Tenant resolved from the ``X-Aether-Tenant-ID`` header. The
-      ``/{provider}/{endpoint_id}`` route is the server-resolved-tenant path.
+    Retained ONLY for local development behind
+    ``AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED``; returns a uniform 404 in
+    every non-local environment (see :func:`_require_legacy_header_route`). It
+    resolves the tenant from ``X-Aether-Tenant-ID``, which a public caller must
+    never control — use the durable ``/{provider}/{endpoint_id}`` route in
+    staging/production, where the tenant and environment are server-resolved.
     """
     _require_rails_enabled()
+    _require_legacy_header_route()
     tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
     if not tenant_id:
         raise BadRequestError("X-Aether-Tenant-ID header is required")
@@ -119,6 +138,11 @@ async def payment_rail_webhook_by_endpoint(provider: str, endpoint_id: str, requ
 
     endpoint = await webhook_endpoint_registry.resolve(endpoint_id, provider)
     if endpoint is None:
+        # Unknown/revoked/cross-provider/cross-tenant/cross-environment endpoint id.
+        # Metered (metadata only) so repeated probing is alertable; the external
+        # response is a uniform 404 that never reveals which dimension mismatched.
+        metrics.increment("payment_rail_webhook_unknown_endpoint_total",
+                          labels={"provider": provider})
         raise NotFoundError("webhook endpoint")
 
     payload = await request.body()
@@ -140,8 +164,14 @@ async def payment_rail_webhook_by_endpoint(provider: str, endpoint_id: str, requ
 # ── Tenant provider controls ──────────────────────────────────────────────
 
 class SyncRequest(BaseModel):
-    """Optional provider-shaped records for deterministic (non-network) sync."""
+    """Optional provider-shaped records for deterministic (non-network) sync.
+
+    ``environment`` threads the sandbox/live credential environment explicitly so
+    the pull resolves the correct credential version and provider host; when
+    omitted the service derives it from the deployment environment.
+    """
     records: Optional[list[dict[str, Any]]] = None
+    environment: Optional[str] = None
 
 
 @router.post("/{provider}/sync")
@@ -149,8 +179,11 @@ async def sync_provider(provider: str, body: SyncRequest, request: Request):
     """Trigger provider status polling for open funding sessions."""
     _require_rails_enabled()
     tenant_id = _tenant_id(request, "write")
+    kwargs: dict[str, Any] = {"records": body.records}
+    if body.environment:
+        kwargs["environment"] = body.environment
     result = await get_payment_rails_service().status_sync(
-        tenant_id, provider, records=body.records
+        tenant_id, provider, **kwargs
     )
     return APIResponse(data=result).to_dict()
 
@@ -306,17 +339,25 @@ async def payment_rails_health(request: Request):
 
 @router.post("/payment-rails/canonical-backlog/repair")
 async def repair_canonical_backlog(request: Request, limit: int = 500):
-    """On-demand (admin) recovery of funding sessions with a canonical-delivery
-    gap — implied ``payment_*`` events never delivered because of a crash before
-    emission or an outbox relay outage. Re-drives emission idempotently (the
-    deterministic canonical id dedupes on both delivery paths), so the call is
-    safe to repeat. ``limit`` bounds the per-call scan (clamped to 1..2000).
-    Returns ``{scanned, repaired, events_reemitted}``.
+    """On-demand (admin) canonical-delivery repair for this tenant.
+
+    Scans the durable receipt ledger for incomplete deliveries AND funding
+    sessions with an emission gap (a crash before emission or an outbox-relay
+    outage), and idempotently re-drives canonical emission / outbox enqueue — the
+    deterministic canonical id dedupes on both delivery paths, so the call is safe
+    to repeat and never double-emits or double-bills. Tenant-scoped, authorized
+    (admin), idempotent, and audited. ``limit`` bounds the per-call scan (clamped
+    to 1..2000). Returns the per-run repair counters.
     """
     _require_rails_enabled()
     tenant_id = _tenant_id(request, "admin")
     bounded = max(1, min(int(limit), 2000))
-    stats = await get_payment_rails_service().repair_canonical_backlog(
-        tenant_id, limit=bounded
-    )
+    service = get_payment_rails_service()
+    stats = await service.run_canonical_repair(tenant_id, limit=bounded)
+    await service.repos.audit.record(tenant_id, {
+        "action": "canonical_repair_manual",
+        "provider": "*",
+        "actor": _endpoint_actor(request),
+        "detail": stats,
+    })
     return APIResponse(data=stats).to_dict()

@@ -36,6 +36,12 @@ from services.integrations.providers.payment_rails.models import (
     utc_now_iso,
 )
 from services.integrations.providers.payment_rails.reconciliation import reconcile_session
+from services.integrations.providers.payment_rails.receipts import (
+    COMPLETE_STAGES,
+    TERMINAL_STATES,
+    ReceiptStage,
+    ReceiptState,
+)
 from services.integrations.providers.payment_rails.repository import (
     PaymentRailsRepositories,
     get_payment_rails_repositories,
@@ -195,8 +201,14 @@ class PaymentRailsService:
         if not isinstance(parsed, dict):
             raise BadRequestError("Webhook payload must be a JSON object")
 
+        from services.integrations.providers.payment_rails.base import _resolve_environment
+
+        env = _resolve_environment(None)
         events = adapter.parse_webhook(tenant_id, parsed, payload_hash(parsed))
-        results = [await self._process_event(tenant_id, adapter, event) for event in events]
+        results = [
+            await self._process_event(tenant_id, adapter, event, environment=env)
+            for event in events
+        ]
         metrics.increment("payment_rail_webhook_handled_total",
                           labels={"provider": adapter.provider_name})
         return {"handled": True, "events": results}
@@ -237,6 +249,11 @@ class PaymentRailsService:
                               labels={"provider": adapter.provider_name})
             await self._quarantine_denied(
                 tenant_id, adapter, payload, "body_too_large", endpoint_id,
+            )
+            await self._reject_receipt(
+                tenant_id, adapter.provider_name, payload,
+                state=ReceiptState.QUARANTINED, reason="body_too_large",
+                environment=environment, endpoint_id=endpoint_id,
             )
             return {"handled": False, "reason": "body_too_large"}
 
@@ -282,6 +299,11 @@ class PaymentRailsService:
                 tenant_id, adapter, payload, result.reason or "signature_invalid",
                 endpoint_id,
             )
+            await self._reject_receipt(
+                tenant_id, adapter.provider_name, payload,
+                state=ReceiptState.REJECTED, reason=result.reason or "signature_invalid",
+                environment=environment, endpoint_id=endpoint_id,
+            )
             # A signature mismatch / stale / bad-format is a permanent 4xx; a
             # missing secret is a configuration state, still a 4xx (not a retry).
             return {"handled": False, "reason": result.reason}
@@ -294,7 +316,13 @@ class PaymentRailsService:
             raise BadRequestError("Webhook payload must be a JSON object")
 
         events = adapter.parse_webhook(tenant_id, parsed, payload_hash(parsed))
-        results = [await self._process_event(tenant_id, adapter, event) for event in events]
+        results = [
+            await self._process_event(
+                tenant_id, adapter, event,
+                environment=environment, endpoint_id=endpoint_id,
+            )
+            for event in events
+        ]
         metrics.increment("payment_rail_webhook_handled_total",
                           labels={"provider": adapter.provider_name})
         return {"handled": True, "events": results, "environment": environment}
@@ -330,31 +358,40 @@ class PaymentRailsService:
     async def _webhook_secrets(
         self, tenant_id: str, provider: str, environment: str, adapter: Any
     ) -> list[str]:
-        """Active + valid-previous webhook signing secrets, credential authority
-        first, then the legacy vault as a migration fallback."""
-        secrets: list[str] = []
+        """Active + valid-previous webhook signing secrets for the durable
+        endpoint-id route.
+
+        The durable CredentialAuthority is always consulted first (it is the
+        production path). The retired in-memory vault is read ONLY as a
+        local-development compatibility fallback when the authority yields
+        nothing: outside local development there is NO authority→legacy-vault
+        fallback, so an unconfigured slot fails closed (empty list → verification
+        fails) rather than silently reading the vault.
+        """
+        from services.integrations.providers.payment_rails.base import _is_local_env
+
         try:
             from services.providers.credentials.authority import credential_authority
 
             secrets = await credential_authority.get_verification_secrets(
                 tenant_id, provider, environment, "webhook_signing_secret"
             )
-        except Exception:  # authority not configured for this slot yet
+        except Exception:  # noqa: BLE001 — authority unavailable
             secrets = []
-        if not secrets:
-            try:
-                from services.integrations.providers.payment_rails.base import (
-                    get_payment_rails_vault,
-                )
+        if secrets or not _is_local_env():
+            return secrets
+        # Local-development-only compatibility read against the legacy vault.
+        try:
+            from services.integrations.providers.payment_rails.base import (
+                get_payment_rails_vault,
+            )
 
-                legacy = await get_payment_rails_vault().get_key(
-                    tenant_id, adapter.vault_provider_name
-                )
-                if legacy:
-                    secrets = [legacy]
-            except Exception:
-                secrets = []
-        return secrets
+            legacy = await get_payment_rails_vault().get_key(
+                tenant_id, adapter.vault_provider_name
+            )
+            return [legacy] if legacy else []
+        except Exception:  # noqa: BLE001
+            return []
 
     # ── Polling / status sync ─────────────────────────────────────────────
 
@@ -378,6 +415,21 @@ class PaymentRailsService:
         adapter = require_provider_enabled(provider)
         account = await self.repos.accounts.get(tenant_id, adapter.provider_name) or {}
 
+        # Authoritative credential environment for this pull: an explicit caller
+        # value wins, else the deployment-derived default (sandbox everywhere but
+        # production). Threaded into credential + endpoint resolution so a sandbox
+        # connection never pulls with live credentials. Mapped onto the sandbox|live
+        # credential vocabulary (a stored connection "environment" is accepted too).
+        from services.integrations.providers.payment_rails.base import _resolve_environment
+
+        _account_env = account.get("environment")
+        # The legacy account default is the string "production"; only honor a stored
+        # environment that was explicitly narrowed to a credential vocabulary token.
+        if _account_env in ("sandbox", "live"):
+            environment = _resolve_environment(params.pop("environment", None) or _account_env)
+        else:
+            environment = _resolve_environment(params.pop("environment", None))
+
         poll_state: Optional[dict[str, Any]] = None
         if records is None and adapter.polling_supported:
             scope = str(params.get("partner_user_ref") or params.get("customer_id") or "default")
@@ -386,14 +438,22 @@ class PaymentRailsService:
                 "cursor": cursors.get(scope), "scope": scope,
                 "health": "ok", "next_cursor": None, "pages": 0,
             }
-            events = await adapter.status_sync(tenant_id, poll_state=poll_state, **params)
+            events = await adapter.status_sync(
+                tenant_id, poll_state=poll_state, environment=environment, **params
+            )
         else:
             events = await adapter.status_sync(tenant_id, records=records)
 
-        results = [await self._process_event(tenant_id, adapter, event) for event in events]
+        results = [
+            await self._process_event(tenant_id, adapter, event, environment=environment)
+            for event in events
+        ]
 
         # Persist sync cursor + provider poll health on the account record.
-        account_changes: dict[str, Any] = {"last_poll_at": utc_now_iso()}
+        account_changes: dict[str, Any] = {
+            "last_poll_at": utc_now_iso(),
+            "environment": environment,
+        }
         if poll_state is not None:
             health = poll_state.get("health") or "ok"
             account_changes["provider_poll_health"] = health
@@ -419,6 +479,7 @@ class PaymentRailsService:
         await self.repos.audit.record(tenant_id, adapter.audit_record(
             tenant_id, "status_sync",
             {"event_count": len(events),
+             "environment": environment,
              "poll_health": (poll_state or {}).get("health"),
              "poll_pages": (poll_state or {}).get("pages")},
         ))
@@ -432,18 +493,41 @@ class PaymentRailsService:
     # ── Shared event pipeline ─────────────────────────────────────────────
 
     async def _process_event(
-        self, tenant_id: str, adapter: PaymentRailAdapter, event: ParsedProviderEvent
+        self,
+        tenant_id: str,
+        adapter: PaymentRailAdapter,
+        event: ParsedProviderEvent,
+        *,
+        environment: Optional[str] = None,
+        endpoint_id: Optional[str] = None,
     ) -> dict[str, Any]:
+        # Open (or re-open) the durable receipt for this delivery. Idempotent on
+        # the deterministic receipt id: a provider retry / webhook↔polling overlap
+        # / repair all map to the same ledger row. Receipt writes are best-effort
+        # (never drop an observation), but the ledger is the repair worker's truth.
+        rid = await self._open_receipt(
+            tenant_id, event, environment=environment, endpoint_id=endpoint_id,
+            stage=(ReceiptStage.SIGNATURE_VERIFIED if event.source == "webhook"
+                   else ReceiptStage.RECEIVED),
+        )
+
         _, disposition = await self.repos.events.record_event(tenant_id, event)
         if disposition == "ignored_duplicate":
+            # A legitimate duplicate retry is a completed delivery — never rebilled.
+            await self._receipt_advance(tenant_id, rid, ReceiptStage.COMPLETED,
+                                        verification_state="duplicate")
             return {"provider_event_id": event.provider_event_id,
-                    "disposition": "ignored_duplicate"}
+                    "disposition": "ignored_duplicate", "receipt_id": rid}
         if disposition == "rejected":
+            await self._receipt_mark(tenant_id, rid, ReceiptState.QUARANTINED,
+                                     reason="event_hash_conflict",
+                                     error_classification="reused_event_id_mutated_payload")
             await self.repos.audit.record(tenant_id, adapter.audit_record(
                 tenant_id, "event_hash_conflict",
                 {"provider_event_id": event.provider_event_id},
             ))
-            return {"provider_event_id": event.provider_event_id, "disposition": "rejected"}
+            return {"provider_event_id": event.provider_event_id,
+                    "disposition": "rejected", "receipt_id": rid}
 
         # Side records (never funding sessions themselves).
         deposit_address = adapter.extract_deposit_address(tenant_id, event)
@@ -453,18 +537,24 @@ class PaymentRailsService:
         if virtual_account:
             await self.repos.virtual_accounts.upsert(tenant_id, virtual_account)
 
+        await self._receipt_advance(tenant_id, rid, ReceiptStage.PARSED)
         session = adapter.normalize_to_funding_session(tenant_id, event)
         if session is None:
+            await self._receipt_advance(tenant_id, rid, ReceiptStage.COMPLETED,
+                                        verification_state="side_record")
             return {"provider_event_id": event.provider_event_id,
-                    "disposition": "side_record"}
+                    "disposition": "side_record", "receipt_id": rid}
 
         # Consent gate (default OFF): a funding-session observation is persisted
         # and emitted only when its subject has granted the required purpose.
         if not await self._consent_permits_session(tenant_id, adapter, event, session):
+            await self._receipt_mark(tenant_id, rid, ReceiptState.REJECTED,
+                                     reason="consent_denied")
             return {"provider_event_id": event.provider_event_id,
                     "disposition": "consent_denied",
-                    "funding_session_id": session.id}
+                    "funding_session_id": session.id, "receipt_id": rid}
 
+        await self._receipt_advance(tenant_id, rid, ReceiptStage.NORMALIZED)
         record, session_disposition = await self.repos.sessions.upsert_from_event(
             tenant_id, session, source=event.source
         )
@@ -474,6 +564,8 @@ class PaymentRailsService:
                 {"funding_session_id": record["id"],
                  "attempted_status": session.status},
             ))
+        await self._receipt_advance(tenant_id, rid, ReceiptStage.FUNDING_SESSION_PERSISTED,
+                                    funding_session_id=record["id"])
 
         reconciliation = reconcile_session(
             record,
@@ -488,6 +580,7 @@ class PaymentRailsService:
             await self.repos.sessions.save(tenant_id, record)
 
         emitted = await self._emit_canonical_events(tenant_id, adapter, record)
+        await self._receipt_finalize_delivery(tenant_id, rid, record)
         return {
             "provider_event_id": event.provider_event_id,
             "disposition": session_disposition,
@@ -495,7 +588,91 @@ class PaymentRailsService:
             "status": record["status"],
             "reconciliation_state": reconciliation.state,
             "canonical_events_emitted": emitted,
+            "receipt_id": rid,
         }
+
+    # ── Receipt lifecycle helpers (best-effort; never break the flow) ─────────
+
+    async def _open_receipt(
+        self, tenant_id: str, event: ParsedProviderEvent, *,
+        environment: Optional[str], endpoint_id: Optional[str], stage: str,
+    ) -> Optional[str]:
+        try:
+            record = await self.repos.receipts.open(
+                tenant_id, event.provider,
+                provider_event_id=event.provider_event_id, body_hash=event.raw_hash,
+                environment=environment, endpoint_id=endpoint_id,
+                source=event.source, stage=stage,
+            )
+            return record["receipt_id"]
+        except Exception as exc:  # noqa: BLE001 — ledger write must never drop an observation
+            logger.warning(f"payment receipt open failed (non-fatal): {exc}")
+            return None
+
+    async def _receipt_advance(
+        self, tenant_id: str, rid: Optional[str], stage: str, **fields: Any
+    ) -> None:
+        if not rid:
+            return
+        try:
+            await self.repos.receipts.advance(tenant_id, rid, stage, **fields)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"payment receipt advance failed (non-fatal): {exc}")
+
+    async def _receipt_mark(
+        self, tenant_id: str, rid: Optional[str], state: str, **kwargs: Any
+    ) -> None:
+        if not rid:
+            return
+        try:
+            await self.repos.receipts.mark_state(tenant_id, rid, state, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"payment receipt mark failed (non-fatal): {exc}")
+
+    async def _receipt_finalize_delivery(
+        self, tenant_id: str, rid: Optional[str], record: dict[str, Any]
+    ) -> None:
+        """Advance the receipt through canonical + delivery stages after emission.
+
+        Direct-publish (default) is synchronous → OUTBOX_PUBLISHED → COMPLETED.
+        The durable-outbox path stops at OUTBOX_ENQUEUED; the supervised relay
+        publishes asynchronously and the canonical-repair worker advances the
+        receipt to COMPLETED once it confirms the outbox row drained.
+        """
+        if not rid:
+            return
+        canonical_ids = list(record.get("metadata", {}).get("canonical_event_ids", []))
+        await self._receipt_advance(
+            tenant_id, rid, ReceiptStage.CANONICAL_EVENT_WRITTEN,
+            canonical_event_ids=canonical_ids or None,
+        )
+        if getattr(settings.payment_rails, "canonical_outbox_enabled", False):
+            await self._receipt_advance(
+                tenant_id, rid, ReceiptStage.OUTBOX_ENQUEUED,
+                outbox_record_id=(canonical_ids[0] if canonical_ids else None),
+                outbox_publication_state="enqueued",
+            )
+        else:
+            await self._receipt_advance(
+                tenant_id, rid, ReceiptStage.OUTBOX_PUBLISHED,
+                outbox_publication_state="published",
+            )
+            await self._receipt_advance(tenant_id, rid, ReceiptStage.COMPLETED)
+
+    async def _reject_receipt(
+        self, tenant_id: str, provider: str, payload: Optional[bytes], *,
+        state: str, reason: str, environment: Optional[str], endpoint_id: Optional[str],
+    ) -> None:
+        """Durably record a delivery that is denied before it produces an event
+        (bad signature, oversized body). Metadata-only, keyed by body hash."""
+        try:
+            body_hash = payload_hash(payload or b"")
+            await self.repos.receipts.open_terminal(
+                tenant_id, provider, state=state, body_hash=body_hash,
+                environment=environment, endpoint_id=endpoint_id, reason=reason,
+            )
+        except Exception as exc:  # noqa: BLE001 — ledger write must never change the outcome
+            logger.warning(f"payment reject receipt failed (non-fatal): {exc}")
 
     # The canonical consent purpose governing a payment funding-session
     # observation — "Payments, approvals, entitlements, subscriptions, orders"
@@ -583,11 +760,13 @@ class PaymentRailsService:
         to_outbox = getattr(settings.payment_rails, "canonical_outbox_enabled", False)
         meter_on = getattr(settings.payment_rails, "usage_metering_enabled", False)
         emitted: list[str] = []
+        emitted_ids: list[str] = []
         for canonical in implied:
             event_type = canonical["event_type"]
             if event_type in already:
                 continue
             event_id = canonical_event_id(tenant_id, canonical.get("session_id"), event_type)
+            emitted_ids.append(event_id)
             payload = {
                 "event_id": event_id,
                 "tenant_id": tenant_id,
@@ -620,6 +799,8 @@ class PaymentRailsService:
                 )
         if emitted:
             record["metadata"]["emitted_canonical"] = sorted(already | set(emitted))
+            prior_ids = record["metadata"].get("canonical_event_ids", [])
+            record["metadata"]["canonical_event_ids"] = sorted(set(prior_ids) | set(emitted_ids))
             await self.repos.sessions.save(tenant_id, record)
         return emitted
 
@@ -706,6 +887,84 @@ class PaymentRailsService:
                 repaired += 1
                 reemitted += len(emitted)
         return {"scanned": scanned, "repaired": repaired, "events_reemitted": reemitted}
+
+    # Bounded repair: a receipt that cannot be advanced after this many repair
+    # attempts is dead-lettered (a durable, inspectable terminal record) so a
+    # permanently-stuck delivery cannot loop forever.
+    MAX_REPAIR_ATTEMPTS = 8
+
+    async def run_canonical_repair(
+        self, tenant_id: str, *, limit: int = 500
+    ) -> dict[str, int]:
+        """Idempotently repair the canonical-delivery lifecycle for one tenant.
+
+        1. Scan incomplete receipts: for each whose funding session exists,
+           re-drive canonical emission (re-emits missing canonical events AND
+           re-enqueues missing outbox rows idempotently — the deterministic
+           canonical id dedupes both paths) and advance the receipt. A receipt
+           that never reached a funding session, after ``MAX_REPAIR_ATTEMPTS``,
+           is dead-lettered.
+        2. Scan funding sessions with an emission gap that have no receipt
+           (legacy rows) via :meth:`repair_canonical_backlog`.
+
+        Every operation is idempotent, so repeated cycles never double-emit or
+        double-bill. Returns per-run counters and records each repair outcome on
+        the receipt lifecycle.
+        """
+        stats = {
+            "receipts_scanned": 0, "receipts_repaired": 0, "receipts_dead_lettered": 0,
+            "sessions_scanned": 0, "sessions_repaired": 0, "events_reemitted": 0,
+        }
+        receipts = [
+            r for r in await self.repos.receipts.list_for_tenant(tenant_id, limit=limit)
+            if r.get("current_stage") not in COMPLETE_STAGES
+            and r.get("current_stage") not in TERMINAL_STATES
+        ]
+        for r in receipts[:limit]:
+            stats["receipts_scanned"] += 1
+            rid = r.get("receipt_id")
+            fsid = r.get("funding_session_id")
+            if not fsid:
+                # A delivery that never produced a funding session: give it a
+                # bounded number of repair attempts, then dead-letter it.
+                if int(r.get("repair_attempts", 0)) >= self.MAX_REPAIR_ATTEMPTS:
+                    await self.repos.receipts.mark_state(
+                        tenant_id, rid, ReceiptState.DEAD_LETTERED,
+                        reason="no_funding_session_after_max_repair",
+                    )
+                    stats["receipts_dead_lettered"] += 1
+                else:
+                    await self.repos.receipts.record_repair(
+                        tenant_id, rid, outcome="no_funding_session")
+                continue
+            record = await self.repos.sessions.get_record(tenant_id, fsid)
+            if record is None:
+                await self.repos.receipts.record_repair(
+                    tenant_id, rid, outcome="session_missing")
+                continue
+            adapter = ADAPTERS.get(record.get("provider"))
+            if adapter is None:
+                continue
+            emitted = await self._emit_canonical_events(tenant_id, adapter, record)
+            await self._receipt_finalize_delivery(tenant_id, rid, record)
+            # Durable enqueue to the guaranteed-delivery outbox (or a synchronous
+            # direct publish) means the canonical event is delivered; complete the
+            # receipt so it clears the backlog. The supervised relay owns the
+            # outbox row's own retry/dead-letter for the publish step.
+            await self.repos.receipts.advance(tenant_id, rid, ReceiptStage.COMPLETED)
+            await self.repos.receipts.record_repair(
+                tenant_id, rid,
+                outcome=("reemitted" if emitted else "advanced"),
+                detail=f"events={len(emitted)}",
+            )
+            stats["receipts_repaired"] += 1
+            stats["events_reemitted"] += len(emitted)
+
+        session_stats = await self.repair_canonical_backlog(tenant_id, limit=limit)
+        stats["sessions_scanned"] = session_stats["scanned"]
+        stats["sessions_repaired"] = session_stats["repaired"]
+        stats["events_reemitted"] += session_stats["events_reemitted"]
+        return stats
 
     # ── Health ────────────────────────────────────────────────────────────
 

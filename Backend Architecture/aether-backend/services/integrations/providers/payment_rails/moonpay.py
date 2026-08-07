@@ -212,11 +212,12 @@ class MoonPayAdapter(PaymentRailAdapter):
         point. Never raises: a classified failure degrades provider health.
         """
         poll_state = params.get("poll_state")
-        secret = await self._require_secret(tenant_id)
+        environment = params.get("environment")
+        secret = await self._require_secret(tenant_id, environment)
         if not secret:
             self._mark_health(poll_state, "not_configured")
             return []
-        base = await self._resolve_base_url(tenant_id)
+        base = await self._resolve_base_url(tenant_id, environment)
         limit = int(params.get("limit", self.poll_page_size))
 
         records: list[dict[str, Any]] = []
@@ -256,15 +257,17 @@ class MoonPayAdapter(PaymentRailAdapter):
         )
         return records
 
-    async def _live_connection_test(self, tenant_id: str) -> ConnectionTestResult:
+    async def _live_connection_test(
+        self, tenant_id: str, environment: Optional[str] = None
+    ) -> ConnectionTestResult:
         """Authenticated health ping: a bounded transactions GET (limit=1)."""
-        secret = await self._require_secret(tenant_id)
+        secret = await self._require_secret(tenant_id, environment)
         if not secret:
             return ConnectionTestResult(
                 provider=self.provider_name, ok=False, status="not_configured",
-                detail="missing credential (configure the key vault)",
+                detail="missing credential (provision the required slots)",
             )
-        base = await self._resolve_base_url(tenant_id)
+        base = await self._resolve_base_url(tenant_id, environment)
         request = self.build_request({
             "tenant_id": tenant_id, "credential": secret, "base_url": base, "limit": 1,
         })
@@ -302,15 +305,24 @@ def _failure_reason(data: dict[str, Any]) -> Optional[str]:
 
 
 def _sum_fee(data: dict[str, Any]) -> Optional[str]:
-    total = 0.0
-    seen = False
+    """Exact-decimal sum of MoonPay's fee components.
+
+    Uses ``Decimal`` (never binary float) so fractional fee amounts sum exactly
+    and provider-native precision is preserved. A present-but-malformed component
+    makes the total unreliable, so we return ``None`` (no fee reported) rather
+    than silently coercing it to zero and understating the fee. ``None`` is also
+    returned when no fee component is present.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    total: Optional[Decimal] = None
     for key in ("feeAmount", "extraFeeAmount", "networkFeeAmount"):
         value = data.get(key)
         if value in (None, ""):
             continue
         try:
-            total += float(value)
-            seen = True
-        except (TypeError, ValueError):
-            continue
-    return f"{total:.8f}".rstrip("0").rstrip(".") if seen else None
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        total = amount if total is None else total + amount
+    return str(total) if total is not None else None
