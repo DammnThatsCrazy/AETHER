@@ -90,6 +90,11 @@ _NATIVE_WEBHOOK_SCHEMES: dict[str, str] = {
     # high-entropy durable endpoint id in the webhook URL is the credential.
     "mailchimp": "endpoint_secret",
     "postmark": "endpoint_secret",
+    # Braze does not sign REST webhooks with a provider-native HMAC — its primary
+    # ingest path is REST pull (email-list export). Any webhook path therefore
+    # verifies through Aether's generic timestamped HMAC ("hmac"): honest, since
+    # the framework still HMAC-verifies signed webhooks (pull-model-first).
+    "braze": "hmac",
 }
 
 # Real, non-empty OAuth scopes keyed by connector_type. Empty today: no

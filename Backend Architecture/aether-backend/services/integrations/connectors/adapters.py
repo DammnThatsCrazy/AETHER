@@ -1020,6 +1020,7 @@ from services.integrations.connectors.customerio import CustomerIOConnector  # n
 from services.integrations.connectors.mailchimp import MailchimpConnector  # noqa: E402
 from services.integrations.connectors.postmark import PostmarkConnector  # noqa: E402
 from services.integrations.connectors.iterable import IterableConnector  # noqa: E402
+from services.integrations.connectors.braze import BrazeConnector  # noqa: E402
 
 ALL_CONNECTORS: list[type[BaseConnector]] = [
     SlackConnector, WebhookConnector, ShopifyConnector, StripeConnector, HubSpotConnector,
@@ -1027,4 +1028,5 @@ ALL_CONNECTORS: list[type[BaseConnector]] = [
     JiraConnector, LinearConnector, ZendeskConnector, IntercomConnector, DuneConnector,
     SendGridConnector, CustomerIOConnector, MailchimpConnector, PostmarkConnector,
     IterableConnector,
+    BrazeConnector,
 ]

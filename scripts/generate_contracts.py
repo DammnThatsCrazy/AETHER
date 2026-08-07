@@ -196,6 +196,7 @@ def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> No
         "mailchimp",
         "postmark",
         "iterable",
+        "braze",
         "segment",
         "posthog",
         "ga4",

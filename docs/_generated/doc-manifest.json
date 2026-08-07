@@ -409,6 +409,25 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/BRAZE-CONNECTOR.md",
+      "title": "Braze Connector",
+      "slug": "operations/braze-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED",
+        "AETHER_COMMS_INGESTION_ENABLED"
+      ]
+    },
+    {
       "path": "docs/BREAK-GLASS-ACCESS.md",
       "title": "Break-Glass Operator Access",
       "slug": "enterprise/break-glass-access",

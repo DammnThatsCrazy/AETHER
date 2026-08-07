@@ -83,6 +83,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `BACKUP-RESTORE.md`
 - `BILLING-PROVIDER-INTERFACE.md`
 - `BILLING-REVENUE-OPS.md`
+- `BRAZE-CONNECTOR.md`
 - `BREAK-GLASS-ACCESS.md`
 - `BUYER-PERSONAS.md`
 - `CANONICAL-PATH-INTELLIGENCE.md`

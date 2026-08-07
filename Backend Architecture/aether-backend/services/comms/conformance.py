@@ -177,6 +177,20 @@ _EVENT_FIXTURES: dict[str, tuple[dict[str, Any], str]] = {
         },
         "email_clicked",
     ),
+    "braze": (
+        {
+            "id": "br-ev-1",
+            "event_type": "users.messages.email.Click",
+            "time": 1750000000,
+            "user": {"braze_id": "user-1", "email_address": "person@example.com",
+                     "external_id": "ext-1"},
+            "campaign_id": "camp-1",
+            "dispatch_id": "disp-1",
+            "link_url": "https://x",
+            "link_id": "link-1",
+        },
+        "email_clicked",
+    ),
 }
 
 

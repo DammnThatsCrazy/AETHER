@@ -24,6 +24,8 @@ ConnectorType = Literal[
     "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom", "dune",
     # Branded communications providers (comms.* data outputs, ADR-C11 cohort)
     "sendgrid", "customerio", "mailchimp", "postmark", "iterable",
+    # ADR-C11 follow-up cohort (pull-model-first for Braze)
+    "braze",
     # Olympus-owned provider connectors (Layer 1)
     "dune_api", "dune_datashare", "dune_sim",
     "defi_llama", "coingecko", "coinmarketcap",

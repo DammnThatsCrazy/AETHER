@@ -1,6 +1,40 @@
 {
   "generated_from": "Backend Architecture/aether-backend/shared/certification/registry.py",
   "providers": {
+    "communications:braze": {
+      "adapter": "BrazeConnector",
+      "adapter_version": "1.0.0",
+      "capabilities": [
+        "campaign_sync",
+        "delivery_events",
+        "engagement_events",
+        "historical_backfill",
+        "identity_evidence",
+        "incremental_pull",
+        "message_sync",
+        "suppression_observe",
+        "webhook_ingest"
+      ],
+      "domain": "communications",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "provider": "braze",
+      "required_credentials": [
+        "api_key"
+      ],
+      "required_endpoints": [],
+      "secret_ref_names": [
+        "connector:{tenant}:braze"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 2,
+      "streaming_model": "webhook",
+      "unsupported": [
+        "send",
+        "suppression_write",
+        "template_edit"
+      ]
+    },
     "communications:customerio": {
       "adapter": "CustomerIOConnector",
       "adapter_version": "1.0.0",

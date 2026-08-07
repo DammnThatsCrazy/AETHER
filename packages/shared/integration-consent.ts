@@ -18,7 +18,6 @@
   | 'customerio'
   | 'mailchimp'
   | 'postmark'
-  | 'iterable'
   | 'segment'
   | 'posthog'
   | 'ga4'
@@ -30,6 +29,8 @@
   | 'apple_pay'
   | 'google_pay'
   | 'outbound_activation'
+  | 'iterable'
+  | 'braze'
           ;
 
         export type AetherConsentControlPlaneFlag =
@@ -804,63 +805,6 @@
   "supportsOutboundActivation": false,
   "notes": "Observe-only webhooks; possession of the durable endpoint id is the auth (verified by possession). Bounce types classify hard/soft/transient."
 },
-  "iterable": {
-  "connectorType": "iterable",
-  "connectorClass": "marketing_connector",
-  "provider": "Iterable",
-  "category": "marketing",
-  "dataFlowDirection": "inbound",
-  "riskTier": "medium",
-  "implementationStatus": "available",
-  "supportedCapabilities": [
-    "pull",
-    "webhook"
-  ],
-  "requiredTenantPermissions": [
-    "tenant_admin_approval"
-  ],
-  "requiresProviderAdminInstall": true,
-  "requiresTenantAdminApproval": true,
-  "requiredSubjectPurposes": [
-    "marketing"
-  ],
-  "supportedProcessingBases": [
-    "consent",
-    "legal_obligation"
-  ],
-  "defaultProcessingBasis": "consent",
-  "dataCategories": [
-    "engagement",
-    "suppression",
-    "spam_complaint"
-  ],
-  "identitySignals": [
-    "iterable_user_id",
-    "tenant_scoped_email_alias"
-  ],
-  "allowsIdentityLinking": true,
-  "allowsGraphProjection": true,
-  "allowsModelTraining": false,
-  "allowsPreConsentProcessing": true,
-  "complianceEvidenceEvents": [
-    "unsubscribe",
-    "suppression",
-    "spam_complaint"
-  ],
-  "suppressionEvents": [
-    "unsubscribe",
-    "suppression",
-    "spam_complaint"
-  ],
-  "retentionClass": "marketing_or_compliance",
-  "rawPayloadPolicy": "field_allowlist_only",
-  "quarantinePolicy": "unknown_fields",
-  "providerConsentBridge": "none",
-  "providerSignatureScheme": "iterable_hmac_query",
-  "supportsHistoricalBackfill": true,
-  "supportsOutboundActivation": false,
-  "notes": "Observe-only email lifecycle + REST event export (ADR-C1); webhook signature verified via Iterable HMAC-SHA256 over the raw body with the signature/ts in the webhook URL query params. Unknown event types skip."
-},
   "segment": {
   "connectorType": "segment",
   "connectorClass": "event_router_connector",
@@ -1541,5 +1485,119 @@
   "supportsHistoricalBackfill": false,
   "supportsOutboundActivation": true,
   "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+},
+  "iterable": {
+  "connectorType": "iterable",
+  "connectorClass": "marketing_connector",
+  "provider": "Iterable",
+  "category": "marketing",
+  "dataFlowDirection": "inbound",
+  "riskTier": "medium",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "legal_obligation"
+  ],
+  "defaultProcessingBasis": "consent",
+  "dataCategories": [
+    "engagement",
+    "suppression",
+    "spam_complaint"
+  ],
+  "identitySignals": [
+    "iterable_user_id",
+    "tenant_scoped_email_alias"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": true,
+  "complianceEvidenceEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "marketing_or_compliance",
+  "rawPayloadPolicy": "field_allowlist_only",
+  "quarantinePolicy": "unknown_fields",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "iterable_hmac_query",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "Observe-only email lifecycle + REST event export (ADR-C1); webhook signature verified via Iterable HMAC-SHA256 over the raw body with the signature/ts in the webhook URL query params. Unknown event types skip."
+},
+  "braze": {
+  "connectorType": "braze",
+  "connectorClass": "marketing_connector",
+  "provider": "Braze",
+  "category": "marketing",
+  "dataFlowDirection": "inbound",
+  "riskTier": "medium",
+  "implementationStatus": "available",
+  "supportedCapabilities": [
+    "pull",
+    "webhook"
+  ],
+  "requiredTenantPermissions": [
+    "tenant_admin_approval"
+  ],
+  "requiresProviderAdminInstall": true,
+  "requiresTenantAdminApproval": true,
+  "requiredSubjectPurposes": [
+    "marketing"
+  ],
+  "supportedProcessingBases": [
+    "consent",
+    "legal_obligation"
+  ],
+  "defaultProcessingBasis": "consent",
+  "dataCategories": [
+    "engagement",
+    "suppression",
+    "spam_complaint"
+  ],
+  "identitySignals": [
+    "tenant_scoped_email_alias",
+    "provider_profile_id"
+  ],
+  "allowsIdentityLinking": true,
+  "allowsGraphProjection": true,
+  "allowsModelTraining": false,
+  "allowsPreConsentProcessing": true,
+  "complianceEvidenceEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "suppressionEvents": [
+    "unsubscribe",
+    "suppression",
+    "spam_complaint"
+  ],
+  "retentionClass": "marketing_or_compliance",
+  "rawPayloadPolicy": "field_allowlist_only",
+  "quarantinePolicy": "unknown_fields",
+  "providerConsentBridge": "none",
+  "providerSignatureScheme": "braze_rest_pull",
+  "supportsHistoricalBackfill": true,
+  "supportsOutboundActivation": false,
+  "notes": "Observe-only (ADR-C1). Pull-model-first: Braze does not sign REST webhooks with a provider-native HMAC, so email lifecycle events export via the REST email-list endpoints (hard bounces, unsubscribes) with a durable cursor; pushed message events arrive via REST payloads. No provider write-back."
 }
         } as const;

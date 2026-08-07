@@ -16,7 +16,6 @@ public enum IntegrationConnectorType: String, CaseIterable {
     case customerio = "customerio"
     case mailchimp = "mailchimp"
     case postmark = "postmark"
-    case iterable = "iterable"
     case segment = "segment"
     case posthog = "posthog"
     case ga4 = "ga4"
@@ -28,6 +27,8 @@ public enum IntegrationConnectorType: String, CaseIterable {
     case applepay = "apple_pay"
     case googlepay = "google_pay"
     case outboundactivation = "outbound_activation"
+    case iterable = "iterable"
+    case braze = "braze"
 }
 
 public struct ProcessingDecision: Codable, Equatable {
