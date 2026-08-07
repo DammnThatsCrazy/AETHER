@@ -10,7 +10,7 @@ from services.computation import repositories as repo
 
 MIGRATION = (
     Path(__file__).resolve().parents[2]
-    / "alembic" / "versions" / "20260815_computation_substrate.py"
+    / "alembic" / "versions" / "20260818_computation_substrate.py"
 )
 
 
@@ -32,5 +32,5 @@ def test_ddl_matches_migration_verbatim():
 
 def test_migration_chains_onto_single_head():
     text = MIGRATION.read_text(encoding="utf-8")
-    assert 'down_revision = "20260814_customer_webhook_delivery_claims"' in text
-    assert 'revision = "20260815_computation_substrate"' in text
+    assert 'down_revision = "20260817_payment_provider_receipts"' in text
+    assert 'revision = "20260818_computation_substrate"' in text

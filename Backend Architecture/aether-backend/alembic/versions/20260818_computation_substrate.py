@@ -19,17 +19,17 @@ for runtime auto-creation). ``tests/computation/test_repo_ddl_parity.py`` assert
 the repo constants match the strings in this file. When changing table shape,
 edit this migration first, then mirror it in the repository.
 
-Revision ID: 20260815_computation_substrate
-Revises: 20260814_customer_webhook_delivery_claims
-Create Date: 2026-08-15
+Revision ID: 20260818_computation_substrate
+Revises: 20260817_payment_provider_receipts
+Create Date: 2026-08-18
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "20260815_computation_substrate"
-down_revision = "20260814_customer_webhook_delivery_claims"
+revision = "20260818_computation_substrate"
+down_revision = "20260817_payment_provider_receipts"
 branch_labels = None
 depends_on = None
 
