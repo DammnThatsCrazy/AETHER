@@ -29,7 +29,7 @@ historical rows read back as ``properties={}``, ``revenue_usd=NULL``,
 ``is_conversion=FALSE``.
 
 Revision ID: 20260823_touchpoint_conversion_fields
-Revises: 20260818_computation_substrate
+Revises: 20260823_merge_comms_substrate
 Create Date: 2026-08-23
 """
 
@@ -38,7 +38,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260823_touchpoint_conversion_fields"
-down_revision = "20260818_computation_substrate"
+down_revision = "20260823_merge_comms_substrate"
 branch_labels = None
 depends_on = None
 
