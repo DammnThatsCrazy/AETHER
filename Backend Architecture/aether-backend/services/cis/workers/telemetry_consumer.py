@@ -11,7 +11,7 @@ Pattern mirrors services/profile360_workers (additive subscription model).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from shared.events.events import Event, EventConsumer, Topic
 from shared.logger.logger import get_logger
@@ -99,6 +99,26 @@ def _build_mutation_analytics_row(event: Event) -> dict[str, Any]:
     }
 
 
+def _optional_float(value: Any) -> Optional[float]:
+    """Coerce to float, preserving ``None`` (unknown) instead of fabricating 0.0."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: Any) -> Optional[int]:
+    """Coerce to int, preserving ``None`` (unknown) instead of fabricating 0/1."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _build_retrieval_traces_row(event: Event) -> dict[str, Any]:
     p = event.payload
     return {
@@ -111,10 +131,15 @@ def _build_retrieval_traces_row(event: Event) -> dict[str, Any]:
         "embedding_model": p.get("embedding_model", ""),
         "reasoning_trace": p.get("reasoning_trace", ""),
         "citations": p.get("citations", []),
-        "confidence_score": float(p.get("confidence_score", p.get("confidence", 0.0))),
+        # Honest telemetry: an unknown model confidence / grounding signal stays
+        # NULL end-to-end. Never coerce absence to 0.0 or 1 — that would
+        # re-manufacture the exact claim the ml-serving layer took care to drop.
+        "confidence_score": _optional_float(
+            p["confidence_score"] if "confidence_score" in p else p.get("confidence")
+        ),
         "generation_hash": p.get("generation_hash", ""),
         "latency_ms": float(p.get("latency_ms", 0.0)),
-        "grounded": int(p.get("grounded", 1)),
+        "grounded": _optional_int(p.get("grounded")),
         "synthetic_ratio": float(p.get("synthetic_ratio", 0.0)),
         "source_service": event.source_service,
     }

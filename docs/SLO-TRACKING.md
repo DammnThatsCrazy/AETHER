@@ -13,7 +13,7 @@ related:
   - reliability/operations
 canonical_owner: platform@aether
 estimated_read_minutes: 4
-last_synced_commit: "4e944e7"
+last_synced_commit: "bb1aef2"
 ---
 # SLO Tracking
 

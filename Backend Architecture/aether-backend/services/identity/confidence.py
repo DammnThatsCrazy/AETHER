@@ -5,6 +5,17 @@ Implements the five-tier confidence model:
 
 Every scoring decision produces a numeric score (0.0–1.0), a tier, and
 an explicit list of reason codes that make the decision auditable.
+
+Score semantics — read this before treating the number as a probability:
+the composite value produced here is an *identity MATCH score*, an
+evidence-weighted strength-of-match derived from signal-type weights. It is
+**not** a calibrated probability: it is not fit against observed
+merge-correctness outcomes, so it must never be read as ``P(same identity)``.
+It is an ordinal match strength whose only job is to drive the tier decision.
+:func:`score_signals` returns a :class:`MatchScore`, which unpacks as the same
+``(score, tier, reason_codes)`` 3-tuple as before but additionally carries
+explicit ``score_kind`` / ``calibrated=False`` markers that make this contract
+machine-readable.
 """
 
 from __future__ import annotations
@@ -33,6 +44,53 @@ from .models import (
     REASON_REVOKED_ALIAS,
     REASON_INSUFFICIENT_EVIDENCE,
 )
+
+
+# ── Score kind markers ────────────────────────────────────────────────────────
+#
+# Make the semantics of the composite number explicit and machine-readable: it
+# is an evidence-weighted identity *match* score, not a calibrated probability.
+
+SCORE_KIND: str = "identity_match_score"
+CALIBRATED: bool = False
+
+
+class MatchScore(tuple):
+    """Result of :func:`score_signals` — an evidence-weighted identity match score.
+
+    Unpacks exactly like the historical ``(score, tier, reason_codes)`` 3-tuple,
+    so every existing caller keeps working unchanged, while additionally
+    carrying explicit semantic markers on the result itself:
+
+    * ``score_kind`` — ``"identity_match_score"``: a strength-of-match, not a
+      probability.
+    * ``calibrated`` — ``False``: the score is NOT calibrated against observed
+      outcomes and must not be interpreted as ``P(same identity)``.
+    """
+
+    __slots__ = ()
+    score_kind: str = SCORE_KIND
+    calibrated: bool = False
+
+    def __new__(
+        cls,
+        score: float,
+        tier: ConfidenceTier,
+        reason_codes: list[str],
+    ) -> "MatchScore":
+        return super().__new__(cls, (score, tier, reason_codes))
+
+    @property
+    def score(self) -> float:
+        return self[0]
+
+    @property
+    def tier(self) -> ConfidenceTier:
+        return self[1]
+
+    @property
+    def reason_codes(self) -> list[str]:
+        return list(self[2])
 
 
 # ── Signal-type weights (used to compute composite score) ─────────────────────
@@ -101,12 +159,17 @@ def score_signals(
     source_tenant_id: str,
     target_tenant_id: str,
     revoked_types: list[IdentitySignalType] | None = None,
-) -> tuple[float, ConfidenceTier, list[str]]:
+) -> MatchScore:
     """
-    Compute composite confidence score and tier for a candidate match.
+    Compute the composite identity **match** score and tier for a candidate.
+
+    The returned number is an evidence-weighted match strength, NOT a calibrated
+    probability (see the module docstring and :class:`MatchScore`).
 
     Returns:
-        (score: float, tier: ConfidenceTier, reason_codes: list[str])
+        MatchScore — unpacks as ``(score: float, tier: ConfidenceTier,
+        reason_codes: list[str])`` and carries ``score_kind`` /
+        ``calibrated=False`` markers.
     """
     reason_codes: list[str] = []
     revoked_types = revoked_types or []
@@ -114,7 +177,7 @@ def score_signals(
     # ── Absolute blocking rules ──────────────────────────────────────────
 
     if source_tenant_id != target_tenant_id:
-        return 0.0, ConfidenceTier.BLOCKED, [REASON_CROSS_TENANT_BLOCKED]
+        return MatchScore(0.0, ConfidenceTier.BLOCKED, [REASON_CROSS_TENANT_BLOCKED])
 
     # Revoked alias in matching set
     for rt in revoked_types:
@@ -126,7 +189,7 @@ def score_signals(
                 if st not in revoked_types
             ]
             if not non_revoked:
-                return 0.0, ConfidenceTier.BLOCKED, reason_codes
+                return MatchScore(0.0, ConfidenceTier.BLOCKED, reason_codes)
 
     # Fingerprint-only check: if the ONLY signals are fingerprint, block
     non_fp = [
@@ -134,7 +197,7 @@ def score_signals(
         if st != IdentitySignalType.DEVICE_FINGERPRINT
     ]
     if not non_fp and IdentitySignalType.DEVICE_FINGERPRINT in matching_signal_types:
-        return 0.0, ConfidenceTier.BLOCKED, [REASON_FINGERPRINT_ONLY_BLOCKED]
+        return MatchScore(0.0, ConfidenceTier.BLOCKED, [REASON_FINGERPRINT_ONLY_BLOCKED])
 
     # ── Consent check for sensitive signals ──────────────────────────────
 
@@ -153,17 +216,18 @@ def score_signals(
             if st not in CONSENT_REQUIRED_SIGNALS
         ]
         if not matching_signal_types:
-            return 0.0, ConfidenceTier.BLOCKED, reason_codes
+            return MatchScore(0.0, ConfidenceTier.BLOCKED, reason_codes)
     elif sensitive_in_match and has_consent:
         reason_codes.append(REASON_CONSENT_ALLOWS_LINK)
 
     if not matching_signal_types:
-        return 0.0, ConfidenceTier.BLOCKED, [REASON_INSUFFICIENT_EVIDENCE]
+        return MatchScore(0.0, ConfidenceTier.BLOCKED, [REASON_INSUFFICIENT_EVIDENCE])
 
     # ── Composite score ───────────────────────────────────────────────────
 
-    # Use the maximum signal weight as the primary confidence, then
-    # boost slightly for each additional corroborating signal.
+    # Use the maximum signal weight as the primary match strength, then
+    # boost slightly for each additional corroborating signal. This is an
+    # evidence-weighted MATCH score, not a calibrated probability.
     weights = [
         _SIGNAL_WEIGHTS.get(st, 0.3)
         for st in matching_signal_types
@@ -171,7 +235,7 @@ def score_signals(
     weights.sort(reverse=True)
     primary = weights[0]
     boost = sum(w * 0.02 for w in weights[1:])
-    score = min(1.0, primary + boost)
+    match_score = min(1.0, primary + boost)
 
     # Add reason codes for each matched signal
     for st in matching_signal_types:
@@ -179,8 +243,8 @@ def score_signals(
         if code and code not in reason_codes:
             reason_codes.append(code)
 
-    tier = _tier_for_score(score, matching_signal_types)
-    return score, tier, reason_codes
+    tier = _tier_for_score(match_score, matching_signal_types)
+    return MatchScore(match_score, tier, reason_codes)
 
 
 def _tier_for_score(
@@ -246,5 +310,11 @@ def _has_consent(consent_snapshot: dict | None) -> bool:
 
 
 def signal_weight(signal_type: IdentitySignalType) -> float:
-    """Return the base confidence weight for a single signal type."""
+    """Return the base match weight for a single signal type."""
     return _SIGNAL_WEIGHTS.get(signal_type, 0.3)
+
+
+# Clearly-named public alias reflecting what the score actually is (an identity
+# match score). ``score_signals`` is retained as the historical name that
+# existing callers (e.g. merge_policy.evaluate) import.
+identity_match_score = score_signals

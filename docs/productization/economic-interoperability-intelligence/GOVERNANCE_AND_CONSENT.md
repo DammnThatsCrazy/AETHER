@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/auth/auth.py
   - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
 canonical_owner: platform@aether
-last_synced_commit: "159f114"
+last_synced_commit: "d951420"
 ---
 
 # Governance and Consent
