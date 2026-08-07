@@ -71,3 +71,46 @@ class PaymentWebhookRateLimiter:
 
 
 payment_webhook_rate_limiter = PaymentWebhookRateLimiter()
+
+
+class PaymentTenantActionRateLimiter:
+    """Fixed per-minute-window limiter for tenant-initiated write actions.
+
+    Guards the manual provider-sync and canonical-repair endpoints so an
+    authorized tenant cannot hammer provider polling / repair with no cooldown.
+    Keyed on ``action:tenant`` per UTC minute using the same atomic counter as
+    the webhook limiter. Fails **open** (a cache error never blocks a legitimate
+    admin action) — the endpoints remain permission-gated and audited regardless.
+    """
+
+    def __init__(self, cache: Optional[CacheClient] = None) -> None:
+        self._cache = cache or CacheClient()
+
+    @staticmethod
+    def _key(action: str, tenant_id: str) -> str:
+        minute = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M")
+        return CacheKey.custom(f"payrail:actrl:{action}:{tenant_id}:{minute}")
+
+    async def allow(self, *, action: str, tenant_id: str, limit: int) -> bool:
+        if limit <= 0:
+            return True
+        try:
+            count, allowed = await self._cache.incr_if_under(
+                self._key(action, tenant_id), limit=limit, ttl=_WINDOW_TTL
+            )
+        except Exception as exc:  # noqa: BLE001 — never let the limiter fail closed
+            logger.warning(f"payment tenant-action rate limiter unavailable, allowing: {exc}")
+            return True
+        if not allowed:
+            metrics.increment(
+                "payment_rail_tenant_action_rate_limited_total",
+                labels={"action": action},
+            )
+            logger.warning(
+                "payment tenant-action rate limit exceeded",
+                extra={"action": action, "tenant_id": tenant_id, "count": count, "limit": limit},
+            )
+        return allowed
+
+
+payment_tenant_action_rate_limiter = PaymentTenantActionRateLimiter()

@@ -25,6 +25,7 @@ from shared.common.common import (
     BadRequestError,
     ForbiddenError,
     NotFoundError,
+    RateLimitedError,
 )
 from shared.logger.logger import get_logger, metrics
 
@@ -73,6 +74,23 @@ def _tenant_id(request: Request, permission: str = "read") -> str:
     if not tid:
         raise ForbiddenError("Tenant context is required")
     return tid
+
+
+async def _rate_limit_tenant_action(action: str, tenant_id: str, limit: int) -> None:
+    """Enforce a per-tenant, per-minute budget on a tenant-initiated write action.
+
+    Fails open (a cache outage never blocks a permission-gated admin action) and
+    raises a retryable 429 when the budget is exceeded. ``limit <= 0`` disables it.
+    """
+    from services.integrations.providers.payment_rails.rate_limit import (
+        payment_tenant_action_rate_limiter,
+    )
+
+    allowed = await payment_tenant_action_rate_limiter.allow(
+        action=action, tenant_id=tenant_id, limit=limit
+    )
+    if not allowed:
+        raise RateLimitedError(retry_after=60)
 
 
 # ── Public provider webhooks (HMAC-verified inside the service) ───────────
@@ -179,6 +197,9 @@ async def sync_provider(provider: str, body: SyncRequest, request: Request):
     """Trigger provider status polling for open funding sessions."""
     _require_rails_enabled()
     tenant_id = _tenant_id(request, "write")
+    await _rate_limit_tenant_action(
+        "sync", tenant_id, settings.payment_rails.tenant_sync_rate_limit_per_minute
+    )
     kwargs: dict[str, Any] = {"records": body.records}
     if body.environment:
         kwargs["environment"] = body.environment
@@ -307,7 +328,60 @@ async def get_funding_session(session_id: str, request: Request):
     service = get_payment_rails_service()
     record = await service.repos.sessions.get(tenant_id, session_id)
     reconciliation = await service.repos.reconciliation.get_for_session(tenant_id, session_id)
-    return APIResponse(data={"session": record, "reconciliation": reconciliation}).to_dict()
+    # Per-session delivery lifecycle: the metadata-only receipt(s) for this
+    # funding session — current stage, canonical event ids, outbox record +
+    # publication state, repair attempts, last error classification. Never any
+    # secret or raw sensitive payload. `delivery` is the latest receipt's stage
+    # so a caller has a single at-a-glance delivery state.
+    receipts = [
+        r for r in await service.repos.receipts.list_for_tenant(tenant_id, limit=1000)
+        if r.get("funding_session_id") == session_id
+    ]
+    receipts.sort(key=lambda r: r.get("last_attempted_at") or r.get("received_at") or "")
+    latest = receipts[-1] if receipts else None
+    delivery = {
+        "stage": (latest or {}).get("current_stage"),
+        "canonical_event_ids": (latest or {}).get("canonical_event_ids", []),
+        "outbox_record_id": (latest or {}).get("outbox_record_id"),
+        "outbox_publication_state": (latest or {}).get("outbox_publication_state"),
+        "repair_attempts": (latest or {}).get("repair_attempts", 0),
+        "repair_eligible": bool(
+            latest and latest.get("current_stage") not in (
+                "completed", "consumed_or_projected", "outbox_published",
+                "rejected", "quarantined", "dead_lettered",
+            )
+        ),
+        "last_error_classification": (latest or {}).get("last_error_classification"),
+    } if latest else None
+    return APIResponse(data={
+        "session": record,
+        "reconciliation": reconciliation,
+        "receipts": receipts,
+        "delivery": delivery,
+    }).to_dict()
+
+
+@router.get("/payment-rails/diagnostics")
+async def tenant_diagnostics(request: Request, provider: Optional[str] = None):
+    """Tenant-scoped payment-rail diagnostics (the tenant's own view).
+
+    Returns the shared, typed ``TenantDiagnosticsResponse`` for the authenticated
+    tenant only — per-provider adapter + health (nested), credential-slot states
+    (no secret values), webhook-endpoint registration state, polling health /
+    cursor age, delivery backlogs, recent safe audit records, and recent repair
+    outcomes. Reuses the same builder the Kyber operator surface uses, re-scoped
+    to the caller's tenant so nothing cross-tenant is ever exposed.
+    """
+    _require_rails_enabled()
+    tenant_id = _tenant_id(request)
+    from services.integrations.providers.payment_rails.kyber_aggregate import (
+        build_tenant_diagnostics,
+    )
+
+    response = await build_tenant_diagnostics(
+        get_payment_rails_service(), tenant_id, provider
+    )
+    return APIResponse(data=response.model_dump(mode="json")).to_dict()
 
 
 @router.get("/payment-rails/reconciliation")
@@ -351,6 +425,9 @@ async def repair_canonical_backlog(request: Request, limit: int = 500):
     """
     _require_rails_enabled()
     tenant_id = _tenant_id(request, "admin")
+    await _rate_limit_tenant_action(
+        "repair", tenant_id, settings.payment_rails.tenant_repair_rate_limit_per_minute
+    )
     bounded = max(1, min(int(limit), 2000))
     service = get_payment_rails_service()
     stats = await service.run_canonical_repair(tenant_id, limit=bounded)

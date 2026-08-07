@@ -1289,6 +1289,106 @@ class PaymentRailsConfig:
     legacy_webhook_route_enabled: bool = _env_bool(
         "AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED", False
     )
+    # Per-tenant, per-minute budgets for the tenant-initiated write actions
+    # (manual provider sync + manual canonical repair) so an authorized tenant
+    # cannot hammer provider polling / repair. 0 disables the limiter for that
+    # action. Fails open on a cache outage (the endpoints stay permission-gated).
+    tenant_sync_rate_limit_per_minute: int = _env_int(
+        "AETHER_PAYMENT_TENANT_SYNC_RATE_LIMIT_PER_MINUTE", 20
+    )
+    tenant_repair_rate_limit_per_minute: int = _env_int(
+        "AETHER_PAYMENT_TENANT_REPAIR_RATE_LIMIT_PER_MINUTE", 10
+    )
+
+    # ── Payment-rail derived-alert thresholds (env-aware) ──────────────────────
+    # These drive the in-process alert evaluator
+    # (services/integrations/providers/payment_rails/alert_eval.py), which
+    # classifies DERIVED health conditions that have no clean single-series PromQL
+    # expression — most importantly the reconciliation-conflict backlog, which is
+    # NOT emitted as a counter and can only be read from the durable
+    # reconciliation records. Keeping the thresholds here (rather than hardcoding
+    # them in the evaluator) makes them per-environment tunable: staging runs the
+    # tight defaults below; a production overlay can raise them via these env vars
+    # WITHOUT a code change, exactly like ROUTE_REGISTRY_ENFORCED and the storage
+    # sweep tunables. Every threshold is a non-secret integer (seconds or a count)
+    # — no secret or provider payload is ever expressed through an alert.
+    #
+    # no-webhook-in-window: a webhook-capable provider that has produced no
+    # verified delivery (receipt with source="webhook") for longer than this is
+    # silently broken (rotated/misconfigured endpoint, provider outage). 24h
+    # mirrors the PromQL PaymentRailNoWebhookInWindow ceiling. Absence of ANY
+    # webhook receipt is reported as UNKNOWN (no-data), never as a 0-second age —
+    # "no data" must be visibly distinct from "fresh".
+    alert_no_webhook_seconds: int = _env_int(
+        "AETHER_PAYMENT_ALERT_NO_WEBHOOK_SECONDS", 24 * 60 * 60
+    )
+    # oldest-incomplete-receipt age: a delivery stuck short of `completed`. Warn at
+    # 15m (a couple of missed sync/repair sweeps), critical at 1h (matches the
+    # PromQL PaymentRailOldestIncompleteReceipt gauge threshold so the two agree).
+    alert_oldest_receipt_warn_seconds: int = _env_int(
+        "AETHER_PAYMENT_ALERT_OLDEST_RECEIPT_WARN_SECONDS", 15 * 60
+    )
+    alert_oldest_receipt_critical_seconds: int = _env_int(
+        "AETHER_PAYMENT_ALERT_OLDEST_RECEIPT_CRITICAL_SECONDS", 60 * 60
+    )
+    # canonical-delivery backlog: count of incomplete receipts. Warn well before
+    # the PromQL absolute ceiling (100) so a steadily growing backlog is caught
+    # early; critical once the backlog is unambiguously falling behind.
+    alert_canonical_backlog_warn: int = _env_int(
+        "AETHER_PAYMENT_ALERT_CANONICAL_BACKLOG_WARN", 50
+    )
+    alert_canonical_backlog_critical: int = _env_int(
+        "AETHER_PAYMENT_ALERT_CANONICAL_BACKLOG_CRITICAL", 200
+    )
+    # dead-letter backlog: receipts parked in `dead_lettered` — a delivery that
+    # can never self-heal and needs manual replay. Any dead-letter warns; a batch
+    # of them is critical. Fail-loud: a dead-letter must never be silent.
+    alert_dead_letter_warn: int = _env_int("AETHER_PAYMENT_ALERT_DEAD_LETTER_WARN", 1)
+    alert_dead_letter_critical: int = _env_int(
+        "AETHER_PAYMENT_ALERT_DEAD_LETTER_CRITICAL", 10
+    )
+    # reconciliation conflict: SDK-observed vs provider-truth disagreement
+    # (a `conflict` reconciliation record). This is the genuinely-missing signal —
+    # no counter is emitted for the durable conflict backlog, so only the
+    # evaluator can surface it. Any conflict warns (a financial discrepancy always
+    # merits a look); a burst is critical.
+    alert_reconciliation_conflict_warn: int = _env_int(
+        "AETHER_PAYMENT_ALERT_RECONCILIATION_CONFLICT_WARN", 1
+    )
+    alert_reconciliation_conflict_critical: int = _env_int(
+        "AETHER_PAYMENT_ALERT_RECONCILIATION_CONFLICT_CRITICAL", 25
+    )
+    # reconciliation stale: SDK-only sessions no provider ever confirmed within the
+    # staleness window. Informational-to-warning — a surge can mean a provider is
+    # silently dropping traffic. Only warns once a meaningful number accumulate.
+    alert_reconciliation_stale_warn: int = _env_int(
+        "AETHER_PAYMENT_ALERT_RECONCILIATION_STALE_WARN", 25
+    )
+    # webhook signature/verification failures within the recent window: repeated
+    # rejected/quarantined webhook receipts — a rotated/misconfigured signing
+    # secret or a probing caller. Window default 5m matches the PromQL rate
+    # windows; warn on a handful, critical on a sustained burst.
+    alert_webhook_verification_failure_window_seconds: int = _env_int(
+        "AETHER_PAYMENT_ALERT_WEBHOOK_VERIFICATION_WINDOW_SECONDS", 5 * 60
+    )
+    alert_webhook_verification_failure_warn: int = _env_int(
+        "AETHER_PAYMENT_ALERT_WEBHOOK_VERIFICATION_FAILURE_WARN", 5
+    )
+    alert_webhook_verification_failure_critical: int = _env_int(
+        "AETHER_PAYMENT_ALERT_WEBHOOK_VERIFICATION_FAILURE_CRITICAL", 25
+    )
+    # Derived-condition alert evaluator worker (services/.../payment_rails/
+    # alert_worker.py). The Prometheus rules fire on their own, but the derived
+    # conditions with no single-series PromQL form (reconciliation-conflict
+    # backlog, backlog growth, outbox stalling, provider silence) are only
+    # surfaced by the in-process evaluator — which does nothing unless a worker
+    # runs it. Default OFF like every payment-rails rollout flag; enable in
+    # staging/prod once the plane is live so the derived alerts actually fire.
+    # The interval is the evaluator cadence in seconds (per-environment tunable).
+    alert_eval_enabled: bool = _env_bool("AETHER_PAYMENT_ALERT_EVAL_ENABLED", False)
+    alert_eval_interval_seconds: int = _env_int(
+        "AETHER_PAYMENT_ALERT_EVAL_INTERVAL_SECONDS", 5 * 60
+    )
 
 
 @dataclass(frozen=True)

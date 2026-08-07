@@ -5,17 +5,23 @@ import {
   fetchReconciliationRecords,
   fetchPaymentRailHealth,
   fetchProviderStatus,
+  fetchTenantDiagnostics,
   syncProviderStatus,
   repairCanonicalBacklog,
 } from './api';
 import type {
   FundingSessionRecord,
+  FundingSessionDetail,
   FundingSessionListParams,
   FundingSessionListResult,
+  FundingReceiptRecord,
+  SessionDeliveryRecord,
   ReconciliationRecordEntry,
   PaymentRailHealthRecord,
   PaymentRailHealthResult,
   ProviderAdapterStatusRecord,
+  TenantDiagnosticsResponse,
+  TenantDiagnosticsResult,
   CanonicalBacklogRepairOutcome,
 } from './api';
 
@@ -55,18 +61,27 @@ export function useFundingSessions(params?: FundingSessionListParams): {
 
 export function useFundingSession(id: string | null): {
   readonly session: FundingSessionRecord | null;
+  readonly receipts: FundingReceiptRecord[];
+  readonly delivery: SessionDeliveryRecord | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly refresh: () => void;
 } {
-  const { data, isLoading, error, refetch } = useQuery<FundingSessionRecord>({
+  const { data, isLoading, error, refetch } = useQuery<FundingSessionDetail>({
     key: `${KEY_PREFIX}:session:${id ?? 'none'}`,
     fetcher: () => fetchFundingSession(id ?? ''),
     staleTime: STALE,
     enabled: id !== null,
   });
 
-  return { session: data, loading: isLoading, error, refresh: refetch };
+  return {
+    session: data?.session ?? null,
+    receipts: data?.receipts ?? [],
+    delivery: data?.delivery ?? null,
+    loading: isLoading,
+    error,
+    refresh: refetch,
+  };
 }
 
 export function useReconciliationRecords(): {
@@ -99,6 +114,28 @@ export function usePaymentRailHealth(): {
 
   return {
     providers: data?.providers ?? [],
+    notConfigured: data?.notConfigured ?? false,
+    loading: isLoading,
+    error,
+    refresh: refetch,
+  };
+}
+
+export function useTenantDiagnostics(provider?: string): {
+  readonly diagnostics: TenantDiagnosticsResponse | null;
+  readonly notConfigured: boolean;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly refresh: () => void;
+} {
+  const { data, isLoading, error, refetch } = useQuery<TenantDiagnosticsResult>({
+    key: `${KEY_PREFIX}:diagnostics:${provider ?? 'all'}`,
+    fetcher: () => fetchTenantDiagnostics(provider),
+    staleTime: STALE,
+  });
+
+  return {
+    diagnostics: data?.diagnostics ?? null,
     notConfigured: data?.notConfigured ?? false,
     loading: isLoading,
     error,
