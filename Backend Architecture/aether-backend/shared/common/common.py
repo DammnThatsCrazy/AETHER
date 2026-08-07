@@ -394,12 +394,10 @@ def parse_event_time(value: Any) -> Optional[datetime]:
     perform that presence check themselves and only call this helper once
     they know a value is present.
     """
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    # Delegates to the temporal kernel — the sanctioned owner of timezone
+    # attachment. ``coerce_utc_lenient`` carries the exact assume-UTC-on-naive
+    # rule this helper used to inline, kept byte-for-byte for behavior parity
+    # while keeping raw tzinfo attachment out of this non-kernel module.
+    from shared.temporal.instant import coerce_utc_lenient
+
+    return coerce_utc_lenient(value)

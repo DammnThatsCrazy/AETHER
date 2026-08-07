@@ -609,13 +609,17 @@ def _max_occurred_at(rows: list[dict[str, Any]]) -> Optional[datetime]:
     other "now" reference in this module, so comparisons never raise on
     mixed aware/naive datetimes.
     """
+    from shared.temporal.instant import coerce_utc_lenient
+
     newest: Optional[datetime] = None
     for row in rows:
-        ts = _parse_ts(row.get("occurred_at"))
+        # coerce_utc_lenient (temporal kernel) parses + assumes UTC on naive —
+        # the exact normalization the watermark needs — without this module
+        # attaching a tzinfo itself (which the temporal-integrity gate forbids
+        # outside shared/temporal/).
+        ts = coerce_utc_lenient(row.get("occurred_at"))
         if ts is None:
             continue
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
         if newest is None or ts > newest:
             newest = ts
     return newest
