@@ -8,7 +8,7 @@ program:
   base_commit: "ead4ba6c7b53783958bebc03bddcede1a2ea7429"   # == origin/main at completion-program start (feat: payment-rails financial-plane provider readiness (#509))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of the original C0 base
   platform_version: "8.12.0"
-  last_landed_checkpoint: C8   # C0-C4 foundation + C8 compliance slice landed via #500 + #503; completion program drives C2-remainder + C5-C9
+  last_landed_checkpoint: C5   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4); C6/C7/C9 remaining
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -151,22 +151,25 @@ milestones:
   - id: C5
     name: feature-screens-projections-notification-center
     depends_on: [C8, M2]
-    status: active
-    landed: [mobile-config-route, distribution-profiles, app-version-registration, mobile-ui-package, offline-cache-framework, mobile-compliance-umbrella, gateway-projections, aether-mobile-screens, desktop-notification-center-aether, preferences-persistence]
-    lands: [kyber-mobile-screens]
+    status: landed
+    landed: [mobile-config-route, distribution-profiles, app-version-registration, mobile-ui-package, offline-cache-framework, mobile-compliance-umbrella, gateway-projections, aether-mobile-screens, desktop-notification-center-aether, preferences-persistence, kyber-mobile-screens, kyber-desktop-command-receipt-stub, kyber-continuation-hooks-stub]
     externally_blocked: [native-compile, store-submission]
     note: >
-      C5 has landed the bounded redacted gateway projections (today/profile/campaign/alerts/
+      C5 is LANDED. The bounded redacted gateway projections (today/profile/campaign/alerts/
       explore — services/mobile/projections.py reuses owning services, never re-calculates
       Profile360/Campaign360/graph truth), Aether Mobile feature screens
       (Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth),
-      and the Aether desktop notification center (inbox UI + unread badge + filters + read/ack/
+      the Aether desktop notification center (inbox UI + unread badge + filters + read/ack/
       archive) with preferences persistence (quiet hours/timezone/digest on the EXISTING
-      /v1/notifications/config surface). Landed via M2 (platform/config/compliance foundations) +
-      M3 (projections + screens + desktop NC). The /notifications surface is classified in the
-      Kyber feature-surface manifest as tenant self-scoped (no tenant-graph projection; operator
-      signals live in the ops exception queue). Remaining: M4 Kyber Mobile operator screens. All
-      new surfaces flag-gated OFF or read-only; no runtime behavior change with flags off.
+      /v1/notifications/config surface), and M4's Kyber Mobile operator screens (Pulse/Exceptions/
+      Incidents/Runs/Reviews/Briefings/Account — read-only typed-navigator app, GET-only client
+      over the EXISTING /v1/kyber/ops/* + /v1/agent/* + /v1/kyber/auth|devices/* routes) plus the
+      Kyber desktop polish (command-receipt visibility stub on the EXISTING /kyber-commands page +
+      inert continuation hooks behind enableKyberContinuations default OFF). The /notifications
+      surface is classified in the Kyber feature-surface manifest as tenant self-scoped (no
+      tenant-graph projection; operator signals live in the ops exception queue). Landed via M2 +
+      M3 + M4 of the completion program. All new surfaces flag-gated OFF or read-only; no runtime
+      behavior change with flags off.
   - id: C6
     name: continue-on-phone-sync-completion
     depends_on: [C5]
@@ -307,12 +310,12 @@ quality:                                     # updated at each milestone boundar
 # Completion program is IN FLIGHT (M0-M8): C6/C7 surfaces + M4/M7 additions are not yet
 # landed; update this section only where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; completion program (C5-C9) in flight on claude/aether-turnkey-completion-7m3x9"
+  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); completion program (C6/C7/C9) in flight on claude/aether-turnkey-completion-7m3x9"
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
   mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store)"
-  mobile_apps: "Aether Mobile feature screens landed (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth); native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI; Kyber Mobile screens are C5/M4 (in flight)"
+  mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client over the existing /v1/kyber/ops/* + /v1/agent/* + /v1/kyber/auth|devices/* routes); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
   credential: externally_blocked            # no AWS/APNs/FCM/email/Apple/Google; contracts + fakes + preflight only
   design_partner: partial
   store_submission: externally_blocked
   controlled_production: externally_blocked
-  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 landed; C2-pending + C5-C9 building to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"
+  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 landed; C6/C7/C9 building to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"

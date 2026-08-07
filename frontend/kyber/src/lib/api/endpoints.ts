@@ -1887,6 +1887,66 @@ export const api = {
     },
   },
 
+  // ── Kyber ops — read-only command receipts (durable command lifecycle) ──────
+  // snake_case per D6. These surfaces render backend-provided command state and
+  // govern nothing; approve/execute/verify/dry-run are the command queue's concern.
+  kyberOps: {
+    /** Open commands with their durable lifecycle state, newest first. */
+    commandReceipts: (params: { status?: string; limit?: number } = {}) =>
+      restClient.get(
+        `/v1/kyber/ops/commands${buildQS({
+          status: params.status ?? 'open',
+          limit: params.limit ?? 100,
+        })}`,
+        wrap(z.object({
+          commands: z.array(z.object({
+            command_id: z.string(),
+            command_type: z.string(),
+            status: z.string(),
+            requested_by: z.string(),
+            reason: z.string(),
+            created_at: z.string().nullable().optional(),
+            updated_at: z.string().nullable().optional(),
+          }).passthrough()),
+          count: z.number().nullable(),
+          status_filter: z.string().nullable().optional(),
+        }).passthrough()),
+      ).then(r => r.data),
+
+    /** One command's durable receipt detail — execution + verification state. */
+    commandReceipt: (commandId: string) =>
+      restClient.get(
+        `/v1/kyber/ops/commands/${encodeURIComponent(commandId)}`,
+        wrap(z.object({
+          command: z.object({
+            command_id: z.string(),
+            command_type: z.string(),
+            status: z.string(),
+            requested_by: z.string(),
+            reason: z.string(),
+            created_at: z.string().nullable().optional(),
+            updated_at: z.string().nullable().optional(),
+          }).passthrough(),
+          execution: z.object({
+            execution_id: z.string(),
+            attempt: z.number().nullable().optional(),
+            started_at: z.string().nullable().optional(),
+            completed_at: z.string().nullable().optional(),
+            error: z.string().nullable().optional(),
+          }).passthrough().nullable(),
+          verification: z.object({
+            verification_id: z.string(),
+            outcome: z.string(),
+            failure_reason: z.string().nullable().optional(),
+            started_at: z.string().nullable().optional(),
+            completed_at: z.string().nullable().optional(),
+          }).passthrough().nullable(),
+          verified: z.boolean(),
+          generated_at: z.string().nullable().optional(),
+        }).passthrough()),
+      ).then(r => r.data),
+  },
+
   // ── Graph — Kyber sees the COMBINED graph of ALL tenants ──────────────────
   //
   // Kyber has omniscient scope: every entity, every tenant, every connection.

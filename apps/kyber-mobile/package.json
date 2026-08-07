@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aether/mobile-core": "^8.12.0",
+    "@aether/mobile-ui": "^8.12.0",
     "expo": "^51.0.0",
     "expo-crypto": "^13.0.0",
     "expo-secure-store": "^13.0.0",

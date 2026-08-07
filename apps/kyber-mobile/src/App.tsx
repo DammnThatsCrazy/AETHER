@@ -1,27 +1,56 @@
 /**
- * Kyber Mobile root — navigation skeleton.
+ * Kyber Mobile root — typed navigator wiring the seven M4a operator-companion
+ * screens (Pulse / Exceptions / Incidents / Runs / Reviews / Briefings / Account).
  *
- * C4 lands a compiling shell bound to the operator plane. Full operator surfaces
- * (Pulse / Exceptions / Incidents / Runs / Reviews) and governed Tier-0–3 actions
- * (challenge / step-up / device-sign over the Kyber command plane) are C5–C7.
+ * Navigation uses `createNavigator<KyberRoutes>()` from `@aether/mobile-ui`: the
+ * app holds the active tab, pushes typed routes through the navigator, and
+ * renders the matching screen inside the shared `Screen` shell. All screens are
+ * read-only (M2 "no offline mutation" invariant); governed actions (approve /
+ * suspend / revoke / resolve / suppress / acknowledge) are M5/M6.
  */
-import React from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { SafeAreaView, StyleSheet, View } from 'react-native';
+
+import { theme } from '@aether/mobile-ui';
+
+import { TabBar } from './components/TabBar';
+import { navigate } from './navigator';
+import type { KyberTab } from './routes';
+import AccountScreen from './screens/AccountScreen';
+import BriefingsScreen from './screens/BriefingsScreen';
+import ExceptionsScreen from './screens/ExceptionsScreen';
+import IncidentsScreen from './screens/IncidentsScreen';
+import PulseScreen from './screens/PulseScreen';
+import ReviewsScreen from './screens/ReviewsScreen';
+import RunsScreen from './screens/RunsScreen';
 
 export default function App(): React.JSX.Element {
+  const [tab, setTab] = useState<KyberTab>('Pulse');
+
+  const selectTab = (next: KyberTab): void => {
+    setTab(next);
+    // Keep the typed navigator in sync — root tabs are pushed routes, so
+    // deep-link / goBack semantics stay coherent with the registry.
+    navigate(next);
+  };
+
   return (
     <SafeAreaView style={styles.root}>
-      <View style={styles.center}>
-        <Text style={styles.title}>Kyber</Text>
-        <Text style={styles.subtitle}>Operator companion</Text>
+      <View style={styles.body}>
+        {tab === 'Pulse' && <PulseScreen />}
+        {tab === 'Exceptions' && <ExceptionsScreen />}
+        {tab === 'Incidents' && <IncidentsScreen />}
+        {tab === 'Runs' && <RunsScreen />}
+        {tab === 'Reviews' && <ReviewsScreen />}
+        {tab === 'Briefings' && <BriefingsScreen />}
+        {tab === 'Account' && <AccountScreen />}
       </View>
+      <TabBar active={tab} onSelect={selectTab} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a0a0a' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#ffffff', fontSize: 28, fontWeight: '700' },
-  subtitle: { color: '#9a9a9a', fontSize: 15, marginTop: 6 },
+  root: { flex: 1, backgroundColor: theme.colors.background },
+  body: { flex: 1 },
 });
