@@ -11,7 +11,7 @@ toc_depth: 2
 source_files:
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/campaign/routes.py
-last_synced_commit: "23fc60a"
+last_synced_commit: "10052e6"
 ---
 
 # Runbook — Graph Results Disagree With Campaign Totals

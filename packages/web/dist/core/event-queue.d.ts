@@ -37,9 +37,12 @@ export declare class EventQueue {
     /**
      * Parse per-batch acceptance counters from the /v1/batch response body.
      * The backend BatchResponse uses `accepted` / `duplicates` / `rejected`
-     * (packages/shared/ingestion-contract.ts). Falls back to treating the whole
-     * batch as accepted if the body is absent or unparseable, so health reporting
-     * never blocks a successful (2xx) delivery.
+     * (packages/shared/ingestion-contract.ts). Returns `undefined` when the
+     * body is absent, non-JSON, or carries none of those keys — an ambiguous
+     * 2xx. Callers MUST NOT treat `undefined` as success: a 2xx only confirms
+     * the request was received, not that every event landed, and crediting the
+     * whole batch on an ambiguous body would silently hide real drops. See
+     * `AmbiguousDeliveryError` for how the caller (`sendBatch`) handles this.
      */
     private parseIngestCounters;
     private sendBeacon;

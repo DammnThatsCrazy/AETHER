@@ -13,7 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py
   - Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py
   - Backend Architecture/aether-backend/services/traffic/repair.py
-last_synced_commit: "23fc60a"
+last_synced_commit: "10052e6"
 ---
 
 # Runbook — Attribution Run Failed (Campaign 360)
