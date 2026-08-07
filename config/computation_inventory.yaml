@@ -218,10 +218,10 @@ computations:
     unit: score
     grain: subject
     time_semantics: as-of evidence
-    missing_input_behavior: evaluation failure -> risk_score 0 (benign)
+    missing_input_behavior: evaluation failure -> fail-closed to review (fixed)
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [hitcount_as_probability, fail_open_benign, correlated_signals_double_counted]
+    known_defects: [hitcount_as_probability, correlated_signals_double_counted]
     priority: P0
     proposed_definition_id: null
     migration_state: not_started

@@ -388,13 +388,21 @@ class FraudEvaluationService:
             tenant_id=tenant_id,
             subject_type=subject_type,
             subject_id=subject_id,
-            decision="monitor",
+            # Fail CLOSED: an evaluation failure must NOT silently become a
+            # benign/cleared outcome. Route to human review with an elevated
+            # (undetermined) tier rather than defaulting to monitor+low+score 0,
+            # which read as "clear". risk_score is not a computed assessment here.
+            decision="review",
             risk_score=0.0,
-            risk_tier="low",
+            risk_tier="medium",
+            review_state="required",
             evaluation_state="failed",
             evaluated_at=now,
             valid_from=now,
-            machine_explanation="Evaluation failed; defaulting to monitor pending retry.",
+            machine_explanation=(
+                "Evaluation failed; fail-closed to human review (not cleared). "
+                "risk_score is not a computed assessment."
+            ),
             created_at=now,
             updated_at=now,
         )
