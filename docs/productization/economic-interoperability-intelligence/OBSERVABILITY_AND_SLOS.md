@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/services/notification_intelligence/consumer.py
 canonical_owner: platform@aether
-last_synced_commit: "723fa4f5"
+last_synced_commit: "58ecad11"
 ---
 
 # Observability and SLOs
