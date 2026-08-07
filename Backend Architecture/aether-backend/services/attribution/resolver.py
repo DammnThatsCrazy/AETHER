@@ -38,6 +38,7 @@ from services.attribution.models import (
     TimeDecayModel,
     Touchpoint,
 )
+from shared.common.common import parse_event_time
 
 logger = logging.getLogger("aether.attribution.resolver")
 
@@ -259,23 +260,24 @@ class AttributionResolver:
         """
         touchpoints: list[Touchpoint] = []
         for item in raw:
-            ts = item.get("timestamp")
-            if ts is None:
-                ts = item.get("occurred_at")
-            if isinstance(ts, str):
-                try:
-                    ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                except (ValueError, AttributeError):
-                    logger.warning(
-                        "Excluding touchpoint with invalid timestamp: %r",
-                        item.get("timestamp") or item.get("occurred_at"),
-                    )
-                    continue
-            elif not isinstance(ts, datetime):
+            ts_raw = item.get("timestamp")
+            if ts_raw is None:
+                ts_raw = item.get("occurred_at")
+
+            # Only a string or a datetime is a candidate instant; anything else
+            # (including absent) is "missing" rather than "invalid" — same
+            # bucket the pre-refactor type check used.
+            if not isinstance(ts_raw, (str, datetime)):
                 logger.warning("Excluding touchpoint with missing timestamp")
                 continue
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
+
+            ts = parse_event_time(ts_raw)
+            if ts is None:
+                logger.warning(
+                    "Excluding touchpoint with invalid timestamp: %r",
+                    item.get("timestamp") or item.get("occurred_at"),
+                )
+                continue
 
             touchpoints.append(
                 Touchpoint(
@@ -315,12 +317,11 @@ def _event_reference_time(event: dict[str, Any]) -> Optional[datetime]:
         # that IS present but empty/invalid falls through to the refuse paths
         # below (never silently coerced to now).
         return datetime.now(timezone.utc)
-    if isinstance(raw, datetime):
-        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
-    if isinstance(raw, str):
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-        except ValueError:
-            return None
-    return None
+    if not isinstance(raw, (str, datetime)):
+        return None
+    # A time WAS supplied (present, non-None) — parse_event_time() cannot
+    # itself tell "absent" from "invalid" (both give None), which is exactly
+    # why the presence check above happens BEFORE this call, not inside
+    # parse_event_time. A present-but-unparseable value refuses (returns
+    # None) rather than being coerced to now().
+    return parse_event_time(raw)

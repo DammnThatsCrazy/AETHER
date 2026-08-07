@@ -26,6 +26,34 @@ class TerminalIngestError extends Error {
   }
 }
 
+/**
+ * Raised when a 2xx response body carries no parseable delivery counters
+ * (missing/non-JSON body, or JSON without `accepted`/`duplicate(s)`/`rejected`
+ * keys). A 2xx only confirms the request was *received* — not that every
+ * event in the batch landed — so this is deliberately NOT treated as success.
+ *
+ * It is just as deliberately NOT a `TerminalIngestError`: this is an
+ * unconfirmed outcome, not a rejection, so `flush()`'s catch routes it through
+ * the same retryable path as a transient 5xx/network failure (return the
+ * batch to the queue head) rather than dropping it.
+ *
+ * That retry is safe because every web-emitted event's `id` is minted once,
+ * at event-creation time (see `enqueueEvent` in ../index.ts), and is never
+ * regenerated across requeues/retries — the same event object (and thus the
+ * same id) is what gets resent. The backend dedups on that id, so replaying
+ * an already-delivered batch is absorbed as a `duplicate`, never a
+ * double-write. This mirrors the server SDK's identical fix
+ * (packages/server/src/transport.ts `parseIngestCounters` +
+ * packages/server/src/index.ts flush(), which requeues on `result.ok &&
+ * !result.counters` instead of crediting it).
+ */
+class AmbiguousDeliveryError extends Error {
+  constructor() {
+    super('Aether API: 2xx response with no parseable delivery counters — delivery unconfirmed, not credited');
+    this.name = 'AmbiguousDeliveryError';
+  }
+}
+
 interface QueueConfig {
   endpoint: string;
   apiKey: string;
@@ -196,8 +224,11 @@ export class EventQueue {
         this.persistQueue();
         this.config.onError?.(error, allowedEvents);
       } else {
-        // Transient failure (5xx exhausted, rate-limit, network): return the
-        // batch to the head so the next flush retries it.
+        // Transient failure (5xx exhausted, rate-limit, network) OR an
+        // AmbiguousDeliveryError (2xx with no parseable counters — unconfirmed,
+        // not rejected): return the batch to the head so the next flush
+        // retries it. Stable per-event ids make the backend dedup a resend of
+        // an already-delivered batch, so retrying here can't double-write.
         this.queue.unshift(...allowedEvents);
         this.persistQueue();
         this.config.onError?.(error as Error, allowedEvents);
@@ -293,17 +324,27 @@ export class EventQueue {
       throw new Error(`Aether API error: ${response.status} ${response.statusText}`);
     }
 
-    return this.parseIngestCounters(events.length, response);
+    const counters = await this.parseIngestCounters(response);
+    if (!counters) {
+      // 2xx but no parseable delivery counters: unconfirmed, not accepted.
+      // Throwing (instead of resolving) routes this through flush()'s catch
+      // as a retryable outcome rather than the credited-success path.
+      throw new AmbiguousDeliveryError();
+    }
+    return counters;
   }
 
   /**
    * Parse per-batch acceptance counters from the /v1/batch response body.
    * The backend BatchResponse uses `accepted` / `duplicates` / `rejected`
-   * (packages/shared/ingestion-contract.ts). Falls back to treating the whole
-   * batch as accepted if the body is absent or unparseable, so health reporting
-   * never blocks a successful (2xx) delivery.
+   * (packages/shared/ingestion-contract.ts). Returns `undefined` when the
+   * body is absent, non-JSON, or carries none of those keys — an ambiguous
+   * 2xx. Callers MUST NOT treat `undefined` as success: a 2xx only confirms
+   * the request was received, not that every event landed, and crediting the
+   * whole batch on an ambiguous body would silently hide real drops. See
+   * `AmbiguousDeliveryError` for how the caller (`sendBatch`) handles this.
    */
-  private async parseIngestCounters(sent: number, response: Response): Promise<IngestCounters> {
+  private async parseIngestCounters(response: Response): Promise<IngestCounters | undefined> {
     try {
       const body = (await response.json()) as Record<string, unknown>;
       const num = (v: unknown): number | undefined =>
@@ -319,9 +360,9 @@ export class EventQueue {
         };
       }
     } catch {
-      // Body missing / non-JSON — fall through to optimistic default.
+      // Body missing / non-JSON — ambiguous; fall through to `undefined`.
     }
-    return { accepted: sent, duplicate: 0, rejected: 0 };
+    return undefined;
   }
 
   private sendBeacon(events: AetherEvent[]): boolean {

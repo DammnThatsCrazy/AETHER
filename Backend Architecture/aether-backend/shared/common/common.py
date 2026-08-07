@@ -358,3 +358,48 @@ def parse_iso(value: str) -> datetime:
 
 def to_iso(dt: datetime) -> str:
     return dt.isoformat()
+
+
+def parse_event_time(value: Any) -> Optional[datetime]:
+    """Parse a canonical event-time value into an aware UTC ``datetime``, or
+    ``None`` if it cannot be parsed.
+
+    This is the single shared parser for the event-time rule behind audit
+    finding H: attribution must REFUSE on an invalid/absent conversion
+    timestamp rather than silently substituting ``now()``. It mirrors the
+    accept/reject rule enforced by ``BaseEvent.validate_timestamp``
+    (``services/ingestion/batch.py``) — the same
+    ``datetime.fromisoformat(value.replace("Z", "+00:00"))`` call — and does
+    not invent any additional accepted formats.
+
+    Accepts:
+      - a ``datetime`` instance: returned unchanged if timezone-aware, or
+        stamped with ``tzinfo=UTC`` if naive. A naive value is ASSUMED to
+        already be UTC; it is never reinterpreted via an inferred local zone.
+      - anything else (typically a ``str``): stringified and parsed with
+        ``datetime.fromisoformat`` (after mapping a trailing ``Z`` to
+        ``+00:00``), then normalized naive -> UTC the same way.
+
+    Returns ``None`` (never raises) for:
+      - ``None``
+      - ``""`` (empty string)
+      - any value that does not parse as ISO-8601 (e.g. ``"not-a-date"``)
+
+    Note for callers: this function cannot distinguish a time FIELD that is
+    ABSENT (e.g. a missing dict key) from one that is PRESENT but invalid —
+    both a missing value and an unparseable one are the caller's problem to
+    detect *before* calling this helper. Callers that must tell "no time
+    supplied, fall back to real-time now()" apart from "a time was supplied
+    but is corrupt, refuse" (e.g. ``services.attribution.resolver``) need to
+    perform that presence check themselves and only call this helper once
+    they know a value is present.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)

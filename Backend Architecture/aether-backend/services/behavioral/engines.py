@@ -51,7 +51,15 @@ def _parse_event_time(event: dict) -> Optional[datetime]:
 
     Returns None when the timestamp is absent or not a valid instant, so callers
     can window by real event-time (comparing datetimes) instead of by list
-    position or lexical string ordering."""
+    position or lexical string ordering.
+
+    Deliberately NOT delegated to ``shared.common.common.parse_event_time``:
+    that helper mirrors ``BaseEvent.validate_timestamp`` and ACCEPTS a naive
+    (timezone-less) ISO string by assuming UTC, whereas ``parse_instant_strict``
+    below REJECTS naive values outright (``timestamp_naive``) per the Temporal
+    Integrity kernel's platform invariant (see ``shared/temporal/instant.py``).
+    Swapping in the shared helper would silently loosen that rejection, so the
+    two parsers are intentionally kept separate."""
     raw = event.get("created_at", "")
     if not raw:
         return None

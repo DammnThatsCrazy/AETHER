@@ -325,7 +325,10 @@ describe('EventQueue', () => {
       globalThis.fetch = vi.fn(async () => {
         calls++;
         if (calls === 1) return { ok: false, status: 500, statusText: 'Internal Server Error', headers: new Headers() } as Response;
-        return { ok: true, status: 200 } as Response;
+        // Second attempt is a CONFIRMED success (real counters body) — this
+        // test is about the 500-then-succeed retry path, not the separate
+        // ambiguous-2xx path covered below.
+        return { ok: true, status: 200, json: async () => ({ accepted: 1, duplicate: 0, rejected: 0 }) } as unknown as Response;
       }) as unknown as typeof fetch;
 
       await q.flush();
@@ -370,6 +373,124 @@ describe('EventQueue', () => {
       // 5xx is transient: the batch returns to the head, not dropped.
       expect(errorFired).toBe(true);
       expect(q.size).toBe(1);
+      q.destroy();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Ambiguous 2xx (no parseable delivery counters) — web ids are stable
+  // (minted once per event in enqueueEvent(), never regenerated on
+  // requeue/retry — see packages/web/src/index.ts), so the backend safely
+  // dedups a resend. A counter-less 2xx must therefore be treated as
+  // UNCONFIRMED delivery: not credited, and retried — never dropped, and
+  // never optimistically counted as accepted. This aligns the web SDK with
+  // the server SDK's identical fix (packages/server/src/index.ts flush()).
+  // -------------------------------------------------------------------------
+
+  describe('ambiguous 2xx (no parseable delivery counters)', () => {
+    it('does not credit a 2xx with a missing/non-JSON body, and retains the batch for retry', async () => {
+      let errorFired = false;
+      let batchResultCalls = 0;
+      const q = makeQueue({
+        onError: () => { errorFired = true; },
+        onBatchResult: () => { batchResultCalls++; },
+        retry: { maxRetries: 0, baseDelay: 1, maxDelay: 1, backoffMultiplier: 1 },
+      });
+      q.enqueue(makeTrackEvent());
+
+      // `ok: true` with no `json` method at all — same shape used elsewhere
+      // in this file for a bare 2xx, but now must NOT be optimistically
+      // credited.
+      globalThis.fetch = vi.fn(async () => (
+        { ok: true, status: 200 } as Response
+      )) as unknown as typeof fetch;
+
+      await q.flush();
+      // Unconfirmed delivery: surfaced via onError, NEVER counted as
+      // delivered (onBatchResult only fires on a confirmed outcome), and the
+      // batch is retained (requeued) rather than dropped like a poison 4xx.
+      expect(errorFired).toBe(true);
+      expect(batchResultCalls).toBe(0);
+      expect(q.size).toBe(1);
+      q.destroy();
+    });
+
+    it('does not credit a 2xx whose JSON body carries no accepted/duplicate/rejected keys', async () => {
+      let errorFired = false;
+      const q = makeQueue({
+        onError: () => { errorFired = true; },
+        retry: { maxRetries: 0, baseDelay: 1, maxDelay: 1, backoffMultiplier: 1 },
+      });
+      q.enqueue(makeTrackEvent());
+
+      // Parseable JSON, but none of the known counter keys — still ambiguous.
+      globalThis.fetch = vi.fn(async () => (
+        { ok: true, status: 200, json: async () => ({ status: 'queued' }) } as unknown as Response
+      )) as unknown as typeof fetch;
+
+      await q.flush();
+      expect(errorFired).toBe(true);
+      expect(q.size).toBe(1);
+      q.destroy();
+    });
+
+    it('does not double-drop: an ambiguous 2xx is retained (not dropped like a terminal 4xx)', async () => {
+      const q = makeQueue({
+        retry: { maxRetries: 0, baseDelay: 1, maxDelay: 1, backoffMultiplier: 1 },
+      });
+      const event = makeTrackEvent();
+      q.enqueue(event);
+
+      globalThis.fetch = vi.fn(async () => (
+        { ok: true, status: 200 } as Response
+      )) as unknown as typeof fetch;
+
+      await q.flush();
+      // Retained (not dropped): the exact same event is still queued, so the
+      // eventual confirmed retry sends the identical, stably-id'd event.
+      expect(q.size).toBe(1);
+      q.destroy();
+    });
+
+    it('a subsequent batch still flushes after an ambiguous 2xx (head-of-line not blocked)', async () => {
+      let accepted = -1;
+      let batchResultCalls = 0;
+      const q = makeQueue({
+        onBatchResult: (health) => { batchResultCalls++; accepted = health.accepted; },
+        retry: { maxRetries: 0, baseDelay: 1, maxDelay: 1, backoffMultiplier: 1 },
+      });
+      q.enqueue(makeTrackEvent({ seq: 1 }));
+
+      // First flush: ambiguous 2xx — retained, not credited (onBatchResult
+      // does not fire for this attempt).
+      globalThis.fetch = vi.fn(async () => (
+        { ok: true, status: 200 } as Response
+      )) as unknown as typeof fetch;
+      await q.flush();
+      expect(q.size).toBe(1);
+      expect(batchResultCalls).toBe(0);
+
+      // A second, distinct event arrives after the failed attempt.
+      q.enqueue(makeTrackEvent({ seq: 2 }));
+      expect(q.size).toBe(2);
+
+      // Second flush: backend now returns a confirmed, fully-accepted
+      // response. Both the retried batch and the newly-enqueued event go out
+      // together and are credited — proving the earlier ambiguous response
+      // did not permanently wedge the queue (no head-of-line blocking).
+      let capturedBatch: AetherEvent[] = [];
+      globalThis.fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+        const body = JSON.parse((init?.body as string) ?? '{}');
+        capturedBatch = body.batch;
+        return { ok: true, status: 200, json: async () => ({ accepted: capturedBatch.length, duplicate: 0, rejected: 0 }) } as unknown as Response;
+      }) as unknown as typeof fetch;
+
+      await q.flush();
+      expect(capturedBatch).toHaveLength(2);
+      expect(capturedBatch.map((e) => (e.properties as Record<string, unknown>)?.seq)).toEqual([1, 2]);
+      expect(q.size).toBe(0);
+      expect(batchResultCalls).toBe(1);
+      expect(accepted).toBe(2);
       q.destroy();
     });
   });
