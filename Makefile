@@ -393,15 +393,24 @@ generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts
 	python scripts/generate_contracts.py --check
 
 # ---------------------------------------------------------------------------
-# Mobile / continuity / notification productization gates (program C0-C4)
+# Mobile / continuity / notification productization gates (program C0-C8)
 # ---------------------------------------------------------------------------
-.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test
+.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test mobile-app-typecheck mobile-app-test
 
 mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
 	npm run typecheck --workspace=packages/mobile-core --if-present
 
 mobile-test: ## CI gate — unit tests for the mobile SDK packages
 	npm run test --workspace=packages/mobile-core --if-present
+
+mobile-app-typecheck: ## CI gate — TypeScript typecheck of the Expo app shells (needs mobile-core dist, gitignored)
+	npm run build --workspace=packages/mobile-core
+	npm run typecheck --workspace=apps/aether-mobile
+	npm run typecheck --workspace=apps/kyber-mobile
+
+mobile-app-test: ## CI gate — app-level unit tests (no-op until C5 screens land tests in M3/M4; kept --if-present)
+	npm run test --workspace=apps/aether-mobile --if-present
+	npm run test --workspace=apps/kyber-mobile --if-present
 
 mobile-build-check: ## Mobile app scaffold invariants + honest native-build posture (report; exit 0 unless a scaffold is broken)
 	python scripts/mobile_build_check.py

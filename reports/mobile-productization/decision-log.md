@@ -95,3 +95,40 @@ Second notification inbox · second delivery queue · second audit ledger · sec
 second tenant authorization engine · second Kyber command plane · second graph truth · second
 Profile360/Campaign360 calculation · second consent/DSR system · second saved-view system · second
 Noesis conversation store · second deployment-profile taxonomy. Each is reused from its existing owner.
+
+## D10 — Completion program: full remaining scope on one branch → one PR
+- **Decision (owner-approved):** drive C2-pending + C5/C6/C7/C9 to `make ci-check` green as one
+  milestone-commit train on `claude/aether-turnkey-completion-7m3x9` (base `ead4ba6c` = origin/main
+  @ #509) → single PR to main. Mirrors the C0-C4 precedent. See `PROGRAM_STATE.yaml` `completion:`.
+- **Comms branch parked:** `claude/aether-comms-multi-provider` (ADR-C11 comms cohort) is out of
+  scope — separate observe-external-ESP domain (`services/comms/`); its 12 unmerged commits stay
+  untouched. No completion commit touches `services/comms/`.
+
+## D11 — Mobile notification projection = redacted push, no raw payload
+- **Reuse statement:** the delivery adapters (`services/delivery/adapters/_notification_base.py`)
+  and `notification_inbox` remain canonical. The new projection (M1) derives push
+  `title/body/summary` + destination deep-link class + category **at the push boundary only**;
+  it never stores raw notification payload in push, never adds a second inbox, and shares the
+  secure-attention-pointer semantics of the continuation plane.
+- **Validator:** `scripts/release/validate_delivery_safety.py` (M1) promotes the D2/D4/D7-style
+  regression checks into a permanent gate — direct adapter calls, `asyncio.create_task` on critical
+  delivery, unconfigured routers, success-with-no-recipient, simulated provider receipts all fail.
+
+## D12 — Reuse-before-build for C5-C9 surfaces (non-exhaustive, updated per milestone)
+- **Gateway projections (M3) reuse owning services** (`services/profile/*`, `services/campaign/*`,
+  `notification_intelligence/inbox`, `services/exploration/store`, `noesis`) — bounded, redacted,
+  data-truth-preserving. NEVER re-calculate Profile360/Campaign360/graph truth.
+- **Mobile action adapter (M6) reuses `services/kyber/ops/*`** — no second command plane, no generic
+  mutation channel, no endpoint naming arbitrary actions. Step-up reuses `StepUpService`/`device_proof`.
+- **Offline cache (M2) is read-only** — fresh/offline/stale markers, cache-age, NO offline mutation.
+- **Distribution profiles (M2) enforced by `scripts/mobile_build_check.py`** — per-build declaration,
+  not a second release authority.
+
+---
+
+### Prohibited-duplicate ledger (explicitly NOT built)
+Second notification inbox · second delivery queue · second audit ledger · second operator identity ·
+second tenant authorization engine · second Kyber command plane · second graph truth · second
+Profile360/Campaign360 calculation · second consent/DSR system · second saved-view system · second
+Noesis conversation store · second deployment-profile taxonomy · second release authority for app
+distribution · second sync feed · generic mobile mutation channel. Each is reused from its existing owner.

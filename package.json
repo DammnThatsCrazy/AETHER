@@ -9,6 +9,8 @@
     "packages/server",
     "packages/react-native",
     "packages/mobile-core",
+    "apps/aether-mobile",
+    "apps/kyber-mobile",
     "frontend/aether",
     "frontend/kyber",
     "frontend/shared",

@@ -4,22 +4,43 @@
 # Precedent: docs/integration-control-plane/PROGRAM_STATE.yaml.
 
 program:
-  branch: claude/aether-turnkey-productization-iu2qk4
-  base_commit: "78562ddae28de01ec0fe3c59e42bb357baaffb1f"   # == origin/main at program start (feat: Unified Integration Control Plane — foundation (#497))
-  observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of base_commit
+  branch: claude/aether-turnkey-completion-7m3x9
+  base_commit: "ead4ba6c7b53783958bebc03bddcede1a2ea7429"   # == origin/main at completion-program start (feat: payment-rails financial-plane provider readiness (#509))
+  observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of the original C0 base
   platform_version: "8.12.0"
-  last_landed_checkpoint: C8   # C0-C4 foundation + C8 compliance slice (DSR + privacy manifests); C5/C6/C7/C9 staged
+  last_landed_checkpoint: C8   # C0-C4 foundation + C8 compliance slice landed via #500 + #503; completion program drives C2-remainder + C5-C9
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
-  session_scope: "C0-C4"                         # owner-selected: foundation baseplate + shared mobile platform. C5-C9 staged.
+  session_scope: "C2-pending + C5-C9"            # owner-selected FULL REMAINING PROGRAM (one branch -> one PR -> milestone-commit train)
 
-# Milestone commits (this session = C0-C4). Full app surfaces + governed actions +
-# compliance/distribution + adversarial review (C5-C9) are documented, not built this session.
+# Completion program (this session): picks up C2-pending (mobile notification projection,
+# unsafe-routing validator) and drives C5-C9 to make ci-check green. PRs #500 (C0-C4) and
+# #503 (C8 slice) landed on origin/main; the in-flight ADR-C11 comms cohort branch
+# (claude/aether-comms-multi-provider) is PARKED and out of scope (services/comms/ untouched).
+completion:
+  scope: full-remaining-program
+  pr_train: one-branch-one-pr                      # claude/aether-turnkey-completion-7m3x9 -> single PR -> milestone commits
+  plan: docs/../.claude/plans/identify-what-was-complete-smooth-lake.md   # approved finish plan (M0-M8)
+  parked: "claude/aether-comms-multi-provider (ADR-C11 comms cohort; separate observe-external-ESP domain; untouched)"
+  external_blockers: reports/mobile-productization/external-blockers.json
+  milestones:
+    - M0 re-baseline + orchestration control plane   # base repaired (stale REPO-INDEX + 2 source-linked stamps); ledgers regenerated
+    - M1 C2-remainder (mobile projection + unsafe-routing validator)
+    - M2 mobile config + distribution profile + mobile-ui + offline cache + compliance umbrella
+    - M3 C5 projections + Aether Mobile screens + desktop notification center
+    - M4 Kyber Mobile operator screens
+    - M5 C6 continue-on-phone + remaining sync producers + operator continuation router
+    - M6 C7 governed mobile actions + mobile action adapter
+    - M7 design-partner demo + distribution/compliance docs
+    - M8 C9 six-lens adversarial review + remediation + final gate
+
+# Milestone commits (C0-C8 landed via #500/#503; C2-pending + C5/C6/C7/C9 active in the
+# completion program).
 milestones:
   - id: C0
     name: reconciliation-and-orchestration-control-plane
-    status: in_progress
+    status: landed
     lands: [program-ledgers, reuse-map, external-blockers, credential-contracts-registry, architecture-doc, feature-flags-off]
     runtime_behavior_change: false
   - id: C1
@@ -58,7 +79,8 @@ milestones:
       + GET /v1/notifications/coverage — honest states, NEVER 'healthy' without a
       declared baseline, in-process heartbeat, seeded with real producers at
       required=False (operators declare the baseline). ~20 tests. Remaining C2 (mobile
-      notification projection with redacted push, unsafe-routing validator) still staged.
+      notification projection with redacted push, unsafe-routing validator) is picked
+      up by M1 of the completion program.
   - id: C3
     name: delivery-providers-installations-push-email-deeplinks
     depends_on: [C2]
@@ -125,7 +147,57 @@ milestones:
       ~90 tests. HONEST CEILING: manifest GENERATION + DSR erasure are done + gated; store
       SUBMISSION (App Store / Play review) remains externally_blocked (developer accounts +
       signing). C5/C6/C7/C9 (feature screens, continue-on-phone, governed actions, adversarial
-      review) remain staged.
+      review) are now ACTIVE in the completion program.
+  - id: C5
+    name: feature-screens-projections-notification-center
+    depends_on: [C8, M2]
+    status: active
+    lands: [mobile-config-route, distribution-profiles, app-version-registration, mobile-ui-package, offline-cache-framework, mobile-compliance-umbrella, gateway-projections, aether-mobile-screens, desktop-notification-center-aether, preferences-persistence]
+    externally_blocked: [native-compile, store-submission]
+    note: >
+      C5 is the largest remaining milestone: bounded redacted gateway projections
+      (today/profile/campaign/alerts/explore) reusing owning services (never re-calculating
+      Profile360/Campaign360/graph truth); the mobile platform foundations (GET /v1/mobile/config,
+      distribution-profile enum + per-build enforcement, app-version registration, packages/mobile-ui,
+      read-only offline cache); Aether Mobile feature screens (Today/Copilot/Explore/Alerts/Account);
+      and the Aether desktop notification center + preferences persistence. Driven by M2 (platform/
+      config/compliance foundations) + M3 (projections + screens + desktop NC) in the completion
+      program. All new surfaces flag-gated OFF or read-only; no runtime behavior change with flags off.
+  - id: C6
+    name: continue-on-phone-sync-completion
+    depends_on: [C5]
+    status: active
+    lands: [remaining-sync-producers, operator-continuation-router, desktop-continue-on-phone-surfaces, mobile-continue-on-desktop, client-sync-consumption-ui, cross-device-read-ack]
+    note: >
+      C6 wires the remaining 9 sync producers (notification/saved_view/conversation/watchlist/
+      incident/command_receipt/preference_changed/session/installation_revoked) via
+      enqueue_sync_change at their owning mutation sites, adds the operator (Kyber) continuation
+      router in services/continuation/, and builds the desktop continue-on-phone / recent-activity /
+      resume surfaces in both frontends plus mobile continue-on-desktop / resume / send-to-desktop
+      and client-sync consumption UI. Cross-device read/ack state propagation (notification opened
+      on mobile shows read on desktop) verified by tests. Driven by M5 of the completion program.
+  - id: C7
+    name: governed-mobile-actions
+    depends_on: [C6]
+    status: active
+    lands: [mobile-action-adapter, kyber-mobile-tier-0-3-ui, mobile-step-up-flow, command-receipt-visibility, mobile-bound-device-attestation]
+    note: >
+      C7 adds a mobile action adapter on the gateway (exposes action availability + adapts mobile
+      step-up challenges to the EXISTING services/kyber/ops command plane — no second command
+      plane, no generic mutation channel), Kyber Mobile Tier 0/1/2/3 UI + step-up via the existing
+      StepUpService/device_proof, durable command-receipt visibility, and mobile-bound device
+      signature/attestation where feasible. No offline mutation. Driven by M6 of the completion program.
+  - id: C9
+    name: adversarial-review-remediation
+    depends_on: [C7, M7]
+    status: staged
+    lands: [six-lens-review, remediation-commits, final-gate]
+    note: >
+      C9 is the six-lens adversarial review (architecture/duplication, tenant-operator security,
+      data truth/evidence, concurrency/delivery/reliability, mobile privacy/store compliance,
+      operational/release honesty) run in parallel with an adversarial refute pass, remediation
+      commits, and the final make ci-check + release-gate decision. Driven by M8 of the completion
+      program. Not started (staged).
 
 # Wave / architecture rollup (reuse-first). "reuse" = exists complete; "extend" = exists, add surface;
 # "build" = net-new this program. Authoritative detail: reports/mobile-productization/repo-baseline.json.
@@ -145,16 +217,25 @@ architecture:
   tenant_identity_authz: reuse              # services/auth/*, middleware/middleware.py, services/policy/*
   credential_platform: reuse                # shared/credentials/* (in_memory/local_encrypted/aws_secrets_manager)
   mobile_apps: build                        # NET-NEW: apps/aether-mobile, apps/kyber-mobile (Expo + prebuild)
-  mobile_shared_packages: build             # NET-NEW: packages/mobile-*
+  mobile_shared_packages: build             # NET-NEW: packages/mobile-* (mobile-ui in M2)
   desktop_notification_center_kyber: reuse  # frontend/kyber/src/features/notifications/* (mobile push = "Architecture-Ready")
-  desktop_notification_center_aether: build # NET-NEW: only settings/notifications-section.tsx exists today (C5)
+  desktop_notification_center_aether: build # NET-NEW: only settings/notifications-section.tsx exists today (M3)
+  mobile_notification_projection: build     # NET-NEW: M1 (redacted push title/body/summary; no raw payload in push)
+  delivery_safety_validator: build          # NET-NEW: M1 (scripts/release/validate_delivery_safety.py permanent gate)
+  mobile_config_release: build              # NET-NEW: M2 (GET /v1/mobile/config + distribution profiles + app-version registration)
+  mobile_offline_cache: build               # NET-NEW: M2 (read-only offline cache framework in packages/mobile-core)
+  gateway_projections: build                # NET-NEW: M3 (bounded redacted projections reusing owning services)
+  operator_continuation_router: build       # NET-NEW: M5 (services/continuation/ operator router)
+  mobile_action_adapter: build              # NET-NEW: M6 (gateway adapter -> existing services/kyber/ops, no second plane)
+  demo_seed_extensions: extend              # NET-NEW: M7 (notifications/continuations/exceptions/incidents/runs/reviews in demo_seed)
   release_readiness_machinery: reuse        # scripts/production_status.py, repo_doctor.py, deployment_profiles.yaml
 
 # Alembic revision reservation. Single-head invariant is enforced by
-# scripts/validate_temporal_integrity.py. Current DB head at program start: 20260812_credential_platform.
-# NOTE: PR #498 (unmerged) reserves 20260812_provider_credential_versions + 20260813_payment_webhook_endpoints.
-# Our IDs are namespaced 20260820+ to avoid name collision; down_revision must be re-pointed to the
-# real single head on any rebase that lands #498 (or other migrations) first.
+# scripts/validate_temporal_integrity.py. Current DB head: 20260822_mobile_installations
+# (C1/C3 landed chain 20260820 -> 20260821 -> 20260822 from 20260812_credential_platform).
+# Completion-program migrations (M2 app-version on mobile_installations; M6 mobile-bound
+# attestation; M7 demo-seed if it needs tables) will be namespaced 20260830+ and registered
+# here as they land. down_revision must always re-point to the real single head on rebase.
 migration_reservation:
   chain_root_at_start: "20260812_credential_platform"
   reserved:
@@ -173,6 +254,18 @@ migration_reservation:
 
 # Coordination with in-flight open PRs (do NOT merge wholesale; reuse-in-place).
 open_pr_overlap:
+  - pr: 500
+    title: "C0-C4 mobile/continuity/notification foundation (MERGED origin/main)"
+    branch: claude/aether-turnkey-productization-iu2qk4
+    relation: "landed; this completion program builds on top, not beside"
+    action: landed
+    disposition: superseded
+  - pr: 503
+    title: "C8 DSR/compliance slice (MERGED origin/main)"
+    branch: claude/aether-turnkey-productization-iu2qk4
+    relation: "landed; C8 mobile erasure + privacy manifests are the completion base"
+    action: landed
+    disposition: superseded
   - pr: 498
     title: "durable multi-slot provider-credential authority (PR 1 of 4)"
     branch: claude/aether-credential-ready-pilot-vwa66s
@@ -185,6 +278,12 @@ open_pr_overlap:
     relation: "low overlap"
     action: note-only
     disposition: parallel
+  - pr: null
+    title: "ADR-C11 comms cohort (PARKED by owner decision)"
+    branch: claude/aether-comms-multi-provider
+    relation: "separate observe-external-ESP domain (services/comms/); out of scope for this program; 12 unmerged local commits left untouched"
+    action: park
+    disposition: parked
 
 quality:                                     # updated at each milestone boundary from real gate runs
   ci_check: "make ci-check EXIT=0 (53 gates) confirmed green at the C3 full-gate checkpoint (5fbc8a63) and re-confirmed on the C4 mobile-core+auth tip (fd698679) — includes npm ci lockfile integrity for the new workspace"
@@ -197,16 +296,19 @@ quality:                                     # updated at each milestone boundar
   credentials_tooling: "9 tests (env-var derivation, missing/invalid/configured states, --strict blocks required-profile creds, no secret leak)"
   frontend_tests: "npm typecheck + build + test pass with new TS twins (delivery-receipt push channel)"
   migration_single_head: "true (head=20260822_mobile_installations; chains 20260820->20260821->20260822 from 20260812_credential_platform)"
+  completion_baseline: "completion program re-based on origin/main head ead4ba6c (#509); pre-existing stale REPO-INDEX (591->592 docs count) repaired (0707e8cb) + 2 pre-existing source-linked stamps reviewed+updated (9d25c42b); make docs-check 38/38 green at completion start"
   ci_note: "intermediate superseded SHAs show a `validate` failure caused solely by E2E_TENANT_RESULT=cancelled (concurrency cancellation from the next push); every real gate passed. Only the final tip SHA is authoritative."
 
 # Honest readiness verdict (per productization dimension). No fake production-ready claims.
+# Completion program is IN FLIGHT (M0-M8): C5/C6/C7 surfaces + M1/M2/M7 additions are not yet
+# landed; update this section only where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 foundation landed + gated green; C5-C9 staged"
+  implementation: "C0-C4 + C8 landed + gated green; completion program (C2-pending + C5-C9) in flight on claude/aether-turnkey-completion-7m3x9"
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
   mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store)"
-  mobile_apps: "shells scaffolded + structural invariants gated green; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
+  mobile_apps: "shells scaffolded + structural invariants gated green; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI; feature screens are C5/M3 (in flight)"
   credential: externally_blocked            # no AWS/APNs/FCM/email/Apple/Google; contracts + fakes + preflight only
   design_partner: partial
   store_submission: externally_blocked
   controlled_production: externally_blocked
-  overall: "CODE_COMPLETE_CREDENTIALS_BLOCKED + READY_FOR_LOCAL_INTEGRATED_DEMO (backend + SDK verifiable-green; native app compile + credentials + store distribution externally_blocked, not faked)"
+  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 landed; C2-pending + C5-C9 building to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"
