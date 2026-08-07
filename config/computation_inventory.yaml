@@ -36,10 +36,10 @@ computations:
     unit: ratio
     grain: campaign_day
     time_semantics: event-time day window
-    missing_input_behavior: was 0.0 on zero impressions; now missing_inputs (null)
+    missing_input_behavior: gold row writes NULL on zero impressions (Nullable col); substrate is truth
     aggregation_behavior: ratio_of_sums
     currency_behavior: n/a
-    known_defects: [zero_denominator_as_zero]
+    known_defects: []
     priority: P0
     proposed_definition_id: campaign.ctr
     migration_state: migrated
@@ -54,10 +54,10 @@ computations:
     unit: currency
     grain: campaign_day
     time_semantics: event-time day window
-    missing_input_behavior: was 0.0 on zero clicks; now missing_inputs (null)
+    missing_input_behavior: gold row writes NULL on zero clicks (Nullable col); substrate is truth
     aggregation_behavior: ratio_of_sums
     currency_behavior: native currency preserved
-    known_defects: [zero_denominator_as_zero, float_money]
+    known_defects: []
     priority: P0
     proposed_definition_id: campaign.cpc
     migration_state: migrated
@@ -72,10 +72,10 @@ computations:
     unit: ratio
     grain: campaign_day
     time_semantics: event-time day window
-    missing_input_behavior: was 0.0 on zero spend; now missing_inputs (null)
+    missing_input_behavior: gold row writes NULL on zero spend (Nullable col); substrate is truth
     aggregation_behavior: ratio_of_sums
     currency_behavior: revenue/spend windows matched
-    known_defects: [zero_denominator_as_zero, float_money]
+    known_defects: []
     priority: P0
     proposed_definition_id: campaign.gross_roas
     migration_state: migrated
@@ -108,10 +108,10 @@ computations:
     unit: currency
     grain: journey
     time_semantics: journey window
-    missing_input_behavior: allocated (estimated), conserved; never observed
+    missing_input_behavior: allocated by conversion share at the SITE now, conserved; estimated not observed
     aggregation_behavior: sum
     currency_behavior: native currency preserved
-    known_defects: [campaign_spend_duplicated_per_journey]
+    known_defects: []
     priority: P0
     proposed_definition_id: campaign.journey_allocated_cost
     migration_state: migrated
