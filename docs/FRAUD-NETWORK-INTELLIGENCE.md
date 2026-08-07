@@ -9,7 +9,7 @@ since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: "41c79d4"
+last_synced_commit: "bb1aef2"
 ---
 
 # Fraud Network Intelligence
@@ -101,6 +101,13 @@ Detection Pipeline
 
 All scoring functions are pure (`services/fraud_networks/scoring.py`); risk in
 [0, 100], confidence in [0, 1].
+
+> **These are uncalibrated heuristics, not probabilities.** Every risk/confidence
+> value here is a hand-weighted evidence score (`score_kind = "uncalibrated_heuristic"`,
+> `calibrated = False`), governed by `CONFIDENCE_WEIGHTS_VERSION`. `score_confidence`
+> is a weighted *evidence count*, not `P(fraud)`; emitting a true probability would
+> require a labeled outcome dataset and a fitting/monitoring step. Consumers must not
+> read these as calibrated likelihoods.
 
 ### Entity Risk (`score_entity_risk`)
 
