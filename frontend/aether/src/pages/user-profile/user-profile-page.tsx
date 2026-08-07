@@ -54,6 +54,15 @@ function fmtScore(v: unknown): string {
   return `${Math.round(Number(v) * 100)}`;
 }
 
+// Honest ratio→percentage: an absent confidence/weight is unknown, not 0%.
+// Render "—" instead of coercing a missing rate into a misleading "0%".
+function fmtPct(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${Math.round(n * 100)}%`;
+}
+
 function relTime(iso: string | undefined | null): string {
   if (!iso) return '—';
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -505,7 +514,7 @@ function JourneysTab({ userId }: { userId: string }) {
                         return <div key={hi} className="flex flex-wrap gap-2">
                           <span>{fmt(hr.from_device_type)} → {fmt(hr.to_device_type)}</span>
                           <span>sessions {fmt(hr.from_session_id)} → {fmt(hr.to_session_id)}</span>
-                          <span>confidence {Math.round(Number(hr.confidence ?? 0) * 100)}%</span>
+                          <span>confidence {fmtPct(hr.confidence)}</span>
                           <span>{asList(hr.confidence_signals).join(' + ') || 'signals pending'}</span>
                         </div>;
                       })}
@@ -769,7 +778,7 @@ function BehavioralTab({ userId }: { userId: string }) {
             { key: 'type', header: 'Signal', render: s => <span className="font-medium text-text-primary">{fmt(s.signal_type)}</span> },
             { key: 'family', header: 'Family', render: s => s.family ? <Badge variant="default" size="sm">{fmt(s.family)}</Badge> : <span className="text-text-muted">—</span> },
             { key: 'severity', header: 'Severity', render: s => <Badge variant={severityVariant(fmt(s.severity))} size="sm">{fmt(s.severity)}</Badge> },
-            { key: 'conf', header: 'Confidence', render: s => `${Math.round(Number(s.confidence ?? 0) * 100)}%` },
+            { key: 'conf', header: 'Confidence', render: s => fmtPct(s.confidence) },
             { key: 'source_silence', header: 'Silent?', render: s => s.is_source_silence ? <Badge variant="warning" size="sm">Silent</Badge> : <span className="text-text-muted">No</span> },
             { key: 'explanation', header: 'Explanation', render: s => <span className="text-text-secondary text-xs">{fmt(s.explanation)}</span> },
           ]}
@@ -795,7 +804,7 @@ function SignalRowWithEvidence({ sig, severityVariant }: {
           <Badge variant={severityVariant(fmt(sig.severity))} size="sm">{fmt(sig.severity)}</Badge>
           <Badge variant="default" size="sm">{fmt(sig.signal_type)}</Badge>
           {!!sig.family && <Badge variant="default" size="sm">{fmt(sig.family)}</Badge>}
-          <span className="text-xs text-text-muted ml-auto">Confidence: {Math.round(Number(sig.confidence ?? 0) * 100)}%</span>
+          <span className="text-xs text-text-muted ml-auto">Confidence: {fmtPct(sig.confidence)}</span>
           {evidenceRefs.length > 0 && (
             <button
               onClick={() => setOpen(v => !v)}
@@ -946,7 +955,7 @@ function RelationshipsTab({ userId }: { userId: string }) {
                       {asList(m.link_types).slice(0, 3).map((l, i) => <Badge key={i} variant="default" size="sm">{fmt(l)}</Badge>)}
                     </div>
                   )},
-                  { key: 'conf', header: 'Membership', render: m => `${Math.round(Number(m.membership_confidence ?? 0) * 100)}%` },
+                  { key: 'conf', header: 'Membership', render: m => fmtPct(m.membership_confidence) },
                 ]}
               />
               {/* Formation signals */}
@@ -972,8 +981,8 @@ function RelationshipsTab({ userId }: { userId: string }) {
             { key: 'type', header: 'Relation', render: e => <span className="text-text-primary">{fmt(e.relation_type)}</span> },
             { key: 'to', header: 'Counterparty', render: e => <code className="text-xs text-text-secondary">{fmt(e.to_entity_id ?? e.from_entity_id)}</code> },
             { key: 'toKind', header: 'Kind', render: e => <Badge variant="default" size="sm">{fmt(e.to_kind ?? e.from_kind)}</Badge> },
-            { key: 'weight', header: 'Weight', render: e => `${Math.round(Number(e.weight ?? 0) * 100)}%` },
-            { key: 'conf', header: 'Confidence', render: e => `${Math.round(Number(e.confidence ?? 0) * 100)}%` },
+            { key: 'weight', header: 'Weight', render: e => fmtPct(e.weight) },
+            { key: 'conf', header: 'Confidence', render: e => fmtPct(e.confidence) },
             { key: 'inferred', header: 'Source', render: e => <Badge variant={e.is_inferred ? 'warning' : 'success'} size="sm">{e.is_inferred ? 'Inferred' : 'Explicit'}</Badge> },
             { key: 'volume', header: 'Volume', render: e => e.volume_usd !== undefined ? <span>${formatDecimal(Number(e.volume_usd), timeCtx, { maximumFractionDigits: 0 })}</span> : <span className="text-text-muted">—</span> },
           ]}
