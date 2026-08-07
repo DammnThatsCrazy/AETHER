@@ -1,14 +1,17 @@
 """Connector ingestion routes.
 
 * ``router`` (``/v1/integrations/connectors``) — tenant-scoped connector
-  management + manual sync/test + authenticated webhook ingest.
+  management + manual sync/test + authenticated webhook ingest + comms webhook
+  endpoint registry management.
 * ``admin_router`` (``/v1/admin/kyber/connectors``) — operator-gated,
   aggregate-only connector health.
 
 Production external webhook delivery (unauthenticated, signature-verified)
 targets a public ``/v1/integrations/webhooks/{connector}`` endpoint. Provider
 adapters use their native scheme when declared; generic webhooks use Aether's
-timestamped HMAC scheme.
+timestamped HMAC scheme. Comms providers use server-controlled durable endpoint
+ids (``/v1/integrations/webhooks/comms/{connector}/{endpoint_id}``) resolved
+server-side — never an ``X-Aether-Tenant-ID`` header.
 """
 from __future__ import annotations
 
@@ -17,7 +20,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ForbiddenError,
+    NotFoundError,
+)
 from shared.logger.logger import get_logger
 
 from services.integrations.connectors.registry import descriptor_for, get_connector
@@ -256,13 +264,15 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
 @webhook_public_router.post("/{connector_type}")
 async def public_webhook_ingest(connector_type: str, request: Request):
     """
-    Public provider webhook ingestion.
+    Public provider webhook ingestion (non-comms connectors).
 
     - No API key required.
     - Provider-native or Aether HMAC signature verification.
     - Tenant resolved from X-Aether-Tenant-ID header.
     - Generic HMAC replay prevention: 5-minute timestamp window.
     - Idempotent: duplicate webhook event IDs are detected and skipped.
+    - Comms connectors are permanently denied here — they use the server-controlled
+      /comms/{connector}/{endpoint_id} route (never a tenant header, ADR-C11).
 
     Headers:
       X-Aether-Tenant-ID: <tenant_id>       (required — set by webhook registration)
@@ -276,6 +286,20 @@ async def public_webhook_ingest(connector_type: str, request: Request):
     connector = get_connector(connector_type)
     if connector is None:
         raise NotFoundError("connector")
+
+    # Comms webhooks resolve tenant ownership through durable server-controlled
+    # endpoint ids — never this header. A comms connector on the header route is
+    # a permanent denial (ADR-C11); tenants use /comms/{connector}/{endpoint_id}.
+    from services.comms.entitlements import is_comms_connector
+    if is_comms_connector(connector_type):
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": "tenant_header_disallowed",
+        })
+        raise BadRequestError(
+            "comms webhooks must use a durable endpoint id "
+            "(POST /v1/integrations/webhooks/comms/{connector}/{endpoint_id}), "
+            "not the X-Aether-Tenant-ID header"
+        )
 
     tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
     if not tenant_id:
@@ -340,6 +364,199 @@ async def public_webhook_ingest(connector_type: str, request: Request):
     _metrics.increment("connector_webhook_received_total", labels={"connector": connector_type})
 
     return APIResponse(data=result).to_dict()
+
+
+# ── Comms provider webhooks — server-controlled durable endpoint ids ──────────
+# Comms connectors never resolve tenant ownership from a request header. Each
+# tenant mints a high-entropy endpoint id (below) whose public URL is
+# /v1/integrations/webhooks/comms/{connector}/{endpoint_id}; the id resolves
+# server-side to exactly one (tenant, connector, environment). The id alone is
+# not authentication — the provider signature is still verified.
+
+@webhook_public_router.post("/comms/{connector_type}/{endpoint_id}")
+async def comms_webhook_by_endpoint(connector_type: str, endpoint_id: str, request: Request):
+    """Server-controlled comms webhook receiver (ADR-C11).
+
+    Tenant ownership is resolved server-side from the durable ``whe_`` endpoint
+    registry — never an ``X-Aether-Tenant-ID`` header. Unknown, revoked, or
+    mismatched endpoints return a uniform 404 that does not reveal whether the
+    id, tenant, or connector exists. Signature verification, metadata-only
+    quarantine, and audit are owned by ``connector_service.ingest_webhook`` so a
+    denial stays closed even if verification is skipped by a future caller.
+    """
+    from shared.logger.logger import metrics as _metrics
+    from services.comms.entitlements import is_comms_connector
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        DOMAIN_COMMS,
+        webhook_endpoint_registry,
+    )
+
+    connector = get_connector(connector_type)
+    if connector is None or not is_comms_connector(connector_type):
+        raise NotFoundError("connector")
+
+    endpoint = await webhook_endpoint_registry.resolve(
+        endpoint_id, connector_type, domain=DOMAIN_COMMS
+    )
+    if endpoint is None:
+        raise NotFoundError("webhook endpoint")
+    tenant_id = endpoint["tenant_id"]
+
+    raw_body = await request.body()
+    signature = request.headers.get("X-Aether-Signature", "").strip()
+    timestamp = request.headers.get("X-Aether-Timestamp", "").strip()
+
+    cfg_record = await connector_service.get(tenant_id, connector_type)
+    if not cfg_record or not cfg_record.get("enabled"):
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": "connector_disabled",
+        })
+        raise ForbiddenError("Connector not enabled for this tenant")
+
+    from services.integrations.connectors.base import ConnectorConfig
+    from services.integrations.providers.payment_rails.signature_verify import (
+        ENDPOINT_SECRET,
+    )
+    config = ConnectorConfig(**cfg_record) if cfg_record else None
+    # endpoint_secret providers (Mailchimp, Postmark) send no cryptographic
+    # signature — the server-resolved durable endpoint id above *is* the
+    # authentication — so there is no secret to resolve or compare. Signing
+    # providers still require a configured secret (public key for SendGrid,
+    # HMAC secret for Customer.io, generic Aether HMAC for Klaviyo).
+    scheme = getattr(connector, "signature_scheme", None)
+    secret: Optional[str] = None
+    if scheme != ENDPOINT_SECRET:
+        if config and config.secret_configured:
+            secret = await connector_service._resolve_secret(config)
+        if not secret:
+            _metrics.increment("connector_webhook_rejected_total", labels={
+                "connector": connector_type, "reason": "secret_missing",
+            })
+            raise ForbiddenError("Connector webhook secret not configured")
+
+    result = await connector_service.ingest_webhook(
+        connector_type, tenant_id,
+        raw_body=raw_body, signature=signature, timestamp=timestamp,
+        secret=secret, headers=dict(request.headers),
+    )
+    if not result.get("accepted"):
+        reason = str(result.get("reason", "rejected"))
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": reason,
+        })
+        # Verified failures are permanent 4xx so the provider does not retry;
+        # durable acceptance would return 2xx.
+        raise BadRequestError(f"webhook rejected: {reason}")
+    _metrics.increment("connector_webhook_received_total", labels={"connector": connector_type})
+    return APIResponse(data=result).to_dict()
+
+
+@webhook_public_router.get("/comms/{connector_type}/{endpoint_id}")
+async def comms_webhook_validation(connector_type: str, endpoint_id: str, request: Request):
+    """Setup validation probe for GET-probing comms providers (Mailchimp).
+
+    Mailchimp GET-probes a webhook URL when it is configured and expects 200.
+    Resolution is server-side (uniform 404 for unknown/revoked ids — the same
+    closed denial as POST). Only providers that declare ``supports_get_validation``
+    accept the probe; everything else keeps the 404 so a GET never leaks whether
+    an endpoint exists. No signature is involved — the probe carries nothing to
+    verify, and the durable endpoint id is the credential (ADR-C11).
+    """
+    from services.comms.entitlements import is_comms_connector
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        DOMAIN_COMMS,
+        webhook_endpoint_registry,
+    )
+
+    connector = get_connector(connector_type)
+    if connector is None or not is_comms_connector(connector_type):
+        raise NotFoundError("connector")
+    if not getattr(connector, "supports_get_validation", False):
+        raise NotFoundError("webhook endpoint")
+    endpoint = await webhook_endpoint_registry.resolve(
+        endpoint_id, connector_type, domain=DOMAIN_COMMS
+    )
+    if endpoint is None:
+        raise NotFoundError("webhook endpoint")
+    return APIResponse(data={"validated": True, "endpoint_id": endpoint_id}).to_dict()
+
+
+# ── Comms webhook endpoint management (tenant-admin) ───────────────────────────
+
+class WebhookEndpointCreate(BaseModel):
+    environment: str = "sandbox"
+
+
+def _comms_connector_or_404(connector_type: str):
+    connector = get_connector(connector_type)
+    if connector is None:
+        raise NotFoundError("connector")
+    from services.comms.entitlements import is_comms_connector
+    if not is_comms_connector(connector_type):
+        raise NotFoundError("connector")
+    return connector
+
+
+@router.post("/{connector_type}/webhook-endpoints")
+async def create_comms_webhook_endpoint(connector_type: str, body: WebhookEndpointCreate, request: Request):
+    """Mint a durable, high-entropy public webhook endpoint id for this comms connector."""
+    _comms_connector_or_404(connector_type)
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        DOMAIN_COMMS,
+        webhook_endpoint_registry,
+    )
+    ep = await webhook_endpoint_registry.create(
+        tenant_id, connector_type, body.environment,
+        created_by=_actor(request), domain=DOMAIN_COMMS,
+    )
+    return APIResponse(data=ep).to_dict()
+
+
+@router.get("/{connector_type}/webhook-endpoints")
+async def list_comms_webhook_endpoints(connector_type: str, request: Request):
+    """List this tenant's durable webhook endpoints for a comms connector."""
+    _comms_connector_or_404(connector_type)
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        DOMAIN_COMMS,
+        webhook_endpoint_registry,
+    )
+    return APIResponse(
+        data=await webhook_endpoint_registry.list_for(
+            tenant_id, connector_type, domain=DOMAIN_COMMS
+        )
+    ).to_dict()
+
+
+@router.post("/{connector_type}/webhook-endpoints/rotate")
+async def rotate_comms_webhook_endpoint(connector_type: str, body: WebhookEndpointCreate, request: Request):
+    """Revoke this tenant's active endpoints for the slot and mint a fresh one."""
+    _comms_connector_or_404(connector_type)
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        DOMAIN_COMMS,
+        webhook_endpoint_registry,
+    )
+    ep = await webhook_endpoint_registry.rotate(
+        tenant_id, connector_type, body.environment,
+        actor=_actor(request), domain=DOMAIN_COMMS,
+    )
+    return APIResponse(data=ep).to_dict()
+
+
+@router.post("/{connector_type}/webhook-endpoints/{endpoint_id}/revoke")
+async def revoke_comms_webhook_endpoint(connector_type: str, endpoint_id: str, request: Request):
+    """Revoke a durable webhook endpoint (unknown or cross-tenant ids are 404)."""
+    _comms_connector_or_404(connector_type)
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.providers.payment_rails.webhook_endpoints import (
+        webhook_endpoint_registry,
+    )
+    ok = await webhook_endpoint_registry.revoke(tenant_id, endpoint_id, actor=_actor(request))
+    if not ok:
+        raise NotFoundError("webhook endpoint")
+    return APIResponse(data={"endpoint_id": endpoint_id, "state": "revoked"}).to_dict()
 
 
 # ── Kyber operator (aggregate-only) ────────────────────────────────────────────

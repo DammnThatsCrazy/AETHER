@@ -11,18 +11,22 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/descriptor.py
 canonical_owner: platform@aether
-last_synced_commit: "146e1603"
+last_synced_commit: "c3323a5c"
 ---
 
 # Provider Capability Matrix Guide
 
-> v8.12.0: the matrix now includes the `communications` domain. Klaviyo is the
-> certified reference communications adapter at `credential_waiting`
-> (first-release), resolved from the live connector via
-> `services/comms/conformance.py::comms_certification_descriptor`. It certifies
-> offline through the shared framework (18 generic checks + 9 comms-domain
-> checks) and reports `credential_turnkey / staging_validation_pending` — never
-> `provider_live` — until real credentials and infrastructure are supplied.
+> v8.12.0: the matrix now includes the `communications` domain — the full
+> five-provider cohort (Klaviyo, SendGrid, Customer.io, Mailchimp, Postmark), each
+> certifying at `credential_waiting` (first-release), resolved from its live
+> connector via
+> `services/comms/conformance.py::comms_certification_descriptor`. The descriptor
+> derives `capabilities` from the connector's declared manifest outputs, so
+> webhook-only providers honestly claim fewer operations than the Klaviyo pull
+> reference. Every communications provider certifies offline through the shared
+> framework (18 generic checks + 9 comms-domain checks) and reports
+> `credential_turnkey / staging_validation_pending` — never `provider_live` —
+> until real credentials and infrastructure are supplied.
 
 The canonical, machine-readable capability matrix is generated, not authored:
 
@@ -66,11 +70,15 @@ assertion never admits an off-ramped provider.
 
 ## Current first-release scope (all `credential_waiting`)
 
-18 providers, none live: derivatives (drift, dydx, gmx, hyperliquid), interop
+23 providers, none live: communications (customerio, klaviyo, mailchimp,
+postmark, sendgrid), derivatives (drift, dydx, gmx, hyperliquid), interop
 (axelar, chainlink_ccip, debridge, hyperlane, ibc, layerzero, wormhole),
 payments (bridge, coinbase, moonpay, privy, stripe_onramp), stablecoin_chain
 (evm, svm). `credential_waiting` is **not** production-ready — see
-`CREDENTIAL_WAITING_PROMOTION_GUIDE.md`.
+`CREDENTIAL_WAITING_PROMOTION_GUIDE.md`. Within communications, only Klaviyo
+declares the pull surface (campaign/flow/message sync, incremental pull,
+historical backfill, reconciliation); the other four are webhook-only and their
+`capabilities` lists reflect that honestly.
 
 > Field caveat: for derivatives, `capabilities` come from the live adapter but
 > `streaming_model`/`pagination_model` come from a fixed spec table, so dydx can

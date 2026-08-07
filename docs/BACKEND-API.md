@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "12162c4b"
+last_synced_commit: "75edbd7d"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2731,6 +2731,15 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | POST | `/v1/webhooks/jira/events` | X-Hub-Signature-256 HMAC | Jira issue webhook; persisted to WebhookInbox and processed async |
 | POST | `/v1/webhooks/aether/callback` | X-Aether-Signature HMAC | Generic signed outcome callback from webhook delivery targets |
 
+Comms provider webhooks (`/v1/integrations/webhooks/comms/*`, ADR-C11) use
+server-controlled durable endpoint ids; tenant ownership is resolved from the
+`whe_` registry, never a request header:
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/v1/integrations/webhooks/comms/{connector}/{endpoint_id}` | Provider-native signature (SendGrid ECDSA / Customer.io HMAC / endpoint id possession) | Normalized comms event receiver; unknown/revoked ids and disabled connectors return a uniform closed denial. `endpoint_secret` providers (Mailchimp, Postmark) authenticate by possession of the resolved id; signing providers require their configured key |
+| GET | `/v1/integrations/webhooks/comms/{connector}/{endpoint_id}` | endpoint id possession | Setup validation probe for GET-probing providers (Mailchimp); only connectors declaring `supports_get_validation` answer, others keep the uniform 404 |
+
 ## Semantic-Sentiment Intelligence APIs
 
 The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope.
@@ -2741,10 +2750,13 @@ Additional semantic-sentiment routes in this iteration include `GET /v1/campaign
 
 ## Communications Intelligence APIs
 
-The Communications Intelligence plane ingests provider communications (Klaviyo is
-the certified reference adapter) through the generic connector framework and the
-canonical comms spine. All routes are tenant-scoped; operator routes require an
-explicit Kyber operator scope and are audited.
+The Communications Intelligence plane ingests provider communications through the
+generic connector framework and the canonical comms spine. The certified cohort
+(ADR-C11) is **Klaviyo, SendGrid, Customer.io, Mailchimp, and Postmark**; every
+comms connector is a `BaseConnector` subclass with `comms.*` data outputs, and
+catalog manifests are derived from the connector declarations. All routes are
+tenant-scoped; operator routes require an explicit Kyber operator scope and are
+audited.
 
 Connector setup + synchronization (`/v1/integrations/connectors/*`):
 
@@ -2756,6 +2768,19 @@ Connector setup + synchronization (`/v1/integrations/connectors/*`):
 - `GET /v1/integrations/connectors/{type}/sync-runs` — durable sync-run history
   (the customer-visible progress surface; §12.4 fields including cursor movement,
   record counts, and a safe error classification on failure).
+
+Comms webhook endpoint management (tenant-admin; ADR-C11):
+
+- `POST /v1/integrations/connectors/{type}/webhook-endpoints` — mint a durable,
+  high-entropy `whe_` endpoint id for a comms connector. The id resolves
+  server-side to exactly one (tenant, connector, environment); it is never read
+  from an `X-Aether-Tenant-ID` header.
+- `GET /v1/integrations/connectors/{type}/webhook-endpoints` — list the tenant's
+  comms webhook endpoints.
+- `POST /v1/integrations/connectors/{type}/webhook-endpoints/rotate` — rotate
+  (revoke + re-mint) an endpoint id.
+- `POST /v1/integrations/connectors/{type}/webhook-endpoints/{endpoint_id}/revoke`
+  — revoke an endpoint id; revoked ids resolve to a uniform 404.
 
 Communications tenant surface (`/v1/comms/*`):
 
@@ -2769,6 +2794,11 @@ Communications tenant surface (`/v1/comms/*`):
   review; `POST /v1/comms/identities/{id}/resolve` maps one to a canonical entity.
 - `GET /v1/comms/health` — comms pipeline health plus turnkey activation signals
   (provisional identities, active suppressions, latest sync-run).
+- `GET /v1/comms/coverage` — per-provider observation coverage for the tenant:
+  identity-bridge mappings (observed/resolved/provisional + resolution rate) and
+  active suppressions per registered comms connector, next to each provider's
+  declared capabilities. Evidence-grounded — providers nobody has wired yet
+  report zero observations, never fabricated completeness.
 
 Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
 
@@ -2776,6 +2806,8 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
 - `POST /v1/comms/admin/suppressions/reconcile` — observe-only reconciliation of
   provider-reported suppressions against Aether's canonical set (reports drift;
   never writes back unless write-back is separately authorized).
+- `GET /v1/comms/admin/coverage?tenant_id=…` — per-provider coverage for one
+  tenant, or a fleet aggregate across all observed tenants when unscoped.
 - Existing audited remediation: `POST /v1/comms/admin/state/rebuild`,
   `/graph/reproject`, `/dsr/erase`.
 

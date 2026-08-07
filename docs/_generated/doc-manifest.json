@@ -671,6 +671,25 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/CUSTOMERIO-CONNECTOR.md",
+      "title": "Customer.io Connector",
+      "slug": "operations/customerio-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED",
+        "AETHER_COMMS_INGESTION_ENABLED"
+      ]
+    },
+    {
       "path": "docs/DATA-DURABILITY.md",
       "title": "Data Durability",
       "slug": "data/data-durability",
@@ -1914,6 +1933,25 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/MAILCHIMP-CONNECTOR.md",
+      "title": "Mailchimp Connector",
+      "slug": "operations/mailchimp-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED",
+        "AETHER_COMMS_INGESTION_ENABLED"
+      ]
+    },
+    {
       "path": "docs/MIGRATION-RUNBOOK.md",
       "title": "Migration Runbook",
       "slug": "operations/migration",
@@ -2263,6 +2301,25 @@
       "canonical_owner": "platform@aether",
       "flags": [
         "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/POSTMARK-CONNECTOR.md",
+      "title": "Postmark Connector",
+      "slug": "operations/postmark-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED",
+        "AETHER_COMMS_INGESTION_ENABLED"
       ]
     },
     {
@@ -2959,6 +3016,25 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "ai@aether"
+    },
+    {
+      "path": "docs/SENDGRID-CONNECTOR.md",
+      "title": "SendGrid Connector",
+      "slug": "operations/sendgrid-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED",
+        "AETHER_COMMS_INGESTION_ENABLED"
+      ]
     },
     {
       "path": "docs/SHOPIFY-CONNECTOR.md",
@@ -3962,6 +4038,18 @@
       ]
     },
     {
+      "path": "docs/comms/COMMS_FOLLOW_UP_ROADMAP.md",
+      "title": "Communications Multi-Provider Follow-Up Roadmap",
+      "slug": "comms/comms-follow-up-roadmap",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ]
+    },
+    {
       "path": "docs/comms/COMMS_GENERIC_WEBHOOK.md",
       "title": "Generic Signed Communications Webhook",
       "slug": "comms/comms-generic-webhook",
@@ -3970,6 +4058,17 @@
       "audience": [
         "dev-senior",
         "dev-junior"
+      ]
+    },
+    {
+      "path": "docs/comms/COMMS_PROVIDER_HARDCODE_LEDGER.md",
+      "title": "Communications Provider Hardcode Ledger",
+      "slug": "comms/comms-provider-hardcode-ledger",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
       ]
     },
     {

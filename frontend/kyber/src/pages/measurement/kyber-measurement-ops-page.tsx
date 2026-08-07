@@ -332,9 +332,33 @@ function CommsOperatorActions() {
   const [tenantId, setTenantId] = useState('');
   const [entityId, setEntityId] = useState('');
   const [campaignId, setCampaignId] = useState('');
-  const [provider, setProvider] = useState('klaviyo');
+  // Registered comms providers (marketing category), fetched from the operator
+  // connector overview. No provider name is hardcoded — the cohort is the
+  // backend catalog (ADR-C11). Default to the first registered comms provider.
+  const [commsProviders, setCommsProviders] = useState<Array<{ connector_type: string; label: string }>>([]);
+  const [provider, setProvider] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [syncRuns, setSyncRuns] = useState<Row[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api.admin.kyber.connectorsOverview()
+      .then((d) => {
+        if (!active) return;
+        const byTypeDetail = (d as Row | null)?.['by_type_detail'] as Row[] | undefined ?? [];
+        const comms = byTypeDetail
+          .filter((r) => r['category'] === 'marketing')
+          .map((r) => ({ connector_type: String(r['connector_type'] ?? ''), label: String(r['label'] ?? r['connector_type'] ?? '') }))
+          .filter((r) => r.connector_type !== '');
+        setCommsProviders(comms);
+        setProvider((prev) => prev && comms.some((c) => c.connector_type === prev)
+          ? prev
+          : (comms[0]?.connector_type ?? ''));
+      })
+      .catch(() => { /* overview offline: leave provider empty so reconcile stays disabled */ })
+      .finally(() => { active = false; });
+    return () => { active = false; };
+  }, []);
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     try {
@@ -369,8 +393,15 @@ function CommsOperatorActions() {
         </div>
         <div>
           <label className="text-xs text-text-muted block mb-1" htmlFor="comms-provider">Provider</label>
-          <input id="comms-provider" type="text" value={provider} onChange={e => setProvider(e.target.value)}
-                 className="w-full text-sm font-mono bg-surface-secondary border border-border rounded px-2 py-1" />
+          <select id="comms-provider" value={provider}
+                  onChange={e => setProvider(e.target.value)}
+                  className="w-full text-sm bg-surface-secondary border border-border rounded px-2 py-1">
+            {commsProviders.length === 0
+              ? <option value="">No comms provider registered</option>
+              : commsProviders.map((p) => (
+                  <option key={p.connector_type} value={p.connector_type}>{p.label}</option>
+                ))}
+          </select>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">

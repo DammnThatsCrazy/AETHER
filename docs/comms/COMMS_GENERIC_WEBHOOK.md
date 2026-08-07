@@ -7,12 +7,62 @@ audience: [dev-senior, dev-junior]
 source_files:
   - Backend Architecture/aether-backend/services/comms/routes.py
   - Backend Architecture/aether-backend/services/comms/ingest.py
+  - Backend Architecture/aether-backend/services/integrations/connectors/routes.py
+  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/webhook_endpoints.py
+  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/signature_verify.py
 ---
 
 # Generic Signed Communications Webhook
 
 The fastest provider-neutral way to feed communications into Aether: any
 system that can POST JSON can integrate — no dedicated connector required.
+
+## Provider-native webhooks (server-controlled endpoints)
+
+Branded comms providers (Klaviyo today; SendGrid, Postmark, Customer.io,
+Mailchimp next) do **not** use the generic signed endpoint above. They receive
+their own native webhook calls at a server-controlled, durable endpoint id:
+
+```
+POST /v1/integrations/webhooks/comms/{connector}/{endpoint_id}
+```
+
+Tenant ownership is resolved **server-side** from the durable `whe_` endpoint
+registry — never from an `X-Aether-Tenant-ID` header (ADR-C11). The endpoint id
+is high-entropy, non-sequential, revocable, and bound to exactly one
+(tenant, connector, environment); the id alone is not authentication — the
+provider signature is still verified.
+
+Signature verification uses the connector's native scheme when its adapter
+declares one, else Aether's generic timestamped HMAC (`X-Aether-Signature` +
+`X-Aether-Timestamp`, ±300s replay window):
+
+| Connector | Scheme | Verification |
+|---|---|---|
+| SendGrid | `sendgrid_ecdsa` | `X-Twilio-Email-Event-Webhook-Signature` is a base64 DER **ECDSA** signature over SHA-256(`timestamp` + raw body); the stored credential is the account's **public key** (the private key stays with Twilio) |
+| Customer.io | `customerio_hmac_v0` | `X-CIO-Signature` is hex `HMAC-SHA256(secret, "v0:{X-CIO-Timestamp}:" + raw_body)` — the `v0:` prefix and colons are part of the signed string |
+| Mailchimp | `endpoint_secret` | No cryptographic signature — auth is the `secret` query parameter in the webhook URL, which Aether covers with the durable endpoint id |
+| Postmark | `endpoint_secret` | No cryptographic signature — auth is URL/Basic-Auth server credentials, covered by the durable endpoint id |
+
+Timestamped native schemes (SendGrid, Customer.io) enforce the ±300s replay
+tolerance; the no-signature providers rely on the durable endpoint id plus the
+end-to-end idempotency dedupe for replay safety. Denied webhooks are
+quarantined metadata-only (never the raw body) and audited.
+
+Tenant administrators mint and manage endpoints for each comms connector:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/v1/integrations/connectors/{connector}/webhook-endpoints` | Mint a durable endpoint |
+| `GET` | `/v1/integrations/connectors/{connector}/webhook-endpoints` | List endpoints |
+| `POST` | `/v1/integrations/connectors/{connector}/webhook-endpoints/rotate` | Revoke + mint |
+| `POST` | `/v1/integrations/connectors/{connector}/webhook-endpoints/{endpoint_id}/revoke` | Revoke |
+
+The legacy header-based connector webhook route
+(`POST /v1/integrations/webhooks/{connector}` with `X-Aether-Tenant-ID`) is
+**permanently denied for comms connectors**; it remains only for non-comms
+connectors. Configure your comms provider to POST to the minted
+`/comms/{connector}/{endpoint_id}` URL instead.
 
 ## Endpoint
 

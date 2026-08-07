@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/auth/auth.py
   - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
 canonical_owner: platform@aether
-last_synced_commit: "94332c5"
+last_synced_commit: "75edbd7d"
 ---
 
 # Governance and Consent
@@ -21,7 +21,10 @@ last_synced_commit: "94332c5"
 `economic_observability` and `cross_chain_observability` (plus PR1's
 `financial_activity` for derivatives): explicit opt-in, default
 disabled, 2555-day retention, `allowModelTraining: false`, revocation
-stops new collection and suppresses projections. Enforcement is
+stops new collection and suppresses projections. `fraud_prevention`
+(bot detection, abuse and platform-security signals; added to the
+canonical registry in 8.12.0) is also explicit-opt-in, default disabled,
+with 365-day retention and `allowModelTraining: true`. Enforcement is
 registry-derived (root fix in 8.12.0 removed the stale hardcoded set).
 
 ## Permissions (18 new)

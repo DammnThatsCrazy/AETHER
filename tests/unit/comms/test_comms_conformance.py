@@ -70,8 +70,41 @@ def test_certification_descriptor_is_honest():
     assert d.pagination_model == "cursor" and d.streaming_model == "webhook"
 
 
-def test_registry_includes_klaviyo_communications():
+def test_registry_includes_all_communications_providers():
+    """The certification registry enumerates every registered comms connector —
+    no hardcoded list of one (ADR-C11 multi-provider)."""
     from shared.certification.registry import iter_first_release_descriptors
 
     descriptors = {(d.domain, d.provider) for d in iter_first_release_descriptors()}
-    assert ("communications", "klaviyo") in descriptors
+    for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark"):
+        assert ("communications", provider) in descriptors, (
+            f"registry missing communications/{provider}"
+        )
+
+
+def test_every_comms_provider_passes_conformance_suite():
+    """Each comms provider certifies with no failures: capabilities it declares
+    are checked and pass; capabilities it does not declare skip honestly."""
+    from services.comms.conformance import certify_comms
+
+    for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark"):
+        results = certify_comms(connector_type=provider)
+        failures = [r for r in results if not r.passed]
+        assert not failures, (
+            f"{provider}: {[f'{r.name}: {r.detail}' for r in failures]}"
+        )
+
+
+def test_webhook_only_providers_do_not_claim_pull_operations():
+    """The certification descriptor derives operations from the connector's
+    declared manifest outputs + capability flags — a webhook-only provider never
+    claims campaign/flow/message sync or pull/backfill/reconciliation (ADR-C11)."""
+    from services.comms.conformance import comms_certification_descriptor
+
+    pull_ops = {"campaign_sync", "flow_sync", "message_sync", "incremental_pull",
+                "historical_backfill", "reconciliation", "reply_ingest"}
+    for provider in ("sendgrid", "customerio", "mailchimp", "postmark"):
+        ops = set(comms_certification_descriptor(provider).supported_operations)
+        assert not (ops & pull_ops), f"{provider} claims pull operations {ops & pull_ops}"
+        # Klaviyo is the reference that declares the full pull surface.
+        assert pull_ops <= set(comms_certification_descriptor("klaviyo").supported_operations)

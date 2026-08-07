@@ -455,6 +455,227 @@
       "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
     },
     {
+      "connectorType": "sendgrid",
+      "connectorClass": "marketing_connector",
+      "provider": "SendGrid",
+      "category": "marketing",
+      "dataFlowDirection": "inbound",
+      "riskTier": "medium",
+      "implementationStatus": "available",
+      "supportedCapabilities": [
+        "webhook"
+      ],
+      "requiredTenantPermissions": [
+        "tenant_admin_approval"
+      ],
+      "requiresProviderAdminInstall": true,
+      "requiresTenantAdminApproval": true,
+      "requiredSubjectPurposes": [
+        "marketing"
+      ],
+      "supportedProcessingBases": [
+        "consent",
+        "legal_obligation"
+      ],
+      "defaultProcessingBasis": "consent",
+      "dataCategories": [
+        "engagement",
+        "suppression",
+        "spam_complaint"
+      ],
+      "identitySignals": [
+        "tenant_scoped_email_alias"
+      ],
+      "allowsIdentityLinking": true,
+      "allowsGraphProjection": true,
+      "allowsModelTraining": false,
+      "allowsPreConsentProcessing": true,
+      "complianceEvidenceEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "suppressionEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "retentionClass": "marketing_or_compliance",
+      "rawPayloadPolicy": "field_allowlist_only",
+      "quarantinePolicy": "unknown_fields",
+      "providerConsentBridge": "none",
+      "providerSignatureScheme": "sendgrid_ecdsa",
+      "supportsHistoricalBackfill": false,
+      "supportsOutboundActivation": false,
+      "notes": "Observe-only email event webhooks (ADR-C1); signature verified via SendGrid ECDSA over the timestamp+raw body. Unknown event fields quarantine."
+    },
+    {
+      "connectorType": "customerio",
+      "connectorClass": "marketing_connector",
+      "provider": "Customer.io",
+      "category": "marketing",
+      "dataFlowDirection": "inbound",
+      "riskTier": "medium",
+      "implementationStatus": "available",
+      "supportedCapabilities": [
+        "webhook"
+      ],
+      "requiredTenantPermissions": [
+        "tenant_admin_approval"
+      ],
+      "requiresProviderAdminInstall": true,
+      "requiresTenantAdminApproval": true,
+      "requiredSubjectPurposes": [
+        "marketing"
+      ],
+      "supportedProcessingBases": [
+        "consent",
+        "legal_obligation"
+      ],
+      "defaultProcessingBasis": "consent",
+      "dataCategories": [
+        "engagement",
+        "suppression",
+        "spam_complaint"
+      ],
+      "identitySignals": [
+        "tenant_scoped_email_alias"
+      ],
+      "allowsIdentityLinking": true,
+      "allowsGraphProjection": true,
+      "allowsModelTraining": false,
+      "allowsPreConsentProcessing": true,
+      "complianceEvidenceEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "suppressionEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "retentionClass": "marketing_or_compliance",
+      "rawPayloadPolicy": "field_allowlist_only",
+      "quarantinePolicy": "unknown_fields",
+      "providerConsentBridge": "none",
+      "providerSignatureScheme": "customerio_hmac_v0",
+      "supportsHistoricalBackfill": false,
+      "supportsOutboundActivation": false,
+      "notes": "Observe-only email event webhooks (ADR-C1); signature verified via Customer.io HMAC-SHA256 over v0:{ts}:+raw body. Unknown event types skip."
+    },
+    {
+      "connectorType": "mailchimp",
+      "connectorClass": "marketing_connector",
+      "provider": "Mailchimp",
+      "category": "marketing",
+      "dataFlowDirection": "inbound",
+      "riskTier": "medium",
+      "implementationStatus": "available",
+      "supportedCapabilities": [
+        "webhook"
+      ],
+      "requiredTenantPermissions": [
+        "tenant_admin_approval"
+      ],
+      "requiresProviderAdminInstall": true,
+      "requiresTenantAdminApproval": true,
+      "requiredSubjectPurposes": [
+        "marketing"
+      ],
+      "supportedProcessingBases": [
+        "consent",
+        "legal_obligation"
+      ],
+      "defaultProcessingBasis": "consent",
+      "dataCategories": [
+        "engagement",
+        "suppression",
+        "spam_complaint"
+      ],
+      "identitySignals": [
+        "tenant_scoped_email_alias",
+        "provider_profile_id"
+      ],
+      "allowsIdentityLinking": true,
+      "allowsGraphProjection": true,
+      "allowsModelTraining": false,
+      "allowsPreConsentProcessing": true,
+      "complianceEvidenceEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "suppressionEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "retentionClass": "marketing_or_compliance",
+      "rawPayloadPolicy": "field_allowlist_only",
+      "quarantinePolicy": "unknown_fields",
+      "providerConsentBridge": "none",
+      "providerSignatureScheme": "endpoint_secret",
+      "supportsHistoricalBackfill": false,
+      "supportsOutboundActivation": false,
+      "notes": "Observe-only form-encoded webhooks; possession of the durable endpoint id is the auth (verified by possession). Sends a GET validation probe on setup."
+    },
+    {
+      "connectorType": "postmark",
+      "connectorClass": "marketing_connector",
+      "provider": "Postmark",
+      "category": "marketing",
+      "dataFlowDirection": "inbound",
+      "riskTier": "medium",
+      "implementationStatus": "available",
+      "supportedCapabilities": [
+        "webhook"
+      ],
+      "requiredTenantPermissions": [
+        "tenant_admin_approval"
+      ],
+      "requiresProviderAdminInstall": true,
+      "requiresTenantAdminApproval": true,
+      "requiredSubjectPurposes": [
+        "marketing"
+      ],
+      "supportedProcessingBases": [
+        "consent",
+        "legal_obligation"
+      ],
+      "defaultProcessingBasis": "consent",
+      "dataCategories": [
+        "engagement",
+        "suppression",
+        "spam_complaint"
+      ],
+      "identitySignals": [
+        "tenant_scoped_email_alias"
+      ],
+      "allowsIdentityLinking": true,
+      "allowsGraphProjection": true,
+      "allowsModelTraining": false,
+      "allowsPreConsentProcessing": true,
+      "complianceEvidenceEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "suppressionEvents": [
+        "unsubscribe",
+        "suppression",
+        "spam_complaint"
+      ],
+      "retentionClass": "marketing_or_compliance",
+      "rawPayloadPolicy": "field_allowlist_only",
+      "quarantinePolicy": "unknown_fields",
+      "providerConsentBridge": "none",
+      "providerSignatureScheme": "endpoint_secret",
+      "supportsHistoricalBackfill": false,
+      "supportsOutboundActivation": false,
+      "notes": "Observe-only webhooks; possession of the durable endpoint id is the auth (verified by possession). Bounce types classify hard/soft/transient."
+    },
+    {
       "connectorType": "segment",
       "connectorClass": "event_router_connector",
       "provider": "Segment",

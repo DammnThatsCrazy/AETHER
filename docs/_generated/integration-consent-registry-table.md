@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/integration-consent-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Integration Consent Registry (18 connectors/adapters, contract v8.13.0)
+# Aether Integration Consent Registry (22 connectors/adapters, contract v8.13.0)
 
 | Connector | Provider | Category | Risk | Status | Purposes | Default basis | Raw payload policy | Signature scheme |
 |---|---|---|---|---|---|---|---|---|
@@ -12,6 +12,10 @@
 | `hubspot` | HubSpot | crm | high | available | analytics, marketing | contract | field_allowlist_only | provider_native_or_oauth_pull |
 | `salesforce` | Salesforce | crm | high | available | analytics, marketing | contract | field_allowlist_only | provider_native_or_oauth_pull |
 | `klaviyo` | Klaviyo | marketing | medium | available | marketing | consent | prohibit_recipient_email | klaviyo_native_or_oauth_pull |
+| `sendgrid` | SendGrid | marketing | medium | available | marketing | consent | field_allowlist_only | sendgrid_ecdsa |
+| `customerio` | Customer.io | marketing | medium | available | marketing | consent | field_allowlist_only | customerio_hmac_v0 |
+| `mailchimp` | Mailchimp | marketing | medium | available | marketing | consent | field_allowlist_only | endpoint_secret |
+| `postmark` | Postmark | marketing | medium | available | marketing | consent | field_allowlist_only | endpoint_secret |
 | `segment` | Segment | event_router | high | available | analytics, marketing, personalization | classification_required | unknown_properties_quarantine | segment_signature_or_writekey |
 | `posthog` | PostHog | product_analytics | high | available | analytics, personalization | legitimate_interest | quarantine_arbitrary_person_properties | posthog_webhook_signature |
 | `ga4` | Google Analytics 4 | analytics | medium | available | analytics, marketing | aggregate_analytics | aggregate_preferred_user_level_gated | google_oauth_or_signed_export |

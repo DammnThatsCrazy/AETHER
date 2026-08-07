@@ -81,6 +81,14 @@ _NATIVE_WEBHOOK_SCHEMES: dict[str, str] = {
     "hubspot": "hubspot_signature_v3",
     "jira": "jira_hub_signature",
     "linear": "linear_signature",
+    # Comms provider-native schemes (declared ahead of their adapters so the
+    # manifest names the provider's real scheme from the start).
+    "sendgrid": "sendgrid_ecdsa",
+    "customerio": "customerio_hmac_v0",
+    # Mailchimp (Marketing) and Postmark send no cryptographic signature; the
+    # high-entropy durable endpoint id in the webhook URL is the credential.
+    "mailchimp": "endpoint_secret",
+    "postmark": "endpoint_secret",
 }
 
 # Real, non-empty OAuth scopes keyed by connector_type. Empty today: no
