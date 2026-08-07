@@ -14,6 +14,7 @@ Endpoints:
 from __future__ import annotations
 
 import uuid
+from html import escape
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
@@ -115,15 +116,32 @@ async def contact_enterprise(body: EnterpriseContactRequest, request: Request):
 
 
 async def _notify_sales_team(inquiry_id: str, body: EnterpriseContactRequest) -> bool:
-    """Deliver an email to the sales team. Returns True on send success."""
+    """Deliver an email to the sales team. Returns True on send success.
+
+    Every user-controlled field is HTML-escaped before interpolation into the
+    body — a tenant-supplied message/name/company must never carry raw markup
+    into the sales team's mail client (email XSS via the HTML body). The
+    subject is also newline-stripped so a crafted company name cannot inject
+    SMTP headers (header-injection defense); email providers reject raw
+    control characters in headers.
+    """
     from config.settings import settings
 
-    subject = f"[Enterprise Inquiry] {body.company_name} ({body.company_type})"
+    subject = (
+        f"[Enterprise Inquiry] {body.company_name} ({body.company_type})"
+    ).replace("\r", " ").replace("\n", " ")
+
+    company_name = escape(body.company_name, quote=True)
+    company_type = escape(body.company_type, quote=True)
+    name = escape(body.name, quote=True)
+    email = escape(body.email, quote=True)
+    message = escape(body.message, quote=True)
+
     body_html = _base("Enterprise inquiry", f"""
-<p><strong>Company:</strong> {body.company_name} ({body.company_type})</p>
-<p><strong>Contact:</strong> {body.name} &lt;{body.email}&gt;</p>
+<p><strong>Company:</strong> {company_name} ({company_type})</p>
+<p><strong>Contact:</strong> {name} &lt;{email}&gt;</p>
 <hr>
-<p>{body.message}</p>
+<p>{message}</p>
 <p><em>Inquiry id: {inquiry_id}</em></p>
 """)
     return await email_service.send_email(
