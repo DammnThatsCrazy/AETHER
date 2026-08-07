@@ -89,6 +89,7 @@ _NATIVE_WEBHOOK_HEADERS: dict[str, list[str]] = {
         "X-Twilio-Email-Event-Webhook-Timestamp",
     ],
     "customerio_hmac_v0": ["X-CIO-Signature", "X-CIO-Timestamp"],
+    "hubspot_signature_v3": ["X-HubSpot-Signature-v3", "X-HubSpot-Request-Timestamp"],
     ENDPOINT_SECRET: [],
 }
 
@@ -143,6 +144,19 @@ _EVENT_FIXTURES: dict[str, tuple[dict[str, Any], str]] = {
             "Recipient": "person@example.com",
             "Link": "https://x",
             "ClickedAt": "2026-07-01T10:00:00Z",
+        },
+        "email_clicked",
+    ),
+    "hubspot": (
+        {
+            "eventType": "CLICK",
+            "id": "hs-ev-1",
+            "email": "person@example.com",
+            "recipient": "person@example.com",
+            "campaignId": 123,
+            "portalId": 62515,
+            "created": 1750000000,
+            "url": "https://x",
         },
         "email_clicked",
     ),

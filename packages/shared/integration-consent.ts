@@ -411,7 +411,8 @@
   "defaultProcessingBasis": "contract",
   "dataCategories": [
     "crm_field_allowlist",
-    "contact_alias"
+    "contact_alias",
+    "engagement"
   ],
   "identitySignals": [
     "hubspot_contact_id",
@@ -444,10 +445,10 @@
   "rawPayloadPolicy": "field_allowlist_only",
   "quarantinePolicy": "unknown_fields",
   "providerConsentBridge": "none",
-  "providerSignatureScheme": "provider_native_or_oauth_pull",
+  "providerSignatureScheme": "hubspot_signature_v3",
   "supportsHistoricalBackfill": true,
   "supportsOutboundActivation": true,
-  "notes": "No automatic consent grant; fail closed or quarantine unknown schemas and fields."
+  "notes": "CRM ingest (contacts/companies/deals) + Marketing Hub email engagement observation (ADR-C11). No automatic consent grant; fail closed or quarantine unknown schemas and fields."
 },
   "salesforce": {
   "connectorType": "salesforce",

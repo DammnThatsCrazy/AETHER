@@ -37,9 +37,10 @@ def comms_coverage():
 
 @pytest.mark.asyncio
 async def test_comms_providers_includes_full_cohort(comms_coverage):
-    """All five branded comms providers are registered and comms-classified."""
+    """All comms providers are registered and comms-classified."""
     providers = comms_coverage.comms_providers()
-    assert {"klaviyo", "sendgrid", "customerio", "mailchimp", "postmark"} <= set(providers)
+    assert {"klaviyo", "sendgrid", "customerio", "mailchimp", "postmark",
+            "hubspot"} <= set(providers)
 
 
 @pytest.mark.asyncio
@@ -94,7 +95,8 @@ async def test_non_comms_provider_is_none(comms_coverage):
 async def test_report_covers_every_registered_provider(comms_coverage):
     report = await comms_coverage.comms_coverage_report("t1")
     providers = {r["provider"] for r in report}
-    assert {"klaviyo", "sendgrid", "customerio", "mailchimp", "postmark"} <= providers
+    assert {"klaviyo", "sendgrid", "customerio", "mailchimp", "postmark",
+            "hubspot"} <= providers
     # every entry carries capabilities + honest zero coverage
     for entry in report:
         assert "capabilities" in entry

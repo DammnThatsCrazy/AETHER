@@ -31,6 +31,16 @@ def test_klaviyo_passes_full_conformance_suite():
     assert all(r.passed for r in results)
 
 
+def test_hubspot_passes_full_conformance_suite():
+    from services.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
+
+    results = certify_comms(connector_type="hubspot")
+    assert len(results) == len(COMMS_CONFORMANCE_CHECKS)
+    failures = [r for r in results if not r.passed]
+    assert not failures, [f"{r.name}: {r.detail}" for r in failures]
+    assert all(r.passed for r in results)
+
+
 def test_comms_domain_checks_all_apply():
     """The comms-domain checks are not silently skipping — each asserts a real
     §25 property (manifest, credential absence, normalization, identity,
@@ -76,7 +86,8 @@ def test_registry_includes_all_communications_providers():
     from shared.certification.registry import iter_first_release_descriptors
 
     descriptors = {(d.domain, d.provider) for d in iter_first_release_descriptors()}
-    for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark"):
+    for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark",
+                     "hubspot"):
         assert ("communications", provider) in descriptors, (
             f"registry missing communications/{provider}"
         )
@@ -87,7 +98,8 @@ def test_every_comms_provider_passes_conformance_suite():
     are checked and pass; capabilities it does not declare skip honestly."""
     from services.comms.conformance import certify_comms
 
-    for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark"):
+    for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark",
+                     "hubspot"):
         results = certify_comms(connector_type=provider)
         failures = [r for r in results if not r.passed]
         assert not failures, (

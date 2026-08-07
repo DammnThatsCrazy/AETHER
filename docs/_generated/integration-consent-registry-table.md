@@ -9,7 +9,7 @@
 | `generic_webhook` | Generic Webhook | custom_ingest | high | available | analytics | explicit_manifest_required | quarantine_until_schema_approved | aether_hmac_sha256 |
 | `shopify` | Shopify | commerce | medium | available | commerce, analytics, marketing | contract | prohibit_customer_email_addresses | shopify_hmac_sha256 |
 | `stripe` | Stripe | payments | medium | available | commerce | contract | prohibit_payment_method_objects | stripe_v1 |
-| `hubspot` | HubSpot | crm | high | available | analytics, marketing | contract | field_allowlist_only | provider_native_or_oauth_pull |
+| `hubspot` | HubSpot | crm | high | available | analytics, marketing | contract | field_allowlist_only | hubspot_signature_v3 |
 | `salesforce` | Salesforce | crm | high | available | analytics, marketing | contract | field_allowlist_only | provider_native_or_oauth_pull |
 | `klaviyo` | Klaviyo | marketing | medium | available | marketing | consent | prohibit_recipient_email | klaviyo_native_or_oauth_pull |
 | `sendgrid` | SendGrid | marketing | medium | available | marketing | consent | field_allowlist_only | sendgrid_ecdsa |
