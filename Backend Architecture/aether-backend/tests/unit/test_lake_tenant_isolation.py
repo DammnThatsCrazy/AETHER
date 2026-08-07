@@ -57,6 +57,22 @@ async def test_get_metrics_scopes_to_tenant_plus_global():
 
 
 @pytest.mark.asyncio
+async def test_empty_tenant_returns_global_only_never_all_tenants():
+    # Regression: an empty-string tenant_id (no owning tenant, e.g. an engine
+    # invoked without a tenant) must scope to global/legacy rows only — never a
+    # full cross-tenant read (which would leak every tenant's data).
+    reset_in_memory_stores()
+    gold = GoldRepository(domain="iso_empty")
+    await gold.materialize(metric_name="m", entity_id="e", entity_type="t",
+                           value={"src": "a"}, tenant_id="tenant-a")
+    await gold.materialize(metric_name="m", entity_id="e", entity_type="t",
+                           value={"src": "global"}, tenant_id="")
+
+    rows = await gold.get_metrics("e", entity_type="t", tenant_id="")
+    assert sorted(r["value"]["src"] for r in rows) == ["global"]
+
+
+@pytest.mark.asyncio
 async def test_get_metrics_cross_tenant_read_sees_all():
     reset_in_memory_stores()
     gold = GoldRepository(domain="iso_all")

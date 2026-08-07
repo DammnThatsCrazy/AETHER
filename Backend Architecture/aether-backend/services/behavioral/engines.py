@@ -169,7 +169,7 @@ async def compute_identity_delta(
 ) -> Optional[dict]:
     """Detect identity confidence changes based on evidence."""
     identity_records = await silver_identity.get_entity(
-        entity_id, "wallet", tenant_id=tenant_id or None
+        entity_id, "wallet", tenant_id=tenant_id
     )
     if not identity_records:
         return None
@@ -304,7 +304,7 @@ async def compute_source_shadow(
     """Distinguish behavior absence from source/observation silence."""
     domain_recency: dict[str, str] = {}
     for domain_name, repo in [("identity", silver_identity), ("onchain", silver_onchain), ("social", silver_social)]:
-        records = await repo.get_entity(entity_id, "wallet", tenant_id=tenant_id or None)
+        records = await repo.get_entity(entity_id, "wallet", tenant_id=tenant_id)
         if records:
             latest = max(records, key=lambda r: r.get("updated_at", ""))
             domain_recency[domain_name] = latest.get("updated_at", "")

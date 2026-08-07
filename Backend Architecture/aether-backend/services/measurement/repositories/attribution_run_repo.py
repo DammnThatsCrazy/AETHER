@@ -80,8 +80,11 @@ class AttributionRunRepository:
             return None
         pool = await self._pool()
         if pool is None:
+            # Compare against the normalized UUID so local lookup matches
+            # Postgres's case-insensitive UUID equality (a caller may pass an
+            # upper/mixed-case UUID string).
             for cfg in _local_model_configs.get(tenant_id, []):
-                if str(cfg.get("model_config_id")) == str(model_config_id):
+                if str(cfg.get("model_config_id")) == str(config_uuid):
                     return cfg
             return None
         async with pool.acquire() as conn:

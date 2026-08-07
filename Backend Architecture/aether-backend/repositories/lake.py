@@ -52,11 +52,20 @@ async def _tenant_scoped_find(
     they are simply concatenated (tenant first) and capped.
 
     ``tenant_id=None`` is an explicit, auditable cross-tenant read reserved for
-    ETL / global-materialization jobs that have no single owning tenant.
+    ETL / global-materialization jobs that have no single owning tenant. An
+    empty-string ``tenant_id`` means "no owning tenant" and returns ONLY the
+    global/legacy rows — never every tenant's rows (that would be the leak this
+    scoping exists to prevent).
     """
     if tenant_id is None:
         return await repo.find_many(
             filters=base_filters, limit=limit, sort_by=sort_by, sort_order=sort_order
+        )
+    if tenant_id == "":
+        # No owning tenant → global/legacy rows only (tenant IS NULL or '').
+        return await repo.find_many(
+            filters={**base_filters, "tenant_id": ""},
+            limit=limit, sort_by=sort_by, sort_order=sort_order,
         )
     primary = await repo.find_many(
         filters={**base_filters, "tenant_id": tenant_id},

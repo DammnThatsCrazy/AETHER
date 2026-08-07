@@ -303,8 +303,17 @@ def _event_reference_time(event: dict[str, Any]) -> Optional[datetime]:
     The durable pipeline (AttributionEngine.run_for_conversion) is stricter
     still: a stored conversion with no valid occurred_at fails the run.
     """
-    raw = event.get("timestamp") or event.get("occurred_at") or event.get("created_at")
+    raw = None
+    for key in ("timestamp", "occurred_at", "created_at"):
+        val = event.get(key)
+        if val is not None:
+            raw = val
+            break
     if raw is None:
+        # No conversion time field present at all → real-time resolve(); the
+        # conversion is happening now, so now() is the correct anchor. A field
+        # that IS present but empty/invalid falls through to the refuse paths
+        # below (never silently coerced to now).
         return datetime.now(timezone.utc)
     if isinstance(raw, datetime):
         return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)

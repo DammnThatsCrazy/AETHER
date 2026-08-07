@@ -141,9 +141,11 @@ export class AetherServerSDK {
       // Canonical BaseEvent identity the ingestion API requires (id/sessionId/
       // anonymousId, all non-empty). id is minted per event so retries dedupe;
       // sessionId/anonymousId fall back to the per-process identity.
-      id: event.id ?? randomUUID(),
-      sessionId: event.sessionId ?? this.sessionId,
-      anonymousId: event.anonymousId ?? this.anonymousId,
+      // `||` (not `??`) so an empty-string id/sessionId/anonymousId is also
+      // replaced — the backend BaseEvent requires all three to be non-empty.
+      id: event.id || randomUUID(),
+      sessionId: event.sessionId || this.sessionId,
+      anonymousId: event.anonymousId || this.anonymousId,
       timestamp: ts,
       properties: event.properties ? scrubSensitiveFields(event.properties) : undefined,
       context: {

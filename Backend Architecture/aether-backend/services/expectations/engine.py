@@ -78,7 +78,7 @@ class ExpectationEngine:
         """Detect contradictory identity evidence from multiple sources."""
         signals = []
         identity_records = await silver_identity.get_entity(
-            entity_id, "wallet", tenant_id=tenant_id or None
+            entity_id, "wallet", tenant_id=tenant_id
         )
 
         # Check for conflicting source claims about the same entity
@@ -214,7 +214,7 @@ class ExpectationEngine:
             ("onchain", silver_onchain),
             ("social", silver_social),
         ]:
-            records = await repo.get_entity(entity_id, "wallet", tenant_id=tenant_id or None)
+            records = await repo.get_entity(entity_id, "wallet", tenant_id=tenant_id)
             if not records:
                 continue
 

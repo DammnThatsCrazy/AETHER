@@ -36,7 +36,13 @@ from services.attribution.resolver import AttributionResolver
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # A fresh loop each call — asyncio.get_event_loop() raises "no current event
+    # loop" under pytest-asyncio + xdist once a prior async test closed the loop.
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,6 +109,36 @@ def test_api_created_config_is_visible_to_engine_repo():
 # ─────────────────────────────────────────────────────────────────────────────
 # H — event-time integrity
 # ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_get_model_config_uuid_case_insensitive():
+    # Regression: the local lookup must match Postgres's case-insensitive UUID
+    # equality, so an upper/mixed-case UUID string still resolves.
+    _reset_local_attribution()
+    repo = AttributionRunRepository()
+    saved = await repo.create_model_config({
+        "tenant_id": "tenant-a", "name": "cfg", "model_type": "linear",
+    })
+    found = await AttributionRunRepository().get_model_config(
+        "tenant-a", saved["model_config_id"].upper()
+    )
+    assert found is not None
+    assert found["model_type"] == "linear"
+
+
+@pytest.mark.asyncio
+async def test_resolver_refuses_on_empty_string_conversion_timestamp():
+    # Regression: a PRESENT-but-empty timestamp is provided-and-invalid → refuse
+    # (not treated as absent → now()).
+    resolver = AttributionResolver()
+    result = await resolver.resolve(
+        user_id="u-1",
+        event={"timestamp": ""},
+        touchpoints=[{"channel": "a", "timestamp": "2026-01-01T00:00:00Z"}],
+    )
+    assert result.model_used == "none"
+    assert result.credits == []
+
 
 @pytest.mark.asyncio
 async def test_engine_rejects_invalid_conversion_timestamp(monkeypatch):
