@@ -7,12 +7,15 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from repositories.repos import BaseRepository, reset_in_memory_stores
+from repositories.continuation_repo import reset_continuation_memory
+from repositories.repos import BaseRepository, reset_in_memory_stores as reset_base_stores
+from services.agent.runtime_repository import get_agent_runtime_repository
 from services.demo_seed.dataset import v1_manifest
 from services.demo_seed.policy import SeedPolicyError
 from services.demo_seed import routes as seed_routes
-from services.demo_seed.service import DemoSeedService, SeedSafetyError
+from services.demo_seed.service import DemoSeedService, SeedSafetyError, _target_ids
 from services.demo_seed.startup import maybe_seed_demo_on_start
+from shared.store import reset_in_memory_stores as reset_durable_stores
 
 pytestmark = pytest.mark.asyncio
 
@@ -27,7 +30,9 @@ def isolated_memory(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("AETHER_STAGING_DEMO_ENABLED", raising=False)
     monkeypatch.delenv("AETHER_STAGING_DEMO_TENANT_ALLOWLIST", raising=False)
-    reset_in_memory_stores()
+    reset_base_stores()
+    reset_durable_stores()
+    reset_continuation_memory()
 
 
 def service(*run_ids: str, environment: str = "test") -> DemoSeedService:
@@ -224,6 +229,62 @@ async def test_startup_seed_refuses_production(monkeypatch: pytest.MonkeyPatch):
     app = SimpleNamespace(state=SimpleNamespace())
     with pytest.raises(RuntimeError, match="only in local/test"):
         await maybe_seed_demo_on_start(app, environment="production")
+
+
+async def test_m7a_six_domains_seed_and_are_visible_via_canonical_read_paths():
+    """M7a: notifications, continuations, exceptions, incidents, runs, reviews
+    seed through the manifest and are readable through the SAME stores the real
+    APIs read — never a parallel copy."""
+    manager = service("seed-run-m7a")
+    await manager.seed(tenant_id=TENANT, namespace=NAMESPACE)
+    target_ids = _target_ids(v1_manifest(NAMESPACE), TENANT)
+    by_logical = {record.logical_name: record for record in v1_manifest(NAMESPACE).records}
+
+    # Notifications → notification_inbox (BaseRepository) via the seed repo.
+    notification = by_logical["demo-notification"]
+    stored = await manager.repositories["notifications"].find_by_id(
+        target_ids[notification.record_id]
+    )
+    assert stored is not None
+    assert stored["tenant_id"] == TENANT
+    assert stored["category"] == "alert"
+    assert stored["read"] is False
+
+    # Exceptions / incidents → kyber ops tables.
+    for logical, repository_name, identity in (
+        ("demo-exception", "exceptions", "exception_id"),
+        ("demo-incident", "incidents", "incident_id"),
+    ):
+        record = by_logical[logical]
+        stored = await manager.repositories[repository_name].find_many(
+            filters={"tenant_id": TENANT}, limit=10
+        )
+        assert len(stored) == 1, logical
+        assert stored[0][identity] == stored[0]["id"]
+        assert stored[0]["data_origin"] == "synthetic_seed"
+        assert TENANT in stored[0].get("affected_tenants", [])
+
+    # Runs / reviews → the DurableStore the agent runtime reads.
+    agent = get_agent_runtime_repository()
+    seeded_run = (await manager.repositories["runs"].find_many(
+        filters={"tenant_id": TENANT}, limit=1
+    ))[0]
+    run = await agent.get_run(TENANT, seeded_run["run_id"])
+    assert run is not None
+    assert run["status"] == "completed"
+    assert run["data_origin"] == "synthetic_seed"
+    batches = await agent.list_review_batches(TENANT, status="pending")
+    assert len(batches) == 1
+    assert batches[0]["data_origin"] == "synthetic_seed"
+
+    # Continuations → the tenant-scope-scoped canonical repository.
+    continuation = by_logical["demo-continuation"]
+    visible = await manager._resolve_repository("continuations", TENANT).find_by_id(
+        target_ids[continuation.record_id]
+    )
+    assert visible is not None
+    assert visible["surface"] == "exploration"
+    assert visible["data_origin"] == "synthetic_seed"
 
 
 async def test_existing_non_seeded_stable_id_is_never_claimed_or_overwritten():

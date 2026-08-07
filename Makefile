@@ -25,6 +25,7 @@
         frontend-data-truth-report \
         demo-seed demo-reset demo-status demo-verify dev-demo \
         clean-install-smoke demo-seed-smoke demo-reset-smoke \
+        design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
         validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
@@ -361,6 +362,31 @@ demo-seed-smoke: ## Verify seed visibility, provenance, checksum, and idempotenc
 
 demo-reset-smoke: ## Verify reset isolation, control-record preservation, and audit
 	cd "$(BACKEND_DIR)" && $(PYTHON) -m pytest -q -o addopts='' tests/test_demo_seed.py -k "reset or tenant_ids_are_isolated"
+
+# ---------------------------------------------------------------------------
+# Design-partner demo (M7) — local/automated end-to-end demo stack
+# ---------------------------------------------------------------------------
+# Brings up postgres + backend (migrations applied), seeds the versioned demo
+# dataset (notifications/continuations/exceptions/incidents/runs/reviews),
+# and verifies the seeded state is API-visible. Provider fakes run in-process
+# under AETHER_ENV=local and fail closed outside local/dev. JWT_SECRET here is
+# a local-only demo default; staging/prod still require bootstrap.sh.
+design-partner-demo-up: ## Bring up the design-partner demo stack (postgres + backend + migrations)
+	docker compose --profile migrate run --rm migrate
+	JWT_SECRET="$${JWT_SECRET:-local-design-partner-demo-secret}" AETHER_ENV=local docker compose up -d
+	@echo "Design-partner demo stack is up. Run 'make design-partner-demo-seed' then 'make design-partner-demo-check'."
+
+design-partner-demo-seed: ## Seed the design-partner demo dataset (idempotent; safe reset via demo-reset)
+	$(MAKE) demo-seed
+
+design-partner-demo-check: ## Verify the demo dataset is seeded, provenance-clean, and API-visible
+	$(MAKE) demo-verify
+	$(MAKE) demo-seed-smoke
+	$(MAKE) demo-reset-smoke
+
+design-partner-demo-down: ## Stop the design-partner demo stack
+	docker compose down
+	@echo "Design-partner demo stack stopped. Seeded records persist in postgres; reset with 'make demo-reset'."
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi

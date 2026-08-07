@@ -8,7 +8,7 @@ program:
   base_commit: "ead4ba6c7b53783958bebc03bddcede1a2ea7429"   # == origin/main at completion-program start (feat: payment-rails financial-plane provider readiness (#509))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of the original C0 base
   platform_version: "8.12.0"
-  last_landed_checkpoint: C7   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4), C6 (M5), C7 (M6); C9 remaining
+  last_landed_checkpoint: C7   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4), C6 (M5), C7 (M6), M7a demo seed + design-partner-demo targets (M7); M7b distribution/compliance docs + C9 remaining
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -260,7 +260,7 @@ architecture:
   gateway_projections: build                # NET-NEW: M3 landed (services/mobile/projections.py reusing owning services, never re-calculating Profile360/Campaign360/graph truth)
   operator_continuation_router: build       # NET-NEW: M5 (services/continuation/ operator router)
   mobile_action_adapter: build              # NET-NEW: M6 landed (gateway adapter -> existing services/kyber/ops, no second plane)
-  demo_seed_extensions: extend              # NET-NEW: M7 (notifications/continuations/exceptions/incidents/runs/reviews in demo_seed)
+  demo_seed_extensions: landed              # M7a landed: six M7 domains seed through the CANONICAL stores (DurableStore/continuation-scope adapters, no parallel copy) + design-partner-demo make targets
   release_readiness_machinery: reuse        # scripts/production_status.py, repo_doctor.py, deployment_profiles.yaml
 
 # Alembic revision reservation. Single-head invariant is enforced by
@@ -326,7 +326,8 @@ open_pr_overlap:
     disposition: parked
 
 quality:                                     # updated at each milestone boundary from real gate runs
-  ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the C7 (M6) tip — mobile action adapter (read-only availability digest) + mobile-bound proof-key attestation + SDK typed step-up/proof-keys/actions/receipts + pure-TS P256 signer + Kyber Mobile Actions/Receipts screens all integrated and gated"
+  ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the M7a tip — demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores (DurableStoreSeedRepository → same get_store singleton the agent runtime reads; ContinuationScopedSeedRepository → canonical create()/get_scoped/delete_scoped) with no parallel copy; make design-partner-demo-{up,seed,check,down} targets wrap the existing demo-seed/reset-smoke machinery"
+  demo_seed: "services/demo_seed suite 14 tests green incl. test_m7a_six_domains_seed_and_are_visible_via_canonical_read_paths (each domain read through the SAME store/read path the real APIs use: notification_inbox find_by_id, kyber ops find_many, agent get_run/list_review_batches, continuation get_scoped); manifest 25 records, checksum-stable, all offsets <= 0; ownership sidecar + exact-confirmation reset + production refusal unchanged"
   mobile_sdk: "packages/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 46 tests green (client/PKCE/secure-store/offline + 11 kyber-client step-up/proof-keys/actions/receipts + 12 P256 signer incl. RFC 6979 A.2.5 KAT + derivePublicKey round-trip) via npm test --workspaces"
   mobile_apps: "apps/aether-mobile + apps/kyber-mobile scaffolds; scripts/mobile_build_check.py enforces distinct planes/bundles + scaffold completeness (4 tests); native compile externally_blocked (no macOS/Xcode/Android SDK/Expo here)"
   unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability) — root 4951 passed, backend 3540 passed (incl. 12 mobile-action + 11 mobile-proof-key + 21 producer-coverage + 15 operator-continuation + 3 operator-client-sync tests), compliance 361 passed"
@@ -343,7 +344,7 @@ quality:                                     # updated at each milestone boundar
 # Completion program is IN FLIGHT (M0-M8): C9 (M8 review) + M7 demo/distribution additions are not
 # yet landed; update this section only where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7 LANDED via M6 (mobile action adapter — read-only availability digest reusing services/kyber/ops, NO second command plane; Kyber Mobile Tier 0-3 Actions + durable Receipts tabs with step-up via existing StepUpService/device_proof; mobile-bound proof-key attestation reusing the browser-proof store/verify path); C9 (M8 review) + M7 demo remaining on claude/aether-turnkey-completion-7m3x9"
+  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7 LANDED via M6 (mobile action adapter — read-only availability digest reusing services/kyber/ops, NO second command plane; Kyber Mobile Tier 0-3 Actions + durable Receipts tabs with step-up via existing StepUpService/device_proof; mobile-bound proof-key attestation reusing the browser-proof store/verify path); M7a LANDED via M7 (demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores — DurableStore singleton + continuation scope/idempotency — with design-partner-demo-{up,seed,check,down} make targets; no parallel copies); M7b distribution/compliance docs + C9 (M8 review) remaining on claude/aether-turnkey-completion-7m3x9"
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
   mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store; M6: step-up/proof-key/actions/receipts typed methods + zero-import pure-TS P256Signer verified against RFC 6979 A.2.5 + Node crypto)"
   mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth; M5: continue-on-desktop/resume via ContinueOnDesktopPanel) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client; M5: OperatorContinuationsPanel with 404-safe resume; M6: Actions Tier 0-3 + durable Receipts tabs, step-up via attestation.ts ensureProofKey/elevate, verification:null rendered as 'Not verified' — never omitted); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
@@ -351,4 +352,4 @@ readiness:
   design_partner: partial
   store_submission: externally_blocked
   controlled_production: externally_blocked
-  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 + C6 + C7 landed; C9/M8 review + M7 demo/distribution remaining to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"
+  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 + C6 + C7 + M7a demo seed landed; M7b distribution/compliance docs + C9/M8 review remaining to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"
