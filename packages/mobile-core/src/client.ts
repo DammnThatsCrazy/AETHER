@@ -64,6 +64,11 @@ export interface DeepLinkResolution {
   continuation?: DeepLinkContinuation;
 }
 
+/** Body of `GET /v1/kyber/continuations/recent` (operator plane). */
+export interface OperatorRecentContinuations {
+  continuations: ContinuationContext[];
+}
+
 export class AetherMobileClient {
   private readonly http: HttpClient;
 
@@ -119,6 +124,27 @@ export class AetherMobileClient {
 
   getContinuation(id: string): Promise<ContinuationContext> {
     return this.http.request<ContinuationContext>('GET', `/v1/continuations/${encodeURIComponent(id)}`);
+  }
+
+  // ── Operator continuity (flag-gated /v1/kyber/continuations router) ───────
+  //
+  // The operator continuation router (M5b) mirrors the tenant `/v1/continuations`
+  // shapes under `/v1/kyber/continuations` and is gated by
+  // `settings.continuation.enabled`. When the gate is off the backend returns 404;
+  // callers treat a `MobileApiError` with `status === 404` as "surface
+  // unavailable" and render nothing.
+  /** GET /v1/kyber/continuations/recent — recent operator continuations. */
+  async operatorRecentContinuations(): Promise<ContinuationContext[]> {
+    const data = await this.http.request<OperatorRecentContinuations>(
+      'GET',
+      '/v1/kyber/continuations/recent',
+    );
+    return data.continuations;
+  }
+
+  /** GET /v1/kyber/continuations/{id} — one operator continuation. */
+  operatorGetContinuation(id: string): Promise<ContinuationContext> {
+    return this.http.request<ContinuationContext>('GET', `/v1/kyber/continuations/${encodeURIComponent(id)}`);
   }
 
   // ── Client-sync feed ──────────────────────────────────────────────────

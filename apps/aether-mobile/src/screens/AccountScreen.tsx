@@ -13,6 +13,7 @@ import { Card, theme } from '@aether/mobile-ui';
 import { Screen } from '../navigator';
 import { projections, type MobileConfigWire, type ProfileProjection } from '../projections';
 import { useProjection, type ProjectionStatus } from '../useProjection';
+import { ContinueOnDesktopPanel } from '../components/ContinueOnDesktopPanel';
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/ScreenStatus';
 
 function fieldRow(label: string, value: string): React.JSX.Element {
@@ -52,6 +53,8 @@ function AccountContent({
           <Text style={styles.upgradeNote}>Update {config.upgrade_policy === 'required' ? 'required' : 'suggested'}.</Text>
         ) : null}
       </Card>
+
+      <ContinueOnDesktopPanel />
 
       <Text style={styles.readOnlyNote}>Read-only in this build — account actions arrive in a later milestone.</Text>
     </ScrollView>

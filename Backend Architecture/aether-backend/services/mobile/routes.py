@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from config.settings import settings
 from shared.auth.auth import TenantContext
 from shared.common.common import APIResponse, NotFoundError
+from services.client_sync.emitter import enqueue_sync_change
 from services.mobile.config import DISTRIBUTION_PROFILES
 
 from services.mobile import service as mobile_service
@@ -144,6 +145,14 @@ async def revoke_installation(request: Request, installation_id: str = Path(...)
     )
     if row is None:
         raise NotFoundError("installation not found")
+    await enqueue_sync_change(
+        scope_key=mobile_service.tenant_scope(tenant.tenant_id),
+        principal_id=_principal(tenant),
+        change_type="installation_revoked",
+        resource_kind="installation",
+        resource_id=installation_id,
+        device_id=(row.get("data") or {}).get("device_id"),
+    )
     return APIResponse(data=row)
 
 

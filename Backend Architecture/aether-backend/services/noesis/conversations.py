@@ -8,6 +8,8 @@ from typing import Any, Optional
 from repositories.repos import BaseRepository
 from shared.common.common import ForbiddenError, NotFoundError, utc_now
 
+from services.client_sync.emitter import enqueue_sync_change
+
 from .models import NoesisQueryRequest, NoesisResponse
 
 
@@ -57,6 +59,13 @@ class NoesisConversationStore:
                 "messages": [user_message, assistant_message],
             }
             await self._repo.insert(conversation_id, record)
+        await enqueue_sync_change(
+            scope_key=f"t:{effective_tenant_id}",
+            principal_id=effective_tenant_id,
+            change_type="conversation_changed",
+            resource_kind="conversation",
+            resource_id=conversation_id,
+        )
         return conversation_id
 
     async def list_for_scope(

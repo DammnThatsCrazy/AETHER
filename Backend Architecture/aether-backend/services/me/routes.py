@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError, ServiceUnavailableError
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import APIKeyRepository
+from services.client_sync.emitter import enqueue_sync_change
 
 logger = get_logger("aether.service.me")
 router = APIRouter(prefix="/v1/me", tags=["Me"])
@@ -341,6 +342,12 @@ async def revoke_my_session(session_id: str, request: Request):
     if not await session_service.revoke_for_tenant(tenant.tenant_id, session_id):
         raise NotFoundError(f"Session {session_id}")
     metrics.increment("human_sessions_revoked")
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant.tenant_id}",
+        principal_id=tenant.user_id or tenant.tenant_id,
+        change_type="session_revoked",
+        resource_id=session_id,
+    )
     return APIResponse(data={"revoked": True, "id": session_id}).to_dict()
 
 
@@ -365,4 +372,10 @@ async def revoke_my_other_sessions(request: Request):
         tenant.tenant_id, current_session_id
     )
     metrics.increment("human_sessions_revoked", value=revoked)
+    if revoked:
+        await enqueue_sync_change(
+            scope_key=f"t:{tenant.tenant_id}",
+            principal_id=tenant.user_id or tenant.tenant_id,
+            change_type="session_revoked",
+        )
     return APIResponse(data={"revoked_count": revoked}).to_dict()

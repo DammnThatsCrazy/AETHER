@@ -97,4 +97,71 @@ describe('AetherMobileClient', () => {
     const { client } = stubClient(() => ({ status: 409, body: { error: 'conflict' } }));
     await expect(client.getContinuation('c1')).rejects.toBeInstanceOf(MobileApiError);
   });
+
+  it('lists recent operator continuations via the /v1/kyber/continuations router', async () => {
+    const { client, calls } = stubClient(() => ({
+      status: 200,
+      body: {
+        data: {
+          continuations: [
+            {
+              version: '1',
+              id: 'cont_op_1',
+              principal_id: 'operator-1',
+              app_kind: 'kyber',
+              source_client: 'desktop',
+              surface: 'investigation',
+              resource_references: [],
+              canonical_context: {},
+              summary: { title: 'Resume the settlement incident', subtitle: 'kyber' },
+              state_revision: 1,
+              sensitivity: 'standard',
+              updated_at: '2026-08-01T00:00:00Z',
+            },
+          ],
+        },
+      },
+    }));
+    const list = await client.operatorRecentContinuations();
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe('cont_op_1');
+    expect(list[0].summary.title).toBe('Resume the settlement incident');
+    expect(calls[0].url).toBe('https://api.aether.test/v1/kyber/continuations/recent');
+  });
+
+  it('reads one operator continuation by id', async () => {
+    const { client, calls } = stubClient(() => ({
+      status: 200,
+      body: {
+        data: {
+          version: '1',
+          id: 'cont_op_7',
+          principal_id: 'operator-1',
+          app_kind: 'kyber',
+          source_client: 'desktop',
+          surface: 'incident',
+          resource_references: [],
+          canonical_context: {},
+          summary: { title: 'Investigate the webhook storm' },
+          state_revision: 2,
+          sensitivity: 'restricted',
+          updated_at: '2026-08-02T00:00:00Z',
+        },
+      },
+    }));
+    const continuation = await client.operatorGetContinuation('cont_op_7');
+    expect(continuation.id).toBe('cont_op_7');
+    expect(calls[0].url).toBe('https://api.aether.test/v1/kyber/continuations/cont_op_7');
+  });
+
+  it('surfaces a 404 from the flag-gated operator router as MobileApiError', async () => {
+    const { client } = stubClient(() => ({ status: 404, body: { detail: 'not found' } }));
+    try {
+      await client.operatorRecentContinuations();
+      throw new Error('expected operatorRecentContinuations to reject');
+    } catch (err) {
+      expect(err).toBeInstanceOf(MobileApiError);
+      expect((err as MobileApiError).status).toBe(404);
+    }
+  });
 });

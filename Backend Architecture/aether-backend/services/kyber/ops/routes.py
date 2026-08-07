@@ -45,6 +45,9 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, ForbiddenError
 from shared.logger.logger import get_logger, metrics
 
+from services.client_sync.emitter import enqueue_sync_change
+from services.continuation.service import operator_scope
+
 from ..access.capabilities import (
     ACTION_CLASS_ANNOTATE,
     ACTION_CLASS_FLEET_DESTRUCTIVE,
@@ -377,6 +380,14 @@ async def acknowledge_exception(
     exc = await exception_service.acknowledge(
         exception_id, actor_id=getattr(context, "operator_id", "unknown")
     )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=exception_id,
+    )
     return APIResponse(data={"exception": exc.model_dump()}, meta=_meta(context)).to_dict()
 
 
@@ -402,6 +413,14 @@ async def resolve_exception(
     exc = await exception_service.resolve(
         exception_id, actor_id=getattr(context, "operator_id", "unknown"), note=body.note
     )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=exception_id,
+    )
     return APIResponse(data={"exception": exc.model_dump()}, meta=_meta(context)).to_dict()
 
 
@@ -423,6 +442,14 @@ async def suppress_exception(
         exception_id,
         actor_id=getattr(context, "operator_id", "unknown"),
         reason=body.reason,
+    )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=exception_id,
     )
     return APIResponse(data={"exception": exc.model_dump()}, meta=_meta(context)).to_dict()
 
@@ -567,6 +594,14 @@ async def update_incident(
     incident = await incident_correlator.update_incident(
         incident_id, actor_id=getattr(context, "operator_id", "unknown"), **fields
     )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="incident_changed",
+        resource_kind="incident",
+        resource_id=incident_id,
+    )
     return APIResponse(
         data={
             "incident": incident.model_dump(),
@@ -594,6 +629,14 @@ async def resolve_incident(
         incident_id,
         actor_id=getattr(context, "operator_id", "unknown"),
         root_cause=body.root_cause,
+    )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="incident_changed",
+        resource_kind="incident",
+        resource_id=incident_id,
     )
     return APIResponse(data={"incident": incident.model_dump()}, meta=_meta(context)).to_dict()
 
@@ -794,6 +837,14 @@ async def approve_command(
         approver_id=getattr(authorized, "operator_id", "unknown"),
         role_template_ids=list(getattr(authorized, "role_template_ids", ()) or ()),
     )
+    _operator_id = getattr(authorized, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=command_id,
+    )
     return APIResponse(
         data={
             "command": updated.model_dump(),
@@ -829,6 +880,14 @@ async def execute_command(
     )
     result = await command_service.execute(
         command_id, actor_id=getattr(authorized, "operator_id", "unknown")
+    )
+    _operator_id = getattr(authorized, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=command_id,
     )
     return APIResponse(data=result, meta=_meta(authorized)).to_dict()
 
@@ -866,6 +925,14 @@ async def verify_command(
     )
     result = await command_service.verify(
         command_id, actor_id=getattr(authorized, "operator_id", "unknown")
+    )
+    _operator_id = getattr(authorized, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=command_id,
     )
     return APIResponse(data=result, meta=_meta(authorized)).to_dict()
 

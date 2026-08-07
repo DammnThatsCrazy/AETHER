@@ -15,6 +15,7 @@ import { Card, theme } from '@aether/mobile-ui';
 import { Screen } from '../navigator';
 import { kyberOps, type KyberDevice, type KyberSession } from '../kyberOps';
 import { useOpsFetch, type OpsFetchStatus } from '../useOpsFetch';
+import { OperatorContinuationsPanel } from '../components/OperatorContinuationsPanel';
 import { EmptyState, ErrorState, LoadingState } from '../components/ScreenStatus';
 
 function approvalColor(state: string): string {
@@ -136,6 +137,8 @@ function AccountContent({
       ) : (
         sessions.map((session) => <SessionRow key={session.session_id} session={session} />)
       )}
+
+      <OperatorContinuationsPanel />
 
       <Text style={styles.readOnlyNote}>
         Read-only in this build — device and session actions arrive in a later milestone.

@@ -88,7 +88,10 @@ import {
   verifyCommand,
   CommandReceiptsPanel,
 } from '@kyber/features/kyber-ops';
-import { ContinuationCreateButton } from '@kyber/features/continuation';
+import {
+  ContinuationCreateButton,
+  OperatorContinuationPanel,
+} from '@kyber/features/continuation';
 import type {
   BlastRadius,
   CommandDetail,
@@ -1443,7 +1446,11 @@ export function KyberCommandsPage() {
             )}
             {canReadCommands && <CommandReceiptsPanel />}
             <RequestCommandCard specs={commandTypes.data?.types ?? []} />
-            <ContinuationCreateButton />
+            <OperatorContinuationPanel />
+            <ContinuationCreateButton
+              canCreate={canReadCommands}
+              reason="Operator-initiated continuation from the Commands & containment console"
+            />
           </div>
         </TabsContent>
 

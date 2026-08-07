@@ -27,6 +27,7 @@ import {
   useArchiveInbox,
   type InboxNotification,
 } from '@aether-app/features/notifications/use-inbox';
+import { RecentActivity } from '@aether-app/features/continuation';
 
 const SEVERITY_OPTIONS = ['all', 'P0', 'P1', 'P2', 'P3', 'info'] as const;
 type SeverityFilter = typeof SEVERITY_OPTIONS[number];
@@ -251,6 +252,8 @@ export function NotificationCenterPage() {
         In-app notifications are tenant-scoped. Reads and archives are idempotent; archived
         notifications drop out of the unread count.
       </p>
+
+      <RecentActivity />
     </div>
   );
 }

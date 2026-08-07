@@ -265,6 +265,61 @@ const sourceClassificationOperationsSchema = z.object({
   }).passthrough().optional(),
 }).passthrough();
 
+// ─── Operator continuations (M5b router; mirror packages/shared/continuation.ts) ──
+/** A typed reference to any first-class object (shared ContinuationContext twin). */
+const continuationReferenceSchema = z.object({
+  kind: z.string(),
+  id: z.string(),
+}).passthrough();
+
+/** Human-facing summary of a continuation (shared ContinuationSummary twin). */
+const continuationSummarySchema = z.object({
+  title: z.string(),
+  subtitle: z.string().nullable().optional(),
+  last_meaningful_action: z.string().nullable().optional(),
+}).passthrough();
+
+/**
+ * One durable operator continuation — wire twin of the shared
+ * `ContinuationContext` contract (`packages/shared/continuation.ts`). Additive
+ * fields stay open (passthrough) so the M5b router can grow the payload.
+ */
+const continuationContextSchema = z.object({
+  version: z.string(),
+  id: z.string(),
+  principal_id: z.string(),
+  tenant_id: z.string().nullable().optional(),
+  app_kind: z.enum(['aether', 'kyber']).nullable().optional(),
+  source_client: z.string(),
+  surface: z.string(),
+  resource_references: z.array(continuationReferenceSchema).optional(),
+  canonical_context: z.record(z.unknown()).nullable().optional(),
+  summary: continuationSummarySchema,
+  state_revision: z.number().optional(),
+  sensitivity: z.string().optional(),
+  freshness: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+  updated_at: z.string(),
+}).passthrough();
+
+/**
+ * The backend selection token minted at handoff — wire twin of the shared
+ * `ContinuationSelection` contract. `token` is the deep-link token the operator
+ * copies to their phone.
+ */
+const continuationSelectionSchema = z.object({
+  token: z.string(),
+  tenant_scope: z.string(),
+  principal_id: z.string(),
+  mode: z.enum(['explicit', 'query']).optional(),
+  resource_ids: z.array(z.string()).nullable().optional(),
+  saved_view_id: z.string().nullable().optional(),
+  query_id: z.string().nullable().optional(),
+  as_of: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+  created_at: z.string(),
+}).passthrough();
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
@@ -1944,6 +1999,56 @@ export const api = {
           verified: z.boolean(),
           generated_at: z.string().nullable().optional(),
         }).passthrough()),
+      ).then(r => r.data),
+  },
+
+  // ── Operator continuations (M5b router) ─────────────────────────────────────
+  // Flag-gated by `settings.continuation.enabled`: when the gate is off these
+  // routes 404. The UI hooks gate on `enableKyberContinuations` first, so no
+  // request fires while the flag is off (D8). Shapes mirror the tenant
+  // `/v1/continuations` twins in `packages/shared/continuation.ts`.
+  continuations: {
+    /** GET /v1/kyber/continuations/recent — recent operator continuations. */
+    recent: () =>
+      restClient.get(
+        '/v1/kyber/continuations/recent',
+        wrap(z.object({ continuations: z.array(continuationContextSchema) }).passthrough()),
+      ).then(r => r.data),
+
+    /** GET /v1/kyber/continuations — the operator continuation feed. */
+    list: (params?: { status?: string; limit?: number }) =>
+      restClient.get(
+        `/v1/kyber/continuations${buildQS({ ...params })}`,
+        wrap(z.object({
+          continuations: z.array(continuationContextSchema),
+          count: z.number().optional(),
+        }).passthrough()),
+      ).then(r => r.data),
+
+    /** GET /v1/kyber/continuations/{id} — one operator continuation. */
+    get: (continuationId: string) =>
+      restClient.get(
+        `/v1/kyber/continuations/${encodeURIComponent(continuationId)}`,
+        wrap(continuationContextSchema),
+      ).then(r => r.data),
+
+    /** POST /v1/kyber/continuations — mint an operator continuation. */
+    create: (input: Record<string, unknown>) =>
+      restClient.post('/v1/kyber/continuations', wrap(continuationContextSchema), input).then(r => r.data),
+
+    /** POST /v1/kyber/continuations/{id}/handoff — mint the deep-link selection token. */
+    handoff: (continuationId: string, input?: Record<string, unknown>) =>
+      restClient.post(
+        `/v1/kyber/continuations/${encodeURIComponent(continuationId)}/handoff`,
+        wrap(continuationSelectionSchema),
+        input ?? {},
+      ).then(r => r.data),
+
+    /** DELETE /v1/kyber/continuations/{id} — delete an operator continuation. */
+    remove: (continuationId: string) =>
+      restClient.delete(
+        `/v1/kyber/continuations/${encodeURIComponent(continuationId)}`,
+        wrap(z.object({ deleted: z.boolean() })),
       ).then(r => r.data),
   },
 

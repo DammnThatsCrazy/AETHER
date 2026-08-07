@@ -46,6 +46,7 @@ export type {
   DeepLinkContinuation,
   DeepLinkResolution,
   InstallationRegisterInput,
+  OperatorRecentContinuations,
   RegistrationResult,
   SubscriptionInput,
 } from './client';

@@ -8,7 +8,7 @@ program:
   base_commit: "ead4ba6c7b53783958bebc03bddcede1a2ea7429"   # == origin/main at completion-program start (feat: payment-rails financial-plane provider readiness (#509))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of the original C0 base
   platform_version: "8.12.0"
-  last_landed_checkpoint: C5   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4); C6/C7/C9 remaining
+  last_landed_checkpoint: C6   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4), C6 (M5); C7/C9 remaining
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -173,16 +173,30 @@ milestones:
   - id: C6
     name: continue-on-phone-sync-completion
     depends_on: [C5]
-    status: active
-    lands: [remaining-sync-producers, operator-continuation-router, desktop-continue-on-phone-surfaces, mobile-continue-on-desktop, client-sync-consumption-ui, cross-device-read-ack]
+    status: landed
+    landed: [remaining-sync-producers, operator-continuation-router, operator-client-sync-read-route, desktop-continue-on-phone-surfaces, mobile-continue-on-desktop, client-sync-consumption-ui]
+    deferred_to_later_milestones: [cross-device-read-ack (M7 demo end-to-end + M8 review)]
     note: >
-      C6 wires the remaining 9 sync producers (notification/saved_view/conversation/watchlist/
-      incident/command_receipt/preference_changed/session/installation_revoked) via
-      enqueue_sync_change at their owning mutation sites, adds the operator (Kyber) continuation
-      router in services/continuation/, and builds the desktop continue-on-phone / recent-activity /
-      resume surfaces in both frontends plus mobile continue-on-desktop / resume / send-to-desktop
-      and client-sync consumption UI. Cross-device read/ack state propagation (notification opened
-      on mobile shows read on desktop) verified by tests. Driven by M5 of the completion program.
+      C6 is LANDED via M5 of the completion program. The remaining sync producers are wired —
+      24 enqueue_sync_change callsites across 8 service files emitting all 10 syncChangeTypes
+      (notification/saved_view/conversation/watchlist/incident/command_receipt/preference_changed/
+      session/installation_revoked/continuation), tenant-scoped t:{tenant_id} AND operator-scoped
+      o:{operator_id}; pinned by tests/unit/test_client_sync_producer_coverage.py (21 tests). The
+      operator (Kyber) continuation router landed (services/continuation/operator_routes.py,
+      /v1/kyber/continuations — create/recent/get/patch/handoff/delete, scoped to the authenticated
+      operator_id, flag-gated OFF like the tenant plane, 15 tests) and the operator client-sync
+      read route closed the gap (services/client_sync/operator_routes.py, /v1/kyber/client-sync
+      reading o:{operator_id} via the SAME durable feed — no second sync feed, 3 new tests). Desktop
+      continue-on-phone surfaces: frontend/aether (continue-on-phone + recent-activity on the Noesis
+      + notification-center pages, cursor-paged client-sync consumption, flags enableContinuations/
+      enableClientSyncConsumption default OFF, 13 tests) + frontend/kyber (operator continuation
+      create button + panel on the EXISTING /kyber-commands page behind enableKyberContinuations OFF,
+      13 tests). Mobile continue-on-desktop: aether-mobile AccountScreen ContinueOnDesktopPanel +
+      kyber-mobile AccountScreen OperatorContinuationsPanel via @aether/mobile-core additions
+      (operatorRecentContinuations/operatorGetContinuation). Cross-device read/ack propagation is
+      deferred to M7 (demo end-to-end) + M8 (review) since the durable feed + read surfaces exist and
+      the consuming UI for ack state lands with the demo. All surfaces flag-gated OFF; no runtime
+      behavior change with flags off.
   - id: C7
     name: governed-mobile-actions
     depends_on: [C6]
@@ -293,15 +307,15 @@ open_pr_overlap:
     disposition: parked
 
 quality:                                     # updated at each milestone boundary from real gate runs
-  ci_check: "make ci-check EXIT=0 (53 gates) confirmed green at the C3 full-gate checkpoint (5fbc8a63) and re-confirmed on the C4 mobile-core+auth tip (fd698679) — includes npm ci lockfile integrity for the new workspace"
+  ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the C6 (M5) tip — sync producers + operator continuation router + operator client-sync read route + desktop/mobile continue-on-phone surfaces all integrated and gated"
   mobile_sdk: "packages/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 9 tests (5 client + 4 PKCE/secure-store) green in ci-check via npm test --workspaces"
   mobile_apps: "apps/aether-mobile + apps/kyber-mobile scaffolds; scripts/mobile_build_check.py enforces distinct planes/bundles + scaffold completeness (4 tests); native compile externally_blocked (no macOS/Xcode/Android SDK/Expo here)"
-  unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability)"
-  contract_tests: "34 contract parity tests pass (12 continuation + 5 sync-event + notification + delivery-receipt incl. push channel)"
+  unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability) — backend 3517 passed incl. 21 producer-coverage + 15 operator-continuation + 3 operator-client-sync tests"
+  contract_tests: "190 contract parity tests pass (12 continuation + 5 sync-event + notification + delivery-receipt incl. push channel + route/capability/ownership)"
   provider_adapters: "21 adapter tests (fake path + production guard + injected-transport real-path request/response mapping); registry registers apns/fcm/web_push/email"
   deep_link_resolve: "12 tests (fail-closed unknown/unowned/revoked/cross-scope/cross-plane/expired all uniform; step-up gate)"
   credentials_tooling: "9 tests (env-var derivation, missing/invalid/configured states, --strict blocks required-profile creds, no secret leak)"
-  frontend_tests: "npm typecheck + build + test pass with new TS twins (delivery-receipt push channel)"
+  frontend_tests: "npm typecheck + build + test pass — frontend/aether 55 files/314 tests, frontend/kyber 57 files/498 tests, packages/mobile-core 23 tests (operator continuation SDK + barrel surface); ownership validator + ts public exports green"
   migration_single_head: "true (head=20260822_mobile_installations; chains 20260820->20260821->20260822 from 20260812_credential_platform)"
   completion_baseline: "completion program re-based on origin/main head ead4ba6c (#509); pre-existing stale REPO-INDEX (591->592 docs count) repaired (0707e8cb) + 2 pre-existing source-linked stamps reviewed+updated (9d25c42b); make docs-check 38/38 green at completion start"
   ci_note: "intermediate superseded SHAs show a `validate` failure caused solely by E2E_TENANT_RESULT=cancelled (concurrency cancellation from the next push); every real gate passed. Only the final tip SHA is authoritative."
@@ -310,12 +324,12 @@ quality:                                     # updated at each milestone boundar
 # Completion program is IN FLIGHT (M0-M8): C6/C7 surfaces + M4/M7 additions are not yet
 # landed; update this section only where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); completion program (C6/C7/C9) in flight on claude/aether-turnkey-completion-7m3x9"
+  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7/C9 remaining on claude/aether-turnkey-completion-7m3x9"
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
   mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store)"
-  mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client over the existing /v1/kyber/ops/* + /v1/agent/* + /v1/kyber/auth|devices/* routes); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
+  mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth; M5: continue-on-desktop/resume via ContinueOnDesktopPanel) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client; M5: OperatorContinuationsPanel with 404-safe resume); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
   credential: externally_blocked            # no AWS/APNs/FCM/email/Apple/Google; contracts + fakes + preflight only
   design_partner: partial
   store_submission: externally_blocked
   controlled_production: externally_blocked
-  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 landed; C6/C7/C9 building to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"
+  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 + C6 landed; C7/C9 building to make ci-check green; native app compile + credentials + store distribution remain externally_blocked, not faked)"

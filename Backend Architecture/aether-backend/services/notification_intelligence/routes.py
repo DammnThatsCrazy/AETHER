@@ -63,6 +63,7 @@ from services.notification_intelligence.inbox import (
     mark_notification_read as _inbox_mark_read,
     unread_notification_count as _inbox_unread_count,
 )
+from services.client_sync.emitter import enqueue_sync_change
 
 logger = get_logger("aether.service.notification_intelligence")
 
@@ -505,6 +506,12 @@ async def inbox_read_all(request: Request):
     request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
     count = await _inbox_mark_all_read(tenant_id)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant_id}",
+        principal_id=tenant_id,
+        change_type="notification_changed",
+        resource_kind="notification_inbox",
+    )
     return APIResponse(data={"read": count}).to_dict()
 
 
@@ -514,6 +521,13 @@ async def inbox_mark_read(notification_id: str, request: Request):
     request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
     row = await _inbox_mark_read(tenant_id, notification_id)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant_id}",
+        principal_id=tenant_id,
+        change_type="notification_changed",
+        resource_kind="notification_inbox",
+        resource_id=notification_id,
+    )
     return APIResponse(data=row).to_dict()
 
 
@@ -523,6 +537,13 @@ async def inbox_archive(notification_id: str, request: Request):
     request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
     row = await _inbox_archive(tenant_id, notification_id)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant_id}",
+        principal_id=tenant_id,
+        change_type="notification_changed",
+        resource_kind="notification_inbox",
+        resource_id=notification_id,
+    )
     return APIResponse(data=row).to_dict()
 
 
@@ -569,6 +590,13 @@ async def update_config(body: UpdateConfigRequest, request: Request, tenantId: s
     config_dict["tenant_id"] = tenantId
     result = await _config_repo.upsert(tenantId, config_dict)
     result.pop("slack_bot_token_ref", None)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenantId}",
+        principal_id=tenantId,
+        change_type="preference_changed",
+        resource_kind="notification_config",
+        resource_id=tenantId,
+    )
     return APIResponse(data=result).to_dict()
 
 

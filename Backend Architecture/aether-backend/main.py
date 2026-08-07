@@ -1361,15 +1361,21 @@ def create_app() -> FastAPI:
 
     if settings.continuation.enabled:
         from services.continuation.routes import router as continuation_router
+        from services.continuation.operator_routes import operator_router as kyber_continuation_router
         app.include_router(continuation_router, tags=["Continuation Plane"])
-        logger.info("Continuation plane mounted (/v1/continuations)")
+        app.include_router(kyber_continuation_router, tags=["Kyber Continuations"])
+        logger.info(
+            "Continuation plane mounted (/v1/continuations, /v1/kyber/continuations)"
+        )
     else:
         logger.info("Continuation plane disabled (AETHER_CONTINUATION_ENABLED=false)")
 
     if settings.client_sync.enabled:
         from services.client_sync.routes import router as client_sync_router
         app.include_router(client_sync_router, tags=["Client Sync"])
-        logger.info("Client-sync feed mounted (/v1/client-sync)")
+        from services.client_sync.operator_routes import operator_router as kyber_client_sync_router
+        app.include_router(kyber_client_sync_router, tags=["Kyber Client Sync"])
+        logger.info("Client-sync feed mounted (/v1/client-sync, /v1/kyber/client-sync)")
     else:
         logger.info("Client-sync feed disabled (AETHER_CLIENT_SYNC_ENABLED=false)")
 
