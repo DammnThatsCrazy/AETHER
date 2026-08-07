@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "bb1aef2"
+last_synced_commit: "45067ae"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -912,9 +912,13 @@ Configure a reward delivery rail for the authenticated tenant.
 Rails: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim`.
 Beta (config only, no delivery): `stripe_credit` | `loyalty_points` | `coupon` | `internal_credit` | `x402_credit`.
 
+Secret material under `config` (e.g. `signing_secret`, `api_key`) is
+**write-only**: every rail response and audit state returns `<redacted>` plus a
+`has_<key>` marker and a short non-reversible fingerprint — never the value.
+
 ### GET /v1/rewards/rails
 
-List configured rails for the authenticated tenant.
+List configured rails for the authenticated tenant (secrets redacted).
 
 ### GET /v1/rewards/rails/{id}
 
@@ -2750,6 +2754,23 @@ Connector setup + synchronization (`/v1/integrations/connectors/*`):
 - `GET /v1/integrations/connectors/{type}/sync-runs` — durable sync-run history
   (the customer-visible progress surface; §12.4 fields including cursor movement,
   record counts, and a safe error classification on failure).
+
+Connector webhook endpoints (server-side tenant binding):
+
+- `POST /v1/integrations/connectors/{type}/webhook-endpoints` — mint a durable,
+  high-entropy public webhook endpoint id (`cwe_…`) bound server-side to
+  exactly one (tenant, connector, environment).
+- `GET /v1/integrations/connectors/{type}/webhook-endpoints` — list endpoints.
+- `POST /v1/integrations/connectors/{type}/webhook-endpoints/rotate` — revoke
+  active endpoints for the slot and mint a fresh one.
+- `POST /v1/integrations/connectors/{type}/webhook-endpoints/{endpoint_id}/revoke`
+  — revoke a single endpoint.
+- Public delivery targets
+  `POST /v1/integrations/webhooks/connectors/{type}/{endpoint_id}` (signature
+  verification still applies — the endpoint id is routing, not authentication).
+  The legacy header-tenant route (`X-Aether-Tenant-ID`) is local-only behind
+  `AETHER_CONNECTOR_LEGACY_WEBHOOK_ROUTE_ENABLED` and returns a uniform 404
+  everywhere else.
 
 Communications tenant surface (`/v1/comms/*`):
 

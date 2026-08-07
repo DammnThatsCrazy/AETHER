@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "41c79d4"
+last_synced_commit: "45067ae"
 ---
 # Commerce Operator Runbook
 
@@ -36,6 +36,12 @@ last_synced_commit: "41c79d4"
 3. Retry via `SettlementTracker.retry(tenant_id, settlement_id)` or equivalent API.
 4. If facilitator is unhealthy: update health via internal API, select alternate facilitator on retry.
 
+> Expected steady state outside local: newly started settlements park in
+> `PENDING` ("awaiting on-chain finality confirmation") — `SETTLED` is asserted
+> only by the reconciliation path or an explicit operator action, never
+> automatically at start. A growing PENDING backlog with no reconciliation
+> progress is the actionable signal, not PENDING itself.
+
 ## 3. Facilitator outage
 
 **Symptom:** `avg_latency_ms` climbing, `success_rate` dropping on Command Facilitator panel.
@@ -50,6 +56,10 @@ last_synced_commit: "41c79d4"
    selection — freshly seeded facilitators are selectable before their first
    health observation.
 3. If all facilitators down: verification falls back to local verification per chain.
+4. Outside the local environment, LOCAL-mode facilitators (the internal Aether
+   verifier seed) are never auto-selected and never confer verification — a
+   tenant with only the internal seed routes straight to on-chain RPC
+   verification.
 
 ## 4. Duplicate payment detected
 
