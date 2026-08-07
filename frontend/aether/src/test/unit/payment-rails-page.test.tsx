@@ -393,8 +393,9 @@ describe('Aether Payment Rails page', () => {
   });
 
   it('renders per-session delivery lifecycle (receipt stage) in the drawer', async () => {
+    const detailSession = SESSION_FIXTURES[1]!;
     mocks.fetchFundingSession.mockResolvedValue({
-      session: SESSION_FIXTURES[1],
+      session: detailSession,
       reconciliation: null,
       receipts: [
         {
@@ -403,7 +404,7 @@ describe('Aether Payment Rails page', () => {
           provider: 'coinbase',
           environment: 'sandbox',
           provider_event_id: 'evt_1',
-          funding_session_id: SESSION_FIXTURES[1].id,
+          funding_session_id: detailSession.id,
           canonical_event_ids: ['ce_1', 'ce_2'],
           outbox_record_id: 'ce_1',
           outbox_publication_state: 'published',
