@@ -326,10 +326,10 @@ open_pr_overlap:
     disposition: parked
 
 quality:                                     # updated at each milestone boundary from real gate runs
-  ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the C6 (M5) tip — sync producers + operator continuation router + operator client-sync read route + desktop/mobile continue-on-phone surfaces all integrated and gated"
+  ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the C7 (M6) tip — mobile action adapter (read-only availability digest) + mobile-bound proof-key attestation + SDK typed step-up/proof-keys/actions/receipts + pure-TS P256 signer + Kyber Mobile Actions/Receipts screens all integrated and gated"
   mobile_sdk: "packages/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 46 tests green (client/PKCE/secure-store/offline + 11 kyber-client step-up/proof-keys/actions/receipts + 12 P256 signer incl. RFC 6979 A.2.5 KAT + derivePublicKey round-trip) via npm test --workspaces"
   mobile_apps: "apps/aether-mobile + apps/kyber-mobile scaffolds; scripts/mobile_build_check.py enforces distinct planes/bundles + scaffold completeness (4 tests); native compile externally_blocked (no macOS/Xcode/Android SDK/Expo here)"
-  unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability) — backend 3517 passed incl. 21 producer-coverage + 15 operator-continuation + 3 operator-client-sync tests"
+  unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability) — root 4951 passed, backend 3540 passed (incl. 12 mobile-action + 11 mobile-proof-key + 21 producer-coverage + 15 operator-continuation + 3 operator-client-sync tests), compliance 361 passed"
   contract_tests: "190 contract parity tests pass (12 continuation + 5 sync-event + notification + delivery-receipt incl. push channel + route/capability/ownership)"
   provider_adapters: "21 adapter tests (fake path + production guard + injected-transport real-path request/response mapping); registry registers apns/fcm/web_push/email"
   deep_link_resolve: "12 tests (fail-closed unknown/unowned/revoked/cross-scope/cross-plane/expired all uniform; step-up gate)"
