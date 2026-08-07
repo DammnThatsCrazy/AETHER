@@ -31,6 +31,44 @@ from shared.logger.logger import get_logger, metrics
 logger = get_logger("aether.lake")
 
 
+async def _tenant_scoped_find(
+    repo: BaseRepository,
+    base_filters: dict,
+    tenant_id: Optional[str],
+    *,
+    limit: int,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+) -> list[dict]:
+    """Tenant-scoped lake read: a tenant's own rows PLUS global tenant-less rows,
+    never another tenant's rows.
+
+    The lake tiers are written with mixed tenancy — some records carry a real
+    ``tenant_id`` (SDK ingestion, card-linked, explicit Gold materialization)
+    while others are global/tenant-less (feature ETL, on-chain observations).
+    A tenant-facing read must therefore see its own rows and the global rows,
+    but not another tenant's. Primary (``tenant_id = X``) and legacy
+    (``tenant_id IS NULL OR ''``) result sets are disjoint by construction, so
+    they are simply concatenated (tenant first) and capped.
+
+    ``tenant_id=None`` is an explicit, auditable cross-tenant read reserved for
+    ETL / global-materialization jobs that have no single owning tenant.
+    """
+    if tenant_id is None:
+        return await repo.find_many(
+            filters=base_filters, limit=limit, sort_by=sort_by, sort_order=sort_order
+        )
+    primary = await repo.find_many(
+        filters={**base_filters, "tenant_id": tenant_id},
+        limit=limit, sort_by=sort_by, sort_order=sort_order,
+    )
+    legacy = await repo.find_many(
+        filters={**base_filters, "tenant_id": ""},
+        limit=limit, sort_by=sort_by, sort_order=sort_order,
+    )
+    return (primary + legacy)[:limit]
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PROVENANCE ENUMS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -353,10 +391,19 @@ class SilverRepository(BaseRepository):
 
         return result
 
-    async def get_entity(self, entity_id: str, entity_type: str) -> list[dict]:
-        """Get all Silver records for an entity across sources."""
-        return await self.find_many(
-            filters={"entity_id": entity_id, "entity_type": entity_type}, limit=100
+    async def get_entity(
+        self, entity_id: str, entity_type: str, *, tenant_id: Optional[str]
+    ) -> list[dict]:
+        """Get Silver records for an entity, scoped to a tenant.
+
+        Pass the caller's ``tenant_id`` to return that tenant's rows plus global
+        tenant-less rows (never another tenant's). Pass ``tenant_id=None`` ONLY
+        for cross-tenant ETL/graph jobs — an explicit, auditable opt-out. The
+        keyword is required (no default) so a caller can never silently omit it.
+        """
+        return await _tenant_scoped_find(
+            self, {"entity_id": entity_id, "entity_type": entity_type},
+            tenant_id, limit=100,
         )
 
     async def rollback_by_source_tag(self, source_tag: str) -> int:
@@ -403,8 +450,12 @@ class GoldRepository(BaseRepository):
         lineage_id links this Gold record back to its Bronze source manifests
         and data rights grants for audit, revocation, and compliance.
         """
+        # tenant_id is part of the identity: without it, two tenants
+        # materializing the same metric for the same entity collide on one
+        # record_id and silently overwrite each other's Gold value. Mirrors the
+        # Silver record_id, which already includes tenant_id.
         record_id = hashlib.sha256(
-            f"{metric_name}:{entity_id}:{entity_type}".encode()
+            f"{tenant_id}:{metric_name}:{entity_id}:{entity_type}".encode()
         ).hexdigest()[:24]
 
         data = {
@@ -436,22 +487,33 @@ class GoldRepository(BaseRepository):
         entity_id: str,
         entity_type: str = "",
         metric_name: str = "",
+        *,
+        tenant_id: Optional[str],
     ) -> list[dict]:
-        """Query Gold metrics for an entity."""
+        """Query Gold metrics for an entity, scoped to a tenant.
+
+        Returns the tenant's rows plus global tenant-less rows (never another
+        tenant's). ``tenant_id=None`` is an explicit cross-tenant read for ETL.
+        The keyword is required so a caller can never silently omit tenant scope.
+        """
         filters: dict = {"entity_id": entity_id}
         if entity_type:
             filters["entity_type"] = entity_type
         if metric_name:
             filters["metric_name"] = metric_name
-        return await self.find_many(filters=filters, limit=200)
+        return await _tenant_scoped_find(self, filters, tenant_id, limit=200)
 
-    async def get_highlights(self, metric_name: str, limit: int = 50) -> list[dict]:
-        """Get top highlights for a metric (e.g., top wallet risk scores)."""
-        return await self.find_many(
-            filters={"metric_name": metric_name},
-            limit=limit,
-            sort_by="updated_at",
-            sort_order="desc",
+    async def get_highlights(
+        self, metric_name: str, limit: int = 50, *, tenant_id: Optional[str]
+    ) -> list[dict]:
+        """Get top highlights for a metric (e.g., top wallet risk scores).
+
+        Scoped to a tenant's rows plus global tenant-less rows.
+        ``tenant_id=None`` is an explicit cross-tenant read for ETL.
+        """
+        return await _tenant_scoped_find(
+            self, {"metric_name": metric_name}, tenant_id,
+            limit=limit, sort_by="updated_at", sort_order="desc",
         )
 
 

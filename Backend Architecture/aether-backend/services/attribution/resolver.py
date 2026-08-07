@@ -199,9 +199,16 @@ class AttributionResolver:
 
         # Step 2 — filter by lookback window
         # Historical recomputation must evaluate lookback relative to the
-        # conversion, not wall-clock time. Callers that omit an event timestamp
-        # retain the legacy "now" behavior.
+        # conversion, not wall-clock time. A conversion event with no valid
+        # timestamp has no anchor, so refuse to attribute rather than silently
+        # anchoring the window to now() (which over-credits).
         reference_time = _event_reference_time(event)
+        if reference_time is None:
+            logger.warning(
+                "Attribution skipped for user=%s: conversion event has no valid timestamp",
+                user_id,
+            )
+            return AttributionResult(credits=[], model_used="none", total_credit=0.0)
         # The canonical measurement engine can replay an immutable model-config
         # snapshot whose click/view horizon is longer than this resolver's
         # process-wide default.  An explicit per-run horizon must therefore win;
@@ -243,7 +250,12 @@ class AttributionResolver:
 
     @staticmethod
     def _parse_touchpoints(raw: list[dict[str, Any]]) -> list[Touchpoint]:
-        """Convert raw dicts to ``Touchpoint`` objects with safe defaults."""
+        """Convert raw dicts to ``Touchpoint`` objects.
+
+        A touchpoint with a missing or unparseable timestamp is EXCLUDED rather
+        than stamped with now(): fabricating a time would place it inside every
+        lookback window and over-credit it.
+        """
         touchpoints: list[Touchpoint] = []
         for item in raw:
             ts = item.get("timestamp")
@@ -251,9 +263,11 @@ class AttributionResolver:
                 try:
                     ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 except (ValueError, AttributeError):
-                    ts = datetime.now(timezone.utc)
+                    logger.warning("Excluding touchpoint with invalid timestamp: %r", item.get("timestamp"))
+                    continue
             elif not isinstance(ts, datetime):
-                ts = datetime.now(timezone.utc)
+                logger.warning("Excluding touchpoint with missing timestamp")
+                continue
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
 
@@ -270,7 +284,14 @@ class AttributionResolver:
         return touchpoints
 
 
-def _event_reference_time(event: dict[str, Any]) -> datetime:
+def _event_reference_time(event: dict[str, Any]) -> Optional[datetime]:
+    """Return the conversion event's reference time, or None when it is absent
+    or unparseable.
+
+    Callers must treat None as "cannot anchor attribution" and refuse to
+    attribute — never silently substitute now(), which would score touchpoints
+    against a wall-clock window unrelated to when the conversion happened.
+    """
     raw = event.get("timestamp") or event.get("occurred_at") or event.get("created_at")
     if isinstance(raw, datetime):
         return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
@@ -279,5 +300,5 @@ def _event_reference_time(event: dict[str, Any]) -> datetime:
             parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
             return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
         except ValueError:
-            pass
-    return datetime.now(timezone.utc)
+            return None
+    return None

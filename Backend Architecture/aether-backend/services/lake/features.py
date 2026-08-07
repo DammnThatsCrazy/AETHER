@@ -37,11 +37,12 @@ async def materialize_wallet_features(
         "materialized_at": utc_now().isoformat(),
     }
 
-    # Gather from Silver tiers
-    onchain_records = await silver_onchain.get_entity(wallet_address, "wallet")
-    market_records = await silver_market.get_entity(wallet_address, "wallet")
-    social_records = await silver_social.get_entity(wallet_address, "wallet")
-    identity_records = await silver_identity.get_entity(wallet_address, "wallet")
+    # Gather from Silver tiers. This is a global feature job with no single
+    # owning tenant, so it reads cross-tenant explicitly (tenant_id=None).
+    onchain_records = await silver_onchain.get_entity(wallet_address, "wallet", tenant_id=None)
+    market_records = await silver_market.get_entity(wallet_address, "wallet", tenant_id=None)
+    social_records = await silver_social.get_entity(wallet_address, "wallet", tenant_id=None)
+    identity_records = await silver_identity.get_entity(wallet_address, "wallet", tenant_id=None)
 
     # Transaction features
     features["tx_count"] = len(onchain_records)
@@ -77,7 +78,8 @@ async def materialize_protocol_features(
         "materialized_at": utc_now().isoformat(),
     }
 
-    market_records = await silver_market.get_entity(protocol_id, "protocol")
+    # Global protocol feature job — explicit cross-tenant read.
+    market_records = await silver_market.get_entity(protocol_id, "protocol", tenant_id=None)
     features["data_points"] = len(market_records)
 
     await gold_market.materialize(

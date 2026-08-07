@@ -13,6 +13,19 @@ const QUEUE_STORAGE_KEY = 'event_queue';
 const MAX_STORED_EVENTS = 1000;
 const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 
+/**
+ * A non-retryable ingestion failure (a non-429 4xx): the batch is malformed or
+ * rejected and will never succeed on retry, so it is dropped (with onError)
+ * instead of being returned to the queue head where it would block every later
+ * event behind it forever.
+ */
+class TerminalIngestError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'TerminalIngestError';
+  }
+}
+
 interface QueueConfig {
   endpoint: string;
   apiKey: string;
@@ -177,9 +190,18 @@ export class EventQueue {
       this.persistQueue();
     } catch (error) {
       this.config.onAttempt?.(Date.now() - start, false);
-      this.queue.unshift(...allowedEvents);
-      this.persistQueue();
-      this.config.onError?.(error as Error, allowedEvents);
+      if (error instanceof TerminalIngestError) {
+        // Poison batch: drop it (surfaced via onError) rather than unshifting to
+        // the head, so one permanently-rejected batch can't block the queue.
+        this.persistQueue();
+        this.config.onError?.(error, allowedEvents);
+      } else {
+        // Transient failure (5xx exhausted, rate-limit, network): return the
+        // batch to the head so the next flush retries it.
+        this.queue.unshift(...allowedEvents);
+        this.persistQueue();
+        this.config.onError?.(error as Error, allowedEvents);
+      }
     } finally {
       this.isFlushing = false;
       if (this.queue.length >= this.config.batchSize) this.flush();
@@ -193,7 +215,15 @@ export class EventQueue {
   destroy(): void {
     this.isDestroyed = true;
     if (this.flushTimer) { clearInterval(this.flushTimer); this.flushTimer = null; }
-    if (this.queue.length > 0) this.sendBeacon(this.queue);
+    if (this.queue.length > 0) {
+      // Persist BEFORE the beacon: sendBeacon is fire-and-forget and cannot
+      // confirm delivery, so a failed keepalive send must remain recoverable
+      // via restoreQueue() on the next load rather than being lost. Events
+      // carry a stable id, so a re-send after a beacon that actually succeeded
+      // is deduped at the backend (at-least-once beats at-most-once here).
+      this.persistQueue();
+      this.sendBeacon(this.queue);
+    }
     this.queue = [];
   }
 
@@ -249,6 +279,15 @@ export class EventQueue {
         const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10);
         await this.sleep(retryAfter * 1000);
         return this.sendBatch(events, retryCount + 1);
+      }
+
+      if (response.status >= 400 && response.status < 500) {
+        // Non-429 4xx is a terminal rejection (malformed/poison batch): retrying
+        // it forever would block the queue head. Mark it terminal so flush drops it.
+        throw new TerminalIngestError(
+          response.status,
+          `Aether API error: ${response.status} ${response.statusText}`,
+        );
       }
 
       throw new Error(`Aether API error: ${response.status} ${response.statusText}`);
@@ -330,6 +369,10 @@ export class EventQueue {
     if (typeof window === 'undefined') return;
     window.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.queue.length > 0) {
+        // Persist first: the keepalive beacon is fire-and-forget, so if it fails
+        // (network down, or the queue exceeds the browser's ~64KB keepalive cap)
+        // the events survive for restoreQueue() on the next page load.
+        this.persistQueue();
         const sent = this.sendBeacon(this.queue);
         if (sent) this.queue = [];
         // If beacon rejected, leave queue intact — periodic flush will retry
@@ -337,6 +380,7 @@ export class EventQueue {
     });
     window.addEventListener('pagehide', () => {
       if (this.queue.length > 0) {
+        this.persistQueue();
         const sent = this.sendBeacon(this.queue);
         if (sent) this.queue = [];
       }

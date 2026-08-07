@@ -2,9 +2,10 @@
 // Aether SDK — SDK Health Agent (React Native)
 //
 // Emits periodic fleet heartbeats to /v1/diagnostics/sdk/heartbeat so installed
-// mobile SDKs show up in the tenant's SDK fleet view, and fetches the remote
-// config manifest on startup. Heartbeats are fire-and-forget and never block
-// the app. Mirrors packages/web SDKHealthAgent behavior for parity.
+// mobile SDKs show up in the tenant's SDK fleet view. Heartbeats are
+// fire-and-forget and never block the app. Mirrors packages/web SDKHealthAgent
+// behavior for parity. (Remote-manifest fetch + apply is owned by the
+// RemoteManifest module, so it is fetched once and actually applied.)
 // =============================================================================
 
 import { Platform } from 'react-native';
@@ -90,7 +91,6 @@ export class RNHealthAgent {
     void this.loadSdkId().then(() => {
       void this.sendHeartbeat();
     });
-    void this.fetchManifest();
     this.timer = setInterval(() => { void this.sendHeartbeat(); }, this.config.heartbeatIntervalMs);
   }
 
@@ -124,17 +124,4 @@ export class RNHealthAgent {
     }
   }
 
-  private async fetchManifest(): Promise<void> {
-    try {
-      const url = `${this.config.endpoint}/v1/config/sdk/manifest?sdk_id=${encodeURIComponent(this.sdkId)}&sdk_version=${SDK_VERSION}`;
-      await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'X-Aether-SDK': this.platform(),
-        },
-      });
-    } catch {
-      // Non-fatal.
-    }
-  }
 }

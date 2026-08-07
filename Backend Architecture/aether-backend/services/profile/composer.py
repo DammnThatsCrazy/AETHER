@@ -200,7 +200,7 @@ class ProfileComposer:
              {}, include_graph),
             ("intelligence",
              lambda: self._compose_intelligence(user_id, tenant_id), {}, include_intelligence),
-            ("lake", lambda: self._compose_lake_data(user_id), {}, include_lake),
+            ("lake", lambda: self._compose_lake_data(user_id, tenant_id), {}, include_lake),
             # Agent economic Profile360 telemetry (opt-in/additive) — human/user
             # profile responses are unchanged unless an agent route enables it.
             ("agent_economic",
@@ -391,7 +391,9 @@ class ProfileComposer:
         score = await self._scorer.compute(entity_id=user_id, entity_type="human")
 
         # Gold-tier identity features
-        gold_features = await gold_identity.get_metrics(user_id, entity_type="wallet")
+        gold_features = await gold_identity.get_metrics(
+            user_id, entity_type="wallet", tenant_id=tenant_id
+        )
         features = gold_features[0].get("value", {}) if gold_features else {}
 
         return {
@@ -399,8 +401,8 @@ class ProfileComposer:
             "features": features,
         }
 
-    async def _compose_lake_data(self, user_id: str) -> dict:
-        """Gather Gold-tier data across all lake domains."""
+    async def _compose_lake_data(self, user_id: str, tenant_id: str) -> dict:
+        """Gather Gold-tier data across all lake domains, scoped to the tenant."""
         result: dict[str, Any] = {}
         for domain_name, repo in [
             ("identity", gold_identity),
@@ -408,7 +410,7 @@ class ProfileComposer:
             ("onchain", gold_onchain),
             ("social", gold_social),
         ]:
-            records = await repo.get_metrics(user_id)
+            records = await repo.get_metrics(user_id, tenant_id=tenant_id)
             if records:
                 result[domain_name] = [r.get("value", {}) for r in records]
         return result
@@ -453,14 +455,21 @@ class ProfileComposer:
             "type": entity_type,
             "name": core.get("name") or core.get("display_name") or entity_id,
             "displayLabel": core.get("display_name") or core.get("name") or entity_id,
-            "createdAt": core.get("created_at") or full.get("computed_at"),
-            "updatedAt": core.get("updated_at") or full.get("computed_at"),
+            # Absence is not zero: an unknown score/timestamp is null, not a
+            # fabricated 0 or the compute time. The Kyber Entity type already
+            # accepts number|null / boolean|null / string|undefined and renders
+            # "—"/"Unavailable"; `readiness` carries the typed per-dimension
+            # absence descriptor so a real measured 0 is distinguishable from
+            # "not computed".
+            "createdAt": core.get("created_at"),
+            "updatedAt": core.get("updated_at"),
             "health": {"status": core.get("status", "unknown"), "lastChecked": full.get("computed_at")},
-            "trustScore": core.get("trust_score", 0),
-            "riskScore": core.get("risk_score", 0),
-            "anomalyScore": core.get("anomaly_score", 0),
-            "needsHelp": bool(core.get("needs_help", False)),
+            "trustScore": core.get("trust_score"),
+            "riskScore": core.get("risk_score"),
+            "anomalyScore": core.get("anomaly_score"),
+            "needsHelp": core.get("needs_help"),
             "tags": core.get("tags", []),
+            "readiness": full.get("readiness"),
             "metadata": core,
         }
         sections = {
@@ -506,13 +515,13 @@ class ProfileComposer:
         return await self._analytics.query_events(tenant_id, filters, limit=limit)
 
     async def get_provenance(
-        self, user_id: str, field: str = ""
+        self, user_id: str, field: str = "", *, tenant_id: Optional[str]
     ) -> dict:
-        """Get provenance info for a profile field or entity."""
+        """Get provenance info for a profile field or entity, scoped to a tenant."""
         # Lake Silver records show source/source_tag for each data point
-        identity_records = await silver_identity.get_entity(user_id, "wallet")
-        onchain_records = await silver_onchain.get_entity(user_id, "wallet")
-        social_records = await silver_social.get_entity(user_id, "wallet")
+        identity_records = await silver_identity.get_entity(user_id, "wallet", tenant_id=tenant_id)
+        onchain_records = await silver_onchain.get_entity(user_id, "wallet", tenant_id=tenant_id)
+        social_records = await silver_social.get_entity(user_id, "wallet", tenant_id=tenant_id)
 
         return {
             "entity_id": user_id,

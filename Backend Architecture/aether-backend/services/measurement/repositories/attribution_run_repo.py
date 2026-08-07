@@ -18,6 +18,23 @@ _IS_LOCAL = os.getenv("AETHER_ENV", "local").lower() == "local"
 
 _local_runs: dict[str, dict[str, Any]] = {}
 _local_credits: list[dict[str, Any]] = []
+# Model configs share the same dual-mode store idiom as runs/credits: in local
+# mode (no pool) both the write (API) and the read (engine.get_model_config)
+# hit this one module object, so an API-created config is actually visible to
+# the engine. Production persists to the attribution_model_configs table.
+_local_model_configs: dict[str, list[dict[str, Any]]] = {}
+
+
+def _reset_local_attribution() -> None:
+    """Test helper — clear the in-memory attribution stores between cases.
+
+    reset_in_memory_stores() operates on BaseRepository tables and does not
+    touch these module-level dicts, so tests that exercise the config→engine
+    bridge must reset them explicitly to avoid cross-test bleed.
+    """
+    _local_runs.clear()
+    _local_credits.clear()
+    _local_model_configs.clear()
 
 _RUN_MUTABLE_COLUMNS = (
     "status", "failure_reason", "is_active", "completed_at", "started_at",
@@ -63,6 +80,9 @@ class AttributionRunRepository:
             return None
         pool = await self._pool()
         if pool is None:
+            for cfg in _local_model_configs.get(tenant_id, []):
+                if str(cfg.get("model_config_id")) == str(model_config_id):
+                    return cfg
             return None
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -74,6 +94,81 @@ class AttributionRunRepository:
                 config_uuid,
             )
         return dict(row) if row else None
+
+    async def create_model_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Persist a versioned attribution model config so the engine can read it.
+
+        Local mode writes the shared module store the engine reads via
+        get_model_config; production upserts the typed attribution_model_configs
+        table. This closes the split where the API wrote a per-worker in-memory
+        dict that the engine (which queries the table) never saw.
+        """
+        config.setdefault("model_config_id", str(uuid4()))
+        now = datetime.now(timezone.utc).isoformat()
+        config.setdefault("created_at", now)
+        config.setdefault("effective_from", now)
+        config.setdefault("status", "active")
+        tenant_id = config.get("tenant_id")
+
+        pool = await self._pool()
+        if pool is None:
+            _local_model_configs.setdefault(tenant_id, []).append(config)
+            return config
+
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO attribution_model_configs (
+                    model_config_id, tenant_id, name, model_type, model_version,
+                    conversion_types, click_lookback_window, view_lookback_window,
+                    session_timeout_seconds, direct_traffic_policy,
+                    identity_confidence_min, fraud_policy, status,
+                    effective_from, created_at
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                ON CONFLICT (tenant_id, model_config_id) DO UPDATE SET
+                    name=EXCLUDED.name,
+                    model_type=EXCLUDED.model_type,
+                    model_version=EXCLUDED.model_version,
+                    conversion_types=EXCLUDED.conversion_types,
+                    click_lookback_window=EXCLUDED.click_lookback_window,
+                    view_lookback_window=EXCLUDED.view_lookback_window,
+                    session_timeout_seconds=EXCLUDED.session_timeout_seconds,
+                    direct_traffic_policy=EXCLUDED.direct_traffic_policy,
+                    identity_confidence_min=EXCLUDED.identity_confidence_min,
+                    fraud_policy=EXCLUDED.fraud_policy,
+                    status=EXCLUDED.status
+                """,
+                _uuid_or_none(config["model_config_id"]), tenant_id,
+                config.get("name"), config.get("model_type"),
+                config.get("model_version", "1.0"),
+                json.dumps(config.get("conversion_types") or ["all"]),
+                int(config.get("click_lookback_window", 720)),
+                int(config.get("view_lookback_window", 168)),
+                int(config.get("session_timeout_seconds", 1800)),
+                config.get("direct_traffic_policy", "include"),
+                config.get("identity_confidence_min", 0.5),
+                config.get("fraud_policy", "exclude"),
+                config.get("status", "active"),
+                _parse_ts(config.get("effective_from")) or datetime.now(timezone.utc),
+                _parse_ts(config.get("created_at")) or datetime.now(timezone.utc),
+            )
+        return config
+
+    async def list_model_configs(self, tenant_id: str) -> list[dict[str, Any]]:
+        """List a tenant's attribution model configs (newest first)."""
+        pool = await self._pool()
+        if pool is None:
+            return list(_local_model_configs.get(tenant_id, []))
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM attribution_model_configs
+                WHERE tenant_id=$1
+                ORDER BY created_at DESC
+                """,
+                tenant_id,
+            )
+        return [dict(r) for r in rows]
 
     # ── Runs ─────────────────────────────────────────────────────────────────
 

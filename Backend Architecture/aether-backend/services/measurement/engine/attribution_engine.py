@@ -206,7 +206,13 @@ class AttributionEngine:
             exclusion_reasons: dict[str, str] = {}
 
             occurred_at_str = conversion.get("occurred_at", "")
-            conversion_ts = _parse_ts(occurred_at_str) or datetime.now(timezone.utc)
+            conversion_ts = _parse_ts(occurred_at_str)
+            if conversion_ts is None:
+                # A conversion with no valid event time cannot anchor a lookback
+                # window. Silently substituting now() widens the window and
+                # over-credits touchpoints, so fail the run with a surfaced
+                # reason (recorded as failure_reason by the except below).
+                raise ValueError("invalid_conversion_timestamp")
             click_cutoff = conversion_ts - timedelta(hours=effective_lookback_hours)
             view_cutoff = conversion_ts - timedelta(hours=effective_view_lookback_hours)
 
@@ -477,9 +483,16 @@ class AttributionEngine:
         Neither run is marked is_active=TRUE.
         """
         results: list[dict[str, Any]] = []
+        skipped_invalid_ts: list[str] = []
         for conv_id in conversion_ids:
             conversion = await self._conversion_repo.get(tenant_id, conv_id)
             if conversion is None:
+                continue
+            conversion_ts = _parse_ts(conversion.get("occurred_at"))
+            if conversion_ts is None:
+                # No valid conversion event time — skip rather than anchoring the
+                # comparison window to now() (which would over-credit).
+                skipped_invalid_ts.append(conv_id)
                 continue
             if conversion.get("profile_id"):
                 identity_type = "profile"
@@ -499,8 +512,7 @@ class AttributionEngine:
                 tp for tp in raw_touchpoints
                 if _touchpoint_exclusion_reason(
                     tp,
-                    conversion_ts=_parse_ts(conversion.get("occurred_at"))
-                    or datetime.now(timezone.utc),
+                    conversion_ts=conversion_ts,
                     click_cutoff=datetime.min.replace(tzinfo=timezone.utc),
                     view_cutoff=datetime.min.replace(tzinfo=timezone.utc),
                     identity_confidence_min=0.0,
@@ -509,7 +521,6 @@ class AttributionEngine:
                     engaged_view_threshold_ms=0,
                 ) is None
             ]
-            conversion_ts = _parse_ts(conversion.get("occurred_at")) or datetime.now(timezone.utc)
 
             result_a = await _resolver.resolve(
                 user_id=profile_id or conv_id,
@@ -538,6 +549,7 @@ class AttributionEngine:
             "model_b": model_b,
             "conversion_count": len(results),
             "comparisons": results,
+            "skipped_invalid_timestamp": skipped_invalid_ts,
         }
 
 

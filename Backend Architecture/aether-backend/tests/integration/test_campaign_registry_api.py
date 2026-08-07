@@ -60,7 +60,7 @@ class _CampaignTestTenant:
         return None
 
 
-def _build_app():
+def _build_app(producer_factory=None):
     app = FastAPI()
 
     @app.exception_handler(AetherError)
@@ -78,7 +78,7 @@ def _build_app():
     app.include_router(sources_router)
     app.include_router(mapping_router)
     app.include_router(quality_router)
-    app.dependency_overrides[get_producer] = lambda: AsyncMock()
+    app.dependency_overrides[get_producer] = producer_factory or (lambda: AsyncMock())
     return app
 
 
@@ -245,3 +245,125 @@ class TestCampaignQualityEndpoint:
         assert result_b.status_code == 200
         assert "data" in result_a.json()
         assert "data" in result_b.json()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Touchpoint recording  (findings A + B)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestTouchpointRecording:
+    def test_record_touchpoint_with_properties(self, client):
+        # Finding A: TouchpointCreate had no `properties`, so the route's
+        # `body.properties` raised AttributeError on every POST. It must now
+        # accept and echo the field.
+        campaign_id = _create_campaign(client, "TP Props Camp")["campaign_id"]
+        resp = client.post(f"/v1/campaigns/{campaign_id}/touchpoints", json={
+            "source": "newsletter",
+            "event_type": "click",
+            "properties": {"variant": "b", "position": 3},
+        })
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["properties"] == {"variant": "b", "position": 3}
+
+    def test_record_touchpoint_without_properties_defaults_empty(self, client):
+        campaign_id = _create_campaign(client, "TP NoProps Camp")["campaign_id"]
+        resp = client.post(f"/v1/campaigns/{campaign_id}/touchpoints", json={
+            "source": "newsletter",
+            "event_type": "pageview",
+        })
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["data"]["properties"] == {}
+
+    def test_write_failure_returns_503_and_does_not_publish(self, monkeypatch):
+        # Finding B: a canonical-write failure was swallowed and the event
+        # published anyway, returning 200 for a touchpoint stored nowhere. It
+        # must now fail the request and publish nothing.
+        producer = AsyncMock()
+        local_client = TestClient(_build_app(producer_factory=lambda: producer))
+        campaign_id = _create_campaign(local_client, "TP Fail Camp")["campaign_id"]
+
+        from services.measurement.repositories import touchpoint_repo as tp_mod
+
+        async def _boom(self, *args, **kwargs):
+            raise RuntimeError("canonical store unavailable")
+
+        monkeypatch.setattr(
+            tp_mod.TouchpointRepository, "upsert_from_campaign_touchpoint", _boom
+        )
+
+        # Campaign creation above may itself publish, so assert on the delta:
+        # the failed touchpoint must add no publish.
+        before = producer.publish.await_count
+        resp = local_client.post(f"/v1/campaigns/{campaign_id}/touchpoints", json={
+            "source": "newsletter", "event_type": "click",
+        })
+        assert resp.status_code == 503, resp.text
+        assert producer.publish.await_count == before
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Campaign source persistence  (finding C)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCampaignSourcePersistence:
+    def test_connect_then_list_and_health_and_sync(self):
+        # Finding C: connect returned a fabricated connector_id that no read
+        # could see (local mode skipped the write; prod swallowed failures).
+        # A connected source must now be retrievable by list/health/sync.
+        from services.measurement.repositories.measurement_connector_repo import (
+            _reset_local_connectors,
+        )
+        _reset_local_connectors()
+        local_client = TestClient(_build_app())
+
+        connect = local_client.post("/v1/campaign-sources", json={"platform": "google_ads"})
+        assert connect.status_code == 200, connect.text
+        connector_id = connect.json()["data"]["connector_id"]
+        assert connector_id
+
+        listing = local_client.get("/v1/campaign-sources").json()["data"]
+        ids = [item["connector_id"] for item in listing["items"]]
+        assert connector_id in ids
+        assert listing["source_status"] == "available"
+
+        health = local_client.get(f"/v1/campaign-sources/{connector_id}/health")
+        assert health.status_code == 200, health.text
+        assert health.json()["data"]["connector_id"] == connector_id
+
+        sync = local_client.post(f"/v1/campaign-sources/{connector_id}/sync")
+        assert sync.status_code == 200, sync.text
+        assert sync.json()["data"]["status"] == "queued"
+
+    def test_connect_failure_surfaces_error_not_fabricated_source(self, monkeypatch):
+        from services.measurement.repositories import (
+            measurement_connector_repo as mc_mod,
+        )
+
+        async def _boom(self, *args, **kwargs):
+            raise RuntimeError("connector store unavailable")
+
+        monkeypatch.setattr(mc_mod.MeasurementConnectorRepository, "create", _boom)
+        local_client = TestClient(_build_app())
+        resp = local_client.post("/v1/campaign-sources", json={"platform": "meta_ads"})
+        # No fabricated connector_id — a write failure is a 503.
+        assert resp.status_code == 503, resp.text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Campaign overview data-quality honesty  (finding J)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCampaignOverviewQuality:
+    def test_reconciliation_status_is_not_hardcoded_ok(self, client):
+        # Finding J: reconciliation_status was a constant "ok" even with no
+        # reconciliation performed. With no data there is no detected
+        # inconsistency, so it must read "unknown" — never "ok".
+        campaign_id = _create_campaign(client, "Overview Quality Camp")["campaign_id"]
+        resp = client.get(f"/v1/campaigns/{campaign_id}/overview")
+        assert resp.status_code == 200, resp.text
+        quality = resp.json()["data"]["data_quality"]
+        assert quality["reconciliation_status"] == "unknown"
+        assert quality["reconciliation_status"] != "ok"
+        assert quality["projection_lag_hours"] is None
+        assert quality["completeness_pct"] is None

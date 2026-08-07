@@ -334,27 +334,65 @@ describe('EventQueue', () => {
       q.destroy();
     });
 
-    it('re-queues batch on non-retryable error', async () => {
-      const q = makeQueue();
-      q.enqueue(makeTrackEvent());
-
+    it('drops a terminal 4xx (poison) so it cannot block the queue head', async () => {
       let errorFired = false;
-      const qWithError = makeQueue({
+      const q = makeQueue({
         onError: () => { errorFired = true; },
         retry: { maxRetries: 0, baseDelay: 1, maxDelay: 1, backoffMultiplier: 1 },
       });
-      qWithError.enqueue(makeTrackEvent());
+      q.enqueue(makeTrackEvent());
 
-      globalThis.fetch = vi.fn(async () => {
-        return { ok: false, status: 400, statusText: 'Bad Request', headers: new Headers() } as Response;
-      }) as unknown as typeof fetch;
+      globalThis.fetch = vi.fn(async () => (
+        { ok: false, status: 400, statusText: 'Bad Request', headers: new Headers() } as Response
+      )) as unknown as typeof fetch;
 
-      await qWithError.flush();
-      // 400 is not retried — error callback fires and events re-queued
+      await q.flush();
+      // 400 is a terminal rejection: surfaced via onError and DROPPED (not
+      // re-queued), so one permanently-rejected batch can't block later events.
       expect(errorFired).toBe(true);
-      expect(qWithError.size).toBe(1);
-      qWithError.destroy();
+      expect(q.size).toBe(0);
       q.destroy();
+    });
+
+    it('re-queues a transient 5xx failure for a later retry', async () => {
+      let errorFired = false;
+      const q = makeQueue({
+        onError: () => { errorFired = true; },
+        retry: { maxRetries: 0, baseDelay: 1, maxDelay: 1, backoffMultiplier: 1 },
+      });
+      q.enqueue(makeTrackEvent());
+
+      globalThis.fetch = vi.fn(async () => (
+        { ok: false, status: 503, statusText: 'Service Unavailable', headers: new Headers() } as Response
+      )) as unknown as typeof fetch;
+
+      await q.flush();
+      // 5xx is transient: the batch returns to the head, not dropped.
+      expect(errorFired).toBe(true);
+      expect(q.size).toBe(1);
+      q.destroy();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Offline persistence on unload (persist BEFORE clearing)
+  // -------------------------------------------------------------------------
+
+  describe('offline persistence on unload', () => {
+    it('persists the queue on destroy so a failed beacon is recoverable next load', () => {
+      const q = makeQueue();
+      q.enqueue(makeTrackEvent());
+
+      // sendBeacon is fire-and-forget fetch(keepalive); simulate a failed send.
+      globalThis.fetch = vi.fn(async () => { throw new Error('network down'); }) as unknown as typeof fetch;
+
+      q.destroy(); // persists BEFORE clearing the in-memory queue
+
+      // A fresh queue restores the persisted events (constructor → restoreQueue),
+      // so a beacon failure on unload is not permanent data loss.
+      const q2 = makeQueue();
+      expect(q2.size).toBe(1);
+      q2.destroy();
     });
   });
 });

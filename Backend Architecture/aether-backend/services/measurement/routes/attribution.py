@@ -25,14 +25,6 @@ _SUPPORTED_MODELS = {
     "markov", "shapley_heuristic",
 }
 
-# In-memory config store for AETHER_ENV=local; production uses attribution_model_configs table.
-_model_configs: dict[str, list[dict]] = {}
-
-
-def _get_tenant_configs(tenant_id: str) -> list[dict]:
-    return _model_configs.get(tenant_id, [])
-
-
 def _require_tenant(request: Request):
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
@@ -77,7 +69,7 @@ class ModelComparisonRequest(BaseModel):
 @router.get("/configurations")
 async def list_model_configs(request: Request):
     tenant = _require_tenant(request)
-    configs = _get_tenant_configs(tenant.tenant_id)
+    configs = await _run_repo.list_model_configs(tenant.tenant_id)
     return APIResponse(data=configs, meta={"count": len(configs), "supported_models": sorted(_SUPPORTED_MODELS)}).to_dict()
 
 
@@ -107,7 +99,7 @@ async def create_model_config(request: Request, body: ModelConfigRequest):
         "effective_from": datetime.now(timezone.utc).isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    _model_configs.setdefault(tenant.tenant_id, []).append(config)
+    config = await _run_repo.create_model_config(config)
     logger.info(
         "Attribution model config created: tenant=%s model_type=%s name=%s",
         tenant.tenant_id, body.model_type, body.name,

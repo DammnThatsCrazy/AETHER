@@ -221,7 +221,9 @@ async def get_provenance(
     """Source attribution for all data associated with this user."""
     request.state.tenant.require_permission("read")
 
-    provenance = await composer.get_provenance(user_id)
+    provenance = await composer.get_provenance(
+        user_id, tenant_id=request.state.tenant.tenant_id
+    )
     return APIResponse(data=provenance).to_dict()
 
 
@@ -874,7 +876,7 @@ async def get_lake_data(
     if not repo:
         raise BadRequestError(f"Unknown domain: {domain}. Available: {list(domain_repos.keys())}")
 
-    records = await repo.get_metrics(user_id)
+    records = await repo.get_metrics(user_id, tenant_id=request.state.tenant.tenant_id)
     return APIResponse(data={
         "user_id": user_id,
         "domain": domain,

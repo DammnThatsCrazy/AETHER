@@ -149,7 +149,10 @@ async def wallet_risk_score(address: str, request: Request):
     scorer = TrustScoreComposite()
 
     # Get features from Gold tier (or materialize if missing)
-    gold_records = await gold_identity.get_metrics(address, entity_type="wallet", metric_name="wallet_features")
+    gold_records = await gold_identity.get_metrics(
+        address, entity_type="wallet", metric_name="wallet_features",
+        tenant_id=request.state.tenant.tenant_id,
+    )
     if gold_records:
         features = gold_records[0].get("value", {})
     else:
@@ -183,7 +186,9 @@ async def protocol_analytics(protocol_id: str, request: Request):
     """
     request.state.tenant.require_permission("read")
 
-    gold_records = await gold_market.get_metrics(protocol_id, entity_type="protocol")
+    gold_records = await gold_market.get_metrics(
+        protocol_id, entity_type="protocol", tenant_id=request.state.tenant.tenant_id
+    )
     if not gold_records:
         return APIResponse(data={
             "protocol_id": protocol_id,
@@ -223,7 +228,9 @@ async def identity_cluster(entity_id: str, request: Request):
         })
 
     # Get Gold identity features
-    gold_records = await gold_identity.get_metrics(entity_id)
+    gold_records = await gold_identity.get_metrics(
+        entity_id, tenant_id=request.state.tenant.tenant_id
+    )
 
     metrics.increment("intelligence_identity_cluster")
     return APIResponse(data={
@@ -243,7 +250,9 @@ async def anomaly_alerts(request: Request, limit: int = 50):
     request.state.tenant.require_permission("read")
 
     # Read from Gold anomaly tier
-    alerts = await gold_identity.get_highlights("anomaly_alert", limit=limit)
+    alerts = await gold_identity.get_highlights(
+        "anomaly_alert", limit=limit, tenant_id=request.state.tenant.tenant_id
+    )
 
     metrics.increment("intelligence_alerts_queried")
     return APIResponse(data={
@@ -264,7 +273,9 @@ async def wallet_profile(address: str, request: Request):
     registry = get_registry()
 
     # Features
-    gold_records = await gold_identity.get_metrics(address, entity_type="wallet")
+    gold_records = await gold_identity.get_metrics(
+        address, entity_type="wallet", tenant_id=request.state.tenant.tenant_id
+    )
     features = gold_records[0].get("value", {}) if gold_records else {}
 
     # Graph neighbors

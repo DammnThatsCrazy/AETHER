@@ -179,7 +179,7 @@ async def query_gold(domain: str, entity_id: str, request: Request):
     if not repo:
         raise BadRequestError(f"Unknown Gold domain: {domain}")
 
-    results = await repo.get_metrics(entity_id)
+    results = await repo.get_metrics(entity_id, tenant_id=request.state.tenant.tenant_id)
     return APIResponse(data={"entity_id": entity_id, "metrics": results}).to_dict()
 
 

@@ -94,10 +94,20 @@ class CampaignPopulationExplorer:
         converted = conv_summary.get("converted_count", 0)
         attributed = conv_summary.get("attributed_count", 0)
 
-        # Enforce reconciliation invariants (clamp, do not raise — data may be eventually consistent)
-        resolved = min(resolved, observed)
-        engaged = min(engaged, resolved)
-        attributed = min(attributed, converted)
+        # Enforce reconciliation invariants (clamp, do not raise — data may be
+        # eventually consistent). Whether the clamp actually changes a value is a
+        # real signal: if the raw counts violated resolved<=observed,
+        # engaged<=resolved, or attributed<=converted, that inconsistency must be
+        # surfaced, not hidden behind a hardcoded reconciliation_status of "ok".
+        clamped_resolved = min(resolved, observed)
+        clamped_engaged = min(engaged, clamped_resolved)
+        clamped_attributed = min(attributed, converted)
+        reconciliation_inconsistent = (
+            clamped_resolved != resolved
+            or clamped_engaged != engaged
+            or clamped_attributed != attributed
+        )
+        resolved, engaged, attributed = clamped_resolved, clamped_engaged, clamped_attributed
 
         gross_rev = conv_summary.get("attributed_gross_revenue", 0.0)
         net_rev = conv_summary.get("attributed_net_revenue", 0.0)
@@ -145,7 +155,10 @@ class CampaignPopulationExplorer:
                 "connector_freshness": "unknown",
                 "attribution_run_freshness": "fresh" if credit_summary.get("credits") else "missing",
                 "projection_lag_hours": None,
-                "reconciliation_status": "ok",
+                # Honest state: "inconsistent" when the clamp above detected an
+                # invariant breach, otherwise "unknown" — this overview does not
+                # reconcile against provider truth, so it must never claim "ok".
+                "reconciliation_status": "inconsistent" if reconciliation_inconsistent else "unknown",
                 "completeness_pct": None,
             },
         }
