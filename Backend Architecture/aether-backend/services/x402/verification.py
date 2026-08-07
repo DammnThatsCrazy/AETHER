@@ -18,11 +18,16 @@ import httpx
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 
-from .commerce_models import Facilitator, PaymentAuthorization, PaymentReceipt
+from .commerce_models import Facilitator, FacilitatorMode, PaymentAuthorization, PaymentReceipt
 from .commerce_store import get_commerce_store
 from .facilitators import get_facilitator_registry
 
 _FACILITATOR_TIMEOUT_S = 10.0
+
+
+def _is_local_env() -> bool:
+    import os
+    return os.getenv("AETHER_ENV", "local").lower() == "local"
 
 # x402 network names (chain ID → x402 network identifier)
 _CHAIN_TO_NETWORK: dict[str, str] = {
@@ -175,9 +180,22 @@ class VerificationEngine:
         authorization: PaymentAuthorization,
         tx_hash: str,
     ) -> tuple[bool, Optional[str]]:
-        """Delegate to facilitator. Local facilitator verifies deterministically;
-        external facilitators receive a real HTTP POST to their endpoint."""
-        if facilitator.facilitator_id == "fac_local_aether":
+        """Delegate to facilitator. The internal LOCAL facilitator confers
+        verification only in the local environment; external facilitators
+        receive a real HTTP POST and their SEMANTIC verdict (isValid/verified)
+        decides — HTTP reachability alone never verifies a payment."""
+        if (
+            facilitator.mode == FacilitatorMode.LOCAL
+            or facilitator.facilitator_id == "fac_local_aether"
+        ):
+            if not _is_local_env():
+                # The internal facilitator has no chain access. Outside local
+                # it must never confer verification — hand off to the on-chain
+                # RPC verifier (error=None → engine falls through to
+                # _verify_locally, which does a real receipt/transfer check).
+                return False, None
+            if authorization.amount_usd <= 0:
+                return False, "amount must be positive"
             await self._facilitators.update_health(
                 tenant_id, facilitator.facilitator_id, "healthy", success=True
             )

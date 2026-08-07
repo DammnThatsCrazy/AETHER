@@ -6,6 +6,7 @@ assets. Day-1 seeds: local facilitator for Aether-native, USDC/Base, USDC/Solana
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from shared.logger.logger import get_logger
@@ -14,6 +15,10 @@ from .commerce_models import Facilitator, FacilitatorMode, StablecoinAsset
 from .commerce_store import get_commerce_store
 
 logger = get_logger("aether.service.x402.facilitators")
+
+
+def _is_local_env() -> bool:
+    return os.getenv("AETHER_ENV", "local").lower() == "local"
 
 
 # ─── Day-1 Seeds ──────────────────────────────────────────────────────
@@ -103,14 +108,23 @@ class FacilitatorRegistry:
         "unknown". Selection therefore excludes only facilitators known to be
         down and ranks healthy ahead of unprobed ahead of degraded; requiring
         "healthy" here made a new tenant's payments structurally unroutable.
+
+        Outside the local environment, LOCAL-mode facilitators (the internal
+        Aether verifier seed) are never auto-selected: they have no chain
+        access, and selecting one for a fresh tenant used to confer
+        verification on every payment. Non-local selection is restricted to
+        external facilitators; with none configured, verification falls to the
+        on-chain RPC verifier.
         """
         health_rank = {"healthy": 0, "unknown": 1, "degraded": 2}
         facilitators = await self.list(tenant_id)
+        local_env = _is_local_env()
         candidates = [
             f for f in facilitators
             if asset_symbol in f.supported_assets
             and chain in f.supported_chains
             and f.health_status != "down"
+            and (local_env or f.mode != FacilitatorMode.LOCAL)
         ]
         if not candidates:
             return None
