@@ -11,7 +11,7 @@ toc_depth: 2
 source_files:
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/campaign/routes.py
-last_synced_commit: "c3323a5c"
+last_synced_commit: "99da74c0"
 ---
 
 # Runbook — Stale Spend Warning (Campaign 360)

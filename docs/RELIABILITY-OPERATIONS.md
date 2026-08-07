@@ -21,7 +21,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "3283497"
+last_synced_commit: "99da74c0"
 ---
 # Reliability Operations
 
@@ -47,21 +47,23 @@ tenants, infrastructure metadata, security-sensitive internals, incident
 `internal_notes`, `root_cause`, `affected_services`, `affected_tenants`, or owner
 ids. Backend tests assert the absence of these keys on `/v1/status*` payloads.
 
-The internal surface is gated by `_require_kyber_operator` (admin permission).
+The internal surface is gated by `_require_kyber_operator`, which delegates
+to the canonical fail-closed `require_kyber_operator` gate — a regular tenant
+holding only the `admin` permission is not a Kyber operator.
 
 ## Implemented reliability controls
 
-- **Service health registry** — 18 services, heartbeat/status/metadata/last-job
+- **Service health registry** — 19 services, heartbeat/status/metadata/last-job
   updates, open-incident linkage. (See `PIPELINE-HEALTH.md`, `QUEUE-WORKER-HEALTH.md`.)
-- **Pipeline health** — 12 critical pipelines with throughput, latency, error
+- **Pipeline health** — 13 critical pipelines with throughput, latency, error
   rate, retry/dead-letter counts, freshness, and affected-tenant counts.
 - **Queue/worker health** — 7 queues with depth, oldest-message age, worker
   counts, retry/dead-letter counts, processing latency (adapter/mock-backed).
 - **Incident management** — full lifecycle with internal audit trail and service
   linkage. (See `INCIDENT-RESPONSE.md`.)
-- **Runbooks** — 13 seeded operational runbooks plus custom runbook CRUD.
+- **Runbooks** — 14 seeded operational runbooks plus custom runbook CRUD.
   (See `SRE-RUNBOOKS.md`.)
-- **SLO tracking** — 9 internal SLOs with status + error-budget computation.
+- **SLO tracking** — 12 internal SLOs with status + error-budget computation.
   (See `SLO-TRACKING.md`.)
 - **Tenant impact analysis** — per-tenant impact with tenant-safe and internal
   projections.

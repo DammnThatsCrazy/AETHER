@@ -15,7 +15,7 @@ source_files:
 canonical_owner: compliance@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "5a44e9e"
+last_synced_commit: "99da74c0"
 ---
 
 # Compliance Framework — GDPR & SOC 2
@@ -59,9 +59,9 @@ is the generated table `docs/_generated/consent-registry-table.md`. The base
 | `commerce` | Transaction processing and payment telemetry | required for commerce features |
 
 Explicit opt-in purposes (`financial_activity`, `credit`, `location`,
-`economic_observability`, `cross_chain_observability`) always require separate
-opt-in and are never granted by accept-all. See the registry for the full set and
-per-purpose retention / DSR scope.
+`economic_observability`, `cross_chain_observability`, `fraud_prevention`)
+always require separate opt-in and are never granted by accept-all. See the
+registry for the full set and per-purpose retention / DSR scope.
 
 Consent state is stored per-user, per-purpose in DynamoDB with a full audit log
 of changes. A consent withdrawal immediately suppresses the relevant event types
