@@ -8,19 +8,17 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from .dataset import v1_manifest
+from .errors import SeedPolicyError, SeedSafetyError
 from .models import Clock, SeedManifest, SeedResult
-from .policy import SeedPolicyError, assert_seed_allowed
+from .policy import assert_seed_allowed
 from .repositories import (
     ContinuationScopedSeedRepository,
+    DurableStoreSeedRepository,
     SeedOwnershipRepository,
     SeedResetAuditRepository,
     SeedRunRepository,
     domain_repositories,
 )
-
-
-class SeedSafetyError(RuntimeError):
-    pass
 
 
 def _utc_now() -> datetime:
@@ -187,6 +185,15 @@ class DemoSeedService:
                     if existing is not None:
                         result.skipped[item.domain] = result.skipped.get(item.domain, 0) + 1
                         continue
+                    if isinstance(repository, DurableStoreSeedRepository):
+                        # M8-C1: the ownership ledger is authoritative for durable
+                        # domains. The sidecar exists but the record is absent
+                        # (a fresh process with an empty process-local store, or a
+                        # flushed cache) — this record was already seeded; count it
+                        # skipped rather than writing a parallel copy or tripping
+                        # the process-local guard.
+                        result.skipped[item.domain] = result.skipped.get(item.domain, 0) + 1
+                        continue
                 elif existing is not None:
                     raise SeedSafetyError(
                         f"refusing to overwrite non-seeded {item.repository} record {target_id}"
@@ -263,10 +270,6 @@ class DemoSeedService:
             filters={"tenant_id": tenant_id, "namespace": namespace},
             limit=100,
         )
-        owners = await self.ownership.find_many(
-            filters={"tenant_id": tenant_id, "seed_namespace": namespace},
-            limit=10_000,
-        )
         tenant = await self.repositories["tenants"].find_by_id(tenant_id)
         latest = runs[0] if runs else None
         latest_run = None
@@ -284,9 +287,40 @@ class DemoSeedService:
                 "updated_counts": latest.get("updated", {}),
                 "skipped_counts": latest.get("skipped", {}),
             }
-        seeded = bool(owners) and tenant is not None
+        # M8-C3: never derive seeded-ness from the ownership sidecars alone.
+        # Count records ACTUALLY present through the same canonical read paths
+        # verify() uses, and count as owned only records that are both
+        # sidecar-owned AND present. A fresh process with an empty process-local
+        # DurableStore therefore reports the durable runs/reviews domains
+        # truthfully as not seeded, even though their sidecars persist.
+        present = 0
+        owned_and_present = 0
+        target_ids = _target_ids(manifest, tenant_id)
+        for item in manifest.records:
+            target_id = target_ids[item.record_id]
+            owner = await self.ownership.find_by_id(
+                _ownership_id(tenant_id, namespace, item.repository, target_id),
+            )
+            record = await self._resolve_repository(
+                item.repository, tenant_id,
+            ).find_by_id(target_id)
+            if record is not None:
+                present += 1
+                if owner is not None:
+                    owned_and_present += 1
+
+        durable_repos = [
+            repo
+            for repo in self.repositories.values()
+            if isinstance(repo, DurableStoreSeedRepository)
+        ]
+        durable_store_shared = (
+            bool(durable_repos)
+            and all(not repo.is_process_local for repo in durable_repos)
+        )
+
         return {
-            "seeded": seeded,
+            "seeded": present == len(manifest.records) and tenant is not None,
             "is_demo_tenant": bool(tenant and tenant.get("is_demo_tenant")),
             "tenant_id": tenant_id,
             "tenant_name": tenant.get("name") if tenant else None,
@@ -295,7 +329,8 @@ class DemoSeedService:
             "dataset_version": manifest.version,
             "checksum": manifest.checksum,
             "run_count": len(runs),
-            "owned_record_count": len(owners),
+            "owned_record_count": owned_and_present,
+            "durable_store_shared": durable_store_shared,
             "latest_run": latest_run,
         }
 

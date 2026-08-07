@@ -619,10 +619,18 @@ class CommandService:
         status: Optional[str] = "open",
         command_type: Optional[str] = None,
         limit: int = 100,
+        tenant_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
-        """Commands by status, newest first."""
+        """Commands by status, newest first.
+
+        ``tenant_id`` narrows to one tenant scope (M8-D3): the mobile action
+        digest binds its open-command list to the operator's resolved scope so a
+        tenant-scoped operator never sees another tenant's commands. ``None``
+        keeps the global list the ops ``/commands`` routes expose under
+        ``kyber.audit.read``.
+        """
         rows = await self._commands.list_by_status(
-            status, command_type=command_type, limit=limit
+            status, command_type=command_type, limit=limit, tenant_id=tenant_id
         )
         return [_strip_row(row) for row in rows]
 

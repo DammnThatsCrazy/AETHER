@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
 from repositories.repos import (
@@ -30,7 +31,9 @@ from services.kyber.ops.repository import ExceptionRepository, IncidentRepositor
 from services.metering_evidence.service import MeteringEvidenceRepository
 from services.notification_intelligence.inbox import NotificationInboxRepository
 from shared.common.common import utc_now
-from shared.store import DurableStore, get_store
+from shared.store import DurableStore, InMemoryStore, get_store
+
+from .errors import SeedSafetyError
 
 
 def domain_repositories() -> dict[str, Any]:
@@ -80,12 +83,48 @@ class DurableStoreSeedRepository:
     through ``get_store(name)`` (a process-wide singleton). Seeding through this
     adapter writes to that SAME store, so a seeded run or review batch is visible
     to the real API read paths — not to a parallel JSONB table.
+
+    Process-local guard (M8-C1): without Redis configured the resolved store is
+    an ``InMemoryStore``, which is a per-process singleton. A seed CLI run as a
+    SEPARATE process from the backend (the design-partner ``make demo-seed``
+    host-CLI flow) would write runs/reviews into a store the backend API never
+    reads — a silent parallel copy. The guard surfaces this as a
+    ``SeedSafetyError`` unless an explicit ``AETHER_ALLOW_INMEMORY_SEED=1``
+    override is set (test/dev use).
     """
 
     def __init__(self, store_name: str, identity_field: str) -> None:
         self.store_name = store_name
         self.identity_field = identity_field
         self._store: DurableStore = get_store(store_name)
+        self.store_kind = "in_memory" if isinstance(self._store, InMemoryStore) else "durable"
+
+    @property
+    def is_process_local(self) -> bool:
+        """True when the underlying store is process-local (InMemoryStore)."""
+        return self.store_kind == "in_memory"
+
+    def _assert_writable(self) -> None:
+        """Refuse writes into a process-local store (M8-C1).
+
+        Without Redis configured the resolved store is an ``InMemoryStore`` — a
+        per-process singleton. A seed CLI run as a SEPARATE process from the
+        backend (the design-partner ``make demo-seed`` host flow) would write
+        runs/reviews into a store the backend API never reads and that vanishes
+        on exit — a silent parallel copy. Fail closed unless the operator
+        explicitly opts into the in-memory path with
+        ``AETHER_ALLOW_INMEMORY_SEED=1`` (test/dev in-process use).
+        """
+        if self.is_process_local and os.getenv("AETHER_ALLOW_INMEMORY_SEED", "") != "1":
+            raise SeedSafetyError(
+                f"refusing to write durable domain {self.store_name!r} into a "
+                "process-local in-memory store — records written here are "
+                "invisible to the backend API in a separate process and are lost "
+                "on exit. Run the seed inside the backend container/process (or "
+                "configure REDIS_HOST/REDIS_URL so the DurableStore is shared), or "
+                "set AETHER_ALLOW_INMEMORY_SEED=1 to explicitly acknowledge the "
+                "in-memory path."
+            )
 
     async def find_by_id(self, record_id: str) -> Optional[dict]:
         return await self._store.get(record_id)
@@ -106,6 +145,7 @@ class DurableStoreSeedRepository:
         return await self._store.count(**(filters or {}))
 
     async def insert(self, record_id: str, data: dict) -> dict:
+        self._assert_writable()
         now = utc_now().isoformat()
         payload = dict(data)
         payload["id"] = record_id
@@ -116,6 +156,7 @@ class DurableStoreSeedRepository:
         return payload
 
     async def update(self, record_id: str, data: dict) -> dict:
+        self._assert_writable()
         existing = await self._store.get(record_id)
         if existing is None:
             raise KeyError(f"{self.store_name} record {record_id!r} not found")

@@ -198,6 +198,12 @@ services:
       DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
       # E1: no REDIS_HOST → cache falls back to in-memory when AETHER_ENV=local.
       # Add --profile legacy to run with Redis, or --profile streaming for LocalStack DynamoDB.
+      # M8-C1: the demo-seed durable domains (runs/reviews) live in a named
+      # DurableStore. Leave REDIS_HOST unset for the default local in-memory
+      # backend (seed in-process via `make dev-demo`); set REDIS_HOST=redis for
+      # the design-partner demo so a host-side `make demo-seed` CLI and the
+      # backend SHARE the same durable store — never a parallel copy.
+      REDIS_HOST: ${REDIS_HOST:-}
       # E2: ML predict routes served in-process — no separate ml-serving container needed.
       # Set ML_SERVING_INLINE=false in .env when using --profile integration or staging-ml
       # to route ML requests to the standalone ml-serving container instead.

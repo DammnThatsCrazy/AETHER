@@ -9,7 +9,7 @@ since_version: "8.8.0"
 canonical_owner: product@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: df45786
+last_synced_commit: 790e20e2
 ---
 
 # Productization Gap Analysis — First Paying Customer
@@ -21,6 +21,18 @@ This document assesses what's production-ready, what's blocking the first paying
 ## What's Production-Ready
 
 The following subsystems are implemented, tested, and CI-verified:
+
+> **Readiness terminology.** A ✅ in this section is a **code-state** claim:
+> implemented, tested, and CI-verified. It is *not* a claim of production + scale
+> readiness. The canonical readiness authority is the production status scorecard
+> (`make production-status`, `scripts/production_status.py`) — currently **overall
+> 3.77/5, pre-production**. Per the scorecard most areas below are **release-ready
+> (4/5)** with minor gaps, and several carry release blockers: production
+> infrastructure is not provisioned (deployment/cloud 3/5), ML model artifacts are
+> not published (scale 3/5), and the external smart contract audit is outstanding.
+> Only a few surfaces (Profile360 aggregator, customer frontend, campaign
+> intelligence) score 5/5. Where this document and the scorecard disagree, the
+> scorecard wins.
 
 ### Data Infrastructure
 - ✅ Event ingestion pipeline (event lake, enrichment, ASN connection-type enrichment)
@@ -185,4 +197,4 @@ now complete are documented in the "What's Production-Ready" section above.
 
 ## Version Note
 
-This document reflects the state of the codebase at commit `df45786` and the Phase 2 extension (PR #187 + Phase 3 entity-agnostic expansion). Provider counts: 51 providers, 17 categories. TypeScript contracts: 13 shared type packages. Gold schemas: 12 ClickHouse tables.
+This document reflects the state of the codebase at commit `df45786` and the Phase 2 extension (PR #187 + Phase 3 entity-agnostic expansion). The "What's Production-Ready" framing was revised at the M8-F commit tip to be consistent with the canonical readiness scorecard (`make production-status`; overall 3.77/5, pre-production) — ✅ marks code-state (implemented + CI-verified), never a substitute for scorecard readiness. Provider counts: 51 providers, 17 categories. TypeScript contracts: 13 shared type packages. Gold schemas: 12 ClickHouse tables.

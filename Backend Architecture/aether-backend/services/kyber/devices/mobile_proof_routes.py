@@ -28,6 +28,14 @@ exactly what :meth:`DeviceProofKeyRepository.find_active_by_device` returns to
 ``revoked_at`` and removes it from the active list; the revoked row stays for
 forensics, mirroring browser re-enrollment.
 
+Re-key step-up gate. Replacing a **live** key is the one step that re-binds an
+attested device to new key material, so it demands a fresh step-up grant. The
+grant itself can only be obtained against the *current* live key (the proof
+service verifies against ``find_active_by_device``), which is exactly why a
+captured session cookie alone cannot re-key a device. First enrollment — no
+existing live key — needs no step-up, so legitimate mobile onboarding still
+works.
+
 Projection decision (D6 — all wire fields snake_case). The register and revoke
 responses return the full record, including the SPKI ``public_key`` — a public
 value the device already holds, returned so the client can confirm the exact
@@ -51,7 +59,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel
 
-from shared.common.common import APIResponse, BadRequestError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError
 from shared.logger.logger import get_logger
 
 from ..access.capabilities import (
@@ -141,18 +149,37 @@ async def _require_owned_device(operator_id: str, device_id: str) -> TrustedDevi
 
 
 async def _upsert_key(
-    *, device_id: str, operator_id: str, public_key_b64: str, algorithm: str
+    *,
+    device_id: str,
+    operator_id: str,
+    public_key_b64: str,
+    algorithm: str,
+    session_id: str,
 ) -> tuple[DeviceProofKey, bool]:
-    """One live key per device: replace in place, or create through the service.
+    """One live key per device: replace in place (step-up gated), or create.
 
     Returns ``(key, replaced)``. ``replaced=True`` means an existing live key
     was updated in place; ``replaced=False`` means a new row was created (or an
     identical key was already active). ``find_active_by_device`` is the exact
     lookup ``verify_proof`` performs, so the row this route keeps live is the
     one the proof path will check.
+
+    The replace path re-keys a LIVE attestation key, so it demands a fresh
+    step-up grant for this session first — a grant that step-up verification
+    itself can only obtain against the current live key, which is exactly why a
+    captured session cookie alone cannot re-key a device. First enrollment (no
+    existing live key) needs no step-up.
     """
     existing = await _keys.find_active_by_device(device_id)
     if existing is not None and existing.operator_id == operator_id:
+        from ..sessions.step_up import step_up_service
+
+        ok, reason = await step_up_service.require_fresh(session_id)
+        if not ok:
+            raise ForbiddenError(
+                "re-keying a live device proof key requires a fresh step-up",
+                details={"denial_reason": reason or "step_up_required"},
+            )
         existing.public_key = public_key_b64
         existing.algorithm = algorithm
         key = await _keys.save(existing)
@@ -223,6 +250,7 @@ async def register_mobile_proof_key(
         operator_id=operator_id,
         public_key_b64=body.public_key,
         algorithm=body.algorithm,
+        session_id=context.session.session_id,
     )
     if replaced:
         # A re-enrollment replaced an existing live key; record the governed

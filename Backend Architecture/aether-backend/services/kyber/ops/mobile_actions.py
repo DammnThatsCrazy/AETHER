@@ -42,9 +42,9 @@ from ..access.capabilities import (
     ACTION_CLASS_RECOMPUTE,
     ACTION_CLASS_RETRY,
     ACTION_CLASS_READ,
-    SELF_CAPABILITY,
     STEP_UP_ACTION_CLASSES,
 )
+from ..access.disclosure import DisclosureLevel
 from .contracts import now_iso
 from .registry import get_command_spec
 
@@ -53,6 +53,12 @@ logger = get_logger("aether.kyber.ops.mobile_actions")
 mobile_actions_router = APIRouter(
     prefix="/v1/kyber/mobile/actions", tags=["Kyber Mobile Actions"]
 )
+
+#: The capability the ops ``/v1/kyber/ops/commands`` routes gate on (M8-D3).
+#: The digest surfaces the SAME open-command rows, so it must sit behind the
+#: same authorization + disclosure declaration — never the low-bar
+#: ``kyber.workforce.self.read``. Mirrors ``routes.AUDIT_READ``.
+AUDIT_READ = "kyber.audit.read"
 
 # ── Tier vocabulary ──────────────────────────────────────────────────────────
 # tier0 = act now (critical_now exceptions + open high-impact/fleet-destructive
@@ -237,12 +243,23 @@ class MobileActionDigest:
 
         return await exception_service.queue()
 
-    async def _commands(self) -> list:
+    async def _commands(self, tenant_id: Optional[str] = None) -> list:
+        """The open command rows for the digest, bound to ``tenant_id``.
+
+        ``tenant_id`` is the operator's resolved scope tenant (M8-D3): scoped
+        operators see only their own tenant's commands; ``None`` (unscoped,
+        behind the ``kyber.audit.read`` route gate) keeps the global list the
+        ops routes expose. The bound value is passed to the OWNING service so
+        the filter is applied where the rows are indexed — never a post-hoc
+        strip of already-fetched rows.
+        """
         if self._command_list is not None:
-            return await self._command_list()
+            return await self._command_list(tenant_id=tenant_id)
         from services.kyber.ops.commands import command_service
 
-        return await command_service.list_commands(status="open", limit=200)
+        return await command_service.list_commands(
+            status="open", limit=200, tenant_id=tenant_id
+        )
 
     async def _require_fresh(self, session_id: str) -> tuple[bool, Optional[str]]:
         if self._step_up_fresh is not None:
@@ -269,6 +286,12 @@ class MobileActionDigest:
         queue = await self._queue()
         buckets = queue.get("buckets") or {}
 
+        # M8-D3: the open-command list is bound to the operator's resolved
+        # tenant scope. Unscoped (scope-less) operators pass the ``kyber.audit.read``
+        # route gate and see the global list, exactly like the ops /commands routes.
+        scope = getattr(context, "scope", None)
+        scope_tenant_id = getattr(scope, "tenant_id", None) if scope is not None else None
+
         session_id = getattr(getattr(context, "session", None), "session_id", None)
         step_up_fresh, _denial = await self._require_fresh(session_id)
 
@@ -287,7 +310,7 @@ class MobileActionDigest:
         for exc in buckets.get("informational", []):
             tiers["tier3"].append(_project_exception(exc, step_up_fresh=step_up_fresh))
 
-        for row in await self._commands():
+        for row in await self._commands(tenant_id=scope_tenant_id):
             action_class = int(row.get("action_class") or 0)
             status = row.get("status")
             if action_class >= ACTION_CLASS_HIGH_IMPACT and status in _TIER0_COMMAND_STATUSES:
@@ -338,7 +361,13 @@ def _require(capability: str, **kwargs: Any) -> Callable[..., Any]:
 
 @mobile_actions_router.get("")
 async def action_availability(
-    context: Any = Depends(_require(SELF_CAPABILITY)),
+    context: Any = Depends(
+        _require(
+            AUDIT_READ,
+            disclosure=DisclosureLevel.D4_EVENT_EVIDENCE,
+            action_class=ACTION_CLASS_READ,
+        )
+    ),
 ) -> dict:
     """The action-availability digest for the authenticated operator.
 
@@ -346,6 +375,11 @@ async def action_availability(
     step-up state; performs no mutations and dispatches nothing. The governed
     command lifecycle remains at ``/v1/kyber/ops/commands/*`` — this surface only
     reports what a governed action exists for and whether step-up is fresh.
+
+    The gate mirrors the ops ``/commands`` routes (``kyber.audit.read`` +
+    D4 event-evidence disclosure + read action class) because the digest
+    surfaces the same open-command rows. Open commands are further bound to the
+    operator's resolved tenant scope (M8-D3).
     """
     data = await _digest_service.action_availability(context=context)
     return APIResponse(data=data).to_dict()

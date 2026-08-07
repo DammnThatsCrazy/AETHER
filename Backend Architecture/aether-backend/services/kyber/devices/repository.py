@@ -144,6 +144,19 @@ class TrustedDeviceRepository(_ModelRepository):
         )
         return hydrate_all(TrustedDevice, rows)
 
+    async def delete_by_operator(self, operator_id: str) -> int:
+        """Physically erase every device row for one operator (DSR erasure, M8-E1).
+
+        Offboarding *revokes* a device — the row stays so the audit trail and a
+        revoke-then-re-enroll ceremony still resolve, and every transition keeps
+        its ``DeviceApprovalEvent``. A data-subject erasure is the opposite act:
+        it must physically erase the operator's device personal data. This is the
+        DSR hook the consent erasure job calls; the append-only
+        ``kyber_device_approval_events`` ledger is deliberately NOT covered
+        (storage policy ``preserve`` / legal hold).
+        """
+        return await self.delete_by_entity("operator_id", operator_id)
+
 
 class WebAuthnCredentialRepository(_ModelRepository):
     """Platform authenticator credentials. Public key and counter only."""
@@ -182,6 +195,15 @@ class WebAuthnCredentialRepository(_ModelRepository):
             rows = [r for r in rows if not r.get("revoked_at")]
         return hydrate_all(WebAuthnCredential, rows)
 
+    async def delete_by_operator(self, operator_id: str) -> int:
+        """Physically erase every WebAuthn credential row for one operator (M8-E1).
+
+        Revocation marks a credential revoked and retains it for forensics; a
+        data-subject erasure physically deletes the stored public key + counter
+        data. The same DSR boundary as :meth:`TrustedDeviceRepository.delete_by_operator`.
+        """
+        return await self.delete_by_entity("operator_id", operator_id)
+
 
 class DeviceProofKeyRepository(_ModelRepository):
     """Browser-profile-bound ECDSA P-256 public keys."""
@@ -219,6 +241,16 @@ class DeviceProofKeyRepository(_ModelRepository):
     async def find_by_operator(self, operator_id: str) -> list[DeviceProofKey]:
         rows = await self.find_many({"operator_id": operator_id}, limit=_LIST_LIMIT)
         return hydrate_all(DeviceProofKey, rows)
+
+    async def delete_by_operator(self, operator_id: str) -> int:
+        """Physically erase every device proof key for one operator (M8-E1).
+
+        Same contract as the sibling device repos: a data-subject erasure deletes
+        the stored public-key material (the private half never leaves the enrolled
+        profile and is not exportable). The proof-key rows are what authorize
+        device-bound sessions, so erasure is what actually ends device proof.
+        """
+        return await self.delete_by_entity("operator_id", operator_id)
 
 
 class DeviceApprovalEventRepository(_ModelRepository):

@@ -42,6 +42,10 @@ AGENT_DIR   := Agent Layer
 DEMO_TENANT_ID ?= aether-demo-v1
 DEMO_SEED_NAMESPACE ?= aether-demo-v1
 DEMO_DATABASE_URL ?= postgresql://aether:aether_dev_password@localhost:5432/aether
+# Durable-store seam for the demo CLI (M8-C1): runs/reviews live in a named
+# DurableStore. When the seed CLI and the backend must share it across
+# processes, point DEMO_REDIS_URL at the same Redis the backend uses.
+DEMO_REDIS_URL ?= redis://localhost:6379/0
 PYTHON ?= python3
 # The live Terraform root. NOT terraform/environments/* — that tree references
 # seven modules that do not exist and `terraform init` fails there.
@@ -329,15 +333,24 @@ frontend-data-truth-report: ## Run release certification and write machine-reada
 	python scripts/generate_frontend_data_truth_report.py
 
 demo-seed: ## Explicitly seed the versioned backend demo dataset
+	# M8-C1: the durable runs/reviews domains live in a named DurableStore. The
+	# CLI shares it with the backend only when REDIS_URL/REDIS_HOST is set;
+	# otherwise it resolves a process-local in-memory store and the seed guard
+	# refuses the write (that path would be a parallel copy the backend never
+	# reads). Seed in-process instead via `make dev-demo` (seed-on-start), or
+	# export REDIS_URL=$(DEMO_REDIS_URL) so the durable store is shared.
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli seed --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-status: ## Show backend demo seed ledger status
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli status --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-verify: ## Verify the demo manifest checksum, records, and provenance
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli verify --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
@@ -345,6 +358,7 @@ demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
 		echo 'Set DEMO_RESET_CONFIRMATION="RESET $(DEMO_TENANT_ID) $(DEMO_SEED_NAMESPACE)"'; exit 1; \
 	fi
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli reset --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)" --confirm "$(DEMO_RESET_CONFIRMATION)"
 
 dev-demo: ## Explicitly start local backend with in-process demo seeding
@@ -371,16 +385,17 @@ demo-reset-smoke: ## Verify reset isolation, control-record preservation, and au
 # and verifies the seeded state is API-visible. Provider fakes run in-process
 # under AETHER_ENV=local and fail closed outside local/dev. JWT_SECRET here is
 # a local-only demo default; staging/prod still require bootstrap.sh.
-design-partner-demo-up: ## Bring up the design-partner demo stack (postgres + backend + migrations)
+design-partner-demo-up: ## Bring up the design-partner demo stack (postgres + redis + backend + migrations)
 	docker compose --profile migrate run --rm migrate
-	JWT_SECRET="$${JWT_SECRET:-local-design-partner-demo-secret}" AETHER_ENV=local docker compose up -d
+	JWT_SECRET="$${JWT_SECRET:-local-design-partner-demo-secret}" AETHER_ENV=local REDIS_HOST=redis \
+		docker compose up -d
 	@echo "Design-partner demo stack is up. Run 'make design-partner-demo-seed' then 'make design-partner-demo-check'."
 
 design-partner-demo-seed: ## Seed the design-partner demo dataset (idempotent; safe reset via demo-reset)
-	$(MAKE) demo-seed
+	REDIS_URL="$(DEMO_REDIS_URL)" $(MAKE) demo-seed
 
 design-partner-demo-check: ## Verify the demo dataset is seeded, provenance-clean, and API-visible
-	$(MAKE) demo-verify
+	REDIS_URL="$(DEMO_REDIS_URL)" $(MAKE) demo-verify
 	$(MAKE) demo-seed-smoke
 	$(MAKE) demo-reset-smoke
 

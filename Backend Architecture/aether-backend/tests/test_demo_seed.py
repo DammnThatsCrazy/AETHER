@@ -11,7 +11,7 @@ from repositories.continuation_repo import reset_continuation_memory
 from repositories.repos import BaseRepository, reset_in_memory_stores as reset_base_stores
 from services.agent.runtime_repository import get_agent_runtime_repository
 from services.demo_seed.dataset import v1_manifest
-from services.demo_seed.policy import SeedPolicyError
+from services.demo_seed.policy import SeedPolicyError, assert_seed_allowed
 from services.demo_seed import routes as seed_routes
 from services.demo_seed.service import DemoSeedService, SeedSafetyError, _target_ids
 from services.demo_seed.startup import maybe_seed_demo_on_start
@@ -30,6 +30,11 @@ def isolated_memory(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("AETHER_STAGING_DEMO_ENABLED", raising=False)
     monkeypatch.delenv("AETHER_STAGING_DEMO_TENANT_ALLOWLIST", raising=False)
+    # M8-C1: these tests run IN-PROCESS — the in-memory DurableStore they write
+    # is the SAME store the canonical read paths read (test_m7a asserts that),
+    # so the process-local guard is explicitly opted into. The guard still
+    # refuses the out-of-process CLI path (see the guard test below).
+    monkeypatch.setenv("AETHER_ALLOW_INMEMORY_SEED", "1")
     reset_base_stores()
     reset_durable_stores()
     reset_continuation_memory()
@@ -229,6 +234,71 @@ async def test_startup_seed_refuses_production(monkeypatch: pytest.MonkeyPatch):
     app = SimpleNamespace(state=SimpleNamespace())
     with pytest.raises(RuntimeError, match="only in local/test"):
         await maybe_seed_demo_on_start(app, environment="production")
+
+
+async def test_durable_store_seed_guard_refuses_inmemory_cli_path(monkeypatch):
+    """M8-C1: a CLI seeding durable domains into a process-local store must fail
+    loudly — that is a parallel copy the backend API never reads — unless the
+    explicit AETHER_ALLOW_INMEMORY_SEED=1 override is set."""
+    monkeypatch.delenv("AETHER_ALLOW_INMEMORY_SEED", raising=False)
+    manager = service("seed-guard")
+    with pytest.raises(SeedSafetyError, match="AETHER_ALLOW_INMEMORY_SEED"):
+        await manager.seed(tenant_id=TENANT, namespace=NAMESPACE)
+
+    # The explicit override restores the write (test/dev in-process use).
+    monkeypatch.setenv("AETHER_ALLOW_INMEMORY_SEED", "1")
+    manager = service("seed-guard-ok")
+    result = await manager.seed(tenant_id=TENANT, namespace=NAMESPACE)
+    assert result.status == "completed"
+    assert (await manager.verify(tenant_id=TENANT, namespace=NAMESPACE))["ok"] is True
+
+
+async def test_nonlocal_database_url_refused_in_local_env(monkeypatch):
+    """M8-C2: in local/test the AETHER_ENV string alone must not gate demo ops.
+    A non-loopback DATABASE_URL is refused unless AETHER_ALLOW_NONLOCAL_DB=1."""
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://aether:aether@db.prod.example.com:5432/aether",
+    )
+    manager = service("seed-nonlocal")
+    with pytest.raises(SeedPolicyError, match="DATABASE_URL"):
+        await manager.seed(tenant_id=TENANT, namespace=NAMESPACE)
+
+    # The explicit override opens the policy gate even though the non-loopback
+    # database is still configured (seeding itself then needs that database,
+    # which is outside this unit's scope).
+    monkeypatch.setenv("AETHER_ALLOW_NONLOCAL_DB", "1")
+    assert_seed_allowed(environment="local", tenant_id=TENANT)
+
+
+async def test_fresh_process_durable_domains_are_reported_truthfully():
+    """M8-C3: status() never reports seeded from the ownership sidecars alone.
+    A fresh process with an empty process-local DurableStore reports the durable
+    runs/reviews domains as not present even though their sidecars persist."""
+    manager = service("seed-m7a")
+    await manager.seed(tenant_id=TENANT, namespace=NAMESPACE)
+    assert (await manager.verify(tenant_id=TENANT, namespace=NAMESPACE))["ok"] is True
+
+    # Model a fresh process: the DurableStore is emptied while the ownership
+    # sidecars and DB-backed records persist.
+    reset_durable_stores()
+    fresh = service("fresh-process")
+    status = await fresh.status(tenant_id=TENANT, namespace=NAMESPACE)
+
+    manifest = v1_manifest(NAMESPACE)
+    durable_count = sum(
+        1 for record in manifest.records if record.repository in {"runs", "reviews"}
+    )
+    assert status["durable_store_shared"] is False
+    assert status["owned_record_count"] == len(manifest.records) - durable_count
+    assert status["seeded"] is False  # durable domains are missing
+
+    # verify() agrees: the wiped durable domains are reported missing.
+    verified = await fresh.verify(tenant_id=TENANT, namespace=NAMESPACE)
+    assert verified["ok"] is False
+    assert any(
+        "runs:" in failure or "reviews:" in failure for failure in verified["failures"]
+    )
 
 
 async def test_m7a_six_domains_seed_and_are_visible_via_canonical_read_paths():

@@ -192,3 +192,48 @@ distribution · second sync feed · generic mobile mutation channel. Each is reu
   `get_run`/`list_review_batches`, continuation `get_scoped`) — proving no parallel copy; full
   demo_seed suite 14 tests; `make design-partner-demo-{up,seed,check,down}` targets wrap the
   existing demo-seed/reset-smoke machinery (idempotent seed, safe reset, provenance-clean check).
+
+#### D12 appendix — M8 reuse statements (landed)
+- **Mobile-actions tenant scope (M8-D3):** existing — the M6 mobile action digest
+  (`services/kyber/ops/mobile_actions.py`, `GET /v1/kyber/mobile/actions`) surfaced
+  `command_service.list_commands(status="open", limit=200)` (fleet-wide list) and the inbox/
+  step-up buckets WITHOUT a tenant bound, so a scoped operator context (an `AccessScope` with a
+  `tenant_id`) would see another tenant's open commands. New boundary: `MobileActionDigest`
+  threads the context's `AccessScope`; `_commands(tenant_id=...)` passes the bound tenant into
+  `command_service.list_commands`, which forwards to `CommandRepository.list_by_status` —
+  filtering on the typed `tenant_id` column (the row's `_first_tenant`). `tenant_id=""` (fleet
+  scope) never leaks into the scoped view; `None` keeps the global list; `_matches_filters` is
+  unchanged. NO new repository, NO second digest. Validators: `tests/unit/test_kyber_mobile_actions.py`
+  (16 tests: scoped context binds `tenant_id="tenant-a"`; unscoped keeps `None`; repo-level
+  `list_by_status` tenant filter inserts rows via `save` so `tenant_id` is stamped from
+  `_first_tenant`), full kyber suite 64 green.
+- **Kyber device DSR erasure (M8-E1):** existing — the DSR coverage gate
+  (`scripts/release/check_dsr_coverage.py`) bound four links (repo erase hook, `DSR_COMPONENTS`,
+  erasure-handler literal, storage-policy `delete_behavior`) for the three principal-keyed
+  mobile stores. The kyber device stores (`kyber_trusted_devices`, `kyber_webauthn_credentials`,
+  `kyber_device_proof_keys`) are **operator-keyed** (workforce personal data) and had no
+  principal-scoped erase path, so a data-subject erasure could not reach them. New boundary:
+  each of the three repos exposes `delete_by_operator` via `BaseRepository.delete_by_entity`
+  (no new repository machinery); the consent erasure handler maps the DSR subject to an operator
+  id and erases them through their own try/except (isolated + retryable, same idiom as the mobile
+  stores); `DSR_COMPONENTS` grew 23→26 with the three device components at the tail;
+  `kyber_device_approval_events` is deliberately NOT covered (storage policy `preserve`/legal
+  hold — a DSR must not destroy evidence of who approved which machine). Validators:
+  `tests/unit/test_dsr_coverage.py` (6: gate passes, missing component fails closed), backend
+  dsr suites (105 tests incl. isolated-failure retry test), coverage gate 34 checks PASS.
+- **Privacy-manifest honesty (M8-E2):** existing — `scripts/generate_privacy_manifests.py`
+  produced the per-app Play Data Safety declarations. The generated `deletion_mechanism`
+  over-claimed "In-app account deletion" that does not exist. New boundary: the generator emits
+  the honest mechanism — deletion happens through the backend data-subject erasure flow
+  (`consent/erasure` API, `request_type=erasure`), which removes the principal's mobile records
+  (continuations, installations/push subscriptions, sync change log) server-side; the app has no
+  in-app account-deletion UI. Regenerated `apps/*/data-safety.json`; drift-gated
+  (`make privacy-manifest-check`).
+- **Readiness-honesty docs (M8-F):** existing — `docs/PRODUCTIZATION.md`,
+  `docs/source-of-truth/REWARD_ENABLEMENT.md`, and `docs/CONNECTORS.md` claimed "production-ready"
+  that contradicted the canonical readiness scorecard (`scripts/production_status.py`, overall
+  3.77/5 pre-production; most areas 4/5 = release-ready with minor gaps; release blockers for
+  infra/ML artifacts/smart-contract audit). New boundary: all three docs now use scorecard
+  vocabulary — "release-ready (4/5)" instead of "production-ready", a readiness-terms note in
+  PRODUCTIZATION.md clarifying ✅ = code-state (implemented + CI-verified), and the scorecard
+  declared the canonical authority. `scripts/production_status.py` untouched.

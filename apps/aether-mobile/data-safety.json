@@ -60,7 +60,7 @@
   "security_practices": {
     "committed_to_play_families_policy": true,
     "data_encrypted_in_transit": true,
-    "deletion_mechanism": "In-app account deletion / DSR erasure request; deletion follows each purpose's dsrDeleteScope in the consent registry.",
+    "deletion_mechanism": "Data deletion is available through the Aether platform's data-subject erasure flow (backend consent/erasure API, request_type=erasure); the app has no in-app account-deletion UI. A submitted erasure request removes the principal's mobile records server-side: continuations and continuation selections, mobile installations and push subscriptions, the sync change log.",
     "independent_security_review": false,
     "user_can_request_data_deletion": true
   },

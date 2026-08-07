@@ -93,6 +93,76 @@ describe('AetherMobileClient', () => {
     expect(calls[0].url).toBe('https://api.aether.test/v1/client-sync?cursor=0%3A0');
   });
 
+  it('reads the operator client-sync feed with no query params', async () => {
+    const { client, calls } = stubClient(() => ({
+      status: 200,
+      body: { data: { events: [], cursor: 'op:9', has_more: false, reset: true } },
+    }));
+    const feed = await client.operatorClientSync();
+    expect(feed.cursor).toBe('op:9');
+    expect(feed.reset).toBe(true);
+    expect(calls[0].url).toBe('https://api.aether.test/v1/kyber/client-sync');
+    expect(calls[0].init.method ?? 'GET').toBe('GET');
+    expect(calls[0].init.headers.authorization).toBe('Bearer tok-123');
+  });
+
+  it('emits only the set operator client-sync query params', async () => {
+    const { client, calls } = stubClient(() => ({
+      status: 200,
+      body: { data: { events: [], cursor: 'op:1', has_more: false, reset: false } },
+    }));
+    await client.operatorClientSync({ cursor: '0:0' });
+    expect(calls[0].url).toBe('https://api.aether.test/v1/kyber/client-sync?cursor=0%3A0');
+
+    await client.operatorClientSync({ cursor: '0:0', limit: 50 });
+    expect(calls[1].url).toBe('https://api.aether.test/v1/kyber/client-sync?cursor=0%3A0&limit=50');
+
+    await client.operatorClientSync({ limit: 50 });
+    expect(calls[2].url).toBe('https://api.aether.test/v1/kyber/client-sync?limit=50');
+  });
+
+  it('unwraps the ClientSyncResponse envelope from the operator feed', async () => {
+    const { client, calls } = stubClient(() => ({
+      status: 200,
+      body: {
+        data: {
+          events: [
+            {
+              seq: 1,
+              tenant_id: 'op-1',
+              principal_id: 'op-1',
+              change_type: 'command_receipt_changed',
+              resource_kind: 'command_receipt',
+              resource_id: 'cmd_1',
+              payload: {},
+              emitted_at: '2026-08-01T00:00:00Z',
+            },
+          ],
+          cursor: 'op:2',
+          has_more: true,
+          reset: false,
+        },
+      },
+    }));
+    const feed = await client.operatorClientSync({ cursor: 'op:1' });
+    expect(feed.events).toHaveLength(1);
+    expect(feed.events[0].change_type).toBe('command_receipt_changed');
+    expect(feed.events[0].resource_id).toBe('cmd_1');
+    expect(feed.has_more).toBe(true);
+    expect(calls[0].url).toBe('https://api.aether.test/v1/kyber/client-sync?cursor=op%3A1');
+  });
+
+  it('surfaces a 404 from the flag-gated operator client-sync router as MobileApiError', async () => {
+    const { client } = stubClient(() => ({ status: 404, body: { detail: 'not found' } }));
+    try {
+      await client.operatorClientSync();
+      throw new Error('expected operatorClientSync to reject');
+    } catch (err) {
+      expect(err).toBeInstanceOf(MobileApiError);
+      expect((err as MobileApiError).status).toBe(404);
+    }
+  });
+
   it('throws MobileApiError on a non-2xx response', async () => {
     const { client } = stubClient(() => ({ status: 409, body: { error: 'conflict' } }));
     await expect(client.getContinuation('c1')).rejects.toBeInstanceOf(MobileApiError);

@@ -7,7 +7,8 @@ path uses. The suite proves:
 * Registration persists a ``DeviceProofKey`` row the proof repo reads.
 * Registration is an idempotent UPSERT — re-registering ``(device_id,
   operator_id)`` never creates a second row, and a different key REPLACES the
-  stored one in place.
+  stored one in place **only after a fresh step-up grant** (a re-key of a live
+  attestation key; first enrollment needs no step-up).
 * Ownership is enforced with the continuation router's 404 idiom — a foreign or
   absent ``device_id`` / ``proof_key_id`` is indistinguishable from gone, and a
   list never shows another operator's keys.
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from unittest.mock import AsyncMock
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
@@ -30,7 +32,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from repositories.repos import reset_in_memory_stores
-from shared.common.common import AetherError, BadRequestError, NotFoundError
+from shared.common.common import AetherError, BadRequestError, ForbiddenError, NotFoundError
 from services.kyber.access.contracts import TrustedDevice, WorkforcePrincipal, WorkforceSession
 from services.kyber.access.dependencies import KyberAccessContext
 from services.kyber.devices.device_proof import device_proof_service
@@ -42,6 +44,7 @@ from services.kyber.devices.mobile_proof_routes import (
     revoke_mobile_proof_key,
 )
 from services.kyber.devices.repository import DeviceProofKeyRepository, TrustedDeviceRepository
+from services.kyber.sessions.step_up import step_up_service
 
 
 def _run(coro):
@@ -185,10 +188,15 @@ def test_register_creates_proof_key_row_via_the_proof_repo():
     assert row.public_key == PUB_KEY_A
 
 
-def test_register_is_idempotent_upsert():
+def test_register_is_idempotent_upsert(monkeypatch):
     _run(_seed_device(operator_id="op-1", device_id="dev_1"))
 
     first = _register("dev_1", PUB_KEY_A)
+
+    # Re-registration rides the replace path, which demands a fresh step-up.
+    monkeypatch.setattr(
+        step_up_service, "require_fresh", AsyncMock(return_value=(True, None))
+    )
     second = _register("dev_1", PUB_KEY_A)
 
     assert second["proof_key_id"] == first["proof_key_id"]
@@ -196,10 +204,16 @@ def test_register_is_idempotent_upsert():
     assert len(rows) == 1
 
 
-def test_register_with_different_key_replaces_in_place():
+def test_register_with_different_key_replaces_in_place(monkeypatch):
     _run(_seed_device(operator_id="op-1", device_id="dev_1"))
 
     first = _register("dev_1", PUB_KEY_A)
+
+    # Re-keying a live key rides the replace path, which demands a fresh
+    # step-up; with the grant, the stored key is REPLACED in place.
+    monkeypatch.setattr(
+        step_up_service, "require_fresh", AsyncMock(return_value=(True, None))
+    )
     second = _register("dev_1", PUB_KEY_B)
 
     # One live row per device; a re-enrollment REPLACES the stored key.
@@ -208,6 +222,43 @@ def test_register_with_different_key_replaces_in_place():
     rows = _run(DeviceProofKeyRepository().find_by_device("dev_1"))
     assert len(rows) == 1
     assert rows[0].public_key == PUB_KEY_B
+
+
+def test_register_replacement_denied_without_fresh_step_up():
+    """A live key cannot be re-bound without a fresh step-up grant (D2).
+
+    The vulnerability this closes: under only a SELF_CAPABILITY session, an
+    attacker holding a captured cookie could re-key the device to a key they
+    control and then pass ``/step-up/verify``. Because the grant itself is only
+    obtainable against the *current* live key, the re-key must fail here and
+    leave the existing key intact.
+    """
+    _run(_seed_device(operator_id="op-1", device_id="dev_1"))
+    first = _register("dev_1", PUB_KEY_A)
+
+    # No step-up grant for this session -> the re-key is refused outright.
+    with pytest.raises(ForbiddenError) as excinfo:
+        _register("dev_1", PUB_KEY_B)
+    assert excinfo.value.details.get("denial_reason") == "step_up_required"
+
+    # The live attestation key is untouched — the device still proves with A.
+    row = _run(DeviceProofKeyRepository().find_active_by_device("dev_1"))
+    assert row is not None
+    assert row.public_key == PUB_KEY_A
+    assert row.proof_key_id == first["proof_key_id"]
+    rows = _run(DeviceProofKeyRepository().find_by_device("dev_1"))
+    assert len(rows) == 1
+
+
+def test_first_time_enrollment_still_allowed_without_step_up():
+    """First enrollment (no existing live key) needs no step-up grant."""
+    _run(_seed_device(operator_id="op-1", device_id="dev_1"))
+
+    data = _register("dev_1", PUB_KEY_A)
+
+    assert data["public_key"] == PUB_KEY_A
+    row = _run(DeviceProofKeyRepository().find_active_by_device("dev_1"))
+    assert row is not None and row.public_key == PUB_KEY_A
 
 
 def test_register_foreign_device_is_404():

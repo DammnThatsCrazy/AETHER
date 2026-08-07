@@ -165,6 +165,26 @@ export class AetherMobileClient {
     return this.http.request<ClientSyncResponse>('GET', `/v1/client-sync${query}`);
   }
 
+  /**
+   * GET /v1/kyber/client-sync — the operator-plane client-sync feed.
+   *
+   * Mirrors the tenant `clientSync` under `/v1/kyber/client-sync`, scoped by the
+   * server to the authenticated operator (`o:{operator_id}`) — never from a
+   * client header. Gated by `settings.client_sync.enabled`: when the gate is off
+   * the backend returns 404; callers treat a `MobileApiError` with
+   * `status === 404` as "surface unavailable" and render nothing.
+   *
+   * Only the query params that are set are emitted: `?cursor=&limit=`, either,
+   * or neither.
+   */
+  async operatorClientSync(opts?: { cursor?: string; limit?: number }): Promise<ClientSyncResponse> {
+    const query: string[] = [];
+    if (opts?.cursor !== undefined) query.push(`cursor=${encodeURIComponent(opts.cursor)}`);
+    if (opts?.limit !== undefined) query.push(`limit=${encodeURIComponent(String(opts.limit))}`);
+    const qs = query.join('&');
+    return this.http.request<ClientSyncResponse>('GET', `/v1/kyber/client-sync${qs ? `?${qs}` : ''}`);
+  }
+
   // ── Kyber auth: session & step-up ────────────────────────────────────
   /** GET /v1/kyber/auth/session — the caller's current Kyber session. */
   getSession(): Promise<KyberSessionView> {

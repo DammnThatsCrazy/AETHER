@@ -23,10 +23,18 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 
+from repositories.repos import reset_in_memory_stores
 from shared.common.common import AetherError
-from services.kyber.access.contracts import StepUpGrant, WorkforcePrincipal, WorkforceSession
+from services.kyber.access.contracts import (
+    AccessScope,
+    StepUpGrant,
+    WorkforcePrincipal,
+    WorkforceSession,
+    now_iso,
+)
 from services.kyber.access.dependencies import KyberAccessContext
 from services.kyber.ops import mobile_actions
+from services.kyber.ops.command_repository import CommandRepository
 from services.kyber.ops.contracts import OperationalException
 from services.kyber.ops.commands import command_service
 from services.kyber.ops.exceptions import exception_service
@@ -45,13 +53,15 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _ctx(operator_id: str = "op-1") -> KyberAccessContext:
+def _ctx(operator_id: str = "op-1", tenant_id: str | None = None) -> KyberAccessContext:
     """The real ``KyberAccessContext`` a workforce session would authorize.
 
     Mirrors ``tests/kyber/conftest.py.build_scoped_context`` and
     ``tests/unit/test_kyber_continuations.py._ctx``: a live, device-bound session
     plus an active principal — the shape ``require_kyber_access`` hands a handler
-    after a successful evaluation.
+    after a successful evaluation. ``tenant_id`` attaches a resolved
+    ``AccessScope`` (M8-D3) so the digest binds its open-command list to the
+    operator's tenant scope; ``None`` models an unscoped operator.
     """
     session = WorkforceSession(
         token_hash=f"hash_{operator_id}",
@@ -67,10 +77,23 @@ def _ctx(operator_id: str = "op-1") -> KyberAccessContext:
         employment_status="active",
         kyber_enabled=True,
     )
+    scope = None
+    if tenant_id is not None:
+        scope = AccessScope(
+            operator_id=operator_id,
+            session_id=session.session_id,
+            device_id=session.device_id,
+            environment=session.environment,
+            tenant_id=tenant_id,
+            purpose="customer_support",
+            reason="M8-D3 digest tenant-scope test",
+            expires_at=now_iso(),
+        )
     return KyberAccessContext(
         session=session,
         principal=principal,
         environment=session.environment,
+        scope=scope,
     )
 
 
@@ -104,8 +127,9 @@ def _cmd(
     status: str,
     action_class: int,
     blast_radius: dict | None = None,
+    tenant_ids: list[str] | None = None,
 ) -> dict:
-    return {
+    cmd = {
         "command_id": command_id,
         "command_type": command_type,
         "status": status,
@@ -117,6 +141,9 @@ def _cmd(
         "updated_at": "2026-08-07T00:00:00+00:00",
         "blast_radius": blast_radius,
     }
+    if tenant_ids is not None:
+        cmd["tenant_ids"] = tenant_ids
+    return cmd
 
 
 def _queue(buckets: dict | None = None) -> dict:
@@ -346,3 +373,76 @@ def test_empty_queue_all_empty_with_step_up_present(monkeypatch):
     assert data["step_up_required"] is True
     assert data["step_up"] == {"fresh": False, "grant_id": None, "expires_at": None}
     assert data["generated_at"]
+
+
+# ── M8-D3: tenant-scope binding ───────────────────────────────────────────────
+
+def test_scoped_context_binds_commands_to_tenant(monkeypatch):
+    """A tenant-scoped context passes its tenant_id into the owning service.
+
+    The digest never post-hoc strips already-fetched rows: the bound value goes
+    to ``command_service.list_commands`` so the filter runs where the rows are
+    indexed. ``tenant_id`` travels as an explicit kwarg alongside the fixed
+    ``status``/``limit`` the ops routes already use.
+    """
+    _seed(monkeypatch, commands=[])
+    fake = command_service.list_commands
+    data = _run(mobile_actions.action_availability(context=_ctx("op-1", tenant_id="tenant-a")))["data"]
+    fake.assert_awaited_once_with(status="open", limit=200, tenant_id="tenant-a")
+    assert data["tiers"] == {"tier0": [], "tier1": [], "tier2": [], "tier3": []}
+
+
+def test_unscoped_context_keeps_global_command_list(monkeypatch):
+    """An unscoped operator keeps the global list — exactly like ops /commands.
+
+    ``scope=None`` resolves to ``tenant_id=None``, which the owning service
+    treats as "no tenant filter". The digest surface is unchanged for the
+    operators who sit behind the same ``kyber.audit.read`` gate as the ops
+    routes.
+    """
+    _seed(monkeypatch, commands=[])
+    fake = command_service.list_commands
+    data = _run(mobile_actions.action_availability(context=_ctx()))["data"]
+    fake.assert_awaited_once_with(status="open", limit=200, tenant_id=None)
+    assert data["tiers"] == {"tier0": [], "tier1": [], "tier2": [], "tier3": []}
+
+
+def test_scoped_digest_surfaces_only_the_operators_tenant(monkeypatch):
+    """The digest renders only what the scoped owning-service call returns.
+
+    With two tenants each holding a high-impact open command, a tenant-a
+    operator's tier0 must contain only tenant-a's command — the digest trusts
+    the indexed filter, not a presentational rebucket, so nothing from tenant-b
+    (or fleet-wide) can surface.
+    """
+    tenant_a = [_cmd("kcm_a", command_type="pause_connector", status="approved", action_class=4)]
+    tenant_b = [_cmd("kcm_b", command_type="pause_connector", status="approved", action_class=4)]
+
+    async def _list(**kwargs):
+        return tenant_a if kwargs.get("tenant_id") == "tenant-a" else tenant_b
+
+    monkeypatch.setattr(command_service, "list_commands", AsyncMock(side_effect=_list))
+    data = _run(mobile_actions.action_availability(context=_ctx("op-1", tenant_id="tenant-a")))["data"]
+    assert [i["id"] for i in data["tiers"]["tier0"]] == ["kcm_a"]
+    assert "kcm_b" not in [i["id"] for i in _all_items(data)]
+
+
+def test_command_repository_list_by_status_tenant_scope():
+    """M8-D3: tenant-filtered listing excludes other tenants AND fleet-wide rows.
+
+    The typed ``tenant_id`` column is stamped by ``save`` from the first entry
+    of ``tenant_ids``; ``list_by_status(tenant_id=...)`` must narrow to it.
+    Fleet-wide commands (``tenant_id=""``) never leak into a scoped view, and
+    the unscoped list keeps all three — mirroring the ops ``/commands`` surface.
+    """
+    reset_in_memory_stores()
+    repo = CommandRepository()
+    _run(repo.save(_cmd("kcm_fleet", command_type="retry_job", status="approved", action_class=2)))
+    _run(repo.save(_cmd("kcm_a", command_type="retry_job", status="approved", action_class=2, tenant_ids=["tenant-a"])))
+    _run(repo.save(_cmd("kcm_b", command_type="retry_job", status="approved", action_class=2, tenant_ids=["tenant-b"])))
+
+    scoped = _run(repo.list_by_status(status="open", tenant_id="tenant-a"))
+    assert [row["command_id"] for row in scoped] == ["kcm_a"]
+
+    global_list = _run(repo.list_by_status(status="open"))
+    assert {row["command_id"] for row in global_list} == {"kcm_fleet", "kcm_a", "kcm_b"}
