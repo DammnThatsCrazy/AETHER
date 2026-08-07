@@ -10,7 +10,7 @@ source_files:
   - scripts/financial_credential_readiness.py
   - Backend Architecture/aether-backend/shared/certification/registry.py
 canonical_owner: platform@aether
-last_synced_commit: "380de9d"
+last_synced_commit: "e9fc085"
 ---
 
 # Financial Credential-Readiness Runbook
@@ -59,6 +59,10 @@ and reports this cohort as `credential_waiting`; no doc may claim otherwise.
 The gate **fails closed**:
 
 - a `SCAFFOLDED` adapter ranks below the threshold → not READY;
+- a `SCAFFOLDED` state caused by a broken adapter import is distinguishable
+  from an honest absence: the failure is recorded in
+  `registry.import_errors()` and in the generated matrix
+  `summary.import_errors` (an empty map is part of a healthy build);
 - a dishonest `PARTNER_LIVE`/`SANDBOX_VALIDATED` descriptor (claiming a live
   state with no live evidence — no `ctx['live_evidence']`, no `last_certified_at`)
   fails the `honest_status` check → not READY.

@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/descriptor.py
 canonical_owner: platform@aether
-last_synced_commit: "146e1603"
+last_synced_commit: "e9fc085"
 ---
 
 # Provider Capability Matrix Guide
@@ -51,9 +51,11 @@ Keys are `<domain>:<provider>`. Each entry carries `state`, `state_rank`,
 
 ### Readiness states (low → high)
 
+The states below are the `CredentialReadiness` enum members in
+`shared/certification/readiness.py` with their `_READINESS_RANK` values.
+
 | State | Rank | Meaning |
 |---|---|---|
-| `mocked_local` | 0 | deterministic local mock, no real transport |
 | `scaffolded` | 1 | descriptor only, unimplemented paths (forbidden for first release) |
 | `credential_waiting` | 2 | code-complete + infra-defined, credential-gated, NOT yet validated |
 | `replay_validated` | 3 | validated against recorded fixtures |
@@ -64,13 +66,22 @@ Keys are `<domain>:<provider>`. Each entry carries `state`, `state_rank`,
 `degraded`/`disabled` rank below everything so an "at least CREDENTIAL_WAITING"
 assertion never admits an off-ramped provider.
 
+### Import failures are surfaced, never silent
+
+A provider whose adapter module fails to import still resolves to `scaffolded`,
+but the failure is recorded: the matrix `summary.import_errors` map (and
+`registry.import_errors()`) carries `"module:attr" → error`. An empty map is
+part of a healthy build — a `scaffolded` entry accompanied by an
+`import_errors` record is a **resolution failure to fix**, not an honest
+absence, and certification gates fail on it.
+
 ## Current first-release scope (all `credential_waiting`)
 
-18 providers, none live: derivatives (drift, dydx, gmx, hyperliquid), interop
+19 providers, none live: derivatives (drift, dydx, gmx, hyperliquid), interop
 (axelar, chainlink_ccip, debridge, hyperlane, ibc, layerzero, wormhole),
 payments (bridge, coinbase, moonpay, privy, stripe_onramp), stablecoin_chain
-(evm, svm). `credential_waiting` is **not** production-ready — see
-`CREDENTIAL_WAITING_PROMOTION_GUIDE.md`.
+(evm, svm), communications (klaviyo). `credential_waiting` is **not**
+production-ready — see `CREDENTIAL_WAITING_PROMOTION_GUIDE.md`.
 
 > Field caveat: for derivatives, `capabilities` come from the live adapter but
 > `streaming_model`/`pagination_model` come from a fixed spec table, so dydx can

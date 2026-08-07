@@ -77,7 +77,7 @@ What this audit pass changed (June 2026):
 What the July 2026 staging-capstone pass changed (PRs 1–6):
 
 - Added a **credentialless provider certification plane** (new scorecard area,
-  4/5): a `CredentialReadiness` truth model (8 ranked states) plus a
+  4/5): a `CredentialReadiness` truth model (7 ranked states) plus a
   `ReadinessDimensions` record whose validators refuse to infer `production_ready`
   from structure. `build_capability_matrix()` resolves every provider's state
   **from source** into `docs/_generated/adapter-certification-matrix.json`, and
