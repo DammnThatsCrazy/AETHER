@@ -162,6 +162,21 @@ object Aether : DefaultLifecycleObserver {
 
     private var healthAgent: AetherHealthAgent? = null
 
+    /**
+     * Sampling rate in [0,1] derived from the remote manifest's
+     * rollout_percentage (Truth Kernel remote config). 1.0 (no gate) until a
+     * manifest has been fetched, verified, and applied via onManifestUpdate.
+     * See enqueueEvent(type, properties).
+     */
+    var samplingRate: Double = 1.0
+
+    /**
+     * Manifest-provided feature-flag overrides (SDKManifest.features),
+     * applied on top of serverConfig["featureFlags"] in isFeatureEnabled().
+     * Empty until a manifest is applied.
+     */
+    var manifestFeatureOverrides: Map<String, Boolean> = emptyMap()
+
     /** Invoked after each processed batch with per-batch ingestion health (§2.8). */
     var onBatchResult: ((BatchHealth) -> Unit)? = null
 
@@ -302,6 +317,10 @@ object Aether : DefaultLifecycleObserver {
         "workflow_started" to "analytics", "workflow_completed" to "analytics", "workflow_failed" to "analytics",
         // Ecommerce extended family
         "cart_item_added" to "commerce", "cart_item_removed" to "commerce",
+        // Registry events previously missing from this map (mobile-event parity gate)
+        "product_viewed" to "commerce", "checkout_started" to "commerce", "coupon_applied" to "commerce",
+        "message_received_observed" to "analytics", "message_sent_observed" to "analytics",
+        "notification_opened" to "analytics",
         "cart_updated" to "commerce", "checkout_step_completed" to "commerce",
         "order_completed" to "commerce", "order_cancelled" to "commerce",
         "order_refunded" to "commerce", "chargeback_observed" to "commerce",
@@ -519,6 +538,13 @@ object Aether : DefaultLifecycleObserver {
             )
         }
         healthAgent = hAgent
+        // Wire the verified remote manifest into the emitter: rollout_percentage
+        // drives the sampling gate in enqueueEvent, features feed
+        // isFeatureEnabled. Previously fetched+verified+cached and discarded.
+        hAgent.onManifestUpdate { manifest ->
+            samplingRate = manifest.rollout_percentage.coerceIn(0, 100) / 100.0
+            manifestFeatureOverrides = manifest.features
+        }
         if (config.privacy.gdprMode) {
             if ("analytics" in consentState) hAgent.start()
         } else {
@@ -1409,10 +1435,25 @@ object Aether : DefaultLifecycleObserver {
     // =========================================================================
 
     fun isFeatureEnabled(key: String, default: Boolean = false): Boolean {
+        // Manifest overrides win over server config flags — this mirrors the
+        // JS RemoteManifest module (packages/react-native/src/modules/RemoteManifest.ts),
+        // which pushes manifest flags/features into RNFeatureFlags via
+        // setOverride(): an override that supersedes the underlying value.
+        manifestFeatureOverrides[key]?.let { return it }
         return try {
             serverConfig.optJSONObject("featureFlags")?.optBoolean(key, default) ?: default
         } catch (_: Exception) { default }
     }
+
+    /**
+     * Sampling decision for the manifest-driven rollout gate (Truth Kernel
+     * remote config). Pure/stateless so it can be tested deterministically —
+     * [roll] is injectable and defaults to the platform RNG in production
+     * call sites. Mirrors the JS RemoteManifest sampling convention
+     * (packages/react-native/src/modules/RemoteManifest.ts): keep the event
+     * when roll < rate.
+     */
+    fun shouldSample(rate: Double, roll: Double = Math.random()): Boolean = roll < rate
 
     fun getFeatureValue(key: String, default: Any? = null): Any? {
         return try {
@@ -1464,6 +1505,16 @@ object Aether : DefaultLifecycleObserver {
             // surfaced as the BatchHealth.droppedByConsent counter (§2.8).
             pendingConsentDrops.incrementAndGet()
             healthAgent?.recordDroppedEvents(1)
+            return
+        }
+
+        // Manifest-driven rollout sampling gate (Truth Kernel remote config).
+        // Consent gating above is unchanged; this only applies once a
+        // manifest with rollout_percentage < 100 has been fetched, verified,
+        // and applied via onManifestUpdate.
+        val rate = samplingRate
+        if (rate < 1.0 && !shouldSample(rate)) {
+            log("Dropping $type — sampled out by remote rollout gate (rate=$rate)")
             return
         }
 

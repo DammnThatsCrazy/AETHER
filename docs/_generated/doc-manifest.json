@@ -3784,6 +3784,21 @@
       "since_version": "9.0.0"
     },
     {
+      "path": "docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md",
+      "title": "Aether Reliability Phase 2 — Architectural Programs",
+      "slug": "architecture/reliability-phase-2-program",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "estimated_read_minutes": 28,
+      "toc_depth": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/UNIVERSAL_GRAPH_ARCHITECTURE.md",
       "title": "Universal Intelligence Graph Architecture",
       "slug": "architecture/universal-graph-architecture",

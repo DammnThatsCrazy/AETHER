@@ -122,19 +122,48 @@ class MeasurementConnectorRepository:
         merged["connector_id"] = str(merged.get("connector_id", connector_id))
         return _normalize(merged)
 
-    async def list_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def list_by_tenant(
+        self,
+        tenant_id: str,
+        *,
+        status: Optional[str] = None,
+        connector_type: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """List connectors for a tenant, optionally filtered by status/connector_type."""
         pool = await self._pool()
         if pool is None:
-            rows = [v for v in _local_connectors.values() if v.get("tenant_id") == tenant_id]
+            rows = [
+                v for v in _local_connectors.values()
+                if v.get("tenant_id") == tenant_id
+                and (status is None or v.get("status") == status)
+                and (connector_type is None or v.get("connector_type") == connector_type)
+            ]
             rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
             return [_normalize(r) for r in rows]
+
+        conditions = ["tenant_id = $1"]
+        params: list[Any] = [tenant_id]
+        p = 2
+        if status:
+            conditions.append(f"status = ${p}")
+            params.append(status)
+            p += 1
+        if connector_type:
+            conditions.append(f"connector_type = ${p}")
+            params.append(connector_type)
+            p += 1
+
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT * FROM measurement_connectors WHERE tenant_id = $1 "
+                f"SELECT * FROM measurement_connectors WHERE {' AND '.join(conditions)} "
                 "ORDER BY created_at DESC",
-                tenant_id,
+                *params,
             )
         return [_normalize(dict(r)) for r in rows]
+
+    async def list_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Alias for the unfiltered case — kept for existing call sites."""
+        return await self.list_by_tenant(tenant_id)
 
     async def get(self, tenant_id: str, connector_id: str) -> Optional[dict[str, Any]]:
         pool = await self._pool()
@@ -180,3 +209,104 @@ class MeasurementConnectorRepository:
                 tenant_id, cid,
             )
         return True
+
+    async def set_status(self, tenant_id: str, connector_id: str, status: str) -> bool:
+        """Update a connector's status. Returns False when it does not exist."""
+        pool = await self._pool()
+        if pool is None:
+            record = _local_connectors.get(f"{tenant_id}:{connector_id}")
+            if record is None:
+                return False
+            record["status"] = status
+            record["updated_at"] = datetime.now(timezone.utc).isoformat()
+            return True
+
+        cid = _uuid_or_none(connector_id)
+        if cid is None:
+            return False
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE measurement_connectors SET status = $1, updated_at = NOW() "
+                "WHERE tenant_id = $2 AND connector_id = $3",
+                status, tenant_id, cid,
+            )
+            return result.split()[-1] != "0"
+
+    async def update_cursor(
+        self, tenant_id: str, connector_id: str, cursor_state: dict[str, Any]
+    ) -> bool:
+        """Persist the durable sync cursor. Returns False when it does not exist."""
+        pool = await self._pool()
+        if pool is None:
+            record = _local_connectors.get(f"{tenant_id}:{connector_id}")
+            if record is None:
+                return False
+            record["cursor_state"] = cursor_state
+            record["updated_at"] = datetime.now(timezone.utc).isoformat()
+            return True
+
+        cid = _uuid_or_none(connector_id)
+        if cid is None:
+            return False
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE measurement_connectors SET cursor_state = $1, updated_at = NOW() "
+                "WHERE tenant_id = $2 AND connector_id = $3",
+                json.dumps(cursor_state), tenant_id, cid,
+            )
+            return result.split()[-1] != "0"
+
+    async def record_sync(
+        self,
+        tenant_id: str,
+        connector_id: str,
+        *,
+        success: bool,
+        next_sync_at: Optional[datetime] = None,
+        health_status: str = "healthy",
+    ) -> bool:
+        """Record the outcome of a sync attempt. Returns False when the connector
+        does not exist."""
+        now = datetime.now(timezone.utc)
+        pool = await self._pool()
+        if pool is None:
+            record = _local_connectors.get(f"{tenant_id}:{connector_id}")
+            if record is None:
+                return False
+            record["last_sync_at"] = now.isoformat()
+            record["health_status"] = health_status
+            record["updated_at"] = now.isoformat()
+            record["sync_run_count"] = int(record.get("sync_run_count") or 0) + 1
+            if success:
+                record["last_success_at"] = now.isoformat()
+            else:
+                record["error_count"] = int(record.get("error_count") or 0) + 1
+            if next_sync_at:
+                record["next_sync_at"] = next_sync_at.isoformat()
+            return True
+
+        cid = _uuid_or_none(connector_id)
+        if cid is None:
+            return False
+
+        updates = [
+            "last_sync_at = $3", "health_status = $4", "updated_at = NOW()",
+            "sync_run_count = sync_run_count + 1",
+        ]
+        params: list[Any] = [tenant_id, cid, now, health_status]
+        if success:
+            updates.append(f"last_success_at = ${len(params) + 1}")
+            params.append(now)
+        else:
+            updates.append("error_count = error_count + 1")
+        if next_sync_at:
+            updates.append(f"next_sync_at = ${len(params) + 1}")
+            params.append(next_sync_at)
+
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"UPDATE measurement_connectors SET {', '.join(updates)} "
+                "WHERE tenant_id = $1 AND connector_id = $2",
+                *params,
+            )
+            return result.split()[-1] != "0"

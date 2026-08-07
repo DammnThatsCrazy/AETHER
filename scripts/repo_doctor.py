@@ -598,6 +598,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="sync CANONICAL_EVENT_TYPES in services/ingestion/batch.py with EventType union in packages/shared/events.ts",
     )
     run(
+        [sys.executable, "scripts/validate_mobile_event_parity.py"],
+        name="Mobile event parity",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "hand-edit AetherEventType/eventConsentPurpose in packages/ios/Sources/AetherSDK/Aether.swift "
+            "and/or EVENT_CONSENT_PURPOSE in packages/android/src/main/java/com/aether/sdk/Aether.kt so their "
+            "event-type sets match packages/shared/contracts/event-registry.json; native registries are never "
+            "code-generated (see scripts/validate_sdk_parity.py's documented non-goal)"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_meter_names.py"],
         name="Canonical meter names (ingestion/connector paths)",
         results=results,
