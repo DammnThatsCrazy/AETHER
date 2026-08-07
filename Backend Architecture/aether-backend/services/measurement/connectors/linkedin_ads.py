@@ -17,6 +17,49 @@ logger = logging.getLogger("aether.measurement.connectors.linkedin_ads")
 _CONNECTOR_TYPE = "linkedin_ads"
 _API_VERSION = "202401"
 _BASE_URL = "https://api.linkedin.com/rest"
+_DEFAULT_CURRENCY = "USD"
+
+
+def _resolve_billing_currency(config: dict[str, Any], row_currency: Any = None) -> tuple[str, bool]:
+    """Resolve the billing currency for a spend row.
+
+    LinkedIn reports spend as ``costInLocalCurrency`` — the ad account's local
+    currency — but the ``adAnalytics`` element does not echo a currency code, so
+    the code is sourced from account settings (connector config).
+
+    Preference order:
+      1. Currency reported on the provider element (``row_currency``), if present.
+      2. Account-level currency from connector config (account settings).
+      3. Documented ``USD`` default, flagged as a fallback.
+
+    Returns ``(currency_code, is_default_fallback)``.
+    """
+    for candidate in (
+        row_currency,
+        config.get("currency"),
+        config.get("account_currency"),
+        config.get("billing_currency"),
+    ):
+        if candidate:
+            code = str(candidate).strip().upper()
+            if code:
+                return code, False
+    return _DEFAULT_CURRENCY, True
+
+
+def _resolve_source_timezone(config: dict[str, Any], row_timezone: Any = None) -> str:
+    """Resolve the account/report timezone, preserving provider metadata when present."""
+    for candidate in (
+        row_timezone,
+        config.get("time_zone"),
+        config.get("timezone"),
+        config.get("account_timezone"),
+    ):
+        if candidate:
+            tz = str(candidate).strip()
+            if tz:
+                return tz
+    return "UTC"
 
 
 class LinkedInAdsConnector(BaseConnector):
@@ -109,6 +152,19 @@ class LinkedInAdsConnector(BaseConnector):
                     period_date = date(dr_start.get("year", start.year), dr_start.get("month", start.month), dr_start.get("day", start.day))
                     campaign_urn = el.get("pivotValue", "")
                     spend = el.get("costInLocalCurrency", 0)
+                    currency, currency_is_default = _resolve_billing_currency(
+                        self._config, row_currency=el.get("currency")
+                    )
+                    source_tz = _resolve_source_timezone(self._config)
+                    raw_dimensions: dict[str, Any] = {
+                        "pivotValue": campaign_urn,
+                        "date": str(period_date),
+                        "currency_source": "default_fallback" if currency_is_default else "provider",
+                        "source_timezone": source_tz,
+                    }
+                    exchange_rate = el.get("exchangeRate") or self._config.get("exchange_rate")
+                    if exchange_rate is not None:
+                        raw_dimensions["exchange_rate"] = str(exchange_rate)
                     metrics_list.append(ExternalCampaignMetric(
                         platform=_CONNECTOR_TYPE,
                         external_account_id=ad_account_id,
@@ -118,8 +174,9 @@ class LinkedInAdsConnector(BaseConnector):
                         impressions=int(el.get("impressions", 0)),
                         clicks=int(el.get("clicks", 0)),
                         spend=Decimal(str(spend)),
-                        currency="USD",
-                        raw_dimensions={"pivotValue": campaign_urn, "date": str(period_date)},
+                        currency=currency,
+                        source_timezone=source_tz,
+                        raw_dimensions=raw_dimensions,
                     ))
                 write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
                 rows_upserted = write_result.spend_records_written

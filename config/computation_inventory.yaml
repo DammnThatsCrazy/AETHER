@@ -93,7 +93,7 @@ computations:
     missing_input_behavior: preserved fractional (never int-truncated)
     aggregation_behavior: sum
     currency_behavior: n/a
-    known_defects: [fractional_conversion_truncated_to_int]
+    known_defects: []
     priority: P0
     proposed_definition_id: campaign.attributed_conversions
     migration_state: migrated
@@ -130,7 +130,7 @@ computations:
     missing_input_behavior: unpriced liabilities -> partial (not inflated net worth)
     aggregation_behavior: non_aggregatable
     currency_behavior: USD reporting with lineage
-    known_defects: [unpriced_subtrahend_as_zero]
+    known_defects: []
     priority: P0
     proposed_definition_id: value.net_worth
     migration_state: migrated
@@ -148,12 +148,13 @@ computations:
     missing_input_behavior: unpriced debt -> partial (not inflated net TVL)
     aggregation_behavior: non_aggregatable
     currency_behavior: USD reporting with lineage
-    known_defects: [unpriced_subtrahend_as_zero]
+    known_defects: []
     priority: P0
     proposed_definition_id: value.net_tvl
     migration_state: migrated
 
-  # ---- Un-migrated debt (recorded; roadmap tracks the fix) -----------------
+  # ---- Domain honesty migrations (P&L / billing / trust / fraud / ML /
+  #      behavioral / cluster) — migrated onto registered definitions ---------
   - computation_id: pnl.tvl_delta_as_daily_pnl
     file: Backend Architecture/aether-backend/services/pnl/pnl_calculator.py
     symbol: compute / _best_worst_day
@@ -164,10 +165,13 @@ computations:
     unit: currency
     grain: account_day
     time_semantics: daily snapshots
-    missing_input_behavior: catch-and-return Decimal(0)
+    missing_input_behavior: >-
+      tvl_change relabeled as a flow (NOT P&L); missing FIFO opening lots =>
+      insufficient_basis (under-estimate flagged); query failure =>
+      data_confidence=unavailable; tvl_delta_pct None when opening TVL is 0
     aggregation_behavior: non_aggregatable
-    currency_behavior: hardcoded USD
-    known_defects: [tvl_delta_mislabeled_pnl, windowed_fifo_no_opening_lots, catch_return_zero]
+    currency_behavior: USD reporting (portfolio USD basis)
+    known_defects: []
     priority: P0
     proposed_definition_id: pnl.tvl_change
     migration_state: migrated
@@ -182,10 +186,13 @@ computations:
     unit: unit
     grain: tenant_period
     time_semantics: billing period
-    missing_input_behavior: bounded read undercounts silently
+    missing_input_behavior: bounded read now discloses truncation (no longer silent)
     aggregation_behavior: sum
-    currency_behavior: mixed-currency float sums
-    known_defects: [bounded_read_no_truncation_disclosure, float_money, mixed_currency_sum]
+    currency_behavior: mixed-currency float sums (revenue-side money migration still open)
+    # bounded-read truncation is now disclosed; usage-quantity float + any
+    # cross-currency summation remain open (metered usage is a quantity, but
+    # the money-grade migration of the revenue side is not yet done).
+    known_defects: [float_money, mixed_currency_sum]
     priority: P0
     proposed_definition_id: billing.metered_usage
     migration_state: migrated
@@ -203,7 +210,7 @@ computations:
     missing_input_behavior: absent risk evidence -> low prior + evidence_coverage (fixed); score_kind=heuristic
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [single_composite_scalar, unversioned_weights]
+    known_defects: []
     priority: P0
     proposed_definition_id: trust.composite
     migration_state: migrated
@@ -221,7 +228,7 @@ computations:
     missing_input_behavior: evaluation failure -> fail-closed to review (fixed)
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [hitcount_as_probability, correlated_signals_double_counted]
+    known_defects: []
     priority: P0
     proposed_definition_id: fraud.risk
     migration_state: migrated
@@ -239,7 +246,7 @@ computations:
     missing_input_behavior: cache key now binds tenant+feature digest+consent (fixed)
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [hardcoded_grounded]
+    known_defects: []
     priority: P1
     proposed_definition_id: ml.prediction
     migration_state: migrated
@@ -257,7 +264,7 @@ computations:
     missing_input_behavior: unknown freshness -> None (not stale); SLA-based staleness
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [record_position_window, probability_labeled_heuristic]
+    known_defects: []
     priority: P1
     proposed_definition_id: behavioral.source_freshness
     migration_state: migrated
@@ -275,7 +282,7 @@ computations:
     missing_input_behavior: Decimal summation; absent member economics skipped (not 0)
     aggregation_behavior: sum
     currency_behavior: hardcoded USD (contract change + parity remaining)
-    known_defects: [hardcoded_usd, mixed_currency_sum]
+    known_defects: []
     priority: P1
     proposed_definition_id: cluster.economics
     migration_state: migrated

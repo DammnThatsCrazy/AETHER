@@ -15,6 +15,49 @@ logger = logging.getLogger("aether.measurement.connectors.tiktok_ads")
 
 _CONNECTOR_TYPE = "tiktok_ads"
 _API_VERSION = "v1.3"
+_DEFAULT_CURRENCY = "USD"
+
+
+def _resolve_billing_currency(config: dict[str, Any], row_currency: Any = None) -> tuple[str, bool]:
+    """Resolve the billing currency for a spend row.
+
+    TikTok reports spend in the advertiser account's currency; the integrated
+    report row does not always echo a currency code, so it is sourced from
+    account settings (connector config) unless the row provides one.
+
+    Preference order:
+      1. Currency reported on the provider row (``row_currency``), if present.
+      2. Account-level currency from connector config (account settings).
+      3. Documented ``USD`` default, flagged as a fallback.
+
+    Returns ``(currency_code, is_default_fallback)``.
+    """
+    for candidate in (
+        row_currency,
+        config.get("currency"),
+        config.get("account_currency"),
+        config.get("billing_currency"),
+    ):
+        if candidate:
+            code = str(candidate).strip().upper()
+            if code:
+                return code, False
+    return _DEFAULT_CURRENCY, True
+
+
+def _resolve_source_timezone(config: dict[str, Any], row_timezone: Any = None) -> str:
+    """Resolve the account/report timezone, preserving provider metadata when present."""
+    for candidate in (
+        row_timezone,
+        config.get("time_zone"),
+        config.get("timezone"),
+        config.get("account_timezone"),
+    ):
+        if candidate:
+            tz = str(candidate).strip()
+            if tz:
+                return tz
+    return "UTC"
 
 
 class TikTokAdsConnector(BaseConnector):
@@ -64,6 +107,18 @@ class TikTokAdsConnector(BaseConnector):
                 stat_date_str = str(row.get("stat_time_day", row.get("date", start.date().isoformat())))[:10]
                 period_start = datetime.combine(date.fromisoformat(stat_date_str), datetime.min.time()).replace(tzinfo=timezone.utc)
                 period_end = period_start + timedelta(days=1)
+                currency, currency_is_default = _resolve_billing_currency(
+                    self._config, row_currency=row.get("currency")
+                )
+                source_tz = _resolve_source_timezone(self._config, row_timezone=row.get("timezone"))
+                raw_dimensions: dict[str, Any] = {
+                    "stat_time_day": stat_date_str,
+                    "currency_source": "default_fallback" if currency_is_default else "provider",
+                    "source_timezone": source_tz,
+                }
+                exchange_rate = row.get("exchange_rate") or self._config.get("exchange_rate")
+                if exchange_rate is not None:
+                    raw_dimensions["exchange_rate"] = str(exchange_rate)
                 metrics_list.append(ExternalCampaignMetric(
                     platform=_CONNECTOR_TYPE,
                     external_account_id=account_id,
@@ -74,8 +129,9 @@ class TikTokAdsConnector(BaseConnector):
                     impressions=int(row.get("impression", row.get("impressions", 0))),
                     clicks=int(row.get("click", row.get("clicks", 0))),
                     spend=Decimal(str(row.get("spend", "0"))),
-                    currency="USD",
-                    raw_dimensions={"stat_time_day": stat_date_str},
+                    currency=currency,
+                    source_timezone=source_tz,
+                    raw_dimensions=raw_dimensions,
                 ))
             write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
             errors.extend(write_result.errors)

@@ -208,13 +208,96 @@ def _build_payload(canonical_id: str, entity_id: str, features: dict[str, Any]) 
     if canonical_id in ("churn_prediction", "ltv_prediction"):
         return {"identity_id": entity_id, "features": features}
     if canonical_id == "journey_prediction":
-        events = features.get("observed_events", ["page_view"])
+        # Do NOT fabricate observed events: absent means empty/unknown, not a
+        # synthetic "page_view" the caller never actually reported.
+        events = features.get("observed_events", [])
         return {"identity_id": entity_id, "observed_events": events}
     if canonical_id == "campaign_attribution":
         touchpoints = features.get("touchpoints", [])
         return {"conversion_id": entity_id, "touchpoints": touchpoints}
     # Generic batch-style for remaining models
     return {"model": canonical_id, "instances": [features]}
+
+
+# ---------------------------------------------------------------------------
+# Prediction-envelope + telemetry-honesty helpers
+# ---------------------------------------------------------------------------
+
+
+def _derive_confidence(ml_result: Any) -> Optional[float]:
+    """Honest confidence for telemetry: the model's reported confidence, or None.
+
+    A missing confidence is *unknown*, not zero. Defaulting to ``0.0`` would
+    assert a definite "no confidence" the model never expressed (0 is a claim).
+    Consumers must treat ``None`` as unknown rather than as a 0.0 datapoint.
+    """
+    if isinstance(ml_result, dict):
+        raw = ml_result.get("confidence")
+        if raw is not None:
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _grounded_signal(ml_result: Any) -> Optional[int]:
+    """Honest grounding signal for the CIS retrieval trace — never a hardcoded 1.
+
+    These serving models return prediction probabilities/confidence but do NOT
+    currently return grounding evidence (citations, sources, retrieved nodes), so
+    grounding is genuinely unknown at this call site. We therefore derive it only
+    from what the model actually returned:
+
+      * an explicit boolean ``grounded`` field on the result -> that value (0/1),
+      * a non-empty evidence collection (citations/sources/evidence/…) -> 1,
+      * an empty evidence collection -> 0,
+      * nothing to go on -> ``None`` (unknown; we do NOT assert 1).
+    """
+    if not isinstance(ml_result, dict):
+        return None
+    if "grounded" in ml_result:
+        raw = ml_result.get("grounded")
+        return None if raw is None else int(bool(raw))
+    for key in ("citations", "sources", "evidence", "retrieved_node_ids", "grounding"):
+        if key in ml_result:
+            return 1 if ml_result.get(key) else 0
+    return None
+
+
+def _prediction_envelope(
+    canonical_id: str,
+    tenant_id: str,
+    features: dict[str, Any],
+    consent_purposes: list,
+) -> dict[str, Any]:
+    """Bind a prediction to the exact model + feature context that produced it.
+
+    Additive metadata attached to /predict responses:
+
+      * ``feature_schema_hash`` — the model's feature-contract schema hash (same
+        source as GET /features); ``None`` if the contract registry is
+        unavailable — never fabricated.
+      * ``feature_digest`` — the tenant + feature-values + consent digest that
+        also keys the prediction cache (see ``_prediction_cache_hash``), so a
+        response can be traced back to its exact feature payload.
+      * ``calibration_segment`` / ``drift_status`` — honest ``None`` placeholders
+        for calibration-segment binding and drift evaluation (not yet computed);
+        present so downstream consumers can rely on the fields existing.
+    """
+    feature_schema_hash: Optional[str] = None
+    try:
+        from common.feature_contracts import compute_schema_hash
+        feature_schema_hash = compute_schema_hash(canonical_id)
+    except (ImportError, KeyError):
+        feature_schema_hash = None
+
+    return {
+        "feature_schema_hash": feature_schema_hash,
+        "feature_digest": _prediction_cache_hash(tenant_id, features, consent_purposes),
+        "calibration_segment": None,
+        "drift_status": None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +520,14 @@ async def predict(
                 ),
             }
 
+            # Prediction envelope — binds this response to its exact model +
+            # feature context (feature_schema_hash + feature digest). Additive:
+            # existing consumers ignore the extra key. Stored in cache too so a
+            # later cache hit carries the same binding.
+            prediction["envelope"] = _prediction_envelope(
+                canonical_id, tenant.tenant_id, body.features, body.consent_purposes
+            )
+
             if was_deprecated_alias:
                 prediction["deprecated_alias_used"] = body.model_name
                 prediction["alias_warning"] = (
@@ -474,15 +565,16 @@ async def predict(
                             "query_hash": CacheKey.hash_query(str(body.features)),
                             "model_name": canonical_id,
                             "latency_ms": round(latency_ms, 2),
-                            "confidence_score": float(
-                                ml_result.get("confidence", 0.0)
-                                if isinstance(ml_result, dict)
-                                else 0.0
-                            ),
+                            # Honest confidence: the model's value, or None when
+                            # omitted — never a fabricated 0.0 (0 is a claim).
+                            "confidence_score": _derive_confidence(ml_result),
                             "generation_hash": _hl.sha256(
                                 _json.dumps(ml_result, sort_keys=True, default=str).encode()
                             ).hexdigest()[:16],
-                            "grounded": 1,
+                            # Honest grounding: derived from what the model
+                            # returned; None (unknown) when there is no evidence,
+                            # never a hardcoded 1.
+                            "grounded": _grounded_signal(ml_result),
                             "synthetic_ratio": float(
                                 ml_result.get("synthetic_data", False)
                                 if isinstance(ml_result, dict) else False

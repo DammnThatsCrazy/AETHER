@@ -11,11 +11,24 @@ No public API — consumed only by ExtractionExpectationEngine.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.expectations.baseline_builder")
+
+# A derived peer baseline needs at least this many peers before its statistics
+# are presentable as an "ok" cohort profile; below it the baseline is reported as
+# "insufficient" rather than confident.
+MIN_PEER_COHORT = 5
+
+
+def _percentile(sorted_values: list[float], q: float) -> float:
+    """Nearest-rank percentile of an already-sorted list (empty -> 0.0)."""
+    if not sorted_values:
+        return 0.0
+    idx = min(len(sorted_values) - 1, int(round(q * (len(sorted_values) - 1))))
+    return sorted_values[idx]
 
 
 @dataclass
@@ -50,10 +63,11 @@ class PeerBaseline:
     cohort_id: str = ""
     cohort_size: int = 0
     avg_rpm: float = 0.0
-    avg_models_per_day: float = 1.0
-    avg_batch_size: float = 1.0
+    avg_models_per_day: float = 0.0
+    avg_batch_size: float = 0.0
     p95_rpm: float = 0.0
     quality: float = 0.0
+    status: str = "unavailable"   # unavailable | insufficient | ok
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +77,7 @@ class PeerBaseline:
             "avg_models_per_day": round(self.avg_models_per_day, 1),
             "p95_rpm": round(self.p95_rpm, 2),
             "quality": round(self.quality, 2),
+            "status": self.status,
         }
 
 
@@ -109,19 +124,69 @@ class BaselineBuilder:
     def build_peer_baseline(
         tenant_id: str = "",
         tier: str = "",
+        peer_history: Optional[list[dict]] = None,
     ) -> PeerBaseline:
         """
         Build a peer cohort baseline.
 
-        Currently returns sensible defaults. In production, this would
-        query aggregate statistics from the analytics system.
+        Peer-cohort analytics aggregation is not yet wired to this builder. Rather
+        than emit fabricated constants that *look* computed (the previous
+        ``cohort_size=100, avg_rpm=5.0`` regardless of tenant), this returns an
+        explicit ``status="unavailable"`` baseline with zeroed statistics when no
+        peer data is supplied.
+
+        When ``peer_history`` IS supplied (a list of per-peer summary dicts), the
+        statistics are DERIVED from it: ``status="ok"`` once the cohort meets
+        ``MIN_PEER_COHORT``, otherwise ``status="insufficient"``. Nothing is
+        fabricated in either branch.
         """
+        cohort_id = f"{tenant_id}:{tier}" if tenant_id else "default"
+
+        if not peer_history:
+            # No real peer data — signal unavailability instead of inventing one.
+            return PeerBaseline(
+                cohort_id=cohort_id,
+                cohort_size=0,
+                avg_rpm=0.0,
+                avg_models_per_day=0.0,
+                avg_batch_size=0.0,
+                p95_rpm=0.0,
+                quality=0.0,
+                status="unavailable",
+            )
+
+        cohort_size = len(peer_history)
+        rpms = sorted(
+            float(r.get("usual_rpm", r.get("rpm", 0.0)) or 0.0) for r in peer_history
+        )
+        batch_sizes = [
+            float(r.get("usual_batch_size", r.get("batch_size", 0.0)) or 0.0)
+            for r in peer_history
+        ]
+        models_per_peer = [
+            float(len(r.get("usual_models", [])) or r.get("models_per_day", 0.0) or 0.0)
+            for r in peer_history
+        ]
+
+        avg_rpm = sum(rpms) / cohort_size
+        avg_batch_size = sum(batch_sizes) / max(len(batch_sizes), 1)
+        avg_models_per_day = sum(models_per_peer) / max(len(models_per_peer), 1)
+        p95_rpm = _percentile(rpms, 0.95)
+
+        if cohort_size >= MIN_PEER_COHORT:
+            status = "ok"
+            quality = min(cohort_size / (MIN_PEER_COHORT * 4), 1.0)
+        else:
+            status = "insufficient"
+            quality = min(cohort_size / (MIN_PEER_COHORT * 4), 0.3)
+
         return PeerBaseline(
-            cohort_id=f"{tenant_id}:{tier}" if tenant_id else "default",
-            cohort_size=100,
-            avg_rpm=5.0,
-            avg_models_per_day=2.0,
-            avg_batch_size=1.0,
-            p95_rpm=30.0,
-            quality=0.3,  # Low quality until backed by real analytics
+            cohort_id=cohort_id,
+            cohort_size=cohort_size,
+            avg_rpm=avg_rpm,
+            avg_models_per_day=avg_models_per_day,
+            avg_batch_size=avg_batch_size,
+            p95_rpm=p95_rpm,
+            quality=quality,
+            status=status,
         )

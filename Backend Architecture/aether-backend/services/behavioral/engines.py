@@ -11,7 +11,7 @@ import hashlib
 import uuid
 from typing import Optional
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from repositories.repos import BaseRepository, AnalyticsRepository
 from repositories.lake import silver_identity, silver_onchain, silver_social
@@ -26,6 +26,11 @@ from services.behavioral.signals import SignalFamily
 # hardcoded calendar date (which silently rots everything past a fixed day).
 SOURCE_FRESHNESS_SLA_DAYS = 45
 
+# "Early behavior" is the entity's first days of observed activity, defined by an
+# EVENT-TIME window from the first observed event — never by a positional slice
+# (``events[:20]``), which conflates row order with chronology.
+EARLY_BEHAVIOR_WINDOW_DAYS = 7
+
 
 def _is_source_stale(
     last_update_iso: Optional[str], *, sla_days: int = SOURCE_FRESHNESS_SLA_DAYS
@@ -39,6 +44,21 @@ def _is_source_stale(
     except Exception:
         return None
     return (utc_now() - ts) > timedelta(days=sla_days)
+
+
+def _parse_event_time(event: dict) -> Optional[datetime]:
+    """Parse an event's canonical ``created_at`` to an aware UTC instant.
+
+    Returns None when the timestamp is absent or not a valid instant, so callers
+    can window by real event-time (comparing datetimes) instead of by list
+    position or lexical string ordering."""
+    raw = event.get("created_at", "")
+    if not raw:
+        return None
+    try:
+        return ensure_aware_utc(parse_instant_strict(raw))
+    except Exception:
+        return None
 
 logger = get_logger("aether.behavioral.engines")
 
@@ -130,7 +150,12 @@ async def compute_intent_residue(
             "intent_residue_score": round(residue_score, 4),
             "unfinished_flow_type": "high_intent_no_conversion",
             "last_high_intent_step": str(last_intent.get("properties", {}).get("url", ""))[:100],
+            # NOT a calibrated probability — an ad-hoc ratio transform of the
+            # residue score. Labelled heuristic so downstream consumers don't
+            # treat it as a modelled likelihood.
             "return_to_intent_probability": round(min(0.9, residue_score * 0.8), 4),
+            "return_to_intent_probability_kind": "heuristic",
+            "calibrated": False,
             "high_intent_events": intent_count,
             "conversions": conversion_count,
         },
@@ -244,9 +269,24 @@ async def compute_pre_post_continuity(
     if not connect_events:
         return None
 
-    connect_time = connect_events[0].get("created_at", "")
-    pre_events = [e for e in events if e.get("created_at", "") < connect_time]
-    post_events = [e for e in events if e.get("created_at", "") >= connect_time]
+    # Anchor the split on the earliest connect INSTANT, compared as parsed
+    # event-time — never by lexical string order (which mis-sorts across
+    # offsets / precisions).
+    connect_times = [t for t in (_parse_event_time(e) for e in connect_events) if t is not None]
+    if not connect_times:
+        return None
+    connect_time = min(connect_times)
+
+    pre_events = []
+    post_events = []
+    for e in events:
+        ts = _parse_event_time(e)
+        if ts is None:
+            continue
+        if ts < connect_time:
+            pre_events.append(e)
+        else:
+            post_events.append(e)
 
     if not pre_events or not post_events:
         return None
@@ -354,7 +394,11 @@ async def compute_source_shadow(
         family=SignalFamily.SOURCE_SHADOW,
         outputs={
             "source_coverage_confidence": round(coverage_confidence, 4),
+            # Heuristic, uncalibrated: the complement of a coverage ratio, not a
+            # probability of true behavioral absence.
             "behavior_absence_confidence": round(1.0 - coverage_confidence, 4) if source_shadow else 0.0,
+            "behavior_absence_confidence_kind": "heuristic",
+            "calibrated": False,
             "source_shadow_flag": source_shadow,
             "stale_domains": stale_domains,
             "active_domains": active_domains,
@@ -406,7 +450,11 @@ async def compute_reward_near_miss(
         outputs={
             "eligibility_gap_reason": "high_intent_no_qualification",
             "near_miss_window": f"{attempted} attempts, {qualified} qualified",
+            # Heuristic, uncalibrated: a bounded ratio transform, not a modelled
+            # recovery likelihood.
             "recovery_probability": round(min(0.8, qualified / max(attempted, 1) + 0.2), 4),
+            "recovery_probability_kind": "heuristic",
+            "calibrated": False,
             "next_best_action_for_eligibility": "complete_pending_requirement",
             "attempt_count": attempted,
             "qualification_count": qualified,
@@ -526,9 +574,21 @@ async def compute_behavioral_twins(
     if len(events) < 5:
         return None
 
-    # Build behavioral fingerprint: event type distribution
+    # Build behavioral fingerprint over the entity's EARLY behavior, defined by
+    # an event-time window from the first observed event — not the first N rows
+    # (list position is not chronology).
+    timed = [(t, e) for e in events if (t := _parse_event_time(e)) is not None]
+    if timed:
+        earliest = min(t for t, _ in timed)
+        cutoff = earliest + timedelta(days=EARLY_BEHAVIOR_WINDOW_DAYS)
+        early_events = [e for t, e in timed if t <= cutoff]
+    else:
+        # No parseable timestamps — fall back to the full set rather than an
+        # arbitrary positional slice.
+        early_events = events
+
     type_dist: dict[str, int] = {}
-    for e in events[:20]:  # early behavior only
+    for e in early_events:
         et = e.get("event_type", "")
         if et:
             type_dist[et] = type_dist.get(et, 0) + 1

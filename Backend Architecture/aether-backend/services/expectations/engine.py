@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from repositories.repos import BaseRepository, AnalyticsRepository
 from repositories.lake import silver_identity, silver_onchain, silver_social
@@ -27,6 +27,11 @@ from shared.temporal import ensure_aware_utc, parse_instant_strict
 # a hardcoded calendar date.
 SOURCE_FRESHNESS_SLA_DAYS = 45
 
+# Minimum number of observed events before an ABSENCE can be read as behavior
+# rather than thin/no observation. Below this there was not enough opportunity to
+# tell "did not happen" from "was not observed".
+MIN_OBSERVATION_SAMPLE = 5
+
 
 def _is_source_stale(
     last_update_iso: Optional[str], *, sla_days: int = SOURCE_FRESHNESS_SLA_DAYS
@@ -39,6 +44,20 @@ def _is_source_stale(
     except Exception:
         return None
     return (utc_now() - ts) > timedelta(days=sla_days)
+
+
+def _parse_event_time(event: dict) -> Optional[datetime]:
+    """Parse an event's canonical ``created_at`` to an aware UTC instant, or None.
+
+    Lets callers window by real event-time instead of list position (events[:20])
+    or lexical string comparison."""
+    raw = event.get("created_at", "")
+    if not raw:
+        return None
+    try:
+        return ensure_aware_utc(parse_instant_strict(raw))
+    except Exception:
+        return None
 from services.expectations.models import (
     SignalType, SignalSeverity, BaselineSource, make_signal_record,
 )
@@ -133,18 +152,99 @@ class ExpectationEngine:
 
     # ── Missing Expected Actions ──────────────────────────────────
 
+    @staticmethod
+    def _observation_coverage(events: list[dict], window_days: int) -> dict:
+        """Assess whether there was an OPPORTUNITY to observe behavior in the
+        window, so a missing action can be read as "no behavior" rather than
+        "no opportunity / no observation".
+
+        Eligibility requires: a source with enough sample (``MIN_OBSERVATION_SAMPLE``),
+        observation that actually reaches into the window (not entirely stale),
+        and baseline history predating the window. Returns a coverage/eligibility
+        flag consumed by :meth:`detect_missing_actions` and attached to any
+        emitted signal for provenance."""
+        now = utc_now()
+        window_start = now - timedelta(days=window_days)
+        times = [t for t in (_parse_event_time(e) for e in events) if t is not None]
+        sample_size = len(events)
+        min_sample_met = sample_size >= MIN_OBSERVATION_SAMPLE
+
+        base = {
+            "sample_size": sample_size,
+            "min_sample": MIN_OBSERVATION_SAMPLE,
+            "min_sample_met": min_sample_met,
+            "observation_window_days": window_days,
+            "window_start": window_start.isoformat(),
+            "window_end": now.isoformat(),
+        }
+
+        if not times:
+            return {
+                **base,
+                "eligible": False,
+                "reason": "no_parseable_observation_times",
+                "observed_in_window": False,
+                "history_before_window": False,
+            }
+
+        latest, earliest = max(times), min(times)
+        observed_in_window = latest >= window_start        # source not entirely stale
+        history_before_window = earliest < window_start    # baseline predates window
+        eligible = min_sample_met and observed_in_window and history_before_window
+
+        if not min_sample_met:
+            reason = "insufficient_sample"
+        elif not observed_in_window:
+            reason = "no_observation_in_window"            # source/observation silence
+        elif not history_before_window:
+            reason = "no_baseline_before_window"
+        else:
+            reason = "eligible"
+
+        return {
+            **base,
+            "eligible": eligible,
+            "reason": reason,
+            "observed_in_window": observed_in_window,
+            "history_before_window": history_before_window,
+        }
+
     async def detect_missing_actions(
         self, entity_id: str, tenant_id: str = "", window_days: int = 7,
     ) -> list[dict]:
-        """Detect expected actions that did not occur based on self-history."""
-        signals = []
+        """Detect expected actions that did not occur based on self-history.
 
-        # Get recent events for the entity
+        Absence is only interpreted as behavior when there was an OPPORTUNITY to
+        observe it: a real event-time window (``window_days``), a minimum sample,
+        and observation that actually spans the window (see
+        :meth:`_observation_coverage`). Otherwise the absence is attributed to
+        no-observation, and no "missing behavior" signal is fabricated."""
+        signals: list[dict] = []
+
+        # Get events for the entity
         events = await self._analytics.query_events(
             tenant_id, {"user_id": entity_id}, limit=200
         )
         if not events:
             return signals
+
+        coverage = self._observation_coverage(events, window_days)
+        if not coverage["eligible"]:
+            # No opportunity / no observation — do not read absence as behavior.
+            metrics.increment(
+                "expectation_missing_actions_skipped",
+                labels={"reason": coverage["reason"]},
+            )
+            return signals
+
+        window_start = utc_now() - timedelta(days=window_days)
+
+        # "Recent" is defined by EVENT-TIME within the window, never by list
+        # position (events[:20]).
+        recent_events = [
+            e for e in events
+            if (t := _parse_event_time(e)) is not None and t >= window_start
+        ]
 
         # Build action frequency baseline from history
         action_counts: dict[str, int] = {}
@@ -153,13 +253,13 @@ class ExpectationEngine:
             if et:
                 action_counts[et] = action_counts.get(et, 0) + 1
 
-        # Check for actions that were frequent but stopped
+        # Check for actions that were frequent but stopped within the window
         total = len(events)
         for action, count in action_counts.items():
             frequency = count / max(total, 1)
             if frequency > 0.1 and count > 3:
-                # This was a regular action — check if it's still happening
-                recent = [e for e in events[:20] if e.get("event_type") == action]
+                # This was a regular action — is it still happening in-window?
+                recent = [e for e in recent_events if e.get("event_type") == action]
                 if not recent:
                     signal = make_signal_record(
                         entity_id=entity_id,
@@ -167,11 +267,14 @@ class ExpectationEngine:
                         signal_type=SignalType.MISSING_EXPECTED_ACTION,
                         severity=SignalSeverity.MEDIUM,
                         expected=f"Action '{action}' expected (historical frequency: {frequency:.0%})",
-                        observed=f"No recent '{action}' events in last window",
+                        observed=f"No '{action}' events within the last {window_days}d window",
                         baseline_source=BaselineSource.SELF_HISTORY,
                         confidence=min(frequency * 2, 0.9),
-                        explanation=f"Entity performed '{action}' {count} times historically but stopped recently",
+                        explanation=f"Entity performed '{action}' {count} times historically but not within the observed {window_days}d window",
                         tenant_id=tenant_id,
+                        window_start=coverage["window_start"],
+                        window_end=coverage["window_end"],
+                        metadata={"observation_coverage": coverage},
                     )
                     await signal_repo.insert(signal["id"], signal)
                     signals.append(signal)

@@ -311,6 +311,27 @@ def _governance_definitions() -> tuple[ComputationDefinition, ...]:
              domain="trust", owner="trust@aether", kind=ComputationKind.HEURISTIC_SCORE,
              output=MathType.HEURISTIC_SCORE, unit="score", impact=DecisionImpactClass.ACCESS_CONTROL,
              low=0.0, high=1.0, tests=["tests/computation/test_trust_evidence.py"]),
+        # Governed trust VECTOR + its use-case composites. One scalar is not a
+        # universal trust; each composite weights the same governed dimensions
+        # differently and is stamped with WEIGHTS_VERSION (shared/scoring).
+        make("trust.vector", "Governed Trust Vector (heuristic)",
+             "Six governed heuristic dimensions (identity_assurance, transaction_integrity, "
+             "behavioral_reliability, automation_likelihood [trust-INVERTED], source_coverage, "
+             "evidence_recency); each carries value+coverage. Absence => neutral/low prior, never 0.",
+             domain="trust", owner="trust@aether", kind=ComputationKind.HEURISTIC_SCORE,
+             output=MathType.HEURISTIC_SCORE, unit="score", impact=DecisionImpactClass.ACCESS_CONTROL,
+             low=0.0, high=1.0, tests=["tests/computation/test_trust_vector.py"]),
+        make("trust.reward_eligibility", "Reward Eligibility Trust (heuristic)",
+             "Vector composite that penalizes automation and requires identity assurance; gates payouts. NOT calibrated.",
+             domain="trust", owner="trust@aether", kind=ComputationKind.HEURISTIC_SCORE,
+             output=MathType.HEURISTIC_SCORE, unit="score", impact=DecisionImpactClass.FINANCIAL,
+             low=0.0, high=1.0, tests=["tests/computation/test_trust_vector.py"]),
+        make("trust.agent_delegation", "Agent Delegation Trust (heuristic)",
+             "Vector composite where automation is expected/unpenalized; weights transactional "
+             "integrity + reliability + evidence freshness for delegating authority. NOT calibrated.",
+             domain="trust", owner="trust@aether", kind=ComputationKind.HEURISTIC_SCORE,
+             output=MathType.HEURISTIC_SCORE, unit="score", impact=DecisionImpactClass.ACCESS_CONTROL,
+             low=0.0, high=1.0, tests=["tests/computation/test_trust_vector.py"]),
         make("fraud.risk", "Fraud Risk (heuristic)",
              "Rule/detector heuristic risk in [0,100]; evaluation failure fails closed to review. NOT a probability.",
              domain="fraud", owner="fraud@aether", kind=ComputationKind.HEURISTIC_SCORE,

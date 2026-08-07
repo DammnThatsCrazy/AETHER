@@ -1,9 +1,17 @@
 """
-Aether Shared — Trust Score Composite
+Aether Shared — Trust Score Composite + Governed Trust Vector
 NOT a new ML model. A weighted composite of existing model outputs:
   - Transaction Trust (40%): Fraud Engine + Anomaly Detection
   - Identity Trust (35%):    Identity Resolution + Bot Detection
   - Behavioral Trust (25%):  Session Scorer + Churn Prediction
+
+Beyond the legacy scalar, ``compute`` now also produces a governed multi-
+dimension trust VECTOR (see ``shared/scoring/trust_vector.py``). Each named
+dimension carries its OWN evidence coverage, the folding weights are VERSIONED
+(``WEIGHTS_VERSION``), and several separately-named use-case composites
+(base, reward-eligibility, agent-delegation) are derived from the same vector
+so that different decisions no longer share one universal scalar. The legacy
+``composite`` remains as a convenience but is now DERIVED FROM the vector.
 
 Used by: Agent service, Commerce service, Analytics dashboard.
 
@@ -15,10 +23,32 @@ passed directly (or defaults for local dev).
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from shared.logger.logger import get_logger, metrics
+from shared.scoring.trust_vector import (
+    ABSENT_AUTOMATION_PRIOR,
+    ABSENT_RECENCY_PRIOR,
+    COVERAGE_COMPLETE,
+    COVERAGE_MISSING,
+    COVERAGE_PARTIAL,
+    WEIGHTS_VERSION,
+    TrustDimension,
+    TrustVector,
+    base_composite,
+    recency_from_age_days,
+    use_case_composites,
+)
+
+# Re-exported for callers that governed the versioned weights via this module.
+__all__ = [
+    "ABSENT_EVIDENCE_PRIOR",
+    "WEIGHTS_VERSION",
+    "TrustScore",
+    "TrustScoreComposite",
+    "TrustVector",
+]
 
 logger = get_logger("aether.scoring.trust")
 
@@ -48,12 +78,22 @@ class TrustScore:
     transaction_trust: float   # 0.0 – 1.0
     identity_trust: float      # 0.0 – 1.0
     behavioral_trust: float    # 0.0 – 1.0
-    composite: float           # Weighted average
+    composite: float           # Base composite — DERIVED from ``trust_vector``
     components: dict           # Raw model outputs used
     # Which components had real evidence vs a low prior from absence. This is a
     # HeuristicScore composite, not a calibrated probability.
     evidence_coverage: Optional[dict] = None
     score_kind: str = "heuristic"
+    # Governed multi-dimension trust vector. The three legacy ``*_trust`` fields
+    # and ``composite`` above are views over this vector, kept for compatibility.
+    trust_vector: Optional[TrustVector] = None
+    # Version of the weight/threshold policy that produced this score, so weight
+    # changes are traceable in the output.
+    weights_version: str = WEIGHTS_VERSION
+    # Separately-named use-case composites (reward eligibility, agent delegation,
+    # ...), each with its own weighting and evidence-backed coverage. NOT one
+    # universal composite.
+    use_case_composites: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -66,16 +106,34 @@ class TrustScore:
             "components": self.components,
             "evidence_coverage": self.evidence_coverage or {},
             "score_kind": self.score_kind,
+            "weights_version": self.weights_version,
+            "trust_vector": self.trust_vector.to_dict() if self.trust_vector else None,
+            "use_case_composites": self.use_case_composites or {},
         }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# WEIGHTS
+# WEIGHTS  (base composite)
 # ═══════════════════════════════════════════════════════════════════════════
+#
+# The authoritative, VERSIONED weight maps live in
+# ``shared/scoring/trust_vector.py`` (``BASE_COMPOSITE_WEIGHTS`` and the
+# use-case maps, stamped with ``WEIGHTS_VERSION``). These module-level aliases
+# are kept for backward reference only; the base composite is DERIVED from the
+# vector via ``base_composite`` so there is a single governed source of truth.
 
 TRANSACTION_WEIGHT = 0.40
 IDENTITY_WEIGHT = 0.35
 BEHAVIORAL_WEIGHT = 0.25
+
+
+def _signal_coverage(a_observed: bool, b_observed: bool) -> str:
+    """Coverage for a two-signal dimension: complete / partial / missing."""
+    if a_observed and b_observed:
+        return COVERAGE_COMPLETE
+    if a_observed or b_observed:
+        return COVERAGE_PARTIAL
+    return COVERAGE_MISSING
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -172,12 +230,23 @@ class TrustScoreComposite:
             if ml_result:
                 bot_score = ml_result.get("confidence", 0.0)
 
-        identity_observed = identity_confidence is not None or bot_score is not None
-        identity_confidence = identity_confidence if identity_confidence is not None else 0.1
-        bot_score = bot_score if bot_score is not None else 0.0
-        identity_trust = identity_confidence * (1.0 - bot_score)
+        # Capture per-signal observation BEFORE defaulting so the vector can
+        # disclose which dimensions rest on real evidence vs a prior.
+        identity_conf_observed = identity_confidence is not None
+        bot_observed = bot_score is not None
+        identity_observed = identity_conf_observed or bot_observed
+        identity_confidence = identity_confidence if identity_conf_observed else 0.1
+        bot_value = bot_score if bot_observed else 0.0
+        identity_trust = identity_confidence * (1.0 - bot_value)
         components["identity_confidence"] = identity_confidence
-        components["bot_score"] = bot_score
+        components["bot_score"] = bot_value
+
+        # Automation dimension: the LIKELIHOOD the entity is automated. Absence
+        # of bot evidence is genuinely unknown (a neutral prior), never read as
+        # "definitely human". This is trust-INVERTED — composites decide whether
+        # to penalize it (reward eligibility does; agent delegation does not).
+        automation_value = bot_score if bot_observed else ABSENT_AUTOMATION_PRIOR
+        components["automation_likelihood"] = round(automation_value, 4)
 
         # ── Component 3: Behavioral Trust (25%) ──────────────────────
         session_score = features.get("session_score")
@@ -197,20 +266,85 @@ class TrustScoreComposite:
             if ml_result:
                 churn_risk = ml_result.get("churn_probability", 0.0)
 
-        behavioral_observed = session_score is not None or churn_risk is not None
-        session_score = session_score if session_score is not None else 0.1
-        churn_risk = churn_risk if churn_risk is not None else 0.0
+        session_observed = session_score is not None
+        churn_observed = churn_risk is not None
+        behavioral_observed = session_observed or churn_observed
+        session_score = session_score if session_observed else 0.1
+        churn_risk = churn_risk if churn_observed else 0.0
         behavioral_trust = session_score * (1.0 - churn_risk)
         components["session_score"] = session_score
         components["churn_risk"] = churn_risk
 
-        # ── Weighted composite ────────────────────────────────────────
-        composite = (
-            TRANSACTION_WEIGHT * transaction_trust
-            + IDENTITY_WEIGHT * identity_trust
-            + BEHAVIORAL_WEIGHT * behavioral_trust
+        # ── Dimension: Evidence recency ───────────────────────────────
+        # Freshness of the backing evidence, from a direct [0,1] score or an
+        # age in days. Absent recency evidence is treated as stale (low prior),
+        # not fresh — the same "absence is not trust" stance as elsewhere.
+        recency_raw = features.get("evidence_recency")
+        age_days = features.get("evidence_age_days")
+        if recency_raw is not None:
+            recency_observed = True
+            recency_value = max(0.0, min(1.0, float(recency_raw)))
+        elif age_days is not None:
+            recency_observed = True
+            recency_value = recency_from_age_days(float(age_days))
+            components["evidence_age_days"] = age_days
+        else:
+            recency_observed = False
+            recency_value = ABSENT_RECENCY_PRIOR
+        components["evidence_recency"] = round(recency_value, 4)
+
+        # ── Dimension: Source coverage ────────────────────────────────
+        # Meta-dimension: how many independent evidence signals actually backed
+        # this score. Surfaces thin/one-signal scores that would otherwise look
+        # confident.
+        signal_flags = [
+            fraud_observed, anomaly_observed, identity_conf_observed,
+            bot_observed, session_observed, churn_observed, recency_observed,
+        ]
+        observed_signals = sum(1 for flag in signal_flags if flag)
+        total_signals = len(signal_flags)
+        source_coverage_value = observed_signals / total_signals
+        if observed_signals == total_signals:
+            source_coverage_cov = COVERAGE_COMPLETE
+        elif observed_signals == 0:
+            source_coverage_cov = COVERAGE_MISSING
+        else:
+            source_coverage_cov = COVERAGE_PARTIAL
+
+        # ── Governed trust VECTOR (composites are views over this) ─────
+        vector = TrustVector(
+            identity_assurance=TrustDimension(
+                "identity_assurance", identity_trust,
+                _signal_coverage(identity_conf_observed, bot_observed),
+                identity_observed,
+            ),
+            transaction_integrity=TrustDimension(
+                "transaction_integrity", transaction_trust,
+                transaction_evidence, transaction_evidence != COVERAGE_MISSING,
+            ),
+            behavioral_reliability=TrustDimension(
+                "behavioral_reliability", behavioral_trust,
+                _signal_coverage(session_observed, churn_observed),
+                behavioral_observed,
+            ),
+            automation_likelihood=TrustDimension(
+                "automation_likelihood", automation_value,
+                COVERAGE_COMPLETE if bot_observed else COVERAGE_MISSING,
+                bot_observed,
+            ),
+            source_coverage=TrustDimension(
+                "source_coverage", source_coverage_value,
+                source_coverage_cov, observed_signals > 0,
+            ),
+            evidence_recency=TrustDimension(
+                "evidence_recency", recency_value,
+                COVERAGE_COMPLETE if recency_observed else COVERAGE_MISSING,
+                recency_observed,
+            ),
         )
-        composite = max(0.0, min(1.0, composite))
+
+        # ── Base composite — DERIVED from the vector (not recomputed) ──
+        composite = base_composite(vector)
 
         evidence_coverage = {
             "transaction": transaction_evidence,
@@ -230,6 +364,9 @@ class TrustScoreComposite:
             composite=composite,
             components=components,
             evidence_coverage=evidence_coverage,
+            trust_vector=vector,
+            weights_version=WEIGHTS_VERSION,
+            use_case_composites=use_case_composites(vector),
         )
 
         metrics.increment("trust_score_computed", labels={"entity_type": entity_type})

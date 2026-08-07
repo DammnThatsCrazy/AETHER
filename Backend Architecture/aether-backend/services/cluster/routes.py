@@ -95,11 +95,23 @@ class ClusterRecord(BaseModel):
 
 class ClusterEconomicSummary(BaseModel):
     cluster_id: str
+    # Scalar money fields are a BEST-EFFORT rollup within the dominant currency
+    # only — never a mixed-currency scalar sum. When the cluster spans multiple
+    # currencies (or none can be resolved) they reflect the dominant currency's
+    # slice; consult `by_currency` for the loss-free per-currency breakdown.
     total_revenue: float = 0.0
     total_spend: float = 0.0
     ltv_estimate: float = 0.0
     transaction_count: int = 0
-    currency: str = "USD"
+    # currency is the SINGLE resolved currency, or None when the cluster is
+    # mixed-currency / genuinely unknown (never fabricated as "USD").
+    currency: Optional[str] = None
+    dominant_currency: Optional[str] = None
+    is_mixed_currency: bool = False
+    # Per-currency breakdown so no money is summed across currencies. Amounts are
+    # Decimal strings (None when a currency reported no revenue/spend — unknown
+    # is never coerced to 0).
+    by_currency: dict[str, dict[str, Any]] = Field(default_factory=dict)
     value_tier: str = "unknown"
     member_economic_summaries: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -413,6 +425,13 @@ async def get_cluster_economic(
     # Sum with Decimal for accuracy and treat ABSENT member economics as unknown
     # (skipped), not 0 — coercing missing revenue/spend to 0 understates the
     # rollup. Graph properties are JSON numbers, so parse leniently via str().
+    #
+    # CRITICAL: money is NEVER summed across currencies into one scalar. Each
+    # member's revenue/spend is bucketed by that member's own currency (falling
+    # back to the cluster's declared currency, then an explicit "unknown"), and
+    # amounts are only combined within a single currency — mirroring the
+    # canonical per-currency Decimal rollup in services/profile/economic.py and
+    # services/value/rollups.py (a mixed-currency raw sum is never produced).
     from decimal import Decimal, InvalidOperation
 
     def _dec(value: object):
@@ -424,26 +443,81 @@ async def get_cluster_economic(
             return None
         return d if d.is_finite() else None
 
-    total_revenue_d = Decimal("0")
-    total_spend_d = Decimal("0")
+    _UNKNOWN = "unknown"
+
+    def _is_real(cur: object) -> bool:
+        return bool(cur) and cur != _UNKNOWN
+
+    # Cluster-declared currency is real data used only as a per-member fallback —
+    # it is NOT a hardcoded "USD" default.
+    cluster_currency = v.properties.get("currency")
+
+    buckets: dict[str, dict[str, Any]] = {}
     member_summaries = []
     for m in members:
+        member_currency = m.properties.get("currency") or cluster_currency or _UNKNOWN
         rev = _dec(m.properties.get("revenue"))
         spd = _dec(m.properties.get("spend"))
+
+        b = buckets.setdefault(
+            member_currency, {"revenue": None, "spend": None, "member_count": 0}
+        )
+        b["member_count"] += 1
         if rev is not None:
-            total_revenue_d += rev
+            b["revenue"] = (b["revenue"] or Decimal("0")) + rev
         if spd is not None:
-            total_spend_d += spd
+            b["spend"] = (b["spend"] or Decimal("0")) + spd
+
         member_summaries.append({
             "entity_id": m.vertex_id,
             "revenue": float(rev) if rev is not None else None,
             "spend": float(spd) if spd is not None else None,
+            "currency": member_currency if _is_real(member_currency) else None,
         })
 
-    total_revenue = float(total_revenue_d)
-    total_spend = float(total_spend_d)
+    real_currencies = [c for c in buckets if _is_real(c)]
+
+    def _sort_key(cur: str):
+        b = buckets[cur]
+        return (b["member_count"], b["revenue"] or Decimal("0"))
+
+    # Pick the bucket that drives the best-effort scalar fields. A single bucket
+    # (even "unknown") is an unambiguous single currency; with multiple buckets
+    # we take the dominant REAL currency (most members, then most revenue) rather
+    # than summing across them.
+    if len(buckets) == 1:
+        scalar_bucket_key = next(iter(buckets))
+    elif real_currencies:
+        scalar_bucket_key = max(real_currencies, key=_sort_key)
+    else:
+        scalar_bucket_key = None
+
+    is_mixed_currency = len(real_currencies) > 1
+    # A single resolved currency only when exactly one real currency is present;
+    # mixed or unknown is exposed honestly as None (never fabricated "USD").
+    if len(buckets) == 1 and _is_real(scalar_bucket_key):
+        resolved_currency = scalar_bucket_key
+    else:
+        resolved_currency = None
+    dominant_currency = scalar_bucket_key if _is_real(scalar_bucket_key) else None
+
+    if scalar_bucket_key is not None:
+        db = buckets[scalar_bucket_key]
+        rev_d = db["revenue"]
+        spd_d = db["spend"]
+    else:
+        rev_d = None
+        spd_d = None
+
+    total_revenue = float(rev_d) if rev_d is not None else 0.0
+    total_spend = float(spd_d) if spd_d is not None else 0.0
+
     _ltv_d = _dec(v.properties.get("ltv_estimate"))
-    ltv = float(_ltv_d) if _ltv_d is not None else float(total_revenue_d - total_spend_d)
+    if _ltv_d is not None:
+        ltv = float(_ltv_d)
+    else:
+        # LTV as revenue - spend within the dominant currency only.
+        ltv = float((rev_d or Decimal("0")) - (spd_d or Decimal("0")))
     transaction_count = int(v.properties.get("transaction_count", 0))
     if ltv >= 10000:
         value_tier = "high"
@@ -452,13 +526,25 @@ async def get_cluster_economic(
     else:
         value_tier = "low"
 
+    by_currency = {
+        cur: {
+            "revenue": format(b["revenue"], "f") if b["revenue"] is not None else None,
+            "spend": format(b["spend"], "f") if b["spend"] is not None else None,
+            "member_count": b["member_count"],
+        }
+        for cur, b in buckets.items()
+    }
+
     summary = ClusterEconomicSummary(
         cluster_id=cluster_id,
         total_revenue=total_revenue,
         total_spend=total_spend,
         ltv_estimate=ltv,
         transaction_count=transaction_count,
-        currency=v.properties.get("currency", "USD"),
+        currency=resolved_currency,
+        dominant_currency=dominant_currency,
+        is_mixed_currency=is_mixed_currency,
+        by_currency=by_currency,
         value_tier=value_tier,
         member_economic_summaries=member_summaries,
     )
