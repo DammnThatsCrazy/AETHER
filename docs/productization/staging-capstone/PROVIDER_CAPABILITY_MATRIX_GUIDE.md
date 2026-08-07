@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/descriptor.py
 canonical_owner: platform@aether
-last_synced_commit: "e9fc085"
+last_synced_commit: "71d96f6"
 ---
 
 # Provider Capability Matrix Guide
@@ -52,19 +52,32 @@ Keys are `<domain>:<provider>`. Each entry carries `state`, `state_rank`,
 ### Readiness states (low → high)
 
 The states below are the `CredentialReadiness` enum members in
-`shared/certification/readiness.py` with their `_READINESS_RANK` values.
+`shared/certification/readiness.py` with their `_READINESS_RANK` values
+(spaced by 10; only relative order is contractual). The canonical
+cross-language contract is
+`packages/shared/contracts/readiness-vocabulary.json`, enforced by
+`scripts/validate_readiness_vocabulary.py` in `make ci-check`.
 
 | State | Rank | Meaning |
 |---|---|---|
-| `scaffolded` | 1 | descriptor only, unimplemented paths (forbidden for first release) |
-| `credential_waiting` | 2 | code-complete + infra-defined, credential-gated, NOT yet validated |
-| `replay_validated` | 3 | validated against recorded fixtures |
-| `sandbox_validated` | 4 | validated against a provider sandbox |
-| `partner_live` | 5 | validated against a live provider |
-| `degraded` / `disabled` | −1 / −2 | off-ramp: regressed or pulled (ranked below all) |
+| `scaffolded` | 10 | descriptor only, unimplemented paths (forbidden for first release) |
+| `credential_waiting` | 20 | code-complete + infra-defined, credential-gated, NOT yet validated |
+| `replay_validated` | 30 | validated against recorded fixtures |
+| `credential_supplied` | 40 | an active credential version exists; connection test pending |
+| `connection_validated` | 50 | the supplied credential passed a real connection/identity test |
+| `sandbox_validated` | 60 | validated against a provider sandbox |
+| `partner_live` | 70 | validated against a live provider |
+| `degraded` | −10 | off-ramp: auto-recoverable regression (probe/dependency failure) |
+| `suspended` | −20 | off-ramp: reversible operator/kill-switch stop |
+| `revoked` | −30 | off-ramp: credentials revoked; resubmission required |
+| `disabled` | −40 | off-ramp: pulled from release |
 
-`degraded`/`disabled` rank below everything so an "at least CREDENTIAL_WAITING"
-assertion never admits an off-ramped provider.
+All four off-ramps rank below everything so an "at least CREDENTIAL_WAITING"
+assertion never admits an off-ramped provider. Per-tenant runtime lifecycle
+state is persisted in `capability_activation_states` and transitioned only
+through the machine-enforced `CapabilityLifecycleAuthority`
+(`services/capabilities/lifecycle.py`) — promotions require evidence
+references, an ACTIVE credential version, and entitlement, all fail-closed.
 
 ### Import failures are surfaced, never silent
 

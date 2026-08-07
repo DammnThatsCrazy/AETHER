@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "45067ae"
+last_synced_commit: "71d96f6"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -1219,6 +1219,25 @@ discovery — callers can determine available capabilities without trial-and-err
 1. Tenant BYOK key → 2. System default provider → 3. Fallback provider(s) → 4. ServiceUnavailableError
 
 Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until activated.
+
+### Capability Activation Lifecycle
+
+Persisted, machine-enforced per-(tenant, provider, environment, capability)
+lifecycle along the canonical `CredentialReadiness` ladder
+(`packages/shared/contracts/readiness-vocabulary.json`). Every transition
+records actor, reason, evidence references, and the credential version it is
+bound to; promotions are fail-closed (no rung skipping, evidence must resolve,
+credential slot must be ACTIVE, entitlement must approve).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/capabilities/activation` | Current lifecycle state of every capability for the tenant (`read`) |
+| GET | `/v1/capabilities/activation/{provider}/{capability}?environment=` | Current state + full promotion/demotion history (`read`) |
+| POST | `/v1/capabilities/activation/{provider}/{capability}/promote` | Promote toward `target_state` with `evidence_refs` (`admin`; 400 on illegal/unproven moves) |
+| POST | `/v1/capabilities/activation/{provider}/{capability}/suspend` | Reversible suspension (`admin`) |
+| POST | `/v1/capabilities/activation/{provider}/{capability}/resume` | Resume to the interrupted certified level (`admin`) |
+| GET | `/v1/kyber/capabilities/activation` | Cross-tenant current states (Kyber operator) |
+| POST | `/v1/kyber/capabilities/activation/{tenant_id}/{provider}/{capability}/suspend` | Audited operator emergency suspend (kill switch) |
 
 ---
 
