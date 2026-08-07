@@ -13,6 +13,7 @@ from services.integrations.connectors.base import (
     BaseConnector,
     ConnectorConfig,
     ConnectionTestResult,
+    ImplementationStatus,
     NormalizedEvent,
     now_iso,
 )
@@ -233,17 +234,125 @@ class StripeConnector(BaseConnector):
         return constant_time_compare(expected, v1_sig)
 
 
+# HubSpot Marketing Hub email event webhook ``eventType`` → canonical
+# communication event type (ADR-C2 taxonomy).
+HUBSPOT_MARKETING_EVENT_MAP: dict[str, str] = {
+    "SENT": "email_sent",
+    "PROCESSED": "email_processed",
+    "DEFERRED": "email_deferred",
+    "DELIVERED": "email_delivered",
+    "OPEN": "email_opened",
+    "OPENED": "email_opened",
+    "CLICK": "email_clicked",
+    "CLICKED": "email_clicked",
+    "BOUNCE": "email_bounced",
+    "DROPPED": "email_dropped",
+    "SPAMREPORT": "email_spam_complaint",
+    "SPAM": "email_spam_complaint",
+    "UNSUBSCRIBE": "unsubscribe_observed",
+    "UNSUBSCRIBED": "unsubscribe_observed",
+}
+
+
+def _hubspot_ts(value: Any) -> Optional[str]:
+    """HubSpot ``created`` timestamps are unix epoch *milliseconds*; accept
+    seconds too and normalize to an ISO-8601 string."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        from datetime import datetime, timezone
+        ts = float(value)
+        if ts > 1e12:  # milliseconds → seconds
+            ts /= 1000.0
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    return str(value)
+
+
+def _hubspot_bounce_type(record: dict[str, Any]) -> str:
+    """HubSpot reports ``bounceSubType``: PERMANENT → hard, else soft."""
+    subtype = str(
+        record.get("bounceSubType") or record.get("bounce_sub_type") or ""
+    ).upper()
+    return "hard" if subtype == "PERMANENT" else "soft"
+
+
+def normalize_hubspot_marketing_event(record: dict[str, Any]) -> Optional[NormalizedEvent]:
+    """One HubSpot Marketing Email event webhook record → canonical event.
+
+    HubSpot posts ``{"events": [{...}]}``; each record carries ``eventType``,
+    ``created`` (ms epoch), ``email``/``recipient``, and ``campaignId``. The
+    raw address transits in memory only — the comms/identity pipeline hashes
+    it before any storage (ADR-C10).
+    """
+    event_name = str(record.get("eventType") or record.get("event") or "").strip().upper()
+    event_type = HUBSPOT_MARKETING_EVENT_MAP.get(event_name)
+    if not event_type:
+        return None
+
+    occurred_at = _hubspot_ts(record.get("created")) or now_iso()
+    properties: dict[str, Any] = {
+        "provider": "hubspot",
+        "provider_event_id": str(record.get("id") or ""),
+        "channel": "email",
+        "message_category": "marketing",
+        "recipient_email": record.get("recipient") or record.get("email"),
+        "external_campaign_id": record.get("campaignId") or record.get("campaign_id"),
+        "external_message_id": record.get("emailId") or record.get("messageId"),
+        "external_template_id": record.get("emailId"),
+        "link_id": record.get("url") or record.get("link"),
+        "bounce_type": _hubspot_bounce_type(record) if event_type == "email_bounced" else None,
+        "hubspot_portal_id": record.get("portalId"),
+    }
+    if event_type == "unsubscribe_observed":
+        # HubSpot marketing unsubscribes are global marketing-channel scope.
+        properties["unsubscribe_scope"] = "marketing_channel"
+    return NormalizedEvent(
+        event_type=event_type,
+        source="hubspot",
+        external_id=properties["provider_event_id"] or str(record.get("created") or now_iso()),
+        occurred_at=str(occurred_at),
+        properties={k: v for k, v in properties.items() if v is not None},
+    )
+
+
 class HubSpotConnector(BaseConnector):
     connector_type = "hubspot"
     label = "HubSpot"
     category = "crm"
-    description = "Ingest HubSpot contacts, companies, and deals."
+    description = (
+        "Ingest HubSpot contacts, companies, and deals, and observe HubSpot "
+        "Marketing Hub email engagement. Aether never sends through this "
+        "connector (ADR-C1)."
+    )
     supports_webhook = True
     supports_pull = True
     requires_secret = True
     premium = True
-    ingest_event_types = ("hubspot.contact", "hubspot.company", "hubspot.deal")
+    # Canonical comms capability surface projected onto the ProviderManifest
+    # (ADR-C11): HubSpot Marketing Hub email event webhooks + campaign sync.
+    manifest_data_outputs = (
+        "comms.campaigns", "comms.delivery_events", "comms.open_events",
+        "comms.click_events", "comms.bounces", "comms.complaints",
+        "comms.unsubscribes",
+    )
+    manifest_product_destinations = ("campaign_360", "profile_360")
+    # Existing CRM ingest types remain untouched; comms types are additive.
+    ingest_event_types = (
+        "hubspot.contact", "hubspot.company", "hubspot.deal", "hubspot.campaign",
+        "email_sent", "email_processed", "email_deferred", "email_delivered",
+        "email_opened", "email_clicked", "email_bounced", "email_dropped",
+        "email_spam_complaint", "unsubscribe_observed",
+    )
     docs_slug = "operations/hubspot-connector"
+    implementation_status = ImplementationStatus.CREDENTIAL_GATED
+    # Native webhook verification: X-HubSpot-Signature-V3 (already used by the
+    # CRM webhook path and listed in _NATIVE_WEBHOOK_SCHEMES).
+    signature_scheme = "hubspot_signature_v3"
+    # Two typed credential slots: private-app token (pull) + webhook client
+    # secret (signature verification). Resolved via the CredentialAuthority.
+    required_credentials = ("api_key", "webhook_signing_secret")
+    # Pull-API protocol facts for the comms conformance ``build_request`` hook.
+    pull_api_base = "https://api.hubapi.com"
 
     @staticmethod
     def verify_webhook_signature(raw_body: bytes, headers: dict, secret: str) -> bool:
@@ -284,9 +393,43 @@ class HubSpotConnector(BaseConnector):
             return _ok(self.connector_type, "HubSpot token valid")
         return _err(self.connector_type, body.get("message", f"HTTP {status}"))
 
+    def parse_webhook(self, payload: dict[str, Any]) -> list[NormalizedEvent]:
+        """Map a verified HubSpot webhook to normalized events.
+
+        HubSpot Marketing Email event webhooks post ``{"events": [...]}`` (or a
+        bare array wrapped as ``{"items": [...]}`` by the generic ingest path);
+        each record carries ``eventType``. CRM webhook payloads carry no
+        ``eventType`` and fall through to the base generic mapping untouched,
+        preserving the pre-comms CRM behavior exactly.
+        """
+        records: list[dict[str, Any]] = []
+        items = payload.get("items") if isinstance(payload, dict) else None
+        events = payload.get("events") if isinstance(payload, dict) else None
+        if isinstance(events, list):
+            records = events
+        elif isinstance(items, list):
+            records = items
+        elif isinstance(payload, list):
+            records = payload
+        elif isinstance(payload, dict) and payload.get("eventType"):
+            records = [payload]
+
+        marketing = [r for r in records if isinstance(r, dict) and r.get("eventType")]
+        if marketing:
+            out: list[NormalizedEvent] = []
+            for record in marketing:
+                normalized = normalize_hubspot_marketing_event(record)
+                if normalized:
+                    out.append(normalized)
+            return out
+        # Not a Marketing Email webhook — preserve the base generic mapping.
+        return super().parse_webhook(payload)
+
     async def pull(self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None) -> list[NormalizedEvent]:
         if not _is_live(secret):
             return []
+        events: list[NormalizedEvent] = []
+        # Existing CRM contact pull (unchanged behavior).
         params = "?limit=50&properties=email,firstname,lastname"
         if since:
             params += f"&updatedAfter={since}"
@@ -294,15 +437,42 @@ class HubSpotConnector(BaseConnector):
             f"https://api.hubapi.com/crm/v3/objects/contacts{params}",
             {"Authorization": f"Bearer {secret}"},
         )
+        if status == 200:
+            events.extend([
+                NormalizedEvent(
+                    event_type="hubspot.contact",
+                    source="hubspot",
+                    external_id=str(r.get("id")),
+                    occurred_at=r.get("updatedAt", now_iso()),
+                    properties=r.get("properties", {}),
+                )
+                for r in body.get("results", [])
+            ])
+        # Marketing Email campaign sync (Marketing Hub API, durable cursor).
+        events.extend(await self._pull_marketing_emails(secret, since))  # type: ignore[arg-type]
+        return events
+
+    async def _pull_marketing_emails(self, secret: str, since: Optional[str]) -> list[NormalizedEvent]:
+        url = "https://api.hubapi.com/marketing/v3/emails?limit=50"
+        if since:
+            url += f"&createdAt={since}"
+        status, body = await _http_get(url, {"Authorization": f"Bearer {secret}"})
         if status != 200:
             return []
         return [
             NormalizedEvent(
-                event_type="hubspot.contact",
+                event_type="hubspot.campaign",
                 source="hubspot",
                 external_id=str(r.get("id")),
-                occurred_at=r.get("updatedAt", now_iso()),
-                properties=r.get("properties", {}),
+                occurred_at=r.get("updatedAt") or r.get("createdAt") or now_iso(),
+                properties={
+                    "external_campaign_id": str(r.get("id")),
+                    "external_message_id": str(r.get("id")),
+                    "external_template_id": str(r.get("id")),
+                    "name": r.get("name"),
+                    "status": r.get("state"),
+                    "channel": "email",
+                },
             )
             for r in body.get("results", [])
         ]
@@ -845,9 +1015,18 @@ async def _http_post(url: str, payload: dict, headers: dict) -> tuple[int, dict]
 
 
 from services.integrations.connectors.klaviyo import KlaviyoConnector  # noqa: E402
+from services.integrations.connectors.sendgrid import SendGridConnector  # noqa: E402
+from services.integrations.connectors.customerio import CustomerIOConnector  # noqa: E402
+from services.integrations.connectors.mailchimp import MailchimpConnector  # noqa: E402
+from services.integrations.connectors.postmark import PostmarkConnector  # noqa: E402
+from services.integrations.connectors.iterable import IterableConnector  # noqa: E402
+from services.integrations.connectors.braze import BrazeConnector  # noqa: E402
 
 ALL_CONNECTORS: list[type[BaseConnector]] = [
     SlackConnector, WebhookConnector, ShopifyConnector, StripeConnector, HubSpotConnector,
     SalesforceConnector, KlaviyoConnector, SegmentConnector, PostHogConnector, GA4Connector,
     JiraConnector, LinearConnector, ZendeskConnector, IntercomConnector, DuneConnector,
+    SendGridConnector, CustomerIOConnector, MailchimpConnector, PostmarkConnector,
+    IterableConnector,
+    BrazeConnector,
 ]

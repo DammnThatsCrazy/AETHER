@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { OnboardingPage } from '@aether-app/pages/onboarding';
 
@@ -13,11 +13,20 @@ vi.mock('@aether-app/features/onboarding', () => ({
   usePatchOnboardingStep: () => ({ mutate: vi.fn() }),
 }));
 
+const commsConnector = (connector_type: string, label: string) => ({
+  connector_type, label, description: 'Email lifecycle', requires_secret: true,
+  enabled: false, secret_configured: false, sync_status: 'never_synced',
+  manifest_data_outputs: ['comms.delivery_events', 'comms.open_events', 'comms.click_events'],
+});
+
 vi.mock('@aether-app/lib/api/endpoints', () => ({
-  api: { connectors: { get: vi.fn(() => Promise.resolve({
-    connector_type: 'klaviyo', label: 'Klaviyo', description: 'Email lifecycle',
-    requires_secret: true, enabled: false, secret_configured: false, sync_status: 'never_synced',
-  })) } },
+  api: { connectors: { list: vi.fn(() => Promise.resolve({ items: [
+    commsConnector('klaviyo', 'Klaviyo'),
+    commsConnector('sendgrid', 'SendGrid'),
+    commsConnector('customerio', 'Customer.io'),
+    commsConnector('mailchimp', 'Mailchimp'),
+    commsConnector('postmark', 'Postmark'),
+  ] })) } },
 }));
 
 describe('Aether Onboarding Center', () => {
@@ -28,5 +37,14 @@ describe('Aether Onboarding Center', () => {
     expect(screen.getByText('No blockers')).toBeInTheDocument();
     expect(await screen.findByTestId('comms-connect-onboarding-step')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect Klaviyo' })).toBeInTheDocument();
+  });
+
+  it('lists every registered communications provider in the comms onboarding step', async () => {
+    render(<OnboardingPage />);
+    await waitFor(() => expect(screen.getByTestId('comms-connect-onboarding-step')).toBeInTheDocument());
+    const select = screen.getByLabelText('Communications provider');
+    for (const label of ['Klaviyo', 'SendGrid', 'Customer.io', 'Mailchimp', 'Postmark']) {
+      expect(within(select).getByText(label)).toBeInTheDocument();
+    }
   });
 });

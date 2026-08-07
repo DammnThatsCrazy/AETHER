@@ -40,6 +40,12 @@ never in connector config or API responses.
   This path is listed in `PUBLIC_PATH_PREFIXES` so the middleware skips API-key auth;
   security is enforced entirely by HMAC verification inside the handler.
 
+  **Comms connectors are the exception**: they never accept a tenant header.
+  Communications providers use server-controlled durable endpoint ids —
+  `POST /v1/integrations/webhooks/comms/{connector}/{endpoint_id}` — resolved
+  server-side (see `docs/comms/COMMS_GENERIC_WEBHOOK.md`). The header path above
+  is a permanent denial for comms connectors.
+
 - **Authenticated (testing/manual)**: `POST /v1/integrations/connectors/{type}/webhook`
   — tenant from the authenticated context; used for testing and first-party
   delivery. Verifies the signature when a secret is configured; in local/mocked

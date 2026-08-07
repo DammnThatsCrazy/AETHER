@@ -1,9 +1,11 @@
 """
 Aether Service — Enterprise Contact
 
-Accepts inbound enterprise inquiries from authenticated tenants and routes them
-to the internal sales team via logged notification. Falls back gracefully when
-the email delivery layer is unavailable.
+Accepts inbound enterprise inquiries from authenticated tenants, persists them
+durably, and notifies the internal sales team by email. The persisted row is the
+source of truth — email delivery is best-effort and never loses an inquiry.
+Inquiry PII (name/email/company/message) is written only to the database, never
+to application logs.
 
 Endpoints:
     POST /v1/contact/enterprise   Submit an enterprise inquiry
@@ -11,10 +13,15 @@ Endpoints:
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError
+from repositories.repos import EnterpriseInquiryRepository
+from shared.common.common import APIResponse, BadRequestError, ServiceUnavailableError
+from shared.email import email_service
+from shared.email.templates import _base
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.contact")
@@ -39,13 +46,17 @@ class EnterpriseContactRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=500)
 
 
+_enterprise_inquiries = EnterpriseInquiryRepository()
+
+
 @router.post("/enterprise")
 async def contact_enterprise(body: EnterpriseContactRequest, request: Request):
     """Accept an enterprise inquiry from an authenticated tenant.
 
-    Logs the submission for internal review and attempts to deliver an email
-    notification to the sales team. The response is always 200 as long as the
-    payload is valid — delivery failure is non-fatal.
+    Persists the inquiry as the durable record, then attempts an email
+    notification to the sales team. If persistence fails the request fails
+    (no fake success); email delivery failure is non-fatal and the inquiry is
+    retained with a ``status`` marker.
     """
     tenant = _require_tenant(request)
 
@@ -55,51 +66,68 @@ async def contact_enterprise(body: EnterpriseContactRequest, request: Request):
             f"Valid values: {sorted(_VALID_COMPANY_TYPES)}"
         )
 
-    logger.info(
-        "enterprise_contact_received",
-        extra={
+    inquiry_id = str(uuid.uuid4())
+    try:
+        await _enterprise_inquiries.insert(inquiry_id, {
             "tenant_id": tenant.tenant_id,
             "name": body.name,
             "email": body.email,
             "company_name": body.company_name,
+            "company_type": body.company_type,
+            "message": body.message,
+            "status": "received",
+        })
+    except Exception as exc:
+        logger.error(
+            "enterprise_contact_persist_failed",
+            extra={"tenant_id": tenant.tenant_id, "inquiry_id": inquiry_id, "error": str(exc)},
+        )
+        raise ServiceUnavailableError("enterprise inquiry storage") from exc
+
+    logger.info(
+        "enterprise_contact_received",
+        extra={
+            "tenant_id": tenant.tenant_id,
+            "inquiry_id": inquiry_id,
             "company_type": body.company_type,
             "message_length": len(body.message),
         },
     )
     metrics.increment("contact_enterprise_submitted")
 
-    # Best-effort internal notification — failure is non-fatal.
-    try:
-        await _notify_sales_team(tenant.tenant_id, body)
-    except Exception as exc:
-        logger.warning(f"Sales notification delivery failed (non-fatal): {exc}")
+    notified = await _notify_sales_team(inquiry_id, body)
+    if not notified:
+        # Email is best-effort on top of the durable row; flag it for an
+        # internal retry sweep rather than dropping or faking the inquiry.
+        await _enterprise_inquiries.update(inquiry_id, {"status": "email_failed"})
+        logger.warning(
+            "enterprise_contact_email_failed",
+            extra={"tenant_id": tenant.tenant_id, "inquiry_id": inquiry_id},
+        )
+    else:
+        await _enterprise_inquiries.update(inquiry_id, {"status": "notified"})
 
     return APIResponse(data={
         "received": True,
+        "inquiry_id": inquiry_id,
         "message": "Thank you — our team will respond within 2 business days.",
     }).to_dict()
 
 
-async def _notify_sales_team(tenant_id: str, body: EnterpriseContactRequest) -> None:
-    """Attempt to deliver an internal notification to the sales team."""
-    try:
-        from shared.notification.email import send_internal_email
-        subject = f"[Enterprise Inquiry] {body.company_name} ({body.company_type})"
-        content = (
-            f"Tenant: {tenant_id}\n"
-            f"Name: {body.name}\n"
-            f"Email: {body.email}\n"
-            f"Company: {body.company_name} ({body.company_type})\n\n"
-            f"Message:\n{body.message}"
-        )
-        await send_internal_email(subject=subject, body=content, tag="enterprise_inquiry")
-    except ImportError:
-        # Email module not available in this deployment — log only.
-        logger.info(
-            "enterprise_contact_logged_only",
-            extra={
-                "tenant_id": tenant_id,
-                "company_name": body.company_name,
-                "email": body.email,
-            },
-        )
+async def _notify_sales_team(inquiry_id: str, body: EnterpriseContactRequest) -> bool:
+    """Deliver an email to the sales team. Returns True on send success."""
+    from config.settings import settings
+
+    subject = f"[Enterprise Inquiry] {body.company_name} ({body.company_type})"
+    body_html = _base("Enterprise inquiry", f"""
+<p><strong>Company:</strong> {body.company_name} ({body.company_type})</p>
+<p><strong>Contact:</strong> {body.name} &lt;{body.email}&gt;</p>
+<hr>
+<p>{body.message}</p>
+<p><em>Inquiry id: {inquiry_id}</em></p>
+""")
+    return await email_service.send_email(
+        to=settings.email.enterprise_inquiry_email,
+        subject=subject,
+        body_html=body_html,
+    )

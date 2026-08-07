@@ -14,7 +14,7 @@ related:
   - reliability/queue-worker-health
 canonical_owner: platform@aether
 estimated_read_minutes: 3
-last_synced_commit: "3283497"
+last_synced_commit: "559be979"
 ---
 # Pipeline Health
 
@@ -41,7 +41,8 @@ SDK ingestion → event store · event store → identity resolution · identity
 graph mutation · graph mutation → Profile360 · Profile360 → recommendation
 generation · recommendation → decision/action lifecycle · action → dispatch ·
 dispatch → outcome · outcome → confidence update · outcome → outcome ledger ·
-usage event → billing metering · audit event → audit ledger.
+usage event → billing metering · audit event → audit ledger · validated event →
+semantic classification.
 
 ## APIs
 

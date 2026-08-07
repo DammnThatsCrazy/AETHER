@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: "9ebc883"
+last_synced_commit: "ead4ba6c"
 ---
 
 # Events / Kafka Subsystem
@@ -54,6 +54,18 @@ Consumer group IDs include `AETHER_ENV` (`aether-backend-<env>` by default) so s
 `EventProducer.connect()` is called during `ResourceRegistry.startup()`. In Kafka mode it creates an `AIOKafkaProducer` with `acks=all` and 3 retries; in SQS mode it creates boto3 SQS (and, with fanout, SNS) clients. FIFO queues get `MessageGroupId=tenant_id` and `MessageDeduplicationId=event_id`.
 
 `EventConsumer.start()` subscribes to registered topics and begins consuming (`enable_auto_commit=False` in Kafka mode — offsets are committed only after handlers or the durable DLQ path complete). Restart re-entry tears down any leftover broker client first so a zombie group member cannot stall partitions.
+
+## Local In-Memory Delivery Pump
+
+In `AETHER_ENV=local` with no broker reachable, `EventProducer.publish()` appends to an in-memory list and `EventConsumer.receive_loop()` returns immediately — nothing outside a broker poll ever invokes `EventConsumer.process()`. A `POST /v1/batch` therefore reached Bronze and stopped: the local stack's Bronze→Silver projection pipeline silently did not run.
+
+`EventProducer.pump_local()` is the missing bridge. It is a cursor-based pump that drains the in-memory `_published` list into `consumer.process()`, the same canonical handler path the Kafka and SQS loops drive, giving the single-process local stack real Bronze→Silver delivery. Key properties:
+
+- Wired by the `main.py` lifespan only when the producer actually connected **in-memory** (`producer.mode == "in-memory"`) and consumers are attached — a broker-connected producer is never double-delivered (its `_published` list stays empty, and the pump re-checks `mode`).
+- Cursor-based: each event is delivered **at most once per process**; the cursor never resets.
+- Events published by handlers while pumping are picked up on the next tick (handler-republish pickup).
+- Cancelled cleanly on shutdown (the pump task is awaited with `CancelledError` swallowed before resources tear down).
+- In a pure-`api` role process (`_start_consumers=False`) the pump never runs.
 
 ## Health Check
 

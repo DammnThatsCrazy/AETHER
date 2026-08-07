@@ -208,10 +208,41 @@ Prometheus rules (group `aether_payment_rails` in
 | `PaymentRailCanonicalBacklog` | Canonical/outbox delivery is falling behind |
 | `PaymentRailOutboxDeadLetterGrowth` | Dead-letters growing — manual replay required |
 | `PaymentRailProviderPollDegraded` | Provider poll health non-ok |
+| `PaymentRailReconciliationConflict` | Unresolved SDK-vs-provider conflicts exceed threshold (a truth disagreement is piling up, not being superseded) |
+| `PaymentRailReconciliationStaleSurge` | Surge of sessions ageing past the reconciliation window (provider truth not arriving) |
+| `PaymentRailCanonicalBacklogGrowth` | Incomplete-receipt backlog is *growing*, not just non-zero (repair is losing ground) |
+| `PaymentRailOutboxDeliveryStalling` | Outbox `published` count lagging `enqueued` — the relay is enabled but not draining |
 
-Thresholds are environment-tunable (`AETHER_PAYMENT_SYNC_INTERVAL_SECONDS`,
-`AETHER_PAYMENT_RECON_STALE_AFTER_SECONDS`, per-environment rules overlay). No
-secret or provider payload ever appears in an alert.
+Thresholds are environment-tunable. The single-series PromQL rules use
+`AETHER_PAYMENT_SYNC_INTERVAL_SECONDS` / `AETHER_PAYMENT_RECON_STALE_AFTER_SECONDS`
+and the per-environment rules overlay. The **derived** conditions that have no
+clean single-series PromQL form — most importantly the reconciliation-conflict
+backlog, which is read from the durable reconciliation records rather than a
+counter — are classified by an in-process evaluator
+(`services/integrations/providers/payment_rails/alert_eval.py`) whose thresholds
+come from `settings.payment_rails.alert_*` (env vars `AETHER_PAYMENT_ALERT_*`, e.g.
+`AETHER_PAYMENT_ALERT_NO_WEBHOOK_SECONDS`, `AETHER_PAYMENT_ALERT_CANONICAL_BACKLOG_WARN`,
+`AETHER_PAYMENT_ALERT_RECONCILIATION_CONFLICT_WARN`). This keeps thresholds
+per-environment tunable without a code change. The evaluator reads state only,
+emits nothing back into the plane, and — like the Prometheus rules — never puts a
+secret or provider payload in an alert. It reports **UNKNOWN** (no data) as a
+severity distinct from OK, so a silent/never-configured provider is never mistaken
+for a healthy one.
+
+The evaluator is a library; it only runs when the **supervised worker**
+`payment_alert_eval` is enabled (`AETHER_PAYMENT_ALERT_EVAL_ENABLED=true`, default
+off, gated behind the payment-rails master flag; cadence
+`AETHER_PAYMENT_ALERT_EVAL_INTERVAL_SECONDS`, default 300s). Each cycle publishes
+a labelled `payment_rail_alert_condition_severity` gauge per condition
+(`ok=0 unknown=1 warning=2 critical=3`), a firing-count + worst-severity gauge and
+a heartbeat, and logs every firing condition. Enable it in staging/production once
+the plane is live — otherwise the derived conditions (conflict backlog, backlog
+growth, outbox stalling) are classified but never evaluated.
+
+**Why this exists.** Payment-rail metrics were emitted from day one but nothing
+consumed the *derived* health conditions (silence, backlog growth, conflict
+pile-up, outbox stalling). The rules + evaluator close that gap so an operator is
+paged on a degrading delivery plane instead of discovering it during an incident.
 
 ## Release feature flags
 
@@ -224,6 +255,7 @@ secret or provider payload ever appears in an alert.
 | `AETHER_PAYMENT_CANONICAL_OUTBOX_ENABLED` | off | Durable canonical delivery |
 | `OUTBOX_RELAY_ENABLED` | off | Event-outbox relay (enable WITH the canonical outbox) |
 | `AETHER_PAYMENT_CANONICAL_REPAIR_ENABLED` | **on outside local** | Supervised repair worker |
+| `AETHER_PAYMENT_ALERT_EVAL_ENABLED` | off | Supervised derived-condition alert evaluator worker (enable in staging/prod once live) |
 | `AETHER_PAYMENT_USAGE_METERING_ENABLED` | off | Billing meter (keep off until contract confirmed) |
 | `AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED` | off | Local-dev-only header route (404 elsewhere) |
 | `CREDENTIAL_CIPHER` / `CREDENTIAL_KMS_KEY_ID` | `local` / — | KMS cipher (aws_kms required outside local) |

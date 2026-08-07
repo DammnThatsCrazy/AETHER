@@ -9,7 +9,7 @@ source_files:
   - packages/web/src/types.ts
   - packages/web/src/index.ts
   - packages/web/src/tracking/traffic-source-tracker.ts
-last_synced_commit: "6306ea8"
+last_synced_commit: "99da74c0"
 ---
 
 # Campaign SDK Acquisition Evidence
@@ -50,12 +50,17 @@ interface AcquisitionEvidence {
   referrerDomain?: string;
   landingPage?: string;
   referralToken?: string;     // opaque aether_ref value; verified server-side
+  entryMethod?: string;       // how the entry evidence was physically observed (web_referrer, android_install_referrer, ios_universal_link, ...)
+  destinationDomain?: string; // host of the destination the user LANDED on (deep/universal link host); never the referrer
+  destinationPathHash?: string; // one-way hash of the destination path when path privacy is configured
+  firstTouch?: boolean;       // true when this is the persisted first touch (vs latest touch)
 
   // Session metadata
   firstCapturedAt?: string;   // ISO 8601
   lastObservedAt?: string;
+  evidenceExpiresAt?: string; // ISO 8601 — when this evidence stops attaching to new events
   sessionId?: string;
-  schemaVersion: number;      // Currently 2
+  schemaVersion: number;      // Currently 3
 
   /** @deprecated Use utmCampaign instead */
   name?: string;
@@ -64,7 +69,7 @@ interface AcquisitionEvidence {
 }
 ```
 
-`ACQUISITION_EVIDENCE_SCHEMA_VERSION` is `2`. Version 2 adds only the optional `referralToken`, so version 1 payloads remain valid inputs.
+`ACQUISITION_EVIDENCE_SCHEMA_VERSION` is `3`. Version 2 added only the optional `referralToken`; version 3 adds the optional `entryMethod`, `destinationDomain`, `destinationPathHash`, `firstTouch`, and `evidenceExpiresAt` fields. Older version payloads remain valid inputs.
 
 ## Web event context
 

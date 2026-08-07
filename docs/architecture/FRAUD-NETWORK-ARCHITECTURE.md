@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/risk_overlay/
   - Backend Architecture/aether-backend/repositories/repos.py
   - packages/shared/graph-contract.ts
-last_synced_commit: "3283497"
+last_synced_commit: "559be979"
 ---
 
 # Fraud Network Architecture

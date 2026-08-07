@@ -81,7 +81,45 @@ steps live in `docs/PAYMENT-RAILS-ACTIVATION.md`.
    `PaymentRailOutboxDeadLetterGrowth` alert means delivery is falling behind —
    confirm the outbox relay is enabled **with** the canonical outbox.
 3. Alerts live in the `aether_payment_rails` Prometheus group; alert meanings are
-   catalogued in `docs/PAYMENT-RAILS-ACTIVATION.md#alerts`.
+   catalogued in `docs/PAYMENT-RAILS-ACTIVATION.md#alerts`. Derived conditions
+   with no single-series PromQL form (reconciliation-conflict backlog, backlog
+   *growth*, outbox stalling, provider silence) are classified by an in-process
+   evaluator (`alert_eval.py`) with env-tunable `AETHER_PAYMENT_ALERT_*`
+   thresholds; it reports `unknown` (no data) distinctly from `ok`. The evaluator
+   runs only when the supervised `payment_alert_eval` worker is enabled
+   (`AETHER_PAYMENT_ALERT_EVAL_ENABLED=true`, default off) — if the derived
+   alerts never fire on a live plane, check that flag first. It publishes a
+   `payment_rail_alert_condition_severity` gauge per condition plus a heartbeat.
+4. **Ledger truth on the durable-outbox path.** When the canonical outbox is on,
+   ingestion parks a receipt at `outbox_enqueued`/`"enqueued"` and the relay
+   drains the row out of band. The supervised repair sweep records the
+   `outbox_published` transition (publication state → `"published"`) before it
+   marks the receipt `completed`, so a completed durable-path receipt reflects
+   the stage it actually passed rather than a stale `"enqueued"`. This is
+   forward-only and idempotent (direct-publish receipts already passed the stage;
+   a re-run skips completed receipts) — do not "fix" a `completed` receipt whose
+   publication state reads `published`; that is the correct terminal shape.
+
+### Delivery-integrity guarantees (what the tests pin)
+
+These invariants are enforced by regression tests
+(`tests/payment_rails/test_provider_pipeline_matrix.py`, `test_delivery_relay.py`,
+`test_crash_recovery.py`, `test_webhook_admission_edges.py`,
+`test_polling_fetch_paths.py`) so a refactor can't silently break them:
+
+- **One observation → one receipt → one funding session → one canonical id per
+  event type**, for all five providers end to end.
+- **Idempotent recovery after a crash at *any* receipt stage:** the repair worker
+  re-drives to `completed` without a second session, a second canonical event, or
+  a second usage-meter charge; a crash *before* the session is linked bounds to
+  `no_funding_session` and dead-letters after the attempt cap — it never
+  fabricates a session.
+- **Replayed / duplicate / malformed webhooks** map to one receipt (no double
+  metering) or are rejected with a uniform, secret-free error plus a server-side
+  audit record.
+- **Polling never raises:** a provider 5xx/4xx/timeout/unparseable-body degrades
+  poll health and returns the partial records gathered; webhook-only providers
+  (Privy, Stripe onramp) no-op the poll path (`webhook_only`).
 
 ## Never do
 
