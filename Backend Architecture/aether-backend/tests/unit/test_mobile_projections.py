@@ -65,6 +65,17 @@ def _async_raise(exc):
     return _fn
 
 
+def _async_value_args(value):
+    """Async fn returning ``value`` and recording ``(args, kwargs)`` verbatim —
+    used where the exact calling convention (positional vs keyword) matters."""
+    async def _fn(*args, **kwargs):
+        _fn.calls.append((args, kwargs))
+        return value
+
+    _fn.calls = []
+    return _fn
+
+
 class _Tenant:
     tenant_id = "tenant-a"
     user_id = "user-1"
@@ -86,45 +97,56 @@ def _enabled(monkeypatch):
 # ── fixture data: owning-service truth (as returned by the real services) ─────
 
 def _profile_summary():
+    """Real ``Profile360Aggregator.summary()`` shape: profile truth nested under
+    ``snapshot``; top level carries only ids / kind / dependency_status /
+    computed_at / provenance."""
     return {
-        "canonical_entity_id": "ent-1",
-        "entity": {
-            "id": "ent-1",
-            "type": "person",
-            "displayLabel": "Alice alice@example.com",
-            "parentEntityId": None,
-            "known": True,
-            "timestamps": {"createdAt": "2026-01-01T00:00:00Z", "updatedAt": None},
-            "metadata": {"segment": "northwind"},
+        "entity_id": "ent-1",
+        "tenant_id": "tenant-a",
+        "kind": "summary",
+        "snapshot": {
+            "canonical_entity_id": "ent-1",
+            "entity": {
+                "id": "ent-1",
+                "type": "person",
+                "displayLabel": "Alice alice@example.com",
+                "parentEntityId": None,
+                "known": True,
+                "timestamps": {"createdAt": "2026-01-01T00:00:00Z", "updatedAt": None},
+                "metadata": {"segment": "northwind"},
+            },
+            "counts": {
+                "agents": 2,
+                "wallets": 3,
+                "transfers": 5,
+                "delegations_granted": 0,
+                "delegations_received": 1,
+                "active_delegations_granted": 0,
+                "active_delegations_received": 1,
+                "journey_chains": 0,
+                "agent_executions": 4,
+            },
+            "financials": {
+                "inflow_total": 100.0,
+                "outflow_total": 40.0,
+                "net": 60.0,
+                "inflow_usd": "100.00",
+                "outflow_usd": "40.00",
+                "net_usd": "60.00",
+                "rollup_status": "single_currency",
+            },
+            "behavior": {
+                "automation_ratio": 0.5,
+                "decision_latency_ms": 12,
+                "risk_score": 0.8,
+                "anomaly_flags": ["large-transfer", "new-wallet"],
+                "computed_at": "2026-01-01T00:00:00Z",
+                "computed": True,
+            },
         },
-        "counts": {
-            "agents": 2,
-            "wallets": 3,
-            "transfers": 5,
-            "delegations_granted": 0,
-            "delegations_received": 1,
-            "active_delegations_granted": 0,
-            "active_delegations_received": 1,
-            "journey_chains": 0,
-            "agent_executions": 4,
-        },
-        "financials": {
-            "inflow_total": 100.0,
-            "outflow_total": 40.0,
-            "net": 60.0,
-            "inflow_usd": "100.00",
-            "outflow_usd": "40.00",
-            "net_usd": "60.00",
-            "rollup_status": "single_currency",
-        },
-        "behavior": {
-            "automation_ratio": 0.5,
-            "decision_latency_ms": 12,
-            "risk_score": 0.8,
-            "anomaly_flags": ["large-transfer", "new-wallet"],
-            "computed_at": "2026-01-01T00:00:00Z",
-            "computed": True,
-        },
+        "dependency_status": {"summary.entity": {"status": "ok", "error_code": None}},
+        "computed_at": "2026-01-01T00:00:00Z",
+        "provenance": {"sources": ["entities", "behavior_profiles"]},
     }
 
 
@@ -234,7 +256,7 @@ def test_profile_projection_composes_owning_counts_and_redacts_amounts_pii():
 
 def test_profile_projection_preserves_absent_amounts():
     summary = _profile_summary()
-    summary["financials"] = {
+    summary["snapshot"]["financials"] = {
         "inflow_total": None,
         "outflow_total": None,
         "net": None,
@@ -251,9 +273,19 @@ def test_profile_projection_preserves_absent_amounts():
 
 def test_profile_projection_bounds_anomaly_flags():
     summary = _profile_summary()
-    summary["behavior"]["anomaly_flags"] = [f"flag-{i}" for i in range(50)]
+    summary["snapshot"]["behavior"]["anomaly_flags"] = [f"flag-{i}" for i in range(50)]
     proj = project_profile_summary(summary)
     assert len(proj["behavior"]["anomaly_flags"]) <= 10
+
+
+def test_profile_projection_falls_back_to_flat_block_for_injected_fakes():
+    """The projection also accepts a flat owning-service block (injected fakes /
+    direct callers), not only the nested ``snapshot`` envelope."""
+    flat = _profile_summary()["snapshot"]
+    proj = project_profile_summary(flat)
+    assert proj["entity_id"] == "ent-1"
+    assert proj["counts"]["agents"] == 2
+    assert proj["behavior"]["risk_score"] == 0.8
 
 
 def test_profile_peek_is_bounded_subset():
@@ -397,7 +429,7 @@ def test_profile_summary_passes_through_stubbed_truth():
 def test_campaign_summary_reuses_owned_campaign_truth():
     owned = {"campaign_id": "c1", "tenant_id": "tenant-a", "name": "Q3 Launch"}
     overview = _campaign_overview()
-    fake_find = _async_value(owned)
+    fake_find = _async_value_args(owned)
     fake_overview = _async_value(overview)
     svc = MobileProjectionService(
         campaign_repo=SimpleNamespace(find_by_id=fake_find),
@@ -409,7 +441,9 @@ def test_campaign_summary_reuses_owned_campaign_truth():
     assert result["campaign_id"] == "c1"
     assert result["counts"]["converted_count"] == 50
     assert result["amounts"]["spend_usd"] == REDACTED
-    assert fake_find.calls == [{"campaign_id": "c1"}]
+    # BaseRepository.find_by_id takes a positional record_id — assert the
+    # positional call so keyword-vs-positional drift cannot pass falsely.
+    assert fake_find.calls == [(("c1",), {})]
     assert fake_overview.calls == [{
         "tenant_id": "tenant-a",
         "campaign_id": "c1",
@@ -419,14 +453,14 @@ def test_campaign_summary_reuses_owned_campaign_truth():
 
 def test_campaign_summary_404_for_unowned_or_missing_campaign():
     # Missing campaign.
-    svc = MobileProjectionService(campaign_repo=SimpleNamespace(find_by_id=_async_value(None)))
+    svc = MobileProjectionService(campaign_repo=SimpleNamespace(find_by_id=_async_value_args(None)))
     with pytest.raises(NotFoundError):
         _run(svc.campaign_summary(tenant_id="tenant-a", campaign_id="nope"))
 
     # Campaign owned by another tenant — no cross-tenant leak.
     other = {"campaign_id": "c9", "tenant_id": "tenant-b"}
     svc = MobileProjectionService(
-        campaign_repo=SimpleNamespace(find_by_id=_async_value(other)),
+        campaign_repo=SimpleNamespace(find_by_id=_async_value_args(other)),
         campaign_explorer=SimpleNamespace(get_overview=_async_value(_campaign_overview())),
     )
     with pytest.raises(NotFoundError):

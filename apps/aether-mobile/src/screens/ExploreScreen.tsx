@@ -2,8 +2,9 @@
  * Explore — saved-views browsing (M3b).
  *
  * Consumes the `/v1/mobile/briefing` exploration projection via the typed client
- * and renders its saved views. Shares the `briefing` cache key with Copilot, so
- * both tabs read the same projection without a second network round-trip. Read-only.
+ * and renders its saved views (`name` / `saved_at`). Shares the `briefing` cache
+ * key with Copilot, so both tabs read the same projection without a second network
+ * round-trip. Read-only.
  */
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -19,12 +20,8 @@ function SavedViewRow({ view }: { view: SavedView }): React.JSX.Element {
   return (
     <Card style={styles.row}>
       <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{view.title}</Text>
-        <Text style={styles.rowMeta}>
-          {view.kind}
-          {typeof view.item_count === 'number' ? ` · ${view.item_count} items` : ''}
-          {view.updated_at ? ` · updated ${view.updated_at}` : ''}
-        </Text>
+        <Text style={styles.rowTitle}>{view.name ?? 'Saved view'}</Text>
+        <Text style={styles.rowMeta}>{view.saved_at ? `saved ${view.saved_at}` : ''}</Text>
       </View>
     </Card>
   );
@@ -37,7 +34,7 @@ function ExploreContent({ data }: { data: BriefingProjection }): React.JSX.Eleme
       {data.saved_views.length === 0 ? (
         <EmptyState message="No saved views yet. Saved views will appear here." />
       ) : (
-        data.saved_views.map((view) => <SavedViewRow key={view.view_id} view={view} />)
+        data.saved_views.map((view) => <SavedViewRow key={view.view_id ?? view.name ?? ''} view={view} />)
       )}
     </ScrollView>
   );

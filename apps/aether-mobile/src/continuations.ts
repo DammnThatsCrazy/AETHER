@@ -28,10 +28,25 @@ export interface ContinueOnDesktopResult {
 
 /** The device's own installation id, discovered read-only. */
 export async function currentInstallationId(): Promise<string | null> {
+  const own = await currentInstallation();
+  return own?.id ?? null;
+}
+
+/**
+ * The device's own principal id (the authenticated user), discovered read-only.
+ * The gateway derives `principal_id` server-side from the session; the profile
+ * projection is scoped by this value (`user_id` query param).
+ */
+export async function currentPrincipalId(): Promise<string | null> {
+  const own = await currentInstallation();
+  return own?.principal_id ?? null;
+}
+
+/** The device's own installation record, discovered read-only. */
+async function currentInstallation(): Promise<MobileInstallation | null> {
   try {
     const installations: MobileInstallation[] = await client.listInstallations();
-    const own = installations.find(installation => installation.app_kind === 'aether') ?? installations[0];
-    return own?.id ?? null;
+    return installations.find(installation => installation.app_kind === 'aether') ?? installations[0] ?? null;
   } catch {
     return null;
   }

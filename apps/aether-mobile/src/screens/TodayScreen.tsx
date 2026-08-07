@@ -1,8 +1,8 @@
 /**
  * Today — the digest surface (M3b).
  *
- * Consumes GET /v1/mobile/today via the typed projection client, showing
- * severity-banded alert counts plus redacted notification titles. Read-only: it
+ * Consumes GET /v1/mobile/today via the typed projection client: unread + top
+ * severity alert counts plus the most recent redacted alert titles. Read-only: it
  * only ever renders the projection's redacted `title` fields — never raw bodies.
  */
 import React from 'react';
@@ -11,16 +11,9 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card, theme } from '@aether/mobile-ui';
 
 import { Screen } from '../navigator';
-import { alertBands, bandForSeverity, projections, type TodayProjection } from '../projections';
+import { projections, type AlertSeverity, type TodayProjection } from '../projections';
 import { useProjection } from '../useProjection';
-import { bandColor, EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/ScreenStatus';
-
-const BAND_LABELS: Record<(typeof alertBands)[number], string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  info: 'Info',
-};
+import { EmptyState, ErrorState, LoadingState, severityColor, StatusBadge } from '../components/ScreenStatus';
 
 function TodayContent({ data }: { data: TodayProjection }): React.JSX.Element {
   return (
@@ -28,25 +21,29 @@ function TodayContent({ data }: { data: TodayProjection }): React.JSX.Element {
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>Alerts</Text>
         <View style={styles.bandRow}>
-          {alertBands.map((band) => (
-            <View key={band} style={styles.band}>
-              <Text style={[styles.bandCount, { color: bandColor(band) }]}>{data.alert_counts[band] ?? 0}</Text>
-              <Text style={styles.bandLabel}>{BAND_LABELS[band]}</Text>
-            </View>
-          ))}
+          <View style={styles.band}>
+            <Text style={[styles.bandCount, { color: theme.colors.danger }]}>{data.unread_alert_count}</Text>
+            <Text style={styles.bandLabel}>Unread</Text>
+          </View>
+          <View style={styles.band}>
+            <Text style={[styles.bandCount, { color: theme.colors.warning }]}>{data.top_severity_alert_count}</Text>
+            <Text style={styles.bandLabel}>Critical</Text>
+          </View>
         </View>
       </Card>
 
-      <Text style={styles.sectionLabel}>Notifications</Text>
-      {data.notifications.length === 0 ? (
-        <EmptyState message="No notifications right now." />
+      <Text style={styles.sectionLabel}>Recent alerts</Text>
+      {data.recent_alerts.length === 0 ? (
+        <EmptyState message="No alerts right now." />
       ) : (
-        data.notifications.map((notification) => (
-          <Card key={notification.notification_id} style={styles.notifCard}>
-            <View style={[styles.dot, { backgroundColor: bandColor(bandForSeverity(notification.severity)) }]} />
+        data.recent_alerts.map((alert) => (
+          <Card key={alert.id ?? alert.title} style={styles.notifCard}>
+            <View
+              style={[styles.dot, { backgroundColor: severityColor((alert.severity ?? 'info') as AlertSeverity) }]}
+            />
             <View style={styles.notifText}>
-              <Text style={styles.notifTitle}>{notification.title}</Text>
-              <Text style={styles.notifMeta}>{notification.detected_at}</Text>
+              <Text style={styles.notifTitle}>{alert.title}</Text>
+              <Text style={styles.notifMeta}>{alert.created_at ?? ''}</Text>
             </View>
           </Card>
         ))
@@ -79,7 +76,7 @@ const styles = StyleSheet.create({
   cardTitle: { color: theme.colors.text, fontSize: theme.type.subtitle.fontSize, fontWeight: '600' },
   bandRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     marginTop: theme.spacing.md,
   },
   band: { alignItems: 'center', gap: theme.spacing.xs },

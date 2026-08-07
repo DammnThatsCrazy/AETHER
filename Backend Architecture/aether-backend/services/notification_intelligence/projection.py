@@ -55,6 +55,17 @@ _LONG_DIGIT_RE = re.compile(r"\b\d{10,}\b")
 _AMOUNT_RE = re.compile(
     r"(?<![A-Za-z0-9_$€£¥])(?:[$€£¥]\s*)?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?(?![A-Za-z0-9_%])"
 )
+# Ungrouped / large amounts the comma-form regex above cannot see: "1234.56",
+# "12000", "200000.0", "$12000.00". Deliberately conservative so dates and
+# versions survive: a bare 4-digit run is only redacted when it carries a
+# decimal part (an amount), never when it is a year ("2026-01-01") or a version
+# ("8.12.0"); 5+ digit runs are always amounts.
+_LARGE_AMOUNT_RE = re.compile(
+    r"(?<![\d.A-Za-z_$€£¥])(?:[$€£¥]\s*)?(?:"
+    r"\d{5,}(?:\.\d{1,3})?"    # 5+ integer digits, optional decimals
+    r"|\d{4}\.\d{1,3}"         # 4 integer digits carrying a decimal part
+    r")(?![A-Za-z0-9%])"
+)
 
 # Deep-link path prefix → continuation-plane surface class. Only classes the
 # continuation plane already understands are produced (see CONTINUATION_SURFACES).
@@ -122,6 +133,7 @@ def _redact(text: Optional[Any]) -> str:
     value = _PHONE_RE.sub(_REDACTED, value)
     value = _LONG_DIGIT_RE.sub(_REDACTED, value)
     value = _AMOUNT_RE.sub(_REDACTED, value)
+    value = _LARGE_AMOUNT_RE.sub(_REDACTED, value)
     # Collapse adjacent redactions ("[redacted] [redacted]" → single marker).
     value = re.sub(r"(?:\s*\[redacted\]\s*)+", f" {_REDACTED} ", value).strip()
     return value

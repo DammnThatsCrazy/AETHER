@@ -464,7 +464,8 @@ mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Pytho
 	python -m pytest tests/contracts/test_continuation_contract_parity.py \
 		tests/contracts/test_sync_event_contract_parity.py \
 		tests/contracts/test_delivery_receipt_parity.py \
-		tests/contracts/test_notification_contract_parity.py -q
+		tests/contracts/test_notification_contract_parity.py \
+		tests/contracts/test_mobile_projection_contract_parity.py -q
 
 continuity-check: ## CI gate — cross-device continuation plane + client-sync feed
 	python -m pytest \

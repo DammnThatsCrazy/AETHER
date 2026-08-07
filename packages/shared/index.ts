@@ -88,6 +88,7 @@ export * from './delivery-receipt';
 export * from './notification';
 export * from './installation';
 export * from './mobile-config';
+export * from './mobile-projection';
 export * from './imports';
 
 // Unified-platform registries (generated from packages/shared/contracts/*.json

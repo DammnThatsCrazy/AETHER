@@ -1,32 +1,46 @@
 /**
  * Aether Mobile projection layer (M3b).
  *
- * App-local typed client + wire contracts for the mobile-gateway projection
- * endpoints: `/v1/mobile/config`, `/v1/mobile/today`, `/v1/mobile/profile`,
+ * App-local typed client for the mobile-gateway projection endpoints:
+ * `/v1/mobile/config`, `/v1/mobile/today`, `/v1/mobile/profile`,
  * `/v1/mobile/briefing`, `/v1/mobile/alerts`.
  *
- * The mobile-gateway backend is landing these projections in parallel; the wire
- * shapes are therefore provisional and live HERE rather than in `@aether/shared`
- * / `AetherMobileClient` until the backend contracts are stable. Reusing the SDK's
- * `HttpClient` keeps transport, auth (SecureStore token), and the `{ data: ... }`
- * envelope unwrapping identical to the rest of the app. When the backend
- * projections land, these methods + types move into `@aether/mobile-core` against
- * their `@aether/shared` contract twins — no screen change required.
+ * The wire contracts live in `@aether/shared` (`packages/shared/mobile-projection.ts`)
+ * as parity-tested twins of the Python-authoritative builders
+ * (`services/mobile/projections.py`) and are re-exported here under the app-local
+ * names the screens consume — a single canonical shape, no app-local drift.
  *
  * All screens are READ-ONLY by construction (M2 "no offline mutation" invariant):
- * these methods issue GETs only. Field names are snake_case (decision-log D6),
- * matching every other mobile wire contract. Only redacted content is typed here —
- * notification titles are the backend's redacted projection, never raw bodies/PII.
+ * these methods issue GETs only. Query parameters that scope a projection to the
+ * requesting installation / principal (``installation_id``, ``user_id``) are passed
+ * explicitly — the backend routes require them. Only redacted content is typed
+ * here — notification titles are the backend's redacted projection, never raw
+ * bodies/PII.
  */
 import {
   HttpClient,
   normalizeBaseUrl,
   type HttpClientDeps,
+  type MobileAlertsProjection,
+  type MobileBriefingProjection,
+  type MobileProfileSummary,
+  type MobileSavedView,
+  type MobileTodayProjection,
+  type WireMobileConfig,
 } from '@aether/mobile-core';
 
 import { auth, config, deviceFetch } from './client';
 
-// ── Alert severity / banding ─────────────────────────────────────────────────
+// ── Canonical shared wire twins (re-exported app-local aliases) ──────────────
+
+export type TodayProjection = MobileTodayProjection;
+export type AlertsProjection = MobileAlertsProjection;
+export type BriefingProjection = MobileBriefingProjection;
+export type ProfileProjection = MobileProfileSummary;
+export type SavedView = MobileSavedView;
+export type MobileConfigWire = WireMobileConfig;
+
+// ── Alert severity / banding (display concern; presentation, not wire truth) ─
 
 /** Severity vocabulary (mirrors the shared notification contract). */
 export const alertSeverities = ['P0', 'P1', 'P2', 'P3', 'info'] as const;
@@ -51,85 +65,17 @@ export function bandForSeverity(severity: AlertSeverity): AlertBand {
   }
 }
 
-/** Redacted notification title surfaced to mobile (never raw body/PII). */
-export interface RedactedNotification {
-  notification_id: string;
-  severity: AlertSeverity;
-  /** Backend-redacted title. */
-  title: string;
-  detected_at: string;
-  /** Continuation-plane surface class, used for future deep links. */
-  deep_link_class?: string | null;
-}
+// ── Query-param builder (snake_case wire keys, URL-encoded values) ───────────
 
-// ── Projection contracts (provisional — see module header) ──────────────────
-
-/** GET /v1/mobile/today — the today digest surface. */
-export interface TodayProjection {
-  generated_at: string;
-  period: string;
-  /** Severity-banded alert counts (server-aggregated). */
-  alert_counts: Record<AlertBand, number>;
-  notifications: RedactedNotification[];
-}
-
-/** GET /v1/mobile/alerts — the read-only alerts inbox. */
-export interface AlertsProjection {
-  generated_at: string;
-  unread_count: number;
-  items: RedactedNotification[];
-}
-
-/** A saved exploration view (Explore tab browses these). */
-export interface SavedView {
-  view_id: string;
-  title: string;
-  /** Exploration surface/kind (e.g. `exploration`, `campaign`). */
-  kind: string;
-  item_count?: number | null;
-  updated_at?: string | null;
-}
-
-/** GET /v1/mobile/briefing — read-only briefing/exploration projection. */
-export interface BriefingProjection {
-  generated_at: string;
-  headline: string;
-  sections: Array<{
-    heading: string;
-    summary: string;
-    source: string;
-    updated_at?: string | null;
-  }>;
-  saved_views: SavedView[];
-  /** Projection-backed (no noesis conversation transport used in M3b). */
-  source: 'projection';
-}
-
-/** GET /v1/mobile/profile — read-only profile summary. */
-export interface ProfileProjection {
-  profile_id: string;
-  display_name: string;
-  masked_identifier?: string | null;
-  plan: string;
-  tier?: string | null;
-  member_since?: string | null;
-}
-
-/**
- * GET /v1/mobile/config — wire twin of the shared `MobileConfig` contract
- * (`packages/shared/mobile-config.ts`); provisional copy until the shared twin is
- * re-exported through the SDK.
- */
-export interface MobileConfigWire {
-  app_kind: 'aether' | 'kyber';
-  environment: string;
-  min_version: string;
-  latest_version: string;
-  upgrade_policy: 'required' | 'suggested' | 'none';
-  distribution_profile: string;
-  feature_flags: Record<string, boolean>;
-  service_capabilities: Record<string, boolean>;
-  externally_blocked_providers: string[];
+function withQuery(path: string, params: Record<string, string | undefined>): string {
+  const entries = Object.entries(params).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined && entry[1] !== '',
+  );
+  if (entries.length === 0) return path;
+  const qs = entries
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+  return `${path}?${qs}`;
 }
 
 // ── Typed read-only client ───────────────────────────────────────────────────
@@ -144,16 +90,25 @@ export class ProjectionClient {
     this.http = new HttpClient(normalizeBaseUrl(config.apiBaseUrl), deps);
   }
 
-  getConfig(): Promise<MobileConfigWire> {
-    return this.http.request<MobileConfigWire>('GET', '/v1/mobile/config');
+  getConfig(installationId: string): Promise<MobileConfigWire> {
+    return this.http.request<MobileConfigWire>(
+      'GET',
+      withQuery('/v1/mobile/config', { installation_id: installationId }),
+    );
   }
 
-  getToday(): Promise<TodayProjection> {
-    return this.http.request<TodayProjection>('GET', '/v1/mobile/today');
+  getToday(profileUserId?: string): Promise<TodayProjection> {
+    return this.http.request<TodayProjection>(
+      'GET',
+      withQuery('/v1/mobile/today', { profile_user_id: profileUserId }),
+    );
   }
 
-  getProfile(): Promise<ProfileProjection> {
-    return this.http.request<ProfileProjection>('GET', '/v1/mobile/profile');
+  getProfile(userId: string): Promise<ProfileProjection> {
+    return this.http.request<ProfileProjection>(
+      'GET',
+      withQuery('/v1/mobile/profile', { user_id: userId }),
+    );
   }
 
   getBriefing(): Promise<BriefingProjection> {

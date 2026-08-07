@@ -137,6 +137,18 @@ def _project_profile_behavior(behavior: Any) -> Optional[dict]:
     }
 
 
+def _profile_snapshot(summary: dict) -> dict:
+    """The Profile360 block inside a ``Profile360Aggregator.summary`` result.
+
+    The owning service nests the profile truth under ``snapshot`` (top level
+    carries only ``entity_id`` / ``tenant_id`` / ``kind`` / ``dependency_status``
+    / ``computed_at`` / ``provenance``). Read from ``snapshot``; fall back to the
+    raw dict for injected fakes that pass a flat block.
+    """
+    snapshot = summary.get("snapshot")
+    return snapshot if isinstance(snapshot, dict) else summary
+
+
 def project_profile_summary(summary: Any) -> Optional[dict]:
     """Bounded redaction of a ``Profile360Aggregator.summary`` result.
 
@@ -145,12 +157,13 @@ def project_profile_summary(summary: Any) -> Optional[dict]:
     """
     if not isinstance(summary, dict):
         return None
+    block = _profile_snapshot(summary)
     return {
-        "entity_id": summary.get("canonical_entity_id"),
-        "entity": _project_profile_entity(summary.get("entity")),
-        "counts": summary.get("counts") or {},
-        "financials": _project_profile_financials(summary.get("financials")),
-        "behavior": _project_profile_behavior(summary.get("behavior")),
+        "entity_id": block.get("canonical_entity_id"),
+        "entity": _project_profile_entity(block.get("entity")),
+        "counts": block.get("counts") or {},
+        "financials": _project_profile_financials(block.get("financials")),
+        "behavior": _project_profile_behavior(block.get("behavior")),
     }
 
 
@@ -314,7 +327,7 @@ class MobileProjectionService:
             from repositories.repos import CampaignRepository
 
             self._campaign_repo = CampaignRepository()
-        return await self._campaign_repo.find_by_id(campaign_id=campaign_id)
+        return await self._campaign_repo.find_by_id(campaign_id)
 
     async def _campaign_overview(
         self, tenant_id: str, campaign_id: str, campaign: Optional[dict]

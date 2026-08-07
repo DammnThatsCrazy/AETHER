@@ -80,6 +80,32 @@ def test_projection_redacts_pii_amounts_and_card_numbers():
     assert "[redacted]" in joined
 
 
+def test_projection_redacts_ungrouped_and_large_amounts():
+    """Ungrouped/large amounts the comma-form regex cannot see must not leak
+    (M8 data-truth-2): '1234.56', '12000', '200000.0', '$12000.00'."""
+    proj = build_projection(
+        title="Total 1234.56",
+        body="Balance 12000 — transfer 200000.0 — fee $12000.00",
+        summary="Wire 12000.5",
+    )
+    payload = proj.as_payload()
+    joined = " ".join(str(v or "") for v in payload.values())
+    for raw in ("1234.56", "12000", "200000.0", "$12000.00", "12000.5"):
+        assert raw not in joined, f"ungrouped amount leaked into projection: {raw!r}"
+    assert "[redacted]" in joined
+
+
+def test_projection_does_not_over_redact_bare_years():
+    """The ungrouped-amount pass is deliberately conservative: a bare 4-digit
+    run without a decimal part is a year, not an amount, and must survive."""
+    proj = build_projection(
+        title="fiscal year 2026",
+        body="baseline for 2026 reporting",
+    )
+    joined = " ".join(str(v or "") for v in proj.as_payload().values())
+    assert "2026" in joined
+
+
 def test_projection_redacts_direct_record_payload():
     """A raw record dict (notification-shaped) yields a redacted projection."""
     proj = build_projection(

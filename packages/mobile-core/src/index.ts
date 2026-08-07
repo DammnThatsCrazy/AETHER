@@ -30,6 +30,27 @@ export {
   syncChangeTypes,
 } from '@aether/shared';
 
+// Mobile-gateway projection wire twins (M3a, decision-log D12) — bounded,
+// redacted surfaces composed from the owning services on the backend. The wire
+// `MobileConfig` twin is re-exported as `WireMobileConfig` to avoid colliding with
+// the SDK's local client `MobileConfig` (`./config`).
+export type { MobileConfig as WireMobileConfig } from '@aether/shared';
+export type {
+  MobileAlertItem,
+  MobileAlertsProjection,
+  MobileBriefingProjection,
+  MobileConversation,
+  MobileProfileBehavior,
+  MobileProfileEntity,
+  MobileProfileFinancials,
+  MobileProfilePeek,
+  MobileProfileSummary,
+  MobileRecentAlert,
+  MobileSavedView,
+  MobileTodayProjection,
+} from '@aether/shared';
+export { conversationSourceStatuses } from '@aether/shared';
+
 export type { MobileAppKind, MobileConfig } from './config';
 export { normalizeBaseUrl } from './config';
 

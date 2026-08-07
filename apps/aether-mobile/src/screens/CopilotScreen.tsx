@@ -2,15 +2,15 @@
  * Copilot — read-only briefing / exploration (M3b).
  *
  * Consumes GET /v1/mobile/briefing via the typed projection client and renders the
- * headline + briefing sections. No message-sending UI yet: this milestone is
- * read-only, so the surface is honest about that. If the projection endpoint is
- * absent (backend landing in parallel), the offline-first hook falls back to the
- * last cached briefing and labels it `offline` / `stale`; with no cache it shows
- * an error + retry. A noesis conversation transport will replace this fallback
- * when one ships.
+ * recent Noesis conversations with an honest source status
+ * (`missing` / `empty` / `available` — an outage never presents as "no
+ * conversations"). No message-sending UI yet: this milestone is read-only, so the
+ * surface is honest about that. If the projection endpoint is absent, the
+ * offline-first hook falls back to the last cached briefing and labels it
+ * `offline` / `stale`; with no cache it shows an error + retry.
  */
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { Card, theme } from '@aether/mobile-ui';
 
@@ -23,25 +23,30 @@ function BriefingContent({ data }: { data: BriefingProjection }): React.JSX.Elem
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card style={styles.headlineCard}>
-        <Text style={styles.headline}>{data.headline}</Text>
+        <Text style={styles.headline}>Recent conversations</Text>
         <Text style={styles.meta}>
-          Briefing · generated {data.generated_at} · read-only
+          Noesis source: {data.conversations_source_status} · read-only
         </Text>
       </Card>
 
-      {data.sections.map((section) => (
-        <Card key={section.heading} style={styles.sectionCard}>
-          <Text style={styles.sectionHeading}>{section.heading}</Text>
-          <Text style={styles.sectionSummary}>{section.summary}</Text>
-          <Text style={styles.meta}>
-            {section.source}
-            {section.updated_at ? ` · updated ${section.updated_at}` : ''}
-          </Text>
-        </Card>
-      ))}
+      {data.conversations.length === 0 ? (
+        <EmptyState message="No conversations yet." />
+      ) : (
+        data.conversations.map((conversation) => (
+          <Card
+            key={conversation.conversation_id ?? conversation.last_message ?? conversation.last_intent ?? ''}
+            style={styles.sectionCard}
+          >
+            <Text style={styles.sectionHeading}>{conversation.last_intent ?? 'Conversation'}</Text>
+            <Text style={styles.sectionSummary}>{conversation.last_message ?? ''}</Text>
+            <Text style={styles.meta}>{conversation.last_ts ? `Updated ${conversation.last_ts}` : ''}</Text>
+          </Card>
+        ))
+      )}
 
       <Text style={styles.readOnlyNote}>
-        This build is read-only — assistant messaging arrives in a later milestone.
+        {data.saved_views.length} saved {data.saved_views.length === 1 ? 'view' : 'views'} · This build is read-only —
+        assistant messaging arrives in a later milestone.
       </Text>
     </ScrollView>
   );
