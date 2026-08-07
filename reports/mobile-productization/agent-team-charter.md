@@ -23,9 +23,12 @@ Each specialist reads:
 2. The topic entries in `reports/mobile-productization/context-index.json` (authoritative
    files to read before trees).
 3. This charter.
-4. `reports/mobile-productization/decision-log.md` — and **appends a reuse statement** for
-   every new module (existing system considered → why it cannot satisfy → new boundary →
-   validator preventing duplication).
+4. `reports/mobile-productization/decision-log.md` (read-only for specialists).
+
+For every new module, the specialist **RETURNS a reuse statement** in its structured output
+(existing system considered → why it cannot satisfy → new boundary → validator preventing
+duplication). The orchestrator appends statements to `decision-log.md` serially — specialists
+NEVER write to `reports/mobile-productization/**` (concurrent writes would corrupt the ledgers).
 
 Do NOT rescan the repo for what the packet already names.
 
@@ -42,6 +45,8 @@ Specialists must never write these; they propose, the orchestrator integrates:
 - `config/storage_policies.yaml` (storage-policy coverage)
 - `alembic/versions/` (single-head invariant)
 - `docs/_generated/**` (never hand-edited; regenerate via `make repo-doctor-fix`)
+- `docs/REPO-INDEX.md` / `docs/AUTOMATION.md` (generated)
+- `reports/mobile-productization/**` (including `decision-log.md` — reuse statements are returned to the orchestrator)
 
 ## Implementation fan-out (per milestone, disjoint paths)
 
