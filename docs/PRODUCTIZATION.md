@@ -9,7 +9,7 @@ since_version: "8.8.0"
 canonical_owner: product@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: 790e20e2
+last_synced_commit: 739bd63c
 ---
 
 # Productization Gap Analysis — First Paying Customer
@@ -94,6 +94,70 @@ The following subsystems are implemented, tested, and CI-verified:
 - ✅ 13 shared type packages covering all Profile360 sub-resources
 - ✅ Canonical `Profile360Response` and `SubResourceEnvelope` contracts
 - ✅ Domain-agnostic entity taxonomy aligned with backend
+
+---
+
+## Mobile, Continuity & Compliance Productization — Complete (M0–M8)
+
+The turnkey productization program (M0–M8, delivered as PR #515 — one PR,
+milestone-commit train, 21 commits, rebased onto `origin/main`) turned the
+mobile and cross-device surfaces from scaffolds into a first-class, governed,
+compliance-ready product plane. This section summarizes what was done, why it
+matters, and what it means for the product moving forward.
+
+### What was done (themes)
+
+- **Mobile surfaces** — `GET /v1/mobile/config` + distribution profiles;
+  `packages/mobile-ui` (theme, typed navigation); offline cache framework; Aether
+  Mobile screens (Today / Copilot / Explore / Alerts / Account); Kyber Mobile
+  operator screens (Pulse / Exceptions / Incidents / Runs / Reviews / Briefings);
+  Aether desktop notification center with quiet-hours/timezone preference
+  persistence.
+- **Continuity** — redacted mobile notification projection (server-derived push
+  titles/bodies, never raw payloads); continue-on-phone with all 10 sync event
+  types wired + operator continuation router; desktop↔mobile handoff surfaces.
+- **Governed mobile actions** — a mobile action adapter onto the *existing* kyber
+  ops command plane (no second plane, no generic mutation channel), Tier 0–3 UI,
+  step-up via the existing `StepUpService`, mobile-bound proof-key attestation,
+  durable command receipts (`verified | executed_unverified | denied | failed | expired`).
+- **Reliability** — permanent delivery-safety CI validator; lease-guarded
+  delivery/jobs release (closes stale-worker split-brain double-delivery); inbox
+  lost-update elimination; ops alerts no longer false-succeed with zero channels.
+- **Compliance** — per-app Apple Privacy Manifest + Play Data Safety generated
+  with an honest `deletion_mechanism`; mobile DSR erasure end to end
+  (installations + kyber-bound device attestation); kyber mobile-actions
+  tenant-scoped end to end; demo-seed guarded so seeded statuses are never
+  mistaken for production truth.
+- **Security** — enterprise-inquiry email body HTML-escaped (email XSS closed) +
+  subject header-injection defense.
+
+### Why it matters
+
+Mobile was the largest unimplemented surface between the product and a first
+paying customer using Aether from a phone. Cross-device continuity and governed
+actions are how operators run the platform from anywhere without an ungoverned
+mutation channel. Delivery reliability and DSR/compliance are hard prerequisites
+for store submission and enterprise trust.
+
+### Value
+
+- The apps are **code-complete for a design-partner demo and store submission** —
+  the remaining work is activation (credentials/accounts), not implementation.
+- The new gates (`delivery-safety-check`, `mobile-compliance-check`) are part of
+  `make ci-check`, so these invariants cannot silently regress.
+- The M8 adversarial review (6 lenses, 30 findings, 0 refuted) hardened the
+  delivery and compliance planes that every surface depends on.
+
+### What it means moving forward
+
+- The production-status scorecard remains **3.77/5, pre-production
+  (release-shaped)**. The release-blockers are all external: smart-contract
+  audit, production infra, zero `PARTNER_LIVE` economic providers, and the
+  node-tar supply-chain critical (requires the Expo SDK 51→57 bump). They are
+  tracked in `reports/mobile-productization/external-blockers.json`.
+- Next milestones are **activation, not code**: hosted-CI native compile,
+  credential provisioning (APNs / FCM / SES), store submission, and the
+  documented physical-device matrix.
 
 ---
 
