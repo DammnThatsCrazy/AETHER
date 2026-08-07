@@ -283,13 +283,87 @@ def test_derive_is_honest():
         == CredentialReadiness.REPLAY_VALIDATED
     )
     assert (
-        ReadinessDimensions.derive(replay_validated=True, sandbox_validated=True).state
+        ReadinessDimensions.derive(
+            replay_validated=True,
+            sandbox_validated=True,
+            credential_supplied=True,
+            connection_validated=True,
+        ).state
         == CredentialReadiness.SANDBOX_VALIDATED
+    )
+    # a credential-free capability may reach sandbox without a connection test
+    assert (
+        ReadinessDimensions.derive(
+            replay_validated=True, sandbox_validated=True, credential_required=False
+        ).state
+        == CredentialReadiness.SANDBOX_VALIDATED
+    )
+    assert (
+        ReadinessDimensions.derive(
+            code_complete=True, infra_defined=True, credential_supplied=True
+        ).state
+        == CredentialReadiness.CREDENTIAL_SUPPLIED
+    )
+    assert (
+        ReadinessDimensions.derive(
+            code_complete=True,
+            infra_defined=True,
+            credential_supplied=True,
+            connection_validated=True,
+        ).state
+        == CredentialReadiness.CONNECTION_VALIDATED
     )
     live = ReadinessDimensions.derive(live_validated=True, credential_supplied=True)
     assert live.state == CredentialReadiness.PARTNER_LIVE
     # derive never turns production_ready on from structure
     assert live.production_ready is False
+
+
+def test_new_lifecycle_invariants_fail_closed():
+    # connection_validated without a supplied credential is dishonest
+    with pytest.raises(ValueError):
+        ReadinessDimensions(connection_validated=True, credential_supplied=False)
+    # credential-gated sandbox validation without a connection test is dishonest
+    with pytest.raises(ValueError):
+        ReadinessDimensions(
+            replay_validated=True,
+            sandbox_validated=True,
+            credential_supplied=True,
+            connection_validated=False,
+        )
+
+
+def test_offramp_states_rank_below_progression():
+    threshold = readiness_rank(CredentialReadiness.CREDENTIAL_WAITING)
+    for off in (
+        CredentialReadiness.DEGRADED,
+        CredentialReadiness.SUSPENDED,
+        CredentialReadiness.REVOKED,
+        CredentialReadiness.DISABLED,
+    ):
+        assert readiness_rank(off) < threshold
+    # severity order among off-ramps: disabled < revoked < suspended < degraded
+    assert (
+        readiness_rank(CredentialReadiness.DISABLED)
+        < readiness_rank(CredentialReadiness.REVOKED)
+        < readiness_rank(CredentialReadiness.SUSPENDED)
+        < readiness_rank(CredentialReadiness.DEGRADED)
+    )
+
+
+def test_full_progression_rank_order():
+    order = [
+        CredentialReadiness.SCAFFOLDED,
+        CredentialReadiness.CREDENTIAL_WAITING,
+        CredentialReadiness.REPLAY_VALIDATED,
+        CredentialReadiness.CREDENTIAL_SUPPLIED,
+        CredentialReadiness.CONNECTION_VALIDATED,
+        CredentialReadiness.SANDBOX_VALIDATED,
+        CredentialReadiness.PARTNER_LIVE,
+    ]
+    ranks = [readiness_rank(s) for s in order]
+    assert ranks == sorted(ranks)
+    assert len(set(ranks)) == len(ranks)
 
 
 def test_derive_enforces_invariants():

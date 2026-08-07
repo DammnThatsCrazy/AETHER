@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aether://contracts/evidence-manifest.schema.json",
+  "title": "Aether capability evidence manifest",
+  "description": "Schema for the tenant-scoped, checksummed, secret-free evidence bundle manifest that backs a capability readiness state. Certification states are bound to packages/shared/contracts/readiness-vocabulary.json (category=certification token ids) and cross-checked by scripts/validate_readiness_vocabulary.py. Manifests carry credential-reference VERSIONS, never credential values; a validator rejects any manifest containing secret material.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_from_commit",
+    "tenant_id",
+    "environment",
+    "capability",
+    "certification_state",
+    "evidence",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "generated_from_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "Source commit the certification ran against."
+    },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "environment": {
+      "type": "string",
+      "enum": ["local", "sandbox", "staging", "live"],
+      "description": "Credential environment the evidence applies to (sandbox/live axis; local/staging for internal runs)."
+    },
+    "provider": {
+      "type": "string",
+      "description": "Provider or rail identifier, when the capability is provider-scoped."
+    },
+    "capability": { "type": "string", "minLength": 1 },
+    "adapter_version": { "type": "string" },
+    "credential_version_ref": {
+      "type": "string",
+      "description": "The credential VERSION identifier this evidence was produced against — never the credential value."
+    },
+    "certification_state": { "$ref": "#/$defs/certificationState" },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidenceItem" },
+      "description": "Individual evidence artifacts backing the state. May be empty only for SCAFFOLDED/CREDENTIAL_WAITING."
+    },
+    "results": {
+      "type": "object",
+      "description": "Named check results (check id -> passed/failed/skipped + safe detail).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "known_limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": ["user", "operator", "system_worker"],
+      "description": "Who produced this manifest."
+    },
+    "actor_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "checksum": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 over the canonical JSON of the manifest minus this field."
+    }
+  },
+  "$defs": {
+    "certificationState": {
+      "type": "string",
+      "enum": [
+        "disabled",
+        "revoked",
+        "suspended",
+        "degraded",
+        "scaffolded",
+        "credential_waiting",
+        "replay_validated",
+        "credential_supplied",
+        "connection_validated",
+        "sandbox_validated",
+        "partner_live"
+      ]
+    },
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_type", "sha256"],
+      "properties": {
+        "evidence_type": {
+          "type": "string",
+          "enum": [
+            "test_output",
+            "connection_test",
+            "sandbox_receipt",
+            "live_receipt",
+            "reconciliation_result",
+            "contract_check",
+            "program_check",
+            "signer_check",
+            "chain_identity_check",
+            "operational_drill",
+            "audit_evidence_ref",
+            "promotion_decision",
+            "kill_switch_test",
+            "rollback_test",
+            "other"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "description": "Bundle-relative path or external identifier of the artifact."
+        },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}

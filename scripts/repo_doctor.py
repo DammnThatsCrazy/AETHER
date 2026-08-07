@@ -473,6 +473,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="update contracts, event schemas, consent docs, and SDK surfaces together",
     )
     run(
+        [sys.executable, "scripts/validate_readiness_vocabulary.py"],
+        name="Readiness vocabulary (Python enum / TS union / contract / evidence schema)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align readiness.py, capability-state.ts, readiness-vocabulary.json, and evidence-manifest.schema.json membership/ranks",
+    )
+    run(
         [sys.executable, "scripts/validate_signal_use_matrix.py"],
         name="Signal-use matrix (exact purpose per signal; no broad-consent fallback)",
         results=results,

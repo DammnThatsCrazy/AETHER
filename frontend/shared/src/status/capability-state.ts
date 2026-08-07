@@ -38,9 +38,11 @@ export const capabilityStates = [
   'credential_invalid', // supplied credentials were rejected by the provider
   'connection_testing', // actively probing the provider connection
   'credential_waiting', // credentials accepted; awaiting async activation/propagation
+  'credential_supplied', // an active credential version exists; connection test pending
   'provisioning', // provider resources are actively being created
   // ── Validation ladder (working, but not partner-live) ─────────────────────
   'replay_validated', // verified against replayed/recorded provider traffic
+  'connection_validated', // supplied credential passed a real connection/identity test
   'sandbox_validated', // verified end-to-end in the provider sandbox
   'partner_live', // fully live against the production provider
   'live', // canonical live spelling; partner_live remains for compatibility
@@ -49,7 +51,9 @@ export const capabilityStates = [
   'stale', // data present but older than its freshness SLA
   'partial', // some expected inputs present, not all
   'error', // the capability read failed
-  // ── Emergency ─────────────────────────────────────────────────────────────
+  // ── Emergency / off-ramps ─────────────────────────────────────────────────
+  'suspended', // reversible operator / kill-switch stop of the capability
+  'revoked', // credentials revoked; requires resubmission
   'kill_switch_active', // capability halted by an active kill switch
 ] as const;
 
@@ -120,8 +124,10 @@ const CAPABILITY_STATE_STYLES: Record<CapabilityState, CapabilityStateStyle> = {
   credential_invalid: style('critical', 'Credential invalid', '⊗', 'The provider rejected the supplied credentials.', true),
   connection_testing: style('progress', 'Testing connection', '⟳', 'Probing the provider connection now.', true),
   credential_waiting: style('progress', 'Awaiting activation', '⋯', 'Credentials accepted — awaiting provider activation.', true),
+  credential_supplied: style('progress', 'Credential supplied', '⊕', 'An active credential version exists — connection test pending.', true),
   provisioning: style('progress', 'Provisioning', '◌', 'Provider resources are being created.', true),
   replay_validated: style('validating', 'Replay validated', '⎌', 'Verified against replayed provider traffic — not live.', true),
+  connection_validated: style('validating', 'Connection validated', '⊙', 'The supplied credential passed a real connection test — not live.', true),
   sandbox_validated: style('validating', 'Sandbox validated', '❖', 'Verified end-to-end in the provider sandbox — not production.', true),
   partner_live: style('live', 'Partner live', '●', 'Live against the production provider.', false),
   live: style('live', 'Live', '◆', 'Live against the production provider.', false),
@@ -129,6 +135,8 @@ const CAPABILITY_STATE_STYLES: Record<CapabilityState, CapabilityStateStyle> = {
   stale: style('caution', 'Stale', '◔', 'Data is older than its freshness SLA.', false),
   partial: style('caution', 'Partial', '◑', 'Some expected inputs are present, not all.', false),
   error: style('critical', 'Error', '⚠', 'The capability read failed.', false),
+  suspended: style('critical', 'Suspended', '⏸', 'Reversibly stopped by an operator or kill switch.', true),
+  revoked: style('critical', 'Revoked', '⌀', 'Credentials were revoked — resubmission required.', true),
   kill_switch_active: style('critical', 'Kill switch active', '⛔', 'Halted by an active kill switch.', true),
 };
 
@@ -148,6 +156,8 @@ export const capabilityStatePrecedence: readonly CapabilityState[] = [
   'live',
   'partner_live',
   'sandbox_validated',
+  'connection_validated',
+  'credential_supplied',
   'replay_validated',
   'partial',
   'stale',
@@ -165,6 +175,8 @@ export const capabilityStatePrecedence: readonly CapabilityState[] = [
   'degraded',
   'credential_invalid',
   'error',
+  'suspended',
+  'revoked',
   'kill_switch_active',
 ];
 
