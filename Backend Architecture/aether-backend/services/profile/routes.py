@@ -102,6 +102,44 @@ def _get_resolver(
     return _resolver
 
 
+# ── Read-completeness metadata ───────────────────────────────────────────
+# Capped list reads return a bare list, so a truncated result is otherwise
+# indistinguishable from "this is everything" (false certainty). These
+# build a small additive `meta` block for the existing APIResponse
+# envelope so callers can tell. Keep in sync with the lake/intelligence
+# copies. Endpoints that delegate their fetch entirely to Profile360Aggregator
+# / IntelligenceAggregator / ProfileComposer / AgentProfile360Composer (all
+# defined outside this file) are intentionally not covered here — the
+# capped fetch itself is not visible/adjustable from this router.
+
+def _probe_completeness(limit: int, fetched: int) -> dict:
+    """Exact completeness meta from an over-fetch relative to `limit`.
+
+    Call with `fetched` = the row count returned when the underlying query
+    already retrieved (or was asked to retrieve) more than `limit` rows —
+    typically a `limit + 1` probe. `has_more` is a fact, not a guess: the
+    fetch would only return more than `limit` rows if more than `limit`
+    rows actually exist.
+    """
+    has_more = fetched > limit
+    return {"limit": limit, "returned": min(fetched, limit), "truncated": has_more, "has_more": has_more}
+
+
+def _heuristic_completeness(limit: int, returned: int) -> dict:
+    """Conservative completeness meta when a limit+1 probe isn't feasible
+    (e.g. the underlying repository call enforces a fixed internal cap with
+    no adjustable limit parameter).
+
+    We cannot distinguish "exactly `limit` rows exist" from "more rows
+    exist beyond `limit`", so we conservatively assume truncation whenever
+    the result exactly fills the limit. This can over-report truncation but
+    never under-report it — never imply completeness when truncation is
+    possible.
+    """
+    truncated = limit > 0 and returned == limit
+    return {"limit": limit, "returned": returned, "truncated": truncated, "has_more": truncated}
+
+
 # ── Full Profile ──────────────────────────────────────────────────────
 
 @router.get("/{user_id}")
@@ -378,9 +416,24 @@ def _get_delegation_repo(cache: CacheClient = Depends(get_cache)) -> DelegationR
 async def get_owned_agents(user_id: str, request: Request):
     """User/org-owned LLM agents whose owner_entity_id matches this profile."""
     request.state.tenant.require_permission("read")
-    rows = await _user_agent_repo.list_for_owner(user_id)
-    rows = [r for r in rows if r.get("tenant_id") == request.state.tenant.tenant_id]
-    return APIResponse(data={"user_id": user_id, "agents": rows, "count": len(rows)}).to_dict()
+    # AgentConfigRepository.list_for_owner() enforces a fixed internal cap
+    # (200) with no adjustable limit parameter and no tenant scoping of its
+    # own (tenant filtering happens below), so an exact limit+1 probe isn't
+    # feasible here. Base truncation on whether the *pre-filter* fetch hit
+    # the cap, not on the post-filter count: if the raw fetch came back
+    # under 200, every matching row (any tenant) was seen, so this tenant's
+    # slice is definitely complete even though it may be far fewer than 200
+    # rows — comparing the post-filter count to 200 would falsely call that
+    # complete-and-small result "truncated is unknown/false" while also
+    # missing real truncation when other tenants' rows fill most of the cap.
+    owned_agents_cap = 200
+    raw = await _user_agent_repo.list_for_owner(user_id)
+    rows = [r for r in raw if r.get("tenant_id") == request.state.tenant.tenant_id]
+    truncated = len(raw) == owned_agents_cap
+    return APIResponse(
+        data={"user_id": user_id, "agents": rows, "count": len(rows)},
+        meta={"limit": owned_agents_cap, "returned": len(rows), "truncated": truncated, "has_more": truncated},
+    ).to_dict()
 
 
 @router.get("/{entity_id}/external-deployments")
@@ -431,22 +484,40 @@ async def get_delegations(
     """Delegations granted by, or received by, this entity."""
     tenant = request.state.tenant
     tenant.require_permission("read")
+    # DelegationRepository has no adjustable-limit read for either side —
+    # both enforce a fixed internal cap (200) — so this is heuristic-only,
+    # reported per list since granted/received are independently capped.
+    delegations_cap = 200
     granted: list = []
     received: list = []
+    granted_truncated = False
+    received_truncated = False
     if role in ("grantor", "both"):
         granted = await repo.find_many(
-            filters={"grantor_entity_id": user_id, "tenant_id": tenant.tenant_id}, limit=200,
+            filters={"grantor_entity_id": user_id, "tenant_id": tenant.tenant_id}, limit=delegations_cap,
         )
+        granted_truncated = len(granted) == delegations_cap
     if role in ("grantee", "both"):
-        received = (
-            await repo.active_for(user_id, tenant.tenant_id) if active
-            else await repo.find_many(filters={"grantee_entity_id": user_id, "tenant_id": tenant.tenant_id}, limit=200)
-        )
-    return APIResponse(data={
-        "user_id": user_id,
-        "granted": granted,
-        "received": received,
-    }).to_dict()
+        if active:
+            # active_for() further filters to active-only after its own
+            # internal 200-row fetch, so the post-filter count is a weaker
+            # signal than usual — still the best available without touching
+            # DelegationRepository (out of scope for this change).
+            received = await repo.active_for(user_id, tenant.tenant_id)
+        else:
+            received = await repo.find_many(filters={"grantee_entity_id": user_id, "tenant_id": tenant.tenant_id}, limit=delegations_cap)
+        received_truncated = len(received) == delegations_cap
+    return APIResponse(
+        data={
+            "user_id": user_id,
+            "granted": granted,
+            "received": received,
+        },
+        meta={
+            "granted": {"limit": delegations_cap, "returned": len(granted), "truncated": granted_truncated, "has_more": granted_truncated},
+            "received": {"limit": delegations_cap, "returned": len(received), "truncated": received_truncated, "has_more": received_truncated},
+        },
+    ).to_dict()
 
 
 @router.get("/{user_id}/flows")
@@ -458,13 +529,27 @@ async def get_flows(
     """Asset transfers in or out of this entity."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    rows = await _transfer_repo.list_for_entity(user_id, limit=limit)
-    rows = [r for r in rows if r.get("tenant_id") == tenant.tenant_id]
-    return APIResponse(data={
-        "user_id": user_id,
-        "transfers": rows,
-        "count": len(rows),
-    }).to_dict()
+    # list_for_entity() applies `limit` as its own final slice (after
+    # merging+deduping from/to matches across ALL tenants — it has no
+    # tenant scoping of its own), so probing with limit+1 tells us whether
+    # the *global* window was full. Tenant filtering happens below, so
+    # has_more must account for both: our own tenant-scoped rows already
+    # exceeding `limit` within the probe, OR the global probe window
+    # itself being full (meaning rows beyond it — possibly ours — were
+    # never examined at all). Either way, never claim completeness.
+    probe = await _transfer_repo.list_for_entity(user_id, limit=limit + 1)
+    probe_window_full = len(probe) > limit
+    fetched = [r for r in probe if r.get("tenant_id") == tenant.tenant_id]
+    rows = fetched[:limit]
+    has_more = len(fetched) > limit or probe_window_full
+    return APIResponse(
+        data={
+            "user_id": user_id,
+            "transfers": rows,
+            "count": len(rows),
+        },
+        meta={"limit": limit, "returned": len(rows), "truncated": has_more, "has_more": has_more},
+    ).to_dict()
 
 
 @router.get("/{user_id}/behavior")
@@ -876,13 +961,20 @@ async def get_lake_data(
     if not repo:
         raise BadRequestError(f"Unknown domain: {domain}. Available: {list(domain_repos.keys())}")
 
+    # GoldRepository.get_metrics() enforces a fixed internal cap (200) with
+    # no adjustable limit parameter, so an exact limit+1 probe isn't
+    # feasible here — heuristic completeness only.
+    gold_metrics_cap = 200
     records = await repo.get_metrics(user_id, tenant_id=request.state.tenant.tenant_id)
-    return APIResponse(data={
-        "user_id": user_id,
-        "domain": domain,
-        "records": records,
-        "count": len(records),
-    }).to_dict()
+    return APIResponse(
+        data={
+            "user_id": user_id,
+            "domain": domain,
+            "records": records,
+            "count": len(records),
+        },
+        meta=_heuristic_completeness(gold_metrics_cap, len(records)),
+    ).to_dict()
 
 
 # ── Intelligence Extension Routes ────────────────────────────────────
@@ -1125,8 +1217,12 @@ async def get_profile_recommendations(user_id: str, request: Request, limit: int
     tenant.require_permission("read")
     from services.intelligence.repositories import RecommendationRepository
     repo = RecommendationRepository()
-    items = await repo.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
-    return APIResponse(data={"entity_id": user_id, "items": items, "count": len(items)}).to_dict()
+    fetched = await repo.list_for_tenant(tenant.tenant_id, limit=limit + 1, entity_id=user_id)
+    items = fetched[:limit]
+    return APIResponse(
+        data={"entity_id": user_id, "items": items, "count": len(items)},
+        meta=_probe_completeness(limit, len(fetched)),
+    ).to_dict()
 
 
 @router.get("/{user_id}/outcomes")
@@ -1136,8 +1232,12 @@ async def get_profile_outcomes(user_id: str, request: Request, limit: int = Quer
     tenant.require_permission("read")
     from services.intelligence.repositories import OutcomeRepository
     repo = OutcomeRepository()
-    items = await repo.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
-    return APIResponse(data={"entity_id": user_id, "items": items, "count": len(items)}).to_dict()
+    fetched = await repo.list_for_tenant(tenant.tenant_id, limit=limit + 1, entity_id=user_id)
+    items = fetched[:limit]
+    return APIResponse(
+        data={"entity_id": user_id, "items": items, "count": len(items)},
+        meta=_probe_completeness(limit, len(fetched)),
+    ).to_dict()
 
 
 @router.get("/{user_id}/outcome-ledger")
@@ -1347,7 +1447,10 @@ async def get_merge_history(
 
     repo = IdentityResolutionRepository()
     resolved_id, redirected = await resolve_entity_redirect(repo, tenant.tenant_id, user_id)
-    events = await repo.get_merge_history(tenant.tenant_id, resolved_id, limit=limit)
+    # get_merge_history() applies `limit` as its own final slice (after
+    # deduping from/into matches), so probing with limit+1 is exact.
+    fetched = await repo.get_merge_history(tenant.tenant_id, resolved_id, limit=limit + 1)
+    events = fetched[:limit]
     items = [
         {
             "merge_event_id": e.get("id"),
@@ -1362,14 +1465,17 @@ async def get_merge_history(
         }
         for e in events
     ]
-    return APIResponse(data={
-        "entity_id": user_id,
-        "resolved_entity_id": resolved_id,
-        "redirected": redirected,
-        "items": items,
-        "count": len(items),
-        "source_status": await _event_source_status(items),
-    }).to_dict()
+    return APIResponse(
+        data={
+            "entity_id": user_id,
+            "resolved_entity_id": resolved_id,
+            "redirected": redirected,
+            "items": items,
+            "count": len(items),
+            "source_status": await _event_source_status(items),
+        },
+        meta=_probe_completeness(limit, len(fetched)),
+    ).to_dict()
 
 
 @router.get("/{user_id}/split-history")
@@ -1387,7 +1493,10 @@ async def get_split_history(
 
     repo = IdentityResolutionRepository()
     resolved_id, redirected = await resolve_entity_redirect(repo, tenant.tenant_id, user_id)
-    events = await repo.get_split_history(tenant.tenant_id, resolved_id, limit=limit)
+    # get_split_history() passes `limit` straight through to a single
+    # tenant+entity-scoped find_many(), so probing with limit+1 is exact.
+    fetched = await repo.get_split_history(tenant.tenant_id, resolved_id, limit=limit + 1)
+    events = fetched[:limit]
     items = [
         {
             "split_event_id": e.get("id"),
@@ -1400,14 +1509,17 @@ async def get_split_history(
         }
         for e in events
     ]
-    return APIResponse(data={
-        "entity_id": user_id,
-        "resolved_entity_id": resolved_id,
-        "redirected": redirected,
-        "items": items,
-        "count": len(items),
-        "source_status": await _event_source_status(items),
-    }).to_dict()
+    return APIResponse(
+        data={
+            "entity_id": user_id,
+            "resolved_entity_id": resolved_id,
+            "redirected": redirected,
+            "items": items,
+            "count": len(items),
+            "source_status": await _event_source_status(items),
+        },
+        meta=_probe_completeness(limit, len(fetched)),
+    ).to_dict()
 
 
 async def _event_source_status(items: list) -> str:
@@ -1739,6 +1851,13 @@ async def get_agent_executions(
     """Agent execution history for this entity (as owner or participant)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
+    # Fan-out across (possibly several) agent_ids, each independently
+    # capped at `limit`, concatenated and re-sliced to `limit` — an exact
+    # limit+1 probe would need to bump every fan-out fetch, so this is
+    # heuristic. Note the heuristic still catches the common overshoot
+    # case for free: whenever concatenation across >1 agent_ids exceeds
+    # `limit`, the post-slice length below is exactly `limit`, which is
+    # precisely the condition the heuristic treats as "truncated".
     try:
         from repositories.repos import AgentConfigRepository, AgentExecutionRepository
         config_repo = AgentConfigRepository()
@@ -1762,12 +1881,15 @@ async def get_agent_executions(
         items = items[:limit]
     except Exception:
         items = []
-    return APIResponse(data={
-        "entity_id": user_id,
-        "items": items,
-        "count": len(items),
-        "source_status": await _event_source_status(items),
-    }).to_dict()
+    return APIResponse(
+        data={
+            "entity_id": user_id,
+            "items": items,
+            "count": len(items),
+            "source_status": await _event_source_status(items),
+        },
+        meta=_heuristic_completeness(limit, len(items)),
+    ).to_dict()
 
 
 # ── Actions & Events ───────────────────────────────────────────────
@@ -1787,6 +1909,13 @@ async def get_profile_actions(
     """
     tenant = request.state.tenant
     tenant.require_permission("read")
+    # Two truncation layers: `recs` itself is capped at `limit` (some
+    # recommendations may never be looked at), and the concatenated
+    # decisions list is separately re-sliced to `limit`. An exact limit+1
+    # probe would need to bump both fan-out layers, so this is heuristic —
+    # but it checks both layers (using data already fetched) rather than
+    # only the final slice, so a recs-side cap is not silently missed.
+    truncated = False
     try:
         from services.intelligence.repositories import DecisionRepository, RecommendationRepository
         rec_repo = RecommendationRepository()
@@ -1803,19 +1932,23 @@ async def get_profile_actions(
             )
             items.extend(r for r in rows if r.get("tenant_id") == tenant.tenant_id)
         items = items[:limit]
+        truncated = len(recs) == limit or len(items) == limit
         degraded = False
     except Exception as exc:
         logger.warning("profile actions unavailable: %s", exc)
         items = []
         degraded = True
-    return APIResponse(data={
-        "entity_id": user_id,
-        "items": items,
-        "count": len(items),
-        "source_status": (
-            "missing" if degraded else ("available" if items else "empty")
-        ),
-    }).to_dict()
+    return APIResponse(
+        data={
+            "entity_id": user_id,
+            "items": items,
+            "count": len(items),
+            "source_status": (
+                "missing" if degraded else ("available" if items else "empty")
+            ),
+        },
+        meta={"limit": limit, "returned": len(items), "truncated": truncated, "has_more": truncated},
+    ).to_dict()
 
 
 @router.get("/{user_id}/events")
@@ -1866,6 +1999,8 @@ def _silver_response(
     source: str = "silver",
     *,
     degraded: bool = False,
+    limit: int,
+    fetched: int,
 ) -> dict:
     """Envelope for the Silver-backed sub-resources.
 
@@ -1874,16 +2009,23 @@ def _silver_response(
     asserting the entity genuinely has no facts (``empty``). Collapsing a
     failed read into ``empty`` is how a store outage reads as confirmed
     no-activity.
+
+    ``limit``/``fetched`` back the ``meta`` completeness block: callers
+    probe with ``limit + 1`` and pass the raw fetched row count (0 on a
+    degraded read) so ``truncated``/``has_more`` are exact, not guessed.
     """
-    return APIResponse(data={
-        "entity_id": entity_id,
-        "items": items,
-        "count": len(items),
-        "source": source,
-        "source_status": (
-            "missing" if degraded else ("available" if items else "empty")
-        ),
-    }).to_dict()
+    return APIResponse(
+        data={
+            "entity_id": entity_id,
+            "items": items,
+            "count": len(items),
+            "source": source,
+            "source_status": (
+                "missing" if degraded else ("available" if items else "empty")
+            ),
+        },
+        meta=_probe_completeness(limit, fetched),
+    ).to_dict()
 
 
 @router.get("/{user_id}/exposures")
@@ -1902,13 +2044,15 @@ async def get_entity_exposures(
         filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
         if content_type:
             filters["content_type"] = content_type
-        items = await repo.query_silver("silver_exposure_facts", filters, limit=limit)
+        fetched = await repo.query_silver("silver_exposure_facts", filters, limit=limit + 1)
+        items = fetched[:limit]
         degraded = False
     except Exception as exc:
         logger.warning("entity exposures unavailable: %s", exc)
         items = []
+        fetched = []
         degraded = True
-    return _silver_response(user_id, items, degraded=degraded)
+    return _silver_response(user_id, items, degraded=degraded, limit=limit, fetched=len(fetched))
 
 
 @router.get("/{user_id}/revenue")
@@ -1927,13 +2071,15 @@ async def get_entity_revenue(
         filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
         if revenue_type:
             filters["revenue_type"] = revenue_type
-        items = await repo.query_silver("silver_revenue_facts", filters, limit=limit)
+        fetched = await repo.query_silver("silver_revenue_facts", filters, limit=limit + 1)
+        items = fetched[:limit]
         degraded = False
     except Exception as exc:
         logger.warning("entity revenue unavailable: %s", exc)
         items = []
+        fetched = []
         degraded = True
-    return _silver_response(user_id, items, degraded=degraded)
+    return _silver_response(user_id, items, degraded=degraded, limit=limit, fetched=len(fetched))
 
 
 @router.get("/{user_id}/friction")
@@ -1948,17 +2094,19 @@ async def get_entity_friction(
     try:
         from repositories.repos import AnalyticsRepository
         repo = AnalyticsRepository()
-        items = await repo.query_silver(
+        fetched = await repo.query_silver(
             "silver_friction_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
-            limit=limit,
+            limit=limit + 1,
         )
+        items = fetched[:limit]
         degraded = False
     except Exception as exc:
         logger.warning("entity friction unavailable: %s", exc)
         items = []
+        fetched = []
         degraded = True
-    return _silver_response(user_id, items, degraded=degraded)
+    return _silver_response(user_id, items, degraded=degraded, limit=limit, fetched=len(fetched))
 
 
 @router.get("/{user_id}/accounts")
@@ -1973,17 +2121,19 @@ async def get_entity_accounts(
     try:
         from repositories.repos import AnalyticsRepository
         repo = AnalyticsRepository()
-        items = await repo.query_silver(
+        fetched = await repo.query_silver(
             "silver_account_activity_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
-            limit=limit,
+            limit=limit + 1,
         )
+        items = fetched[:limit]
         degraded = False
     except Exception as exc:
         logger.warning("entity accounts unavailable: %s", exc)
         items = []
+        fetched = []
         degraded = True
-    return _silver_response(user_id, items, degraded=degraded)
+    return _silver_response(user_id, items, degraded=degraded, limit=limit, fetched=len(fetched))
 
 
 @router.get("/{user_id}/communications")
@@ -2022,12 +2172,20 @@ async def get_entity_communications(
         after=after, before=before, limit=limit, cursor=cursor,
     )
     summary = await repo.entity_summary(tenant.tenant_id, user_id)
+    # list_for_entity() already computes next_cursor from an exact
+    # over-fetch (it only sets it when the underlying result exceeded
+    # `limit`), so has_more/truncated fall straight out of that — no
+    # separate probe needed. This endpoint predates the APIResponse
+    # envelope (returns a flat dict), so `meta` is added at the top level
+    # rather than nested, to stay additive to the existing shape.
+    has_more = next_cursor is not None
     return {
         "entity_id": user_id,
         "items": [_comm_item(row) for row in items],
         "counts": {k: int(v or 0) for k, v in summary.items()},
         "next_cursor": next_cursor,
         "count": len(items),
+        "meta": {"limit": limit, "returned": len(items), "truncated": has_more, "has_more": has_more},
     }
 
 
@@ -2119,17 +2277,19 @@ async def get_entity_integrations(
     try:
         from repositories.repos import AnalyticsRepository
         repo = AnalyticsRepository()
-        items = await repo.query_silver(
+        fetched = await repo.query_silver(
             "silver_server_operation_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
-            limit=limit,
+            limit=limit + 1,
         )
+        items = fetched[:limit]
         degraded = False
     except Exception as exc:
         logger.warning("entity integrations unavailable: %s", exc)
         items = []
+        fetched = []
         degraded = True
-    return _silver_response(user_id, items, degraded=degraded)
+    return _silver_response(user_id, items, degraded=degraded, limit=limit, fetched=len(fetched))
 
 
 @router.get("/{user_id}/data-quality")
@@ -2144,17 +2304,19 @@ async def get_entity_data_quality(
     try:
         from repositories.repos import AnalyticsRepository
         repo = AnalyticsRepository()
-        items = await repo.query_silver(
+        fetched = await repo.query_silver(
             "silver_data_quality_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
-            limit=limit,
+            limit=limit + 1,
         )
+        items = fetched[:limit]
         degraded = False
     except Exception as exc:
         logger.warning("entity data-quality unavailable: %s", exc)
         items = []
+        fetched = []
         degraded = True
-    return _silver_response(user_id, items, degraded=degraded)
+    return _silver_response(user_id, items, degraded=degraded, limit=limit, fetched=len(fetched))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2184,7 +2346,7 @@ async def get_entity_stablecoin_activity(
     rows = await StablecoinObservationRepo().find_many(
         {"tenant_id": tenant.tenant_id}, limit=2000,
     )
-    items = []
+    matched = []
     for row in rows:
         from_ref = row.get("from_entity_ref") or {}
         to_ref = row.get("to_entity_ref") or {}
@@ -2193,13 +2355,18 @@ async def get_entity_stablecoin_activity(
             row.get("from_wallet_id"), row.get("to_wallet_id"),
         ):
             continue
-        items.append({
+        matched.append({
             key: str(value) if isinstance(value, _Decimal) else value
             for key, value in row.items()
         })
-        if len(items) >= limit:
+        # Collect one past `limit` so has_more/truncated are exact relative
+        # to this 2000-row upstream scan (a true overflow beyond 2000
+        # matches is a pre-existing, separate cap this doesn't change).
+        if len(matched) > limit:
             break
+    items = matched[:limit]
     finalized = [i for i in items if i.get("finality_status") == "finalized"]
+    has_more = len(matched) > limit
     return {
         "entity_id": user_id,
         "items": items,
@@ -2211,6 +2378,7 @@ async def get_entity_stablecoin_activity(
         "count": len(items),
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "provenance": {"source": "stablecoin_observations", "surface": "profile360"},
+        "meta": {"limit": limit, "returned": len(items), "truncated": has_more, "has_more": has_more},
     }
 
 
@@ -2238,6 +2406,8 @@ async def get_entity_derivatives_trading(
     items: list[dict] = []
     markets: set[str] = set()
     for repo in (PositionRepo(), FillRepo()):
+        if len(items) > limit:
+            break
         rows = await repo.find_many({"tenant_id": tenant.tenant_id}, limit=2000)
         for row in rows:
             if row.get("trading_account_id") not in account_ids:
@@ -2247,19 +2417,25 @@ async def get_entity_derivatives_trading(
                 key: str(value) if isinstance(value, _Decimal) else value
                 for key, value in row.items()
             })
-            if len(items) >= limit:
+            # Collect one past `limit` (instead of stopping exactly at it)
+            # so has_more/truncated are exact relative to this scan, not
+            # dependent on which repo happens to supply the overflow row.
+            if len(items) > limit:
                 break
+    page = items[:limit]
+    has_more = len(items) > limit
     return {
         "entity_id": user_id,
-        "items": items[:limit],
+        "items": page,
         "summary": {
-            "fact_count": len(items),
+            "fact_count": len(page),
             "accounts": sorted(account_ids),
             "markets": sorted(m for m in markets if m),
         },
-        "count": len(items[:limit]),
+        "count": len(page),
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "provenance": {"source": "derivatives_facts", "surface": "profile360"},
+        "meta": {"limit": limit, "returned": len(page), "truncated": has_more, "has_more": has_more},
     }
 
 
@@ -2304,18 +2480,25 @@ async def get_entity_interop_activity(
             key: str(value) if isinstance(value, _Decimal) else value
             for key, value in leg.items()
         })
-        if len(items) >= limit:
+        # Collect one past `limit` so has_more/truncated are exact relative
+        # to this scan — the intents loop above is already unconditional /
+        # unbounded by `limit`, so between the two this reflects the true
+        # matched total up to each source's 2000-row upstream cap.
+        if len(items) > limit:
             break
 
+    page = items[:limit]
+    has_more = len(items) > limit
     return {
         "entity_id": user_id,
-        "items": items[:limit],
+        "items": page,
         "summary": {
-            "fact_count": len(items),
+            "fact_count": len(page),
             "providers": sorted(p for p in providers if p),
             "paths": sorted(p for p in paths if p),
         },
-        "count": len(items[:limit]),
+        "count": len(page),
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "provenance": {"source": "interop_facts", "surface": "profile360"},
+        "meta": {"limit": limit, "returned": len(page), "truncated": has_more, "has_more": has_more},
     }

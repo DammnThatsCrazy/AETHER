@@ -5508,6 +5508,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/GOLD-TENANT-BACKFILL.md",
+      "title": "Runbook — Gold Tenant Backfill",
+      "slug": "runbooks/gold-tenant-backfill",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 8,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/IDENTITY_REPAIR.md",
       "title": "Runbook — Identity Repair",
       "slug": "runbooks/identity-repair",

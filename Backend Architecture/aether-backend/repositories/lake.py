@@ -462,7 +462,11 @@ class GoldRepository(BaseRepository):
         # tenant_id is part of the identity: without it, two tenants
         # materializing the same metric for the same entity collide on one
         # record_id and silently overwrite each other's Gold value. Mirrors the
-        # Silver record_id, which already includes tenant_id.
+        # Silver record_id, which already includes tenant_id. (See
+        # compute_record_id() below for a pure, reusable version of this exact
+        # formula — e.g. scripts/gold_tenant_backfill.py rekeys rows written
+        # under the pre-fix tenant-less formula by calling it directly instead
+        # of forking the hash.)
         record_id = hashlib.sha256(
             f"{tenant_id}:{metric_name}:{entity_id}:{entity_type}".encode()
         ).hexdigest()[:24]
@@ -490,6 +494,22 @@ class GoldRepository(BaseRepository):
             metrics.increment("lake_gold_created", labels={"metric": metric_name})
 
         return result
+
+    @staticmethod
+    def compute_record_id(tenant_id: str, metric_name: str, entity_id: str, entity_type: str) -> str:
+        """Compute the tenant-inclusive Gold ``record_id`` — the exact formula
+        ``materialize()`` hashes inline above, exposed as a pure, side-effect-free
+        function.
+
+        This does not change ``materialize()``'s behavior; it is purely additive.
+        It exists so a caller that needs to know a row's canonical key WITHOUT
+        writing (e.g. ``scripts/gold_tenant_backfill.py``, deciding whether an
+        existing row is already correctly keyed before touching it) can reuse the
+        real hash instead of reimplementing/forking it.
+        """
+        return hashlib.sha256(
+            f"{tenant_id}:{metric_name}:{entity_id}:{entity_type}".encode()
+        ).hexdigest()[:24]
 
     async def get_metrics(
         self,

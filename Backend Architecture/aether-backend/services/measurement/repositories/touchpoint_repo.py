@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
@@ -48,12 +49,12 @@ _TOUCHPOINT_COLUMNS: tuple[str, ...] = (
     "machine_activity_probability", "identity_resolution_method",
     "identity_confidence", "identity_version", "consent_snapshot_id",
     "privacy_class", "provenance", "evidence_ids", "idempotency_key",
-    "schema_version",
+    "schema_version", "properties", "revenue_usd", "is_conversion",
 )
 
 _JSON_COLUMNS = frozenset({
     "source_classification_evidence", "provenance", "evidence_ids",
-    "evidence_conflicts",
+    "evidence_conflicts", "properties",
 })
 _JSON_LIST_COLUMNS = frozenset({"evidence_ids", "evidence_conflicts"})
 _UUID_COLUMNS = frozenset({
@@ -62,6 +63,11 @@ _UUID_COLUMNS = frozenset({
 _TIMESTAMP_COLUMNS = frozenset({
     "occurred_at", "received_at", "processed_at", "source_classified_at",
 })
+# NUMERIC(18,6) money columns — never bound as a Python/SQL float. Mirrors
+# the representation used for every other money column in this migration
+# family (canonical_conversions.gross_value, revenue_adjustments.amount;
+# see services/measurement/repositories/conversion_repo.py::_to_decimal).
+_MONEY_COLUMNS = frozenset({"revenue_usd"})
 
 _CLASSIFICATION_FIELDS: tuple[str, ...] = (
     "channel", "source", "medium", "source_class", "traffic_origin",
@@ -98,6 +104,13 @@ class TouchpointRepository:
         row.setdefault("is_view_through", False)
         row.setdefault("is_click_through", False)
         row.setdefault("schema_version", 1)
+        row.setdefault("properties", {})
+        row.setdefault("is_conversion", False)
+        # Normalize here — before the local/asyncpg branch split — so both
+        # backends persist and return the same Decimal type. Local mode never
+        # runs values through _db_value(), so coercing only there would leave
+        # revenue_usd as a raw float/str in the in-memory store.
+        row["revenue_usd"] = _to_decimal(row.get("revenue_usd"))
         if row.get("source_classifier_version"):
             row.setdefault("source_classification_id", str(uuid4()))
             row.setdefault("source_classified_at", row.get("received_at"))
@@ -182,6 +195,9 @@ class TouchpointRepository:
             "occurred_at": data.get("occurred_at") or datetime.now(timezone.utc).isoformat(),
             "privacy_class": "behavioral",
             "idempotency_key": idem_key,
+            "properties": data.get("properties") or {},
+            "revenue_usd": data.get("revenue_usd"),
+            "is_conversion": bool(data.get("is_conversion", False)),
         }
         return await self.upsert(row)
 
@@ -1105,7 +1121,25 @@ def _db_value(column: str, value: Any) -> Any:
         return _uuid_or_none(value)
     if column in _TIMESTAMP_COLUMNS:
         return _parse_ts(value)
+    if column in _MONEY_COLUMNS:
+        return _to_decimal(value)
     return value
+
+
+def _to_decimal(value: Any) -> Optional[Decimal]:
+    """Coerce to Decimal via str() — never via float() — to avoid binary
+    floating-point artifacts (e.g. Decimal(0.1) != Decimal('0.1')). Mirrors
+    services/measurement/repositories/conversion_repo.py::_to_decimal, the
+    canonical pattern for every other money column in this table family.
+    """
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
 
 
 def _classification_snapshot(row: dict[str, Any]) -> dict[str, Any]:
