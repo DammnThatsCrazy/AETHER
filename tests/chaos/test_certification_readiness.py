@@ -20,13 +20,13 @@ from shared.certification.readiness import (
 from shared.certification.registry import build_capability_matrix
 
 
-# ── all 23 first-release providers are uniformly credential_waiting ───────────
+# ── all 26 first-release providers are uniformly credential_waiting ───────────
 def test_all_first_release_providers_are_credential_waiting():
     matrix = build_capability_matrix()
     summary = matrix["summary"]
-    assert summary["total"] == 23
-    assert summary["first_release"] == 23
-    assert summary["by_state"] == {"credential_waiting": 23}
+    assert summary["total"] == 26
+    assert summary["first_release"] == 26
+    assert summary["by_state"] == {"credential_waiting": 26}
     # none are production/partner-live, none are scaffolded (forbidden for release)
     states = {p["state"] for p in matrix["providers"].values()}
     assert states == {"credential_waiting"}
@@ -34,10 +34,12 @@ def test_all_first_release_providers_are_credential_waiting():
 
 def test_provider_domains_match_the_shipped_scope():
     matrix = build_capability_matrix()
-    # communications: the five-provider cohort (ADR-C11) — Klaviyo is the
-    # certified reference pull adapter, the other four are webhook-only.
+    # communications: the eight-provider cohort (ADR-C11 + follow-up) — Klaviyo
+    # is the certified reference pull adapter; SendGrid/Customer.io/Mailchimp/
+    # Postmark are webhook-only, and HubSpot/Iterable/Braze (ADR-C11 follow-up)
+    # extend the cohort with pull-capable adapters.
     assert matrix["summary"]["by_domain"] == {
-        "communications": 5, "derivatives": 4, "interop": 7, "payments": 5,
+        "communications": 8, "derivatives": 4, "interop": 7, "payments": 5,
         "stablecoin_chain": 2,
     }
 
