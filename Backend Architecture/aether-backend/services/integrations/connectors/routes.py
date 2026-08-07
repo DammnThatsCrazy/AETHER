@@ -6,9 +6,11 @@
   aggregate-only connector health.
 
 Production external webhook delivery (unauthenticated, signature-verified)
-targets a public ``/v1/integrations/webhooks/{connector}`` endpoint. Provider
+targets the public
+``/v1/integrations/webhooks/connectors/{connector}/{endpoint_id}`` endpoint,
+where ``endpoint_id`` resolves server-side to exactly one tenant. Provider
 adapters use their native scheme when declared; generic webhooks use Aether's
-timestamped HMAC scheme.
+timestamped HMAC scheme. The legacy header-tenant route is local-only.
 """
 from __future__ import annotations
 
@@ -242,44 +244,51 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
 
 
 # ── Public provider webhook ingestion ─────────────────────────────────────────
-# This route is UNAUTHENTICATED by API key.  It is listed in PUBLIC_PATH_PREFIXES
-# so the middleware skips token auth.  Security is enforced inside the handler via
-# provider-native or Aether HMAC signature verification.
+# These routes are UNAUTHENTICATED by API key.  They are listed in
+# PUBLIC_PATH_PREFIXES so the middleware skips token auth.  Security is enforced
+# inside the handler via provider-native or Aether HMAC signature verification.
 #
-# Tenant routing: the tenant is resolved by looking up the connector config whose
-# stored webhook secret produces a valid signature for the incoming payload. The
-# caller provides X-Aether-Tenant-ID so we can scope the secret lookup efficiently.
-# If X-Aether-Tenant-ID is missing or verification fails, the request is rejected.
+# Tenant routing (authoritative): the URL carries a durable, high-entropy
+# ``endpoint_id`` minted by the tenant via the authenticated
+# ``/{connector_type}/webhook-endpoints`` routes; it resolves SERVER-SIDE to
+# exactly one (tenant, connector, environment).  No tenant id is ever accepted
+# from a public request header.
 #
 # Generic Aether HMAC delivery also enforces a five-minute replay window.
 
-@webhook_public_router.post("/{connector_type}")
-async def public_webhook_ingest(connector_type: str, request: Request):
-    """
-    Public provider webhook ingestion.
 
-    - No API key required.
-    - Provider-native or Aether HMAC signature verification.
-    - Tenant resolved from X-Aether-Tenant-ID header.
-    - Generic HMAC replay prevention: 5-minute timestamp window.
-    - Idempotent: duplicate webhook event IDs are detected and skipped.
+def _require_legacy_connector_webhook_route() -> None:
+    """Guard the unsafe legacy header-tenant webhook route.
 
-    Headers:
-      X-Aether-Tenant-ID: <tenant_id>       (required — set by webhook registration)
-      X-Aether-Signature: <hmac_sha256_hex>  (generic webhook only)
-      X-Aether-Timestamp: <unix_epoch_int>   (generic webhook only)
-      Provider-native signature headers     (declared adapter schemes)
+    The ``/{connector_type}`` route lets a public caller select the tenant via
+    an ``X-Aether-Tenant-ID`` header. It is available ONLY in local development
+    AND only when explicitly opted in
+    (``AETHER_CONNECTOR_LEGACY_WEBHOOK_ROUTE_ENABLED``). Everywhere else it
+    returns a uniform 404 — indistinguishable from a route that does not exist —
+    so a public caller can never select a tenant by header in staging or
+    production. The durable ``/{connector_type}/{endpoint_id}`` route is the
+    authoritative path.
     """
+    import os
+
+    from config.settings import settings
+
+    is_local = os.getenv("AETHER_ENV", "local").lower() == "local"
+    if not (settings.connectors.legacy_webhook_route_enabled and is_local):
+        raise NotFoundError("not found")
+
+
+async def _verified_public_ingest(connector_type: str, tenant_id: str, request: Request):
+    """Signature-verify and ingest a public webhook for a resolved tenant.
+
+    Shared by the endpoint-id route (authoritative) and the fenced legacy
+    header route. The tenant id passed here is ALWAYS server-resolved."""
     from shared.common.common import BadRequestError, ForbiddenError
     from shared.logger.logger import metrics as _metrics
 
     connector = get_connector(connector_type)
     if connector is None:
         raise NotFoundError("connector")
-
-    tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
-    if not tenant_id:
-        raise BadRequestError("X-Aether-Tenant-ID header is required")
 
     signature = request.headers.get("X-Aether-Signature", "").strip()
     timestamp = request.headers.get("X-Aether-Timestamp", "").strip()
@@ -340,6 +349,132 @@ async def public_webhook_ingest(connector_type: str, request: Request):
     _metrics.increment("connector_webhook_received_total", labels={"connector": connector_type})
 
     return APIResponse(data=result).to_dict()
+
+
+@webhook_public_router.post("/connectors/{connector_type}/{endpoint_id}")
+async def public_webhook_ingest_endpoint(
+    connector_type: str, endpoint_id: str, request: Request
+):
+    """
+    Public provider webhook ingestion (authoritative route).
+
+    - No API key required.
+    - Tenant resolved SERVER-SIDE from the durable ``endpoint_id`` — never
+      from a request header.
+    - Provider-native or Aether HMAC signature verification still applies;
+      the endpoint id alone is not authentication.
+    - Generic HMAC replay prevention: 5-minute timestamp window.
+    - Idempotent: duplicate webhook event IDs are detected and skipped.
+    """
+    from shared.logger.logger import metrics as _metrics
+
+    from services.integrations.connectors.webhook_endpoints import (
+        connector_webhook_endpoint_registry,
+    )
+
+    resolved = await connector_webhook_endpoint_registry.resolve(
+        endpoint_id, connector_type
+    )
+    if resolved is None:
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": "unknown_endpoint",
+        })
+        # Uniform miss: never leaks whether the connector, endpoint, or
+        # tenant exists.
+        raise NotFoundError("not found")
+
+    return await _verified_public_ingest(
+        connector_type, resolved["tenant_id"], request
+    )
+
+
+@webhook_public_router.post("/{connector_type}")
+async def public_webhook_ingest(connector_type: str, request: Request):
+    """
+    Legacy public webhook ingestion (header-tenant route) — local-only.
+
+    Selects the tenant from the untrusted ``X-Aether-Tenant-ID`` header, so it
+    is fenced to local development behind
+    ``AETHER_CONNECTOR_LEGACY_WEBHOOK_ROUTE_ENABLED`` and returns a uniform 404
+    everywhere else. Use ``/{connector_type}/{endpoint_id}`` in every deployed
+    environment.
+    """
+    from shared.common.common import BadRequestError
+
+    _require_legacy_connector_webhook_route()
+
+    tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
+    if not tenant_id:
+        raise BadRequestError("X-Aether-Tenant-ID header is required")
+
+    return await _verified_public_ingest(connector_type, tenant_id, request)
+
+
+# ── Tenant-scoped webhook endpoint management (authenticated) ─────────────────
+
+
+class ConnectorWebhookEndpointCreate(BaseModel):
+    environment: str = "live"
+
+
+@router.post("/{connector_type}/webhook-endpoints")
+async def create_connector_webhook_endpoint(
+    connector_type: str, body: ConnectorWebhookEndpointCreate, request: Request
+):
+    """Mint a durable, high-entropy public webhook endpoint id for this connector."""
+    tenant_id = _tenant_id(request, "admin")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    from services.integrations.connectors.webhook_endpoints import (
+        connector_webhook_endpoint_registry,
+    )
+    ep = await connector_webhook_endpoint_registry.create(
+        tenant_id, connector_type, body.environment, created_by=_actor(request)
+    )
+    return APIResponse(data=ep).to_dict()
+
+
+@router.get("/{connector_type}/webhook-endpoints")
+async def list_connector_webhook_endpoints(connector_type: str, request: Request):
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.connectors.webhook_endpoints import (
+        connector_webhook_endpoint_registry,
+    )
+    return APIResponse(
+        data=await connector_webhook_endpoint_registry.list_for(tenant_id, connector_type)
+    ).to_dict()
+
+
+@router.post("/{connector_type}/webhook-endpoints/rotate")
+async def rotate_connector_webhook_endpoint(
+    connector_type: str, body: ConnectorWebhookEndpointCreate, request: Request
+):
+    tenant_id = _tenant_id(request, "admin")
+    if get_connector(connector_type) is None:
+        raise NotFoundError("connector")
+    from services.integrations.connectors.webhook_endpoints import (
+        connector_webhook_endpoint_registry,
+    )
+    ep = await connector_webhook_endpoint_registry.rotate(
+        tenant_id, connector_type, body.environment, actor=_actor(request)
+    )
+    return APIResponse(data=ep).to_dict()
+
+
+@router.post("/{connector_type}/webhook-endpoints/{endpoint_id}/revoke")
+async def revoke_connector_webhook_endpoint(
+    connector_type: str, endpoint_id: str, request: Request
+):
+    tenant_id = _tenant_id(request, "admin")
+    from services.integrations.connectors.webhook_endpoints import (
+        connector_webhook_endpoint_registry,
+    )
+    ok = await connector_webhook_endpoint_registry.revoke(
+        tenant_id, endpoint_id, actor=_actor(request)
+    )
+    if not ok:
+        raise NotFoundError("endpoint")
+    return APIResponse(data={"endpoint_id": endpoint_id, "state": "revoked"}).to_dict()
 
 
 # ── Kyber operator (aggregate-only) ────────────────────────────────────────────

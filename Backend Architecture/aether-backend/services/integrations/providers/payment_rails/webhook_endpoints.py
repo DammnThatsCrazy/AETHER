@@ -27,14 +27,12 @@ class EndpointState:
     REVOKED = "revoked"
 
 
+_PATH_TEMPLATE = "/v1/integrations/webhooks/payment-rails/{provider}/{endpoint_id}"
+
+
 class _WebhookEndpointRepo(BaseRepository):
-    def __init__(self) -> None:
-        super().__init__(ENDPOINT_TABLE)
-
-
-def _new_endpoint_id() -> str:
-    # 32 random bytes → 64 hex chars; non-sequential, unguessable.
-    return _ID_PREFIX + secrets.token_hex(32)
+    def __init__(self, table: str = ENDPOINT_TABLE) -> None:
+        super().__init__(table)
 
 
 _SAFE_FIELDS = (
@@ -49,15 +47,34 @@ _SAFE_FIELDS = (
 
 
 class WebhookEndpointRegistry:
-    """Create / resolve / rotate / revoke public webhook endpoints."""
+    """Create / resolve / rotate / revoke public webhook endpoints.
 
-    def __init__(self, repo: Optional[_WebhookEndpointRepo] = None) -> None:
-        self._repo = repo or _WebhookEndpointRepo()
+    Generic over the webhook surface: the payment-rails instance below uses the
+    defaults; other surfaces (e.g. connectors) instantiate with their own
+    ``table`` / ``id_prefix`` / ``path_template``. Semantics are identical
+    everywhere — server-side tenant resolution, uniform-None misses, revocation.
+    """
+
+    def __init__(
+        self,
+        repo: Optional[_WebhookEndpointRepo] = None,
+        *,
+        table: str = ENDPOINT_TABLE,
+        id_prefix: str = _ID_PREFIX,
+        path_template: str = _PATH_TEMPLATE,
+    ) -> None:
+        self._repo = repo or _WebhookEndpointRepo(table)
+        self._id_prefix = id_prefix
+        self._path_template = path_template
+
+    def _new_endpoint_id(self) -> str:
+        # 32 random bytes → 64 hex chars; non-sequential, unguessable.
+        return self._id_prefix + secrets.token_hex(32)
 
     async def create(
         self, tenant_id: str, provider: str, environment: str, *, created_by: str
     ) -> dict:
-        endpoint_id = _new_endpoint_id()
+        endpoint_id = self._new_endpoint_id()
         data = {
             "tenant_id": tenant_id,
             "provider": provider,
@@ -77,7 +94,7 @@ class WebhookEndpointRegistry:
         """Return ``{tenant_id, provider, environment}`` for an ACTIVE endpoint
         whose provider matches the route, else ``None`` (uniform — never leaks
         whether the id, tenant, or provider exists)."""
-        if not endpoint_id or not endpoint_id.startswith(_ID_PREFIX):
+        if not endpoint_id or not endpoint_id.startswith(self._id_prefix):
             return None
         row = await self._repo.find_by_id(endpoint_id)
         if row is None:
@@ -134,13 +151,12 @@ class WebhookEndpointRegistry:
             limit=50,
         )
 
-    @staticmethod
-    def _public(endpoint_id: str, row: dict) -> dict:
+    def _public(self, endpoint_id: str, row: dict) -> dict:
         view = {"endpoint_id": endpoint_id}
         view.update({f: row.get(f) for f in _SAFE_FIELDS if f in row})
         # Safe public webhook path suffix (never includes a secret).
-        view["webhook_path"] = (
-            f"/v1/integrations/webhooks/payment-rails/{row.get('provider')}/{endpoint_id}"
+        view["webhook_path"] = self._path_template.format(
+            provider=row.get("provider"), endpoint_id=endpoint_id
         )
         return view
 

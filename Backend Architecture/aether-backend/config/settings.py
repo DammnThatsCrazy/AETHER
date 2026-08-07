@@ -1001,6 +1001,13 @@ class ConnectorsConfig:
     are required only when a connector is enabled for a tenant."""
     enabled: bool = _env_bool("AETHER_CONNECTORS_ENABLED", False)
     kyber_connector_health_enabled: bool = _env_bool("KYBER_CONNECTOR_HEALTH_ENABLED", False)
+    # Legacy public webhook route that selects the tenant from the untrusted
+    # X-Aether-Tenant-ID header. Available ONLY in local development AND only
+    # with this explicit opt-in; everywhere else the route returns a uniform
+    # 404. The durable /{connector_type}/{endpoint_id} route is authoritative.
+    legacy_webhook_route_enabled: bool = _env_bool(
+        "AETHER_CONNECTOR_LEGACY_WEBHOOK_ROUTE_ENABLED", False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1118,11 +1125,16 @@ class DeliveryConfig:
 
     # Linear API key (system-level default)
     linear_api_key: str = _env("DELIVERY_LINEAR_API_KEY", "")
+    # Inbound Linear webhook HMAC secret (system-level default; the inbox
+    # processor resolves per-row secrets first, then falls back to this).
+    linear_webhook_secret: str = _env("DELIVERY_LINEAR_WEBHOOK_SECRET", "")
 
     # Jira (system-level default; per-tenant configured in connector config)
     jira_base_url: str = _env("DELIVERY_JIRA_BASE_URL", "")
     jira_email: str = _env("DELIVERY_JIRA_EMAIL", "")
     jira_api_token: str = _env("DELIVERY_JIRA_API_TOKEN", "")
+    # Inbound Jira webhook HMAC secret (same resolution order as Linear).
+    jira_webhook_secret: str = _env("DELIVERY_JIRA_WEBHOOK_SECRET", "")
 
 
 # ---------------------------------------------------------------------------

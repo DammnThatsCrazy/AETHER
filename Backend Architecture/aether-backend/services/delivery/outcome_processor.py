@@ -260,9 +260,13 @@ class WebhookInboxProcessor:
 
         try:
             if provider == "slack":
+                import os as _os
+
                 timestamp = headers.get("x-slack-request-timestamp", "")
                 signature = headers.get("x-slack-signature", "")
-                signing_secret = inbox.get("signing_secret", "")
+                signing_secret = inbox.get("signing_secret", "") or _os.getenv(
+                    "SLACK_SIGNING_SECRET", ""
+                )
                 if not signing_secret or not timestamp or not signature:
                     return False
                 from services.delivery.adapters.slack import SlackAdapter
@@ -274,8 +278,14 @@ class WebhookInboxProcessor:
                 )
 
             elif provider == "linear":
+                from config.settings import settings as _settings
+
                 linear_sig = headers.get("linear-signature", "")
-                webhook_secret = inbox.get("webhook_secret", "")
+                # Inbox rows never carry the secret (that would persist
+                # plaintext at rest) — resolve from configuration.
+                webhook_secret = inbox.get("webhook_secret", "") or (
+                    _settings.delivery.linear_webhook_secret
+                )
                 if not linear_sig or not webhook_secret:
                     return False
                 expected = hmac.new(
@@ -285,8 +295,12 @@ class WebhookInboxProcessor:
                 return constant_time_compare(expected, linear_sig)
 
             elif provider == "jira":
+                from config.settings import settings as _settings
+
                 jira_sig = headers.get("x-hub-signature-256", "")
-                webhook_secret = inbox.get("webhook_secret", "")
+                webhook_secret = inbox.get("webhook_secret", "") or (
+                    _settings.delivery.jira_webhook_secret
+                )
                 if not jira_sig or not webhook_secret:
                     return False
                 expected = "sha256=" + hmac.new(
@@ -296,9 +310,13 @@ class WebhookInboxProcessor:
                 return constant_time_compare(expected, jira_sig)
 
             elif provider == "webhook":
+                from config.settings import settings as _settings
+
                 aether_sig = headers.get("x-aether-signature", "")
                 aether_ts = headers.get("x-aether-timestamp", "")
-                signing_secret = inbox.get("signing_secret", "")
+                signing_secret = inbox.get("signing_secret", "") or (
+                    _settings.delivery.webhook_signing_secret
+                )
                 # Require both signature and a known secret — never accept unsigned
                 if not aether_sig or not signing_secret:
                     return False

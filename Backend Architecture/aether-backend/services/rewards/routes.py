@@ -1554,6 +1554,35 @@ async def get_receipt(request: Request, receipt_id: str):
 # RAIL CONFIGURATION ROUTES
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Secret-bearing keys inside a rail ``config`` dict. Values under these keys
+# are WRITE-ONLY: they are never returned by any rail API response and never
+# persisted into audit before/after states.
+_RAIL_SECRET_KEYS = frozenset({
+    "signing_secret", "webhook_secret", "api_key", "api_secret",
+    "secret", "token", "private_key", "signer_key",
+})
+
+
+def _redact_rail_config(record: Optional[dict]) -> Optional[dict]:
+    """Return a deep-copied rail record with secret material replaced by
+    presence markers (``has_<key>`` + short non-reversible fingerprint)."""
+    if not isinstance(record, dict):
+        return record
+    import copy as _copy
+    import hashlib as _hashlib
+
+    redacted = _copy.deepcopy(record)
+    cfg = redacted.get("config")
+    if isinstance(cfg, dict):
+        for key in list(cfg.keys()):
+            if key in _RAIL_SECRET_KEYS and isinstance(cfg[key], str) and cfg[key]:
+                fingerprint = _hashlib.sha256(cfg[key].encode("utf-8")).hexdigest()[:12]
+                cfg[key] = "<redacted>"
+                cfg[f"has_{key}"] = True
+                cfg[f"{key}_fingerprint"] = fingerprint
+    return redacted
+
+
 @router.post("/rails", response_model=None)
 @api_response
 async def configure_rail(request: Request, body: RailConfigCreate):
@@ -1579,8 +1608,8 @@ async def configure_rail(request: Request, body: RailConfigCreate):
     }
     rail_config = await repos["rail_configs"].create_or_update(tenant_id, body.rail, config_data)
     await _audit(repos, tenant_id, "rail.configured", "rail_config", rail_config.get("id"),
-                 after_state=rail_config)
-    return rail_config
+                 after_state=_redact_rail_config(rail_config))
+    return _redact_rail_config(rail_config)
 
 
 @router.get("/rails", response_model=None)
@@ -1590,7 +1619,7 @@ async def list_rails(request: Request):
     _require_permission(request, "rewards:read")
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
-    return await repos["rail_configs"].list(tenant_id)
+    return [_redact_rail_config(r) for r in await repos["rail_configs"].list(tenant_id)]
 
 
 @router.get("/rails/{rail_id}", response_model=None)
@@ -1600,7 +1629,7 @@ async def get_rail(request: Request, rail_id: str):
     _require_permission(request, "rewards:read")
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
-    return await repos["rail_configs"].get(rail_id, tenant_id)
+    return _redact_rail_config(await repos["rail_configs"].get(rail_id, tenant_id))
 
 
 @router.patch("/rails/{rail_id}", response_model=None)
@@ -1616,8 +1645,9 @@ async def update_rail(request: Request, rail_id: str, body: RailConfigUpdate):
     patch["updated_at"] = _utc_now()
     updated = await repos["rail_configs"].update(rail_id, patch)
     await _audit(repos, tenant_id, "rail.updated", "rail_config", rail_id,
-                 before_state=before, after_state=updated)
-    return updated
+                 before_state=_redact_rail_config(before),
+                 after_state=_redact_rail_config(updated))
+    return _redact_rail_config(updated)
 
 
 @router.post("/rails/{rail_id}/verify", response_model=None)
@@ -1652,8 +1682,9 @@ async def disable_rail(request: Request, rail_id: str):
     before = await repos["rail_configs"].get(rail_id, tenant_id)
     updated = await repos["rail_configs"].update(rail_id, {"enabled": False, "updated_at": _utc_now()})
     await _audit(repos, tenant_id, "rail.disabled", "rail_config", rail_id,
-                 before_state=before, after_state=updated)
-    return updated
+                 before_state=_redact_rail_config(before),
+                 after_state=_redact_rail_config(updated))
+    return _redact_rail_config(updated)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
