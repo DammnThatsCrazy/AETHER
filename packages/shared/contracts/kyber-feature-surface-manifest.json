@@ -275,6 +275,14 @@
       "minimum_disclosure": "D0"
     },
     {
+      "feature_id": "notifications",
+      "aether_route": "/notifications",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant's own notification inbox is self-scoped attention data not projected into the tenant graph; operator signals have their own ops exception queue (services/kyber/ops/exceptions)",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "onboarding",
       "aether_route": "/onboarding",
       "tenant_parity_required": false,

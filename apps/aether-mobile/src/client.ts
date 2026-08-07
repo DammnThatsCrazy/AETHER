@@ -17,14 +17,14 @@ import {
   type SecureStore as SecureStoreInterface,
 } from '@aether/mobile-core';
 
-const config: MobileConfig = {
+export const config: MobileConfig = {
   // Real base URL is injected at build time (EAS secret / app config extra).
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.aether.example',
   appKind: 'aether',
   environment: process.env.EXPO_PUBLIC_ENVIRONMENT ?? 'production',
 };
 
-const secureStore: SecureStoreInterface = {
+export const secureStore: SecureStoreInterface = {
   get: (key) => SecureStore.getItemAsync(key),
   set: (key, value) => SecureStore.setItemAsync(key, value),
   delete: (key) => SecureStore.deleteItemAsync(key),
@@ -67,6 +67,6 @@ export const crypto: CryptoProvider = {
 };
 
 // The device fetch (a WHATWG Response) structurally satisfies FetchResponseLike.
-const deviceFetch: FetchLike = (url, init) => fetch(url, init as RequestInit);
+export const deviceFetch: FetchLike = (url, init) => fetch(url, init as RequestInit);
 
 export const client = new AetherMobileClient(config, { fetch: deviceFetch, auth });

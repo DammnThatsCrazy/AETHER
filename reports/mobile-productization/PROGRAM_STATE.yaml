@@ -64,8 +64,8 @@ milestones:
     name: notification-attention-control-plane
     depends_on: [C1]
     status: landed
-    landed: [notification-delivery-ts-twins, notification-control-plane-doc, notifications-collision-resolution, producer-coverage-registry]
-    pending: [mobile-notification-projection, unsafe-routing-validator]
+    landed: [notification-delivery-ts-twins, notification-control-plane-doc, notifications-collision-resolution, producer-coverage-registry, mobile-notification-projection, unsafe-routing-validator]
+    pending: []
     note: >
       Landed: notification.ts + delivery-receipt.ts TS twins (13 parity tests;
       NotificationDeliveryAttempt renamed to avoid a TS2308 collision with the interop
@@ -152,17 +152,21 @@ milestones:
     name: feature-screens-projections-notification-center
     depends_on: [C8, M2]
     status: active
-    lands: [mobile-config-route, distribution-profiles, app-version-registration, mobile-ui-package, offline-cache-framework, mobile-compliance-umbrella, gateway-projections, aether-mobile-screens, desktop-notification-center-aether, preferences-persistence]
+    landed: [mobile-config-route, distribution-profiles, app-version-registration, mobile-ui-package, offline-cache-framework, mobile-compliance-umbrella, gateway-projections, aether-mobile-screens, desktop-notification-center-aether, preferences-persistence]
+    lands: [kyber-mobile-screens]
     externally_blocked: [native-compile, store-submission]
     note: >
-      C5 is the largest remaining milestone: bounded redacted gateway projections
-      (today/profile/campaign/alerts/explore) reusing owning services (never re-calculating
-      Profile360/Campaign360/graph truth); the mobile platform foundations (GET /v1/mobile/config,
-      distribution-profile enum + per-build enforcement, app-version registration, packages/mobile-ui,
-      read-only offline cache); Aether Mobile feature screens (Today/Copilot/Explore/Alerts/Account);
-      and the Aether desktop notification center + preferences persistence. Driven by M2 (platform/
-      config/compliance foundations) + M3 (projections + screens + desktop NC) in the completion
-      program. All new surfaces flag-gated OFF or read-only; no runtime behavior change with flags off.
+      C5 has landed the bounded redacted gateway projections (today/profile/campaign/alerts/
+      explore — services/mobile/projections.py reuses owning services, never re-calculates
+      Profile360/Campaign360/graph truth), Aether Mobile feature screens
+      (Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth),
+      and the Aether desktop notification center (inbox UI + unread badge + filters + read/ack/
+      archive) with preferences persistence (quiet hours/timezone/digest on the EXISTING
+      /v1/notifications/config surface). Landed via M2 (platform/config/compliance foundations) +
+      M3 (projections + screens + desktop NC). The /notifications surface is classified in the
+      Kyber feature-surface manifest as tenant self-scoped (no tenant-graph projection; operator
+      signals live in the ops exception queue). Remaining: M4 Kyber Mobile operator screens. All
+      new surfaces flag-gated OFF or read-only; no runtime behavior change with flags off.
   - id: C6
     name: continue-on-phone-sync-completion
     depends_on: [C5]
@@ -219,12 +223,12 @@ architecture:
   mobile_apps: build                        # NET-NEW: apps/aether-mobile, apps/kyber-mobile (Expo + prebuild)
   mobile_shared_packages: build             # NET-NEW: packages/mobile-* (mobile-ui in M2)
   desktop_notification_center_kyber: reuse  # frontend/kyber/src/features/notifications/* (mobile push = "Architecture-Ready")
-  desktop_notification_center_aether: build # NET-NEW: only settings/notifications-section.tsx exists today (M3)
+  desktop_notification_center_aether: build # NET-NEW: M3 inbox + preferences UI landed (frontend/aether/src/pages/notifications + use-inbox/use-notification-preferences)
   mobile_notification_projection: build     # NET-NEW: M1 (redacted push title/body/summary; no raw payload in push)
   delivery_safety_validator: build          # NET-NEW: M1 (scripts/release/validate_delivery_safety.py permanent gate)
   mobile_config_release: build              # NET-NEW: M2 (GET /v1/mobile/config + distribution profiles + app-version registration)
   mobile_offline_cache: build               # NET-NEW: M2 (read-only offline cache framework in packages/mobile-core)
-  gateway_projections: build                # NET-NEW: M3 (bounded redacted projections reusing owning services)
+  gateway_projections: build                # NET-NEW: M3 landed (services/mobile/projections.py reusing owning services, never re-calculating Profile360/Campaign360/graph truth)
   operator_continuation_router: build       # NET-NEW: M5 (services/continuation/ operator router)
   mobile_action_adapter: build              # NET-NEW: M6 (gateway adapter -> existing services/kyber/ops, no second plane)
   demo_seed_extensions: extend              # NET-NEW: M7 (notifications/continuations/exceptions/incidents/runs/reviews in demo_seed)
@@ -300,13 +304,13 @@ quality:                                     # updated at each milestone boundar
   ci_note: "intermediate superseded SHAs show a `validate` failure caused solely by E2E_TENANT_RESULT=cancelled (concurrency cancellation from the next push); every real gate passed. Only the final tip SHA is authoritative."
 
 # Honest readiness verdict (per productization dimension). No fake production-ready claims.
-# Completion program is IN FLIGHT (M0-M8): C5/C6/C7 surfaces + M1/M2/M7 additions are not yet
+# Completion program is IN FLIGHT (M0-M8): C6/C7 surfaces + M4/M7 additions are not yet
 # landed; update this section only where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 + C8 landed + gated green; completion program (C2-pending + C5-C9) in flight on claude/aether-turnkey-completion-7m3x9"
+  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; completion program (C5-C9) in flight on claude/aether-turnkey-completion-7m3x9"
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
   mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store)"
-  mobile_apps: "shells scaffolded + structural invariants gated green; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI; feature screens are C5/M3 (in flight)"
+  mobile_apps: "Aether Mobile feature screens landed (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth); native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI; Kyber Mobile screens are C5/M4 (in flight)"
   credential: externally_blocked            # no AWS/APNs/FCM/email/Apple/Google; contracts + fakes + preflight only
   design_partner: partial
   store_submission: externally_blocked

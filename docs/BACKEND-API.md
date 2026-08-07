@@ -2340,6 +2340,22 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 | GET | `/v1/notifications/config` | Get tenant notification config |
 | PUT | `/v1/notifications/config` | Update config (Slack token stored via vault) |
 
+Config carries delivery preferences alongside channel wiring: `quiet_hours` (`{start, end, timezone}`), `timezone` (delivery timezone), and `digest` (`{enabled, frequency, send_time}`) are optional and updated via the same `PUT /v1/notifications/config` surface.
+
+### Inbox & Notification Center
+
+Tenant-scoped notification inbox for the operator console. Reads and archives are idempotent; archived notifications drop out of the unread count.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/notifications/inbox` | List inbox notifications (filters: `unread`, `include_archived`, `limit`, `offset`) |
+| GET | `/v1/notifications/inbox/unread-count` | Unread count for the tenant (`{unread: n}`) |
+| POST | `/v1/notifications/inbox/read-all` | Mark all notifications read (`{read: n}`) |
+| POST | `/v1/notifications/inbox/{notification_id}/read` | Mark a single notification read |
+| POST | `/v1/notifications/inbox/{notification_id}/archive` | Archive a notification |
+
+`GET /v1/notifications/inbox` excludes archived rows by default; pass `include_archived=true` to include them.
+
 ---
 
 ## Kyber ML Admin (v8.9.0)

@@ -209,7 +209,10 @@ describe('Command Center ops panels (enableAgentCommandCenter on)', () => {
 
   it('filters the run history by status', async () => {
     renderPage();
-    await screen.findByTestId('run-row-run_001');
+    // The command center fires several parallel queries on mount; under full-suite
+    // load the runs feed can exceed the 1s findBy default. Give the initial render
+    // a longer window — the assertion itself is unchanged.
+    await screen.findByTestId('run-row-run_001', {}, { timeout: 5000 });
     expect(mocks.runs).toHaveBeenNthCalledWith(1, undefined);
 
     await userEvent.selectOptions(screen.getByLabelText('Filter runs by status'), 'failed');

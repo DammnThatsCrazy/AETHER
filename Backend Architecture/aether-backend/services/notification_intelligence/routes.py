@@ -471,14 +471,22 @@ async def replay_notification(notification_id: str, request: Request, tenantId: 
 async def list_inbox(
     request: Request,
     unread: bool = Query(default=False),
+    include_archived: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     """List in-app inbox notifications for the authenticated tenant
-    (newest first; ``unread=true`` filters to unread rows)."""
+    (newest first; ``unread=true`` filters to unread rows,
+    ``include_archived=true`` includes archived rows)."""
     request.state.tenant.require_permission("read")
     tenant_id = request.state.tenant.tenant_id
-    rows = await _inbox_list(tenant_id, unread_only=unread, limit=limit, offset=offset)
+    rows = await _inbox_list(
+        tenant_id,
+        unread_only=unread,
+        include_archived=include_archived,
+        limit=limit,
+        offset=offset,
+    )
     return APIResponse(data=rows).to_dict()
 
 

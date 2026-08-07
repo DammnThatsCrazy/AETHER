@@ -187,6 +187,10 @@ class TenantNotificationConfig(BaseModel):
     slack_channel_map: dict[str, str] = Field(default_factory=dict)
     rate_limit_per_minute: int = 10
     quiet_hours: Optional[dict[str, str]] = None
+    # M3c: notification delivery preferences (preferences persistence on the
+    # existing /v1/notifications/config surface — no second preferences system).
+    timezone: Optional[str] = None
+    digest: Optional[dict[str, Any]] = None
     operator_review_required: list[str] = Field(default_factory=lambda: ["P0", "P1"])
     auto_propagate_on_approve: bool = True
     auto_suppress_on_expire: bool = True
@@ -320,6 +324,10 @@ class UpdateConfigRequest(BaseModel):
     slack_channel_map: Optional[dict[str, str]] = None
     rate_limit_per_minute: Optional[int] = None
     quiet_hours: Optional[dict[str, str]] = None
+    # M3c: notification delivery preferences — persisted on the existing
+    # /v1/notifications/config model (timezone + digest alongside quiet_hours).
+    timezone: Optional[str] = None
+    digest: Optional[dict[str, Any]] = None
     operator_review_required: Optional[list[str]] = None
     auto_propagate_on_approve: Optional[bool] = None
     auto_suppress_on_expire: Optional[bool] = None

@@ -38,6 +38,7 @@ const NAV_ITEMS: readonly NavEntry[] = [
   { to: '/graph', label: 'Graph', glyph: '[g]' },
   { to: '/noesis', label: 'Noesis', glyph: '[n]' },
   { to: '/onboarding', label: 'Onboarding', glyph: '[on]' },
+  { to: '/notifications', label: 'Notifications', glyph: '[!]' },
   { to: '/settings', label: 'Settings', glyph: '[:]' },
   { to: '/billing', label: 'Billing', glyph: '[$]' },
   { to: '/me', label: 'Profile', glyph: '[~]' },

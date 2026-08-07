@@ -183,3 +183,89 @@ async def add_subscription(
     if sub is None:
         raise NotFoundError("installation not found")
     return APIResponse(data=sub)
+
+
+# ── Bounded, redacted projections (M3a, decision-log D12) ────────────────────
+#
+# Each surface COMPOSES owning-service truth (profile-360 summary, campaign-360
+# overview, the single canonical inbox, saved-views store, noesis conversations)
+# and returns a bounded, redacted projection — it never re-calculates
+# Profile360/Campaign360/graph truth. Wire fields are snake_case (D6).
+# See services/mobile/projections.py for the projection builders.
+
+from services.mobile.projections import MobileProjectionService
+
+_projection_service = MobileProjectionService()
+
+
+@router.get("/today")
+async def get_today_projection(
+    request: Request, profile_user_id: Optional[str] = Query(default=None)
+) -> APIResponse:
+    """Today digest — alert counts + recent redacted alert titles + a bounded,
+    redacted profile summary peek."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.today_digest(
+        tenant_id=tenant.tenant_id,
+        profile_user_id=profile_user_id,
+    )
+    return APIResponse(data=result)
+
+
+@router.get("/profile")
+async def get_profile_projection(request: Request, user_id: str = Query(...)) -> APIResponse:
+    """Bounded, redacted profile-360 summary composed from the owning profile
+    service — never re-calculated."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.profile_summary(
+        tenant_id=tenant.tenant_id, user_id=user_id
+    )
+    if result is None:
+        raise NotFoundError("profile summary not found")
+    return APIResponse(data=result)
+
+
+@router.get("/campaign")
+async def get_campaign_projection(
+    request: Request, campaign_id: str = Query(...)
+) -> APIResponse:
+    """Bounded, redacted campaign-360 summary composed from the owning campaign
+    service — never re-calculated."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.campaign_summary(
+        tenant_id=tenant.tenant_id, campaign_id=campaign_id
+    )
+    return APIResponse(data=result)
+
+
+@router.get("/alerts")
+async def get_alerts_projection(
+    request: Request,
+    unread: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> APIResponse:
+    """Redacted alerts inbox — composed from the single canonical
+    ``notification_inbox`` (never a second inbox)."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.alerts_inbox(
+        tenant_id=tenant.tenant_id, unread_only=unread, limit=limit, offset=offset
+    )
+    return APIResponse(data=result)
+
+
+@router.get("/briefing")
+async def get_explore_briefing(
+    request: Request,
+    views_limit: int = Query(default=5, ge=1, le=50),
+    conversations_limit: int = Query(default=5, ge=1, le=20),
+) -> APIResponse:
+    """Lightweight explore briefing — saved views (exploration store) + recent
+    Noesis conversations, bounded and redacted."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.explore_briefing(
+        tenant_id=tenant.tenant_id,
+        views_limit=views_limit,
+        conversations_limit=conversations_limit,
+    )
+    return APIResponse(data=result)
