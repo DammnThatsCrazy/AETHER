@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mobile app build posture — structural invariants + honest native-build gating.
 
-Two jobs, both honest:
+Three jobs, all honest:
 
   1. Verify the STRUCTURAL invariants of the two app scaffolds that CAN be checked
      without a native toolchain: both apps exist and are complete (package.json,
@@ -10,6 +10,11 @@ Two jobs, both honest:
      ships in the Aether binary); each app pins version 8.12.0. These are real
      failures if violated (exit 1).
 
+  1b. Enforce the per-build DISTRIBUTION PROFILE declaration: each app must
+     declare a valid snake_case profile per platform in app.json
+     (expo.extra.distributionProfiles.ios/.android). The vocabulary must agree
+     with services/mobile/config.py (drift-guarded by the contract parity test).
+
   2. Report the NATIVE build posture. The iOS-simulator / Android-emulator compile
      (`expo prebuild` -> xcodebuild / gradlew) needs macOS + Xcode + the Android SDK
      + the Expo toolchain. When those are absent (this Linux CI container) the native
@@ -17,8 +22,8 @@ Two jobs, both honest:
      Exit stays 0: a missing toolchain is not a scaffold defect.
 
 Exit codes:
-  0  scaffolds valid; native build reported (blocked or, on a capable host, runnable)
-  1  a structural invariant is violated (missing/incomplete/colliding scaffold)
+  0  scaffolds valid + profiles declared; native build reported (blocked or, on a capable host, runnable)
+  1  a structural invariant is violated (missing/incomplete/colliding scaffold, or undeclared/invalid distribution profile)
 """
 from __future__ import annotations
 
@@ -35,6 +40,17 @@ EXPECTED = {
     "kyber-mobile": {"app_kind": "kyber", "bundle": "com.aether.kyber", "scheme": "kyber"},
 }
 PLATFORM_VERSION = "8.12.0"
+
+# Distribution profiles per platform family (snake_case). Must agree with
+# services/mobile/config.py DISTRIBUTION_PROFILES — drift-guarded by
+# tests/contracts/test_mobile_config_parity.py. Every app build MUST declare a
+# per-platform profile in app.json:
+#   expo.extra.distributionProfiles = { "ios": "testflight", "android": "dev" }
+# `dev` is family-agnostic (valid on both platforms); the rest are single-family.
+DISTRIBUTION_PROFILES = {
+    "ios": ("dev", "testflight", "app_store"),
+    "android": ("dev", "play_internal", "managed"),
+}
 
 
 def _read_json(path: Path) -> dict:
@@ -89,6 +105,52 @@ def check_scaffolds() -> list[str]:
     return errors
 
 
+def check_distribution_profiles() -> list[str]:
+    """Every app build must declare a valid per-platform distribution profile.
+
+    Missing or unknown profiles are a real failure (exit 1): the per-build
+    declaration is what the config endpoint and distribution gating rely on.
+    """
+    errors: list[str] = []
+    for name, want in EXPECTED.items():
+        app_path = APPS / name / "app.json"
+        if not app_path.exists():
+            continue  # missing app.json is already reported by check_scaffolds
+        extra = _read_json(app_path).get("expo", {}).get("extra", {})
+        profiles = extra.get("distributionProfiles")
+        if not isinstance(profiles, dict):
+            errors.append(
+                f"{name}: expo.extra.distributionProfiles (ios+android map) required"
+            )
+            continue
+        for platform, allowed in DISTRIBUTION_PROFILES.items():
+            value = profiles.get(platform)
+            if value is None:
+                errors.append(
+                    f"{name}: expo.extra.distributionProfiles.{platform} required"
+                )
+            elif not isinstance(value, str) or value not in allowed:
+                errors.append(
+                    f"{name}: expo.extra.distributionProfiles.{platform}={value!r} "
+                    f"must be one of {', '.join(allowed)}"
+                )
+    return errors
+
+
+def declared_profile(name: str) -> str:
+    """Human-readable summary of the declared per-platform profiles (or MISSING)."""
+    app_path = APPS / name / "app.json"
+    if not app_path.exists():
+        return "-"
+    profiles = _read_json(app_path).get("expo", {}).get("extra", {}).get("distributionProfiles", {})
+    if not isinstance(profiles, dict):
+        return "MISSING"
+    ios, android = profiles.get("ios"), profiles.get("android")
+    if ios is None or android is None:
+        return "MISSING"
+    return f"{ios}/{android}"
+
+
 def native_toolchain_present() -> dict[str, bool]:
     return {
         "expo": shutil.which("expo") is not None,
@@ -102,9 +164,11 @@ def main() -> int:
     print("Mobile app build check — structural invariants + native posture")
     print("=" * 78)
     errors = check_scaffolds()
+    errors += check_distribution_profiles()
     for name, want in EXPECTED.items():
         status = "OK" if not any(name in e for e in errors) else "FAIL"
-        print(f"  [{status}] {name:<16} plane={want['app_kind']:<7} bundle={want['bundle']}")
+        print(f"  [{status}] {name:<16} plane={want['app_kind']:<7} "
+              f"bundle={want['bundle']} profiles={declared_profile(name)}")
     if errors:
         print("-" * 78)
         for e in errors:

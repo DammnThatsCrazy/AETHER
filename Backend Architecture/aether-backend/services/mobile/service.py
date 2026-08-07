@@ -9,6 +9,7 @@ from shared.temporal.instant import try_parse_instant
 
 from repositories.installation_repo import get_installation_repository
 from services.continuation import service as continuation_service
+from services.mobile.config import build_mobile_config, validate_distribution_profile
 
 APP_KIND = "aether"
 
@@ -34,6 +35,8 @@ async def register(
     device_name: Optional[str],
     push_token: Optional[str],
     push_provider: Optional[str],
+    app_version: Optional[str] = None,
+    distribution_profile: Optional[str] = None,
 ) -> dict:
     repo = get_installation_repository()
     installation = await repo.register(
@@ -45,6 +48,8 @@ async def register(
         bundle_id=bundle_id,
         environment=environment,
         device_name=device_name,
+        app_version=app_version,
+        distribution_profile=validate_distribution_profile(distribution_profile),
     )
     subscription = None
     if push_token and push_provider:
@@ -62,6 +67,26 @@ async def register(
 
 async def get(scope: str, installation_id: str) -> Optional[dict]:
     return await get_installation_repository().get(scope, installation_id)
+
+
+async def get_config(*, scope: str, installation_id: str) -> Optional[dict]:
+    """Assemble the typed mobile config for an installation.
+
+    Returns None when the installation does not exist in the tenant scope (the
+    route 404s). The config's distribution_profile is the installation's
+    declared profile (looked up by installation id); an install registered
+    before the field existed resolves to the ``dev`` default in the response.
+    """
+    repo = get_installation_repository()
+    installation = await repo.get(scope, installation_id)
+    if installation is None:
+        return None
+    return build_mobile_config(
+        app_kind=APP_KIND,
+        environment=installation.get("environment") or "production",
+        app_version=installation.get("app_version"),
+        distribution_profile=installation.get("distribution_profile"),
+    )
 
 
 async def list_for_principal(scope: str, principal_id: str) -> list[dict]:

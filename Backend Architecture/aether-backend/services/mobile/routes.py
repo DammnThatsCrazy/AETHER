@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Path, Request
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Path, Query, Request
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from config.settings import settings
 from shared.auth.auth import TenantContext
 from shared.common.common import APIResponse, NotFoundError
+from services.mobile.config import DISTRIBUTION_PROFILES
 
 from services.mobile import service as mobile_service
 
@@ -47,6 +48,17 @@ class RegistrationRequest(BaseModel):
     device_name: Optional[str] = None
     push_token: Optional[str] = None
     push_provider: Optional[str] = None
+    app_version: Optional[str] = None
+    distribution_profile: Optional[str] = None
+
+    @field_validator("distribution_profile")
+    @classmethod
+    def _distribution_profile(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in DISTRIBUTION_PROFILES:
+            raise ValueError(
+                f"distribution_profile must be one of {', '.join(DISTRIBUTION_PROFILES)}"
+            )
+        return v
 
 
 class SubscriptionRequest(BaseModel):
@@ -80,7 +92,27 @@ async def register_installation(request: Request, payload: RegistrationRequest) 
         device_name=payload.device_name,
         push_token=payload.push_token,
         push_provider=payload.push_provider,
+        app_version=payload.app_version,
+        distribution_profile=payload.distribution_profile,
     )
+    return APIResponse(data=result)
+
+
+@router.get("/config")
+async def get_mobile_config(request: Request, installation_id: str = Query(...)) -> APIResponse:
+    """Return the typed MobileConfig for the requesting installation.
+
+    Scoped to the authenticated tenant. Returns 404 when ``mobile.enabled`` is
+    OFF (via ``_tenant`` → ``_require_enabled``, mirroring the other gateway
+    routes) and 404 when the installation does not exist in the tenant scope.
+    """
+    tenant = _tenant(request, "read")
+    result = await mobile_service.get_config(
+        scope=mobile_service.tenant_scope(tenant.tenant_id),
+        installation_id=installation_id,
+    )
+    if result is None:
+        raise NotFoundError("installation not found")
     return APIResponse(data=result)
 
 

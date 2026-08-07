@@ -395,13 +395,22 @@ generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts
 # ---------------------------------------------------------------------------
 # Mobile / continuity / notification productization gates (program C0-C8)
 # ---------------------------------------------------------------------------
-.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test mobile-app-typecheck mobile-app-test
+.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test mobile-app-typecheck mobile-app-test mobile-compliance-check
+
+mobile-compliance-check: ## CI gate — mobile compliance umbrella: privacy manifests + DSR coverage + contract parity + distribution-profile + SDK conformance
+	$(MAKE) privacy-manifest-check
+	$(MAKE) dsr-coverage-check
+	$(MAKE) mobile-contracts-check
+	$(MAKE) mobile-build-check
+	$(GATE_PY) scripts/release/sdk_conformance.py --quiet
 
 mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
 	npm run typecheck --workspace=packages/mobile-core --if-present
+	npm run typecheck --workspace=packages/mobile-ui --if-present
 
 mobile-test: ## CI gate — unit tests for the mobile SDK packages
 	npm run test --workspace=packages/mobile-core --if-present
+	npm run test --workspace=packages/mobile-ui --if-present
 
 mobile-app-typecheck: ## CI gate — TypeScript typecheck of the Expo app shells (needs mobile-core dist, gitignored)
 	npm run build --workspace=packages/mobile-core
@@ -411,6 +420,9 @@ mobile-app-typecheck: ## CI gate — TypeScript typecheck of the Expo app shells
 mobile-app-test: ## CI gate — app-level unit tests (no-op until C5 screens land tests in M3/M4; kept --if-present)
 	npm run test --workspace=apps/aether-mobile --if-present
 	npm run test --workspace=apps/kyber-mobile --if-present
+
+delivery-safety-check: ## CI gate — D11 delivery-safety validator (unsafe delivery patterns fail the build)
+	$(GATE_PY) scripts/release/validate_delivery_safety.py
 
 mobile-build-check: ## Mobile app scaffold invariants + honest native-build posture (report; exit 0 unless a scaffold is broken)
 	python scripts/mobile_build_check.py

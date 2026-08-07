@@ -60,3 +60,16 @@ export {
 
 export type { CryptoProvider, PkcePair, SecureStore } from './auth';
 export { createPkcePair, SecureStoreAuthProvider } from './auth';
+
+// Read-only offline cache (platform-agnostic; storage injected by the host app).
+export type {
+  CacheEntry,
+  CacheState,
+  CacheStorage,
+  CachedRead,
+  OfflineCache,
+  OfflineCacheOptions,
+  ReadOfflineOptions,
+  WriteOfflineOptions,
+} from './offline';
+export { createOfflineCache } from './offline';

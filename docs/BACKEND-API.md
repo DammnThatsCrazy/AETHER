@@ -2316,7 +2316,7 @@ Returns the last 50 canary detection events with API key (masked), IP, canary ID
 
 ## Notification Intelligence Service (v8.8.0)
 
-Event-driven multi-channel operator notification pipeline. Ingests intelligence signals from Kafka (anomaly detection, CIS quarantine, agent escalation, ML extraction, governance, commerce approvals), routes them to Slack/Discord/Telegram/Webhook, and surfaces an operator review queue with RBAC-gated approve/suppress/escalate/annotate actions.
+Event-driven multi-channel operator notification pipeline. Ingests intelligence signals from Kafka (anomaly detection, CIS quarantine, agent escalation, ML extraction, governance, commerce approvals), routes them to Slack/Discord/Telegram/Webhook + mobile push (APNs/FCM), and surfaces an operator review queue with RBAC-gated approve/suppress/escalate/annotate actions. Mobile push delivery carries only a redacted projection (decision-log D11) built at notification creation: `push_title`/`push_body`/`push_summary` with amounts and PII replaced by `[redacted]`, plus a routing-only `push_deep_link_class` — raw payload never ships on a push.
 
 ### Intelligence Notifications
 
