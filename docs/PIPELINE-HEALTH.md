@@ -14,7 +14,7 @@ related:
   - reliability/queue-worker-health
 canonical_owner: platform@aether
 estimated_read_minutes: 3
-last_synced_commit: "99da74c0"
+last_synced_commit: "559be979"
 ---
 # Pipeline Health
 
