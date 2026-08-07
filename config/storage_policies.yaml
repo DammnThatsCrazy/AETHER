@@ -6099,3 +6099,25 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: true
+  # Enterprise pre-sales inquiries (services/contact/routes.py): prospect PII
+  # submitted directly to the sales team; the durable record of the inbound
+  # lead. Deliberately NOT tenant-scoped and excluded from
+  # TENANT_SCOPED_REPOSITORY_REGISTRY, so the account-erasure workflow never
+  # deletes it. Standard retention; a data-subject erasure request is a
+  # hard delete.
+  - resource_type: enterprise_inquiries
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false

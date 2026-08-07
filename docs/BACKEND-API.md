@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "4d73f40"
+last_synced_commit: "12162c4b"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -139,6 +139,12 @@ permission gate beyond authentication.
 | `/v1/me/api-keys/{key_id}` | PATCH | Rename an existing API key |
 | `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
 | `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
+
+### Contact & enterprise inquiries (`/v1/contact/*`, API key required)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/contact/enterprise` | POST | Submit an enterprise inquiry. Persists the inquiry as the durable record (source of truth), then best-effort emails `ENTERPRISE_INQUIRY_EMAIL`. A persistence failure fails the request (never a fake success); an email-delivery failure is non-fatal and the inquiry is retained with a `status` marker. Inquiry PII (name/email/company/message) is written only to the database, never to application logs. |
 
 ### Self-service billing (`/v1/billing/*`)
 
