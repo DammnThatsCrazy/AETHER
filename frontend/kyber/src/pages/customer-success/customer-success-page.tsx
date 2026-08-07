@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, formatCount, useTimeContext } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, formatUSD, useTimeContext } from '@aether/ui';
 import type { LocaleContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 
 type Row = Record<string, any>;
-const money = (v: any, locale: LocaleContext) => `$${formatCount(Number(v ?? 0), locale)}`;
-const pct = (v: any) => `${Math.round(Number(v ?? 0) * 100)}%`;
+// Money and rates that are absent are unknown, not zero. Render the canonical
+// "Value unavailable" sentinel ("—") instead of coercing missing values into a
+// misleading "$0" / "0%".
+const money = (v: any, _locale: LocaleContext) => formatUSD(v as string | number | null | undefined, { fallback: '—' });
+const pct = (v: any) =>
+  v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? '—' : `${Math.round(Number(v) * 100)}%`;
 
 function Metric({ label, value }: { readonly label: string; readonly value: any }) {
   return <Card><CardContent className="p-4"><div className="text-xs text-text-muted font-mono">{label}</div><div className="text-2xl font-semibold text-text-primary">{value}</div></CardContent></Card>;

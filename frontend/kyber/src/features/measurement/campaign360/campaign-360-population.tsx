@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, formatCount, formatDate, useTimeContext } from '@aether/ui';
+import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, formatCount, formatDate, formatUSD, useTimeContext } from '@aether/ui';
 import { useCampaign360Population } from '../use-campaign-360';
 import type { PopulationType } from '@aether/shared';
 
@@ -75,7 +75,7 @@ export function Campaign360Population({ campaignId, timeStart, timeEnd }: Props)
                     { key: 'cluster_id', header: 'Cluster', render: r => r.cluster_id ? <span className="font-mono text-xs">{String(r.cluster_id).slice(0, 12)}…</span> : '—' },
                     { key: 'touchpoint_count', header: 'Touchpoints', render: r => formatCount(Number(r.touchpoint_count ?? 0), timeCtx) },
                     { key: 'conversion_count', header: 'Conversions', render: r => formatCount(Number(r.conversion_count ?? 0), timeCtx) },
-                    { key: 'attributed_revenue', header: 'Attributed $', render: r => `$${Number(r.attributed_revenue ?? 0).toFixed(2)}` },
+                    { key: 'attributed_revenue', header: 'Attributed $', render: r => formatUSD(r.attributed_revenue as string | number | null | undefined, { fallback: '—' }) },
                     { key: 'channels', header: 'Channels', render: r => (Array.isArray(r.channels) ? r.channels.join(', ') : '—') },
                     { key: 'last_activity_at', header: 'Last active', render: r => r.last_activity_at ? formatDate(String(r.last_activity_at), timeCtx) : '—' },
                   ]}

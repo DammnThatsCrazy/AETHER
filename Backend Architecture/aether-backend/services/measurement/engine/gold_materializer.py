@@ -129,9 +129,13 @@ async def materialize_campaign_performance_daily(
             "spend_usd": spend,
             "impressions": impressions,
             "clicks": clicks,
-            "cpm": (spend / impressions * 1000) if impressions > 0 else 0.0,
-            "cpc": (spend / clicks) if clicks > 0 else 0.0,
-            "ctr": (clicks / impressions) if impressions > 0 else 0.0,
+            # An undefined ratio (zero denominator) is UNKNOWN, not 0.0 — write
+            # NULL so a consumer never reads an unmeasurable rate as a real zero.
+            # The gold columns are Nullable(Float64); the substrate/measurement
+            # plane is the integrity source of truth for these rates.
+            "cpm": (spend / impressions * 1000) if impressions > 0 else None,
+            "cpc": (spend / clicks) if clicks > 0 else None,
+            "ctr": (clicks / impressions) if impressions > 0 else None,
             "conversions": conversions,
             "revenue_attributed_usd": revenue,
             "ingested_at": now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -192,6 +196,31 @@ async def materialize_campaign_performance_daily(
     return len(gold_rows)
 
 
+def _allocate_journey_campaign_spend(
+    campaign_spend: Decimal,
+    campaign_total_conversions: Decimal,
+    journey_campaign_conversions: Decimal,
+) -> Decimal:
+    """Allocate a campaign's spend to ONE journey by that journey's share of the
+    campaign's attributed conversions (attribution-credit weighted).
+
+    Conserves campaign spend across journeys instead of duplicating the full
+    campaign spend onto every journey: the journey receives
+    ``campaign_spend * (journey_conversions / campaign_total_conversions)``, and
+    the unallocated remainder stays with the campaign (residual). When the
+    campaign has no attributed conversions the journey receives 0 — never the
+    full spend. This is an ESTIMATED/allocated value, not observed.
+    """
+    if campaign_total_conversions is None or campaign_total_conversions <= 0:
+        return Decimal("0")
+    share = journey_campaign_conversions / campaign_total_conversions
+    if share < 0:
+        share = Decimal("0")
+    if share > 1:
+        share = Decimal("1")
+    return campaign_spend * share
+
+
 async def materialize_journey_economics(
     tenant_id: str,
     journey_id: str,
@@ -225,26 +254,55 @@ async def materialize_journey_economics(
     total_attributed_revenue = Decimal("0")
     total_spend = Decimal("0")
     conversion_count = 0
+    # Journey's attributed conversions per campaign — the weights used to ALLOCATE
+    # campaign spend to this journey below.
+    journey_conv_by_campaign: dict[str, Decimal] = {}
 
     for conv_id in conversion_ids:
         credits = await run_repo.list_credits_for_conversion(tenant_id, conv_id, active_only=True)
         for credit in credits:
             total_attributed_revenue += _to_decimal(credit.get("attributed_net_revenue") or "0") or Decimal("0")
+            cid = credit.get("campaign_id")
+            if cid:
+                raw_conv = (
+                    credit.get("attributed_conversions")
+                    if credit.get("attributed_conversions") is not None
+                    else (credit.get("weight") or "0")
+                )
+                conv_w = _to_decimal(raw_conv) or Decimal("0")
+                journey_conv_by_campaign[cid] = (
+                    journey_conv_by_campaign.get(cid, Decimal("0")) + conv_w
+                )
         if credits:
             conversion_count += 1
 
     started_at = _parse_ts(journey.get("started_at"))
     ended_at = _parse_ts(journey.get("ended_at")) or datetime.now(timezone.utc)
 
+    # ALLOCATE each campaign's spend to this journey by the journey's share of the
+    # campaign's attributed conversions — instead of duplicating the FULL campaign
+    # spend onto every journey (which triple-counts a shared campaign). The result
+    # is ESTIMATED/allocated, and conserves campaign spend across journeys.
     for cid in campaign_ids:
-        total_spend += await spend_repo.total_spend(
+        campaign_spend = await spend_repo.total_spend(
             tenant_id, cid,
             period_start=started_at,
             period_end=ended_at,
         )
+        summary = await run_repo.campaign_credit_summary(
+            tenant_id, cid, start_date=started_at, end_date=ended_at,
+        )
+        campaign_total_conv = _to_decimal(
+            summary.get("total_attributed_conversions") or "0"
+        ) or Decimal("0")
+        journey_conv = journey_conv_by_campaign.get(cid, Decimal("0"))
+        total_spend += _allocate_journey_campaign_spend(
+            campaign_spend, campaign_total_conv, journey_conv
+        )
 
-    roas = float(total_attributed_revenue / total_spend) if total_spend > Decimal("0") else 0.0
-    cpa = float(total_spend / conversion_count) if conversion_count > 0 else 0.0
+    # roas/cpa here are journey-level economics computed on ALLOCATED spend.
+    roas = float(total_attributed_revenue / total_spend) if total_spend > Decimal("0") else None
+    cpa = float(total_spend / conversion_count) if conversion_count > 0 else None
 
     now = datetime.now(timezone.utc)
     gold_row = {
@@ -261,7 +319,7 @@ async def materialize_journey_economics(
         "cpa_usd": cpa,
         "ltv_predicted_usd": 0.0,
         "ltv_actual_usd": float(total_attributed_revenue),
-        "aov_usd": float(total_attributed_revenue / conversion_count) if conversion_count > 0 else 0.0,
+        "aov_usd": float(total_attributed_revenue / conversion_count) if conversion_count > 0 else None,
         "repeat_count": conversion_count,
         "retarget_score": 0.0,
         "retarget_recommendation_id": None,

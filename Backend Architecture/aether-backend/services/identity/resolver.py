@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from shared.common.common import utc_now
+from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger
 
 from .audit import IdentityAuditWriter
@@ -171,6 +172,7 @@ class IdentityResolutionService:
         conflict_manager: IdentityConflictManager,
         metrics: IdentityMetrics,
         decision_evidence: Optional[IdentityDecisionEvidenceService] = None,
+        producer: Optional[EventProducer] = None,
     ) -> None:
         self._repo = repo
         self._graph = graph_writer
@@ -181,6 +183,13 @@ class IdentityResolutionService:
         # so a recording failure can never break resolution; defaults to the
         # real recorder when not supplied.
         self._decision_evidence = decision_evidence or IdentityDecisionEvidenceService()
+        # Event producer used to publish IDENTITY_MERGED for automatic auto-merges
+        # so downstream restatement fires (see _publish_identity_merged). Optional
+        # and injectable (tests pass a fake); when not supplied it is resolved
+        # lazily from the shared registry — the same producer the operator merge
+        # route publishes through — because routes.py builds this service without
+        # one. See _resolve_producer.
+        self._producer = producer
 
     # ── Main entry point ──────────────────────────────────────────────────
 
@@ -445,6 +454,7 @@ class IdentityResolutionService:
 
         # ── 10. Merge entities if approved ───────────────────────────────
         merge_event_id: Optional[str] = None
+        auto_merged_from_ids: list[str] = []
         if policy_result.decision == MergeDecision.MERGE and policy_result.merge_target_entity_id:
             for from_id in existing_entity_ids:
                 if from_id == canonical_entity_id:
@@ -463,6 +473,25 @@ class IdentityResolutionService:
                     tenant_id, from_id, canonical_entity_id
                 )
                 self._metrics.record_merge(tenant_id=tenant_id)
+                auto_merged_from_ids.append(from_id)
+
+            # Publish IDENTITY_MERGED for every entity folded into the survivor.
+            # The operator merge route (services/identity/routes.py::merge_identities)
+            # publishes this event, but the in-line auto-merge above previously did
+            # not — so automatic deterministic auto-merges during ingestion never
+            # triggered the downstream measurement / semantic restatement consumers
+            # (Topic.IDENTITY_MERGED). Emit the same event here so restatement fires
+            # for auto-merges too.
+            if auto_merged_from_ids:
+                await self._publish_identity_merged(
+                    tenant_id=tenant_id,
+                    canonical_entity_id=canonical_entity_id,
+                    merged_from_ids=auto_merged_from_ids,
+                    confidence=policy_result.confidence,
+                    confidence_tier=policy_result.confidence_tier,
+                    reason_codes=policy_result.reason_codes,
+                    event_id=event_id,
+                )
 
         # ── 11. Create conflict if ambiguous ──────────────────────────────
         conflict_id: Optional[str] = None
@@ -567,6 +596,85 @@ class IdentityResolutionService:
         )
 
         return decision_obj
+
+    def _resolve_producer(self) -> Optional[EventProducer]:
+        """Return the event producer, falling back to the shared registry.
+
+        routes.py constructs this service without a producer, so when one was
+        not injected obtain the process-wide producer the operator merge route
+        publishes through (``dependencies.providers.get_producer`` → the
+        ``ResourceRegistry`` singleton). The import is deferred to keep the
+        resolver import-light and free of any provider import cycle. A lookup
+        failure degrades to no-publish rather than raising — restatement
+        triggering must never break resolution.
+        """
+        if self._producer is not None:
+            return self._producer
+        try:
+            from dependencies.providers import get_producer
+
+            self._producer = get_producer()
+        except Exception as exc:  # noqa: BLE001 - never break resolution
+            logger.warning(
+                "identity resolver could not obtain an event producer: %s", exc
+            )
+            return None
+        return self._producer
+
+    async def _publish_identity_merged(
+        self,
+        *,
+        tenant_id: str,
+        canonical_entity_id: str,
+        merged_from_ids: list[str],
+        confidence: float,
+        confidence_tier: Any,
+        reason_codes: list[str],
+        event_id: str,
+    ) -> None:
+        """Publish one IDENTITY_MERGED event per entity folded into the survivor.
+
+        Mirrors the payload the operator merge route
+        (services/identity/routes.py::merge_identities) publishes — survivor as
+        ``primary_entity_id`` and consumed entity as ``secondary_entity_id`` —
+        so the downstream measurement + semantic restatement consumers that
+        subscribe to ``Topic.IDENTITY_MERGED`` recompute journeys/attribution
+        and Gold semantic state for auto-merges exactly as they do for operator
+        merges.
+
+        Best-effort and fail-safe: the merge is already durably recorded by the
+        time this runs, so a producer/bus error is logged and swallowed rather
+        than propagated into resolution (where ``resolve_event``'s guard would
+        otherwise discard the whole decision as an internal error).
+        """
+        producer = self._resolve_producer()
+        if producer is None:
+            return
+        reason = reason_codes[0] if reason_codes else "auto_merge"
+        tier_value = getattr(confidence_tier, "value", confidence_tier)
+        for from_id in merged_from_ids:
+            try:
+                await producer.publish(Event(
+                    topic=Topic.IDENTITY_MERGED,
+                    tenant_id=tenant_id,
+                    source_service="identity",
+                    payload={
+                        "primary_entity_id": canonical_entity_id,
+                        "secondary_entity_id": from_id,
+                        "canonical_entity_id": canonical_entity_id,
+                        "reason": reason,
+                        "reason_codes": list(reason_codes),
+                        "confidence": confidence,
+                        "confidence_tier": tier_value,
+                        "auto_merge": True,
+                        "source_event_ids": [event_id] if event_id else [],
+                    },
+                ))
+            except Exception as exc:  # noqa: BLE001 - restatement must never break ingestion
+                logger.warning(
+                    "failed to publish IDENTITY_MERGED for auto-merge %s -> %s: %s",
+                    from_id, canonical_entity_id, exc,
+                )
 
     async def _record_decision_evidence(
         self,

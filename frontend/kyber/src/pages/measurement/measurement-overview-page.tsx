@@ -1,9 +1,18 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, useTimeContext } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatUSD } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useMeasurementOverview } from '@kyber/features/measurement';
 import { useState } from 'react';
 
 type Row = Record<string, unknown>;
+
+// A canonical coverage ratio that is absent is unknown, not 0%. Render "—"
+// rather than coercing a missing rate into a misleading "0%".
+function fmtCoverage(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${Math.round(n * 100)}%`;
+}
 
 function Metric({ label, value, sub }: { readonly label: string; readonly value: unknown; readonly sub?: string }) {
   return (
@@ -32,7 +41,6 @@ function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'defa
 export function MeasurementOverviewPage() {
   const [window, setWindow] = useState('30d');
   const { data, loading, error } = useMeasurementOverview(window);
-  const timeCtx = useTimeContext();
 
   if (loading) return <PageWrapper title="Measurement Overview"><LoadingState lines={8} /></PageWrapper>;
   if (error) return <PageWrapper title="Measurement Overview"><ErrorState title="Unable to load measurement data" message={error} /></PageWrapper>;
@@ -59,16 +67,16 @@ export function MeasurementOverviewPage() {
       }
     >
       <section aria-label="Performance metrics" className="grid gap-4 md:grid-cols-4">
-        <Metric label="Total spend" value={`$${formatCount(Number(overview.campaign_spend?.usd_amount ?? 0), timeCtx)}`} />
-        <Metric label="Attributed revenue" value={`$${formatCount(Number(overview.attributed_revenue?.usd_amount ?? 0), timeCtx)}`} />
+        <Metric label="Total spend" value={formatUSD(overview.campaign_spend?.usd_amount as string | number | null | undefined, { fallback: '—' })} />
+        <Metric label="Attributed revenue" value={formatUSD(overview.attributed_revenue?.usd_amount as string | number | null | undefined, { fallback: '—' })} />
         <Metric label="ROAS" value={overview.roas ? `${Number(overview.roas).toFixed(2)}x` : '—'} sub="Actual spend basis" />
         <Metric label="Entities tracked" value={overview.entity_count ?? 0} />
       </section>
 
       <section aria-label="Data quality metrics" className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Metric label="Attribution coverage" value={`${Math.round(Number(quality.attribution_coverage ?? 0) * 100)}%`} sub="Conversions with active run" />
-        <Metric label="Identity coverage" value={`${Math.round(Number(quality.identity_coverage ?? 0) * 100)}%`} sub="Touchpoints linked to profile" />
-        <Metric label="Spend coverage" value={`${Math.round(Number(quality.spend_coverage ?? 0) * 100)}%`} sub="Campaign days with spend records" />
+        <Metric label="Attribution coverage" value={fmtCoverage(quality.attribution_coverage)} sub="Conversions with active run" />
+        <Metric label="Identity coverage" value={fmtCoverage(quality.identity_coverage)} sub="Touchpoints linked to profile" />
+        <Metric label="Spend coverage" value={fmtCoverage(quality.spend_coverage)} sub="Campaign days with spend records" />
       </section>
 
       {warnings.length > 0 && (

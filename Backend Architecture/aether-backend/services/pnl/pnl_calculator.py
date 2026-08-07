@@ -40,6 +40,10 @@ class FIFOLedger:
     """Tracks cost basis lots per token address for FIFO realized PNL."""
     lots: deque[CostBasisLot] = field(default_factory=deque)
     realized_pnl: Decimal = Decimal("0")
+    # Set when a sell could not be fully matched to buy lots (missing opening
+    # lots / incomplete history) — realized PNL is then an UNDER-estimate and the
+    # caller must downgrade data_confidence rather than report it as exact.
+    insufficient_basis: bool = False
 
     def buy(self, quantity: Decimal, price_per_unit: Decimal, acquired_at: datetime) -> None:
         """Add a buy lot."""
@@ -48,7 +52,8 @@ class FIFOLedger:
     def sell(self, quantity: Decimal, sale_price_per_unit: Decimal) -> Decimal:
         """
         Process a sell using FIFO matching.
-        Returns realized PNL for this sale. Marks data as incomplete if lots run out.
+        Returns realized PNL for this sale. Flags ``insufficient_basis`` if the
+        sold quantity exceeds known buy lots (so confidence can be downgraded).
         """
         remaining = quantity
         realized = Decimal("0")
@@ -60,6 +65,10 @@ class FIFOLedger:
             remaining -= matched
             if lot.quantity == 0:
                 self.lots.popleft()
+        if remaining > 0:
+            # Sold more than we have basis for — do NOT invent a zero-cost lot
+            # (which would overstate realized PNL). Record the shortfall.
+            self.insufficient_basis = True
         self.realized_pnl += realized
         return realized
 
@@ -75,14 +84,17 @@ class PNLResult:
     window_days: int | None
     realized_pnl_usd: Decimal
     unrealized_pnl_usd: Decimal
+    # tvl_delta and best/worst "day" are BALANCE-SNAPSHOT changes (deposits +
+    # withdrawals + price moves), i.e. TVL change — NOT realized P&L. They are a
+    # flow/position proxy, not performance; consumers must not label them P&L.
     tvl_delta_usd: Decimal
-    tvl_delta_pct: float
+    tvl_delta_pct: float | None   # None when opening TVL is 0 (undefined, not 0%)
     best_day_pnl_usd: Decimal | None
     best_day_date: str | None
     worst_day_pnl_usd: Decimal | None
     worst_day_date: str | None
     cost_basis_method: str
-    data_confidence: str   # 'exact' or 'estimated'
+    data_confidence: str   # 'exact' | 'estimated' | 'unavailable'
     daily_series: list[dict[str, Any]]
 
 
@@ -126,7 +138,8 @@ class PNLCalculator:
             entity_id, tenant_id, window_start, now
         )
         tvl_delta_usd = tvl_end - tvl_start
-        tvl_delta_pct = float(tvl_delta_usd / tvl_start * 100) if tvl_start else 0.0
+        # Zero opening TVL => the percentage is UNDEFINED (None), never 0%.
+        tvl_delta_pct = float(tvl_delta_usd / tvl_start * 100) if tvl_start else None
 
         # Compute realized PNL via FIFO
         realized_pnl, data_confidence = await self._compute_realized_pnl(
@@ -233,7 +246,9 @@ class PNLCalculator:
             )
         except Exception as exc:
             logger.error(f"PNL tx query failed for {entity_id}: {exc}")
-            return Decimal("0"), "estimated"
+            # Query failure is NOT a flat/zero P&L — signal unavailability so the
+            # caller does not present 0 as a real, trustworthy value.
+            return Decimal("0"), "unavailable"
 
         # FIFO ledgers keyed by token_address
         ledgers: dict[str, FIFOLedger] = {}
@@ -244,9 +259,16 @@ class PNLCalculator:
             if token_key not in ledgers:
                 ledgers[token_key] = FIFOLedger()
 
-            amount = Decimal(str(row.get("token_amount") or 0))
-            value = Decimal(str(row.get("value_usd") or 0))
-            if amount == 0:
+            raw_amount = row.get("token_amount")
+            raw_value = row.get("value_usd")
+            # A missing cost/value must NOT become a zero-priced lot (which would
+            # corrupt the cost basis). Skip it and mark the result estimated.
+            if raw_amount is None or raw_value is None:
+                data_confidence = "estimated"
+                continue
+            amount = Decimal(str(raw_amount))
+            value = Decimal(str(raw_value))
+            if amount == 0 or value == 0:
                 continue
             price_per_unit = value / amount
 
@@ -265,6 +287,10 @@ class PNLCalculator:
                     ledgers[token_key].sell(abs(amount), price_per_unit)
 
         total_realized = sum(ledger.realized_pnl for ledger in ledgers.values())
+        # If any token sold beyond its known basis (missing opening lots), the
+        # realized PNL is an under-estimate — downgrade confidence.
+        if any(ledger.insufficient_basis for ledger in ledgers.values()):
+            data_confidence = "estimated"
         return total_realized, data_confidence
 
     async def _compute_unrealized_pnl(self, entity_id: str) -> Decimal:

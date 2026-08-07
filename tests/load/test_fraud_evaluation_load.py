@@ -193,7 +193,8 @@ async def test_concurrent_evaluation_throughput():
 
 @pytest.mark.asyncio
 async def test_failure_never_becomes_clear():
-    """When repository raises, the decision must NOT be 'clear' — it must be 'monitor'."""
+    """When repository raises, the decision must FAIL CLOSED — routed to human
+    review, never a benign/cleared outcome (allow/monitor/clear)."""
     from services.fraud.evaluation import FraudEvaluationService
 
     svc = FraudEvaluationService.__new__(FraudEvaluationService)
@@ -215,10 +216,15 @@ async def test_failure_never_becomes_clear():
             subject_type="entity",
             subject_id=f"failing-{_uid()}",
         )
-        assert decision.decision == "monitor", (
-            "Evaluation failure must produce 'monitor', never 'allow'/'review'/'block' — "
-            f"got: {decision.decision!r}, state: {decision.evaluation_state!r}"
+        # Fail CLOSED: failure routes to human review, never a benign/cleared
+        # outcome. (Previously this defaulted to 'monitor', which reads as clear.)
+        assert decision.decision == "review", (
+            "Evaluation failure must fail closed to 'review', never a benign "
+            f"allow/monitor/clear — got: {decision.decision!r}, "
+            f"state: {decision.evaluation_state!r}"
         )
+        assert decision.decision not in ("allow", "clear", "monitor")
+        assert decision.review_state == "required"
         assert decision.evaluation_state == "failed"
 
 

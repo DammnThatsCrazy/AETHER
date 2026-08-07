@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "41c79d4"
+last_synced_commit: "bb1aef2"
 ---
 # Aether Identity Resolution v8.12.0 — Technical Guide
 
@@ -60,7 +60,7 @@ Resolution Consumer (real-time)
     |
     +-- 5. Run deterministic signals
     |      |
-    |      +-- Match found? --> AUTO MERGE
+    |      +-- Match found? --> AUTO MERGE (publishes IDENTITY_MERGED)
     |      |
     |      +-- No match --> Queue for batch
     |

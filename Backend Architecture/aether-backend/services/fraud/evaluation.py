@@ -68,6 +68,90 @@ _MAX_RECURSION_DEPTH = 1       # prevent evaluation loops
 DETECTOR_VERSION = "1.0.0"
 POLICY_VERSION = "v1"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Signal weighting (uncalibrated heuristic — NOT a calibrated probability)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The composite risk_score below is a HANDCRAFTED heuristic: a bounded weighted
+# sum of the *distinct detector signal types* that fired. It is not fit against
+# real labeled fraud outcomes, so it must not be read as P(fraud) — only as a
+# relative triage ordering. ``SIGNAL_WEIGHTS_VERSION`` versions this weight
+# scheme and is persisted on every decision so a stored score is always
+# traceable to the formula that produced it. Bump it whenever a weight, a
+# family grouping, or the damping factor changes.
+#
+# v1.0.0 → naive ``len(distinct signal_types) * 10`` (+25 circular). Each
+#          distinct type added weight independently, which double-counts
+#          structurally-correlated signals (shared IP + shared device + shared
+#          wallet all co-occur for a single household / NAT / device farm;
+#          circular_transfer and split_merge are two views of one layering
+#          topology).
+# v1.1.0 → group signals into structural families and apply diminishing returns
+#          to correlated siblings within a family, so correlated evidence is not
+#          naively additively double-counted. Independent families still add.
+SIGNAL_WEIGHTS_VERSION = "1.1.0"
+
+# Points contributed by the first (strongest) signal in each structural family.
+_SIGNAL_BASE_WEIGHT = 10.0
+
+# Structurally-correlated signals share a family. Members of the same family
+# tend to co-occur for a single underlying cause, so their contributions must
+# not be summed at full weight.
+_SIGNAL_FAMILIES: dict[str, str] = {
+    # Shared-infrastructure / co-location: common in households, NAT gateways,
+    # shared Wi-Fi, and device farms — structurally correlated, not independent.
+    "shared_ip": "co_location",
+    "shared_device": "co_location",
+    "shared_wallet": "co_location",
+    # Fund-layering topology: circular transfers and split/merge are two lenses
+    # on the same movement pattern.
+    "circular_transfer": "layering",
+    "split_merge": "layering",
+    # Coordinated multi-account behaviour.
+    "reward_farming": "coordination",
+    "agentic_delegation_abuse": "coordination",
+    # Standalone.
+    "commerce_abuse": "commerce",
+}
+
+# Weight multiplier applied to the 2nd, 3rd, … distinct signal *within the same
+# family*. < 1.0 => correlated siblings contribute with diminishing returns
+# instead of full additive weight.
+_CORRELATED_SIGNAL_DAMPING = 0.4
+
+# Extra weight for a confirmed circular-transfer topology (high-severity,
+# genuinely distinct evidence of laundering intent).
+_CIRCULAR_TRANSFER_BONUS = 25.0
+
+
+def compute_signal_risk_score(signal_types: list[str]) -> float:
+    """Composite risk score in [0, 100] from the distinct detector signal types.
+
+    This is an UNCALIBRATED heuristic (see ``SIGNAL_WEIGHTS_VERSION``), not a
+    probability. Signals are grouped into structural families; the first signal
+    in a family contributes ``_SIGNAL_BASE_WEIGHT`` and each additional
+    correlated sibling is damped by ``_CORRELATED_SIGNAL_DAMPING``. This stops
+    structurally-correlated evidence (shared IP/device/wallet; circular +
+    split_merge) from being naively additively double-counted, while genuinely
+    independent families still add their full base weight.
+    """
+    distinct = set(signal_types)
+
+    by_family: dict[str, int] = {}
+    for signal in distinct:
+        family = _SIGNAL_FAMILIES.get(signal, signal)
+        by_family[family] = by_family.get(family, 0) + 1
+
+    base = 0.0
+    for count in by_family.values():
+        # First (strongest) signal at full weight; correlated siblings damped.
+        base += _SIGNAL_BASE_WEIGHT
+        base += _SIGNAL_BASE_WEIGHT * _CORRELATED_SIGNAL_DAMPING * (count - 1)
+
+    base = min(base, 100.0)
+    circular_bonus = _CIRCULAR_TRANSFER_BONUS if "circular_transfer" in distinct else 0.0
+    return round(min(base + circular_bonus, 100.0), 4)
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -303,10 +387,11 @@ class FraudEvaluationService:
             for signal, _, detail in all_results
         ]
 
-        # Score: 10 pts per signal, capped at 100; circular transfer adds 25
-        base = min(len(signal_types) * 10.0, 100.0)
-        circular_bonus = 25.0 if "circular_transfer" in signal_types else 0.0
-        risk_score = min(base + circular_bonus, 100.0)
+        # Composite risk score (UNCALIBRATED heuristic, versioned by
+        # SIGNAL_WEIGHTS_VERSION): structurally-correlated signal families are
+        # damped so shared IP/device/wallet and circular/split_merge are not
+        # naively additively double-counted. See compute_signal_risk_score.
+        risk_score = compute_signal_risk_score(signal_types)
 
         risk_tier = risk_tier_from_score(risk_score)
         outcome = decision_from_score(risk_score)
@@ -341,7 +426,7 @@ class FraudEvaluationService:
             evidence_refs=evidence_refs,
             machine_explanation=explanation,
             detector_versions={"all_detectors": DETECTOR_VERSION},
-            model_versions={},
+            model_versions={"signal_weights": SIGNAL_WEIGHTS_VERSION},
             policy_version=POLICY_VERSION,
             evaluation_state="evaluated",
             evaluated_at=now,
@@ -357,6 +442,10 @@ class FraudEvaluationService:
                 "reward_event_count": len(reward_events),
                 "order_count": len(orders),
                 "refund_count": len(refunds),
+                # Traceability: which weight scheme produced this risk_score, and
+                # a truthful note that the score is not a calibrated probability.
+                "signal_weights_version": SIGNAL_WEIGHTS_VERSION,
+                "risk_score_kind": "uncalibrated_heuristic",
             },
             created_at=now,
             updated_at=now,
@@ -388,13 +477,21 @@ class FraudEvaluationService:
             tenant_id=tenant_id,
             subject_type=subject_type,
             subject_id=subject_id,
-            decision="monitor",
+            # Fail CLOSED: an evaluation failure must NOT silently become a
+            # benign/cleared outcome. Route to human review with an elevated
+            # (undetermined) tier rather than defaulting to monitor+low+score 0,
+            # which read as "clear". risk_score is not a computed assessment here.
+            decision="review",
             risk_score=0.0,
-            risk_tier="low",
+            risk_tier="medium",
+            review_state="required",
             evaluation_state="failed",
             evaluated_at=now,
             valid_from=now,
-            machine_explanation="Evaluation failed; defaulting to monitor pending retry.",
+            machine_explanation=(
+                "Evaluation failed; fail-closed to human review (not cleared). "
+                "risk_score is not a computed assessment."
+            ),
             created_at=now,
             updated_at=now,
         )
