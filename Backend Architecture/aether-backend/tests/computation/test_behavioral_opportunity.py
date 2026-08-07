@@ -219,7 +219,7 @@ async def test_source_shadow_absence_confidence_marked_heuristic():
         tenant_id=tenant,
     )
     # Backdate the record past the freshness SLA (insert() stamps updated_at=now).
-    for rec in await silver_identity.get_entity(user, "wallet"):
+    for rec in await silver_identity.get_entity(user, "wallet", tenant_id=tenant):
         rec["updated_at"] = _iso(120)
 
     sig = await compute_source_shadow(user, tenant)
