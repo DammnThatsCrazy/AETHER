@@ -11,12 +11,34 @@ import hashlib
 import uuid
 from typing import Optional
 
+from datetime import timedelta
+
 from repositories.repos import BaseRepository, AnalyticsRepository
 from repositories.lake import silver_identity, silver_onchain, silver_social
 from shared.graph.graph import GraphClient
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
+from shared.temporal import ensure_aware_utc, parse_instant_strict
 from services.behavioral.signals import SignalFamily
+
+# Dynamic freshness SLA — a source is "stale" when its latest observation is
+# older than this many days, computed against the CURRENT time. Never a
+# hardcoded calendar date (which silently rots everything past a fixed day).
+SOURCE_FRESHNESS_SLA_DAYS = 45
+
+
+def _is_source_stale(
+    last_update_iso: Optional[str], *, sla_days: int = SOURCE_FRESHNESS_SLA_DAYS
+) -> Optional[bool]:
+    """True when ``last_update`` is older than the SLA; None when the timestamp is
+    absent or unparseable (unknown freshness is neither fresh nor stale)."""
+    if not last_update_iso:
+        return None
+    try:
+        ts = ensure_aware_utc(parse_instant_strict(last_update_iso))
+    except Exception:
+        return None
+    return (utc_now() - ts) > timedelta(days=sla_days)
 
 logger = get_logger("aether.behavioral.engines")
 
@@ -310,11 +332,13 @@ async def compute_source_shadow(
     if not domain_recency:
         return None
 
-    # Check for domains with stale data
+    # Check for domains with stale data against a dynamic freshness SLA
+    # (not a hardcoded calendar date). Unknown freshness is treated as active
+    # rather than asserting staleness we cannot support.
     stale_domains = []
     active_domains = []
     for domain, last_update in domain_recency.items():
-        if last_update < "2026-03-01":
+        if _is_source_stale(last_update) is True:
             stale_domains.append(domain)
         else:
             active_domains.append(domain)

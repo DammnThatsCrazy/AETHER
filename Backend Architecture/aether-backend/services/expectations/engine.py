@@ -13,12 +13,32 @@ from __future__ import annotations
 
 from typing import Optional
 
+from datetime import timedelta
+
 from repositories.repos import BaseRepository, AnalyticsRepository
 from repositories.lake import silver_identity, silver_onchain, silver_social
 from shared.graph.graph import GraphClient, VertexType
 from shared.cache.cache import CacheClient
 from shared.logger.logger import get_logger, metrics
 from shared.common.common import utc_now
+from shared.temporal import ensure_aware_utc, parse_instant_strict
+
+# Dynamic freshness SLA — source silence is judged against the CURRENT time, not
+# a hardcoded calendar date.
+SOURCE_FRESHNESS_SLA_DAYS = 45
+
+
+def _is_source_stale(
+    last_update_iso: Optional[str], *, sla_days: int = SOURCE_FRESHNESS_SLA_DAYS
+) -> Optional[bool]:
+    """True when ``last_update`` is older than the SLA; None when absent/unparseable."""
+    if not last_update_iso:
+        return None
+    try:
+        ts = ensure_aware_utc(parse_instant_strict(last_update_iso))
+    except Exception:
+        return None
+    return (utc_now() - ts) > timedelta(days=sla_days)
 from services.expectations.models import (
     SignalType, SignalSeverity, BaselineSource, make_signal_record,
 )
@@ -221,7 +241,7 @@ class ExpectationEngine:
             last_update = latest.get("updated_at", "")
 
             # If last update is old, this might be source silence
-            if last_update and last_update < "2026-03-01":  # Stale threshold
+            if _is_source_stale(last_update) is True:  # dynamic freshness SLA
                 signal = make_signal_record(
                     entity_id=entity_id,
                     entity_type="wallet",

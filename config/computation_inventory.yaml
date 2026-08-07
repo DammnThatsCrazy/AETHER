@@ -253,11 +253,11 @@ computations:
     math_type: heuristic_score
     unit: score
     grain: subject
-    time_semantics: hardcoded calendar date (defect)
-    missing_input_behavior: everything before literal date is "stale" forever
+    time_semantics: dynamic freshness SLA vs current time (fixed)
+    missing_input_behavior: unknown freshness -> None (not stale); SLA-based staleness
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [hardcoded_staleness_date, record_position_window, probability_labeled_heuristic]
+    known_defects: [record_position_window, probability_labeled_heuristic]
     priority: P1
     proposed_definition_id: null
     migration_state: not_started
