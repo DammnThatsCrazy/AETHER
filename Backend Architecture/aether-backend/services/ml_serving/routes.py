@@ -51,6 +51,33 @@ _defense_layer = None
 _model_version_cache: dict[str, str] = {}
 
 
+def _prediction_cache_hash(
+    tenant_id: str, features: dict, consent_purposes: list
+) -> str:
+    """A digest binding the cached prediction to its tenant, feature VALUES, and
+    consent scope.
+
+    Without this, the prediction cache key was ``(model, entity_id)`` only, so two
+    different feature payloads for the same entity — or a different tenant/consent
+    scope — collided on the same cached prediction. Feature-as-of, when present in
+    the features, is included by virtue of being part of the feature payload.
+    """
+    import hashlib
+    import json
+
+    payload = json.dumps(
+        {
+            "tenant": tenant_id,
+            "features": features or {},
+            "consent": sorted(consent_purposes or []),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
 def _get_defense_layer():
     """Get the extraction defense layer. Returns None if disabled/unavailable."""
     global _defense_layer
@@ -349,7 +376,8 @@ async def predict(
     # 2. Cache lookup (versioned by artifact so promotions eventually invalidate via new key)
     if body.use_cache:
         _ver = _model_version_cache.get(canonical_id, "")
-        cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver)
+        _fhash = _prediction_cache_hash(tenant.tenant_id, body.features, body.consent_purposes)
+        cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver, contract_hash=_fhash)
         cached = await cache.get_json(cache_key)
         if cached:
             metrics.increment("ml_cache_hit", labels={"model": canonical_id})
@@ -420,7 +448,8 @@ async def predict(
             _ver = ml_result.get("artifact_version", _model_version_cache.get(canonical_id, "")) if isinstance(ml_result, dict) else _model_version_cache.get(canonical_id, "")
             if _ver:
                 _model_version_cache[canonical_id] = _ver
-            cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver)
+            _fhash = _prediction_cache_hash(tenant.tenant_id, body.features, body.consent_purposes)
+            cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver, contract_hash=_fhash)
             await cache.set_json(cache_key, prediction, TTL.PREDICTION)
 
             # 6. Publish event only after successful prediction

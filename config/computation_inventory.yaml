@@ -236,10 +236,10 @@ computations:
     unit: probability
     grain: subject
     time_semantics: feature as-of
-    missing_input_behavior: same-entity different-features collide; hardcoded grounded=1
+    missing_input_behavior: cache key now binds tenant+feature digest+consent (fixed)
     aggregation_behavior: non_aggregatable
     currency_behavior: n/a
-    known_defects: [cache_key_omits_feature_digest, hardcoded_grounded]
+    known_defects: [hardcoded_grounded]
     priority: P1
     proposed_definition_id: null
     migration_state: not_started
