@@ -1289,6 +1289,16 @@ class PaymentRailsConfig:
     legacy_webhook_route_enabled: bool = _env_bool(
         "AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED", False
     )
+    # Per-tenant, per-minute budgets for the tenant-initiated write actions
+    # (manual provider sync + manual canonical repair) so an authorized tenant
+    # cannot hammer provider polling / repair. 0 disables the limiter for that
+    # action. Fails open on a cache outage (the endpoints stay permission-gated).
+    tenant_sync_rate_limit_per_minute: int = _env_int(
+        "AETHER_PAYMENT_TENANT_SYNC_RATE_LIMIT_PER_MINUTE", 20
+    )
+    tenant_repair_rate_limit_per_minute: int = _env_int(
+        "AETHER_PAYMENT_TENANT_REPAIR_RATE_LIMIT_PER_MINUTE", 10
+    )
 
 
 @dataclass(frozen=True)

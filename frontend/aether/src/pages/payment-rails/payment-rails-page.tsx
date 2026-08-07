@@ -25,13 +25,19 @@ import {
   useFundingSession,
   useReconciliationRecords,
   usePaymentRailHealth,
+  useTenantDiagnostics,
   useProviderStatus,
   useSyncProvider,
   useRepairCanonicalBacklog,
 } from '@aether-app/features/payment-rails';
 import type {
   FundingSessionRecord,
+  FundingReceiptRecord,
+  SessionDeliveryRecord,
   PaymentRailHealthRecord,
+  TenantProviderDiagnostics,
+  TenantBacklogs,
+  CredentialSlotState,
   CanonicalBacklogRepairResult,
 } from '@aether-app/features/payment-rails';
 import { isPaymentCanonicalRepairEnabled } from '@aether-app/lib/env';
@@ -46,8 +52,11 @@ import {
   formatDateTime,
   formatMatchedRate,
   formatNativeAmount,
+  humanizeSeconds,
   providerLabel,
 } from './payment-rails-shared';
+import type { ProviderHealthStatus } from './payment-rails-shared';
+import type { PaymentRailProvider as PaymentRailProviderType } from '@aether/shared';
 
 const PROVIDER_OPTIONS = [
   { value: '', label: 'All providers' },
@@ -170,7 +179,7 @@ interface SessionDetailDrawerProps {
 
 function SessionDetailDrawer({ sessionId, onClose }: SessionDetailDrawerProps) {
   const timeCtx = useTimeContext();
-  const { session, loading, error, refresh } = useFundingSession(sessionId);
+  const { session, receipts, delivery, loading, error, refresh } = useFundingSession(sessionId);
   const { records } = useReconciliationRecords();
   const { status: adapterStatus } = useProviderStatus(session?.provider ?? null);
 
@@ -336,6 +345,66 @@ function SessionDetailDrawer({ sessionId, onClose }: SessionDetailDrawerProps) {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>Delivery lifecycle</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!delivery && receipts.length === 0 ? (
+                <p className="text-xs text-text-muted">
+                  No delivery receipt recorded for this session yet.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <DetailField label="Stage" value={delivery?.stage ?? receipts[0]?.current_stage} />
+                    <DetailField
+                      label="Canonical events"
+                      value={String((delivery?.canonical_event_ids ?? receipts[0]?.canonical_event_ids ?? []).length)}
+                    />
+                    <DetailField label="Outbox record" value={delivery?.outbox_record_id ?? receipts[0]?.outbox_record_id} />
+                    <DetailField label="Outbox state" value={delivery?.outbox_publication_state ?? receipts[0]?.outbox_publication_state} />
+                    <DetailField
+                      label="Repair eligible"
+                      value={delivery ? String(delivery.repair_eligible) : undefined}
+                      mono={false}
+                    />
+                    <DetailField
+                      label="Repair attempts"
+                      value={String(delivery?.repair_attempts ?? receipts[0]?.repair_attempts ?? 0)}
+                    />
+                    <DetailField label="Last error" value={delivery?.last_error_classification ?? receipts[0]?.last_error_classification} />
+                  </div>
+                  {receipts.length > 0 && (
+                    <div>
+                      <div className="text-xs text-text-muted font-mono mb-1.5">Receipts</div>
+                      <table className="w-full text-xs font-mono">
+                        <thead>
+                          <tr className="border-b border-border-default text-text-muted">
+                            <th className="py-1 pr-2 text-left font-medium">Receipt</th>
+                            <th className="py-1 pr-2 text-left font-medium">Stage</th>
+                            <th className="py-1 text-right font-medium">Proc/Repair</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {receipts.map((r: FundingReceiptRecord) => (
+                            <tr key={r.receipt_id} className="border-b border-border-subtle last:border-0">
+                              <td className="py-1 pr-2 text-text-primary">{r.receipt_id.slice(0, 12)}…</td>
+                              <td className="py-1 pr-2">{r.current_stage}</td>
+                              <td className="py-1 text-right text-text-muted">
+                                {r.processing_attempts}/{r.repair_attempts}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-2 gap-3 text-xs">
             <DetailField label="Created" value={formatDateTime(session.created_at, timeCtx)} mono={false} />
             <DetailField label="Updated" value={formatDateTime(session.updated_at, timeCtx)} mono={false} />
@@ -486,6 +555,119 @@ function CanonicalDeliveryCard() {
   );
 }
 
+function SlotBadge({ slot }: { readonly slot: CredentialSlotState }) {
+  const variant = slot.configured ? 'success' : slot.required ? 'danger' : 'default';
+  return (
+    <div className="flex items-center justify-between text-xs font-mono">
+      <span className="text-text-muted">
+        {slot.slot_name}
+        {slot.required ? ' *' : ''}
+      </span>
+      <Badge variant={variant} size="sm">
+        {slot.configured ? (slot.state ?? 'configured') : 'missing'}
+      </Badge>
+    </div>
+  );
+}
+
+function ProviderDiagnosticsCard({ entry }: { readonly entry: TenantProviderDiagnostics }) {
+  const { adapter, health } = entry;
+  return (
+    <Card>
+      <CardContent className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-text-primary">
+            {providerLabel(entry.provider as PaymentRailProviderType)}
+          </span>
+          <ProviderHealthBadge status={health.status as ProviderHealthStatus} />
+        </div>
+        <HealthStat label="Environment" value={adapter.environment ?? '—'} />
+        <HealthStat
+          label="Webhook endpoint"
+          value={adapter.webhook_endpoint_registered ? 'registered' : 'not registered'}
+          tone={adapter.webhook_endpoint_registered ? 'success' : 'default'}
+        />
+        <HealthStat
+          label="Polling"
+          value={adapter.polling_configured ? (health.provider_poll_health ?? 'configured') : 'n/a'}
+          tone={health.provider_poll_health != null && health.provider_poll_health !== 'ok' ? 'warning' : 'default'}
+        />
+        <HealthStat label="Cursor age" value={humanizeSeconds(health.polling_cursor_age_seconds)} />
+        <HealthStat label="Probe" value={health.connection_probe_result ?? '—'} />
+        {adapter.credential_slots.length > 0 && (
+          <div className="pt-1 mt-1 border-t border-border-subtle space-y-1">
+            <div className="text-[10px] text-text-muted font-mono">Credential slots</div>
+            {adapter.credential_slots.map(slot => (
+              <SlotBadge key={slot.slot_name} slot={slot} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BacklogsCard({ backlogs }: { readonly backlogs: TenantBacklogs }) {
+  const timeCtx = useTimeContext();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Delivery backlogs</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-2 md:grid-cols-3">
+          <RepairCount label="Receipt backlog" value={formatCount(backlogs.receipt_backlog, timeCtx)} />
+          <RepairCount label="Canonical backlog" value={formatCount(backlogs.canonical_backlog, timeCtx)} />
+          <RepairCount
+            label="Outbox backlog"
+            value={backlogs.outbox_backlog == null ? '—' : formatCount(backlogs.outbox_backlog, timeCtx)}
+          />
+          <RepairCount label="Repair backlog" value={formatCount(backlogs.repair_backlog, timeCtx)} />
+          <RepairCount label="Dead-lettered" value={formatCount(backlogs.dead_lettered, timeCtx)} />
+          <RepairCount
+            label="Oldest incomplete"
+            value={humanizeSeconds(backlogs.oldest_incomplete_receipt_age_seconds)}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Credential + delivery readiness for the authenticated tenant. Surfaces
+ * per-provider credential-slot readiness (no secrets), webhook-endpoint
+ * registration, polling health / cursor age, connection-probe result, and the
+ * delivery backlogs — reusing the same tenant-scoped diagnostics contract the
+ * Kyber operator console consumes. Renders nothing when the plane is not
+ * configured (the not-configured empty state is already shown for provider health).
+ */
+function TenantDiagnosticsSection() {
+  const { diagnostics, notConfigured, loading, error, refresh } = useTenantDiagnostics();
+  if (notConfigured) return null;
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold text-text-primary">Credential &amp; delivery readiness</h2>
+      {loading && !diagnostics && !error ? (
+        <LoadingState lines={3} />
+      ) : error ? (
+        <ErrorState title="Failed to load diagnostics" message={error} onRetry={refresh} />
+      ) : !diagnostics ? (
+        <p className="text-xs text-text-muted">No diagnostics available for this workspace yet.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {diagnostics.providers.map(entry => (
+              <ProviderDiagnosticsCard key={entry.provider} entry={entry} />
+            ))}
+          </div>
+          <BacklogsCard backlogs={diagnostics.backlogs} />
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PaymentRailsPage() {
   const timeCtx = useTimeContext();
   const { toast } = useToast();
@@ -610,6 +792,8 @@ export function PaymentRailsPage() {
           ))}
         </div>
       )}
+
+      <TenantDiagnosticsSection />
 
       <ReconciliationSummary
         loading={reconciliation.loading}

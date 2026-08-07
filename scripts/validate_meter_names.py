@@ -65,6 +65,7 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_webhook_handled_total",
     "payment_rail_webhook_rejected_total",
     "payment_rail_webhook_rate_limited_total",
+    "payment_rail_tenant_action_rate_limited_total",
     # Payment Rail sync/staleness worker (services/.../payment_rails/sync_worker.py)
     "payment_rail_sync_cycle_total",
     "payment_rail_sync_session_scanned_total",

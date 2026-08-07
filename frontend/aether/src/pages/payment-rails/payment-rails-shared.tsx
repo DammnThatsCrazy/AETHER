@@ -53,13 +53,21 @@ export function ReconciliationStateBadge({ state }: { readonly state: Reconcilia
   return <Badge variant={RECONCILIATION_VARIANTS[state] ?? 'default'}>{state}</Badge>;
 }
 
-export type ProviderHealthStatus = 'healthy' | 'degraded' | 'not_configured' | 'error';
+export type ProviderHealthStatus =
+  | 'healthy'
+  | 'degraded'
+  | 'not_configured'
+  | 'error'
+  | 'disabled'
+  | 'unknown';
 
 const HEALTH_STATUS_LABELS: Record<ProviderHealthStatus, string> = {
   healthy: 'healthy',
   degraded: 'degraded',
   not_configured: 'not configured',
   error: 'error',
+  disabled: 'disabled',
+  unknown: 'unknown',
 };
 
 /**
@@ -107,4 +115,29 @@ export function formatNativeAmount(amount: string | null | undefined, unit: stri
 export function formatMatchedRate(rate: number | null | undefined): string {
   if (rate === null || rate === undefined) return '—';
   return `${(rate * 100).toFixed(1)}%`;
+}
+
+/**
+ * Humanize an age in seconds ("42s", "5m 03s", "2h 14m", "3d 4h"). A null/
+ * undefined age means the server could not compute it yet and renders as "—" —
+ * never as a confident 0. A real 0 renders as "0s" so operators can tell the
+ * two apart.
+ */
+export function humanizeSeconds(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return '—';
+  if (!Number.isFinite(seconds) || seconds < 0) return '—';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return `${m}m ${String(s).padStart(2, '0')}s`;
+  }
+  if (seconds < 86_400) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${String(m).padStart(2, '0')}m`;
+  }
+  const d = Math.floor(seconds / 86_400);
+  const h = Math.floor((seconds % 86_400) / 3600);
+  return `${d}d ${h}h`;
 }
