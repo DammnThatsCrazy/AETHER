@@ -252,18 +252,24 @@ class AttributionResolver:
     def _parse_touchpoints(raw: list[dict[str, Any]]) -> list[Touchpoint]:
         """Convert raw dicts to ``Touchpoint`` objects.
 
-        A touchpoint with a missing or unparseable timestamp is EXCLUDED rather
-        than stamped with now(): fabricating a time would place it inside every
-        lookback window and over-credit it.
+        The touchpoint time comes from ``timestamp`` or, if absent, ``occurred_at``
+        (the canonical touchpoint column). A touchpoint with no parseable time is
+        EXCLUDED rather than stamped with now(): fabricating a time would place it
+        inside every lookback window and over-credit it.
         """
         touchpoints: list[Touchpoint] = []
         for item in raw:
             ts = item.get("timestamp")
+            if ts is None:
+                ts = item.get("occurred_at")
             if isinstance(ts, str):
                 try:
                     ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 except (ValueError, AttributeError):
-                    logger.warning("Excluding touchpoint with invalid timestamp: %r", item.get("timestamp"))
+                    logger.warning(
+                        "Excluding touchpoint with invalid timestamp: %r",
+                        item.get("timestamp") or item.get("occurred_at"),
+                    )
                     continue
             elif not isinstance(ts, datetime):
                 logger.warning("Excluding touchpoint with missing timestamp")
@@ -285,14 +291,21 @@ class AttributionResolver:
 
 
 def _event_reference_time(event: dict[str, Any]) -> Optional[datetime]:
-    """Return the conversion event's reference time, or None when it is absent
-    or unparseable.
+    """Return the conversion event's reference time.
 
-    Callers must treat None as "cannot anchor attribution" and refuse to
-    attribute — never silently substitute now(), which would score touchpoints
-    against a wall-clock window unrelated to when the conversion happened.
+    Distinguishes two cases the old code collapsed into a silent now():
+      - No time supplied at all → this is a real-time resolve() call, so the
+        conversion is happening now; now() is the correct anchor.
+      - A time WAS supplied but is unparseable/wrong-typed → return None so the
+        caller refuses to attribute rather than scoring the window against a
+        wall-clock time unrelated to the (corrupt) conversion time.
+
+    The durable pipeline (AttributionEngine.run_for_conversion) is stricter
+    still: a stored conversion with no valid occurred_at fails the run.
     """
     raw = event.get("timestamp") or event.get("occurred_at") or event.get("created_at")
+    if raw is None:
+        return datetime.now(timezone.utc)
     if isinstance(raw, datetime):
         return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
     if isinstance(raw, str):

@@ -134,11 +134,11 @@ def test_parse_touchpoints_excludes_invalid_or_missing_timestamp():
 
 
 @pytest.mark.asyncio
-async def test_resolver_refuses_without_conversion_timestamp():
+async def test_resolver_refuses_on_invalid_conversion_timestamp():
     resolver = AttributionResolver()
     result = await resolver.resolve(
         user_id="u-1",
-        event={},  # no conversion timestamp → no anchor
+        event={"timestamp": "not-a-date"},  # provided but unparseable → refuse
         touchpoints=[{"channel": "a", "timestamp": "2026-01-01T00:00:00Z"}],
     )
     assert result.model_used == "none"
