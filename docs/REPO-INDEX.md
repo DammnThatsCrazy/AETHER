@@ -160,6 +160,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `INTEGRATION-SECURITY.md`
 - `INVESTIGATION-WORKSPACE.md`
 - `INVOICE-PREVIEWS.md`
+- `ITERABLE-CONNECTOR.md`
 - `JIRA-CONNECTOR-SETUP.md`
 - `JIRA-LINEAR-CONNECTORS.md`
 - `KLAVIYO-CONNECTOR.md`

@@ -195,6 +195,7 @@ def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> No
         "customerio",
         "mailchimp",
         "postmark",
+        "iterable",
         "segment",
         "posthog",
         "ga4",

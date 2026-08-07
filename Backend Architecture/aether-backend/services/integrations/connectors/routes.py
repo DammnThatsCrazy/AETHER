@@ -434,10 +434,16 @@ async def comms_webhook_by_endpoint(connector_type: str, endpoint_id: str, reque
             })
             raise ForbiddenError("Connector webhook secret not configured")
 
+    # Providers may sign webhooks via URL query params (e.g. Iterable carries
+    # its ``signature``/``ts`` HMAC in the webhook URL) rather than a header;
+    # merge the request's query params into the headers mapping a native
+    # verifier reads so those schemes resolve without provider-name branching
+    # (ADR-C11). HTTP headers win on any collision.
+    signed_headers = {**dict(request.query_params), **dict(request.headers)}
     result = await connector_service.ingest_webhook(
         connector_type, tenant_id,
         raw_body=raw_body, signature=signature, timestamp=timestamp,
-        secret=secret, headers=dict(request.headers),
+        secret=secret, headers=signed_headers,
     )
     if not result.get("accepted"):
         reason = str(result.get("reason", "rejected"))

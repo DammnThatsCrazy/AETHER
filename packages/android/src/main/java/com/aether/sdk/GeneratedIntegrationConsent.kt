@@ -16,6 +16,7 @@ enum class IntegrationConnectorType(val connectorType: String) {
     CUSTOMERIO("customerio"),
     MAILCHIMP("mailchimp"),
     POSTMARK("postmark"),
+    ITERABLE("iterable"),
     SEGMENT("segment"),
     POSTHOG("posthog"),
     GA4("ga4"),

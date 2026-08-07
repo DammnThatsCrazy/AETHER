@@ -85,6 +85,7 @@ _NATIVE_WEBHOOK_SCHEMES: dict[str, str] = {
     # manifest names the provider's real scheme from the start).
     "sendgrid": "sendgrid_ecdsa",
     "customerio": "customerio_hmac_v0",
+    "iterable": "iterable_hmac_query",
     # Mailchimp (Marketing) and Postmark send no cryptographic signature; the
     # high-entropy durable endpoint id in the webhook URL is the credential.
     "mailchimp": "endpoint_secret",

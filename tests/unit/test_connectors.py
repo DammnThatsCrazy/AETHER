@@ -74,11 +74,11 @@ def unwrap(resp):
 
 EXPECTED = {"slack", "webhook", "shopify", "stripe", "hubspot", "salesforce", "klaviyo",
             "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom", "dune",
-            # ADR-C11: multi-provider comms cohort (Klaviyo + 4 webhook-only).
-            "customerio", "mailchimp", "postmark", "sendgrid"}
+            # ADR-C11: multi-provider comms cohort (Klaviyo + webhook-only + pull-capable Iterable).
+            "customerio", "mailchimp", "postmark", "sendgrid", "iterable"}
 
 
-def test_registry_has_all_19(conn):
+def test_registry_has_all_20(conn):
     assert set(conn.registry.CONNECTORS.keys()) == EXPECTED
 
 
@@ -167,10 +167,10 @@ async def test_kyber_overview_requires_operator(conn):
     with pytest.raises(ForbiddenError):
         await conn.routes.connectors_overview(req("tenant-a", permissions=["admin", "read"]))
     data = unwrap(await conn.routes.connectors_overview(req("ops", permissions=["kyber:operator"])))
-    assert data["available_connectors"] == 19
+    assert data["available_connectors"] == 20
 
 
 async def test_tenant_route_lists_connectors(conn):
     data = unwrap(await conn.routes.list_connectors(req("tenant-a")))
-    assert len(data["items"]) == 19
+    assert len(data["items"]) == 20
     assert "tenant-b" not in str(data)

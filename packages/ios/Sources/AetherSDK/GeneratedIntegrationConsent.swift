@@ -16,6 +16,7 @@ public enum IntegrationConnectorType: String, CaseIterable {
     case customerio = "customerio"
     case mailchimp = "mailchimp"
     case postmark = "postmark"
+    case iterable = "iterable"
     case segment = "segment"
     case posthog = "posthog"
     case ga4 = "ga4"

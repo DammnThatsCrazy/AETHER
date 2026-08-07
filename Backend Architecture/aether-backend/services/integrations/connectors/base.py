@@ -23,7 +23,7 @@ ConnectorType = Literal[
     "slack", "webhook", "shopify", "stripe", "hubspot", "salesforce",
     "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom", "dune",
     # Branded communications providers (comms.* data outputs, ADR-C11 cohort)
-    "sendgrid", "customerio", "mailchimp", "postmark",
+    "sendgrid", "customerio", "mailchimp", "postmark", "iterable",
     # Olympus-owned provider connectors (Layer 1)
     "dune_api", "dune_datashare", "dune_sim",
     "defi_llama", "coingecko", "coinmarketcap",

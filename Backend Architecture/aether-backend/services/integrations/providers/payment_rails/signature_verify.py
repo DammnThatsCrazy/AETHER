@@ -34,6 +34,14 @@ Schemes (each provider adapter declares ``signature_scheme``):
   ``HMAC-SHA256(secret, "v0:{ts}:" + raw_body)``. The ``v0:`` version prefix and
   colon separators are part of the signed string; replay protection is the
   ``X-CIO-Timestamp`` freshness window.
+* ``iterable_hmac_query`` — Iterable webhook signing. Iterable signs webhook
+  requests with an HMAC-SHA256 built from the webhook signing secret; the
+  signature (``signature``) and optional signing timestamp (``ts``) travel in the
+  webhook URL's **query params**, not a header (the generic comms route merges
+  the request's query params into the headers mapping a native verifier reads).
+  The signed string is the raw request body (hex digest, no prefix). Replay
+  protection is the ``ts`` query-param freshness window when Iterable includes
+  one; otherwise the ``silver_comms_idem`` dedupe carries replay safety.
 * ``endpoint_secret`` — no cryptographic signature. Mailchimp (Marketing)
   authenticates with a ``secret`` query parameter in the webhook URL and Postmark
   with URL/Basic-Auth credentials; neither HMACs its body. Both are covered by
@@ -63,6 +71,7 @@ TIMESTAMPED_HEX = "timestamped_hex"
 # Comms provider-native schemes (named so manifests state the provider's scheme).
 SENDGRID_ECDSA = "sendgrid_ecdsa"
 CUSTOMERIO_HMAC_V0 = "customerio_hmac_v0"
+ITERABLE_HMAC_QUERY = "iterable_hmac_query"
 # Mailchimp (Marketing) and Postmark send no cryptographic signature; the durable
 # server-controlled endpoint id in the webhook URL is the credential.
 ENDPOINT_SECRET = "endpoint_secret"
@@ -249,6 +258,38 @@ def _verify_one_customerio_v0(
     return VerificationResult(False, "mismatch")
 
 
+def _verify_one_iterable_query(
+    secret: str,
+    payload: bytes,
+    signature: str,
+    *,
+    timestamp: Optional[str] = None,
+    now_epoch: Optional[int] = None,
+    tolerance_s: int = DEFAULT_TOLERANCE_S,
+) -> VerificationResult:
+    """Iterable webhook signing — ``iterable_hmac_query``.
+
+    Iterable signs webhook requests with an HMAC-SHA256 built from the webhook
+    signing secret; the signature (``signature``) and optional signing timestamp
+    (``ts``) travel in the webhook URL's query params, not a header. The signed
+    string is the raw request body (hex digest, no ``sha256=``/``v1=`` prefix).
+    When Iterable includes a ``ts`` query param it is enforced as a replay
+    freshness window; otherwise replay safety is the ``silver_comms_idem``
+    dedupe downstream.
+    """
+    provided = signature.strip()
+    for prefix in ("sha256=", "v1=", "s="):
+        provided = provided[len(prefix):] if provided.startswith(prefix) else provided
+    if not provided:
+        return VerificationResult(False, "bad_format")
+    if timestamp is not None and not _timestamp_fresh(timestamp, now_epoch, tolerance_s):
+        return VerificationResult(False, "stale")
+    expected = _hmac_hex(secret, payload)
+    if hmac.compare_digest(expected, provided.lower()):
+        return VerificationResult.verified()
+    return VerificationResult(False, "mismatch")
+
+
 def _verify_one_endpoint_secret() -> VerificationResult:
     """No cryptographic signature — possession of the durable endpoint id.
 
@@ -309,6 +350,11 @@ def verify_signature(
                 secret, payload, signature, timestamp,
                 now_epoch=now_epoch, tolerance_s=tolerance_s,
             )
+        elif scheme == ITERABLE_HMAC_QUERY:
+            res = _verify_one_iterable_query(
+                secret, payload, signature, timestamp=timestamp,
+                now_epoch=now_epoch, tolerance_s=tolerance_s,
+            )
         else:
             return VerificationResult(False, "unknown_scheme")
         if res.ok:
@@ -324,6 +370,7 @@ __all__ = [
     "TIMESTAMPED_HEX",
     "SENDGRID_ECDSA",
     "CUSTOMERIO_HMAC_V0",
+    "ITERABLE_HMAC_QUERY",
     "ENDPOINT_SECRET",
     "DEFAULT_TOLERANCE_S",
     "VerificationResult",

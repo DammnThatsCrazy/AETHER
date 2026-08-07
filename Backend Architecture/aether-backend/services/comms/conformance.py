@@ -90,6 +90,10 @@ _NATIVE_WEBHOOK_HEADERS: dict[str, list[str]] = {
     ],
     "customerio_hmac_v0": ["X-CIO-Signature", "X-CIO-Timestamp"],
     "hubspot_signature_v3": ["X-HubSpot-Signature-v3", "X-HubSpot-Request-Timestamp"],
+    # Iterable signs with ``signature``/``ts`` carried in the webhook URL's
+    # query params (not HTTP headers); the generic comms route merges them into
+    # the headers mapping a native verifier reads, so the channel is named here.
+    "iterable_hmac_query": ["signature", "ts"],
     ENDPOINT_SECRET: [],
 }
 
@@ -157,6 +161,19 @@ _EVENT_FIXTURES: dict[str, tuple[dict[str, Any], str]] = {
             "portalId": 62515,
             "created": 1750000000,
             "url": "https://x",
+        },
+        "email_clicked",
+    ),
+    "iterable": (
+        {
+            "eventType": "emailClick",
+            "email": "person@example.com",
+            "campaignId": 42,
+            "templateId": 7,
+            "messageId": "iter-ev-1",
+            "url": "https://x",
+            "userAgent": "Mozilla/5.0",
+            "createdAt": "2026-07-01T10:00:00.000Z",
         },
         "email_clicked",
     ),
