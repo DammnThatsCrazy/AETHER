@@ -208,10 +208,30 @@ Prometheus rules (group `aether_payment_rails` in
 | `PaymentRailCanonicalBacklog` | Canonical/outbox delivery is falling behind |
 | `PaymentRailOutboxDeadLetterGrowth` | Dead-letters growing — manual replay required |
 | `PaymentRailProviderPollDegraded` | Provider poll health non-ok |
+| `PaymentRailReconciliationConflict` | Unresolved SDK-vs-provider conflicts exceed threshold (a truth disagreement is piling up, not being superseded) |
+| `PaymentRailReconciliationStaleSurge` | Surge of sessions ageing past the reconciliation window (provider truth not arriving) |
+| `PaymentRailCanonicalBacklogGrowth` | Incomplete-receipt backlog is *growing*, not just non-zero (repair is losing ground) |
+| `PaymentRailOutboxDeliveryStalling` | Outbox `published` count lagging `enqueued` — the relay is enabled but not draining |
 
-Thresholds are environment-tunable (`AETHER_PAYMENT_SYNC_INTERVAL_SECONDS`,
-`AETHER_PAYMENT_RECON_STALE_AFTER_SECONDS`, per-environment rules overlay). No
-secret or provider payload ever appears in an alert.
+Thresholds are environment-tunable. The single-series PromQL rules use
+`AETHER_PAYMENT_SYNC_INTERVAL_SECONDS` / `AETHER_PAYMENT_RECON_STALE_AFTER_SECONDS`
+and the per-environment rules overlay. The **derived** conditions that have no
+clean single-series PromQL form — most importantly the reconciliation-conflict
+backlog, which is read from the durable reconciliation records rather than a
+counter — are classified by an in-process evaluator
+(`services/integrations/providers/payment_rails/alert_eval.py`) whose thresholds
+come from `settings.payment_rails.alert_*` (env vars `AETHER_PAYMENT_ALERT_*`, e.g.
+`AETHER_PAYMENT_ALERT_NO_WEBHOOK_SECONDS`, `AETHER_PAYMENT_ALERT_CANONICAL_BACKLOG_WARN`,
+`AETHER_PAYMENT_ALERT_RECONCILIATION_CONFLICT_WARN`). This keeps thresholds
+per-environment tunable without a code change. The evaluator reads state only,
+emits nothing, and — like the Prometheus rules — never puts a secret or provider
+payload in an alert. It reports **UNKNOWN** (no data) as a severity distinct from
+OK, so a silent/never-configured provider is never mistaken for a healthy one.
+
+**Why this exists.** Payment-rail metrics were emitted from day one but nothing
+consumed the *derived* health conditions (silence, backlog growth, conflict
+pile-up, outbox stalling). The rules + evaluator close that gap so an operator is
+paged on a degrading delivery plane instead of discovering it during an incident.
 
 ## Release feature flags
 
