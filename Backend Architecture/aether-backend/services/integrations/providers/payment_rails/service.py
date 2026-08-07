@@ -947,10 +947,30 @@ class PaymentRailsService:
                 continue
             emitted = await self._emit_canonical_events(tenant_id, adapter, record)
             await self._receipt_finalize_delivery(tenant_id, rid, record)
-            # Durable enqueue to the guaranteed-delivery outbox (or a synchronous
-            # direct publish) means the canonical event is delivered; complete the
-            # receipt so it clears the backlog. The supervised relay owns the
-            # outbox row's own retry/dead-letter for the publish step.
+            # D1 (relay-publish stage). Durable enqueue to the guaranteed-delivery
+            # outbox (or a synchronous direct publish) means the canonical event is
+            # delivered; complete the receipt so it clears the backlog. The
+            # supervised relay owns the outbox row's own retry/dead-letter for the
+            # publish step.
+            #
+            # On the durable-outbox path the live pipeline left this receipt at
+            # OUTBOX_ENQUEUED with ``outbox_publication_state="enqueued"``. By the
+            # time this supervised sweep re-drives the receipt, the outbox relay
+            # has had ample opportunity to drain (publish) the row — which is
+            # exactly why the block below completes it unconditionally. Before
+            # COMPLETED we therefore advance the receipt THROUGH the
+            # OUTBOX_PUBLISHED stage and flip the publication state to
+            # ``"published"``, so a completed durable-path receipt records the
+            # relay-publish transition instead of lying with a stale ``"enqueued"``
+            # state. This is forward-only and idempotent: a direct-publish receipt
+            # already passed OUTBOX_PUBLISHED (a no-op here), and a re-run finds the
+            # receipt already complete and skips it entirely. This is the
+            # delivery-integrity guarantee that a receipt's ledger truthfully
+            # reflects that its one canonical event per observation was published.
+            await self.repos.receipts.advance(
+                tenant_id, rid, ReceiptStage.OUTBOX_PUBLISHED,
+                outbox_publication_state="published",
+            )
             await self.repos.receipts.advance(tenant_id, rid, ReceiptStage.COMPLETED)
             await self.repos.receipts.record_repair(
                 tenant_id, rid,

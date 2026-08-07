@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   fetchReconciliationRecords: vi.fn(),
   fetchPaymentRailHealth: vi.fn(),
   fetchProviderStatus: vi.fn(),
+  fetchTenantDiagnostics: vi.fn(),
   syncProviderStatus: vi.fn(),
   repairCanonicalBacklog: vi.fn(),
 }));
@@ -201,7 +202,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   queryCache.invalidatePrefix('payment-rails');
   mocks.fetchFundingSessions.mockResolvedValue({ sessions: SESSION_FIXTURES, notConfigured: false });
-  mocks.fetchFundingSession.mockResolvedValue(SESSION_FIXTURES[1]);
+  mocks.fetchFundingSession.mockResolvedValue({
+    session: SESSION_FIXTURES[1],
+    reconciliation: null,
+    receipts: [],
+    delivery: null,
+  });
   mocks.fetchReconciliationRecords.mockResolvedValue(RECONCILIATION_FIXTURES);
   mocks.fetchPaymentRailHealth.mockResolvedValue({ providers: HEALTH_FIXTURES, notConfigured: false });
   mocks.fetchProviderStatus.mockResolvedValue({
@@ -212,6 +218,7 @@ beforeEach(() => {
     polling_configured: true,
     last_synced_at: '2026-07-08T22:10:00.000Z',
   });
+  mocks.fetchTenantDiagnostics.mockResolvedValue({ diagnostics: null, notConfigured: false });
   mocks.syncProviderStatus.mockResolvedValue({ sync_requested: true });
 });
 
@@ -318,6 +325,112 @@ describe('Aether Payment Rails page', () => {
     expect(screen.queryByRole('button', { name: 'Repair backlog' })).not.toBeInTheDocument();
     expect(screen.queryByText('Canonical delivery — Repair backlog')).not.toBeInTheDocument();
     expect(mocks.repairCanonicalBacklog).not.toHaveBeenCalled();
+  });
+
+  it('renders the credential + delivery readiness diagnostics (slots, endpoint, backlogs)', async () => {
+    mocks.fetchTenantDiagnostics.mockResolvedValue({
+      notConfigured: false,
+      diagnostics: {
+        contract_version: '1.0.0',
+        tenant_id: 't_1',
+        providers: [
+          {
+            provider: 'coinbase',
+            adapter: {
+              status: 'configured',
+              environment: 'sandbox',
+              webhook_configured: true,
+              polling_configured: true,
+              webhook_endpoint_registered: true,
+              credential_slots: [
+                { slot_name: 'webhook_signing_secret', required: true, configured: true, state: 'active' },
+                { slot_name: 'onramp_api_key', required: true, configured: false, state: null },
+              ],
+            },
+            health: {
+              status: 'degraded',
+              sessions_observed_24h: 3,
+              sessions_completed_24h: 2,
+              sessions_failed_24h: 0,
+              sessions_unresolved: 1,
+              webhook_verified_24h: 3,
+              webhook_rejected_24h: 0,
+              reconciliation_matched_rate: 0.66,
+              reconciliation_conflicts: 0,
+              last_event_at: null,
+              last_poll_at: null,
+              last_successful_poll_at: null,
+              last_failed_poll_at: null,
+              polling_cursor_age_seconds: 4200,
+              provider_poll_health: 'auth_error',
+              connection_probe_result: 'unauthorized',
+            },
+          },
+        ],
+        backlogs: {
+          receipt_backlog: 2,
+          canonical_backlog: 2,
+          outbox_backlog: null,
+          repair_backlog: 1,
+          dead_lettered: 0,
+          oldest_incomplete_receipt_age_seconds: 3660,
+        },
+        recent_audit: [],
+        recent_repair_outcomes: [],
+      },
+    });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByText('Credential & delivery readiness')).toBeInTheDocument(),
+    );
+    // Credential slots surface by name + lifecycle state, never a secret value.
+    expect(screen.getByText(/webhook_signing_secret/)).toBeInTheDocument();
+    expect(screen.getByText(/onramp_api_key/)).toBeInTheDocument();
+    // Endpoint registration + backlogs render; a null outbox backlog shows "—".
+    expect(screen.getByText('registered')).toBeInTheDocument();
+    expect(screen.getByText('Delivery backlogs')).toBeInTheDocument();
+    expect(screen.getByText('Receipt backlog')).toBeInTheDocument();
+  });
+
+  it('renders per-session delivery lifecycle (receipt stage) in the drawer', async () => {
+    const detailSession = SESSION_FIXTURES[1]!;
+    mocks.fetchFundingSession.mockResolvedValue({
+      session: detailSession,
+      reconciliation: null,
+      receipts: [
+        {
+          receipt_id: 'rcpt_abcdef123456',
+          current_stage: 'completed',
+          provider: 'coinbase',
+          environment: 'sandbox',
+          provider_event_id: 'evt_1',
+          funding_session_id: detailSession.id,
+          canonical_event_ids: ['ce_1', 'ce_2'],
+          outbox_record_id: 'ce_1',
+          outbox_publication_state: 'published',
+          processing_attempts: 1,
+          repair_attempts: 0,
+          last_error_classification: null,
+          received_at: '2026-07-08T22:00:00.000Z',
+          completed_at: '2026-07-08T22:00:01.000Z',
+        },
+      ],
+      delivery: {
+        stage: 'completed',
+        canonical_event_ids: ['ce_1', 'ce_2'],
+        outbox_record_id: 'ce_1',
+        outbox_publication_state: 'published',
+        repair_attempts: 0,
+        repair_eligible: false,
+        last_error_classification: null,
+      },
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Offramp')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Offramp'));
+    await waitFor(() => expect(screen.getByText('Delivery lifecycle')).toBeInTheDocument());
+    expect(screen.getByText('Receipts')).toBeInTheDocument();
+    expect(screen.getByText(/rcpt_abcdef1/)).toBeInTheDocument();
   });
 });
 

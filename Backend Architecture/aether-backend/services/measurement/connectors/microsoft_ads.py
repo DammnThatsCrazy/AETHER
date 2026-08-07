@@ -7,7 +7,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from services.measurement.connectors.base import BaseConnector, ConnectorHealth, SyncResult
 from services.measurement.connectors.writer import CampaignMeasurementWriter, ExternalCampaignMetric
@@ -18,6 +18,63 @@ _CONNECTOR_TYPE = "microsoft_ads"
 _API_VERSION = "v13"
 _BASE_URL = "https://reporting.api.bingads.microsoft.com/Api/Advertiser/Reporting"
 _OAUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+_DEFAULT_CURRENCY = "USD"
+
+
+def _resolve_billing_currency(config: dict[str, Any], row_currency: Any = None) -> tuple[str, bool]:
+    """Resolve the billing currency for a spend row.
+
+    Preference order:
+      1. Currency reported on the provider row/report (``row_currency``).
+      2. Account-level currency from connector config (account settings).
+      3. Documented ``USD`` default, flagged so callers can mark the record as a
+         fallback rather than a real provider value.
+
+    Returns ``(currency_code, is_default_fallback)``.
+    """
+    for candidate in (
+        row_currency,
+        config.get("currency"),
+        config.get("account_currency"),
+        config.get("billing_currency"),
+    ):
+        if candidate:
+            code = str(candidate).strip().upper()
+            if code:
+                return code, False
+    return _DEFAULT_CURRENCY, True
+
+
+def _resolve_source_timezone(config: dict[str, Any], row_timezone: Any = None) -> str:
+    """Resolve the account/report timezone, preserving provider metadata when present."""
+    for candidate in (
+        row_timezone,
+        config.get("time_zone"),
+        config.get("timezone"),
+        config.get("account_timezone"),
+    ):
+        if candidate:
+            tz = str(candidate).strip()
+            if tz:
+                return tz
+    return "UTC"
+
+
+def _parse_spend(raw: Any) -> Decimal:
+    """Parse a provider spend value into ``Decimal`` without float rounding.
+
+    The Bing Ads CSV report returns spend as a decimal string; routing it through
+    ``float()`` would discard native precision, so parse the string directly.
+    """
+    if raw is None:
+        return Decimal("0")
+    text = str(raw).strip().replace(",", "")
+    if not text:
+        return Decimal("0")
+    try:
+        return Decimal(text)
+    except (InvalidOperation, ValueError):
+        return Decimal("0")
 
 
 class MicrosoftAdsConnector(BaseConnector):
@@ -112,7 +169,7 @@ class MicrosoftAdsConnector(BaseConnector):
                 "ReportName": "AetherSpendSync",
                 "ReturnOnlyCompleteData": False,
                 "Aggregation": "Daily",
-                "Columns": ["TimePeriod", "CampaignId", "CampaignName", "Impressions", "Clicks", "Spend"],
+                "Columns": ["TimePeriod", "CampaignId", "CampaignName", "CurrencyCode", "Impressions", "Clicks", "Spend"],
                 "Filter": None,
                 "Scope": {
                     "AccountIds": [account_id],
@@ -181,7 +238,21 @@ class MicrosoftAdsConnector(BaseConnector):
                         period_date = date.fromisoformat(period_str) if period_str else start
                         ext_campaign_id = str(row.get("CampaignId", ""))
                         campaign_name = row.get("CampaignName")
-                        spend = Decimal(str(float(row.get("Spend", 0) or 0)))
+                        # Native decimal string → Decimal directly; never round money through float.
+                        spend = _parse_spend(row.get("Spend"))
+                        currency, currency_is_default = _resolve_billing_currency(
+                            self._config, row_currency=row.get("CurrencyCode")
+                        )
+                        source_tz = _resolve_source_timezone(self._config)
+                        raw_dimensions: dict[str, Any] = {
+                            "TimePeriod": period_str,
+                            "CampaignId": ext_campaign_id,
+                            "currency_source": "default_fallback" if currency_is_default else "provider",
+                            "source_timezone": source_tz,
+                        }
+                        exchange_rate = self._config.get("exchange_rate")
+                        if exchange_rate is not None:
+                            raw_dimensions["exchange_rate"] = str(exchange_rate)
                         metrics_list.append(ExternalCampaignMetric(
                             platform=_CONNECTOR_TYPE,
                             external_account_id=account_id,
@@ -192,8 +263,9 @@ class MicrosoftAdsConnector(BaseConnector):
                             impressions=int(row.get("Impressions", 0) or 0),
                             clicks=int(row.get("Clicks", 0) or 0),
                             spend=spend,
-                            currency="USD",
-                            raw_dimensions={"TimePeriod": period_str, "CampaignId": ext_campaign_id},
+                            currency=currency,
+                            source_timezone=source_tz,
+                            raw_dimensions=raw_dimensions,
                         ))
                     except Exception as row_exc:
                         logger.warning("Microsoft Ads row parse error: %s", row_exc)

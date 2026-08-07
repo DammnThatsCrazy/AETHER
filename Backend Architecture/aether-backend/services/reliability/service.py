@@ -178,9 +178,106 @@ pipeline_service = PipelineHealthService()
 # Phase 4 — Queue + Worker Health
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Statuses a caller may *self-report* that describe a problem. We honour a
+# self-reported problem (failing toward the worse status is safe), but never a
+# self-reported "healthy".
+_QUEUE_PROBLEM_STATUSES = ("degraded", "critical", "offline")
+
+# Metrics that constitute observational evidence that a queue actually did work
+# or is staffed. Absence of ALL of these means the queue was not observed at
+# all — silence, which must never be read as "healthy".
+_QUEUE_WORKLOAD_KEYS = ("depth", "oldest_message_age_seconds", "retry_count", "dead_letter_count")
+
+
+def _coerce_number(value: Any) -> float | None:
+    """Best-effort numeric coercion. Returns None for absent/unparseable/bool."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def evaluate_queue_health(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Derive an *honest* queue-health verdict from self-reported metrics.
+
+    Queue metrics arrive as unverified self-attestation — there is no real queue
+    abstraction yet (see ``QueueHealthService``). Two honesty rules apply, the
+    same principle that makes ``compute_slo_status`` return ``"unknown"`` when
+    there is no ``current`` value:
+
+    * **No workload / no coverage** → status ``"unknown"``, coverage
+      ``"no_coverage"``. The absence of errors is not evidence of health when
+      nothing was observed doing work.
+    * **Self-reported "healthy"** → never certified. Only a self-reported
+      *problem* (degraded/critical/offline) passes through, because erring
+      toward the worse status is safe. A self-reported "healthy" collapses to
+      ``"unknown"`` and is flagged ``unverified``.
+
+    Returns a verdict dict (never mutates ``metrics``) carrying the honest
+    ``status`` plus explicit provenance: ``reported_status``, ``verification``,
+    ``unverified``, ``coverage`` and ``coverage_reason``.
+    """
+    reported_status = metrics.get("status")
+
+    depth = _coerce_number(metrics.get("depth")) or 0.0
+    workload_signal = depth > 0
+    for key in ("oldest_message_age_seconds", "retry_count", "dead_letter_count"):
+        value = _coerce_number(metrics.get(key))
+        if value is not None and value > 0:
+            workload_signal = True
+    active_workers = _coerce_number(metrics.get("active_worker_count"))
+    worker_coverage = active_workers is not None and active_workers > 0
+    processing_signal = metrics.get("processing_latency_ms") is not None
+
+    has_coverage = workload_signal or worker_coverage or processing_signal
+
+    verdict: dict[str, Any] = {
+        "reported_status": reported_status,
+        "verification": "self_reported",
+        "unverified": True,
+    }
+
+    if reported_status in _QUEUE_PROBLEM_STATUSES:
+        # Honour a self-reported problem: failing toward the worse status is
+        # the safe direction, even though it is unverified.
+        verdict["status"] = reported_status
+        verdict["coverage"] = "covered" if has_coverage else "self_reported_problem"
+        verdict["coverage_reason"] = (
+            "self-reported problem status; passed through as an unverified downgrade"
+        )
+        return verdict
+
+    if not has_coverage:
+        verdict["status"] = "unknown"
+        verdict["coverage"] = "no_coverage"
+        verdict["coverage_reason"] = (
+            "no workload and no worker/processing signal observed — "
+            "absence of errors is not evidence of health"
+        )
+        return verdict
+
+    # There is real workload/worker signal, but the health verdict itself is
+    # still only self-reported → do not certify "healthy".
+    verdict["status"] = "unknown"
+    verdict["coverage"] = "covered"
+    verdict["coverage_reason"] = (
+        "workload observed but health is self-reported and unverified — "
+        "not certified healthy"
+    )
+    return verdict
+
+
 class QueueHealthService:
     """Queue/worker health. No real queue abstraction exists yet, so records are
-    seeded locally and updated via ``report`` (adapter interface)."""
+    seeded locally and updated via ``report`` (adapter interface).
+
+    Reported metrics are self-attested and therefore *unverified*: this service
+    never turns a self-reported "healthy" into a certified healthy verdict, and
+    never reads the silence of a never-observed queue as health. See
+    ``evaluate_queue_health``.
+    """
 
     def __init__(self) -> None:
         self.repo = _queues
@@ -195,6 +292,19 @@ class QueueHealthService:
     async def list(self) -> list[dict[str, Any]]:
         await self.seed()
         rows = await self.repo.find_many(limit=1000)
+        for row in rows:
+            # Rows that were never reported against have not been observed at
+            # all. Annotate coverage honestly and never let a seeded/default
+            # "healthy" survive as an attested verdict.
+            if "coverage" not in row:
+                verdict = evaluate_queue_health(row)
+                row["coverage"] = verdict["coverage"]
+                row["coverage_reason"] = verdict["coverage_reason"]
+                row["verification"] = "unobserved"
+                row["unverified"] = True
+                if row.get("status") == "healthy":
+                    row["reported_status"] = "healthy"
+                    row["status"] = verdict["status"]
         return sorted(rows, key=lambda r: r.get("queue_key", ""))
 
     async def report(self, queue_key: str, metrics: dict[str, Any]) -> dict[str, Any]:
@@ -202,6 +312,11 @@ class QueueHealthService:
         existing = await self.repo.find_by_id(queue_key)
         if existing is None:
             raise KeyError(queue_key)
+        # Never mutate the caller's dict; layer the honest verdict on top of the
+        # self-reported metrics so the stored record cannot claim health it has
+        # not earned.
+        metrics = dict(metrics)
+        metrics.update(evaluate_queue_health(metrics))
         metrics["updated_at"] = now_iso()
         return await self.repo.update(queue_key, metrics)
 

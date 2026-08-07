@@ -1,10 +1,22 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, formatDecimal, formatDate, useTimeContext } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, formatCount, formatCurrency, formatDecimal, formatDate, useTimeContext } from '@aether/ui';
+import type { LocaleContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useCampaignIntelligence } from '@kyber/features/measurement';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 type Row = Record<string, unknown>;
+
+// Render a spend ledger amount in the row's OWN billing currency (never a
+// hardcoded "$"), and honestly show "—" when the amount is absent rather than
+// coercing a missing value to a zero-dollar figure.
+function fmtSpend(amount: unknown, currency: unknown, ctx: LocaleContext): string {
+  if (amount === null || amount === undefined || amount === '') return '—';
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return '—';
+  const code = typeof currency === 'string' && currency.trim() ? currency.trim() : 'USD';
+  return formatCurrency(n, code, ctx);
+}
 
 export function CampaignIntelligencePage() {
   const [campaignId, setCampaignId] = useState('');
@@ -75,7 +87,7 @@ export function CampaignIntelligencePage() {
                 { key: 'platform', header: 'Platform', render: r => String(r.platform ?? '—') },
                 { key: 'campaign', header: 'Campaign', render: r => <span className="font-mono text-xs">{String(r.campaign_id ?? '—').slice(0, 12)}…</span> },
                 { key: 'period', header: 'Period', render: r => `${r.period_start ? formatDate(String(r.period_start), timeCtx) : '—'}` },
-                { key: 'spend', header: 'Spend', render: r => `$${Number(r.total_cost ?? 0).toFixed(2)}` },
+                { key: 'spend', header: 'Spend', render: r => fmtSpend(r.total_cost, r.billing_currency, timeCtx) },
                 { key: 'impressions', header: 'Impressions', render: r => formatCount(Number(r.impressions ?? 0), timeCtx) },
                 { key: 'clicks', header: 'Clicks', render: r => formatCount(Number(r.clicks ?? 0), timeCtx) },
                 { key: 'currency', header: 'Currency', render: r => String(r.billing_currency ?? 'USD') },

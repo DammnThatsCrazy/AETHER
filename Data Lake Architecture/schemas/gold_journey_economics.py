@@ -20,11 +20,11 @@ CREATE TABLE IF NOT EXISTS gold_journey_economics (
     -- Economics
     revenue_attributed_usd              Decimal(18, 6),
     ad_spend_usd                        Decimal(18, 6),
-    roas                                Float32,     -- revenue_attributed / ad_spend
-    cpa_usd                             Decimal(18, 6),  -- ad_spend / conversions
+    roas                                Nullable(Float64),   -- revenue_attributed / allocated ad_spend (NULL when spend=0; undefined != 0)
+    cpa_usd                             Nullable(Decimal(18, 6)),  -- allocated ad_spend / conversions (NULL when conversions=0)
     ltv_predicted_usd                   Decimal(18, 6),
     ltv_actual_usd                      Decimal(18, 6),
-    aov_usd                             Decimal(18, 6),  -- average order value
+    aov_usd                             Nullable(Decimal(18, 6)),  -- average order value (NULL when conversions=0)
     repeat_count                        UInt32,
     -- Retarget scoring (0-10)
     retarget_score                      Float32,

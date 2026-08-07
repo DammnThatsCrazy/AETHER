@@ -65,6 +65,7 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_webhook_handled_total",
     "payment_rail_webhook_rejected_total",
     "payment_rail_webhook_rate_limited_total",
+    "payment_rail_tenant_action_rate_limited_total",
     # Payment Rail sync/staleness worker (services/.../payment_rails/sync_worker.py)
     "payment_rail_sync_cycle_total",
     "payment_rail_sync_session_scanned_total",
@@ -75,6 +76,12 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_repair_cycle_total",
     "payment_rail_repair_error_total",
     "payment_rail_repair_dead_lettered_total",
+    # Payment Rail derived-condition alert evaluator worker
+    # (services/.../payment_rails/alert_worker.py). Cycle/error counters; the
+    # per-condition severity, firing-count, worst-severity and heartbeat are
+    # metrics.gauge() (not increment) so they are not listed here.
+    "payment_rail_alert_eval_cycle_total",
+    "payment_rail_alert_eval_error_total",
     # Payment Rail durable webhook endpoint routing (services/.../payment_rails/routes.py)
     "payment_rail_webhook_unknown_endpoint_total",
     # Payment Rail provider polling health (services/.../payment_rails/service.py)

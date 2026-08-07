@@ -19,6 +19,7 @@ reference the same canonical result rather than re-deriving the formula.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Optional
 
 from shared.computation.allocation import AllocationPolicy, AllocationResult, allocate
@@ -99,11 +100,14 @@ def canonical_campaign_metrics(
     results["campaign.cpc"] = rate_result(
         _def("campaign.cpc"), context, numerator=agg.media_spend, denominator=agg.clicks,
     )
-    # CPM = media_spend / impressions * 1000 — expressed as spend per 1000 impressions.
+    # CPM = media_spend / impressions * 1000 — expressed as spend per 1000
+    # impressions. The denominator is computed as an EXACT Decimal (impressions /
+    # 1000): a Python float here would be rejected by the money-grade to_decimal
+    # and render CPM structurally missing_inputs for every impression count.
     results["campaign.cpm"] = rate_result(
         _def("campaign.cpm"), context,
         numerator=agg.media_spend,
-        denominator=(agg.impressions / 1000) if agg.impressions else 0,
+        denominator=(Decimal(agg.impressions) / 1000) if agg.impressions else 0,
     )
     results["campaign.conversion_rate"] = rate_result(
         _def("campaign.conversion_rate"), context,

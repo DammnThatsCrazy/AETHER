@@ -17,9 +17,9 @@ CREATE TABLE IF NOT EXISTS gold_ad_spend (
     spend_usd               Decimal(18, 6),
     impressions             UInt64,
     clicks                  UInt64,
-    cpm                     Float32,   -- cost per thousand impressions
-    cpc                     Float32,   -- cost per click
-    ctr                     Float32,   -- click-through rate (0-1)
+    cpm                     Nullable(Float64),   -- cost per thousand impressions (NULL when impressions=0; undefined != 0)
+    cpc                     Nullable(Float64),   -- cost per click (NULL when clicks=0; undefined != 0)
+    ctr                     Nullable(Float64),   -- click-through rate 0-1 (NULL when impressions=0; undefined != 0)
     conversions             UInt32,
     revenue_attributed_usd  Decimal(18, 6),
     ingested_at             DateTime64(3, 'UTC')

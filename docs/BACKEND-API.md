@@ -11,7 +11,11 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
+<<<<<<< HEAD
 last_synced_commit: "147eb6bd"
+=======
+last_synced_commit: "6298bbf"
+>>>>>>> origin/main
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2752,11 +2756,11 @@ Additional semantic-sentiment routes in this iteration include `GET /v1/campaign
 
 The Communications Intelligence plane ingests provider communications through the
 generic connector framework and the canonical comms spine. The certified cohort
-(ADR-C11) is **Klaviyo, SendGrid, Customer.io, Mailchimp, and Postmark**; every
-comms connector is a `BaseConnector` subclass with `comms.*` data outputs, and
-catalog manifests are derived from the connector declarations. All routes are
-tenant-scoped; operator routes require an explicit Kyber operator scope and are
-audited.
+(ADR-C11) is **Klaviyo, SendGrid, Customer.io, Mailchimp, Postmark, HubSpot,
+Iterable, and Braze**; every comms connector is a `BaseConnector` subclass with
+`comms.*` data outputs, and catalog manifests are derived from the connector
+declarations. All routes are tenant-scoped; operator routes require an explicit
+Kyber operator scope and are audited.
 
 Connector setup + synchronization (`/v1/integrations/connectors/*`):
 

@@ -370,6 +370,7 @@ from services.measurement.routes.quality import router as measurement_quality_ro
 from services.measurement.routes.kyber import router as measurement_kyber_router
 from services.measurement.routes.integrity import router as measurement_integrity_router
 from services.measurement.routes.experiments import router as measurement_experiments_router
+from services.computation.routes import router as computation_router
 from services.imports.routes import router as imports_router
 from services.imports.kyber_routes import router as imports_kyber_router
 
@@ -915,6 +916,7 @@ def create_app() -> FastAPI:
     app.include_router(measurement_spend_router)         # GET/POST /v1/spend
     app.include_router(measurement_quality_router)       # GET /v1/measurement/*
     app.include_router(measurement_integrity_router)     # GET /v1/measurement/definitions|results|results/{id}/explain
+    app.include_router(computation_router)               # GET /v1/computations/definitions|results|results/{id}/explain|runs/{id}
     app.include_router(measurement_kyber_router)         # GET/POST /v1/kyber/measurement/*
     app.include_router(measurement_experiments_router)   # GET/POST /v1/experiments
     logger.info("Canonical Measurement: 6 routers mounted")

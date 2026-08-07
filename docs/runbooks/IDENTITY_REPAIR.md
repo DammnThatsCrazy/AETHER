@@ -13,7 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/identity/redirects.py
   - Backend Architecture/aether-backend/services/identity/graph_reconciliation.py
   - Backend Architecture/aether-backend/services/identity/reconciliation_routes.py
-last_synced_commit: "41c79d4"
+last_synced_commit: "bb1aef2"
 ---
 
 # Runbook — Identity Repair

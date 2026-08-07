@@ -120,10 +120,35 @@ tolerance and rationale; a value is not "reconciled" merely because a formula ra
 scores that are not empirically calibrated are typed `OrdinalScore` /
 `HeuristicScore` / `UncalibratedScore` and must not claim to be probabilities.
 
+## Persistence & runs (`services/computation/repositories.py`)
+
+Canonical results are stored immutably in `computed_results` (Alembic migration
+`20260815_computation_substrate`), with at most one *active* row per
+`(tenant_id, definition_id, definition_version, context_hash)` (partial unique
+index). `computation_runs` records the run that produced a result;
+`computation_restatements` is the supersession audit trail. The repo follows the
+DDL-parity idiom (repo constants asserted equal to the migration) and the dual
+local/asyncpg backend.
+
+## Explain API (`services/computation/routes.py`, mounted at `/v1/computations`)
+
+Read-only, tenant-scoped endpoints:
+
+- `GET /v1/computations/definitions` and `/definitions/{id}` — the canonical
+  registry;
+- `GET /v1/computations/results` and `/results/{id}` — stored canonical results;
+- `GET /v1/computations/results/{id}/explain` — answers *what is this number?*
+  (definition version, formula/kind, inputs, window, observed vs allocated vs
+  estimated vs reconciled, completeness, staleness, uncertainty, supersession
+  chain);
+- `GET /v1/computations/runs/{id}` — the producing run.
+
 ## Restatement
 
 Corrections create a new result that supersedes the prior one (`supersedes_result_id`
 + `restatement_reason`), reusing the measurement plane's supersession discipline.
+The repository's `supersede()` stamps the prior active row and records a
+restatement, so historical truth is preserved and `/explain` can show the chain.
 
 ## Presentation rules (`serialization.py`)
 
@@ -147,12 +172,18 @@ FORMAT values; they never recompute or reinterpret them.
 
 | Domain | State | Notes |
 | --- | --- | --- |
-| Campaign / gold economics | in progress | canonical definitions registered; gold materializer routed through the substrate (fractional conversions, null-not-zero ratios, allocated journey cost) |
-| Financial value (net worth / net TVL / net LTV) | in progress | unpriced-subtrahend fixes (partial, not inflated) |
-| P&L, billing/metering | roadmap | recorded in `config/implementation_ledger.yaml` |
-| Trust / fraud / identity | roadmap | trust vector, fraud calibration, identity evidence + merge restatement |
-| Behavioral / graph / ML | roadmap | opportunity model, graph snapshot governance, prediction cache/envelope |
-| Agent / operational | roadmap | observed vs verified vs estimated vs counterfactual outcomes |
+| Campaign / gold economics | migrated | canonical definitions registered; gold materializer routed through the substrate (fractional conversions, null-not-zero ratios, allocated journey cost); CPM denominator computed as exact Decimal |
+| Financial value (net worth / net TVL / net LTV) | migrated | unpriced-subtrahend fixes (partial, not inflated) |
+| P&L | migrated | TVL change relabeled as a flow (not P&L); FIFO with opening lots; missing basis → insufficient_data; query failure → unavailable |
+| Billing / metering | partial | bounded-read truncation now disclosed; usage-quantity float + revenue-side currency migration still open |
+| Trust | migrated | governed trust **vector** (six dimensions) replaces the single scalar; versioned weights; use-case composites (`trust.vector` / `trust.reward_eligibility` / `trust.agent_delegation` registered) |
+| Fraud | migrated | scores relabeled as uncalibrated heuristics (not `P(fraud)`); family-grouped scoring + correlated-signal damping; versioned signal weights; fail-closed decision preserved |
+| Identity | migrated | auto-merge publishes `IDENTITY_MERGED` (restatement trigger); match score documented as evidence-weighted (not a probability) |
+| ML serving | migrated | grounding derived from evidence (None when unknown, never hardcoded 1); missing confidence → None; additive prediction envelope. CIS retrieval telemetry carries unknown grounding/confidence as NULL end-to-end |
+| Behavioral | migrated | event-time windows (not list-position); absence gated on observation opportunity + min sample; peer baseline no longer fabricates cohort constants |
+| Graph | migrated | path metrics emit a governed `GraphMetric` (snapshot id + population + normalization required) |
+| Cluster / connectors | migrated | per-currency cluster rollup (dominant/is_mixed, no hardcoded USD); connectors preserve native billing currency + source timezone / exchange rate |
+| Agent / operational | migrated | expected-utility keeps components separate (unknowns never 0); outcome classification (claimed/observed/verified/estimated/counterfactual); queue health never certifies self-reported "healthy" without coverage |
 
 The authoritative, up-to-date migration state lives in
 `config/computation_inventory.yaml` and `config/implementation_ledger.yaml`.

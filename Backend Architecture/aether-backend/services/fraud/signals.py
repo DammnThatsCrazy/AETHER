@@ -4,6 +4,16 @@ Aether Backend — Fraud Signal Detectors
 Each signal evaluates one dimension of fraud risk and returns a 0-100 score
 with a weight factor.  Signals are composable and independently testable.
 
+Score semantics (IMPORTANT):
+    The 0-100 ``score`` each signal emits is a HANDCRAFTED, UNCALIBRATED
+    heuristic — a weighted sum of triggered rule contributions. It is NOT an
+    empirically calibrated probability of fraud and must not be interpreted or
+    thresholded as ``P(fraud)``. It only orders how strongly a given signal's
+    rules fired. Turning it into a calibrated probability would require fitting
+    against real labeled fraud outcomes, which these hand-tuned rules do not do.
+    ``SignalResult`` therefore carries ``calibrated=False`` / ``score_kind`` so
+    the number cannot be silently mistaken for a probability downstream.
+
 Design:
     - All signals implement the ``FraudSignal`` ABC.
     - ``evaluate`` receives the raw event dict and a context dict (session data,
@@ -33,13 +43,24 @@ logger = logging.getLogger("aether.fraud.signals")
 
 @dataclass
 class SignalResult:
-    """Output from a single fraud signal evaluation."""
+    """Output from a single fraud signal evaluation.
+
+    ``score`` is a handcrafted, UNCALIBRATED heuristic in [0, 100] — a weighted
+    sum of triggered rule contributions, NOT an empirically calibrated
+    probability of fraud. Do not interpret or threshold it as ``P(fraud)``. The
+    ``calibrated`` / ``score_kind`` markers make this explicit so the number is
+    not silently treated as a probability by downstream consumers.
+    """
 
     name: str
-    score: float           # 0-100 normalised risk score
+    score: float           # 0-100 UNCALIBRATED heuristic (see class docstring), NOT a probability
     weight: float          # 0.0-1.0 contribution to composite
     details: dict = field(default_factory=dict)
     triggered: bool = False
+    # Truthful provenance: the handcrafted score is not calibrated to real
+    # fraud outcomes. Kept as fields (not just docs) so consumers can assert it.
+    calibrated: bool = False
+    score_kind: str = "uncalibrated_heuristic"
 
 
 # ========================================================================
