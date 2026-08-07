@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "9ebc883"
+last_synced_commit: "22c9879"
 ---
 
 # Aether iOS SDK v8.12.0 — Integration Guide
@@ -387,6 +387,9 @@ The health agent starts automatically after `initialize()`. It:
   when `analytics` is granted post-init)
 - When `manifestVerificationKey` is set, unsigned or invalid manifest
   signatures are rejected and the last-known-good config is kept
+- Applies the verified manifest natively: `rollout_percentage` gates event
+  sampling and `features` merge into feature-flag resolution (previously the
+  manifest was fetched and verified but never applied)
 
 ## Granular Agent Lifecycle Emitters
 
