@@ -1706,6 +1706,25 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/ITERABLE-CONNECTOR.md",
+      "title": "Iterable Connector",
+      "slug": "operations/iterable-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED",
+        "AETHER_COMMS_INGESTION_ENABLED"
+      ]
+    },
+    {
       "path": "docs/JIRA-CONNECTOR-SETUP.md",
       "title": "Jira Connector Setup (Outbound Delivery)",
       "slug": "operations/jira-connector-setup",
