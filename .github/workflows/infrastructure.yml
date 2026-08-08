@@ -99,6 +99,8 @@ jobs:
           - production-lean
           - production-scale
           - enterprise-isolated
+          - demo
+          - preview
     defaults:
       run:
         working-directory: AWS Deployment/aether-aws/terraform
@@ -172,6 +174,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # demo/preview are ephemeral-class and deliberately excluded from
+        # remote-plan.
         profile:
           - staging
           - production-lean

@@ -24,6 +24,13 @@ locals {
   scale      = var.deployment_profile == "production-scale"
   enterprise = var.deployment_profile == "enterprise-isolated"
   staging    = var.deployment_profile == "staging"
+  demo       = var.deployment_profile == "demo"
+  preview    = var.deployment_profile == "preview"
+
+  # Ephemeral-class profiles (demo/preview) share the same resource posture as
+  # staging: cost-capped, no heavy managed backends, and a default egress mode
+  # that provisions no NAT Gateway.
+  ephemeral = local.demo || local.preview
 
   # --------------------------------------------------------------------------
   # Forbidden-for-lean toggles (config/deployment_profiles.yaml →
@@ -115,9 +122,14 @@ locals {
   # profiles/*.tfvars pin the default explicitly so a plan is self-describing.
   # --------------------------------------------------------------------------
 
+  # Ephemeral-class profiles default to public_ip like staging/production-lean:
+  # all four are cost-capped and must not provision a NAT Gateway. The explicit
+  # ephemeral arm is deliberate — a future ephemeral egress change must not be
+  # able to silently add NAT to a cost-capped profile.
   default_network_egress_mode = (
     local.enterprise ? "ha_nat" :
     local.scale ? "single_nat" :
+    local.ephemeral ? "public_ip" :
     "public_ip" # staging + production-lean
   )
   network_egress_mode = coalesce(var.network_egress_mode, local.default_network_egress_mode)

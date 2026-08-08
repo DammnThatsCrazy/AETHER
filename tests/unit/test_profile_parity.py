@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -85,6 +86,39 @@ def test_parity_validator_fails_on_ninth_profile(monkeypatch):
     """A profile added to the YAML but nowhere else trips the validator."""
     parity = _load("check_profile_parity")
     _run_check(parity, monkeypatch, lambda p: _valid_yaml(extra_profile="ninth"), fail=True)
+
+
+def test_parity_validator_fails_when_demo_tfvars_missing(monkeypatch, tmp_path):
+    """Deleting demo.tfvars trips the restated selectable-set invariant.
+
+    The C4 restatement makes the selectable set = cloud ∪ ephemeral and demands
+    ``profiles/*.tfvars`` equal that set. Removing one tfvars file from the
+    profiles dir must trip the validator even though the canonical YAML still
+    declares the profile.
+    """
+    parity = _load("check_profile_parity")
+
+    # The tfvars glob is the one surface read straight from the filesystem via
+    # `repo_root() / TF_DIR / "profiles"`. Point repo_root at a tmp tree that
+    # carries a copy of the profiles dir minus demo.tfvars, while every `_read`
+    # surface (docs, variables.tf, check_cost_policy_terraform.py, env
+    # templates) keeps resolving against the real tree. `load_yaml` resolves
+    # against the real tree through _common.repo_root, so the canonical config
+    # is the committed one.
+    def read_from_real_tree(rel_path: str) -> str:
+        return (ROOT / rel_path).read_text()
+
+    monkeypatch.setattr(parity, "_read", read_from_real_tree)
+    monkeypatch.setattr(parity, "repo_root", lambda: tmp_path)
+
+    src = ROOT / "AWS Deployment" / "aether-aws" / "terraform" / "profiles"
+    dst = tmp_path / "AWS Deployment" / "aether-aws" / "terraform" / "profiles"
+    dst.mkdir(parents=True)
+    for tfvars in src.glob("*.tfvars"):
+        if tfvars.name != "demo.tfvars":
+            shutil.copy2(tfvars, dst / tfvars.name)
+
+    assert parity.check() != 0
 
 
 def test_profile_config_rejects_extra_profile(monkeypatch):

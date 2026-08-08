@@ -15,14 +15,16 @@ Surfaces cross-checked:
      computed from the matrix. A ninth profile changes the count word and every
      registered doc fails until reviewed and updated.
   2. CLOUD SUBSET — the cloud-class profiles (class in {staging, production,
-     enterprise}) must be exactly the Terraform-selectable set.
-  3. TERRAFORM SELECTABILITY — ``check_cost_policy_terraform.py::VALID_PROFILES``,
-     ``profiles/*.tfvars`` filenames, and the ``deployment_profile`` variable
-     validation in ``variables.tf`` must all equal the cloud subset.
+     enterprise}) must be exactly EXPECTED_CLOUD.
+  3. SELECTABLE SET — the Terraform-selectable set is exactly cloud-class ∪
+     ephemeral-class (class in {demo, preview}). ``check_cost_policy_terraform.py
+     ::VALID_PROFILES``, the ``profiles/*.tfvars`` filenames, and the
+     ``deployment_profile`` variable validation in ``variables.tf`` must all
+     equal that selectable set.
   4. CONTRACT POLICY — every value in ``config/terraform_resource_contracts.yaml``
      ``permitted_in`` / ``also_applies_to`` must be a canonical profile.
   5. RUNTIME TOPOLOGY — every profile in ``config/runtime_deployment.yaml`` must
-     be canonical, and every cloud profile must have a runtime topology.
+     be canonical, and every SELECTABLE profile must have a runtime topology.
   6. ENV TEMPLATES — ``DEPLOYMENT_PROFILE`` in ``.env.staging.example`` and
      ``.env.production.example`` must be a canonical profile (membership).
      Backend-parity with the profile's declared backends is enforced by
@@ -68,8 +70,17 @@ _NUM_WORDS = {
     15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
 }
 
-# The four Terraform-selectable profiles. Cross-checked, not assumed.
+# The four cloud-class profiles. Cross-checked, not assumed.
 EXPECTED_CLOUD = ["staging", "production-lean", "production-scale", "enterprise-isolated"]
+
+# Ephemeral-class profiles are Terraform-selectable too (class in this set).
+# They provision no NAT egress and are cost-capped/TTL-cleanup-required, but
+# they are NOT part of the four cloud profiles the docs count as "four of the
+# eight".
+EPHEMERAL_CLASSES = {"demo", "preview"}
+
+# The full Terraform-selectable set: cloud ∪ ephemeral.
+EXPECTED_SELECTABLE = EXPECTED_CLOUD + ["demo", "preview"]
 
 CHECK_COST_POLICY_TERRAFORM = "scripts/release/check_cost_policy_terraform.py"
 TF_DIR = "AWS Deployment/aether-aws/terraform"
@@ -94,14 +105,27 @@ def _read(rel_path: str) -> str:
 
 
 def _variables_tf_profiles(text: str) -> list[str] | None:
-    """Extract the ``contains([...], var.deployment_profile)`` profile list."""
+    """Extract the ``contains([...], var.deployment_profile)`` profile list.
+
+    Tolerates both the single-line ``contains([...], var.deployment_profile)``
+    form and the canonical ``terraform fmt`` multi-line form with a trailing
+    comma after the last argument.
+    """
     m = re.search(
-        r'contains\(\s*\[\s*((?:"[^"]+"\s*,\s*)*"[^"]+")\s*\]\s*,\s*var\.deployment_profile\s*\)',
+        r'contains\(\s*\[\s*((?:"[^"]+"\s*,\s*)*"[^"]+")\s*\]\s*,\s*var\.deployment_profile\s*,?\s*\)',
         text,
     )
     if not m:
         return None
     return re.findall(r'"([^"]+)"', m.group(1))
+
+
+def _selectable(profiles: dict) -> list[str]:
+    """The Terraform-selectable set = cloud-class ∪ ephemeral-class profiles."""
+    return sorted(
+        p for p, cfg in profiles.items()
+        if (cfg or {}).get("class") in (CLOUD_CLASSES | EPHEMERAL_CLASSES)
+    )
 
 
 def check() -> int:
@@ -134,11 +158,19 @@ def check() -> int:
     expected_cloud = sorted(EXPECTED_CLOUD)
     r.require(
         cloud == expected_cloud,
-        f"cloud-class subset == Terraform-selectable set ({expected_cloud})",
+        f"cloud-class subset == EXPECTED_CLOUD ({expected_cloud})",
         f"cloud-class subset mismatch: got {cloud}, expected {expected_cloud}",
     )
 
-    # 3. Terraform selectability ---------------------------------------------
+    # 3. Terraform selectability = cloud ∪ ephemeral --------------------------
+    selectable = _selectable(profiles)
+    expected_selectable = sorted(EXPECTED_SELECTABLE)
+    r.require(
+        selectable == expected_selectable,
+        f"selectable set == cloud ∪ ephemeral ({expected_selectable})",
+        f"selectable set mismatch: got {selectable}, expected {expected_selectable}",
+    )
+
     cpt_source = _read(CHECK_COST_POLICY_TERRAFORM)
     m = re.search(r"VALID_PROFILES\s*=\s*(\[[^\]]*\])", cpt_source)
     r.require(
@@ -149,17 +181,17 @@ def check() -> int:
     if m:
         cpt_profiles = re.findall(r'"([^"]+)"', m.group(1))
         r.require(
-            sorted(cpt_profiles) == sorted(cloud),
-            f"VALID_PROFILES == cloud subset ({cloud})",
-            f"VALID_PROFILES mismatch: {cpt_profiles} != {cloud}",
+            sorted(cpt_profiles) == selectable,
+            f"VALID_PROFILES == selectable set ({selectable})",
+            f"VALID_PROFILES mismatch: {cpt_profiles} != {selectable}",
         )
 
     tfvar_dir = repo_root() / TF_DIR / "profiles"
     tfvar_files = sorted(p.stem for p in tfvar_dir.glob("*.tfvars")) if tfvar_dir.exists() else []
     r.require(
-        tfvar_files == cloud,
-        f"profiles/*.tfvars == cloud subset ({cloud})",
-        f"profiles/*.tfvars mismatch: {tfvar_files} != {cloud}",
+        tfvar_files == selectable,
+        f"profiles/*.tfvars == selectable set ({selectable})",
+        f"profiles/*.tfvars mismatch: {tfvar_files} != {selectable}",
     )
 
     try:
@@ -169,9 +201,9 @@ def check() -> int:
         variables_tf = ""
     var_profiles = _variables_tf_profiles(variables_tf)
     r.require(
-        var_profiles is not None and sorted(var_profiles) == sorted(cloud),
-        f"variables.tf deployment_profile validation == cloud subset ({cloud})",
-        f"variables.tf validation mismatch: {var_profiles} != {cloud}",
+        var_profiles is not None and sorted(var_profiles) == selectable,
+        f"variables.tf deployment_profile validation == selectable set ({selectable})",
+        f"variables.tf validation mismatch: {var_profiles} != {selectable}",
     )
 
     # 4. Contract policy references -------------------------------------------
@@ -207,11 +239,11 @@ def check() -> int:
         f"runtime_deployment.yaml names non-canonical profiles: "
         f"{sorted(runtime_profiles - canonical)}",
     )
-    missing_runtime = sorted(p for p in cloud if p not in runtime_profiles)
+    missing_runtime = sorted(p for p in selectable if p not in runtime_profiles)
     r.require(
         not missing_runtime,
-        f"every cloud profile has a runtime topology",
-        f"cloud profiles missing runtime topology: {missing_runtime}",
+        "every selectable profile has a runtime topology",
+        f"selectable profiles missing runtime topology: {missing_runtime}",
     )
 
     # 6. Env template membership --------------------------------------------------

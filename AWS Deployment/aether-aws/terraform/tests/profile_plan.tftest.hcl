@@ -5,10 +5,11 @@
 # credential-gated workflow job.
 #
 # One run block per deployable profile, each pinning its own variables, so a
-# single `terraform test` covers all four with no -var-file. The capacity
-# scalars mirror profiles/<profile>.tfvars and are set here explicitly because
-# the CI job auto-loads exactly one profile's tfvars — without pinning them,
-# three of the four run blocks would silently plan against the wrong capacity.
+# single `terraform test` covers all six (four cloud + demo/preview) with no
+# -var-file. The capacity scalars mirror profiles/<profile>.tfvars and are set
+# here explicitly because the CI job auto-loads exactly one profile's tfvars —
+# without pinning them, five of the six run blocks would silently plan against
+# the wrong capacity.
 #
 # `network_egress_mode` is deliberately set to null in every run block so the
 # profile derivation in profiles.tf is what is under test, not the tfvars value.
@@ -307,6 +308,319 @@ run "staging_profile_plan" {
       module.ecs.backend_autoscaling_bounds.max == 2,
     ])
     error_message = "An awake staging plan no longer runs the reviewed baseline capacity."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# demo — ephemeral-class. Temporary live demo with a seeded backend tenant.
+# Cost-capped and TTL-cleanup-required: same forbidden set and egress posture
+# as staging, in the same consolidated lean-worker shape.
+# ---------------------------------------------------------------------------
+
+run "demo_profile_plan" {
+  command = plan
+
+  variables {
+    deployment_profile  = "demo"
+    environment         = "staging"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    log_retention_days  = 3
+  }
+
+  # The egress posture profiles.tf must derive for a cost-capped profile that
+  # pins no explicit override. (var.deployment_profile's own membership in the
+  # deployable set is enforced by its validation block in variables.tf, not by
+  # re-asserting an input against itself here.)
+  assert {
+    condition = alltrue([
+      local.network_egress_mode == "public_ip",
+      local.nat_mode == "none",
+      local.assign_public_ip,
+    ])
+    error_message = "demo no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
+  }
+
+  # TASK PLACEMENT — the first-apply blocker this pins.
+  #
+  # public_ip mode provisions no NAT Gateway, so aws_route.private_nat has
+  # count 0 and the private route tables carry no 0.0.0.0/0 route whatsoever.
+  # A task ENI placed there cannot reach ECR, Secrets Manager or CloudWatch —
+  # assign_public_ip does not help, because egress follows the SUBNET's route
+  # table — so the very first apply ends in CannotPullContainerError and a
+  # circuit-breaker rollback. Tasks must therefore be in the public tier, which
+  # has the IGW default route.
+  #
+  # The assertion reads module.ecs's own placement keys, i.e. the map the three
+  # network_configuration blocks index, not the root local that produced it.
+  # Subnet IDs are unknown until apply and can pin nothing; the "<tier>/<az>"
+  # keys are configuration-derived and known at plan.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.task_subnet_keys) ==
+      "public/us-east-1a,public/us-east-1b,public/us-east-1c",
+      !module.vpc.private_subnets_have_internet_route,
+      local.ecs_task_subnet_tier == "public",
+    ])
+    error_message = "demo places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
+  }
+
+  # The security invariant that must hold BECAUSE of the placement above: a
+  # public IP on the task ENI must buy egress and nothing else. The ECS
+  # security group admits 8000/8080 from the ALB security group only, and no
+  # CIDR ingress of any kind.
+  assert {
+    condition = alltrue([
+      join(",", sort([for rule in module.vpc.ecs_sg_ingress : tostring(rule.port)])) == "8000,8080",
+      alltrue([for rule in module.vpc.ecs_sg_ingress : length(rule.cidr_blocks) == 0]),
+      alltrue([for rule in module.vpc.ecs_sg_ingress : rule.from_alb]),
+    ])
+    error_message = "The ECS task security group admits a CIDR or a port the ALB does not front; with tasks on public IPs that publishes an application port to the internet."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.msk) == 0,
+      length(module.elasticache) == 0,
+      length(module.neptune) == 0,
+      length(module.rds) == 0,
+    ])
+    error_message = "The demo plan provisions a cost-capped data store it must not."
+  }
+
+  # required_resources: credential_kms — the provider-credential envelope-
+  # encryption CMK is provisioned in every cloud profile. A demo plan that
+  # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
+  assert {
+    condition     = length(module.kms_credentials) == 1
+    error_message = "The demo plan does not provision the provider-credential envelope-encryption CMK."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.vpc.nat_gateway_ids) == 0,
+      length(module.vpc.nat_eip_ids) == 0,
+      module.vpc.nat_mode == "none",
+    ])
+    error_message = "The demo plan provisions NAT egress."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.ecs.dedicated_ml_service_arns) == 0,
+      length(module.ecs.dedicated_ml_target_group_arns) == 0,
+      length(module.alb.ml_target_group_arns) == 0,
+      module.alb.ml_target_group_arn == "",
+      module.ecs.ml_service_name == "",
+    ])
+    error_message = "The demo plan provisions the dedicated ML service or its ALB target group."
+  }
+
+  # The normalized locals must collapse to "" — not to null — when the backing
+  # module is absent, or a null flows into a string module input unnoticed.
+  assert {
+    condition = alltrue([
+      local.redis_host == "",
+      local.redis_auth_secret_arn == "",
+      local.kafka_bootstrap_servers == "",
+      local.neptune_endpoint == "",
+    ])
+    error_message = "A normalized data-store local is not the empty string with its module absent."
+  }
+
+  assert {
+    condition = (
+      local.graph_backend == "postgres" &&
+      local.cache_backend == "dynamodb" &&
+      local.event_broker == "sns_sqs" &&
+      local.analytics_backend == "postgres"
+    )
+    error_message = "The demo backend selectors no longer match the deployment policy."
+  }
+
+  # Demo is an ephemeral-class profile and is expected to run the same
+  # consolidated shape as staging: ONE non-api runtime service, keyed by the
+  # execution group token the container boots as AETHER_ROLE.
+  assert {
+    condition = alltrue([
+      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
+      length(local.runtime_service_settings) == 1,
+      join(",", keys(local.runtime_service_settings)) == "lean-worker",
+      contains(module.ecs.runtime_service_names, "AETHER-staging-lean-worker"),
+      local.runtime_execution_mode == "consolidated",
+    ])
+    error_message = "The demo plan does not provision exactly one consolidated lean-worker service."
+  }
+
+  # Ephemeral-class plans are not scaled to zero by default; the reviewed
+  # baseline must still run.
+  assert {
+    condition = alltrue([
+      var.staging_state == "awake",
+      local.staging_state_multiplier == 1,
+      module.ecs.backend_service_desired_count == 1,
+      module.ecs.runtime_service_desired_counts["lean-worker"] == 1,
+      module.ecs.backend_autoscaling_bounds.max == 2,
+    ])
+    error_message = "A demo plan no longer runs the reviewed baseline capacity."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# preview — ephemeral-class. PR-specific live environment, only when explicitly
+# requested. Cost-capped, auto-expire, no dedicated VPC/ALB/Aurora/Neptune:
+# same forbidden set and egress posture as staging, in the same consolidated
+# lean-worker shape.
+# ---------------------------------------------------------------------------
+
+run "preview_profile_plan" {
+  command = plan
+
+  variables {
+    deployment_profile  = "preview"
+    environment         = "staging"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    log_retention_days  = 3
+  }
+
+  # The egress posture profiles.tf must derive for a cost-capped profile that
+  # pins no explicit override. (var.deployment_profile's own membership in the
+  # deployable set is enforced by its validation block in variables.tf, not by
+  # re-asserting an input against itself here.)
+  assert {
+    condition = alltrue([
+      local.network_egress_mode == "public_ip",
+      local.nat_mode == "none",
+      local.assign_public_ip,
+    ])
+    error_message = "preview no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
+  }
+
+  # TASK PLACEMENT — the first-apply blocker this pins.
+  #
+  # public_ip mode provisions no NAT Gateway, so aws_route.private_nat has
+  # count 0 and the private route tables carry no 0.0.0.0/0 route whatsoever.
+  # A task ENI placed there cannot reach ECR, Secrets Manager or CloudWatch —
+  # assign_public_ip does not help, because egress follows the SUBNET's route
+  # table — so the very first apply ends in CannotPullContainerError and a
+  # circuit-breaker rollback. Tasks must therefore be in the public tier, which
+  # has the IGW default route.
+  #
+  # The assertion reads module.ecs's own placement keys, i.e. the map the three
+  # network_configuration blocks index, not the root local that produced it.
+  # Subnet IDs are unknown until apply and can pin nothing; the "<tier>/<az>"
+  # keys are configuration-derived and known at plan.
+  assert {
+    condition = alltrue([
+      join(",", module.ecs.task_subnet_keys) ==
+      "public/us-east-1a,public/us-east-1b,public/us-east-1c",
+      !module.vpc.private_subnets_have_internet_route,
+      local.ecs_task_subnet_tier == "public",
+    ])
+    error_message = "preview places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
+  }
+
+  # The security invariant that must hold BECAUSE of the placement above: a
+  # public IP on the task ENI must buy egress and nothing else. The ECS
+  # security group admits 8000/8080 from the ALB security group only, and no
+  # CIDR ingress of any kind.
+  assert {
+    condition = alltrue([
+      join(",", sort([for rule in module.vpc.ecs_sg_ingress : tostring(rule.port)])) == "8000,8080",
+      alltrue([for rule in module.vpc.ecs_sg_ingress : length(rule.cidr_blocks) == 0]),
+      alltrue([for rule in module.vpc.ecs_sg_ingress : rule.from_alb]),
+    ])
+    error_message = "The ECS task security group admits a CIDR or a port the ALB does not front; with tasks on public IPs that publishes an application port to the internet."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.msk) == 0,
+      length(module.elasticache) == 0,
+      length(module.neptune) == 0,
+      length(module.rds) == 0,
+    ])
+    error_message = "The preview plan provisions a cost-capped data store it must not."
+  }
+
+  # required_resources: credential_kms — the provider-credential envelope-
+  # encryption CMK is provisioned in every cloud profile. A preview plan that
+  # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
+  assert {
+    condition     = length(module.kms_credentials) == 1
+    error_message = "The preview plan does not provision the provider-credential envelope-encryption CMK."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.vpc.nat_gateway_ids) == 0,
+      length(module.vpc.nat_eip_ids) == 0,
+      module.vpc.nat_mode == "none",
+    ])
+    error_message = "The preview plan provisions NAT egress."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.ecs.dedicated_ml_service_arns) == 0,
+      length(module.ecs.dedicated_ml_target_group_arns) == 0,
+      length(module.alb.ml_target_group_arns) == 0,
+      module.alb.ml_target_group_arn == "",
+      module.ecs.ml_service_name == "",
+    ])
+    error_message = "The preview plan provisions the dedicated ML service or its ALB target group."
+  }
+
+  # The normalized locals must collapse to "" — not to null — when the backing
+  # module is absent, or a null flows into a string module input unnoticed.
+  assert {
+    condition = alltrue([
+      local.redis_host == "",
+      local.redis_auth_secret_arn == "",
+      local.kafka_bootstrap_servers == "",
+      local.neptune_endpoint == "",
+    ])
+    error_message = "A normalized data-store local is not the empty string with its module absent."
+  }
+
+  assert {
+    condition = (
+      local.graph_backend == "postgres" &&
+      local.cache_backend == "dynamodb" &&
+      local.event_broker == "sns_sqs" &&
+      local.analytics_backend == "postgres"
+    )
+    error_message = "The preview backend selectors no longer match the deployment policy."
+  }
+
+  # Preview is an ephemeral-class profile and is expected to run the same
+  # consolidated shape as staging: ONE non-api runtime service, keyed by the
+  # execution group token the container boots as AETHER_ROLE.
+  assert {
+    condition = alltrue([
+      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
+      length(local.runtime_service_settings) == 1,
+      join(",", keys(local.runtime_service_settings)) == "lean-worker",
+      contains(module.ecs.runtime_service_names, "AETHER-staging-lean-worker"),
+      local.runtime_execution_mode == "consolidated",
+    ])
+    error_message = "The preview plan does not provision exactly one consolidated lean-worker service."
+  }
+
+  # Ephemeral-class plans are not scaled to zero by default; the reviewed
+  # baseline must still run.
+  assert {
+    condition = alltrue([
+      var.staging_state == "awake",
+      local.staging_state_multiplier == 1,
+      module.ecs.backend_service_desired_count == 1,
+      module.ecs.runtime_service_desired_counts["lean-worker"] == 1,
+      module.ecs.backend_autoscaling_bounds.max == 2,
+    ])
+    error_message = "A preview plan no longer runs the reviewed baseline capacity."
   }
 }
 

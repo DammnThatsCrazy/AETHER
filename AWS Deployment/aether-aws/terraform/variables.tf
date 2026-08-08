@@ -8,7 +8,10 @@ variable "deployment_profile" {
   default     = "production-lean"
 
   validation {
-    condition     = contains(["staging", "production-lean", "production-scale", "enterprise-isolated"], var.deployment_profile)
+    condition = contains(
+      ["staging", "production-lean", "production-scale", "enterprise-isolated", "demo", "preview"],
+      var.deployment_profile,
+    )
     error_message = "Invalid Aether deployment profile."
   }
 }
@@ -35,12 +38,15 @@ variable "ml_image_digest" {
 
 variable "environment" {
   type        = string
-  description = "Deployment environment (production, staging, dev)"
+  description = "Deployment environment (production, staging, dev, demo, preview)"
   default     = "production"
 
   validation {
-    condition     = contains(["production", "staging", "dev"], var.environment)
-    error_message = "environment must be one of: production, staging, dev."
+    condition = contains(
+      ["production", "staging", "dev", "demo", "preview"],
+      var.environment,
+    )
+    error_message = "environment must be one of: production, staging, dev, demo, preview."
   }
 }
 
