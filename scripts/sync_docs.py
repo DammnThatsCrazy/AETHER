@@ -75,7 +75,7 @@ def top_level_summary(tracked: list[str]) -> list[tuple[str, int, int]]:
     return rows
 
 
-def authored_docs(tracked: list[str]) -> dict[str, list[str]]:
+def authored_docs(tracked: list[str] | None = None) -> dict[str, list[str]]:
     """Group authored docs for REPO-INDEX coverage.
 
     Most authored docs live at ``docs/*.md``. Product-domain slices may also
@@ -89,6 +89,8 @@ def authored_docs(tracked: list[str]) -> dict[str, list[str]]:
     the committed index — otherwise the regenerated REPO-INDEX would diverge
     from the committed one and fail the drift gate.
     """
+    if tracked is None:
+        tracked = _git_tracked_files()
     tracked_set = set(tracked)
     groups: dict[str, list[str]] = defaultdict(list)
     paths = list(DOCS.glob("*.md"))
