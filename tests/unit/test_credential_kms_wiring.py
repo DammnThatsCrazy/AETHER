@@ -10,6 +10,13 @@ tests read the Terraform SOURCE and assert the wiring, so the failure surfaces
 at `make ci-check` rather than in an applied environment where the cipher
 starts failing closed at boot.
 
+The toggle is the root variable `enable_credential_kms` (default true), NOT a
+profiles.tf local: the throwaway `terraform test` apply run passes false so its
+teardown can destroy every resource (the CMK carries `prevent_destroy`), while
+every real deployment keeps the default true. The gates below therefore assert
+the variable-default wiring, and the plan runs still assert the module is
+present for the six profiles that require it.
+
 The mutation cases are the point: each check below must FAIL when its line is
 removed, or it is a spell-check rather than a guard.
 """
@@ -25,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TF = ROOT / "AWS Deployment/aether-aws/terraform"
 MAIN = TF / "main.tf"
 PROFILES_TF = TF / "profiles.tf"
+ROOT_VARS = TF / "variables.tf"
 ECS_MAIN = TF / "modules/ecs/main.tf"
 ECS_VARS = TF / "modules/ecs/variables.tf"
 ECS_OUTPUTS = TF / "modules/ecs/outputs.tf"
@@ -48,16 +56,19 @@ def _read(rel: str) -> str:
 # below can be applied and asserted to FAIL.
 # ---------------------------------------------------------------------------
 
-def _problems(main: str, profiles_tf: str, ecs_main: str,
+def _problems(main: str, profiles_tf: str, root_vars: str, ecs_main: str,
               ecs_vars: str, ecs_outputs: str) -> list[str]:
     p: list[str] = []
 
-    # 1. The root instantiates the module, gated by the toggle.
+    # 1. The root instantiates the module, gated by the root toggle. The gate
+    #    is `var.enable_credential_kms`, not a profiles.tf local: the tftest
+    #    apply run passes false so its throwaway apply can tear down, while
+    #    production keeps the default true.
     if not re.search(r'module\s+"kms_credentials"\s*\{', main):
         p.append("main.tf does not instantiate module \"kms_credentials\"")
-    if "count  = local.enable_credential_kms ? 1 : 0" not in main:
-        p.append("kms_credentials module is not count-gated by local.enable_credential_kms")
-    if "credential_kms_key_id = module.kms_credentials[0].key_id" not in main:
+    if "count  = var.enable_credential_kms ? 1 : 0" not in main:
+        p.append("kms_credentials module is not count-gated by var.enable_credential_kms")
+    if "credential_kms_key_id = try(module.kms_credentials[0].key_id, \"\")" not in main:
         p.append("module.ecs is not handed the credential KMS key id")
 
     # 2. The task role is granted the least-privilege crypto policy.
@@ -71,9 +82,17 @@ def _problems(main: str, profiles_tf: str, ecs_main: str,
         if "policy = module.kms_credentials[0].iam_policy_json" not in block:
             p.append("credential_kms policy does not come from the module's iam_policy_json")
 
-    # 3. The toggle exists and is a literal true (no cloud profile skips it).
-    if not re.search(r'enable_credential_kms\s*=\s*true', profiles_tf):
-        p.append("profiles.tf does not declare enable_credential_kms = true")
+    # 3. The toggle is a root variable defaulting to true — every cloud profile
+    #    gets the CMK unless an operator explicitly disables it, and only the
+    #    throwaway tftest apply run does. (profiles.tf carries no
+    #    enable_credential_kms local anymore; the gate lives in variables.tf.)
+    m = re.search(
+        r'variable\s+"enable_credential_kms"\s*\{(.*?)\n\}', root_vars, re.S,
+    )
+    if not m:
+        p.append("variables.tf has no enable_credential_kms variable")
+    elif "default     = true" not in m.group(1):
+        p.append("enable_credential_kms does not default to true")
 
     # 4. The ECS module accepts the key id and injects CREDENTIAL_KMS_KEY_ID
     #    into BOTH task definitions (api + every runtime service).
@@ -109,8 +128,8 @@ def _problems(main: str, profiles_tf: str, ecs_main: str,
 
 def test_credential_kms_wiring_is_present():
     problems = _problems(
-        MAIN.read_text(), PROFILES_TF.read_text(), ECS_MAIN.read_text(),
-        ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
+        MAIN.read_text(), PROFILES_TF.read_text(), ROOT_VARS.read_text(),
+        ECS_MAIN.read_text(), ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
     )
     assert not problems, "provider-credential KMS wiring regressed:\n  " + \
         "\n  ".join(problems)
@@ -123,8 +142,8 @@ def test_dropping_credential_kms_env_fails(monkeypatch):
     mutated = text.replace('{ name = "CREDENTIAL_KMS_KEY_ID", value = var.credential_kms_key_id },', "")
     assert mutated != text, "mutation was a no-op"
     problems = _problems(
-        MAIN.read_text(), PROFILES_TF.read_text(), mutated,
-        ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
+        MAIN.read_text(), PROFILES_TF.read_text(), ROOT_VARS.read_text(),
+        mutated, ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
     )
     assert problems, "removing CREDENTIAL_KMS_KEY_ID was not detected"
 
@@ -139,8 +158,8 @@ def test_dropping_iam_role_policy_fails():
     end = main.index("}", main.index("iam_policy_json", m.end())) + 1
     mutated = main[:m.start()] + main[end:]
     problems = _problems(
-        mutated, PROFILES_TF.read_text(), ECS_MAIN.read_text(),
-        ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
+        mutated, PROFILES_TF.read_text(), ROOT_VARS.read_text(),
+        ECS_MAIN.read_text(), ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
     )
     assert problems, "removing the aws_iam_role_policy attachment was not detected"
 
@@ -149,10 +168,10 @@ def test_removing_module_from_root_fails():
     """Count-gate flipped off (or the module deleted) must be caught here as
     well as by terraform test."""
     main = MAIN.read_text()
-    mutated = main.replace("count  = local.enable_credential_kms ? 1 : 0\n", "")
+    mutated = main.replace("count  = var.enable_credential_kms ? 1 : 0\n", "")
     assert mutated != main, "mutation was a no-op"
     problems = _problems(
-        mutated, PROFILES_TF.read_text(), ECS_MAIN.read_text(),
-        ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
+        mutated, PROFILES_TF.read_text(), ROOT_VARS.read_text(),
+        ECS_MAIN.read_text(), ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
     )
     assert problems, "uncounting the kms_credentials module was not detected"
