@@ -84,7 +84,11 @@ jobs:
           else
             echo 'configured=false' >> "$GITHUB_OUTPUT"
             printf -v missing_list '%s, ' "${missing[@]}"
-            echo "::notice title=Remote Terraform plans not configured::Missing ${missing_list%, }. Pull requests still run provider-mocked configuration plans; pushes to main fail closed."
+            # The enforcement step below is itself gated on this same
+            # `configured` output, so a credential-less push to main does NOT
+            # fail the run: remote plans are skipped, the promotion gate reports
+            # not-armed, and the commit is NOT promotable until the set is wired.
+            echo "::notice title=Remote Terraform plans not configured::Missing ${missing_list%, }. Pull requests still run provider-mocked configuration plans. Pushes to main skip credentialed remote plans while the set is absent; the promotion gate reports not-armed instead of failing, and enforces fail-closed the moment the set is wired."
           fi
 
   plan:
