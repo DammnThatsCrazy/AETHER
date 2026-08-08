@@ -131,7 +131,12 @@ CONSUMER_ROLES: frozenset[str] = frozenset(
 # consumers are independently and canonically owned by ``consumer_specs.py``;
 # identity/graph/measurement therefore need no artificial loop spec here.
 ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
-    "outbox-relay": frozenset({"notification_outbox", "event_outbox_relay"}),
+    # reward_delivery_outbox is the reward plane's at-least-once delivery loop;
+    # it belongs with the other outbox relays by definition (defect fix: it was
+    # a builder no supervisor ever started).
+    "outbox-relay": frozenset(
+        {"notification_outbox", "event_outbox_relay", "reward_delivery_outbox"}
+    ),
     "stream-worker": frozenset({"event_replay", "dune_polling"}),
     "identity-worker": frozenset(),
     # The Kyber Graph projector consumes the graph mutation ledger into platform
@@ -142,9 +147,12 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # Stream consumer is owned by consumer_specs.py; Phase B adds replay/reconciler
     # supervised loop specs here.
     "semantic-worker": frozenset(),
+    # x402_settlement_reconciliation projects verified on-chain finality into
+    # settlement state — a materialization, like the payment-rail sync/repair
+    # loops that already ride this role.
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
-         "bronze_object_compaction"}
+         "bronze_object_compaction", "x402_settlement_reconciliation"}
     ),
     "maintenance": frozenset(
         {
@@ -170,6 +178,15 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # above rather than justifying a runtime role of its own. Not
             # graph-writer: it reads no ledger.
             "kyber_incident_correlation",
+            # Reward-plane and credential sweeps: each is a single low-frequency
+            # periodic loop (stale reservation release, DLQ depth gauge, expired
+            # credential-overlap tombstoning), so they ride maintenance rather
+            # than justifying dedicated runtime roles and the deploy-profile /
+            # compose / Terraform / topology-validator fan-out that comes with
+            # one.
+            "reward_reservation_release",
+            "reward_dlq_sweeper",
+            "credential_expiry_sweep",
         }
     ),
 }

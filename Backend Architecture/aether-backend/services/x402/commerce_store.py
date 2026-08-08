@@ -307,6 +307,34 @@ class CommerceStore:
     async def list_settlements(self, tenant_id: str, state: Optional[SettlementState] = None) -> list[Settlement]:
         return await self.settlements.list(tenant_id, state=state)
 
+    async def tenants_with_pending_settlements(self) -> list[str]:
+        """Distinct tenant ids holding at least one PENDING settlement.
+
+        Cross-tenant scan used by the reconciliation worker to know which
+        tenants to re-scope into. Local: iterate the in-memory collection;
+        Postgres: a single JSONB filter query."""
+        rows: list = []
+        coll = self.settlements
+        if hasattr(coll, "all_rows"):
+            rows = await coll.all_rows(filters={"state": SettlementState.PENDING.value})
+        elif hasattr(coll, "_repo"):
+            rows = await coll._repo.find_many(
+                filters={"state": SettlementState.PENDING.value}, limit=10000
+            )
+        elif hasattr(coll, "_data"):
+            for tenant_bucket in coll._data.values():
+                rows.extend(
+                    r for r in tenant_bucket.values()
+                    if (getattr(r, "state", None) == SettlementState.PENDING
+                        or (isinstance(r, dict) and r.get("state") == SettlementState.PENDING.value))
+                )
+        seen: list[str] = []
+        for r in rows:
+            tid = r.get("tenant_id") if isinstance(r, dict) else getattr(r, "tenant_id", None)
+            if tid and tid not in seen:
+                seen.append(tid)
+        return seen
+
     # ── Entitlements / Grants / Fulfillments ─────────────────────────
 
     async def put_entitlement(self, e: Entitlement) -> Entitlement:

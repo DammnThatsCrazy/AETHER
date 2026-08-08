@@ -153,6 +153,38 @@ class BudgetReservationService:
     async def get_ledger(self, tenant_id: str, campaign_id: str) -> Optional[dict]:
         return await self._ledger.find_by_id(_account_id(tenant_id, campaign_id))
 
+    async def release_stale(self, *, max_age_seconds: int = 3600) -> int:
+        """Release reservations left ``reserved`` past ``max_age_seconds``.
+
+        A reservation that never committed (the delivery path crashed between
+        reserve and commit) otherwise leaks budget. Idempotent: releasing an
+        already-released/committed reservation is a no-op. Returns the count
+        released."""
+        from datetime import timedelta
+
+        from shared.temporal.instant import try_parse_instant
+
+        cutoff = utc_now() - timedelta(seconds=max_age_seconds)
+        rows = await self._reservations.find_many(
+            filters={"state": "reserved"}, limit=5000
+        )
+        released = 0
+        for row in rows:
+            created = row.get("created_at") or row.get("reserved_at")
+            # try_parse_instant is the sanctioned parser: it returns an aware UTC
+            # instant or a reason code, and rejects naive strings rather than
+            # silently assuming UTC. A row with an unparseable timestamp is left
+            # alone rather than force-released.
+            ts, _reason = try_parse_instant(str(created))
+            if ts is None:
+                continue
+            if ts >= cutoff:
+                continue
+            result = await self.release(row["id"], tenant_id=row.get("tenant_id", ""))
+            if result.ok:
+                released += 1
+        return released
+
     # ── in-memory backend ─────────────────────────────────────────────────
 
     async def _reserve_in_memory(

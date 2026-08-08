@@ -499,6 +499,11 @@ class RewardDeliveryOutbox:
     async def status(self, tenant_id: str) -> dict:
         return await self._jobs.status_counts(tenant_id)
 
+    async def dead_letter_depth(self) -> int:
+        """Cross-tenant count of dead-lettered jobs (DLQ sweeper metric)."""
+        rows = await self._jobs.find_many(filters={"state": "dead_letter"}, limit=10000)
+        return len(rows)
+
     async def redeliver(self, job_id: str, tenant_id: str) -> dict:
         """Operator replay: requeue a failed/dead-lettered job for another attempt."""
         job = await self._jobs.find_by_id(job_id)

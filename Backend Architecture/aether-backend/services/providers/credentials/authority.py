@@ -920,6 +920,35 @@ class CredentialAuthority:
                 return row
         return None
 
+    async def sweep_expired_overlaps(self) -> int:
+        """Tombstone every PREVIOUS credential version whose rotation-overlap
+        window has expired (cross-tenant maintenance sweep). Idempotent;
+        returns the count swept. Erases the ciphertext of each swept row."""
+        from shared.temporal.instant import try_parse_instant
+
+        now = utc_now()
+        rows = await self._repo.find_many(
+            filters={"state": CredentialState.PREVIOUS}, limit=10000
+        )
+        swept = 0
+        for row in rows:
+            expires = row.get("rotation_overlap_expires_at")
+            if not expires:
+                continue
+            # Sanctioned parser: an aware UTC instant or a reason code, never a
+            # naive value silently assumed to be UTC. An unparseable overlap
+            # timestamp is left in place rather than force-tombstoned.
+            ts, _reason = try_parse_instant(str(expires))
+            if ts is None or ts > now:
+                continue
+            await self._repo.update(
+                row["id"],
+                {"state": CredentialState.TOMBSTONED, "encrypted_value": "", "encrypted_data_key": ""},
+            )
+            self._invalidate(row)
+            swept += 1
+        return swept
+
     async def _tombstone_previous(self, tenant_id, provider, environment, slot_name) -> None:
         prev = await self._repo.previous_version(tenant_id, provider, environment, slot_name)
         if prev:
