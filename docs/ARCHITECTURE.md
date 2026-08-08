@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "e5ce7e1"
+last_synced_commit: "d2856ad7"
 ---
 # Aether vNext — Architecture Guide
 
