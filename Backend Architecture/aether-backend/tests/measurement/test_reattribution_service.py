@@ -467,9 +467,11 @@ async def test_fraud_takedown_clean_when_network_has_no_attribution(monkeypatch)
 
 
 async def test_privacy_erasure_dict_shape_unchanged_after_extraction():
-    """handle_erasure must still return the exact evidence-dict keys it did
-    before the M3 extraction — the delegation to reattribute_affected is a pure
-    parity refactor. (Full behavioral parity: tests/dsr/test_erasure_reattribution.py.)"""
+    """handle_erasure must still return the pre-M3 evidence-dict keys — the
+    delegation to reattribute_affected is a pure parity refactor — plus the one
+    additive ``reattribution`` summary key that M2 introduced so the DSR erasure
+    job can record propagation evidence. (Full behavioral parity:
+    tests/dsr/test_erasure_reattribution.py.)"""
     tenant_id = f"tenant-{uuid4().hex[:8]}"
     identity = f"profile-{uuid4().hex[:8]}"
 
@@ -490,6 +492,7 @@ async def test_privacy_erasure_dict_shape_unchanged_after_extraction():
         "reattribution_scope_limit",
         "reattribution_touchpoints_scanned",
         "reattribution_conversions_scanned",
+        "reattribution",  # M2: full re-attribution summary (or None) for DSR evidence
         "errors",
         "partial_failure",
     }
