@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "71d96f6"
+last_synced_commit: "c1969d0"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -912,9 +912,14 @@ Configure a reward delivery rail for the authenticated tenant.
 Rails: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim`.
 Beta (config only, no delivery): `stripe_credit` | `loyalty_points` | `coupon` | `internal_credit` | `x402_credit`.
 
-Secret material under `config` (e.g. `signing_secret`, `api_key`) is
-**write-only**: every rail response and audit state returns `<redacted>` plus a
-`has_<key>` marker and a short non-reversible fingerprint — never the value.
+For `tenant_webhook`, a submitted `signing_secret` is **dual-written into the
+credential authority** (provider `tenant_webhook`, slot `webhook_signing_secret`)
+and replaced by a `secret_ref` before the config is persisted — plaintext never
+reaches the stored row, the durable outbox job, an audit record, or any
+response. The secret is resolved at the narrow send site with active+previous
+rotation overlap. For other rails, secret material under `config` (e.g.
+`api_key`) is **write-only**: responses and audit state return `<redacted>` plus
+a `has_<key>` marker and a short non-reversible fingerprint — never the value.
 
 ### GET /v1/rewards/rails
 
@@ -942,7 +947,7 @@ Register a smart contract for `onchain_claim` proof generation. A verified regis
 
 Re-registering an existing `(tenant_id, chain_id, contract_address)` updates `oracle_signer_address`, `allowed_campaign_ids`, and `contract_name` and resets `verification_status` to `pending` — a new operator verification is required before proof generation resumes.
 
-`oracle_signer_address` is **required** — set it to the Ethereum address derived from `ORACLE_SIGNER_KEY` (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the live oracle signer.
+`oracle_signer_address` is **required** — set it to the Ethereum address derived from the tenant's `reward_signer` credential (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the tenant's resolved reward signer.
 
 **Request:**
 ```json
@@ -966,7 +971,7 @@ Get a single registered contract by ID.
 
 ### POST /v1/rewards/contracts/{id}/verify
 
-**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the current Aether oracle signer (derived from `ORACLE_SIGNER_KEY`) — returns 422 if they diverge. After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
+**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the tenant's **resolved reward signer** (`services/rewards/signing.py`, credential-authority backed) — returns 422 if they diverge, 422 if no signer resolves, and 503 if `eth_account` is unavailable (fail-closed; never passes unverified). After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ---
 
