@@ -57,8 +57,14 @@ def test_unknown_slot_and_provider():
     # strict subset and never get shadowed.
     assert set(ADAPTERS.keys()) <= set(known_providers())
     from services.rewards.signer_slots import REWARD_SLOT_DECLARATIONS
+    from services.x402.credential_slots import declared_slots as x402_slots
 
-    assert set(known_providers()) == set(ADAPTERS.keys()) | set(REWARD_SLOT_DECLARATIONS)
+    expected = (
+        set(ADAPTERS.keys())
+        | set(REWARD_SLOT_DECLARATIONS)
+        | set(x402_slots())
+    )
+    assert set(known_providers()) == expected
 
 
 def test_domain_partition_is_consistent():

@@ -377,77 +377,80 @@ def test_onchain_claim_deliver_is_noop():
 # Beta rail stubs
 # ═══════════════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("adapter_cls", [
-    StripeCreditAdapter,
-    LoyaltyPointsAdapter,
-    CouponAdapter,
-    InternalCreditAdapter,
-    X402CreditAdapter,
-])
-def test_beta_rail_validate_config_returns_error(adapter_cls):
-    errors = adapter_cls().validate_config({})
-    assert len(errors) >= 1
-    assert any("beta" in e.lower() or "unavailable" in e.lower() for e in errors)
-
-
-@pytest.mark.parametrize("adapter_cls", [
-    StripeCreditAdapter,
-    LoyaltyPointsAdapter,
-    CouponAdapter,
-    InternalCreditAdapter,
-    X402CreditAdapter,
-])
-def test_beta_rail_deliver_raises_unavailable(adapter_cls):
-    with pytest.raises(RailUnavailableError) as exc_info:
-        _run(adapter_cls().deliver({}, {}))
-    assert exc_info.value.reason == "beta_unavailable"
-
-
 # ═══════════════════════════════════════════════════════════════════════════
-# Web2 rails: honest first-release vs beta split (deliverable 5)
+# Rail matrix: native rails vs intentionally-unsupported (deliverable 5)
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Rails that must never be a beta stub or intentionally-unsupported.
 FIRST_RELEASE_RAILS = [
-    "recommend_only", "manual_approval", "manual_export", "tenant_webhook", "onchain_claim",
+    "recommend_only", "manual_approval", "manual_export", "tenant_webhook",
+    "onchain_claim", "internal_credit",
 ]
-BETA_RAILS = ["stripe_credit", "loyalty_points", "coupon", "internal_credit", "x402_credit"]
+# Rails that are deliberately out of this release — configuring is refused.
+INTENTIONALLY_UNSUPPORTED = ["loyalty_points", "coupon"]
 
 
-def test_first_release_rails_are_not_beta_stubs():
-    """No first-release rail may be a beta stub, and each has a working adapter."""
-    from services.rewards.rails import _BetaRailStub
-    for rail in FIRST_RELEASE_RAILS:
-        adapter = get_rail_adapter(rail)
-        assert not isinstance(adapter, _BetaRailStub), f"{rail} must be a real adapter, not a beta stub"
-        assert adapter.rail_name == rail
+def test_rail_matrix_tiers_match_adapters():
+    """Every adapter is classified, and the tiers are the confirmed release scope."""
+    from services.rewards.rail_matrix import RAIL_MATRIX
+    from services.rewards.rails import _RAIL_ADAPTERS
+    assert set(RAIL_MATRIX) == set(_RAIL_ADAPTERS)
+    tiers = {name: c.tier for name, c in RAIL_MATRIX.items()}
+    assert tiers["internal_credit"] == "production"
+    assert tiers["stripe_credit"] == "sandbox"
+    assert tiers["x402_credit"] == "explicit_beta"
+    assert tiers["loyalty_points"] == "intentionally_unsupported"
+    assert tiers["coupon"] == "intentionally_unsupported"
 
 
-def test_beta_rails_are_honest_stubs():
-    """Every beta rail is a stub: flagged in config, unavailable on deliver, and
-    its payload honestly says 'beta' with a manual_export fallback path."""
-    from services.rewards.rails import _BetaRailStub
-    for rail in BETA_RAILS:
-        adapter = get_rail_adapter(rail)
-        assert isinstance(adapter, _BetaRailStub)
-        errors = adapter.validate_config({})
-        assert any("beta" in e.lower() for e in errors)
-        payload = _run(adapter.build_action_payload(
-            _make_decision(rail=rail), _RULE, _CAMPAIGN, TENANT, IDEMPOTENCY_KEY,
-        ))
-        # Honest: routed to manual_export with an explicit beta note.
-        assert payload["execution_mode"] == "manual_export"
-        assert "beta" in payload["payload"]["note"].lower()
-        with pytest.raises(RailUnavailableError):
-            _run(adapter.deliver({}, {}))
+@pytest.mark.parametrize("rail", INTENTIONALLY_UNSUPPORTED)
+def test_intentionally_unsupported_rails_refuse_config_and_delivery(rail):
+    from services.rewards.rail_matrix import is_configurable
+    adapter = get_rail_adapter(rail)
+    assert not is_configurable(rail)
+    errors = adapter.validate_config({})
+    assert any("intentionally unsupported" in e.lower() for e in errors)
+    with pytest.raises(RailUnavailableError) as exc:
+        _run(adapter.deliver({}, {}))
+    assert exc.value.reason == "intentionally_unsupported"
+
+
+def test_native_rails_are_configurable():
+    from services.rewards.rail_matrix import is_configurable
+    for rail in ("internal_credit", "stripe_credit", "x402_credit"):
+        assert is_configurable(rail)
+
+
+def test_internal_credit_delivers_through_ledger():
+    """internal_credit is a real production rail: it posts a durable, idempotent
+    double-entry credit and returns success."""
+    from decimal import Decimal
+    from services.rewards.credit_ledger import get_internal_credit_ledger
+
+    adapter = get_rail_adapter("internal_credit")
+    action = {
+        "id": "act-ic-1",
+        "tenant_id": TENANT,
+        "payload": {
+            "recipient_id": "rcpt-1", "campaign_id": "cmp-1",
+            "amount": "12.50", "currency": "USD", "idempotency_key": "ic-idem-1",
+        },
+    }
+    result = _run(adapter.deliver(action, {}))
+    assert result.success and result.status == "delivered"
+    bal = _run(get_internal_credit_ledger().get_balance(TENANT, "rcpt-1", "USD"))
+    assert bal == Decimal("12.50")
+    # idempotent: redelivery does not double-credit
+    _run(adapter.deliver(action, {}))
+    bal2 = _run(get_internal_credit_ledger().get_balance(TENANT, "rcpt-1", "USD"))
+    assert bal2 == Decimal("12.50")
 
 
 def test_tenant_webhook_is_first_release_and_durable_ready():
     """tenant_webhook is a real first-release rail with PR-1 SSRF + a durable
-    outbox path (it must never be a beta stub)."""
-    from services.rewards.rails import _BetaRailStub
+    outbox path."""
     adapter = get_rail_adapter("tenant_webhook")
-    assert not isinstance(adapter, _BetaRailStub)
-    # The durable outbox reuses this exact adapter for PR-1 SSRF + HMAC signing.
+    assert adapter.rail_name == "tenant_webhook"
     from services.rewards.delivery_outbox import RewardWebhookSender
     assert isinstance(RewardWebhookSender()._adapter, TenantWebhookAdapter)
 

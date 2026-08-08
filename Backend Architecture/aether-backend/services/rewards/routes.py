@@ -1600,6 +1600,22 @@ async def configure_rail(request: Request, body: RailConfigCreate):
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
 
+    # Intentionally-unsupported rails cannot be configured — fail closed before
+    # touching the adapter, so an out-of-release rail is never activatable.
+    from services.rewards.rail_matrix import classification_for, is_configurable
+
+    classification = classification_for(body.rail)
+    if classification is not None and not is_configurable(body.rail):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "rail": body.rail,
+                "tier": classification.tier,
+                "error": f"rail {body.rail!r} is {classification.tier} and cannot be "
+                         f"configured: {classification.external_action or classification.summary}",
+            },
+        )
+
     # Validate config via adapter
     try:
         adapter = get_rail_adapter(body.rail)

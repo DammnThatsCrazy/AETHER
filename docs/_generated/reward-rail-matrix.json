@@ -1,0 +1,95 @@
+{
+  "generated_from": "Backend Architecture/aether-backend/services/rewards/rail_matrix.py",
+  "rails": {
+    "coupon": {
+      "custody": "no_custody",
+      "delivery_mode": "none",
+      "external_action": "Requires a designated coupon/promotion provider partner.",
+      "rail": "coupon",
+      "summary": "Not in this release \u2014 configuring it is refused.",
+      "tier": "intentionally_unsupported"
+    },
+    "internal_credit": {
+      "custody": "no_custody",
+      "delivery_mode": "internal_ledger",
+      "external_action": "",
+      "rail": "internal_credit",
+      "summary": "Double-entry credit into the internal reward ledger; fully in-repo.",
+      "tier": "production"
+    },
+    "loyalty_points": {
+      "custody": "no_custody",
+      "delivery_mode": "none",
+      "external_action": "Requires a designated loyalty provider partner (commercial + integration).",
+      "rail": "loyalty_points",
+      "summary": "Not in this release \u2014 configuring it is refused.",
+      "tier": "intentionally_unsupported"
+    },
+    "manual_approval": {
+      "custody": "no_custody",
+      "delivery_mode": "manual",
+      "external_action": "",
+      "rail": "manual_approval",
+      "summary": "Queues the reward for manual operator approval.",
+      "tier": "production"
+    },
+    "manual_export": {
+      "custody": "no_custody",
+      "delivery_mode": "manual",
+      "external_action": "",
+      "rail": "manual_export",
+      "summary": "Produces a batch export row the tenant fulfils out-of-band.",
+      "tier": "production"
+    },
+    "onchain_claim": {
+      "custody": "no_custody",
+      "delivery_mode": "onchain_claim",
+      "external_action": "EVM mainnet real-value activation requires external contract audit evidence.",
+      "rail": "onchain_claim",
+      "summary": "EVM oracle-signed claim proof; tenant/user submits the on-chain tx (Aether never submits or holds funds).",
+      "tier": "production"
+    },
+    "recommend_only": {
+      "custody": "no_custody",
+      "delivery_mode": "none",
+      "external_action": "",
+      "rail": "recommend_only",
+      "summary": "Returns an eligibility recommendation; no delivery.",
+      "tier": "production"
+    },
+    "stripe_credit": {
+      "custody": "no_custody",
+      "delivery_mode": "sync_api",
+      "external_action": "Stripe live-mode credentials (test mode covered in sandbox).",
+      "rail": "stripe_credit",
+      "summary": "Idempotent Stripe customer-balance credit via the tenant's Stripe key.",
+      "tier": "sandbox"
+    },
+    "tenant_webhook": {
+      "custody": "no_custody",
+      "delivery_mode": "sync_api",
+      "external_action": "",
+      "rail": "tenant_webhook",
+      "summary": "Signed JSON delivery to the tenant's webhook via the durable outbox; HMAC secret from the credential authority.",
+      "tier": "production"
+    },
+    "x402_credit": {
+      "custody": "no_custody",
+      "delivery_mode": "internal_ledger",
+      "external_action": "External facilitator + funded RPC for live x402 verification.",
+      "rail": "x402_credit",
+      "summary": "Reward action \u2192 x402 credit grant through the commerce control plane; sandbox-supported, no custody.",
+      "tier": "explicit_beta"
+    }
+  },
+  "summary": {
+    "by_tier": {
+      "explicit_beta": 1,
+      "intentionally_unsupported": 2,
+      "production": 6,
+      "sandbox": 1
+    },
+    "total": 10
+  },
+  "version": "8.12.0"
+}

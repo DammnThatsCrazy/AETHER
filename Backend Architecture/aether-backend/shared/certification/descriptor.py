@@ -52,5 +52,13 @@ class AdapterCertificationDescriptor(BaseModel):
     certification_results: list[CertificationCheckResult] = Field(default_factory=list)
     first_release: bool = False
 
+    # Additive contract fields (default-safe so existing payment/interop
+    # descriptors keep validating unchanged).
+    idempotency_model: str = "unspecified"      # none | key | natural | nonce | unspecified
+    retry_classification: str = "unspecified"   # e.g. "retryable_5xx_429; fatal_4xx"
+    environments: list[str] = Field(default_factory=list)   # sandbox | live | local
+    evidence_requirements: list[str] = Field(default_factory=list)
+    custody_boundary: str = "no_custody"        # no_custody | custodial | execution_capable
+
 
 __all__ = ["AdapterCertificationDescriptor"]

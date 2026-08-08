@@ -33,7 +33,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from decimal import ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -146,6 +146,39 @@ class RewardRailAdapter(ABC):
     async def health_check(self, rail_config: dict) -> dict:
         errors = self.validate_config(rail_config.get("config", {}))
         return {"rail": self.rail_name, "healthy": len(errors) == 0, "errors": errors}
+
+    def certification_descriptor(self):
+        """Certification descriptor for this rail, derived from the rail matrix.
+
+        Keeps the rail's certification surface (tier → readiness, custody
+        boundary, delivery/idempotency model) in lockstep with
+        ``rail_matrix.RAIL_MATRIX`` so the two can never disagree.
+        """
+        from shared.certification.descriptor import AdapterCertificationDescriptor
+        from shared.certification.readiness import CredentialReadiness
+        from services.rewards.rail_matrix import classification_for
+
+        c = classification_for(self.rail_name)
+        tier = c.tier if c else "intentionally_unsupported"
+        state = {
+            "production": CredentialReadiness.CREDENTIAL_WAITING,
+            "sandbox": CredentialReadiness.CREDENTIAL_WAITING,
+            "explicit_beta": CredentialReadiness.CREDENTIAL_WAITING,
+            "intentionally_unsupported": CredentialReadiness.DISABLED,
+        }.get(tier, CredentialReadiness.SCAFFOLDED)
+        return AdapterCertificationDescriptor(
+            provider=self.rail_name,
+            domain="rewards",
+            adapter=type(self).__name__,
+            adapter_version="1.0.0",
+            supported_operations=["deliver"] if (c and c.delivery_mode != "none") else [],
+            implementation_state=state,
+            idempotency_model="key",
+            retry_classification="retryable_5xx_429; fatal_4xx",
+            environments=["sandbox", "live"] if tier != "intentionally_unsupported" else [],
+            custody_boundary=(c.custody if c else "no_custody"),
+            first_release=(tier in ("production", "sandbox")),
+        )
 
     def _idempotency_key(self, decision: PolicyDecision, tenant_id: str) -> str:
         raw = f"{tenant_id}:{decision.campaign_id}:{decision.rule_id}:{decision.identity}"
@@ -623,51 +656,204 @@ class OnchainClaimAdapter(RewardRailAdapter):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BETA RAIL STUBS
+# NATIVE + BOUNDED RAILS
 # ═══════════════════════════════════════════════════════════════════════════
 
-class _BetaRailStub(RewardRailAdapter):
-    """Stub for rails that are not yet production-ready."""
+
+def _reward_amount_currency(decision, rule, campaign) -> tuple[Decimal, str]:
+    """Extract (amount, currency) from a decision/rule/campaign, Decimal-safe."""
+    reward = decision.reward or {}
+    raw = reward.get("amount") if isinstance(reward, dict) else None
+    if raw is None:
+        raw = rule.get("reward_amount") if isinstance(rule, dict) else None
+    amount = Decimal(str(raw)) if raw is not None else Decimal("0")
+    currency = (
+        (reward.get("currency") if isinstance(reward, dict) else None)
+        or (rule.get("currency") if isinstance(rule, dict) else None)
+        or "USD"
+    )
+    return amount, currency
+
+
+class _IntentionallyUnsupportedRail(RewardRailAdapter):
+    """A rail deliberately out of this release (needs an external provider
+    partner). Configuring or delivering it is refused — it is NEVER presented
+    as usable. Classified ``intentionally_unsupported`` in the rail matrix."""
+
+    reason: str = "not available in this release"
 
     def validate_config(self, config: dict) -> list[str]:
-        return [f"Rail {self.rail_name!r} is in beta and not available for production use"]
+        return [
+            f"Rail {self.rail_name!r} is intentionally unsupported in this "
+            f"release: {self.reason}"
+        ]
 
     async def build_action_payload(self, decision, rule, campaign, tenant_id, idempotency_key=None) -> dict:
+        raise RailUnavailableError(self.rail_name, "intentionally_unsupported")
+
+    async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
+        raise RailUnavailableError(self.rail_name, "intentionally_unsupported")
+
+
+class InternalCreditAdapter(RewardRailAdapter):
+    """Native, no-custody internal credit rail — double-entry reward ledger.
+
+    Fully in-repo: the reward credits a recipient's internal balance against
+    the campaign pool. Idempotent, durable, provable end-to-end without any
+    external provider — the reference native Web2 rail.
+    """
+
+    rail_name = "internal_credit"
+
+    def validate_config(self, config: dict) -> list[str]:
+        errors: list[str] = []
+        currency = config.get("currency", "USD")
+        if not isinstance(currency, str) or len(currency) not in (3, 4):
+            errors.append("currency must be a 3-4 letter code")
+        return errors
+
+    async def build_action_payload(self, decision, rule, campaign, tenant_id, idempotency_key=None) -> dict:
+        amount, currency = _reward_amount_currency(decision, rule, campaign)
+        recipient = (decision.identity or {}).get("cluster_id") or (
+            decision.identity or {}
+        ).get("wallet_address") or decision.campaign_id
         return {
             "rail": self.rail_name,
-            "execution_mode": "manual_export",
-            "status": "ready",
+            "execution_mode": "internal_ledger",
+            "status": "created",
             "payload": {
-                "type": f"beta_{self.rail_name}_export",
-                "note": f"Rail {self.rail_name!r} is in beta. Use manual_export to process this reward.",
-                "reward": decision.reward,
+                "type": "internal_credit",
+                "recipient_id": recipient,
                 "campaign_id": decision.campaign_id,
                 "rule_id": decision.rule_id,
+                "amount": str(amount),
+                "currency": currency,
+                "idempotency_key": idempotency_key or self._idempotency_key(decision, tenant_id),
             },
         }
 
     async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
-        raise RailUnavailableError(self.rail_name)
+        from services.rewards.credit_ledger import get_internal_credit_ledger
+
+        payload = action.get("payload") or {}
+        amount = Decimal(str(payload.get("amount", "0")))
+        if amount <= 0:
+            return DeliveryResult(success=False, status="failed", error="amount must be positive")
+        entry = await get_internal_credit_ledger().credit(
+            tenant_id=action.get("tenant_id") or payload.get("tenant_id", ""),
+            recipient_id=payload["recipient_id"],
+            campaign_id=payload.get("campaign_id", ""),
+            amount=amount,
+            currency=payload.get("currency", "USD"),
+            idempotency_key=payload["idempotency_key"],
+            action_id=action.get("id"),
+        )
+        return DeliveryResult(
+            success=True, status="delivered", delivery_id=entry.get("id")
+        )
 
 
-class StripeCreditAdapter(_BetaRailStub):
+class StripeCreditAdapter(RewardRailAdapter):
+    """Native Stripe customer-balance credit rail (sandbox-tier at release).
+
+    Uses the tenant's own Stripe key from the credential authority (provider
+    ``stripe_credit``, slot ``server_api_key``); idempotent via Stripe's
+    Idempotency-Key. No custody: Aether credits the tenant's own Stripe
+    customer balance through the tenant's key — it never holds funds. Live-mode
+    activation requires a live tenant key (external action).
+    """
+
     rail_name = "stripe_credit"
 
+    def validate_config(self, config: dict) -> list[str]:
+        errors: list[str] = []
+        if not config.get("stripe_customer_id") and not config.get("customer_id_field"):
+            errors.append("stripe_customer_id or customer_id_field is required")
+        if not config.get("secret_ref") and not config.get("signing_secret"):
+            # the Stripe key lives in the credential authority; secret_ref points to it
+            errors.append("secret_ref (to the tenant Stripe key credential) is required")
+        return errors
 
-class LoyaltyPointsAdapter(_BetaRailStub):
-    rail_name = "loyalty_points"
+    async def build_action_payload(self, decision, rule, campaign, tenant_id, idempotency_key=None) -> dict:
+        amount, currency = _reward_amount_currency(decision, rule, campaign)
+        return {
+            "rail": self.rail_name,
+            "execution_mode": "sync_api",
+            "status": "created",
+            "payload": {
+                "type": "stripe_customer_balance_credit",
+                "campaign_id": decision.campaign_id,
+                "rule_id": decision.rule_id,
+                "amount": str(amount),
+                "currency": currency.lower(),
+                "customer_ref": (decision.identity or {}).get("stripe_customer_id"),
+                "idempotency_key": idempotency_key or self._idempotency_key(decision, tenant_id),
+            },
+        }
+
+    async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
+        # Real customer-balance credit through the tenant's Stripe key.
+        # Delivery resolves the key at the narrow call site (credential
+        # authority); dispatch is driven by the sender registry
+        # (services/rewards/senders.py::StripeCreditSender).
+        raise RailUnavailableError(
+            self.rail_name,
+            "deliver via the outbox sender (StripeCreditSender), not the adapter",
+        )
 
 
-class CouponAdapter(_BetaRailStub):
-    rail_name = "coupon"
+class X402CreditAdapter(RewardRailAdapter):
+    """x402 reward-credit rail (explicit_beta, sandbox at release).
 
+    Converts a reward action into an x402 credit grant through the commerce
+    control plane (reward → credit grant → durable receipt → reconciliation),
+    no-custody. Sandbox-supported; PARTNER_LIVE needs external facilitator +
+    funded RPC credentials.
+    """
 
-class InternalCreditAdapter(_BetaRailStub):
-    rail_name = "internal_credit"
-
-
-class X402CreditAdapter(_BetaRailStub):
     rail_name = "x402_credit"
+
+    def validate_config(self, config: dict) -> list[str]:
+        errors: list[str] = []
+        if not config.get("asset_symbol"):
+            errors.append("asset_symbol is required (tenant-approved x402 asset)")
+        if not config.get("chain"):
+            errors.append("chain is required (tenant-approved x402 chain)")
+        return errors
+
+    async def build_action_payload(self, decision, rule, campaign, tenant_id, idempotency_key=None) -> dict:
+        amount, currency = _reward_amount_currency(decision, rule, campaign)
+        return {
+            "rail": self.rail_name,
+            "execution_mode": "internal_ledger",
+            "status": "created",
+            "payload": {
+                "type": "x402_credit_grant",
+                "campaign_id": decision.campaign_id,
+                "rule_id": decision.rule_id,
+                "amount": str(amount),
+                "currency": currency,
+                "recipient_id": (decision.identity or {}).get("cluster_id")
+                or (decision.identity or {}).get("wallet_address"),
+                "idempotency_key": idempotency_key or self._idempotency_key(decision, tenant_id),
+            },
+        }
+
+    async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
+        raise RailUnavailableError(
+            self.rail_name,
+            "deliver via the outbox sender (X402CreditSender), not the adapter",
+        )
+
+
+class LoyaltyPointsAdapter(_IntentionallyUnsupportedRail):
+    rail_name = "loyalty_points"
+    reason = "requires a designated loyalty provider partner"
+
+
+class CouponAdapter(_IntentionallyUnsupportedRail):
+    rail_name = "coupon"
+    reason = "requires a designated coupon/promotion provider partner"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -681,10 +867,10 @@ _RAIL_ADAPTERS: dict[str, RewardRailAdapter] = {
     "tenant_webhook": TenantWebhookAdapter(),
     "onchain_claim": OnchainClaimAdapter(),
     "stripe_credit": StripeCreditAdapter(),
-    "loyalty_points": LoyaltyPointsAdapter(),
-    "coupon": CouponAdapter(),
     "internal_credit": InternalCreditAdapter(),
     "x402_credit": X402CreditAdapter(),
+    "loyalty_points": LoyaltyPointsAdapter(),
+    "coupon": CouponAdapter(),
 }
 
 

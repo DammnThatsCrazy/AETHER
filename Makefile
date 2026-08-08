@@ -277,6 +277,9 @@ validate-frontmatter: ## Validate YAML frontmatter on docs/*.md against scripts/
 extract-docs: ## Regenerate docs/_generated/*.json from canonical sources
 	python scripts/docs_extract/run_all.py
 
+gen-reward-rail-matrix: ## Regenerate docs/_generated/reward-rail-matrix.json from source
+	python scripts/docs_extract/extract_reward_rail_matrix.py
+
 docs-drift: ## Detect drift between doc source_files frontmatter and the repo
 	python scripts/docs_drift.py
 
