@@ -27,6 +27,8 @@ ROLES_PY = "Backend Architecture/aether-backend/services/runtime/roles.py"
 # profiles keep one task per role for per-role scaling and blast radius.
 PROFILE_MODES: dict[str, str] = {
     "staging": "consolidated",
+    "demo": "consolidated",
+    "preview": "consolidated",
     "production-lean": "consolidated",
     "production-scale": "dedicated",
     "enterprise-isolated": "dedicated",

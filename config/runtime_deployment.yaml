@@ -107,6 +107,88 @@ profiles:
           queue_depth_target: 1000
           cooldown_seconds: 300
 
+  demo:
+    execution_mode: consolidated
+    static_frontends: true
+    remote_ml: false
+    # Demo is a cost-capped ephemeral environment: the consolidated
+    # shared-foundation footprint, sized one step down from staging.
+    services:
+      api:
+        roles: [api]
+        public: true
+        desired_count: 1
+        cpu: 1024
+        memory: 2048
+        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
+        autoscaling:
+          min_capacity: 1
+          max_capacity: 2
+          metric: alb-request-count-per-target
+          request_count_target: 800
+          cooldown_seconds: 180
+      lean-worker:
+        roles:
+          - outbox-relay
+          - stream-worker
+          - identity-worker
+          - graph-writer
+          - measurement-worker
+          - semantic-worker
+          - materializer
+          - maintenance
+        desired_count: 1
+        cpu: 1024
+        memory: 4096
+        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
+        autoscaling:
+          min_capacity: 1
+          max_capacity: 2
+          metric: sqs-queue-depth
+          queue_depth_target: 1000
+          cooldown_seconds: 300
+
+  preview:
+    execution_mode: consolidated
+    static_frontends: true
+    remote_ml: false
+    # Preview is a cost-capped ephemeral environment: the consolidated
+    # shared-foundation footprint, sized one step down from staging.
+    services:
+      api:
+        roles: [api]
+        public: true
+        desired_count: 1
+        cpu: 1024
+        memory: 2048
+        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
+        autoscaling:
+          min_capacity: 1
+          max_capacity: 2
+          metric: alb-request-count-per-target
+          request_count_target: 800
+          cooldown_seconds: 180
+      lean-worker:
+        roles:
+          - outbox-relay
+          - stream-worker
+          - identity-worker
+          - graph-writer
+          - measurement-worker
+          - semantic-worker
+          - materializer
+          - maintenance
+        desired_count: 1
+        cpu: 1024
+        memory: 4096
+        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
+        autoscaling:
+          min_capacity: 1
+          max_capacity: 2
+          metric: sqs-queue-depth
+          queue_depth_target: 1000
+          cooldown_seconds: 300
+
   production-lean:
     execution_mode: consolidated
     static_frontends: true
