@@ -52,7 +52,25 @@ def test_unknown_slot_and_provider():
     assert get_slot("coinbase", "webhook_signing_secret") is not None
     assert get_slot("coinbase", "not_a_slot") is None
     assert slots_for("nonexistent-provider") == ()
-    assert set(known_providers()) == set(ADAPTERS.keys())
+    # The registry merges payment-adapter-derived providers with the static
+    # domain sources (reward signing / rewards webhook); adapters remain a
+    # strict subset and never get shadowed.
+    assert set(ADAPTERS.keys()) <= set(known_providers())
+    from services.rewards.signer_slots import REWARD_SLOT_DECLARATIONS
+
+    assert set(known_providers()) == set(ADAPTERS.keys()) | set(REWARD_SLOT_DECLARATIONS)
+
+
+def test_domain_partition_is_consistent():
+    from services.providers.credentials.slot_registry import providers_for_domain
+
+    assert providers_for_domain("payments") == tuple(sorted(ADAPTERS.keys()))
+    assert providers_for_domain("signing") == ("reward_signer",)
+    assert providers_for_domain("rewards") == ("tenant_webhook",)
+    # no provider name appears in two domains
+    registry = build_slot_registry()
+    for provider, slots in registry.items():
+        assert len({s.domain for s in slots} & {"payments"}) <= 1
 
 
 def test_registry_is_cached_stable():

@@ -122,6 +122,43 @@ _SLOT_AUGMENTATION: dict[str, dict] = {
         rotation_policy="replace",
         sensitive=True,
     ),
+    "signing_private_key": dict(
+        display_name="Signing private key",
+        purpose="Sign proofs/claims; validated by deriving the public identity.",
+        secret_type="signing_private_key",
+        required_for=("proof_signing",),
+        scope_policy="sign_only",
+        needs_endpoint=False,
+        validation_strategy="key_derivation_check",
+        rotation_policy="replace",
+        sensitive=True,
+    ),
+    "rpc_endpoint_pair": dict(
+        display_name="RPC endpoint + key pair",
+        purpose=(
+            "Atomic JSON document {url, api_key, auth_mode} — one credential "
+            "version is one endpoint+key pair, so a rotated endpoint can never "
+            "mix with a stale key."
+        ),
+        secret_type="endpoint_keyed_url",
+        required_for=("chain_verification", "connection_test"),
+        scope_policy="read_only",
+        needs_endpoint=False,
+        validation_strategy="rpc_chain_probe",
+        rotation_policy="replace",
+        sensitive=True,
+    ),
+    "facilitator_api_key": dict(
+        display_name="Facilitator API key",
+        purpose="Authenticate verification calls to an external x402 facilitator.",
+        secret_type="bearer_token",
+        required_for=("payment_verification", "connection_test"),
+        scope_policy="verify_only",
+        needs_endpoint=True,
+        validation_strategy="live_probe",
+        rotation_policy="replace",
+        sensitive=True,
+    ),
 }
 
 # Fallback policy for a slot name an adapter declares that we have not enriched.
@@ -150,12 +187,41 @@ def _safe_host(url: str) -> str | None:
     return f"host={host}; scheme=https; read_only" if host else None
 
 
+# Static, server-owned slot-declaration sources beyond the payment adapters.
+# Each module exposes ``declared_slots() -> {provider: (slot-dict, ...)}``.
+# Listed modules MUST import — a missing source is a build error, never a
+# silently smaller registry.
+_STATIC_SOURCE_MODULES: tuple[str, ...] = (
+    "services.rewards.signer_slots",
+)
+
+
+def _static_declarations() -> dict[str, tuple[dict, ...]]:
+    import importlib
+
+    merged: dict[str, tuple[dict, ...]] = {}
+    for module_path in _STATIC_SOURCE_MODULES:
+        module = importlib.import_module(module_path)
+        for provider, slots in module.declared_slots().items():
+            if provider in merged:
+                raise ValueError(
+                    f"provider {provider!r} declared by two static slot sources"
+                )
+            merged[provider] = slots
+    return merged
+
+
 @lru_cache(maxsize=1)
 def build_slot_registry() -> dict[str, tuple[CredentialSlot, ...]]:
-    """Derive ``{provider: (CredentialSlot, ...)}`` from the payment adapters.
+    """Merge ``{provider: (CredentialSlot, ...)}`` from every slot source.
 
-    Cached — the adapter descriptors are static. Imported lazily so this module
-    stays cheap and avoids an import cycle with the payment-rails package.
+    Sources: (1) the payment-rail adapters' own
+    ``certification_descriptor().required_credentials`` (adapters stay the
+    source of truth for which secrets they need); (2) static server-owned
+    domain declarations (reward signing, x402/RPC). Provider names are
+    globally unique across domains — a collision is a build error. Cached —
+    all sources are static. Imported lazily so this module stays cheap and
+    avoids an import cycle with the payment-rails package.
     """
     from services.integrations.providers.payment_rails import ADAPTERS
 
@@ -182,7 +248,37 @@ def build_slot_registry() -> dict[str, tuple[CredentialSlot, ...]]:
                 )
             )
         registry[adapter.provider_name] = tuple(slots)
+
+    for provider, slot_dicts in _static_declarations().items():
+        if provider in registry:
+            raise ValueError(
+                f"static slot source redeclares adapter provider {provider!r}"
+            )
+        slots = []
+        for spec in slot_dicts:
+            spec = dict(spec)
+            spec.pop("needs_endpoint", False)
+            slots.append(
+                CredentialSlot(
+                    provider=provider,
+                    environment="any",
+                    endpoint_policy=spec.pop("endpoint_policy", None),
+                    **spec,
+                )
+            )
+        registry[provider] = tuple(slots)
     return registry
+
+
+def providers_for_domain(domain: str) -> tuple[str, ...]:
+    """Providers whose slots belong to ``domain`` (sorted, deterministic)."""
+    return tuple(
+        sorted(
+            provider
+            for provider, slots in build_slot_registry().items()
+            if any(slot.domain == domain for slot in slots)
+        )
+    )
 
 
 def slots_for(provider: str, environment: str | None = None) -> tuple[CredentialSlot, ...]:
@@ -211,6 +307,7 @@ def known_providers() -> tuple[str, ...]:
 __all__ = [
     "CredentialSlot",
     "build_slot_registry",
+    "providers_for_domain",
     "slots_for",
     "get_slot",
     "known_providers",

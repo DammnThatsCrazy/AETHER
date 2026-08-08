@@ -71,10 +71,31 @@ CREDENTIAL_ENVIRONMENTS: tuple[str, ...] = (
     CredentialEnvironment.LIVE,
 )
 
-# The financial-observability credential domain. Kept as a constant so the slot
-# registry, authority, and API agree on the token the payment adapters report
-# via ``certification_descriptor().domain``.
-PAYMENTS_DOMAIN = "payments"
+# Credential domains the authority serves. ``payments`` (the financial
+# observability cohort) was the first; the authority is now the ONLY secret
+# authority for every non-local provider/reward/proof/x402/RPC path, so the
+# slot registry merges slot declarations from multiple domain sources.
+class CredentialDomain:
+    PAYMENTS = "payments"    # payment-rail observers (webhook + polling secrets)
+    REWARDS = "rewards"      # reward rails (tenant webhook signing, provider keys)
+    SIGNING = "signing"      # reward proof signer keys (EVM secp256k1 / SVM ed25519)
+    X402 = "x402"            # x402 facilitator credentials
+    RPC = "rpc"              # tenant RPC endpoint+key pairs (atomic)
+    WEBHOOKS = "webhooks"    # generic outbound webhook signing secrets
+
+
+CREDENTIAL_DOMAINS: tuple[str, ...] = (
+    CredentialDomain.PAYMENTS,
+    CredentialDomain.REWARDS,
+    CredentialDomain.SIGNING,
+    CredentialDomain.X402,
+    CredentialDomain.RPC,
+    CredentialDomain.WEBHOOKS,
+)
+
+# Back-compat constant: the token the payment adapters report via
+# ``certification_descriptor().domain``.
+PAYMENTS_DOMAIN = CredentialDomain.PAYMENTS
 
 
 # The exact JSONB ``data`` fields of a ``provider_credential_versions`` row.
@@ -116,6 +137,8 @@ __all__ = [
     "OVERLAP_STATE",
     "CredentialEnvironment",
     "CREDENTIAL_ENVIRONMENTS",
+    "CredentialDomain",
+    "CREDENTIAL_DOMAINS",
     "PAYMENTS_DOMAIN",
     "CREDENTIAL_VERSION_FIELDS",
 ]
