@@ -50,13 +50,22 @@ _BASE_TS = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def _isolate():
+    import dataclasses
+
+    from config.settings import settings
+
     reset_in_memory_stores()
     reset_jobs_memory()
+    # The replay handler is now gated on the semantic.replay kill-switch; these
+    # tests exercise the replay machinery, so opt the flag on for their duration.
+    original_semantic = settings.semantic
+    settings.semantic = dataclasses.replace(settings.semantic, replay_enabled=True)
     register_semantic_replay_handler()
     original = get_store()
     set_store(DurableSemanticSentimentStore())
     service_mod.set_semantic_service(SemanticIntelligenceService())
     yield
+    settings.semantic = original_semantic
     set_store(original)
     service_mod.set_semantic_service(SemanticIntelligenceService())
     reset_in_memory_stores()
