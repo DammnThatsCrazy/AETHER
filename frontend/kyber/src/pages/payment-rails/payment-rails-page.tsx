@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, CapabilityStateBadge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatDateTime, resolveCapabilityState, useTimeContext, type TimeContext } from '@aether/ui';
+import { Badge, Button, CapabilityStateBadge, Card, CardContent, CardHeader, CardTitle, EmptyState, Icon, LoadingState, ProviderMark, formatDateTime, resolveCapabilityState, useTimeContext, type TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 import { isFeatureEnabled } from '@kyber/lib/featureFlags';
@@ -125,7 +125,10 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
           <div className="text-sm font-mono font-bold text-text-primary">Tenant payment rail diagnostics</div>
           <div className="text-[10px] text-text-muted font-mono">{tenantId}</div>
         </div>
-        <Button variant="ghost" size="sm" onClick={onClose}>[x] Close</Button>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          <Icon name="circle-x" size="xs" decorative className="mr-1" />
+          Close
+        </Button>
       </div>
 
       <div className="text-[10px] text-text-muted font-mono">
@@ -145,7 +148,10 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
             <Card key={provider}>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>{providerLabel(provider)}</CardTitle>
+                  <span className="flex items-center gap-2">
+                    <ProviderMark provider={provider} decorative size={20} />
+                    <CardTitle>{providerLabel(provider)}</CardTitle>
+                  </span>
                   <HealthBadge status={health.status} />
                 </div>
               </CardHeader>
@@ -248,7 +254,12 @@ export function PaymentRailsPage() {
                 <tbody>
                   {providers.map((row) => (
                     <tr key={row.provider} className="border-b border-border-subtle">
-                      <td className="py-2 px-2 font-semibold text-text-primary">{providerLabel(row.provider)}</td>
+                      <td className="py-2 px-2 font-semibold text-text-primary">
+                        <span className="flex items-center gap-2">
+                          <ProviderMark provider={row.provider} decorative size={20} />
+                          <span>{providerLabel(row.provider)}</span>
+                        </span>
+                      </td>
                       <td className="py-2 px-2"><HealthBadge status={row.status} /></td>
                       <td className="py-2 px-2 text-right">{row.configured_tenants}</td>
                       <td className="py-2 px-2 text-right text-success">{row.webhook_verified_24h}</td>

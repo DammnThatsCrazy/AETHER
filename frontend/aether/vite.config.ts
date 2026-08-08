@@ -4,6 +4,9 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // Canonical Olympus/Aether identity geometry is package-owned so every
+  // product build serves the exact same reviewed SVG assets.
+  publicDir: path.resolve(__dirname, '../../packages/brand/src/identity/marks'),
   // Build identity injected at build time (drift-free: version from the
   // workspace package.json via npm, SHA/profile from CI env). Falls back to the
   // env-schema defaults for local dev / typecheck.

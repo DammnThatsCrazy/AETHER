@@ -3996,6 +3996,138 @@
       "since_version": "8.12.0"
     },
     {
+      "path": "docs/brand-system/README.md",
+      "title": "Olympus Labs / Aether / Kyber Brand System",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/accessibility.md",
+      "title": "Accessibility",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/aether.md",
+      "title": "Aether identity",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/architecture.md",
+      "title": "Brand-system architecture and accessibility",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/audit.md",
+      "title": "Olympus Labs / Aether / Kyber Visual-System Inventory",
+      "status": "draft",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/do-dont.md",
+      "title": "Do and don't",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/documentation.md",
+      "title": "Documentation guidance",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/entities.md",
+      "title": "Entity identity",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/final-audit.md",
+      "title": "Brand-system living acceptance report",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/iconography.md",
+      "title": "Iconography",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/kyber.md",
+      "title": "Kyber identity",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/marketing.md",
+      "title": "Marketing guidance",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/migration.md",
+      "title": "Brand-system migration playbook",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/motion.md",
+      "title": "Motion",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/olympus.md",
+      "title": "Olympus Labs identity",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/principles.md",
+      "title": "Brand-system principles",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/provenance-confidence.md",
+      "title": "Provenance, confidence, and freshness",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/providers.md",
+      "title": "Provider identity and attribution",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/responsive.md",
+      "title": "Responsive behavior",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/status-severity.md",
+      "title": "Status and severity",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/surfaces.md",
+      "title": "Surfaces, borders, and focus",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/typography.md",
+      "title": "Typography and spacing",
+      "status": "active",
+      "canonical_owner": "frontend@aether"
+    },
+    {
       "path": "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
       "title": "ADR: Campaign Identity — Canonical UUID Strategy",
       "slug": "campaign/adr-campaign-identity",

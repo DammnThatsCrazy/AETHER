@@ -1,5 +1,6 @@
 import { cn } from '../utils/cn';
 import { Button } from './button';
+import { Icon } from './icon';
 
 interface ErrorStateProps {
   readonly title?: string;
@@ -11,7 +12,7 @@ interface ErrorStateProps {
 export function ErrorState({ title = 'Error', message, onRetry, className }: ErrorStateProps) {
   return (
     <div className={cn('flex flex-col items-center justify-center py-12 text-center', className)}>
-      <div className="text-3xl text-danger mb-3 font-mono">⚠</div>
+      <Icon name="triangle-alert" size="xl" decorative className="mb-3 text-danger" />
       <div className="text-sm font-medium text-danger">{title}</div>
       <div className="text-xs text-text-secondary mt-1 max-w-md">{message}</div>
       {onRetry && (

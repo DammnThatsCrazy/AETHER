@@ -1,5 +1,5 @@
 import type { Entity } from '@kyber/types';
-import { Badge, StatusIndicator } from '@aether/ui';
+import { Badge, EntityAvatar, StatusIndicator } from '@aether/ui';
 import { cn, formatRelativeTime } from '@kyber/lib/utils';
 
 interface EntityListTableProps {
@@ -50,7 +50,10 @@ export function EntityListTable({ entities, onSelect }: EntityListTableProps) {
               )}
             >
               <td className="py-2.5 px-3 font-medium text-neutral-200">
-                {entity.displayLabel}
+                <span className="flex items-center gap-2">
+                  <EntityAvatar entityType={entity.type} name={entity.displayLabel} size={26} />
+                  <span>{entity.displayLabel}</span>
+                </span>
               </td>
               <td className="py-2.5 px-3">
                 <StatusIndicator status={entity.health.status} />
