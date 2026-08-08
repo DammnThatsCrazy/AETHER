@@ -109,7 +109,7 @@ module "secrets" {
 
 module "kms_credentials" {
   source = "./modules/kms_credentials"
-  count  = local.enable_credential_kms ? 1 : 0
+  count  = var.enable_credential_kms ? 1 : 0
 
   environment = var.environment
   project     = var.project
@@ -470,9 +470,9 @@ module "ecs" {
   ml_serving_inline = !local.enable_dedicated_ml
 
   # Provider-credential envelope-encryption CMK id → CREDENTIAL_KMS_KEY_ID.
-  # local.enable_credential_kms is a literal true for every cloud profile, so
-  # the count is statically 1 and index [0] is safe at plan.
-  credential_kms_key_id = module.kms_credentials[0].key_id
+  # Empty when the CMK is disabled (tftest apply run passes enable_credential_kms
+  # = false); module/ecs already skips injecting the env var for an empty id.
+  credential_kms_key_id = try(module.kms_credentials[0].key_id, "")
 
   # The api service, straight from the runtime matrix (profiles.tf). There is
   # no ecs_backend_* variable to disagree with it any more, and no
@@ -503,12 +503,14 @@ module "ecs" {
 # exactly the five-key {tenant_id, provider, environment, slot_name,
 # credential_version} encryption context — the condition lives in the attached
 # policy JSON itself via kms:EncryptionContextKeys. aws_iam_role_policy.role
-# takes the role NAME, hence module.ecs.task_role_name. The module is
-# count-gated, but local.enable_credential_kms is a literal true, so index [0]
-# is always present.
+# takes the role NAME, hence module.ecs.task_role_name. The resource is
+# count-gated on var.enable_credential_kms (default true) so a deployment that
+# disables the CMK — today only the tftest apply run, whose throwaway apply
+# cannot tear down a prevent_destroy resource — creates no dangling grant.
 # ---------------------------------------------------------------------------
 
 resource "aws_iam_role_policy" "credential_kms" {
+  count  = var.enable_credential_kms ? 1 : 0
   name   = "${var.project}-${var.environment}-credential-kms"
   role   = module.ecs.task_role_name
   policy = module.kms_credentials[0].iam_policy_json

@@ -302,6 +302,29 @@ variable "domain_name" {
 }
 
 # --------------------------------------------------------------------------
+# Provider-credential CMK (modules/kms_credentials)
+# --------------------------------------------------------------------------
+
+variable "enable_credential_kms" {
+  type        = bool
+  default     = true
+  description = <<-EOT
+    Whether the provider-credential envelope-encryption CMK
+    (modules/kms_credentials) is created. Defaults to true — every non-local
+    deployment stores real provider credentials, so the cipher is
+    CREDENTIAL_CIPHER=aws_kms and needs this key (flat $1/month, required as
+    `credential_kms` by every profile's cost policy). The key carries
+    lifecycle.prevent_destroy because it is the root of trust for stored
+    provider credentials. terraform test apply-runs tear their created
+    resources down afterwards and cannot destroy a prevent_destroy resource,
+    so the throwaway apply run (tests/profile_plan.tftest.hcl
+    staging_awake_applied) passes false and leaves CMK coverage to the six plan
+    runs that assert length(module.kms_credentials) == 1. Production defaults
+    stay true.
+  EOT
+}
+
+# --------------------------------------------------------------------------
 # Neptune
 # --------------------------------------------------------------------------
 

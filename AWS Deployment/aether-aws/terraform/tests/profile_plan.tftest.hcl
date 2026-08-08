@@ -1228,15 +1228,27 @@ run "enterprise_isolated_profile_plan" {
 run "staging_awake_applied" {
   command = apply
 
-
+  # This apply run materialises the awake staging shape to verify the ECS
+  # baseline (the staging_sleep_plan_against_applied run plans against it). The
+  # credential-envelope CMK (modules/kms_credentials) is deliberately left OUT:
+  # it carries lifecycle.prevent_destroy = true, and terraform test tears every
+  # run-created resource down after the file — a prevent_destroy resource makes
+  # that teardown fail ("Instance cannot be destroyed") even though the suite
+  # reports all passes, and no terraform version lets override_resource or a
+  # variable relax it. The apply run's assertions are ECS-only, and the six plan
+  # runs below all assert length(module.kms_credentials) == 1, so CMK coverage
+  # is unchanged. The production guard in modules/kms_credentials/main.tf stays
+  # prevent_destroy = true — a real plan that would retire the CMK still fails
+  # closed.
   variables {
-    deployment_profile  = "staging"
-    environment         = "staging"
-    staging_state       = "awake"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    log_retention_days  = 3
+    deployment_profile    = "staging"
+    environment           = "staging"
+    staging_state         = "awake"
+    network_egress_mode   = null
+    aurora_min_acu        = 0
+    aurora_max_acu        = 2
+    log_retention_days    = 3
+    enable_credential_kms = false
   }
 
   # The baseline this sleeps FROM. Without it a multiplier stuck at 0 would
