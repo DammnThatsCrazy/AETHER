@@ -135,6 +135,7 @@ profiles:
         - dynamodb
         - s3_object_lake
         - secrets_kms
+        - credential_kms
         - inline_ml
         - postgres_graph
       # Identical heavy-resource exclusions to production-lean, plus the
@@ -175,6 +176,7 @@ profiles:
         - dynamodb
         - s3_object_lake
         - secrets_kms
+        - credential_kms
         - cloudwatch_alarms
         - inline_ml
         - postgres_graph
@@ -253,6 +255,7 @@ profiles:
         - dynamodb
         - s3_object_lake
         - secrets_kms
+        - credential_kms
         - cloudwatch_alarms
       # Forbidden even at scale. These are not cost decisions but architectural
       # regressions: legacy_rds is superseded by Aurora and would fork the
@@ -311,6 +314,7 @@ profiles:
         - dynamodb
         - s3_object_lake
         - secrets_kms
+        - credential_kms
         - cloudwatch_alarms
       # The same architectural regressions barred at scale. A customer paying
       # for isolation still gets the supported topology, not a forked one —

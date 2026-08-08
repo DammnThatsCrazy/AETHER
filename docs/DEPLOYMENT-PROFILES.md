@@ -5,6 +5,15 @@ section: operations
 visibility: I
 audience: [ops, architect]
 status: stable
+source_files:
+  - config/deployment_profiles.yaml
+  - config/runtime_deployment.yaml
+  - config/terraform_resource_contracts.yaml
+  - AWS Deployment/aether-aws/terraform/profiles.tf
+  - AWS Deployment/aether-aws/terraform/main.tf
+  - AWS Deployment/aether-aws/terraform/variables.tf
+  - scripts/release/check_profile_config.py
+  - scripts/release/check_profile_parity.py
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
@@ -12,33 +21,61 @@ toc_depth: 3
 
 # Deployment Profiles
 
-Aether declares ten deployment profiles, from a zero-backend local mock to a
+Aether declares eight deployment profiles, from a zero-backend local mock to a
 contractually isolated enterprise deployment. `config/deployment_profiles.yaml`
 is the canonical matrix — backend selectors, cost policy and numeric budgets —
 and `scripts/release/check_profile_config.py` validates it.
 
-Four of the ten are **cloud profiles**: `staging`, `production-lean`,
+Four of the eight are **cloud profiles**: `staging`, `production-lean`,
 `production-scale`, `enterprise-isolated`. Only those four are selectable in
 Terraform through `var.deployment_profile`, and only those four have a
-`profiles/*.tfvars` file, a plan test and a policy contract. The other six are
+`profiles/*.tfvars` file, a plan test and a policy contract. The other four are
 declared so the architecture stays viable through them; they are described
 honestly below, including where the automation does not exist.
+
+`scripts/release/check_profile_parity.py` enforces that every profile-count
+statement in the docs stays in lockstep with the canonical matrix, so a ninth
+profile added to `config/deployment_profiles.yaml` fails CI until the docs and
+the Terraform layer are updated in the same change.
 
 `deployment_profile` is not documentation. It drives module `count` and module
 inputs in the Terraform root, so a `production-lean` plan structurally cannot
 contain a forbidden resource. See
 [Terraform enforcement](#terraform-enforcement) for exactly how that is proven.
 
-### Pending module: `kms_credentials`
+### Provider-credential KMS (`kms_credentials`)
 
-The `terraform/modules/kms_credentials` module (a customer-managed KMS CMK +
-alias + least-privilege IAM for provider-credential envelope encryption, surfaced
-as `CREDENTIAL_KMS_KEY_ID`) is **defined but not yet wired into the profile root**.
-Wiring it adds `aws_kms_key`/`aws_kms_alias` to the plan, which the
-provider-mocked `profile_plan.tftest.hcl` asserts against exactly; it is left
-unwired until that plan assertion is updated in the same change (with a terraform
-binary available to validate). The staging/production credential cipher reads the
-key id from `CREDENTIAL_KMS_KEY_ID` once the module is wired and applied.
+Every cloud profile provisions a dedicated customer-managed CMK — `credential_kms`
+in its `cost_policy.required_resources` — for the durable, envelope-encrypted
+provider credential authority (`modules/kms_credentials` in the Terraform root).
+It is deliberately separate from the Secrets Manager CMK (`secrets_kms`): that
+key encrypts static secret stubs, this one is the root of trust for every
+per-tenant provider credential the `AwsKmsEnvelopeCredentialCipher` writes, and
+the two carry different rotation, access and blast-radius profiles.
+
+The wiring is enforced at four layers:
+
+1. **Policy** — `credential_kms` is a required resource in all four cloud
+   profiles' `cost_policy`, and `config/terraform_resource_contracts.yaml`
+   contracts it as `exactly:2` resources (`aws_kms_key` + `aws_kms_alias`)
+   under `module.kms_credentials`.
+2. **Plan** — `profiles.tf` sets `enable_credential_kms = true`, the root
+   instantiates the module behind that count, and the provider-mocked
+   `profile_plan.tftest.hcl` asserts `length(module.kms_credentials) == 1` for
+   every cloud profile.
+3. **Task definition** — the key id is injected into both the api and every
+   runtime-service task as `CREDENTIAL_KMS_KEY_ID`, so the backend's cipher
+   resolves its key at boot (staging/production run `CREDENTIAL_CIPHER=aws_kms`).
+4. **Authorization** — the module's `iam_policy_json` is attached to the ECS
+   task role via `aws_iam_role_policy`, constraining the task to the four
+   envelope-crypto actions under exactly the five-key
+   `{tenant_id, provider, environment, slot_name, credential_version}`
+   encryption context.
+
+The `aws_iam_role_policy` attachment is the binding grant (rather than the
+module's `task_role_arns` input) to avoid a module dependency cycle: the ECS
+task role lives inside `module.ecs`, and `module.ecs` consumes this module's
+key id for `CREDENTIAL_KMS_KEY_ID`.
 
 ## Profile summary
 

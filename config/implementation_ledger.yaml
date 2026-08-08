@@ -1632,7 +1632,10 @@ items:
       write-only /v1/providers/credentials API (idempotency, optimistic concurrency,
       tenant-admin authz, sanitized audit) never returns a secret. Tenant deletion
       cascades credential rows. KMS IaC (terraform modules/kms_credentials) is
-      defined. The legacy generic key API is repaired and deprecated.
+      wired into the Terraform root as a required resource in every cloud
+      profile: it injects CREDENTIAL_KMS_KEY_ID into the ECS tasks and attaches
+      the task role's least-privilege crypto grant under the five-key encryption
+      context. The legacy generic key API is repaired and deprecated.
     affected_paths:
       - "Backend Architecture/aether-backend/services/providers/credentials/authority.py"
       - "Backend Architecture/aether-backend/services/providers/credentials/repository.py"

@@ -28,7 +28,7 @@
         design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
-        validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
+        validate-profile-config validate-profile-parity validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults \
         validate-terraform-profile-policy validate-cost-model test-terraform-profiles test-runtime-topology \
@@ -657,11 +657,17 @@ security-release-check: ## Fail-closed security gate: secrets + security-control
 validate-profile-config: ## Validate deployment-profile matrix + founding-tenant posture
 	python scripts/release/check_profile_config.py
 
+validate-profile-parity: ## Cross-source profile parity (docs count, cloud subset, terraform, contracts, env templates)
+	python scripts/release/check_profile_parity.py
+
 validate-cost-policy: ## Validate production-lean cost policy (forbidden/required resources)
 	python scripts/release/check_cost_policy.py
 
 validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production-lean cost policy
 	python scripts/release/check_cost_policy_terraform.py
+
+validate-profile-doctor: ## Per-profile readiness doctor (§27) + deployment certificate (§28); no cloud profile may fall below credential_waiting
+	python scripts/release/profile_doctor.py --all --strict
 
 # ---------------------------------------------------------------------------
 # Deployment-profile enforcement (FT-9)
@@ -737,6 +743,7 @@ collect-deployment-evidence: ## Materialise the release-evidence bundle with che
 
 deployment-profile-gate: ## Every deployment-profile gate that runs without AWS credentials
 	$(MAKE) validate-profile-config
+	$(MAKE) validate-profile-parity
 	$(MAKE) validate-cost-policy
 	$(MAKE) validate-cost-policy-terraform
 	$(MAKE) validate-delivery-topology
@@ -749,6 +756,7 @@ deployment-profile-gate: ## Every deployment-profile gate that runs without AWS 
 	$(MAKE) test-cost-model
 	$(MAKE) test-staging-lifecycle
 	$(MAKE) deployment-readiness-score
+	$(MAKE) validate-profile-doctor
 
 validate-delivery-topology: ## Validate immutable delivery and profile-to-role topology
 	python scripts/release/check_delivery_topology.py

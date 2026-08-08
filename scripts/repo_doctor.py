@@ -631,6 +631,30 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="fix the reported delivery-path violation (direct adapter dispatch, fire-and-forget critical task, unconfigured router, zero-channel success, or unguarded simulated receipt) in services/delivery/** or services/notification_intelligence/**",
     )
     run(
+        [sys.executable, "scripts/release/check_profile_parity.py"],
+        name="Profile parity (docs count, cloud subset, Terraform selectability, contracts, runtime, env templates)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "align every profile-stating surface with config/deployment_profiles.yaml "
+            "(docs count phrases, cloud-class subset, profiles/*.tfvars, variables.tf "
+            "validation, terraform_resource_contracts.yaml, runtime_deployment.yaml, "
+            "env templates); run python scripts/release/check_profile_parity.py to see "
+            "which surface drifted"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/release/profile_doctor.py", "--all", "--strict"],
+        name="Profile readiness doctor (states, no cloud profile below credential_waiting)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "a cloud profile is below CREDENTIAL_WAITING or an in-repo check failed; "
+            "run python scripts/release/profile_doctor.py --all to see which check "
+            "broke and which profile regressed"
+        ),
+    )
+    run(
         [sys.executable, "scripts/staging_capability_matrix.py"],
         name="Deploy-profile capability matrix + join layer (facet references resolve; bidirectional coverage)",
         results=results,

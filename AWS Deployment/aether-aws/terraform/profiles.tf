@@ -83,6 +83,15 @@ locals {
   # Graph lives in Aurora Postgres for any profile that has no Neptune cluster.
   enable_postgres_graph = !local.enable_neptune
 
+  # The dedicated provider-credential envelope-encryption CMK
+  # (modules/kms_credentials). Every non-local deployment stores real provider
+  # credentials, so the cipher is CREDENTIAL_CIPHER=aws_kms everywhere outside
+  # local and needs this key. Literal `true` — there is no cloud profile where
+  # provider credentials sit in plaintext. The key costs $1/month (flat) and is
+  # priced in config/aws_price_book.yaml; the contracts file requires it as
+  # `credential_kms` in all four profiles' cost policy.
+  enable_credential_kms = true
+
   # Static SPA origins, read from the canonical runtime matrix rather than
   # re-derived, so a profile that drops static frontends fails the plan test.
   enable_static_frontends = local.runtime_deployment.profiles[var.deployment_profile].static_frontends

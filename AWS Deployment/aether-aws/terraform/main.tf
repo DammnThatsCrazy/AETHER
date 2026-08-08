@@ -85,6 +85,37 @@ module "secrets" {
 }
 
 # ---------------------------------------------------------------------------
+# 3a. Provider-credential envelope-encryption CMK (modules/kms_credentials)
+#
+# A dedicated customer-managed CMK for the durable, envelope-encrypted provider
+# credential authority. Deliberately separate from the Secrets Manager CMK
+# above: that key encrypts static secret stubs, this one is the root of trust
+# for every per-tenant provider credential the AwsKmsEnvelopeCredentialCipher
+# writes, and the two carry different rotation, access and blast-radius
+# profiles. The key id is handed to module.ecs, which surfaces it to every task
+# as CREDENTIAL_KMS_KEY_ID; the task role's least-privilege crypto grant is
+# attached at the end of section 6.
+#
+# task_role_arns is deliberately NOT passed here. The ECS task role lives inside
+# module.ecs, and module.ecs consumes this module's key_id for
+# CREDENTIAL_KMS_KEY_ID — passing the task role ARN in would close a module
+# cycle (kms needs ecs's role arn; ecs needs kms's key id). The binding grant
+# is therefore the iam_policy_json output attached via aws_iam_role_policy
+# below; its kms:EncryptionContextKeys condition constrains calls to exactly
+# the five-key {tenant_id, provider, environment, slot_name, credential_version}
+# context, and the key policy's EnableIAMRootPermissions statement keeps that
+# IAM identity policy authoritative for this key.
+# ---------------------------------------------------------------------------
+
+module "kms_credentials" {
+  source = "./modules/kms_credentials"
+  count  = local.enable_credential_kms ? 1 : 0
+
+  environment = var.environment
+  project     = var.project
+}
+
+# ---------------------------------------------------------------------------
 # 4a. RDS Postgres — legacy, never provisioned by a fresh plan
 #
 # Aurora Serverless v2 (E3) is the active database in every profile, so
@@ -438,6 +469,11 @@ module "ecs" {
   # is driven by enable_dedicated_ml above.
   ml_serving_inline = !local.enable_dedicated_ml
 
+  # Provider-credential envelope-encryption CMK id → CREDENTIAL_KMS_KEY_ID.
+  # local.enable_credential_kms is a literal true for every cloud profile, so
+  # the count is statically 1 and index [0] is safe at plan.
+  credential_kms_key_id = module.kms_credentials[0].key_id
+
   # The api service, straight from the runtime matrix (profiles.tf). There is
   # no ecs_backend_* variable to disagree with it any more, and no
   # use_fargate_spot flag: the matrix pins api to on-demand at every capacity,
@@ -457,6 +493,25 @@ module "ecs" {
   ml_max_capacity = var.ecs_ml_max_capacity
 
   log_retention_days = var.log_retention_days
+}
+
+# ---------------------------------------------------------------------------
+# 6a. Provider-credential CMK — task-role crypto grant
+#
+# The task role may only call the four envelope-crypto actions
+# (Encrypt/Decrypt/GenerateDataKey/DescribeKey) on the credential CMK, under
+# exactly the five-key {tenant_id, provider, environment, slot_name,
+# credential_version} encryption context — the condition lives in the attached
+# policy JSON itself via kms:EncryptionContextKeys. aws_iam_role_policy.role
+# takes the role NAME, hence module.ecs.task_role_name. The module is
+# count-gated, but local.enable_credential_kms is a literal true, so index [0]
+# is always present.
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_role_policy" "credential_kms" {
+  name   = "${var.project}-${var.environment}-credential-kms"
+  role   = module.ecs.task_role_name
+  policy = module.kms_credentials[0].iam_policy_json
 }
 
 # ---------------------------------------------------------------------------

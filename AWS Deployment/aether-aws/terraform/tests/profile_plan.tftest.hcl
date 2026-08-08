@@ -231,6 +231,14 @@ run "staging_profile_plan" {
     error_message = "The staging plan provisions a cost-capped data store it must not."
   }
 
+  # required_resources: credential_kms — the provider-credential envelope-
+  # encryption CMK is provisioned in every cloud profile. A staging plan that
+  # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
+  assert {
+    condition     = length(module.kms_credentials) == 1
+    error_message = "The staging plan does not provision the provider-credential envelope-encryption CMK."
+  }
+
   assert {
     condition = alltrue([
       length(module.vpc.nat_gateway_ids) == 0,
@@ -446,6 +454,14 @@ run "production_lean_profile_plan" {
     error_message = "The production-lean plan provisions a forbidden data store."
   }
 
+  # required_resources: credential_kms — the provider-credential envelope-
+  # encryption CMK is provisioned in every cloud profile. A lean plan that
+  # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
+  assert {
+    condition     = length(module.kms_credentials) == 1
+    error_message = "The production-lean plan does not provision the provider-credential envelope-encryption CMK."
+  }
+
   # forbidden_resources: nat_gateway_unless_explicit.
   assert {
     condition = alltrue([
@@ -657,6 +673,7 @@ run "production_scale_profile_plan" {
       length(module.msk) == 1,
       length(module.elasticache) == 1,
       length(module.neptune) == 1,
+      length(module.kms_credentials) == 1,
     ])
     error_message = "The production-scale plan does not provision the heavy backends its profile enables."
   }
@@ -807,6 +824,7 @@ run "enterprise_isolated_profile_plan" {
       length(module.elasticache) == 1,
       length(module.neptune) == 1,
       length(module.rds) == 0,
+      length(module.kms_credentials) == 1,
     ])
     error_message = "The enterprise-isolated plan does not provision the heavy backends its profile enables."
   }
