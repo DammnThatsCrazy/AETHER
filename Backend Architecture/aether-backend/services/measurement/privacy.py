@@ -211,6 +211,11 @@ class MeasurementPrivacyHandler:
         # in this increment and is left to a later milestone; the risk stays
         # explicit (see reattribution.py) rather than silent.
         conversions_reattributed = 0
+        # Full re-attribution summary (Program 3 M2) so the DSR erasure job can
+        # record it as DSR propagation evidence on the attribution_records
+        # component. None when no conversions were affected (no re-attribution
+        # ran). Additive — every pre-existing key below is unchanged.
+        reattribution_summary: dict[str, Any] | None = None
         if tombstoned_touchpoint_ids and candidate_conversion_ids:
             reattribution = await reattribute_affected(
                 tenant_id,
@@ -222,6 +227,7 @@ class MeasurementPrivacyHandler:
             )
             conversions_reattributed = reattribution.conversions_reattributed
             errors.extend(reattribution.errors)
+            reattribution_summary = reattribution.to_dict()
 
         return {
             "tenant_id": tenant_id,
@@ -234,6 +240,7 @@ class MeasurementPrivacyHandler:
             "reattribution_scope_limit": _REATTRIBUTION_SCOPE_LIMIT,
             "reattribution_touchpoints_scanned": reattribution_touchpoints_scanned,
             "reattribution_conversions_scanned": reattribution_conversions_scanned,
+            "reattribution": reattribution_summary,
             "errors": errors,
             "partial_failure": bool(errors),
         }

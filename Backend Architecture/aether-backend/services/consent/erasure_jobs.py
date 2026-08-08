@@ -95,6 +95,18 @@ def register_consent_erasure_handler() -> None:
                 requires_recompute=not bool(result.get("journey_rebuild_triggered")),
                 audit_event_id=ctx.job_id,
             )
+            # Program 3 M2: attach the re-attribution correction as DSR
+            # propagation evidence on the same attribution_records component —
+            # additive to the tombstone receipt above, only when re-attribution
+            # actually ran (a profile with affected conversions).
+            reattribution_summary = result.get("reattribution")
+            if reattribution_summary:
+                await dsr_propagation_service.record_reattribution(
+                    propagation_request_id,
+                    reattribution_summary,
+                    tenant_id=ctx.tenant_id,
+                    component=MEASUREMENT_COMPONENT,
+                )
 
         # ── Mobile continuation / installation / client-sync stores ──────────
         # Each store is erased in its OWN try/except so one store's failure never
