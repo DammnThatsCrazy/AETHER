@@ -214,7 +214,7 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — run deploy/staging/bootstrap.sh or set manually}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — run deploy/legacy-staging/bootstrap.sh or set manually}
       BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:-}
       WATERMARK_SECRET_KEY: ${WATERMARK_SECRET_KEY:-}
       CANARY_SECRET_SEED: ${CANARY_SECRET_SEED:-}
@@ -489,7 +489,7 @@ services:
       - "9090:9090"
     volumes:
       - prometheus_data:/prometheus
-      - ./deploy/staging/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/legacy-staging/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/observability/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
 
   grafana:

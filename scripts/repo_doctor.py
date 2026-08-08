@@ -644,6 +644,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
+        [sys.executable, "scripts/release/check_delivery_compose_parity.py"],
+        name="Delivery compose parity (no compose file claims the staging profile)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "a compose file is presenting itself as the canonical staging profile "
+            "(provisions forbidden MSK/ElastiCache/Prometheus). The stale stack must "
+            "stay quarantined under deploy/legacy-staging/ with the LEGACY marker; "
+            "canonical staging is Terraform (profiles/staging.tfvars)"
+        ),
+    )
+    run(
         [sys.executable, "scripts/release/profile_doctor.py", "--all", "--strict"],
         name="Profile readiness doctor (states, no cloud profile below credential_waiting)",
         results=results,
