@@ -103,10 +103,142 @@ def test_all_profiles_report_a_valid_state():
                            "enterprise-isolated"}
     assert states["local"] == "development_only"
     assert states["local-full"] == "development_only"
-    assert states["demo"] == "integration_ready"
-    assert states["preview"] == "integration_ready"
+    # demo/preview reach CREDENTIAL_WAITING once their ephemeral lifecycle is
+    # fully realized (declared budget + cost policy, selectable Terraform,
+    # runtime topology, TTL guard). The assertion only passes after that
+    # lifecycle lands in config/ and the guard files exist; the mutation test
+    # below proves the same state machine never hands it out early.
+    assert states["demo"] == "credential_waiting"
+    assert states["preview"] == "credential_waiting"
     for cloud in ("staging", "production-lean", "production-scale", "enterprise-isolated"):
         assert states[cloud] == "credential_waiting", cloud
+
+
+def test_demo_preview_lifecycle_contract_gates_credential_waiting(tmp_path):
+    """demo/preview are CREDENTIAL_WAITING only when the full ephemeral lifecycle
+    exists; the state machine never hands the rung out early.
+
+    The lifecycle contract is: declared budget + cost_policy, selectable
+    Terraform (tfvars + variables.tf), a runtime topology, and the ephemeral TTL
+    guard wired to the profile's matrix. Two kinds of gap are distinguished:
+
+      * a SOFT gap (no cost_policy, or a missing/unwired guard) keeps the
+        profile at INTEGRATION_READY — never INVALID, never credential_waiting;
+      * a HARD gap (no budget, no tfvars, not selectable, no runtime topology)
+        is independently failed by a gate and knocks the profile to INVALID,
+        which is the same scrutiny cloud profiles already receive.
+    """
+    mod = _load("profile_doctor")
+
+    def realized_fixture(sub: Path):
+        """A fully realized demo in a synthetic repo root."""
+        data = yaml.safe_load((ROOT / "config" / "deployment_profiles.yaml").read_text())
+        demo = data["profiles"]["demo"]
+        demo["cost_policy"] = {
+            "required_resources": ["cloudfront_s3_frontends", "alb", "dynamodb", "sqs_sns"],
+            "forbidden_resources": ["msk"],
+        }
+        demo["budget"] = {
+            "currency": "USD",
+            "region": "us-east-1",
+            "target_monthly_spend": 10,
+            "hard_monthly_spend": 25,
+        }
+        tf_dir = sub / "AWS Deployment" / "aether-aws" / "terraform"
+        (tf_dir / "profiles").mkdir(parents=True, exist_ok=True)
+        (tf_dir / "profiles" / "demo.tfvars").write_text(
+            'deployment_profile = "demo"\n', encoding="utf-8")
+        (tf_dir / "variables.tf").write_text(
+            'variable "deployment_profile" {\n'
+            "  validation {\n"
+            '    condition = contains(["staging", "production-lean", "demo", "preview"], var.deployment_profile)\n'
+            "  }\n"
+            "}\n", encoding="utf-8")
+        guard_py = sub / "scripts" / "release"
+        guard_py.mkdir(parents=True, exist_ok=True)
+        (guard_py / "ephemeral_ttl_guard.py").write_text(
+            '"""ephemeral TTL guard fixture"""\n', encoding="utf-8")
+        workflows = sub / ".github" / "workflows"
+        workflows.mkdir(parents=True, exist_ok=True)
+        (workflows / "ephemeral-ttl-guard.yml").write_text(
+            "name: Ephemeral TTL guard\n"
+            "on:\n  schedule:\n    - cron: '17 * * * *'\n"
+            "jobs:\n  guard:\n    strategy:\n"
+            "      matrix:\n        profile:\n          - demo\n          - preview\n"
+            "    runs-on: ubuntu-latest\n", encoding="utf-8")
+        runtime = yaml.safe_load((ROOT / "config" / "runtime_deployment.yaml").read_text())
+        runtime["profiles"]["demo"] = {
+            "execution_mode": "consolidated",
+            "services": {"api": {"roles": ["api"]}},
+        }
+        return data, runtime, tf_dir, guard_py, workflows
+
+    contracts = yaml.safe_load(
+        (ROOT / "config" / "terraform_resource_contracts.yaml").read_text())
+    readiness = yaml.safe_load((ROOT / "config" / "deployment_readiness.yaml").read_text())
+
+    def report_for(root: Path, data: dict, runtime: dict) -> dict:
+        return mod.build_profile_report(
+            root, "demo", data=data, contracts=contracts,
+            runtime=runtime, readiness=readiness, spine_rows=[],
+        )
+
+    # Fully realized -> CREDENTIAL_WAITING, with every applicable check green.
+    realized = tmp_path / "realized"
+    data, runtime, tf_dir, guard_py, workflows = realized_fixture(realized)
+    report = report_for(realized, data, runtime)
+    assert report["readiness_state"] == "credential_waiting", report["conclusion"]
+    assert all(c["result"] in ("passed", "not_applicable") for c in report["checks"])
+
+    # SOFT gaps: each one alone must leave the profile at INTEGRATION_READY —
+    # never INVALID, never credential_waiting.
+    soft_mutations = (
+        ("no cost_policy", lambda d, rt: d["profiles"]["demo"].pop("cost_policy")),
+        ("no guard py", lambda d, rt: (guard_py / "ephemeral_ttl_guard.py").unlink()),
+        ("no guard workflow", lambda d, rt: (workflows / "ephemeral-ttl-guard.yml").unlink()),
+        ("not in guard matrix", lambda d, rt: (workflows / "ephemeral-ttl-guard.yml").write_text(
+            "jobs:\n  guard:\n    strategy:\n"
+            "      matrix:\n        profile:\n          - preview\n", encoding="utf-8")),
+    )
+    for label, mutate in soft_mutations:
+        sub = tmp_path / f"soft_{label.replace(' ', '_')}"
+        data, runtime, tf_dir, guard_py, workflows = realized_fixture(sub)
+        mutate(data, runtime)
+        report = report_for(sub, data, runtime)
+        assert report["readiness_state"] == "integration_ready", (
+            f"soft mutation {label!r} produced {report['readiness_state']}: "
+            f"{report['conclusion']}")
+        assert all(c["result"] in ("passed", "not_applicable") for c in report["checks"]), label
+
+    # HARD gaps: each is independently failed by a gate, so the profile falls to
+    # INVALID (the same scrutiny cloud profiles receive) rather than resting at
+    # integration_ready.
+    hard_mutations = (
+        ("no budget", lambda d, rt: d["profiles"]["demo"].pop("budget"),
+         "budget-declared"),
+        ("no tfvars", lambda d, rt: (tf_dir / "profiles" / "demo.tfvars").unlink(),
+         "terraform-selectable"),
+        ("not terraform-selectable",
+         lambda d, rt: (tf_dir / "variables.tf").write_text(
+             'variable "deployment_profile" {\n'
+             "  validation {\n"
+             '    condition = contains(["staging", "production-lean"], var.deployment_profile)\n'
+             "  }\n"
+             "}\n", encoding="utf-8"),
+         "terraform-selectable"),
+        ("no runtime topology", lambda d, rt: rt["profiles"].pop("demo"),
+         "runtime-topology"),
+    )
+    for label, mutate, failing_check in hard_mutations:
+        sub = tmp_path / f"hard_{label.replace(' ', '_')}"
+        data, runtime, tf_dir, guard_py, workflows = realized_fixture(sub)
+        mutate(data, runtime)
+        report = report_for(sub, data, runtime)
+        assert report["readiness_state"] == "invalid", (
+            f"hard mutation {label!r} produced {report['readiness_state']}: "
+            f"{report['conclusion']}")
+        failing = next(c for c in report["checks"] if c["id"] == failing_check)
+        assert failing["result"] == "failed", (label, failing)
 
 
 def test_unknown_profile_is_invalid():

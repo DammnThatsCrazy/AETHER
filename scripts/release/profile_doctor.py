@@ -15,11 +15,16 @@ READINESS LADDER (the state, never a percentage)
   development_only        local-class profile: coherent and runnable locally,
                           never a deployment target
   integration_ready       demo/preview-class profile: shared nonprod backends,
-                          TTL lifecycle and seed declared — integration-testable
-  credential_waiting      cloud-class profile whose every in-repo check passes;
-                          the remaining work is exactly the credentialed /
-                          external evidence, none of which is reachable from
-                          this repository
+                          TTL lifecycle and seed declared — integration-testable.
+                          Rises to credential_waiting only once the full
+                          ephemeral lifecycle (declared budget + cost policy,
+                          selectable Terraform, runtime topology, TTL guard) is
+                          realized in the repository
+  credential_waiting      selectable profile (cloud-class, or integration-class
+                          with a realized ephemeral lifecycle) whose every
+                          in-repo check passes; the remaining work is exactly
+                          the credentialed / external evidence, none of which
+                          is reachable from this repository
   cloud_rehearsal_required  cloud-class profile where AWS credentials ARE
                           detectable but the credentialed rehearsal evidence is
                           not yet validated
@@ -31,8 +36,9 @@ READINESS LADDER (the state, never a percentage)
                           contract is validated (production-lean ceiling)
 
 Honesty rules enforced structurally:
-  * A cloud profile is CREDENTIAL_WAITING only when every in-repo check passes.
-    A failing gate below it is INVALID, never "almost ready".
+  * A selectable profile is CREDENTIAL_WAITING only when every in-repo check
+    passes — and, for the demo/preview class, only once its ephemeral lifecycle
+    is fully realized. A failing gate below it is INVALID, never "almost ready".
   * External evidence rows are pending_external unless a credentialed artifact
     is present AND carries structurally valid provenance AND an attestation a
     registered verifier can check. No verifier is registered in this repo, so
@@ -53,9 +59,9 @@ Usage:
 
 Exit codes:
   0  every profile reported is not invalid (default), or --strict with every
-     cloud profile at least credential_waiting
-  1  a reported profile is invalid (integrity broken), or --strict and a cloud
-     profile is below credential_waiting
+     selectable profile at least credential_waiting
+  1  a reported profile is invalid (integrity broken), or --strict and a
+     selectable profile is below credential_waiting
   2  argument/config load failure
 """
 
@@ -71,6 +77,8 @@ import sys
 from enum import Enum
 from pathlib import Path
 
+import yaml
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
@@ -82,6 +90,12 @@ TF_DIR = "AWS Deployment/aether-aws/terraform"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 BUNDLE_ROOT = "release-evidence"
 
+# The ephemeral TTL guard that gives demo/preview a fail-safe cleanup. Both
+# files are created in the same integration wave as this doctor change, so the
+# doctor treats them as absent-if-missing rather than as an error.
+EPHEMERAL_GUARD_PY = "scripts/release/ephemeral_ttl_guard.py"
+EPHEMERAL_GUARD_WORKFLOW = ".github/workflows/ephemeral-ttl-guard.yml"
+
 # The env template each cloud profile with a template is checked against.
 ENV_TEMPLATES = {
     "staging": ".env.staging.example",
@@ -92,6 +106,9 @@ KNOWN_CLASSES = {"local", "demo", "preview", "staging", "production", "enterpris
 LOCAL_CLASSES = frozenset({"local"})
 INTEGRATION_CLASSES = frozenset({"demo", "preview"})
 CLOUD_CLASSES = frozenset({"staging", "production", "enterprise"})
+# Profiles with a Terraform selectability / runtime-topology surface. Cloud
+# profiles always have one; demo/preview acquire it as part of their lifecycle.
+SELECTABLE_CLASSES = CLOUD_CLASSES | INTEGRATION_CLASSES
 
 BACKEND_DIMS = ("database", "cache", "event", "graph", "analytics", "object", "ml")
 
@@ -192,9 +209,13 @@ def _env_values(path: Path) -> dict[str, str]:
 
 
 def _variables_tf_profiles(text: str) -> list[str] | None:
+    # Tolerates both the single-line `contains(["a", "b"], var.deployment_profile)`
+    # and the reformatted multiline form with a trailing comma that the profile
+    # surfaces land in.
     m = re.search(
-        r'contains\(\s*\[\s*((?:"[^"]+"\s*,\s*)*"[^"]+")\s*\]\s*,\s*var\.deployment_profile\s*\)',
+        r'contains\(\s*\[(.*?)\]\s*,\s*var\.deployment_profile\s*,?\s*\)',
         text,
+        re.DOTALL,
     )
     if not m:
         return None
@@ -320,8 +341,8 @@ def _profile_static_checks(
             " — ".join(ENV_TEMPLATES.values()), "no dedicated env template for this profile",
         ))
 
-    # 4. Terraform selectability (cloud profiles) -----------------------------
-    if cls in CLOUD_CLASSES:
+    # 4. Terraform selectability (selectable profiles) ------------------------
+    if cls in SELECTABLE_CLASSES:
         tfvar = root / TF_DIR / "profiles" / f"{profile}.tfvars"
         variables_tf = root / VARIABLES_TF
         problems = []
@@ -347,11 +368,11 @@ def _profile_static_checks(
         checks.append(_na(
             "terraform-selectable", "profile is selectable in Terraform",
             f"{TF_DIR}/profiles/*.tfvars",
-            "non-cloud profile has no Terraform selection path",
+            "local-class profile has no Terraform selection path",
         ))
 
-    # 5. Runtime topology (cloud profiles) ------------------------------------
-    if cls in CLOUD_CLASSES:
+    # 5. Runtime topology (selectable profiles) -------------------------------
+    if cls in SELECTABLE_CLASSES:
         runtime_profiles = set((runtime or {}).get("profiles", {}))
         if profile in runtime_profiles:
             checks.append(_pass(
@@ -366,7 +387,7 @@ def _profile_static_checks(
     else:
         checks.append(_na(
             "runtime-topology", "profile has a runtime topology",
-            RUNTIME_YAML, "non-cloud profile does not need a cloud runtime topology",
+            RUNTIME_YAML, "local-class profile does not need a cloud runtime topology",
         ))
 
     # 6. Cost-policy shape (profiles that declare one) ------------------------
@@ -418,6 +439,32 @@ def _profile_static_checks(
         checks.append(_na(
             "lifecycle-declared", "TTL cleanup required", CANONICAL_YAML,
             "TTL lifecycle applies only to demo/preview profiles",
+        ))
+
+    # 8. Cost-capped profiles must declare a budget ---------------------------
+    # A `cost_capped: true` profile with no budget is INVALID, not merely
+    # integration_ready: a ceiling nobody can enforce is no ceiling at all, and
+    # check_cost_model.py cannot score it (exit 2). This is what forces demo/
+    # preview to carry a numeric ceiling once they are selectable.
+    if profile_cfg.get("cost_capped") is True:
+        budget = profile_cfg.get("budget")
+        if isinstance(budget, dict) and budget:
+            checks.append(_pass(
+                "budget-declared", "cost-capped profile declares a budget",
+                CANONICAL_YAML,
+            ))
+        else:
+            checks.append(_fail(
+                "budget-declared", "cost-capped profile declares a budget",
+                CANONICAL_YAML,
+                f"{profile} is cost_capped: true but declares no budget block; "
+                "a capped profile with no numeric ceiling cannot be certified",
+            ))
+    else:
+        checks.append(_na(
+            "budget-declared", "cost-capped profile declares a budget",
+            CANONICAL_YAML,
+            "profile is not cost-capped; no numeric ceiling is required",
         ))
 
     return checks
@@ -554,6 +601,102 @@ def _external_status(external_checks: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Ephemeral lifecycle realization (demo/preview)
+# ---------------------------------------------------------------------------
+
+def _terraform_selectable(root: Path, profile: str) -> bool:
+    """True when the profile has a tfvars file AND is in the variables.tf
+    deployment_profile validation list."""
+    tfvar = root / TF_DIR / "profiles" / f"{profile}.tfvars"
+    variables_tf = root / VARIABLES_TF
+    if not tfvar.is_file() or not variables_tf.is_file():
+        return False
+    selectable = _variables_tf_profiles(variables_tf.read_text(encoding="utf-8"))
+    return selectable is not None and profile in selectable
+
+
+def _workflow_matrix_profiles(workflow: Path, known_profiles: set[str]) -> set[str]:
+    """Profile names wired into a workflow's ``strategy.matrix.profile`` list.
+
+    Tolerant by design: the ephemeral guard files are created in the same
+    integration wave as this doctor change, so an absent or malformed workflow
+    reads as an empty matrix (N/A), never a crash. The textual fallback is
+    restricted to canonical profile names so a YAML quirk cannot fabricate one.
+    """
+    try:
+        text = workflow.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    found: set[str] = set()
+    try:
+        doc = yaml.safe_load(text)
+    except Exception:  # pragma: no cover - concurrently-authored file
+        doc = None
+    if isinstance(doc, dict):
+        for job in (doc.get("jobs") or {}).values():
+            if not isinstance(job, dict):
+                continue
+            matrix = (job.get("strategy") or {}).get("matrix") or {}
+            if not isinstance(matrix, dict):
+                continue
+            entries = matrix.get("profile")
+            if isinstance(entries, str):
+                found.add(entries)
+            elif isinstance(entries, list):
+                for entry in entries:
+                    if isinstance(entry, str):
+                        found.add(entry)
+                    elif isinstance(entry, dict) and isinstance(entry.get("profile"), str):
+                        found.add(entry["profile"])
+            # matrix.include: [{profile: demo, env: demo}, ...]
+            for inc in (matrix.get("include") or []):
+                if isinstance(inc, dict) and isinstance(inc.get("profile"), str):
+                    found.add(inc["profile"])
+    if not found:
+        for match in re.finditer(r"profile\s*:\s*([a-zA-Z0-9_-]+)", text):
+            name = match.group(1).strip().strip('"\'')
+            if name in known_profiles:
+                found.add(name)
+    return found
+
+
+def _ephemeral_guard_wired(root: Path, profile: str, known_profiles: set[str]) -> bool:
+    """True when both ephemeral-guard artifacts exist and the profile is in the
+    guard workflow's matrix."""
+    guard_py = root / EPHEMERAL_GUARD_PY
+    workflow = root / EPHEMERAL_GUARD_WORKFLOW
+    if not guard_py.is_file() or not workflow.is_file():
+        return False
+    return profile in _workflow_matrix_profiles(workflow, known_profiles)
+
+
+def _lifecycle_realized(
+    profile: str, profile_cfg: dict | None, root: Path, runtime: dict, data: dict,
+) -> bool:
+    """True when an integration-class profile's ephemeral lifecycle is in place:
+      * `cost_policy` AND `budget` declared for the profile in the canonical
+        matrix;
+      * Terraform-selectable (tfvars file + variables.tf validation list);
+      * a runtime topology entry;
+      * the ephemeral TTL guard present and wired to the profile's matrix.
+
+    File-existence checks are tolerant: the guard files are created
+    concurrently, so an absent guard reads as "not yet realized", never a crash.
+    """
+    if not isinstance(profile_cfg, dict):
+        return False
+    budget = profile_cfg.get("budget")
+    if not profile_cfg.get("cost_policy") or not isinstance(budget, dict) or not budget:
+        return False
+    if not _terraform_selectable(root, profile):
+        return False
+    if profile not in set((runtime or {}).get("profiles", {})):
+        return False
+    known = set((data or {}).get("profiles", {}))
+    return _ephemeral_guard_wired(root, profile, known)
+
+
+# ---------------------------------------------------------------------------
 # State derivation
 # ---------------------------------------------------------------------------
 
@@ -563,6 +706,9 @@ def _derive_state(
     inrepo_ok: bool,
     credentials_available: bool,
     external_checks: list[dict],
+    root: Path,
+    runtime: dict,
+    data: dict,
 ) -> Readiness:
     if profile_cfg is None:
         return Readiness.INVALID
@@ -572,6 +718,12 @@ def _derive_state(
     if cls in LOCAL_CLASSES:
         return Readiness.DEVELOPMENT_ONLY
     if cls in INTEGRATION_CLASSES:
+        # demo/preview reach CREDENTIAL_WAITING only once their ephemeral
+        # lifecycle is fully realized (budget + cost policy + selectable
+        # Terraform + runtime topology + TTL guard). Before that they are
+        # integration-testable at best, and never lower than that.
+        if _lifecycle_realized(profile, profile_cfg, root, runtime, data):
+            return Readiness.CREDENTIAL_WAITING
         return Readiness.INTEGRATION_READY
     # Cloud profiles.
     if not credentials_available:
@@ -646,7 +798,10 @@ def build_profile_report(
         c["result"] == FAILED for c in (spine_rows or [])
     )
     credentials = _credentials_available(root)
-    state = _derive_state(profile, profile_cfg, inrepo_ok, credentials, external_checks)
+    state = _derive_state(
+        profile, profile_cfg, inrepo_ok, credentials, external_checks,
+        root, runtime, data,
+    )
     external_status = _external_status(external_checks)
 
     conclusion = _conclusion(profile, state, checks, external_checks, credentials, external_status)
@@ -699,6 +854,14 @@ def _conclusion(
         )
     if state == Readiness.CREDENTIAL_WAITING:
         pending = external_status["contract_rows"]
+        if pending == 0:
+            return (
+                f"{profile.upper()}: CREDENTIAL_WAITING — every in-repo check "
+                "passes and the ephemeral lifecycle (budget, selectable "
+                "Terraform, runtime topology, TTL guard) is fully realized; the "
+                "remaining work is the credentialed/external ephemeral run, "
+                "none of which is reachable from this repository."
+            )
         return (
             f"{profile.upper()}: CREDENTIAL_WAITING — every in-repo check passes; "
             f"{pending} external evidence item(s) are pending credentialed runs. "
@@ -760,7 +923,8 @@ def run(argv: list[str] | None = None) -> int:
                     help="Write each report's deployment certificate to PATH "
                          "({profile} is substituted in --all mode)")
     ap.add_argument("--strict", action="store_true",
-                    help="Exit 1 unless every cloud profile is at least CREDENTIAL_WAITING")
+                    help="Exit 1 unless every selectable profile (cloud + "
+                         "demo/preview) is at least CREDENTIAL_WAITING")
     args = ap.parse_args(argv)
 
     root = repo_root()
@@ -817,13 +981,13 @@ def run(argv: list[str] | None = None) -> int:
             print(f"{r['profile']}: INVALID — see report", file=sys.stderr)
         return 1
     if args.strict:
-        cloud_below = [
+        selectable_below = [
             r for r in reports
-            if r["profile_class"] in CLOUD_CLASSES
+            if r["profile_class"] in SELECTABLE_CLASSES
             and READINESS_RANK[Readiness(r["readiness_state"])] < READINESS_RANK[Readiness.CREDENTIAL_WAITING]
         ]
-        if cloud_below:
-            for r in cloud_below:
+        if selectable_below:
+            for r in selectable_below:
                 print(
                     f"strict gate: {r['profile'].upper()} is "
                     f"{r['readiness_state'].upper()}, below CREDENTIAL_WAITING",
