@@ -140,7 +140,7 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 | **Data behaviour** | Versioned backend-seeded synthetic tenant only. Never real customer data; normal startup remains empty. |
 | **Network behaviour** | Shared non-production network, `network_egress_mode = public_ip` — no NAT Gateway. |
 | **Cost posture** | `cost_capped: true`; FIXED budget target 150 / hard 220 USD/mo, validated by `validate-ephemeral-budget` against the committed demo-valid fixture (~USD 145.60/mo fixed baseline). |
-| **TTL / lifecycle** | `ttl_cleanup_required: true`. Enforced by the ephemeral TTL guard: an SSM lease at `/aether/demo/demo/lifecycle/expires-at` written by `ephemeral_env.py provision`, checked hourly by `.github/workflows/ephemeral-ttl-guard.yml` (fail-closed — missing/expired lease ends the run red), and torn down by `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). |
+| **TTL / lifecycle** | `ttl_cleanup_required: true`. Enforced by the ephemeral TTL guard: an SSM lease at `/aether/demo/demo/lifecycle/expires-at` written by `ephemeral_env.py provision`, checked hourly by `.github/workflows/ephemeral-ttl-guard.yml` (fail-closed — missing/expired lease ends the run red), and torn down by `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN` — it then has no credential to read the lease or trip the TTL, reports it is a NO-OP and passes green, which is **not** a claim that demo is asleep; it re-arms fail-closed the moment the role is wired. |
 | **Security posture** | Would inherit the shared non-production account's posture. Seed/reset additionally require an explicit staging demo policy and tenant allowlist. Unproven. |
 | **Validation** | `make validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-profile-parity validate-ephemeral-budget test-ephemeral-lifecycle` + profile-doctor. |
 | **Limitations** | The TTL guard is the tripwire; enforcement (scale-to-zero) is the operator-run `ephemeral_env.py teardown` — it is not an automatic destroy. |
@@ -174,7 +174,7 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 | **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. Aurora auto-pauses at 0 ACU while asleep. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |
 | **Cost posture** | Target USD 25/month, hard ceiling USD 50/month, against a declared `maximum_scheduled_awake_hours_per_month: 40`. Hourly resources are prorated by awake hours; per-month charges (KMS keys, secrets, alarms) accrue regardless of sleep. See [Cost Optimization](COST-OPTIMIZATION.md). |
-| **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and drops autoscaling floors, then fails the run so the lapse is visible. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
+| **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and drops autoscaling floors, then fails the run so the lapse is visible. Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN` — it then has no credential to read the lease or enforce the TTL, reports it is a NO-OP and passes green, which is **not** a claim that staging is asleep; it re-arms fail-closed the moment the role is wired. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
 | **Security posture** | Same isolation shape as production-lean. The rehearsal itself probes cross-tenant reads, unauthenticated access and empty-state behaviour with two distinct tenants. |
 | **Validation** | `make test-staging-lifecycle`, `make test-terraform-profiles` (run blocks `staging_profile_plan` and `staging_asleep_profile_plan`), `make deployment-profile-gate`. |
 | **Limitations** | No rehearsal has been executed against real AWS. Every lifecycle control is code-complete and externally unverified — see [Readiness](#readiness-and-what-is-externally-blocked). |
@@ -417,7 +417,10 @@ push to `main` has been **deleted**. What remains there:
 - `require-production-credentials`, which on a push to `main` gates
   **promotability**, not an apply: a commit is only dispatchable for promotion
   if its main-branch run proved the credential set exists and all four profiles
-  produced a credentialed, policy- and cost-validated remote plan.
+  produced a credentialed, policy- and cost-validated remote plan. When the
+  credential set is absent the job reports it is a NO-OP — the commit is
+  explicitly **not** promotable — and passes green, re-arming fail-closed the
+  moment the credentials are wired.
 
 `.github/workflows/terraform-promote.yml` is the **sole apply path**. It is
 `workflow_dispatch`-only — no push, tag, schedule or path trigger can reach an
