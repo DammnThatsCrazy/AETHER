@@ -1,8 +1,12 @@
 ---
 title: Brand-system living acceptance report
-status: active
+slug: architecture/brand-system/final-audit
+section: architecture
+visibility: I
+audience: [architect, dev-senior, ops]
+status: beta
+since_version: "8.12.0"
 canonical_owner: frontend@aether
-verified_at: 2026-08-08
 ---
 
 # Brand-system living acceptance report

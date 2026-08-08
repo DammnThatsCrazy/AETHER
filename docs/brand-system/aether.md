@@ -1,6 +1,11 @@
 ---
 title: Aether identity
-status: active
+slug: architecture/brand-system/aether
+section: architecture
+visibility: I
+audience: [dev-senior, architect]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

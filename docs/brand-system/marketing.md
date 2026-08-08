@@ -1,6 +1,11 @@
 ---
 title: Marketing guidance
-status: active
+slug: enterprise/brand-system-marketing
+section: enterprise
+visibility: I
+audience: [exec, buyer, dev-senior]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

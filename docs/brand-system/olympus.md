@@ -1,6 +1,11 @@
 ---
 title: Olympus Labs identity
-status: active
+slug: architecture/brand-system/olympus
+section: architecture
+visibility: I
+audience: [architect, exec, dev-senior]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

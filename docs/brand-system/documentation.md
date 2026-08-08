@@ -1,6 +1,11 @@
 ---
 title: Documentation guidance
-status: active
+slug: architecture/brand-system/documentation
+section: architecture
+visibility: I
+audience: [dev-senior, architect]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

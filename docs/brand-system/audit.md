@@ -1,6 +1,11 @@
 ---
 title: Olympus Labs / Aether / Kyber Visual-System Inventory
-status: draft
+slug: architecture/brand-system/audit
+section: architecture
+visibility: I
+audience: [architect, dev-senior, ops]
+status: beta
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

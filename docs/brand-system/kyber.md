@@ -1,6 +1,11 @@
 ---
 title: Kyber identity
-status: active
+slug: kyber/brand-system
+section: kyber
+visibility: I
+audience: [dev-senior, architect, ops]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

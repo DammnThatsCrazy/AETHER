@@ -1,6 +1,11 @@
 ---
 title: Brand-system architecture and accessibility
-status: active
+slug: architecture/brand-system/architecture
+section: architecture
+visibility: I
+audience: [architect, dev-senior, ops]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

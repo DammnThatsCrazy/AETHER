@@ -1,6 +1,11 @@
 ---
 title: Entity identity
-status: active
+slug: architecture/brand-system/entities
+section: architecture
+visibility: I
+audience: [dev-senior, architect, ops]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 

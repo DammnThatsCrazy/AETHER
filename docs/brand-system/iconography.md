@@ -1,6 +1,11 @@
 ---
 title: Iconography
-status: active
+slug: architecture/brand-system/iconography
+section: architecture
+visibility: I
+audience: [dev-junior, dev-senior, architect]
+status: stable
+since_version: "8.12.0"
 canonical_owner: frontend@aether
 ---
 
