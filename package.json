@@ -9,6 +9,9 @@
     "packages/server",
     "packages/react-native",
     "packages/mobile-core",
+    "packages/mobile-ui",
+    "apps/aether-mobile",
+    "apps/kyber-mobile",
     "frontend/aether",
     "frontend/kyber",
     "frontend/shared",
@@ -78,5 +81,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "overrides": {
+    "shell-quote": "1.10.0",
+    "tar": "7.5.22"
+  }
 }

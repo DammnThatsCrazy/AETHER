@@ -263,9 +263,13 @@ paged on a degrading delivery plane instead of discovering it during an incident
 ## Activation checklist
 
 1. Apply database migrations (`alembic upgrade head`).
-2. Apply/verify the AWS KMS infrastructure (terraform `modules/kms_credentials`).
-3. Set `CREDENTIAL_CIPHER=aws_kms` + `CREDENTIAL_KMS_KEY_ID` (startup fails closed
-   otherwise).
+2. Verify the provider-credential CMK was provisioned by the standard apply:
+   `modules/kms_credentials` is wired into the Terraform root (a required
+   resource in every cloud profile), so a normal `terraform apply` creates the
+   key and the ECS tasks already receive `CREDENTIAL_KMS_KEY_ID`. Confirm with
+   `aether profile doctor <profile> --certificate`.
+3. Set `CREDENTIAL_CIPHER=aws_kms` (startup fails closed unless the key id is
+   present — it is injected by Terraform, so do not unset it).
 4. Provision all required credential slots via the credential API.
 5. `test` each credential version.
 6. `activate` each credential.

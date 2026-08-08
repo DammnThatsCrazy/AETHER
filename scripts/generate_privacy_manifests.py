@@ -117,6 +117,21 @@ REQUIRED_FIELDS = (
     "classification",
 )
 
+# The mobile-plane stores a principal DSR erasure ACTUALLY removes. This is the
+# app's real deletion surface — the tenant-scoped tables the backend
+# ``consent.erasure`` job erases for a principal (services/consent/erasure_jobs.py)
+# and that the DSR-coverage gate binds (scripts/release/check_dsr_coverage.py). It
+# deliberately does NOT come from a purpose's ``dsrDeleteScope`` in the consent
+# registry: the analytics purpose's scope (events/sessions/profiles) describes
+# analytics facts these apps never store, so citing it would claim a governance
+# artifact that does not govern the erased mobile tables. Kept a static constant so
+# generation stays deterministic and --check remains reproducible.
+DELETION_SURFACE = (
+    "continuations and continuation selections",
+    "mobile installations and push subscriptions",
+    "the sync change log",
+)
+
 
 class ManifestError(Exception):
     """Raised when a data-flow declaration fails validation. Fail closed."""
@@ -404,8 +419,12 @@ def build_data_safety(
             "data_encrypted_in_transit": True,
             "user_can_request_data_deletion": True,
             "deletion_mechanism": (
-                "In-app account deletion / DSR erasure request; deletion follows each "
-                "purpose's dsrDeleteScope in the consent registry."
+                "Data deletion is available through the Aether platform's "
+                "data-subject erasure flow (backend consent/erasure API, "
+                "request_type=erasure); the app has no in-app account-deletion "
+                "UI. A submitted erasure request removes the principal's mobile "
+                "records server-side: "
+                f"{', '.join(DELETION_SURFACE)}."
             ),
             "committed_to_play_families_policy": True,
             "independent_security_review": False,

@@ -29,6 +29,7 @@ from shared.logger.logger import get_logger, metrics
 from shared.exploration.models import ExplorationAnchor, ExplorationContextV1
 from services.exploration import service as exploration_service
 from services.exploration.store import ExplorationViewRepository
+from services.client_sync.emitter import enqueue_sync_change
 
 logger = get_logger("aether.service.exploration")
 router = APIRouter(prefix="/v1/explore", tags=["Exploration Fabric"])
@@ -198,6 +199,13 @@ async def upsert_view(request: Request, payload: ViewUpsertRequest) -> APIRespon
     }
     stored = await _views.upsert_scoped(tenant.tenant_id, view_id, record)
     metrics.increment("exploration_saved_views_total")
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant.tenant_id}",
+        principal_id=tenant.user_id or tenant.tenant_id,
+        change_type="saved_view_changed",
+        resource_kind="saved_view",
+        resource_id=view_id,
+    )
     return APIResponse(data={"view": stored})
 
 
@@ -216,6 +224,13 @@ async def delete_view(request: Request, view_id: str) -> APIResponse:
     deleted = await _views.delete_scoped(tenant.tenant_id, view_id)
     if not deleted:
         raise NotFoundError("exploration saved view")
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant.tenant_id}",
+        principal_id=tenant.user_id or tenant.tenant_id,
+        change_type="saved_view_changed",
+        resource_kind="saved_view",
+        resource_id=view_id,
+    )
     return APIResponse(data={"deleted": view_id})
 
 

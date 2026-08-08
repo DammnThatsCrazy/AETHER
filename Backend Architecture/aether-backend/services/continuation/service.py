@@ -66,8 +66,17 @@ async def create(
     )
 
 
-async def get(scope: str, continuation_id: str) -> Optional[dict]:
-    return await get_continuation_repository().get_scoped(scope, continuation_id)
+async def get(scope: str, continuation_id: str, principal_id: Optional[str] = None) -> Optional[dict]:
+    """Read a continuation within the tenant scope.
+
+    ``principal_id`` (when provided) constrains to continuations the caller owns.
+    An unowned (or absent) continuation reads as absent — 404-never-403, no
+    existence leak.
+    """
+    row = await get_continuation_repository().get_scoped(scope, continuation_id)
+    if row is None or (principal_id and row.get("principal_id") != principal_id):
+        return None
+    return row
 
 
 async def list_recent(scope: str, principal_id: str, limit: int = 25) -> list[dict]:
@@ -80,11 +89,20 @@ async def update(
     continuation_id: str,
     expected_revision: int,
     body: ContinuationContext,
+    principal_id: str,
 ) -> Optional[dict]:
-    """Compare-and-swap update. Returns None when absent in scope; the repository
-    raises ConflictError on a state_revision mismatch (→ HTTP 409)."""
-    ctx = body.model_copy(update={"id": continuation_id})
+    """Compare-and-swap update, restricted to the caller's own continuations.
+
+    Returns None when absent in scope or owned by another principal (the route
+    404s — no existence leak). Server identity is re-forced onto the stored
+    context so a caller can never take over a continuation's principal. The
+    repository raises ConflictError on a state_revision mismatch (→ HTTP 409).
+    """
     repo = get_continuation_repository()
+    existing = await repo.get_scoped(scope, continuation_id)
+    if existing is None or existing.get("principal_id") != principal_id:
+        return None
+    ctx = body.model_copy(update={"id": continuation_id, "principal_id": principal_id})
     return await repo.cas_update(
         tenant_scope=scope,
         continuation_id=continuation_id,
@@ -97,8 +115,17 @@ async def update(
     )
 
 
-async def delete(scope: str, continuation_id: str) -> bool:
-    return await get_continuation_repository().delete_scoped(scope, continuation_id)
+async def delete(scope: str, continuation_id: str, principal_id: str) -> bool:
+    """Delete a continuation, restricted to the caller's own.
+
+    An unowned (or absent) continuation deletes as a no-op and returns False —
+    the route 404s, no existence leak.
+    """
+    repo = get_continuation_repository()
+    existing = await repo.get_scoped(scope, continuation_id)
+    if existing is None or existing.get("principal_id") != principal_id:
+        return False
+    return await repo.delete_scoped(scope, continuation_id)
 
 
 async def handoff(
@@ -115,14 +142,15 @@ async def handoff(
 ) -> Optional[dict]:
     """Mint the backend selection token for a continuation (decision-log D4).
 
-    Returns None when the continuation is absent in scope. The token resolves the
-    same subject set for both Noesis exact-handoff and mobile deep-links.
+    Returns None when the continuation is absent in scope OR owned by another
+    principal (the route 404s — no existence leak). The token resolves the same
+    subject set for both Noesis exact-handoff and mobile deep-links.
     """
     if mode not in SELECTION_MODES:
         raise ValueError(f"mode must be one of {SELECTION_MODES}")
     repo = get_continuation_repository()
     existing = await repo.get_scoped(scope, continuation_id)
-    if existing is None:
+    if existing is None or existing.get("principal_id") != principal_id:
         return None
     selection = {
         "continuation_id": continuation_id,

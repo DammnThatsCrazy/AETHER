@@ -468,5 +468,5 @@ deviation above in force, it would fail every run.
 
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the topology these numbers price
 - [Staging Wake/Sleep](STAGING-WAKE-SLEEP.md) — the 40-awake-hours budget model
-- [Deployment Profiles](DEPLOYMENT-PROFILES.md) — the full ten-profile matrix
+- [Deployment Profiles](DEPLOYMENT-PROFILES.md) — the full eight-profile matrix
 - [Release Evidence](RELEASE-EVIDENCE.md) — where cost evidence lands in the bundle

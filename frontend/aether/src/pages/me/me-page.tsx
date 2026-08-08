@@ -7,6 +7,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  DataTable,
+  EmptyState,
   ErrorState,
   GlyphIcon,
   LoadingState,
@@ -14,15 +16,24 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  Popover,
   StatusIndicator,
   TerminalSeparator,
   UsageBar,
   formatCount,
   formatDate as sharedFormatDate,
   useTimeContext,
+  useToast,
   type TimeContext,
 } from '@aether/ui';
+import { queryCache } from '@aether/ui';
 import { useMeProfile, useUsage } from '@aether-app/features/account';
+import {
+  useMeSessions,
+  useRevokeMeSession,
+  useRevokeOtherSessions,
+  type MeSession,
+} from '@aether-app/features/account/use-me-sessions';
 
 function planBadgeVariant(planId: string): 'default' | 'accent' {
   return ['P3', 'P4', 'protocol-plus'].includes(planId) ? 'accent' : 'default';
@@ -102,6 +113,155 @@ function DeleteAccountModal({ open, onClose, available }: DeleteModalProps) {
         </Button>
       </ModalFooter>
     </Modal>
+  );
+}
+
+function sessionStatusVariant(status: string): 'healthy' | 'degraded' | 'unknown' | 'unhealthy' {
+  if (status === 'active') return 'healthy';
+  if (status === 'expired') return 'unknown';
+  if (status === 'revoked' || status === 'rotating') return 'unhealthy';
+  return 'unknown';
+}
+
+function SessionDeviceLabel(session: MeSession): string {
+  const meta = session.metadata as Record<string, unknown> | undefined;
+  const deviceName = meta?.device_name ?? meta?.user_agent;
+  if (typeof deviceName === 'string' && deviceName) return deviceName;
+  if (session.device_id) return `device:${session.device_id}`;
+  if (session.credential_class === 'human_session') return 'Web session';
+  return session.credential_class ?? 'session';
+}
+
+function SessionsCard() {
+  const { toast } = useToast();
+  const timeCtx = useTimeContext();
+  const { data, isLoading, error, refetch } = useMeSessions(20);
+  const { mutate: revoke } = useRevokeMeSession();
+  const { mutate: revokeOthers, isLoading: revokingOthers } = useRevokeOtherSessions();
+  const sessions = data?.sessions ?? [];
+
+  function refreshSessions() {
+    queryCache.invalidatePrefix('me-sessions-');
+    refetch();
+  }
+
+  async function handleRevoke(session: MeSession) {
+    const result = await revoke({ sessionId: session.id });
+    if (result !== null) {
+      refreshSessions();
+      toast.success('Session revoked');
+    } else {
+      toast.error('Revoke failed');
+    }
+  }
+
+  async function handleRevokeOthers() {
+    const result = await revokeOthers(undefined);
+    if (result !== null) {
+      refreshSessions();
+      toast.success(`Revoked ${result.revoked_count} other session${result.revoked_count === 1 ? '' : 's'}`);
+    } else {
+      toast.error('Failed to revoke other sessions');
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-mono text-text-muted">Sessions & Devices</CardTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={sessions.length === 0 || revokingOthers}
+            onClick={() => { void handleRevokeOthers(); }}
+          >
+            {revokingOthers ? '[···]' : 'Revoke other sessions'}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {isLoading && <LoadingState lines={3} />}
+        {error && <ErrorState message="Failed to load sessions" onRetry={refetch} />}
+        {!isLoading && !error && sessions.length === 0 && (
+          <EmptyState
+            title="No sessions"
+            description="No durable human sessions are tracked for this tenant yet."
+          />
+        )}
+        {!isLoading && !error && sessions.length > 0 && (
+          <DataTable<MeSession>
+            keyExtractor={s => s.id}
+            data={sessions}
+            emptyMessage="No sessions"
+            columns={[
+              {
+                key: 'status',
+                header: 'Status',
+                render: s => (
+                  <span className="flex items-center gap-1.5">
+                    <StatusIndicator status={sessionStatusVariant(s.status)} />
+                    <span className="capitalize text-xs text-text-secondary">{s.status}</span>
+                  </span>
+                ),
+              },
+              {
+                key: 'device',
+                header: 'Device',
+                render: s => <span className="text-xs text-text-primary">{SessionDeviceLabel(s)}</span>,
+              },
+              {
+                key: 'last_seen_at',
+                header: 'Last seen',
+                render: s => (
+                  <span className="text-xs text-text-secondary">{formatDate(s.last_seen_at, timeCtx)}</span>
+                ),
+              },
+              {
+                key: 'absolute_expires_at',
+                header: 'Expires',
+                render: s => (
+                  <span className="text-xs text-text-muted">{formatDate(s.absolute_expires_at, timeCtx)}</span>
+                ),
+              },
+              {
+                key: 'actions',
+                header: '',
+                render: s => (
+                  <Popover
+                    trigger={
+                      <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10">
+                        Revoke
+                      </Button>
+                    }
+                    content={
+                      <div className="space-y-2">
+                        <p className="text-xs text-text-primary">Revoke this session?</p>
+                        <p className="text-xs text-danger">Any device signed in with it will be signed out.</p>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          className="w-full mt-1"
+                          onClick={() => { void handleRevoke(s); }}
+                        >
+                          Confirm revoke
+                        </Button>
+                      </div>
+                    }
+                  />
+                ),
+              },
+            ]}
+          />
+        )}
+        {!isLoading && !error && (
+          <p className="text-[10px] text-text-muted font-mono mt-2">
+            Durable human sessions are revocable and expire automatically. Revoking another
+            session signs that device out on its next request.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -247,6 +407,11 @@ export function MePage() {
           </p>
         </CardContent>
       </Card>
+
+      <TerminalSeparator label="sessions" className="my-4" />
+
+      {/* Sessions & Devices */}
+      <SessionsCard />
 
       <TerminalSeparator label="danger zone" className="my-4 text-danger" />
 

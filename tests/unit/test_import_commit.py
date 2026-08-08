@@ -268,6 +268,7 @@ async def test_commit_job_handler(clean):
         return True
 
     ctx = JobContext(job_id="j1", tenant_id=TENANT, correlation_id="c1",
+                     worker_id="test_worker",
                      heartbeat=_noop, emit_event=_noop)
     outcome = await cm.commit_job_handler({"import_id": import_id}, ctx)
     assert outcome.status == "succeeded"

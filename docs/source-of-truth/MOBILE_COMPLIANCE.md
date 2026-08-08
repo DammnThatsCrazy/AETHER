@@ -26,18 +26,28 @@ never a fabricated one:
 | `continuation_records` | `continuations`, `continuation_selections` | `continuation_repo.delete_by_principal` → `continuation/service.erase_principal` |
 | `mobile_installations` | `mobile_installations`, `push_subscriptions` | `installation_repo.delete_by_principal` → `mobile/service.erase_principal` |
 | `client_sync_records` | `sync_change_log` | `client_sync_repo.delete_by_principal` → `client_sync/service.erase_principal` |
+| `kyber_trusted_devices` | `kyber_trusted_devices` | `TrustedDeviceRepository.delete_by_operator` → `consent.erasure` |
+| `kyber_webauthn_credentials` | `kyber_webauthn_credentials` | `WebAuthnCredentialRepository.delete_by_operator` → `consent.erasure` |
+| `kyber_device_proof_keys` | `kyber_device_proof_keys` | `DeviceProofKeyRepository.delete_by_operator` → `consent.erasure` |
 
-Each store is erased under `t:{tenant_id}` in its **own** try/except: one store's
-failure marks only that component `failed` (folded into the job's retryable errors) and
-never aborts the others. The per-scope `sync_cursor_counter` is deliberately **not**
-erased — it is keyed by scope, not principal, and rewinding its monotonic sequence
-would corrupt the sync feed. These three components were added to `DSR_COMPONENTS`
+Each store is erased in its **own** try/except: one store's failure marks only that
+component `failed` (folded into the job's retryable errors) and never aborts the others.
+The tenant stores are erased under `t:{tenant_id}`; the kyber device stores are
+**operator-keyed** (workforce personal data), so they are erased by the DSR subject as
+operator id (M8-E1) — a subject who is not an operator erases 0 rows and is marked
+`completed` with a real zero receipt. The per-scope `sync_cursor_counter` is
+deliberately **not** erased — it is keyed by scope, not principal, and rewinding its
+monotonic sequence would corrupt the sync feed. The append-only
+`kyber_device_approval_events` audit ledger is **not** erased either — its storage
+policy is `preserve` / legal hold, and a DSR must not destroy the evidence of who
+approved which machine. All six components were added to `DSR_COMPONENTS`
 **together with** their erasure wiring, so a DSR still rolls up to `completed`.
 
 ## The coverage gate (fail-closed binding)
 
-Erasability was previously expressed in four disconnected places (a repo
-`delete_by_principal` hook, `DSR_COMPONENTS`, the erasure handler, and a
+Erasability was previously expressed in four disconnected places (a repo erase hook —
+`delete_by_principal` for tenant stores, `delete_by_operator` for the operator-keyed
+kyber device stores — `DSR_COMPONENTS`, the erasure handler, and a
 `storage_policies.yaml` `delete_behavior`) with nothing binding them. `make
 dsr-coverage-check` (`scripts/release/check_dsr_coverage.py`) now asserts, fail-closed,
 that every principal-scoped mobile table has **all four** links. Removing a mobile

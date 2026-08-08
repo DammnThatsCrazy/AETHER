@@ -494,13 +494,20 @@ class JobsRepository:
         )
         return result is not None
 
-    async def update_payload(self, job_id: str, payload: dict) -> Optional[dict]:
+    async def update_payload(
+        self, job_id: str, payload: dict, worker_id: Optional[str] = None
+    ) -> Optional[dict]:
         """Durably replace a running job's payload — handler checkpointing.
 
         Used by resumable handlers (e.g. ``semantic.replay``) to persist a
         progress cursor into the job row itself, so a retry/restart resumes
         from the checkpoint instead of row 0. Returns the updated row, or
         None when the job does not exist.
+
+        When ``worker_id`` is given it must be the CURRENT lease owner (M8-B3):
+        a stale worker whose lease was reaped and whose job was re-claimed must
+        not overwrite the new owner's checkpoint cursor. Ownership mismatch
+        returns None and leaves the row untouched.
         """
         now = utc_now()
         pool = await self._backend()
@@ -510,14 +517,16 @@ class JobsRepository:
                 rec = _MEM_JOBS.get(job_id)
                 if rec is None:
                     return None
+                if worker_id is not None and rec.get("leased_by") != worker_id:
+                    return None
                 rec["payload"] = copy.deepcopy(payload or {})
                 rec["updated_at"] = now.isoformat()
                 return _job_row(rec)
 
         row = await pool.fetchrow(
             "UPDATE jobs SET payload = $2::jsonb, updated_at = $3 "
-            "WHERE id = $1 RETURNING *",
-            job_id, json.dumps(payload or {}, default=str), now,
+            "WHERE id = $1 AND ($4::text IS NULL OR leased_by = $4) RETURNING *",
+            job_id, json.dumps(payload or {}, default=str), now, worker_id,
         )
         return _job_row(dict(row)) if row is not None else None
 
@@ -528,11 +537,17 @@ class JobsRepository:
         result: Optional[dict] = None,
         error: Optional[str] = None,
         scheduled_for: Any = None,
+        worker_id: Optional[str] = None,
     ) -> Optional[dict]:
         """Record a job's post-execution state and release its lease.
 
         ``status='retrying'`` keeps the job claimable (optionally deferred to
         ``scheduled_for`` for backoff); terminal statuses stamp completed_at.
+
+        When ``worker_id`` is given it must be the CURRENT lease owner (M8-B3):
+        a stale worker whose lease was reaped and whose job was re-claimed must
+        not clobber the new owner's active running state. Ownership mismatch
+        returns None and leaves the row untouched (status/result/lease intact).
         """
         status = JobStatus(status).value  # validate
         now = utc_now()
@@ -544,6 +559,8 @@ class JobsRepository:
             async with _mem_lock():
                 rec = _MEM_JOBS.get(job_id)
                 if rec is None:
+                    return None
+                if worker_id is not None and rec.get("leased_by") != worker_id:
                     return None
                 rec.update({
                     "status": status,
@@ -568,12 +585,12 @@ class JobsRepository:
                 scheduled_for = CASE WHEN $2 = 'retrying' THEN $5 ELSE scheduled_for END,
                 completed_at = CASE WHEN $6 THEN $7 ELSE completed_at END,
                 leased_by = NULL, lease_expires_at = NULL, updated_at = $7
-            WHERE id = $1
+            WHERE id = $1 AND ($8::text IS NULL OR leased_by = $8)
             RETURNING *
             """,
             job_id, status,
             json.dumps(result, default=str) if result is not None else None,
-            error, sched_dt, terminal, now,
+            error, sched_dt, terminal, now, worker_id,
         )
         return _job_row(dict(row)) if row is not None else None
 

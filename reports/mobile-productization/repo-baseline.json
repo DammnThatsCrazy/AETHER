@@ -31,6 +31,6 @@
     {"name": "mobile_shared_packages", "classification": "missing_build", "path": "packages/mobile-{core,ui,auth,api,notifications,continuity,security,observability,testing,compliance}/ (new)", "detail": "NET-NEW. Must be wired into npm workspaces + bump_version + check_version_consistency + validate_ts_public_exports or the version/export gates fail."},
     {"name": "governed_mobile_actions", "classification": "intentionally_out_of_scope", "path": "n/a (C7, staged)", "detail": "Tier 0-3 challenge/step-up/device-sign adapting services/kyber/ops. Not built this session."},
     {"name": "mobile_compliance_distribution", "classification": "intentionally_out_of_scope", "path": "n/a (C8, staged)", "detail": "Privacy manifests, Data Safety, account-deletion flows, TestFlight/Play/Managed-Google-Play pipelines. Not built this session; externally credential-blocked."},
-    {"name": "adversarial_review", "classification": "intentionally_out_of_scope", "path": "n/a (C9, staged)", "detail": "Independent review lenses + remediation + final release evidence. Not built this session."}
+    {"name": "adversarial_review", "classification": "intentionally_out_of_scope", "path": "n/a (C9, landed)", "detail": "Independent review lenses + remediation + final release evidence. Landed at M8 final tip (six-lens review + refute pass + remediation + final gate)."}
   ]
 }

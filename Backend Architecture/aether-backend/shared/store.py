@@ -267,6 +267,22 @@ class RedisStore(DurableStore):
 _stores: dict[str, DurableStore] = {}
 
 
+def reset_in_memory_stores() -> None:
+    """Test helper: empty every in-memory DurableStore in place.
+
+    Mirrors ``repositories.repos.reset_in_memory_stores``: store singletons are
+    kept (cleared in place) so cached repository references that captured a
+    ``get_store`` handle at import time keep pointing at the same store and stay
+    resettable. Only in-memory stores are touched — a configured Redis store is
+    left alone.
+    """
+    for store in _stores.values():
+        if isinstance(store, InMemoryStore):
+            store._data.clear()
+            store._lists.clear()
+            store._expiry.clear()
+
+
 def get_store(name: str, prefer_redis: bool = True) -> DurableStore:
     """Get or create a named durable store.
 

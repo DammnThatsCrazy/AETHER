@@ -43,6 +43,7 @@ from services.intelligence.comparison.watchlists import (
     WatchlistDefinition,
     WatchlistRepository,
 )
+from services.client_sync.emitter import enqueue_sync_change
 
 logger = get_logger("aether.intelligence.comparison.routes")
 router = APIRouter(
@@ -247,6 +248,13 @@ async def upsert_watchlist(request: Request, payload: WatchlistUpsertRequest) ->
         created_by=tenant.user_id,
     )
     stored = await _watchlists.upsert(watchlist)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant.tenant_id}",
+        principal_id=tenant.user_id or tenant.tenant_id,
+        change_type="watchlist_changed",
+        resource_kind="watchlist",
+        resource_id=watchlist.watchlist_id,
+    )
     return APIResponse(data={"watchlist": stored})
 
 
@@ -256,6 +264,13 @@ async def delete_watchlist(request: Request, watchlist_id: str) -> APIResponse:
     deleted = await _watchlists.delete_scoped(tenant.tenant_id, watchlist_id)
     if not deleted:
         raise NotFoundError("comparison watchlist")
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant.tenant_id}",
+        principal_id=tenant.user_id or tenant.tenant_id,
+        change_type="watchlist_changed",
+        resource_kind="watchlist",
+        resource_id=watchlist_id,
+    )
     return APIResponse(data={"deleted": watchlist_id})
 
 

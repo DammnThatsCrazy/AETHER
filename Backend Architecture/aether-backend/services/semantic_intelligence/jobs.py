@@ -50,8 +50,11 @@ def register_semantic_replay_handler() -> None:
             # Persist the Bronze cursor into the durable job payload so a
             # retry/restart resumes from it, not row 0; the heartbeat keeps
             # the lease alive (and surfaces cancellation) on long backfills.
+            # M8-B3: guard the checkpoint write with the current lease owner so
+            # a stale worker (lease reaped, job re-claimed) cannot overwrite the
+            # new owner's durable cursor.
             await jobs_repo.update_payload(
-                ctx.job_id, {**payload, "cursor": new_cursor}
+                ctx.job_id, {**payload, "cursor": new_cursor}, worker_id=ctx.worker_id
             )
             await ctx.heartbeat()
 

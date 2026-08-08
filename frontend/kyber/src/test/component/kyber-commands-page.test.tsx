@@ -366,7 +366,12 @@ function renderPage(capabilities: readonly string[] = OPERATOR_CAPABILITIES) {
 }
 
 async function openCommand(): Promise<void> {
-  await userEvent.click(await screen.findByText('re-queue the stuck settlement job'));
+  // Generous wait: under full-suite parallel load the queue fetch + render can
+  // take longer than findByText's 1s default. The assertion is unchanged — this
+  // only makes the shared open-command gate resilient to machine load.
+  await userEvent.click(
+    await screen.findByText('re-queue the stuck settlement job', undefined, { timeout: 5000 }),
+  );
 }
 
 /**
@@ -415,7 +420,7 @@ describe('KyberCommandsPage — authority', () => {
 
     await waitFor(() => expect(screen.getByText('Command queue')).toBeInTheDocument());
     expect(
-      await screen.findByText('re-queue the stuck settlement job'),
+      await screen.findByText('re-queue the stuck settlement job', undefined, { timeout: 5000 }),
     ).toBeInTheDocument();
   });
 

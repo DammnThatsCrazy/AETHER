@@ -428,6 +428,12 @@ variable "analytics_backend" {
   }
 }
 
+variable "credential_kms_key_id" {
+  type        = string
+  description = "KMS CMK key id for provider-credential envelope encryption (modules/kms_credentials). Injected as CREDENTIAL_KMS_KEY_ID so the AwsKmsEnvelopeCredentialCipher resolves its key. Empty string when the profile provisions no such key (there is no such cloud profile today)."
+  default     = ""
+}
+
 variable "assign_public_ip" {
   type        = bool
   description = "Assign a public IP to every task ENI. Required when tasks run in public subnets with no NAT gateway; false for private subnets reaching AWS through NAT or VPC endpoints."

@@ -70,6 +70,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/agent-access` | agent access grants and audit | yes | A | A | A | A | I | `agent-access-page.test.tsx` |
 | `/interoperability` | messages, paths, providers | no | I | A | A | — | I | parameterized route-state family |
 | `/interoperability/messages/:messageId` | lifecycle and delivery attempts | no | I | A | A | — | I | parameterized route-state family |
+| `/notifications` | notification inbox and unread count | yes | I | A | A | — | I | parameterized route-state family |
 
 ## Kyber
 
@@ -155,16 +156,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 127 data-bearing route patterns above: 50 Aether and
+The denominator is the 128 data-bearing route patterns above: 51 Aether and
 77 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 17 / 127 (13.4%) | tracked for every route |
-| Empty-state assertions | 115 / 127 (90.6%) | at least 90% overall |
-| Error/unavailable assertions | 98 / 127 (77.2%) | 100% of critical routes |
-| Populated-state assertions | 31 / 127 (24.4%) | tracked for every route |
-| Critical routes with both empty and error assertions | 61 / 61 (100%) | 61 / 61 (100%) |
+| Explicit loading-state assertions | 17 / 128 (13.3%) | tracked for every route |
+| Empty-state assertions | 116 / 128 (90.6%) | at least 90% overall |
+| Error/unavailable assertions | 99 / 128 (77.3%) | 100% of critical routes |
+| Populated-state assertions | 31 / 128 (24.2%) | tracked for every route |
+| Critical routes with both empty and error assertions | 62 / 62 (100%) | 62 / 62 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

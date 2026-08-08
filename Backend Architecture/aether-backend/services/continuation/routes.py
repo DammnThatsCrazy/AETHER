@@ -151,7 +151,9 @@ async def recent_continuations(
 async def get_continuation(request: Request, continuation_id: str = Path(...)) -> APIResponse:
     tenant = _tenant(request, "read")
     row = await continuation_service.get(
-        continuation_service.tenant_scope(tenant.tenant_id), continuation_id
+        continuation_service.tenant_scope(tenant.tenant_id),
+        continuation_id,
+        _principal(tenant),
     )
     if row is None:
         raise NotFoundError("continuation not found")
@@ -175,6 +177,7 @@ async def update_continuation(
         continuation_id=continuation_id,
         expected_revision=payload.expected_state_revision,
         body=ctx,
+        principal_id=principal,
     )
     if row is None:
         raise NotFoundError("continuation not found")
@@ -219,7 +222,9 @@ async def handoff_continuation(
 async def delete_continuation(request: Request, continuation_id: str = Path(...)) -> APIResponse:
     tenant = _tenant(request, "write")
     deleted = await continuation_service.delete(
-        continuation_service.tenant_scope(tenant.tenant_id), continuation_id
+        continuation_service.tenant_scope(tenant.tenant_id),
+        continuation_id,
+        _principal(tenant),
     )
     if not deleted:
         raise NotFoundError("continuation not found")

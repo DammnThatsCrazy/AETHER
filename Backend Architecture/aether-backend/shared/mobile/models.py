@@ -32,6 +32,8 @@ class MobileInstallation(_Base):
     environment: str
     device_name: Optional[str] = None
     trust_state: str = "registered"
+    app_version: Optional[str] = None
+    distribution_profile: Optional[str] = None
     created_at: str
     last_seen_at: Optional[str] = None
     revoked_at: Optional[str] = None
@@ -69,6 +71,8 @@ class InstallationRegistration(_Base):
     device_name: Optional[str] = None
     push_token: Optional[str] = None
     push_provider: Optional[str] = None
+    app_version: Optional[str] = None
+    distribution_profile: Optional[str] = None
 
 
 class PushSubscription(_Base):

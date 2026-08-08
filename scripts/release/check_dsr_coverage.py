@@ -3,7 +3,9 @@
 
 Erasability of mobile data is expressed in four otherwise-disconnected places:
 
-  1. a repository ``delete_by_principal`` hook that physically erases the rows;
+  1. a repository erase hook that physically deletes the rows — a
+     ``delete_by_principal`` hook for tenant-keyed stores, or a
+     ``delete_by_operator`` hook for the operator-keyed kyber device stores;
   2. a ``DSR_COMPONENT`` (``services/dsr_propagation/models.py``) that a DSR seeds
      and rolls up to ``completed``;
   3. the ``consent.erasure`` job (``services/consent/erasure_jobs.py``) actually
@@ -14,9 +16,14 @@ Erasability of mobile data is expressed in four otherwise-disconnected places:
 If any link is missing, a data-subject erasure silently skips that mobile data (the
 exact gap this program closed) — or, worse, seeds a component that is never marked so
 the DSR never rolls up to ``completed``. This gate binds all four fail-closed: every
-mapped mobile component MUST have its repo hook, be in ``DSR_COMPONENTS``, be marked by
-the erasure handler, and have coherent storage policies. Removing a mobile table from
+mapped component MUST have its repo hook, be in ``DSR_COMPONENTS``, be marked by the
+erasure handler, and have coherent storage policies. Removing a store from
 ``DSR_COMPONENTS`` or unwiring the handler fails CI.
+
+Each entry maps a component to the repo that holds its erase hook (a path relative
+to the backend root — tenant stores live under ``repositories/``, the kyber device
+stores live in ``services/kyber/devices/repository.py``) and the hook NAME it must
+expose. ``hook`` defaults to ``delete_by_principal``.
 
 Usage: python scripts/release/check_dsr_coverage.py
 """
@@ -32,22 +39,40 @@ from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
 _BACKEND_REL = Path("Backend Architecture") / "aether-backend"
 
-# The mobile principal-scoped tables that MUST be reachable by a DSR erasure, each
-# mapped to (repo file exposing delete_by_principal, DSR component, storage-policy
-# tables it cascades over). Adding a mobile principal-scoped store means adding it
-# here AND wiring all four links — that is the point of the gate.
+# The mobile principal-scoped stores that MUST be reachable by a DSR erasure, each
+# mapped to (repo file exposing the erase hook, hook name, storage-policy tables it
+# cascades over). Adding a principal-scoped store means adding it here AND wiring all
+# four links — that is the point of the gate. The kyber device stores are operator-
+# keyed (workforce personal data) and so expose ``delete_by_operator`` instead of
+# ``delete_by_principal``; the append-only ``kyber_device_approval_events`` audit
+# ledger is deliberately NOT covered (storage policy ``preserve`` / legal hold).
 MOBILE_DSR_COVERAGE: dict[str, dict[str, object]] = {
     "continuation_records": {
-        "repo": "continuation_repo.py",
+        "repo": "repositories/continuation_repo.py",
         "tables": ["continuations", "continuation_selections"],
     },
     "mobile_installations": {
-        "repo": "installation_repo.py",
+        "repo": "repositories/installation_repo.py",
         "tables": ["mobile_installations", "push_subscriptions"],
     },
     "client_sync_records": {
-        "repo": "client_sync_repo.py",
+        "repo": "repositories/client_sync_repo.py",
         "tables": ["sync_change_log"],
+    },
+    "kyber_trusted_devices": {
+        "repo": "services/kyber/devices/repository.py",
+        "hook": "delete_by_operator",
+        "tables": ["kyber_trusted_devices"],
+    },
+    "kyber_webauthn_credentials": {
+        "repo": "services/kyber/devices/repository.py",
+        "hook": "delete_by_operator",
+        "tables": ["kyber_webauthn_credentials"],
+    },
+    "kyber_device_proof_keys": {
+        "repo": "services/kyber/devices/repository.py",
+        "hook": "delete_by_operator",
+        "tables": ["kyber_device_proof_keys"],
     },
 }
 
@@ -80,13 +105,16 @@ def _dsr_components(root: Path) -> set[str]:
     return set()
 
 
-def _repo_defines_delete_by_principal(root: Path, repo_file: str) -> bool:
-    path = root / _BACKEND_REL / "repositories" / repo_file
+def _repo_defines_hook(root: Path, repo: str, hook: str) -> bool:
+    """Whether the backend repo file at ``repo`` (backend-root-relative) defines
+    an ``async def <hook>`` erase method. Tenant stores live in ``repositories/``;
+    the operator-keyed kyber device stores live in ``services/kyber/devices/``."""
+    path = root / _BACKEND_REL / repo
     if not path.exists():
         return False
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return any(
-        isinstance(n, ast.AsyncFunctionDef) and n.name == "delete_by_principal"
+        isinstance(n, ast.AsyncFunctionDef) and n.name == hook
         for n in ast.walk(tree)
     )
 
@@ -119,10 +147,11 @@ def run(root: Path) -> int:
 
     for component, spec in MOBILE_DSR_COVERAGE.items():
         repo_file = str(spec["repo"])
+        hook = str(spec.get("hook", "delete_by_principal"))
         r.require(
-            _repo_defines_delete_by_principal(root, repo_file),
-            f"{component}: {repo_file} exposes delete_by_principal",
-            f"{component}: {repo_file} is missing a delete_by_principal erase hook",
+            _repo_defines_hook(root, repo_file, hook),
+            f"{component}: {repo_file} exposes {hook}",
+            f"{component}: {repo_file} is missing a {hook} erase hook",
         )
         r.require(
             component in components,

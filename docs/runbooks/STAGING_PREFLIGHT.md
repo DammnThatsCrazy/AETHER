@@ -45,7 +45,7 @@ exits 0 only if **all** pass.
 
 | Command | Use |
 |---|---|
-| `staging_preflight.py --env-file deploy/staging.env` | validate a real env file |
+| `staging_preflight.py --env-file deploy/legacy-staging.env` | validate a real env file |
 | `staging_preflight.py --base-url https://api.staging…` | add live HTTP readiness probes |
 | `staging_preflight.py --dry-run` | self-test the gate itself (what CI runs) |
 | `staging_preflight.py --json` | machine-readable report |

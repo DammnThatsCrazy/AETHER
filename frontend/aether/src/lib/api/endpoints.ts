@@ -24,6 +24,9 @@ import type {
   WalletRiskProfile, Web3WalletProfile, EntityCluster,
   AttributionJourney, WhyExplanation, BehavioralSignal,
   Profile360Response, EntityGraph,
+  ContinuationContext, ContinuationSelection,
+  ContinuationCanonicalContext, ContinuationSummary, ResourceReference,
+  SelectionMode, ClientSyncResponse,
 } from '@aether/shared';
 
 // ─── Auth grant shapes (trust-plane sessions vs legacy API keys) ─────────────
@@ -268,6 +271,51 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
   const s = qs.toString();
   return s ? `?${s}` : '';
 };
+
+// ── Continuations (cross-device continue-on-phone plane) request shapes ──────
+// Mirrors services/continuation/routes.py ContinuationInput / HandoffRequest.
+// Identity fields (id / principal_id / tenant_id / app_kind) are server-owned.
+
+/** POST /v1/continuations request body (client-supplied fields only). */
+export interface ContinuationCreateInput {
+  readonly source_client: string;
+  readonly surface: string;
+  readonly summary: ContinuationSummary;
+  readonly canonical_context?: ContinuationCanonicalContext | null;
+  readonly resource_references?: ResourceReference[];
+  readonly sensitivity?: string;
+  readonly freshness?: string | null;
+  readonly expires_at?: string | null;
+}
+
+/** POST /v1/continuations/{id}/handoff request body (mirrors HandoffRequest). */
+export interface ContinuationHandoffInput {
+  readonly mode: SelectionMode;
+  readonly resource_ids?: string[] | null;
+  readonly saved_view_id?: string | null;
+  readonly query_id?: string | null;
+  readonly as_of?: string | null;
+  readonly expires_at?: string | null;
+}
+
+// ── Client-sync feed (durable per-scope change log) ─────────────────────────
+const clientSyncEventSchema = z.object({
+  id: z.string(),
+  scope_key: z.string(),
+  seq: z.number(),
+  change_type: z.string(),
+  resource_kind: z.string().nullable().optional(),
+  resource_id: z.string().nullable().optional(),
+  revision: z.string().nullable().optional(),
+  created_at: z.string(),
+});
+
+const clientSyncResponseSchema = z.object({
+  events: z.array(clientSyncEventSchema),
+  cursor: z.string(),
+  has_more: z.boolean(),
+  reset: z.boolean(),
+});
 
 // ─── Semantic intelligence shapes ────────────────────────────────────────────
 // Mirrors services/semantic_intelligence/models.py (EvidenceRef,
@@ -1452,8 +1500,34 @@ export const api = {
       slack_channel_map?: Record<string, string>;
       rate_limit_per_minute?: number;
       operator_review_required?: string[];
+      quiet_hours?: { start?: string; end?: string; timezone?: string };
+      timezone?: string;
+      digest?: { enabled?: boolean; frequency?: string; send_time?: string };
     }) =>
       restClient.put(`/v1/notifications/config${buildQS({ tenantId })}`, wrap(unknownSchema), body).then(r => r.data),
+  },
+
+  // ── Tenant In-App Notification Inbox ──────────────────────────────────────
+  inbox: {
+    /** List the authenticated tenant's in-app inbox notifications (newest first). */
+    list: (params?: { unread?: boolean; include_archived?: boolean; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/notifications/inbox${buildQS({ ...params })}`, wrap(z.array(z.unknown()))).then(r => r.data as Record<string, unknown>[]),
+
+    /** Unread (non-archived) inbox notification count. */
+    unreadCount: () =>
+      restClient.get('/v1/notifications/inbox/unread-count', wrap(z.object({ unread: z.number() }))).then(r => r.data),
+
+    /** Mark one inbox notification read (idempotent). */
+    markRead: (notificationId: string) =>
+      restClient.post(`/v1/notifications/inbox/${encodeURIComponent(notificationId)}/read`, wrap(unknownSchema), {}).then(r => r.data),
+
+    /** Mark every unread inbox notification read. */
+    markAllRead: () =>
+      restClient.post('/v1/notifications/inbox/read-all', wrap(z.object({ read: z.number() })), {}).then(r => r.data),
+
+    /** Archive one inbox notification (idempotent). */
+    archive: (notificationId: string) =>
+      restClient.post(`/v1/notifications/inbox/${encodeURIComponent(notificationId)}/archive`, wrap(unknownSchema), {}).then(r => r.data),
   },
 
   // ── Behavior Profile (read-side snapshots) ────────────────────────────────
@@ -1652,6 +1726,30 @@ export const api = {
       provider?: string;
     }) =>
       restClient.post(`/v1/account-lifecycle/deletion/${encodeURIComponent(workflowId)}/cancel`, wrap(deletionWorkflowSchema), { reauth_evidence }).then(r => r.data),
+
+    /** Durable human sessions for the authenticated tenant (no token hashes). */
+    sessions: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/me/sessions${buildQS({ ...params })}`, wrap(z.object({
+        sessions: z.array(z.unknown()),
+        count: z.number(),
+        total: z.number(),
+        limit: z.number(),
+        offset: z.number(),
+      }))).then(r => r.data as {
+        sessions: Record<string, unknown>[];
+        count: number;
+        total: number;
+        limit: number;
+        offset: number;
+      }),
+
+    /** Revoke one tenant-owned session. */
+    revokeSession: (sessionId: string) =>
+      restClient.delete(`/v1/me/sessions/${encodeURIComponent(sessionId)}`, wrap(z.object({ revoked: z.boolean(), id: z.string() }))).then(r => r.data),
+
+    /** Revoke every session except the caller's current one. */
+    revokeOtherSessions: () =>
+      restClient.post('/v1/me/sessions/revoke-others', wrap(z.object({ revoked_count: z.number() })), {}).then(r => r.data),
   },
 
   // ── Organization management (tenant-scoped) ──────────────────────────────
@@ -1968,4 +2066,34 @@ export const api = {
     reconciliation: (params?: { limit?: number; offset?: number }) =>
       restClient.get(`/v1/interoperability/reconciliation${buildQS({ ...params })}`, listSchema),
   },
+
+  // ── Continuations (cross-device continue-on-phone plane) ───────────────────
+  continuations: {
+    /** Most recent continuations authored by this principal (newest first). */
+    recent: (limit = 25) =>
+      restClient.get(
+        `/v1/continuations/recent${buildQS({ limit })}`,
+        wrap(z.object({ continuations: z.array(z.unknown()) })),
+      ).then(r => r.data as { continuations: ContinuationContext[] }),
+
+    /** Create a continuation from the current surface context (identity is server-owned). */
+    create: (body: ContinuationCreateInput) =>
+      restClient.post('/v1/continuations', wrap(unknownSchema), body)
+        .then(r => r.data as ContinuationContext),
+
+    /** Mint the backend selection token (deep-link mobile resume) for a continuation. */
+    handoff: (continuationId: string, body: ContinuationHandoffInput) =>
+      restClient.post(
+        `/v1/continuations/${encodeURIComponent(continuationId)}/handoff`,
+        wrap(unknownSchema),
+        body,
+      ).then(r => r.data as ContinuationSelection),
+  },
+
+  /** Durable per-scope change-log slice (ids + revision only, never resource bodies). */
+  clientSync: (cursor?: string, limit = 200) =>
+    restClient.get(
+      `/v1/client-sync${buildQS({ cursor, limit })}`,
+      wrap(clientSyncResponseSchema),
+    ).then(r => r.data as ClientSyncResponse),
 };

@@ -210,10 +210,31 @@ async def test_notification_routing_fails_open(ops_enabled, monkeypatch):
     assert len(rows) == 1
 
 
+async def test_no_channels_is_not_false_success(ops_enabled):
+    """M8-B1: an alert with no configured channels is NOT 'routed'.
+
+    A bare/unconfigured router would report routed=True with zero channels —
+    a silent no-op delivery. The honest outcome is routed=False with an
+    explicit reason, while the alert record itself stays durable.
+    """
+    tenant = tenant_id()
+    alert = await record_alert(tenant, "P1", "run_failed", "x", dedupe_key="run:channels")
+    assert alert["notification"]["routed"] is False
+    assert alert["notification"]["reason"] == "no_channels_configured"
+    assert alert["notification"]["channels"] == []
+    # The alert record is still persisted — routing is best-effort, never
+    # the durable signal.
+    rows = await list_alerts(tenant)
+    assert len(rows) == 1
+
+
 async def test_notification_routing_throttled_per_dedupe_key(ops_enabled):
     tenant = tenant_id()
     first = await record_alert(tenant, "P1", "run_failed", "x", dedupe_key="run:throttle")
-    assert first["notification"]["routed"] is True
+    # No channels configured in the test harness → honest non-routed outcome
+    # (the old zero-channel false success is gone).
+    assert first["notification"]["routed"] is False
+    assert first["notification"]["reason"] == "no_channels_configured"
     # Resolve so the next record creates a NEW alert row with the same dedupe
     # key — routing state must still throttle inside the window.
     await resolve_alert(tenant, first["alert_id"])

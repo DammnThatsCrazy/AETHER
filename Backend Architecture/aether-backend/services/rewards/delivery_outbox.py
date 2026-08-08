@@ -129,6 +129,70 @@ class RewardDeliveryJobRepository(BaseRepository):
             counts[j.get("state", "unknown")] = counts.get(j.get("state", "unknown"), 0) + 1
         return counts
 
+    async def release_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        update: dict[str, Any],
+    ) -> Optional[dict[str, Any]]:
+        """Apply a post-processing state update only while this worker still
+        owns the lease.
+
+        The release paths (delivered / failed / dead_letter) must not let a
+        STALE worker overwrite a batch that another worker re-claimed after
+        the lease expired — that split-brain double-delivers in the
+        rewards/delivery fan-out. This is a no-op (returns None, mutates
+        nothing) when the job is currently leased by a DIFFERENT worker; the
+        current owner's release succeeds exactly as before. An unleased job
+        (direct-dispatch path) is still releasable.
+        """
+        pool = await self._ensure_pool()
+        now_str = _now_iso()
+        if pool is None:
+            job = self._store.get(job_id)
+            if job is None:
+                return None
+            current_owner = job.get("leased_by")
+            if current_owner is not None and current_owner != worker_id:
+                logger.warning(
+                    "release_job skipped job=%s: lease held by %r "
+                    "(worker %r is stale)", job_id, current_owner, worker_id,
+                )
+                return None
+            job.update(update)
+            job["updated_at"] = now_str
+            return job
+
+        await self._ensure_table()
+        existing = await self.find_by_id(job_id)
+        if existing is None:
+            return None
+        if existing.get("leased_by") not in (None, worker_id):
+            logger.warning(
+                "release_job skipped job=%s: lease held by %r "
+                "(worker %r is stale)", job_id, existing.get("leased_by"), worker_id,
+            )
+            return None
+        merged = {**existing, **update}
+        merged["updated_at"] = now_str
+        row = await pool.fetchrow(
+            f"""
+            UPDATE {self.table_name}
+            SET data = $2::jsonb, updated_at = NOW()
+            WHERE id = $1
+              AND (data->>'leased_by' IS NULL OR data->>'leased_by' = $3)
+            RETURNING data
+            """,
+            job_id, json.dumps(merged, default=str), worker_id,
+        )
+        if row is None:
+            logger.warning(
+                "release_job skipped job=%s: lease re-claimed while releasing "
+                "(worker %r)", job_id, worker_id,
+            )
+            return None
+        return json.loads(row["data"])
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # WEBHOOK SENDER (reuses PR-1 hardened TenantWebhookAdapter)
@@ -319,7 +383,9 @@ class RewardDeliveryOutbox:
                 logger.error("reward receipt persist failed job=%s: %s", job_id, exc)
                 return await self._schedule_retry_or_dlq(job, attempt, max_attempts,
                                                          f"receipt persist failed: {exc}")
-            await self._jobs.update(job_id, {
+            # Lease-guarded: a stale worker whose batch was re-claimed must
+            # not overwrite the new owner's active job (see release_job).
+            await self._jobs.release_job(job_id, self._worker_id, {
                 "state": "delivered", "attempt_count": attempt,
                 "receipt_id": receipt_id, "external_id": result.external_id,
                 "leased_by": None, "lease_expires_at": None, "delivered_at": _now_iso(),
@@ -342,7 +408,7 @@ class RewardDeliveryOutbox:
             return "dead_letter"
         from services.delivery.worker import _compute_next_attempt_at
         next_at = _compute_next_attempt_at(attempt)
-        await self._jobs.update(job["id"], {
+        await self._jobs.release_job(job["id"], self._worker_id, {
             "state": "failed", "attempt_count": attempt, "last_error": error[:500],
             "next_attempt_at": next_at, "leased_by": None, "lease_expires_at": None,
         })
@@ -352,7 +418,7 @@ class RewardDeliveryOutbox:
         return "retry"
 
     async def _dead_letter(self, job: dict, attempt: int, error: str) -> None:
-        await self._jobs.update(job["id"], {
+        await self._jobs.release_job(job["id"], self._worker_id, {
             "state": "dead_letter", "attempt_count": attempt, "last_error": error[:500],
             "leased_by": None, "lease_expires_at": None,
         })

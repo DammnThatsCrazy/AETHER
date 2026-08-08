@@ -524,5 +524,5 @@ Specifically externally blocked:
 
 - [Cost Optimization](COST-OPTIMIZATION.md) — the awake-hours budget model
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the topology staging rehearses
-- [Deployment Profiles](DEPLOYMENT-PROFILES.md) — the ten-profile matrix
+- [Deployment Profiles](DEPLOYMENT-PROFILES.md) — the eight-profile matrix
 - [Deployment Runbook](DEPLOYMENT-RUNBOOK.md) — application promotion

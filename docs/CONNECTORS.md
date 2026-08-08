@@ -81,4 +81,4 @@ All inbound webhook routes persist to `WebhookInbox` before any business process
 
 Inbound adapters: connector config, connection test, sync, webhook parsing, audit/metering/health hooks, and `WebhookInbox` persistence are fully implemented. Real provider API calls require credentials. See [Data Ingestion Paths](DATA-INGESTION-PATHS.md).
 
-Outbound adapters: Slack, Linear, Jira, and signed webhook are production-ready. See [Connector Support Matrix](CONNECTOR-SUPPORT-MATRIX.md).
+Outbound adapters: Slack, Linear, Jira, and signed webhook are **release-ready** (readiness scorecard 4/5 for connectors). The canonical readiness authority is `make production-status`; connector readiness is not a claim that live provider sends are certified with production credentials or that the platform is production + scale ready (5/5) overall. See [Connector Support Matrix](CONNECTOR-SUPPORT-MATRIX.md).

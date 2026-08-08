@@ -133,6 +133,70 @@ class DeliveryJobRepository(BaseRepository):
             logger.warning(f"lease_next_batch failed: {exc}")
             return []
 
+    async def release_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        update: dict[str, Any],
+    ) -> Optional[dict[str, Any]]:
+        """Apply a post-processing state update only while this worker still
+        owns the lease.
+
+        The release paths (DELIVERED / DEAD_LETTER / FAILED) must not let a
+        STALE worker overwrite a batch that another worker re-claimed after
+        the lease expired — that split-brain double-delivers in the
+        rewards/delivery fan-out. This is a no-op (returns None, mutates
+        nothing) when the job is currently leased by a DIFFERENT worker; the
+        current owner's release succeeds exactly as before. An unleased job
+        (direct-dispatch path) is still releasable.
+        """
+        pool = await self._ensure_pool()
+        now_str = _now_iso()
+        if pool is None:
+            job = self._store.get(job_id)
+            if job is None:
+                return None
+            current_owner = job.get("leased_by")
+            if current_owner is not None and current_owner != worker_id:
+                logger.warning(
+                    f"release_job skipped job={job_id!r}: lease held by "
+                    f"{current_owner!r} (worker {worker_id!r} is stale)"
+                )
+                return None
+            job.update(update)
+            job["updated_at"] = now_str
+            return job
+
+        await self._ensure_table()
+        existing = await self.find_by_id(job_id)
+        if existing is None:
+            return None
+        if existing.get("leased_by") not in (None, worker_id):
+            logger.warning(
+                f"release_job skipped job={job_id!r}: lease held by "
+                f"{existing.get('leased_by')!r} (worker {worker_id!r} is stale)"
+            )
+            return None
+        merged = {**existing, **update}
+        merged["updated_at"] = now_str
+        row = await pool.fetchrow(
+            f"""
+            UPDATE {self.table_name}
+            SET data = $2::jsonb, updated_at = NOW()
+            WHERE id = $1
+              AND (data->>'leased_by' IS NULL OR data->>'leased_by' = $3)
+            RETURNING data
+            """,
+            job_id, json.dumps(merged, default=str), worker_id,
+        )
+        if row is None:
+            logger.warning(
+                f"release_job skipped job={job_id!r}: lease re-claimed while "
+                f"releasing (worker {worker_id!r})"
+            )
+            return None
+        return json.loads(row["data"])
+
     async def find_for_intent(
         self, intent_id: str, tenant_id: str
     ) -> list[dict[str, Any]]:
