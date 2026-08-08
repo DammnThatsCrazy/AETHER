@@ -42,6 +42,15 @@ function isCanonicalEventType(type: string): type is EventType {
 
 export { scrubSensitiveFields } from './scrubber';
 export { makeServerClient } from './client';
+// Opt-in disk-backed queue (Reliability Phase 2 program §2, milestone M4).
+// Not wired into AetherServerSDK's internal track()/flush() here — that
+// wiring (opt-in, then default, in the SDK client) is milestone M5. This
+// export only makes the standalone class reachable by package consumers,
+// since @aether/server's package.json "exports" map has no deep-import
+// subpath — without this line the class would be unbuildable-to-unreachable
+// for anyone outside this package.
+export { DurableEventQueue } from './durable-queue';
+export type { DurableQueueOptions } from './durable-queue';
 export type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose, BatchHealth } from './types';
 export type { SdkHealthSnapshot } from './health';
 export {

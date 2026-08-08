@@ -1,0 +1,148 @@
+name: Production-Equivalent CI (M1)
+
+# Phase-2 Program 4 — "A production-equivalent CI lane"
+# docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md, section 4, milestone M1.
+#
+# WHAT THIS IS: every OTHER backend workflow in .github/workflows/ runs with
+# AETHER_ENV=local, which makes repositories.repos.get_pool() return None, so
+# services/ingestion/bronze_bulk.py (and every repository with the same
+# pattern) silently takes its in-memory-dict fallback branch instead of the
+# real asyncpg/Postgres path. This workflow is the FIRST one that boots real
+# postgres + redis service containers (matching docker-compose.yml's
+# versions/env) and sets DATABASE_URL so the backend takes the REAL pool
+# path, then runs one ingestion smoke test against it.
+#
+# WHAT THIS IS NOT (M1 scope, not the full program):
+#   - Not required: this workflow is intentionally absent from branch
+#     protection. A failure here blocks nothing.
+#   - Does not change `make ci-check`, repo-health.yml, or any other existing
+#     workflow — this file is purely additive.
+#   - Does not migrate the ingestion test suite to the real stack (M2), does
+#     not add kafka/outbox-relay (M3), does not touch measurement/attribution
+#     suites (M4), and is not a required check yet (M5). Those are later,
+#     separately-scoped milestones — see the program doc.
+#   - Adds no database migration and changes no runtime behavior; it only
+#     runs already-existing migrations against a fresh, ephemeral database.
+#
+# KNOWN LIMITATION (found while building this lane, not fixed by it): running
+# `alembic upgrade head` against a genuinely fresh Postgres 16 database can
+# currently fail before reaching the ingestion-v2 revision this lane cares
+# about, due to pre-existing, unrelated migration-graph issues that this M1
+# change does not touch or fix (e.g. a malformed array server_default in
+# alembic/versions/20260529_notification_intelligence.py, and an undeclared
+# cross-branch dependency in alembic/versions/20260712_ops_runtime.py on a
+# table created by alembic/versions/20260604_agent_control_plane.py, which
+# Alembic's topological sort is not guaranteed to order before it). That is
+# precisely the class of gap this program exists to surface — this lane
+# intentionally does NOT work around it, since routing around a real
+# migration-graph bug in CI would hide the exact signal M1 exists to produce.
+# If this job is red at the "Apply database migrations" step, that is the
+# expected, honest signal until those migrations are separately fixed.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-equivalent-ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  BACKEND_DIR: "Backend Architecture/aether-backend"
+  # Matches docker-compose.yml's x-runtime-env anchor (postgres service).
+  DATABASE_URL: postgresql://aether:aether_dev_password@localhost:5432/aether
+  REDIS_URL: redis://localhost:6379/0
+
+jobs:
+  real-stack-ingestion-smoke:
+    name: Ingestion smoke test against real postgres + redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Versions/env below are copied from docker-compose.yml's `postgres` and
+    # `redis` services (repo root) so this lane matches the documented local
+    # topology rather than inventing a separate one.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: aether
+          POSTGRES_USER: aether
+          POSTGRES_PASSWORD: aether_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aether"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
+        run: make bootstrap
+
+      - name: Add project virtualenv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install sync DB driver for Alembic
+        # alembic/env.py runs migrations synchronously via SQLAlchemy against a
+        # postgresql:// URL, which needs a sync driver. pyproject.toml only
+        # declares asyncpg (the runtime driver bronze_bulk.py's get_pool()
+        # uses) — psycopg2 is Alembic-only tooling for THIS lane, installed
+        # here rather than added as a project dependency everything else
+        # would also carry.
+        run: python -m pip install --disable-pip-version-check 'psycopg2-binary>=2.9'
+
+      - name: Verify redis is reachable
+        # Plain stdlib socket check (no redis-cli / redis-tools dependency on
+        # the runner) — just proves the service container is actually up.
+        run: |
+          python - <<'PY'
+          import socket
+          with socket.create_connection(("localhost", 6379), timeout=5) as s:
+              s.sendall(b"PING\r\n")
+              resp = s.recv(64)
+          assert b"PONG" in resp, f"unexpected redis response: {resp!r}"
+          print("redis reachable:", resp)
+          PY
+
+      - name: Apply database migrations
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: alembic upgrade head
+
+      - name: Run real-stack ingestion smoke test
+        run: python -m pytest tests/prod_equivalent/test_real_stack_smoke.py -v -n0
+
+      - name: Diagnostics on failure
+        if: failure()
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          echo "-- alembic current --"
+          alembic current || true
+          echo "-- alembic heads --"
+          alembic heads || true

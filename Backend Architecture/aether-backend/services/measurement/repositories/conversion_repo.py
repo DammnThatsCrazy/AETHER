@@ -237,6 +237,61 @@ class ConversionRepository:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
 
+    async def list_by_erasure_identity(
+        self,
+        tenant_id: str,
+        identity_id: str,
+        *,
+        attribution_eligible_only: bool = False,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Return conversions matching profile_id OR cluster_id OR account_id.
+
+        This mirrors ``tombstone_for_profile``'s WHERE clause exactly — unlike
+        ``list_by_profile``'s default identity match (profile_id OR
+        cluster_id only), ``tombstone_for_profile`` ALSO tombstones
+        conversions identified solely by ``account_id``. Any caller that needs
+        to know, ahead of a tombstone, which conversions a given identity's
+        erasure is about to affect (e.g. DSR re-attribution scope discovery)
+        must use this method rather than ``list_by_profile`` — otherwise a
+        conversion reachable only via ``account_id`` gets tombstoned without
+        ever appearing in that caller's snapshot.
+        """
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                r for r in _local_store.values()
+                if r.get("tenant_id") == tenant_id
+                and (
+                    r.get("profile_id") == identity_id
+                    or r.get("cluster_id") == identity_id
+                    or r.get("account_id") == identity_id
+                )
+                and (not attribution_eligible_only or r.get("attribution_eligible"))
+            ]
+            rows.sort(key=lambda r: r.get("occurred_at", ""))
+            return rows[:limit]
+
+        conditions = [
+            "tenant_id = $1",
+            "(profile_id = $2 OR cluster_id = $2 OR account_id = $2)",
+        ]
+        params: list[Any] = [tenant_id, identity_id]
+        p = 3
+        if attribution_eligible_only:
+            conditions.append("attribution_eligible = TRUE")
+        params.append(limit)
+
+        sql = f"""
+            SELECT * FROM canonical_conversions
+            WHERE {' AND '.join(conditions)}
+            ORDER BY occurred_at ASC
+            LIMIT ${p}
+        """
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+            return [dict(r) for r in rows]
+
     async def list_by_campaign(
         self,
         tenant_id: str,
