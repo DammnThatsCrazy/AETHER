@@ -9,6 +9,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DurableEventQueue } from './durable-queue';
+import type { SpoolFullInfo } from './durable-queue';
 
 let tmpDir: string;
 
@@ -216,6 +217,100 @@ describe('DurableEventQueue — durability', () => {
     // Once everything has been acked, a fresh instance replays nothing.
     const q3 = new DurableEventQueue({ spoolPath: p, maxSize: 2 });
     expect(q3.size).toBe(0);
+  });
+});
+
+describe('DurableEventQueue — disk-space bound (maxSpoolBytes)', () => {
+  it('rejects new events once the live spool would exceed maxSpoolBytes, surfacing every drop', () => {
+    const p = spoolPath();
+    const drops: SpoolFullInfo[] = [];
+    // ~150 bytes/entry; a 400-byte budget fits a couple, then rejects.
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 400, onSpoolFull: (i) => drops.push(i) });
+
+    let accepted = 0;
+    let rejected = 0;
+    for (let n = 0; n < 50; n++) {
+      const ok = q.enqueue({ writeKey: 'wk', events: [{ id: `e${n}`, blob: 'x'.repeat(50) }] });
+      if (ok) accepted++;
+      else rejected++;
+    }
+
+    expect(accepted).toBeGreaterThan(0);
+    expect(rejected).toBeGreaterThan(0);
+    expect(accepted + rejected).toBe(50);
+    // Every rejection is surfaced — none silent.
+    expect(drops.length).toBe(rejected);
+    expect(drops[0].maxSpoolBytes).toBe(400);
+    expect(drops[0].spoolPath).toBe(p);
+    expect(drops[0].attemptedBytes).toBeGreaterThan(0);
+    expect(drops[0].liveBytes).toBeLessThanOrEqual(400);
+    // The queue only holds what it accepted.
+    expect(q.size).toBe(accepted);
+  });
+
+  it('rejects (and surfaces) a single event that is larger than the whole budget', () => {
+    const p = spoolPath();
+    const drops: SpoolFullInfo[] = [];
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 40, onSpoolFull: (i) => drops.push(i) });
+
+    const ok = q.enqueue({ writeKey: 'wk', events: [{ id: 'too-big', blob: 'y'.repeat(200) }] });
+    expect(ok).toBe(false);
+    expect(q.size).toBe(0);
+    expect(drops).toHaveLength(1);
+    expect(drops[0].attemptedBytes).toBeGreaterThan(drops[0].maxSpoolBytes);
+  });
+
+  it('frees room again once entries are delivered (acked) below the bound', () => {
+    const p = spoolPath();
+    const drops: SpoolFullInfo[] = [];
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 400, onSpoolFull: (i) => drops.push(i) });
+
+    // Fill until the bound rejects.
+    while (q.enqueue({ writeKey: 'wk', events: [{ id: 'x', blob: 'y'.repeat(50) }] })) { /* fill */ }
+    expect(drops.length).toBeGreaterThan(0);
+    const dropsWhenFull = drops.length;
+
+    // Deliver+ack one entry -> its bytes are reclaimed.
+    const item = q.dequeueReady()!;
+    q.ack(item);
+
+    // A fresh event now fits again, without a new drop.
+    expect(q.enqueue({ writeKey: 'wk', events: [{ id: 'after-ack', blob: 'y'.repeat(50) }] })).toBe(true);
+    expect(drops.length).toBe(dropsWhenFull);
+  });
+
+  it('does NOT enforce the byte bound when the spool is degraded (in-memory-only)', () => {
+    // Unwritable spool path -> degraded; the byte bound is a disk concept and
+    // must not start rejecting an in-memory-only queue.
+    const blocker = path.join(tmpDir, 'not-a-directory');
+    fs.writeFileSync(blocker, 'x');
+    const p = path.join(blocker, 'nested', 'spool.jsonl');
+    const drops: SpoolFullInfo[] = [];
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 10, onSpoolFull: (i) => drops.push(i) });
+
+    expect(q.spoolHealthy).toBe(false);
+    for (let n = 0; n < 5; n++) {
+      expect(q.enqueue({ writeKey: 'wk', events: [{ id: `e${n}`, blob: 'z'.repeat(50) }] })).toBe(true);
+    }
+    expect(q.size).toBe(5);
+    expect(drops).toHaveLength(0);
+  });
+
+  it('keeps the physical spool file within a small constant factor of the bound under churn', () => {
+    const p = spoolPath();
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 2000, compactionIntervalOps: 100 });
+
+    // Steady add -> deliver -> ack churn: the live set stays tiny, but add/ack
+    // lines accumulate. Compaction (byte- and ops-triggered) must reclaim them.
+    for (let n = 0; n < 500; n++) {
+      if (q.enqueue({ writeKey: 'wk', events: [{ id: `e${n}`, blob: 'q'.repeat(30) }] })) {
+        const item = q.dequeueReady();
+        if (item) q.ack(item);
+      }
+    }
+
+    const fileBytes = fs.statSync(p).size;
+    expect(fileBytes).toBeLessThanOrEqual(2000 * 3);
   });
 });
 
