@@ -8,17 +8,18 @@ enforced by scripts/mobile_build_check.py. Values are validated by
 services/mobile/config.py (DistributionProfile vocabulary).
 
 Revision ID: 20260830_app_version_registration
-Revises: 20260823_merge_comms_substrate
+Revises: 20260823_touchpoint_conversion_fields
 Create Date: 2026-08-07
 
 NOTE on chaining: down_revision is the CURRENT alembic head after rebasing
-onto origin/main — the computation-substrate migration
-(20260818_computation_substrate) landed upstream after this migration was
-authored and was subsequently absorbed by the comms-platform merge point
-(20260823_merge_comms_substrate), so this migration re-chains to that merge
-head to preserve the single-head invariant
-(scripts/validate_temporal_integrity.py). This migration only touches
-mobile_installations and is independent of the computation and comms domains.
+onto origin/main — the touchpoint-conversion migration
+(20260823_touchpoint_conversion_fields, from the reliability-audit PR #513)
+landed upstream after this migration was authored and itself chains onto the
+comms-platform merge point (20260823_merge_comms_substrate), so this
+migration re-chains to that touchpoint head to preserve the single-head
+invariant (scripts/validate_temporal_integrity.py). This migration only
+touches mobile_installations and is independent of the computation, comms,
+and touchpoint domains.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260830_app_version_registration"
-down_revision = "20260823_merge_comms_substrate"
+down_revision = "20260823_touchpoint_conversion_fields"
 branch_labels = None
 depends_on = None
 
