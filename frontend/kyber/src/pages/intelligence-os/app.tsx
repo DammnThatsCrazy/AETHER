@@ -615,9 +615,10 @@ function CommandPalette({ query, commands, onQueryChange, onClose, onSelect }: {
         event.preventDefault()
         setActiveIndex((index) => commands.length ? (index - 1 + commands.length) % commands.length : 0)
       }
-      if (event.key === 'Enter' && commands[activeIndex]) {
+      const activeCommand = commands[activeIndex]
+      if (event.key === 'Enter' && activeCommand) {
         event.preventDefault()
-        onSelect(commands[activeIndex])
+        onSelect(activeCommand)
       }
     }
     window.addEventListener('keydown', handlePaletteKeyDown)
