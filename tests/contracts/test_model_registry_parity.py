@@ -174,8 +174,8 @@ def test_aliases_parity():
 
 
 def test_models_count():
-    assert len(MODEL_REGISTRY_MODELS) == 10
-    assert len(_model_objects()) == 10
+    assert len(MODEL_REGISTRY_MODELS) == 13
+    assert len(_model_objects()) == 13
 
 
 def test_model_fields_parity():

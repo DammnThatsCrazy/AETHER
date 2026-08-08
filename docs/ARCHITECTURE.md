@@ -463,13 +463,42 @@ never import them. Real transport for the first two providers lives in
 |---|---|---|
 | `AnthropicModelProvider` (`adapters/anthropic.py`) | Anthropic SDK (lazy-imported in `complete()`) | `ANTHROPIC_API_KEY`, `NOESIS_LLM_MODEL` |
 | `OpenAIModelProvider` (`adapters/openai.py`) | `httpx` POST to `{base_url}/chat/completions` (no OpenAI SDK) | `OPENAI_API_KEY`, `NOESIS_LLM_MODEL`, `OPENAI_API_BASE` |
+| `OpenAICompatibleModelProvider` (`adapters/compatible.py`) | inherits the `httpx` POST `{base_url}/chat/completions` transport unchanged | `MODEL_RUNTIME_COMPAT_API_KEY`, `MODEL_RUNTIME_COMPAT_MODEL`, `MODEL_RUNTIME_COMPAT_BASE_URL`, `MODEL_RUNTIME_COMPAT_PROVIDER_NAME` |
 
-Both adapters read credentials/config from the process environment at
+All three adapters read credentials/config from the process environment at
 construction (constructor kwargs take precedence), expose `is_configured()`,
 and complete a `ModelRequest` → `ModelResponse` asynchronously via `complete()`.
 Failures surface as `ModelNotConfigured`, `ModelTimeoutError`, or
-`ModelProviderError`; request content and credentials are never logged. The
-Anthropic adapter is capability-driven: it never sends sampling parameters
+`ModelProviderError`; request content and credentials are never logged.
+
+`OpenAICompatibleModelProvider` (`adapters/compatible.py`) is a thin subclass
+of `OpenAIModelProvider` that reuses the inherited httpx chat-completions
+transport unchanged, so it inherits the same error taxonomy
+(`ModelNotConfigured` / `ModelTimeoutError` / `ModelProviderError`) and the
+same "request content and credentials are never logged" guarantee. Its config
+is read from a dedicated `MODEL_RUNTIME_COMPAT_*` env surface, and its
+`provider_name` is an instance attribute (default `"openai_compatible"`,
+overridable per instance via constructor kwarg or
+`MODEL_RUNTIME_COMPAT_PROVIDER_NAME`). Because the runtime registry keys
+providers by `provider_name` (`ModelRuntimeService._providers`), a deployment
+can register several compatible endpoints at once — Kimi-family, self-hosted
+vLLM/TGI, other OpenAI-compatible vendors — alongside the built-in `openai`
+and `anthropic` adapters without collision.
+
+| Compatible-adapter env var | Maps to | Fallback when unset |
+|---|---|---|
+| `MODEL_RUNTIME_COMPAT_API_KEY` | `api_key` | `OPENAI_API_KEY` |
+| `MODEL_RUNTIME_COMPAT_MODEL` | `model` | `NOESIS_LLM_MODEL` |
+| `MODEL_RUNTIME_COMPAT_BASE_URL` | `base_url` | `OPENAI_API_BASE` |
+| `MODEL_RUNTIME_COMPAT_PROVIDER_NAME` | `provider_name` | `"openai_compatible"` |
+
+Config precedence (highest first): explicit constructor kwargs, then the
+`MODEL_RUNTIME_COMPAT_*` vars, then the `OpenAIModelProvider` defaults
+(`OPENAI_API_KEY` / `NOESIS_LLM_MODEL` / `OPENAI_API_BASE`). A deployment that
+sets only the `MODEL_RUNTIME_COMPAT_*` vars can drive a compatible endpoint
+without touching the OpenAI env surface at all.
+
+The Anthropic adapter is capability-driven: it never sends sampling parameters
 (`temperature`/`top_p`/`top_k`) because newer Anthropic models reject them with
 HTTP 400 — it sends only `model`, `max_tokens`, `system`, and `messages`. The
 OpenAI adapter emits `response_format={"type":"json_object"}` when the request

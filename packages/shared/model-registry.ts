@@ -6,7 +6,7 @@
 export const modelRegistryVersion = '1.0.0' as const;
 
 /** Providers registered with the harness. */
-export const modelRegistryProviders = ['anthropic', 'openai'] as const;
+export const modelRegistryProviders = ['anthropic', 'openai', 'kimi', 'deepseek', 'qwen'] as const;
 export type ModelRegistryProvider = typeof modelRegistryProviders[number];
 
 /** Capability flags that drive adapter behavior. */
@@ -29,7 +29,13 @@ export const modelRegistryEffortLevels = ['low', 'medium', 'high', 'xhigh', 'max
 export type ModelRegistryEffortLevel = typeof modelRegistryEffortLevels[number];
 
 /** Lifecycle status of a registered model. */
-export const modelRegistryModelStatuses = ['recommended', 'stable', 'beta', 'deprecated'] as const;
+export const modelRegistryModelStatuses = [
+  'recommended',
+  'stable',
+  'beta',
+  'deprecated',
+  'experimental',
+] as const;
 export type ModelRegistryModelStatus = typeof modelRegistryModelStatuses[number];
 
 /** Alias → canonical modelId. */
@@ -188,5 +194,50 @@ export const modelRegistryModels = [
     outputCostPerMTok: 1.6,
     status: 'stable',
     notes: 'no thinking mode; sampling params supported.',
+  },
+  {
+    modelId: 'kimi-k2',
+    provider: 'kimi',
+    family: 'kimi',
+    contextWindowTokens: 262144,
+    maxOutputTokens: 32768,
+    capabilities: ['chat', 'tool_use', 'streaming', 'structured_outputs', 'vision'],
+    thinkingModes: ['disabled'],
+    effortLevels: [],
+    samplingParamsSupported: true,
+    inputCostPerMTok: 0.6,
+    outputCostPerMTok: 2.5,
+    status: 'experimental',
+    notes: 'OpenAI-compatible; runs via OpenAICompatibleModelProvider (MODEL_RUNTIME_COMPAT_*).',
+  },
+  {
+    modelId: 'deepseek-chat',
+    provider: 'deepseek',
+    family: 'deepseek',
+    contextWindowTokens: 131072,
+    maxOutputTokens: 8192,
+    capabilities: ['chat', 'streaming', 'tool_use', 'structured_outputs'],
+    thinkingModes: ['disabled'],
+    effortLevels: [],
+    samplingParamsSupported: true,
+    inputCostPerMTok: 0.27,
+    outputCostPerMTok: 1.1,
+    status: 'experimental',
+    notes: 'OpenAI-compatible chat API; via OpenAICompatibleModelProvider.',
+  },
+  {
+    modelId: 'qwen2.5-72b-instruct',
+    provider: 'qwen',
+    family: 'qwen',
+    contextWindowTokens: 131072,
+    maxOutputTokens: 8192,
+    capabilities: ['chat', 'streaming', 'tool_use'],
+    thinkingModes: ['disabled'],
+    effortLevels: [],
+    samplingParamsSupported: true,
+    inputCostPerMTok: 0.0,
+    outputCostPerMTok: 0.0,
+    status: 'experimental',
+    notes: 'Open-weight; self-host via vLLM/TGI OpenAI-compatible server; cost 0 is self-host.',
   },
 ] as const;

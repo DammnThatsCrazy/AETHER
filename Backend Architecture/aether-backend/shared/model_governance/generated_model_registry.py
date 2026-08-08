@@ -9,7 +9,7 @@ from typing import Any
 MODEL_REGISTRY_VERSION = "1.0.0"
 
 # Providers registered with the harness.
-MODEL_REGISTRY_PROVIDERS: tuple[str, ...] = ("anthropic", "openai")
+MODEL_REGISTRY_PROVIDERS: tuple[str, ...] = ("anthropic", "openai", "kimi", "deepseek", "qwen")
 
 # Capability flags that drive adapter behavior.
 MODEL_REGISTRY_CAPABILITIES: tuple[str, ...] = (
@@ -28,7 +28,13 @@ MODEL_REGISTRY_THINKING_MODES: tuple[str, ...] = ("adaptive", "enabled", "disabl
 MODEL_REGISTRY_EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
 
 # Lifecycle status of a registered model.
-MODEL_REGISTRY_MODEL_STATUSES: tuple[str, ...] = ("recommended", "stable", "beta", "deprecated")
+MODEL_REGISTRY_MODEL_STATUSES: tuple[str, ...] = (
+    "recommended",
+    "stable",
+    "beta",
+    "deprecated",
+    "experimental",
+)
 
 # Alias -> canonical modelId.
 MODEL_REGISTRY_ALIASES: dict[str, str] = {
@@ -186,6 +192,51 @@ MODEL_REGISTRY_MODELS: tuple[dict[str, Any], ...] = (
         "outputCostPerMTok": 1.6,
         "status": "stable",
         "notes": "no thinking mode; sampling params supported.",
+    },
+    {
+        "modelId": "kimi-k2",
+        "provider": "kimi",
+        "family": "kimi",
+        "contextWindowTokens": 262144,
+        "maxOutputTokens": 32768,
+        "capabilities": ("chat", "tool_use", "streaming", "structured_outputs", "vision"),
+        "thinkingModes": ("disabled",),
+        "effortLevels": (),
+        "samplingParamsSupported": True,
+        "inputCostPerMTok": 0.6,
+        "outputCostPerMTok": 2.5,
+        "status": "experimental",
+        "notes": "OpenAI-compatible; runs via OpenAICompatibleModelProvider (MODEL_RUNTIME_COMPAT_*).",
+    },
+    {
+        "modelId": "deepseek-chat",
+        "provider": "deepseek",
+        "family": "deepseek",
+        "contextWindowTokens": 131072,
+        "maxOutputTokens": 8192,
+        "capabilities": ("chat", "streaming", "tool_use", "structured_outputs"),
+        "thinkingModes": ("disabled",),
+        "effortLevels": (),
+        "samplingParamsSupported": True,
+        "inputCostPerMTok": 0.27,
+        "outputCostPerMTok": 1.1,
+        "status": "experimental",
+        "notes": "OpenAI-compatible chat API; via OpenAICompatibleModelProvider.",
+    },
+    {
+        "modelId": "qwen2.5-72b-instruct",
+        "provider": "qwen",
+        "family": "qwen",
+        "contextWindowTokens": 131072,
+        "maxOutputTokens": 8192,
+        "capabilities": ("chat", "streaming", "tool_use"),
+        "thinkingModes": ("disabled",),
+        "effortLevels": (),
+        "samplingParamsSupported": True,
+        "inputCostPerMTok": 0.0,
+        "outputCostPerMTok": 0.0,
+        "status": "experimental",
+        "notes": "Open-weight; self-host via vLLM/TGI OpenAI-compatible server; cost 0 is self-host.",
     },
 )
 
