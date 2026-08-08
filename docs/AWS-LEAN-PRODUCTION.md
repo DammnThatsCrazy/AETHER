@@ -400,7 +400,10 @@ apply, it gates **promotability**. A commit can only be dispatched for
 promotion if its `main`-branch run proved that the complete remote-plan
 credential set exists and that all four profiles produced credentialed, policy-
 and cost-validated remote plans. Without it a commit could land on `main` with
-every remote plan silently skipped and still be promoted.
+every remote plan silently skipped and still be promoted. When the credential
+set is absent the job reports it is a NO-OP — the commit is explicitly **not**
+promotable — and passes green, re-arming fail-closed the moment the credentials
+are wired.
 
 ## Rollback
 
