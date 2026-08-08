@@ -135,11 +135,18 @@ async def test_worker_executes_erasure_and_marks_step_with_evidence():
     assert step["records_impacted"] == 5
     assert step["audit_event_id"] == job_id
     assert step["requires_recompute"] is False
-    # The three mobile stores were also erased end-to-end and marked with their
-    # OWN real erased-row receipts (0 here — nothing was seeded for this subject).
+    # The three mobile stores and the four semantic stores were also erased
+    # end-to-end and marked with their OWN real erased-row receipts (0 here —
+    # nothing was seeded for this subject).
     mobile_components = {"continuation_records", "mobile_installations", "client_sync_records"}
+    semantic_components = {
+        "semantic_observations",
+        "sentiment_observations",
+        "semantic_gold_state",
+        "semantic_review_queue",
+    }
     for c in status["components"]:
-        if c["component"] in mobile_components:
+        if c["component"] in mobile_components or c["component"] in semantic_components:
             assert c["status"] == "completed"
             assert c["records_impacted"] == 0
             assert c["audit_event_id"] == job_id

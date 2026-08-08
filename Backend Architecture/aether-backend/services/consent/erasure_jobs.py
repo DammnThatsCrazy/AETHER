@@ -19,6 +19,15 @@ its own isolated try/except and each marked with its OWN real erased-row count:
 (installations + push_subscriptions), and ``client_sync_records``
 (sync_change_log). A store is never marked with a fabricated count; a per-store
 failure marks that component ``failed`` and keeps the whole job retryable.
+
+Finally it reaches the semantic-intelligence plane, hard-deleting the subject's
+semantic observations, sentiment, Gold aggregate state and review-queue rows and
+marking the four semantic components (``semantic_observations``,
+``sentiment_observations``, ``semantic_gold_state``, ``semantic_review_queue``)
+with each store's own real erased-row receipt. These components were already
+declared expected in ``dsr_propagation.models.DSR_COMPONENTS`` but were never
+marked, so semantic data silently survived an erasure the DSR record reported as
+``completed`` — a live compliance defect this handler closes.
 """
 
 from __future__ import annotations
@@ -48,6 +57,47 @@ MEASUREMENT_COMPONENT = "attribution_records"
 MOBILE_CONTINUATION_COMPONENT = "continuation_records"
 MOBILE_INSTALLATION_COMPONENT = "mobile_installations"
 MOBILE_CLIENT_SYNC_COMPONENT = "client_sync_records"
+
+# The semantic-intelligence-plane dsr_propagation components. These four are
+# declared as expected components in dsr_propagation.models.DSR_COMPONENTS, so
+# every erasure request opens a `pending` step for each — but nothing ever
+# marked them, so a subject's semantic observations/sentiment/Gold-state/review
+# rows silently survived a DSR erasure that reported "completed". This handler
+# now erases the semantic plane and marks each component with its OWN real
+# erased-row receipt, derived from the privacy handler's per-table counts:
+#   semantic_observations → silver_semantic_observations + entity_mentions
+#                           + subject_links + claims + shadow_divergences
+#   sentiment_observations → silver_sentiment_observations
+#   semantic_gold_state    → gold_entity_semantic_state + gold_entity_sentiment_state
+#   semantic_review_queue  → semantic_review_queue
+SEMANTIC_OBSERVATIONS_COMPONENT = "semantic_observations"
+SEMANTIC_SENTIMENT_COMPONENT = "sentiment_observations"
+SEMANTIC_GOLD_COMPONENT = "semantic_gold_state"
+SEMANTIC_REVIEW_QUEUE_COMPONENT = "semantic_review_queue"
+
+
+def _semantic_component_receipts(deleted: dict) -> dict[str, int]:
+    """Fold the privacy handler's per-table erased-row counts onto the four
+    semantic dsr_propagation components, so each component carries its OWN
+    real receipt (never a fabricated or double-counted total)."""
+
+    def _n(key: str) -> int:
+        return int(deleted.get(key, 0) or 0)
+
+    return {
+        SEMANTIC_OBSERVATIONS_COMPONENT: (
+            _n("silver_semantic_observations")
+            + _n("silver_semantic_entity_mentions")
+            + _n("silver_semantic_subject_links")
+            + _n("silver_semantic_claims")
+            + _n("semantic_shadow_divergences")
+        ),
+        SEMANTIC_SENTIMENT_COMPONENT: _n("silver_sentiment_observations"),
+        SEMANTIC_GOLD_COMPONENT: (
+            _n("gold_entity_semantic_state") + _n("gold_entity_sentiment_state")
+        ),
+        SEMANTIC_REVIEW_QUEUE_COMPONENT: _n("semantic_review_queue"),
+    }
 
 
 def register_consent_erasure_handler() -> None:
@@ -142,6 +192,75 @@ def register_consent_erasure_handler() -> None:
                     records_impacted=int(erased),
                     audit_event_id=ctx.job_id,
                 )
+
+            # ── Semantic-intelligence plane ──────────────────────────────────
+            # Erase the subject's semantic observations, sentiment, Gold state
+            # and review-queue rows through the semantic privacy handler, then
+            # mark each of the four semantic components with its own real
+            # erased-row receipt. The whole plane is one isolated try/except:
+            # any failure marks all four components ``failed`` and keeps the job
+            # retryable (the underlying deletes are idempotent), mirroring the
+            # measurement plane's all-or-nothing evidence contract.
+            from services.semantic_intelligence.service import (
+                SemanticIntelligenceService,
+            )
+
+            semantic_components = (
+                SEMANTIC_OBSERVATIONS_COMPONENT,
+                SEMANTIC_SENTIMENT_COMPONENT,
+                SEMANTIC_GOLD_COMPONENT,
+                SEMANTIC_REVIEW_QUEUE_COMPONENT,
+            )
+            try:
+                semantic_result = await SemanticIntelligenceService().erase_subject(
+                    ctx.tenant_id, user_id
+                )
+                semantic_errors = [
+                    str(e) for e in (semantic_result.get("errors") or [])
+                ]
+                receipts = _semantic_component_receipts(
+                    semantic_result.get("deleted") or {}
+                )
+                if semantic_errors:
+                    # A partial semantic failure fails the whole plane so the
+                    # worker retries the idempotent erasure — never a "completed"
+                    # step over data that may still survive.
+                    errors.extend(f"semantic: {e}" for e in semantic_errors)
+                    for component in semantic_components:
+                        await dsr_propagation_service.mark_step(
+                            propagation_request_id,
+                            component,
+                            "failed",
+                            tenant_id=ctx.tenant_id,
+                            audit_event_id=ctx.job_id,
+                        )
+                else:
+                    for component in semantic_components:
+                        await dsr_propagation_service.mark_step(
+                            propagation_request_id,
+                            component,
+                            "completed",
+                            tenant_id=ctx.tenant_id,
+                            records_impacted=receipts[component],
+                            audit_event_id=ctx.job_id,
+                        )
+            except Exception as exc:  # noqa: BLE001 — isolate the semantic plane
+                errors.append(f"semantic: {exc}")
+                for component in semantic_components:
+                    try:
+                        await dsr_propagation_service.mark_step(
+                            propagation_request_id,
+                            component,
+                            "failed",
+                            tenant_id=ctx.tenant_id,
+                            audit_event_id=ctx.job_id,
+                        )
+                    except Exception:  # noqa: BLE001 — never let marking abort
+                        logger.warning(
+                            "failed to mark semantic DSR component %s failed",
+                            component,
+                            exc_info=True,
+                        )
 
         if dsr_id:
             repo = ConsentRepository()

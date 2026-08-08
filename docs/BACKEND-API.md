@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "896ed23"
+last_synced_commit: "ba14e2c"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2809,7 +2809,11 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
 - `GET /v1/comms/admin/coverage?tenant_id=…` — per-provider coverage for one
   tenant, or a fleet aggregate across all observed tenants when unscoped.
 - Existing audited remediation: `POST /v1/comms/admin/state/rebuild`,
-  `/graph/reproject`, `/dsr/erase`.
+  `/graph/reproject`, `/dsr/erase`. The durable `/dsr/erase` remediation
+  propagates across every subject-data plane — measurement/attribution, mobile
+  (continuations, installations, client-sync), and the semantic-intelligence
+  plane (observations, sentiment, Gold aggregate state, review queue) — marking
+  each `dsr_propagation` component with its own erased-row receipt.
 
 Provider readiness is truthful: without a credential a provider reports
 `credential_missing`, is never marked connected, and the certification harness
