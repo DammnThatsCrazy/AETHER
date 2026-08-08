@@ -193,6 +193,7 @@ def _safe_host(url: str) -> str | None:
 # silently smaller registry.
 _STATIC_SOURCE_MODULES: tuple[str, ...] = (
     "services.rewards.signer_slots",
+    "services.x402.credential_slots",
 )
 
 

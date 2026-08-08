@@ -120,6 +120,33 @@ class SettlementTracker:
         )
         return settlement
 
+    async def mark_settled_reconciled(self, tenant_id: str, settlement_id: str) -> Settlement:
+        """Advance a PENDING settlement to SETTLED after the reconciliation
+        worker confirmed on-chain finality. Idempotent: an already-SETTLED
+        settlement is returned unchanged."""
+        settlement = await self._require(tenant_id, settlement_id)
+        if settlement.state == SettlementState.SETTLED:
+            return settlement
+        settlement.state = SettlementState.SETTLED
+        settlement.settled_at = _now_iso()
+        settlement.updated_at = _now_iso()
+        await self._store.put_settlement(settlement)
+        await self._emit(
+            Topic.COMMERCE_SETTLEMENT_COMPLETED,
+            tenant_id,
+            {
+                "settlement_id": settlement.settlement_id,
+                "receipt_id": settlement.receipt_id,
+                "amount_usd": settlement.amount_usd,
+                "reconciled": True,
+            },
+        )
+        metrics.increment(
+            "commerce_settlements",
+            labels={"state": "settled_reconciled", "chain": settlement.chain},
+        )
+        return settlement
+
     async def fail(self, tenant_id: str, settlement_id: str, reason: str) -> Settlement:
         settlement = await self._require(tenant_id, settlement_id)
         settlement.state = SettlementState.FAILED

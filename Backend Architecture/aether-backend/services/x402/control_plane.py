@@ -289,6 +289,26 @@ class X402ControlPlane:
         await self._mutations.write_approval_decision(approval, decision_obj)
         return approval
 
+    async def _resolve_environment(self, tenant_id: str) -> str:
+        """Resolve the x402 credential environment for a tenant, server-side.
+
+        Reads the tenant's persisted x402 capability activation state (the
+        canonical lifecycle). PARTNER_LIVE → ``live``; everything else →
+        ``sandbox``. Never trusts a client-supplied environment. In local/test
+        (no persisted state) defaults to ``sandbox``.
+        """
+        try:
+            from services.capabilities.lifecycle import get_lifecycle_authority
+
+            state = await get_lifecycle_authority().get_state(
+                tenant_id, "x402", "live", "commerce"
+            )
+            if state and state.get("readiness_state") == "partner_live":
+                return "live"
+        except Exception:  # noqa: BLE001 — default to the safe environment
+            pass
+        return "sandbox"
+
     async def authorize_payment(
         self,
         tenant_id: str,
@@ -317,6 +337,7 @@ class X402ControlPlane:
                 "No facilitator for asset/chain", "FACILITATOR_UNAVAILABLE", 503
             )
 
+        environment = await self._resolve_environment(tenant_id)
         auth = PaymentAuthorization(
             tenant_id=tenant_id,
             challenge_id=approval.challenge_id,
@@ -325,6 +346,7 @@ class X402ControlPlane:
             amount_usd=requirement.amount_usd,
             asset_symbol=requirement.asset_symbol,
             chain=requirement.chain,
+            environment=environment,
             recipient=requirement.recipient,
             payer=payer,
             facilitator_id=facilitator.facilitator_id,

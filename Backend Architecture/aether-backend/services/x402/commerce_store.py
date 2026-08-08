@@ -200,8 +200,18 @@ class CommerceStore:
             self.fulfillments = _RepoCollection(FulfillmentsRepository(), "fulfillment_id", Fulfillment)
             self.treasuries = _RepoCollection(TreasuriesRepository(), "tenant_id", Treasury)
 
-        # budget_policies: TenantCollection in all modes (BudgetPolicy has TYPE_CHECKING import)
-        self.budget_policies = TenantCollection("policy_id")
+        # budget_policies: durable Postgres outside local (a budget cap that
+        # vanishes on restart is a real gap); in-memory only in local dev.
+        if _is_local():
+            self.budget_policies = TenantCollection("policy_id")
+        else:
+            from repositories.commerce_repos import BudgetPoliciesRepository
+
+            from .commerce_models import BudgetPolicy as _BudgetPolicy
+
+            self.budget_policies = _RepoCollection(
+                BudgetPoliciesRepository(), "policy_id", _BudgetPolicy
+            )
 
     # ── Resource registry ────────────────────────────────────────────
 

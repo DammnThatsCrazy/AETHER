@@ -133,7 +133,13 @@ class Facilitator(BaseModel):
     mode: FacilitatorMode = FacilitatorMode.HYBRID
     supported_assets: list[str] = Field(default_factory=list)
     supported_chains: list[str] = Field(default_factory=list)
+    # Environments this facilitator serves (sandbox|live). LOCAL-mode seeds are
+    # sandbox-only; external facilitators declare the environments they cover.
+    supported_environments: list[str] = Field(default_factory=lambda: ["sandbox"])
     approved_by_tenants: list[str] = Field(default_factory=list)
+    # Credential slot name (in the credential authority, domain x402) that holds
+    # this facilitator's API key; None for the internal LOCAL facilitator.
+    credential_slot: Optional[str] = None
     health_status: str = "unknown"  # healthy|degraded|down|unknown
     avg_latency_ms: Optional[float] = None
     success_rate: Optional[float] = None
@@ -250,6 +256,11 @@ class PaymentAuthorization(BaseModel):
     amount_usd: float
     asset_symbol: str
     chain: str
+    # Credential environment (sandbox|live) this authorization is bound to.
+    # Resolved server-side from the tenant's x402 activation state — never
+    # trusted from the client. Verification RPC + facilitator credentials are
+    # selected for this environment.
+    environment: str = "sandbox"
     recipient: str
     payer: str  # wallet address
     facilitator_id: str
@@ -266,14 +277,21 @@ class PaymentReceipt(BaseModel):
     challenge_id: str
     tx_hash: str
     chain: str
+    environment: str = "sandbox"
     asset_symbol: str
     amount_usd: float
     payer: str
     recipient: str
     verified: bool = False
     verified_by: str = ""  # facilitator_id or "local"
+    # Stable semantic verdict token (verified | verification_unavailable |
+    # payer_mismatch | amount_below_required | not_finalized | ...). HTTP
+    # reachability is NEVER a verdict — only the provider's semantic result is.
+    verification_verdict: Optional[str] = None
     verified_at: Optional[str] = None
     verification_error: Optional[str] = None
+    # Confirmations observed at verification time (finality gate).
+    confirmations: Optional[int] = None
 
 
 # ─── Settlement ───────────────────────────────────────────────────────
@@ -286,6 +304,7 @@ class Settlement(BaseModel):
     state: SettlementState = SettlementState.PENDING
     tx_hash: str
     chain: str
+    environment: str = "sandbox"
     amount_usd: float
     facilitator_id: str
     attempts: int = 0

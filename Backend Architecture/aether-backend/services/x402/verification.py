@@ -27,7 +27,31 @@ _FACILITATOR_TIMEOUT_S = 10.0
 
 def _is_local_env() -> bool:
     import os
-    return os.getenv("AETHER_ENV", "local").lower() == "local"
+    return os.getenv("AETHER_ENV", "local").lower() in ("local", "test")
+
+
+# Stable semantic verdict tokens (prefix of the error string → token). HTTP
+# reachability is never a verdict; only the provider's semantic result is.
+_VERDICT_PREFIXES = (
+    "verification_unavailable",
+    "payer_mismatch",
+    "amount_below_required",
+    "not_finalized",
+    "reverted",
+    "no_matching_transfer",
+    "malformed",
+)
+
+
+def _verdict_token(error: Optional[str]) -> str:
+    if not error:
+        return "verification_failed"
+    for prefix in _VERDICT_PREFIXES:
+        if error.startswith(prefix) or error.lower().startswith(prefix):
+            return prefix
+    if "malformed" in (error or "").lower():
+        return "malformed"
+    return "verification_failed"
 
 # x402 network names (chain ID → x402 network identifier)
 _CHAIN_TO_NETWORK: dict[str, str] = {
@@ -44,12 +68,38 @@ _ASSET_CONTRACT: dict[tuple[str, str], str] = {
     ("USDC", "solana:mainnet"): "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
 }
 
-# Decimal places for each supported asset
+# Decimal places for each supported asset. Unknown assets are NOT defaulted to
+# 6 — an unknown asset is a hard error, never a silent assumption.
 _ASSET_DECIMALS: dict[str, int] = {
     "USDC": 6,
 }
 
+# Minimum confirmations before a payment is treated as final (per chain family).
+_MIN_CONFIRMATIONS = {"eip155": 2, "solana": 1}
+
 logger = get_logger("aether.service.x402.verification")
+
+
+class AssetDecimalsError(ValueError):
+    """The asset's decimal precision is not declared — refuse to assume."""
+
+
+def _asset_decimals(symbol: str) -> int:
+    try:
+        return _ASSET_DECIMALS[symbol]
+    except KeyError:
+        raise AssetDecimalsError(
+            f"decimals for asset {symbol!r} are not declared; refusing to assume 6"
+        )
+
+
+def _expected_atomic(amount_usd: float, symbol: str) -> int:
+    decimals = _asset_decimals(symbol)
+    return int(
+        (Decimal(str(amount_usd)) * Decimal(10 ** decimals)).to_integral_value(
+            rounding=ROUND_CEILING
+        )
+    )
 
 # Simple heuristic validators for local verification (production would call RPCs).
 _BASE_TX_HASH = re.compile(r"^0x[a-fA-F0-9]{64}$")
@@ -98,13 +148,15 @@ class VerificationEngine:
                 challenge_id=authorization.challenge_id,
                 tx_hash=tx_hash,
                 chain=authorization.chain,
+                environment=authorization.environment,
                 asset_symbol=authorization.asset_symbol,
                 amount_usd=authorization.amount_usd,
                 payer=authorization.payer,
                 recipient=authorization.recipient,
                 verified=False,
                 verified_by="local",
-                verification_error="Malformed tx_hash for chain",
+                verification_verdict="malformed",
+                verification_error="malformed tx_hash for chain",
             )
             await self._store.put_receipt(receipt)
             await self._emit(
@@ -131,18 +183,21 @@ class VerificationEngine:
             verified, error = await self._verify_locally(authorization, tx_hash)
             verified_by = "local"
 
+        verdict = "verified" if verified else _verdict_token(error)
         receipt = PaymentReceipt(
             tenant_id=tenant_id,
             authorization_id=authorization.authorization_id,
             challenge_id=authorization.challenge_id,
             tx_hash=tx_hash,
             chain=authorization.chain,
+            environment=authorization.environment,
             asset_symbol=authorization.asset_symbol,
             amount_usd=authorization.amount_usd,
             payer=authorization.payer,
             recipient=authorization.recipient,
             verified=verified,
             verified_by=verified_by,
+            verification_verdict=verdict,
             verified_at=_now_iso() if verified else None,
             verification_error=error if not verified else None,
         )
@@ -201,11 +256,10 @@ class VerificationEngine:
             )
             return True, None
 
-        decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
-        atomic_amount = str(int(
-            (Decimal(str(authorization.amount_usd)) * Decimal(10 ** decimals))
-            .to_integral_value(rounding=ROUND_CEILING)
-        ))
+        try:
+            atomic_amount = str(_expected_atomic(authorization.amount_usd, authorization.asset_symbol))
+        except AssetDecimalsError as exc:
+            return False, str(exc)
         network = _CHAIN_TO_NETWORK.get(authorization.chain, authorization.chain)
         asset_contract = _ASSET_CONTRACT.get(
             (authorization.asset_symbol, authorization.chain), ""
@@ -269,9 +323,8 @@ class VerificationEngine:
     async def _verify_locally(
         self, authorization: PaymentAuthorization, tx_hash: str
     ) -> tuple[bool, Optional[str]]:
-        """Dispatch to RPC verification in production; stub in local dev."""
-        import os
-        if os.getenv("AETHER_ENV", "local").lower() == "local":
+        """Dispatch to per-tenant RPC verification; deterministic stub in local dev."""
+        if _is_local_env():
             if authorization.amount_usd <= 0:
                 return False, "amount must be positive"
             return True, None
@@ -282,46 +335,75 @@ class VerificationEngine:
             return await self._verify_solana(authorization, tx_hash)
         return False, f"unsupported chain for local verification: {authorization.chain}"
 
+    async def _resolve_rpc(self, authorization: PaymentAuthorization):
+        """Resolve the tenant's RPC endpoint+key for this authorization.
+
+        Returns a ResolvedRpc, or raises RpcUnavailableError (mapped by the
+        caller to the ``verification_unavailable`` verdict — never auto-pass)."""
+        from services.x402.rpc_resolver import resolve_rpc
+
+        return await resolve_rpc(
+            authorization.tenant_id, authorization.environment, authorization.chain
+        )
+
     async def _verify_evm(
         self, authorization: PaymentAuthorization, tx_hash: str
     ) -> tuple[bool, Optional[str]]:
-        """Verify an ERC-20 USDC Transfer on Base (or other EVM chain) via JSON-RPC."""
-        from config.settings import settings
-        rpc_url = settings.intelligence_graph.commerce_base_rpc
+        """Verify an ERC-20 USDC Transfer on an EVM chain via the tenant's RPC.
+
+        Checks: receipt status, matching Transfer log (contract + recipient +
+        PAYER + amount), and finality (current head minus tx block ≥ minimum
+        confirmations). Returns a stable verdict token on failure.
+        """
+        from services.x402.rpc_resolver import RpcUnavailableError
 
         contract = _ASSET_CONTRACT.get((authorization.asset_symbol, authorization.chain))
         if not contract:
             return False, f"no contract for {authorization.asset_symbol}/{authorization.chain}"
-
-        decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
-        expected_min = int(
-            (Decimal(str(authorization.amount_usd)) * Decimal(10 ** decimals))
-            .to_integral_value(rounding=ROUND_CEILING)
-        )
+        try:
+            expected_min = _expected_atomic(authorization.amount_usd, authorization.asset_symbol)
+        except AssetDecimalsError as exc:
+            return False, str(exc)
+        try:
+            rpc = await self._resolve_rpc(authorization)
+        except RpcUnavailableError as exc:
+            return False, f"verification_unavailable: {exc}"
 
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
-                resp = await client.post(rpc_url, json={
+                resp = await client.post(rpc.request_url(), headers=rpc.headers(), json={
                     "jsonrpc": "2.0", "id": 1,
                     "method": "eth_getTransactionReceipt",
                     "params": [tx_hash],
                 })
-            resp.raise_for_status()
-            data = resp.json()
+                resp.raise_for_status()
+                data = resp.json()
+                # finality: current head vs tx block
+                head_resp = await client.post(rpc.request_url(), headers=rpc.headers(), json={
+                    "jsonrpc": "2.0", "id": 2, "method": "eth_blockNumber", "params": [],
+                })
+                head_resp.raise_for_status()
+                head = int(head_resp.json().get("result", "0x0"), 16)
         except httpx.TimeoutException:
-            return False, "EVM RPC timeout"
+            return False, "verification_unavailable: EVM RPC timeout"
         except Exception as exc:
-            return False, f"EVM RPC error: {exc}"
+            return False, f"verification_unavailable: EVM RPC error: {exc}"
 
         result = data.get("result")
         if result is None:
-            return False, "transaction not found or not yet mined"
+            return False, "not_finalized: transaction not found or not yet mined"
         if result.get("status") != "0x1":
-            return False, "transaction reverted on-chain"
+            return False, "reverted: transaction reverted on-chain"
+
+        tx_block = int(result.get("blockNumber", "0x0"), 16)
+        min_conf = _MIN_CONFIRMATIONS["eip155"]
+        if tx_block == 0 or head - tx_block + 1 < min_conf:
+            return False, f"not_finalized: {max(0, head - tx_block + 1)} < {min_conf} confirmations"
 
         # keccak256("Transfer(address,address,uint256)")
         TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
         recipient_padded = "0x" + authorization.recipient.lower().lstrip("0x").zfill(64)
+        payer_padded = "0x" + authorization.payer.lower().lstrip("0x").zfill(64)
 
         for log in result.get("logs", []):
             topics = log.get("topics", [])
@@ -331,46 +413,62 @@ class VerificationEngine:
                 and topics[0].lower() == TRANSFER_TOPIC
                 and topics[2].lower() == recipient_padded
             ):
+                # payer binding: the Transfer's `from` (topics[1]) must be the
+                # authorized payer — a payment from a different wallet is not
+                # this authorization's payment.
+                if topics[1].lower() != payer_padded:
+                    return False, "payer_mismatch: transfer from unauthorized wallet"
                 raw_amount = int(log.get("data", "0x0"), 16)
                 if raw_amount >= expected_min:
                     return True, None
-                return False, f"transfer amount {raw_amount} below required {expected_min}"
+                return False, f"amount_below_required: {raw_amount} < {expected_min}"
 
-        return False, "no matching USDC Transfer log found"
+        return False, "no_matching_transfer: no matching USDC Transfer log found"
 
     async def _verify_solana(
         self, authorization: PaymentAuthorization, tx_hash: str
     ) -> tuple[bool, Optional[str]]:
-        """Verify an SPL USDC transfer on Solana via JSON-RPC."""
-        from config.settings import settings
-        rpc_url = settings.intelligence_graph.commerce_solana_rpc
+        """Verify an SPL USDC transfer on Solana via the tenant's RPC.
+
+        Checks: tx success, matching transfer (mint + destination + PAYER
+        authority + amount), and commitment finality (`finalized`).
+        """
+        from services.x402.rpc_resolver import RpcUnavailableError
 
         mint = _ASSET_CONTRACT.get((authorization.asset_symbol, authorization.chain))
-        decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
-        expected_min = int(
-            (Decimal(str(authorization.amount_usd)) * Decimal(10 ** decimals))
-            .to_integral_value(rounding=ROUND_CEILING)
-        )
+        try:
+            expected_min = _expected_atomic(authorization.amount_usd, authorization.asset_symbol)
+        except AssetDecimalsError as exc:
+            return False, str(exc)
+        try:
+            rpc = await self._resolve_rpc(authorization)
+        except RpcUnavailableError as exc:
+            return False, f"verification_unavailable: {exc}"
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(rpc_url, json={
+                resp = await client.post(rpc.request_url(), headers=rpc.headers(), json={
                     "jsonrpc": "2.0", "id": 1,
                     "method": "getTransaction",
-                    "params": [tx_hash, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+                    "params": [tx_hash, {
+                        "encoding": "jsonParsed",
+                        "maxSupportedTransactionVersion": 0,
+                        "commitment": "finalized",
+                    }],
                 })
             resp.raise_for_status()
             data = resp.json()
         except httpx.TimeoutException:
-            return False, "Solana RPC timeout"
+            return False, "verification_unavailable: Solana RPC timeout"
         except Exception as exc:
-            return False, f"Solana RPC error: {exc}"
+            return False, f"verification_unavailable: Solana RPC error: {exc}"
 
         result = data.get("result")
         if result is None:
-            return False, "transaction not found"
+            # finalized commitment returned nothing → not yet final (or missing)
+            return False, "not_finalized: transaction not found at finalized commitment"
         if result.get("meta", {}).get("err") is not None:
-            return False, "transaction failed on-chain"
+            return False, "reverted: transaction failed on-chain"
 
         instructions = (
             result.get("transaction", {}).get("message", {}).get("instructions", [])
@@ -391,12 +489,16 @@ class VerificationEngine:
                 continue
             if info.get("destination") != authorization.recipient:
                 continue
+            # payer binding: the transfer authority/source must be the payer.
+            authority = info.get("authority") or info.get("source")
+            if authority and authority != authorization.payer:
+                return False, "payer_mismatch: transfer authority is not the payer"
             raw = info.get("amount") or info.get("tokenAmount", {}).get("amount", "0")
             if int(raw) >= expected_min:
                 return True, None
-            return False, f"transfer amount {raw} below required {expected_min}"
+            return False, f"amount_below_required: {raw} < {expected_min}"
 
-        return False, "no matching SPL token transfer found"
+        return False, "no_matching_transfer: no matching SPL token transfer found"
 
     async def _emit(self, topic: Topic, tenant_id: str, payload: dict) -> None:
         try:

@@ -592,6 +592,28 @@ async def commerce_health(request: Request):
     tid = _tenant_id(request)
     approvals = await store.list_approvals(tid)
     settlements = await store.list_settlements(tid)
+
+    # Evidence-based health: derived from real facilitator health, settlement
+    # backlog, and verification outcomes — never a hardcoded True.
+    from .commerce_models import SettlementState
+
+    facilitators = await get_facilitator_registry().list(tid)
+    fac_down = [f for f in facilitators if f.health_status == "down"]
+    fac_degraded = [f for f in facilitators if f.health_status == "degraded"]
+    pending_settlements = sum(1 for s in settlements if s.state == SettlementState.PENDING)
+    failed_settlements = sum(1 for s in settlements if s.state == SettlementState.FAILED)
+
+    # No usable facilitator, or every facilitator down → unhealthy; a failed
+    # settlement or all-degraded facilitators → degraded; else healthy.
+    if not facilitators or len(fac_down) == len(facilitators):
+        status = "unhealthy"
+    elif failed_settlements or (fac_degraded and not any(
+        f.health_status == "healthy" for f in facilitators
+    )):
+        status = "degraded"
+    else:
+        status = "healthy"
+
     return APIResponse(
         data={
             "approvals": {
@@ -602,8 +624,19 @@ async def commerce_health(request: Request):
                 "rejected": sum(1 for a in approvals if a.status == ApprovalStatus.REJECTED),
                 "expired": sum(1 for a in approvals if a.status == ApprovalStatus.EXPIRED),
             },
-            "settlements": {"total": len(settlements)},
-            "healthy": True,
+            "settlements": {
+                "total": len(settlements),
+                "pending": pending_settlements,
+                "failed": failed_settlements,
+            },
+            "facilitators": {
+                "total": len(facilitators),
+                "down": len(fac_down),
+                "degraded": len(fac_degraded),
+            },
+            "status": status,
+            # honest boolean derived from status, not asserted
+            "healthy": status == "healthy",
         }
     ).to_dict()
 
