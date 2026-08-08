@@ -4,7 +4,7 @@ slug: decisions/adr-008-multi-model-intelligence-harness
 section: reference
 visibility: I
 audience: [architect, dev-senior]
-status: accepted
+status: stable
 since_version: "8.12.0"
 canonical_owner: platform@aether
 ---

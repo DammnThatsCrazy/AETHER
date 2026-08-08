@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "67271129"
+last_synced_commit: "085ca1a9"
 ---
 # Aether vNext — Architecture Guide
 
@@ -428,6 +428,36 @@ mesh → legacy defense layer → off); with `REQUIRE_EXTRACTION_DEFENSE=true`
 (production profiles) an unavailable defense fails closed with
 `EXTRACTION_DEFENSE_UNAVAILABLE` instead of silently passing traffic. See
 [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
+
+## Multi-Model Intelligence Harness (8.12.0)
+
+A provider-neutral intelligence runtime lets AI models operate as
+interchangeable planning, reasoning, classification, and synthesis engines
+inside Aether's controlled harness. OpenAI and Anthropic are the first two
+providers; additional providers (Kimi-family, open-weight, OpenAI-compatible
+endpoints, Bedrock, self-hosted) plug in as isolated adapters without touching
+orchestration logic. Every answer is tenant-scoped, evidence-backed,
+policy-governed, observable, auditable, and verifiable.
+
+The harness extends Aether additively — it does not replace the intelligence
+graph, graph mutation gateway, entity/identity model, consent authority, audit
+ledger, or the Noesis read-only intent + repository-dispatch architecture.
+The design decision record is [ADR-008](decisions/ADR-008-multi-model-intelligence-harness.md).
+
+Canonical contract plane (single source of truth, codegen twins via
+`scripts/generate_platform_contracts.py`):
+
+| Registry | JSON source | Generated twins |
+|---|---|---|
+| Model catalog | `packages/shared/contracts/model-registry.json` | `packages/shared/model-registry.ts`; `shared/model_governance/generated_model_registry.py`; `docs/_generated/model-registry-table.md` |
+| Task profiles | `packages/shared/contracts/task-profile-registry.json` | `packages/shared/task-profile.ts`; `shared/model_governance/generated_task_profiles.py`; `docs/_generated/task-profile-table.md` |
+
+Binding security invariants: credentials never in source/frontend bundles/logs/
+prompts/persisted content; the model never receives direct database authority;
+the model may propose only allowlisted structured plans; Aether executes all
+retrieval; tenant scope is server-authoritative; staging/production fail closed
+on missing credentials/config; no cross-tenant evidence leakage; the model never
+selects or overrides tenant scope.
 
 ## Unified On-Chain Intelligence Graph
 

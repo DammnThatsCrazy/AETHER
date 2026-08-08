@@ -4291,7 +4291,7 @@
         "architect",
         "dev-senior"
       ],
-      "status": "accepted",
+      "status": "stable",
       "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
     },
