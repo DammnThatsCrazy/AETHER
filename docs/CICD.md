@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "896ed23"
+last_synced_commit: "f72fbf0"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -178,7 +178,7 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; its only action is an ECS scale-to-zero, which can only reduce running compute. | no |
 | `repo-consistency.yml` | PR / push to `main` | `make ci-check`. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
-| `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers and runs one real-pool ingestion smoke test against the real stack — exercises the transactional paths the in-memory (`AETHER_ENV=local`) lanes skip. **Non-blocking** (not a required check); the smoke test skips without `DATABASE_URL`. | no |
+| `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers, applies the full Alembic graph to a **fresh** database (`alembic upgrade head` → single head), and runs one real-pool ingestion smoke test against the real stack — exercises the fresh-DB provisioning and transactional paths the in-memory (`AETHER_ENV=local`) lanes skip entirely (that path never runs Alembic). **Non-blocking** (not a required check); the smoke test skips without `DATABASE_URL`. | no |
 
 ### Infrastructure planning is not applying
 
