@@ -2,7 +2,7 @@
 
 :class:`EventNormalizer` is the deterministic, network-free translation seam:
 it takes ONE :class:`RawProviderRecord` and returns a :class:`NormalizationResult`
-containing zero or more provider-neutral :class:`AetherEvent`\ s.
+containing zero or more provider-neutral :class:`AetherEvent` instances.
 
 Determinism is a hard contract here — a normalizer must never depend on
 wall-clock time, randomness, or provider I/O, so the same raw record always
