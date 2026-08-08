@@ -328,6 +328,7 @@ from services.investigation.routes import router as investigation_router
 from services.governance.routes import router as governance_router
 from services.security.routes import router as security_router
 from services.security.admin_routes import admin_router as security_admin_router
+from services.integrity.routes import router as ledger_integrity_router
 from services.policy.routes import router as policy_router
 from services.dsr_propagation.routes import router as dsr_propagation_router
 from services.tenant_readiness.routes import router as tenant_readiness_router
@@ -892,6 +893,7 @@ def create_app() -> FastAPI:
     app.include_router(governance_router)
     app.include_router(security_router)
     app.include_router(security_admin_router)
+    app.include_router(ledger_integrity_router)    # /v1/security/ledger -- Bronze truth-chain verification status (LEDGER M3)
     app.include_router(policy_router)
     app.include_router(dsr_propagation_router)     # /v1/dsr — DSR propagation records + impact indexes
     app.include_router(tenant_readiness_router)    # /v1/tenant/readiness — launch readiness + trust states

@@ -232,6 +232,24 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_bronze_compaction_coro()
 
+    # ── Truth-chain ledger verifier (LEDGER M3) ──────────────────────────
+    # Periodically re-walks each tenant's bronze_sdk_events hash chain (written
+    # by M2 in services/ingestion/bronze_bulk.py) and alerts through the ops/
+    # security alert path on any break. Opt-in (default OFF) via
+    # LEDGER_CHAIN_VERIFIER_ENABLED -- a safety-net sweep, not a hot path.
+    def _ledger_chain_verifier() -> Coroutine[Any, Any, None]:
+        from services.integrity.chain_verifier import build_chain_verifier_coro
+
+        return build_chain_verifier_coro()
+
+    def _ledger_chain_verifier_enabled() -> bool:
+        try:
+            from services.integrity.chain_verifier import is_enabled
+
+            return is_enabled()
+        except Exception:  # noqa: BLE001 - a broken import must not abort spec build
+            return False
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -389,5 +407,14 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
                 )
                 or settings.storage_plane.reconciler_enabled
             ),
+        ),
+        # Truth-chain ledger verifier (LEDGER M3): re-verifies each tenant's
+        # Bronze hash chain on a cadence and alerts on any break. Not required=True
+        # -- a stalled verifier degrades tamper-evidence monitoring, it must not
+        # abort startup. Opt-in via LEDGER_CHAIN_VERIFIER_ENABLED (default OFF).
+        WorkerSpec(
+            name="ledger_chain_verifier",
+            factory=_ledger_chain_verifier,
+            enabled=_ledger_chain_verifier_enabled,
         ),
     ]
