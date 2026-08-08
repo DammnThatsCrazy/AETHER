@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 from shared.common.common import utc_now
+from shared.integrity import hash_chain
 from shared.logger.logger import get_logger, metrics
 from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
 
@@ -133,11 +134,19 @@ def _payload_bytes_and_hash(payload: dict) -> tuple[int, str]:
     return len(encoded), hashlib.sha256(encoded).hexdigest()
 
 
-def _bronze_row(rec: BronzeSDKEvent) -> dict:
-    """Full record persisted to the ``data`` JSONB envelope (BaseRepository shape)."""
+def _bronze_row(rec: BronzeSDKEvent, now: Optional[str] = None) -> dict:
+    """Full record persisted to the ``data`` JSONB envelope (BaseRepository shape).
+
+    ``now`` may be supplied by the caller so every row in one ingest batch shares
+    an identical ``created_at`` — the hash chain relies on ``created_at`` being
+    uniform within a batch (and strictly increasing across batches) to give a
+    well-defined append order (see ``_chain_sort_key``). Omitting it (e.g. the
+    unit tests that build a single row) falls back to a per-row timestamp,
+    unchanged from the original behaviour.
+    """
     payload = sanitize_acquisition_payload(rec.payload)
     payload_bytes, payload_hash = _payload_bytes_and_hash(payload)
-    now = utc_now().isoformat()
+    now = now or utc_now().isoformat()
     return {
         "id": _bronze_id(rec.tenant_id, rec.event_id, rec.schema_version),
         "tenant_id": rec.tenant_id,
@@ -157,6 +166,12 @@ def _bronze_row(rec: BronzeSDKEvent) -> dict:
         "payload_hash": payload_hash,
         "source": rec.source,
         "source_tag": rec.source_tag,
+        # Append-only hash-chain columns (LEDGER M2). Default None = "not yet
+        # chained": a duplicate row that ON CONFLICT skips, or a pre-cutover
+        # historical row. `_chain_rows` overwrites these for every genuinely new
+        # row before it is persisted.
+        "prev_hash": None,
+        "integrity_hash": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -182,6 +197,119 @@ def _outbox_row(ob: OutboxEvent) -> dict:
         "created_at": now,
         "updated_at": now,
     }
+
+
+# ── Append-only hash chain (LEDGER M2) ───────────────────────────────────────
+# Bronze rows get the same tamper-evidence AuditLedger already has: a per-tenant
+# SHA-256 chain (shared/integrity/hash_chain.py). Each NEW row's integrity_hash
+# folds its canonical event identity with the previous row's integrity_hash, so
+# deleting, editing, or reordering a chained row is detectable by verify_chain.
+#
+# Partition key = tenant_id: every tenant owns an independent chain, so one
+# tenant's rows never reference another's (matches AuditLedger and the primitive's
+# documented "likely tenant_id" expectation). This is the natural per-stream key
+# for Bronze — there is no coarser or more meaningful isolation boundary than the
+# tenant for an append-only ledger of that tenant's events.
+#
+# Chain order within a partition = (created_at, event_id, schema_version). Bronze
+# is append-only, so the chain must follow INGEST order, not event-occurrence
+# order (event_timestamp): a late-arriving event appends to the tail, it does not
+# splice into the middle. created_at is uniform within one ingest transaction and
+# strictly increases across transactions, so it separates batches; (event_id,
+# schema_version) — the tail of the row's unique key (tenant_id, event_id,
+# schema_version) — is a total order for the rows sharing a batch's created_at.
+
+
+def _chain_partition(row: dict) -> str:
+    """The independent-chain key for a Bronze row (per tenant)."""
+    return row.get("tenant_id") or ""
+
+
+def _chain_sort_key(row: dict) -> tuple[str, str, str]:
+    """Deterministic append order within a tenant's chain.
+
+    See the section header: ``created_at`` orders/segregates batches; the
+    ``(event_id, schema_version)`` tail of the unique key totally orders the rows
+    of a single batch (which share one ``created_at``). Also used as the
+    ``sort_key`` when re-walking the chain in ``verify_chain``.
+    """
+    return (row.get("created_at") or "", row.get("event_id") or "", row.get("schema_version") or "")
+
+
+def _canonical_fields(row: dict) -> dict:
+    """The STABLE, tamper-evident identity of one Bronze event to hash.
+
+    Only fields that are immutable for a given event participate: its identity
+    key (``tenant_id``/``event_id``/``schema_version``), when it OCCURRED
+    (``event_timestamp`` — deliberately NOT the ingest-assigned, volatile
+    ``received_at``), its type, and a stable content digest (``payload_hash``, a
+    ``sort_keys`` SHA-256 of the already-sanitized payload). Volatile ingest
+    metadata — ``received_at``, ``batch_id``, the derived row ``id``,
+    ``created_at``/``updated_at`` — is excluded so the hash depends only on the
+    event itself, exactly as ``AuditLedger`` excludes its persistence-assigned
+    ``created_at``. ``prev_hash`` is excluded here too: the shared primitive folds
+    it in (``hash_chain.compute_integrity_hash``).
+
+    Every field read here is reconstructable from a stored row (typed column and
+    ``data`` envelope alike), so ``verify_chain`` can re-derive the exact hash.
+    """
+    return {
+        "event_id": row.get("event_id"),
+        "tenant_id": row.get("tenant_id"),
+        "schema_version": row.get("schema_version"),
+        "event_type": row.get("event_type"),
+        "event_timestamp": row.get("event_timestamp"),
+        "payload_hash": row.get("payload_hash"),
+    }
+
+
+def _chain_rows(new_rows: list[dict], prior_tail: dict[str, str]) -> None:
+    """Populate ``prev_hash``/``integrity_hash`` on each NEW row, in place.
+
+    Rows are grouped by tenant partition and chained in append order
+    (``_chain_sort_key``). The first row of a partition chains onto that tenant's
+    prior tail — the ``integrity_hash`` of its last already-chained row, passed in
+    ``prior_tail`` — when one exists, or begins a fresh chain otherwise
+    (``prev_hash = None``, the pre-cutover boundary). Successive rows of the same
+    batch chain to each other. ``new_rows`` must already be scoped to rows that
+    will actually be persisted (never intra-batch or cross-request duplicates),
+    so the stored chain has no gaps.
+    """
+    by_partition: dict[str, list[dict]] = {}
+    for row in new_rows:
+        by_partition.setdefault(_chain_partition(row), []).append(row)
+    for partition, rows in by_partition.items():
+        rows.sort(key=_chain_sort_key)
+        prev = prior_tail.get(partition)  # None → fresh chain (pre-cutover boundary)
+        for row in rows:
+            integrity = hash_chain.compute_integrity_hash(_canonical_fields(row), prev or "")
+            # Store the actual previous integrity_hash (None for a chain head), so
+            # the column is a readable back-link; verify_chain re-derives prev from
+            # the running chain, treating a head's absent prev as "".
+            row["prev_hash"] = prev
+            row["integrity_hash"] = integrity
+            prev = integrity
+
+
+def _memory_prior_tail(bronze_store: dict, partitions: set[str]) -> dict[str, str]:
+    """Per-tenant chain tail (last chained integrity_hash) from the in-memory store.
+
+    Rows with a NULL ``integrity_hash`` (pre-cutover / historical) are ignored —
+    they are not chain anchors, so a partition with only such rows returns no tail
+    and its first new row starts a fresh chain.
+    """
+    best: dict[str, tuple[tuple[str, str, str], str]] = {}
+    for row in bronze_store.values():
+        integrity = row.get("integrity_hash")
+        if not integrity:
+            continue
+        partition = _chain_partition(row)
+        if partition not in partitions:
+            continue
+        key = _chain_sort_key(row)
+        if partition not in best or key > best[partition][0]:
+            best[partition] = (key, integrity)
+    return {partition: integrity for partition, (_, integrity) in best.items()}
 
 
 # ── Failure-injection hook (in-memory rollback test) ─────────────────────────
@@ -299,16 +427,26 @@ def _memory_commit(
     exception while applying) rolls back BOTH tables so nothing is persisted.
     """
     bronze_store, outbox_store = _memory_stores()
+    now = utc_now().isoformat()  # one created_at for the whole batch (chain order)
 
     # Stage Bronze rows that are new (not already present under their id).
     staged_bronze: list[tuple[str, dict, tuple[str, str, str]]] = []
+    new_rows: list[dict] = []
     persisted: set[tuple[str, str, str]] = set()
     for rec in unique:
         rid = _bronze_id(rec.tenant_id, rec.event_id, rec.schema_version)
         if rid in bronze_store:
             continue  # already durable (cross-request duplicate)
-        staged_bronze.append((rid, _bronze_row(rec), rec.key))
+        row = _bronze_row(rec, now)
+        staged_bronze.append((rid, row, rec.key))
+        new_rows.append(row)
         persisted.add(rec.key)
+
+    # Hash-chain the brand-new rows (scoped to new rows only) onto each tenant's
+    # existing chain tail, inside this same commit unit. Mutates the row dicts in
+    # place, so the staged rows carry their prev_hash/integrity_hash when stored.
+    partitions = {_chain_partition(row) for row in new_rows}
+    _chain_rows(new_rows, _memory_prior_tail(bronze_store, partitions))
 
     # Stage outbox rows only for accepted (newly-persisted) events.
     staged_outbox: list[tuple[str, dict]] = []
@@ -353,23 +491,47 @@ INSERT INTO bronze_sdk_events (
     id, data, tenant_id, event_id, schema_version, batch_id, event_type,
     event_family, event_timestamp, received_at, session_id, anonymous_id,
     user_id, entity_id, payload, payload_bytes, payload_hash, source,
-    source_tag, created_at, updated_at
+    source_tag, prev_hash, integrity_hash, created_at, updated_at
 )
 SELECT
     r.id, r.data, r.tenant_id, r.event_id, r.schema_version, r.batch_id,
     r.event_type, r.event_family, r.event_timestamp, r.received_at,
     r.session_id, r.anonymous_id, r.user_id, r.entity_id, r.payload,
-    r.payload_bytes, r.payload_hash, r.source, r.source_tag, now(), now()
+    r.payload_bytes, r.payload_hash, r.source, r.source_tag,
+    r.prev_hash, r.integrity_hash, now(), now()
 FROM jsonb_to_recordset($1::jsonb) AS r(
     id text, data jsonb, tenant_id text, event_id text, schema_version text,
     batch_id text, event_type text, event_family text,
     event_timestamp timestamptz, received_at timestamptz,
     session_id text, anonymous_id text, user_id text, entity_id text,
     payload jsonb, payload_bytes integer, payload_hash text, source text,
-    source_tag text
+    source_tag text, prev_hash text, integrity_hash text
 )
 ON CONFLICT (tenant_id, event_id, schema_version) DO NOTHING
 RETURNING tenant_id, event_id, schema_version
+"""
+
+# Which of this batch's (tenant_id, event_id, schema_version) keys already exist?
+# Only genuinely-new rows join the chain (scoped to new rows only); existing rows
+# keep the integrity_hash from their original insert.
+_BRONZE_EXISTING_KEYS_SQL = """
+SELECT b.tenant_id, b.event_id, b.schema_version
+FROM bronze_sdk_events b
+JOIN jsonb_to_recordset($1::jsonb) AS r(
+    tenant_id text, event_id text, schema_version text
+) ON b.tenant_id = r.tenant_id
+   AND b.event_id = r.event_id
+   AND b.schema_version = r.schema_version
+"""
+
+# Per-tenant chain tail: the integrity_hash of the last already-chained row,
+# ordered by the same append key the writer chains on. NULL-hash (pre-cutover)
+# rows are excluded so a tenant with only historical rows returns no tail.
+_BRONZE_CHAIN_TAIL_SQL = """
+SELECT DISTINCT ON (tenant_id) tenant_id, integrity_hash
+FROM bronze_sdk_events
+WHERE tenant_id = ANY($1::text[]) AND integrity_hash IS NOT NULL
+ORDER BY tenant_id, created_at DESC, event_id DESC, schema_version DESC
 """
 
 _OUTBOX_INSERT_SQL = """
@@ -395,13 +557,41 @@ async def _pg_commit(
     orig_index: Sequence[int],
 ) -> set[tuple[str, str, str]]:
     """Persist Bronze + outbox in ONE asyncpg transaction; return persisted keys."""
-    bronze_rows = [_bronze_row(rec) for rec in unique]
-    bronze_json = json.dumps(
-        [_as_bronze_record_param(row) for row in bronze_rows], default=str
+    now = utc_now().isoformat()  # one created_at for the whole batch (chain order)
+    rows_by_key = {rec.key: _bronze_row(rec, now) for rec in unique}
+    keys_json = json.dumps(
+        [
+            {
+                "tenant_id": rec.tenant_id,
+                "event_id": rec.event_id,
+                "schema_version": rec.schema_version,
+            }
+            for rec in unique
+        ],
+        default=str,
     )
+    tenants = sorted({rec.tenant_id for rec in unique})
 
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # Hash-chain only rows that don't already exist (scoped to new rows),
+            # anchored to each tenant's current tail — all inside this txn so the
+            # tail we read is consistent with the rows we're about to append.
+            existing = {
+                (r["tenant_id"], r["event_id"], r["schema_version"])
+                for r in await conn.fetch(_BRONZE_EXISTING_KEYS_SQL, keys_json)
+            }
+            new_rows = [rows_by_key[rec.key] for rec in unique if rec.key not in existing]
+            prior_tail = {
+                r["tenant_id"]: r["integrity_hash"]
+                for r in await conn.fetch(_BRONZE_CHAIN_TAIL_SQL, tenants)
+            }
+            _chain_rows(new_rows, prior_tail)
+
+            bronze_json = json.dumps(
+                [_as_bronze_record_param(rows_by_key[rec.key]) for rec in unique],
+                default=str,
+            )
             returned = await conn.fetch(_BRONZE_INSERT_SQL, bronze_json)
             persisted = {
                 (r["tenant_id"], r["event_id"], r["schema_version"]) for r in returned
@@ -445,6 +635,8 @@ def _as_bronze_record_param(row: dict) -> dict:
         "payload_hash": row["payload_hash"],
         "source": row["source"],
         "source_tag": row["source_tag"],
+        "prev_hash": row.get("prev_hash"),
+        "integrity_hash": row.get("integrity_hash"),
     }
 
 
