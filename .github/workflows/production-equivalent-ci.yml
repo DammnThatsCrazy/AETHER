@@ -1,7 +1,8 @@
-name: Production-Equivalent CI (M1 + M2)
+name: Production-Equivalent CI (M1 + M2 + M4)
 
 # Phase-2 Program 4 — "A production-equivalent CI lane"
-# docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md, section 4, milestones M1 + M2.
+# docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md, section 4, milestones
+# M1 + M2 + M4.
 #
 # WHAT THIS IS: every OTHER backend workflow in .github/workflows/ runs with
 # AETHER_ENV=local, which makes repositories.repos.get_pool() return None, so
@@ -28,9 +29,15 @@ name: Production-Equivalent CI (M1 + M2)
 #     tests/unit/test_ingestion_v2.py still run in-memory under make ci-check and
 #     stay green as-is (they cover the sequential accept/duplicate/rollback
 #     semantics; the concurrency property they cannot prove is what moved here).
-#     M2 does not add kafka/outbox-relay (M3), does not touch measurement/
-#     attribution suites (M4), and is not a required check yet (M5). Those are
-#     later, separately-scoped milestones — see the program doc.
+#     M2 does not add kafka/outbox-relay (M3) and is not a required check yet
+#     (M5). Those are later, separately-scoped milestones — see the program doc.
+#   - M4 (this increment) extends the lane to the measurement/attribution
+#     repositories (conversion_repo / spend_repo / attribution_run_repo) via
+#     tests/prod_equivalent/test_real_stack_measurement_repos.py — the real
+#     ON CONFLICT / partial-unique / tenant-scope / FX-provenance properties the
+#     in-memory dict fallback cannot model. It does NOT migrate the full
+#     measurement/attribution unit-test suites (those stay in-memory under
+#     make ci-check); kafka/outbox-relay (M3) and required-check (M5) remain.
 #   - Adds no database migration and changes no runtime behavior; it only
 #     runs already-existing migrations against a fresh, ephemeral database.
 #
@@ -168,6 +175,20 @@ jobs:
         # so the shared asyncpg pool singleton stays on one process/event loop;
         # DATABASE_URL / REDIS_URL come from the job-level env.
         run: python -m pytest tests/prod_equivalent/test_real_stack_ingestion_concurrency.py -v -n0
+
+      - name: Run real-stack measurement/attribution repo tests (M4)
+        # M4: extends the lane beyond ingestion to the measurement/attribution
+        # repositories — conversion_repo / spend_repo / attribution_run_repo —
+        # which share bronze_bulk.py's exact get_pool()/in-memory-dict fallback.
+        # Forces their REAL Postgres branch and asserts what the dict cannot:
+        # the authority-ranked ON CONFLICT conversion merge + tenant isolation of
+        # a shared deduplication_key; idempotent spend replay yielding one row
+        # with a stable spend_record_id PK; the CURRENCY FX provenance round-trip
+        # through provenance JSONB + exchange_rate NUMERIC(18,8); and the
+        # "exactly one active run per (tenant_id, conversion_id)" invariant.
+        # Self-skips without DATABASE_URL, so make ci-check stays green. -n0 for
+        # the same shared-pool reason as the M2 step.
+        run: python -m pytest tests/prod_equivalent/test_real_stack_measurement_repos.py -v -n0
 
       - name: Diagnostics on failure
         if: failure()
