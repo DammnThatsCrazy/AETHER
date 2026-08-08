@@ -8,7 +8,7 @@ status: stable
 since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/routes.py
-last_synced_commit: "41c79d4"
+last_synced_commit: "ef4ceba"
 ---
 
 # Fraud Networks API Reference
@@ -22,8 +22,8 @@ a required `tenant_id` query parameter; a mismatch with the authenticated
 tenant returns 403.
 
 Permissions: read endpoints require `fraud:read`; all mutating endpoints
-(build, refresh, open-investigation, annotate, suppress, escalate) require
-`fraud:evaluate`.
+(build, refresh, open-investigation, annotate, suppress, escalate, takedown)
+require `fraud:evaluate`.
 
 Graph projection note: network writes are projected into the universal graph
 through the `GraphMutationGateway` (FRAUD_NETWORK `node_versioned`,
@@ -291,6 +291,41 @@ Mark the network as escalated for senior analyst or compliance review.
 **Request**: `{ "tenant_id": "t1", "reason": "…" }` (`reason` optional)
 
 **Response 200**: Returns the updated network with `status: "escalated"`.
+
+---
+
+## POST /v1/fraud/networks/{network_id}/takedown
+
+Take the network down **and invalidate the attribution it produced**. A takedown
+is the enforcement counterpart to a privacy erasure: instead of deleting PII it
+*voids the fraudulent attribution while retaining* the underlying
+touchpoints/conversions as fraud evidence (no tombstone). For every member
+identity of the network it calls the shared re-attribution invalidation service
+(Reliability Phase-2 Program 3, M3) with `reason="fraud_takedown"`; each affected
+conversion whose active run credits one of the network's now-voided touchpoints
+is superseded by a fresh zero-credit run — the same honest correction DSR erasure
+performs. The network is marked `status: "closed"`.
+
+**Permission**: `fraud:evaluate`
+
+**Request**: `{ "tenant_id": "t1", "reason": "…" }` (`reason` optional)
+
+**Response 200**: the updated network (`status: "closed"`) plus a `reattribution`
+summary. Per-conversion failures and scope-limit truncation are surfaced there
+(`partial_failure`, `truncated`) — never silently dropped — so the network is
+still taken down and the analyst can see what remained:
+
+```json
+{
+  "id": "net_…", "status": "closed",
+  "reattribution": {
+    "reason": "fraud_takedown",
+    "conversions_scanned": 12, "conversions_reattributed": 9,
+    "runs_deactivated": 9, "runs_created": 9,
+    "truncated": false, "errors": []
+  }
+}
+```
 
 ---
 

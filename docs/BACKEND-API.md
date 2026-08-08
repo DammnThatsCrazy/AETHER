@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "896ed23"
+last_synced_commit: "ef4ceba"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2687,6 +2687,7 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | POST | `/v1/fraud/networks/{network_id}/annotate` | `fraud:write` | Add annotation |
 | POST | `/v1/fraud/networks/{network_id}/suppress` | `fraud:write` | Suppress network |
 | POST | `/v1/fraud/networks/{network_id}/escalate` | `fraud:write` | Escalate network |
+| POST | `/v1/fraud/networks/{network_id}/takedown` | `fraud:evaluate` | Close network + invalidate the attribution it produced (re-attribution, retains evidence); returns a `reattribution` summary |
 
 ### Flow Trace (`/v1/flow-trace/*`)
 

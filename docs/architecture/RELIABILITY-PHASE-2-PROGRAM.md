@@ -12,15 +12,31 @@ toc_depth: 4
 
 # Aether Reliability Phase 2 — Architectural Programs
 
-> **This document is design only. Nothing described below is implemented.**
-> It contains no code changes, adds no database migration, and does not
-> alter any running behavior. It is a sequencing and architecture reference
-> for five multi-milestone programs that are out of scope for an immediate
-> reliability cleanup pass because each requires new schema, new services,
-> or a multi-release rollout rather than a same-PR fix. Every claim below
-> about "what exists today" was verified against the current repository
-> state at the time of writing; every claim about a proposed program is
-> explicitly a proposal, not a status report.
+> **This document is the design/sequencing reference for five multi-milestone
+> programs.** It was originally authored as design-only; some milestones have
+> since shipped (see **Landed milestones** below). Every claim about "what
+> exists today" was verified against the repository at authoring time; each
+> milestone marked landed has real code + tests behind it, and every milestone
+> not yet marked landed remains a proposal, not a status report.
+>
+> ### Landed milestones
+> - **M1 — all five programs** (initial reliability remediation PR): shared
+>   `hash_chain` primitive; Node `DurableEventQueue`; re-attribution on privacy
+>   erasure; the production-equivalent CI lane; the FX `PriceProvider`.
+> - **Program 1 (Ledger) M2** — `prev_hash`/`integrity_hash` on
+>   `bronze_sdk_events`, chained inside `ingest_many` (new rows only; NULL =
+>   documented pre-cutover boundary).
+> - **Program 3 (Re-attribution) M3** — invalidation generalized into
+>   `services/measurement/reattribution.py`, reused by privacy erasure and by a
+>   new fraud-network `takedown` flow.
+> - **Program 4 (Prod-equivalent CI) M2** — real-stack ingestion
+>   idempotency/concurrency tests (exactly-once under genuine racing).
+> - **Program 5 (Multi-currency) M2** — real FX rate + provenance recorded in
+>   `conversion_repo`/`spend_repo` upserts (no more hardcoded `1.0`; unpriced is
+>   flagged, never silent parity).
+>
+> Remaining milestones below (incl. Program 2's backend rollout M1–M3, and the
+> behavior-change / infra-gated milestones) are still design-only.
 
 ## Why these five and why they are Phase 2
 

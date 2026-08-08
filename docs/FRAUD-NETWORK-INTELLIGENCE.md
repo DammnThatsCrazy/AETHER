@@ -9,7 +9,7 @@ since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: "559be979"
+last_synced_commit: "ef4ceba"
 ---
 
 # Fraud Network Intelligence
@@ -179,10 +179,19 @@ All detectors are pure functions: no async, no I/O. They return `list[tuple[sign
 | Permission | Endpoints |
 |---|---|
 | `fraud:read` | GET endpoints, list, graph, members, evidence, timeline |
-| `fraud:evaluate` | build, refresh, annotate, suppress, escalate, open-investigation |
+| `fraud:evaluate` | build, refresh, annotate, suppress, escalate, open-investigation, takedown |
 
 All endpoints additionally require the `tenant_id` (body or query) to match
 the authenticated tenant.
+
+**Takedown → re-attribution.** `POST /{network_id}/takedown` marks the network
+`closed` and invalidates the fraudulent attribution it produced: for each member
+identity it calls the shared re-attribution invalidation service
+(`services/measurement/reattribution.py`, Reliability Phase-2 Program 3 M3) with
+`reason="fraud_takedown"`, superseding each affected active run with a fresh
+zero-credit run. Unlike a DSR erasure it retains the touchpoints/conversions as
+fraud evidence (no tombstone). The response carries a `reattribution` summary;
+partial failures and scope truncation are surfaced there, never dropped.
 
 ---
 
