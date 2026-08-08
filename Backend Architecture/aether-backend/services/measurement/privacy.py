@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
 from typing import Any
 
 from shared.logger.logger import get_logger
+from services.measurement.reattribution import reattribute_affected
 from services.measurement.repositories.touchpoint_repo import TouchpointRepository
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
@@ -27,8 +26,10 @@ _attribution_run_repo = AttributionRunRepository()
 # it to detect an over-limit profile, and when that happens it reports
 # reattribution_truncated=True (plus scanned counts) in its result and logs
 # a warning, instead of quietly under-covering re-attribution the way a bare
-# LIMIT would. See _reattribute_conversions' docstring for the related
-# amplification risk this same bound is deliberately kept for.
+# LIMIT would. See services/measurement/reattribution.py for the related
+# amplification risk this same bound is deliberately kept for; the per-conversion
+# deactivate/create-run core itself now lives in that shared service (Program 3
+# M3), which this handler delegates to with reason="privacy_erasure".
 _REATTRIBUTION_SCOPE_LIMIT = 2000
 
 
@@ -46,11 +47,14 @@ class MeasurementPrivacyHandler:
          conversion whose ACTIVE attribution run was built from touchpoints
          that step 1 just tombstoned, deactivates that stale run and
          supersedes it with a fresh, zero-credit run recording that the
-         conversion's attribution was voided by this erasure. This reuses
+         conversion's attribution was voided by this erasure. The
+         deactivate/create-run core is delegated to the generalized
+         ``services.measurement.reattribution.reattribute_affected`` service
+         (Program 3 M3) with ``reason="privacy_erasure"``; that service reuses
          the exact AttributionRunRepository primitives (create_run,
          deactivate_prior_runs) that attribution_engine.py and
          subscription_ltv.py already call in production — no attribution
-         model logic is reimplemented here. Scope is the erasure subject's
+         model logic is reimplemented. Scope is the erasure subject's
          OWN conversions only; a conversion in a *different* identity
          (e.g. another profile sharing a cluster) that happened to credit
          one of these touchpoints is a Program 3 M3 ("generalized
@@ -188,26 +192,36 @@ class MeasurementPrivacyHandler:
             errors.append(f"journey_rebuild: {exc}")
             logger.error("DSR erasure journey rebuild failed: %s", exc, extra={"tenant_id": tenant_id})
 
+        # Delegate the per-conversion deactivate/create-run core to the shared
+        # re-attribution invalidation service (Program 3 M3). Erasure passes the
+        # snapshot it already read pre-tombstone (candidate_conversion_ids) plus
+        # the touchpoints it just tombstoned (the voided set), so the service
+        # does no re-resolution here — the scope-discovery + truncation surfacing
+        # above stays this handler's own, keeping erasure's evidence dict
+        # byte-for-byte unchanged. ``run_repo=_attribution_run_repo`` routes the
+        # create/deactivate/update calls through THIS module's repo instance so
+        # existing erasure tests that monkeypatch it still intercept them.
+        #
         # Amplification risk (docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md
-        # §3 "Risks"): this loop does one create_run/deactivate_prior_runs/
+        # §3 "Risks"): that core does one create_run/deactivate_prior_runs/
         # update_run round trip PER affected conversion, synchronously, inside
-        # the same erasure job. A bulk DSR request or a large fraud-network
-        # takedown erasing many profiles in quick succession — or a single
-        # profile with many affected conversions, up to
-        # _REATTRIBUTION_SCOPE_LIMIT of them — can therefore turn into a load
-        # spike on attribution_runs. This needs the same throttle/off-peak
-        # guidance docs/BACKFILL-JOBS.md already states for backfills, applied
-        # to this trigger; that throttling is intentionally NOT implemented in
-        # this increment (Program 3 M1) and is left to a later milestone, but
-        # the risk must stay explicit here rather than silent.
+        # the same erasure job — a bulk DSR request, or a profile with up to
+        # _REATTRIBUTION_SCOPE_LIMIT affected conversions, can turn into a load
+        # spike on attribution_runs. Throttling is intentionally NOT implemented
+        # in this increment and is left to a later milestone; the risk stays
+        # explicit (see reattribution.py) rather than silent.
         conversions_reattributed = 0
         if tombstoned_touchpoint_ids and candidate_conversion_ids:
-            conversions_reattributed = await _reattribute_conversions(
+            reattribution = await reattribute_affected(
                 tenant_id,
-                candidate_conversion_ids,
-                tombstoned_touchpoint_ids,
-                errors,
+                reason="privacy_erasure",
+                conversions=candidate_conversion_ids,
+                voided_touchpoint_ids=tombstoned_touchpoint_ids,
+                scope_limit=_REATTRIBUTION_SCOPE_LIMIT,
+                run_repo=_attribution_run_repo,
             )
+            conversions_reattributed = reattribution.conversions_reattributed
+            errors.extend(reattribution.errors)
 
         return {
             "tenant_id": tenant_id,
@@ -223,124 +237,6 @@ class MeasurementPrivacyHandler:
             "errors": errors,
             "partial_failure": bool(errors),
         }
-
-
-async def _reattribute_conversions(
-    tenant_id: str,
-    conversion_ids: list[str],
-    tombstoned_touchpoint_ids: set[str],
-    errors: list[str],
-) -> int:
-    """Supersede the stale attribution run for every affected conversion.
-
-    "Affected" means the conversion's current ACTIVE run was built from at
-    least one of the touchpoints this erasure just tombstoned (its
-    ``input_touchpoint_ids`` intersects ``tombstoned_touchpoint_ids``) — i.e.
-    its touchpoint set just changed. Conversions with no active run, or whose
-    active run does not reference any tombstoned touchpoint, are left alone.
-
-    The conversion itself was just marked ``attribution_eligible=FALSE`` by
-    ``ConversionRepository.tombstone_for_profile`` (this same erasure), so it
-    can no longer be routed through ``AttributionEngine.run_for_conversion``
-    — that eligibility gate is a deliberate privacy control (see
-    ``tests/e2e/test_privacy_consent_flow.py::test_06_attribution_refuses_recompute_after_erasure``),
-    not something to work around. The correction that IS honest here is to
-    supersede the stale, now-wrong run with a zero-credit run recording that
-    this conversion's attribution was voided by the erasure — the same
-    create_run -> deactivate_prior_runs -> update_run(complete) shape
-    ``SubscriptionLTVService._create_unattributed_run`` already uses in
-    production, reusing ``AttributionRunRepository``'s run-creation
-    primitives rather than reimplementing any attribution/model logic.
-
-    Never raises: a per-conversion failure is appended to ``errors`` (the
-    same list ``handle_erasure`` already reports as ``partial_failure``) and
-    every other conversion is still attempted, so one bad conversion cannot
-    silently swallow the rest or turn into a blanket success.
-    """
-    reattributed = 0
-    for conversion_id in conversion_ids:
-        try:
-            prior_run = await _attribution_run_repo.get_active_run(tenant_id, conversion_id)
-            if prior_run is None:
-                continue  # nothing active to correct
-
-            input_ids = _json_id_set(prior_run.get("input_touchpoint_ids"))
-            voided_ids = input_ids & tombstoned_touchpoint_ids
-            if not voided_ids:
-                continue  # this run's credited touchpoints were not touched
-
-            now = datetime.now(timezone.utc).isoformat()
-            new_run = await _attribution_run_repo.create_run({
-                "tenant_id": tenant_id,
-                "conversion_id": conversion_id,
-                "model_type": prior_run.get("model_type", "last_touch"),
-                "model_version": prior_run.get("model_version", "1.0"),
-                "code_version": prior_run.get("code_version"),
-                "status": "running",
-                "currency": prior_run.get("currency", "USD"),
-                "eligible_revenue": prior_run.get("eligible_revenue"),
-                "trigger_reason": "privacy_erasure",
-                "prior_attribution_run_id": prior_run.get("attribution_run_id"),
-                "started_at": now,
-            })
-            await _attribution_run_repo.deactivate_prior_runs(tenant_id, conversion_id)
-            completed = await _attribution_run_repo.update_run(
-                new_run["attribution_run_id"],
-                {
-                    "status": "complete",
-                    "is_active": True,
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "credit_total": "0",
-                    "unattributed_credit": "1",
-                    "input_touchpoint_ids": [],
-                    "excluded_touchpoint_ids": sorted(voided_ids),
-                    "exclusion_reasons": {tp_id: "privacy_erasure" for tp_id in voided_ids},
-                    "trigger_reason": "privacy_erasure",
-                },
-                tenant_id=tenant_id,
-            )
-            if completed is None:
-                raise RuntimeError(
-                    f"attribution run {new_run['attribution_run_id']} disappeared before completion"
-                )
-
-            reattributed += 1
-            logger.info(
-                "DSR erasure: superseded stale attribution run %s -> %s for conversion %s "
-                "(voided touchpoints=%s)",
-                prior_run.get("attribution_run_id"),
-                new_run["attribution_run_id"],
-                conversion_id,
-                sorted(voided_ids),
-                extra={"tenant_id": tenant_id},
-            )
-        except Exception as exc:
-            errors.append(f"reattribution:{conversion_id}: {exc}")
-            logger.error(
-                "DSR erasure re-attribution failed for conversion %s: %s",
-                conversion_id, exc, extra={"tenant_id": tenant_id},
-            )
-    return reattributed
-
-
-def _json_id_set(value: Any) -> set[str]:
-    """Normalize an ``input_touchpoint_ids``-shaped field to a set of str ids.
-
-    Local/test mode stores whatever Python list was passed in; production
-    reads a JSONB column back, which some asyncpg/codec configurations
-    surface as a JSON string rather than a decoded list (the same defensive
-    shape ``attribution_engine.py`` already handles for this exact field).
-    """
-    if isinstance(value, (list, tuple, set)):
-        return {str(v) for v in value if v is not None}
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except (ValueError, TypeError):
-            return set()
-        if isinstance(parsed, list):
-            return {str(v) for v in parsed if v is not None}
-    return set()
 
 
 _handler = MeasurementPrivacyHandler()
