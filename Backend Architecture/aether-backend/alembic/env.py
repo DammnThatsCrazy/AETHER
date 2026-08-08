@@ -16,9 +16,23 @@ import os
 import re
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 from alembic import context
+
+# Alembic creates ``alembic_version.version_num`` as ``VARCHAR(32)`` by default.
+# This repo's revision ids are long, descriptive slugs — 13 of them exceed 32
+# characters (up to 47, e.g. ``20260816_payment_webhook_endpoint_active_unique``).
+# Against a genuinely fresh Postgres database that overflow raises
+# ``StringDataRightTruncation`` the moment Alembic stamps the first over-length
+# revision, so ``alembic upgrade head`` cannot complete — a real fresh-DB /
+# production-provisioning failure surfaced by the production-equivalent CI lane
+# but invisible to the in-memory ``AETHER_ENV=local`` path that never runs
+# Alembic. Widening the column is the documented Alembic remedy for long
+# revision ids (renaming the revisions would rewrite every ``down_revision`` /
+# ``depends_on`` reference and desync any already-migrated database). 255 leaves
+# generous headroom for future slugs.
+VERSION_NUM_LENGTH = 255
 
 config = context.config
 
@@ -77,6 +91,40 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _ensure_wide_version_table(connection) -> None:
+    """Guarantee ``alembic_version.version_num`` is wide enough for this repo.
+
+    Runs before ``context.run_migrations()`` so the version table already exists
+    (Alembic's own ``_ensure_version_table`` then finds it and leaves it alone)
+    with a column that can hold this repo's long revision ids. Idempotent and
+    backward compatible across every starting state:
+
+    * fresh database          → table created at ``VARCHAR(VERSION_NUM_LENGTH)``,
+                                 the ALTER is a no-op;
+    * DB Alembic already made  → ``CREATE ... IF NOT EXISTS`` is skipped, the
+      at the default 32          ALTER widens the existing column in place;
+    * DB already widened       → both statements are no-ops.
+
+    Postgres only — the driver check keeps this out of the way of the SQLite
+    fallbacks some tooling uses.
+    """
+    if connection.dialect.name != "postgresql":
+        return
+    connection.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS alembic_version ("
+            f" version_num VARCHAR({VERSION_NUM_LENGTH}) NOT NULL,"
+            " CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+        )
+    )
+    connection.execute(
+        text(
+            "ALTER TABLE alembic_version "
+            f"ALTER COLUMN version_num TYPE VARCHAR({VERSION_NUM_LENGTH})"
+        )
+    )
+
+
 def run_migrations_online() -> None:
     """Connect to the database and execute migrations."""
     cfg = config.get_section(config.config_ini_section) or {}
@@ -97,6 +145,9 @@ def run_migrations_online() -> None:
             # Alembic acquires pg_advisory_xact_lock during migration.
         )
         with context.begin_transaction():
+            # Must precede run_migrations() so the first version stamp of an
+            # over-length revision id does not overflow VARCHAR(32).
+            _ensure_wide_version_table(connection)
             context.run_migrations()
 
 

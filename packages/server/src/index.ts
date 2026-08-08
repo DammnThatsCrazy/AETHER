@@ -16,6 +16,7 @@
 //   await aether.flush();
 
 import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 
 import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@aether/shared';
 // Registry-generated purpose sets — hand-written copies here drifted to 9 of
@@ -41,6 +42,15 @@ function isCanonicalEventType(type: string): type is EventType {
 
 export { scrubSensitiveFields } from './scrubber';
 export { makeServerClient } from './client';
+// Opt-in disk-backed queue (Reliability Phase 2 program §2, milestone M4).
+// Not wired into AetherServerSDK's internal track()/flush() here — that
+// wiring (opt-in, then default, in the SDK client) is milestone M5. This
+// export only makes the standalone class reachable by package consumers,
+// since @aether/server's package.json "exports" map has no deep-import
+// subpath — without this line the class would be unbuildable-to-unreachable
+// for anyone outside this package.
+export { DurableEventQueue } from './durable-queue';
+export type { DurableQueueOptions } from './durable-queue';
 export type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose, BatchHealth } from './types';
 export type { SdkHealthSnapshot } from './health';
 export {
@@ -68,6 +78,11 @@ export class AetherServerSDK {
   /** Monotonic per-process event index, stamped into context.sequence.event so
    *  the backend can detect gaps/reordering in this emitter's stream. */
   private eventSequence = 0;
+  /** Per-process session/anonymous identity minted once. The canonical
+   *  ingestion envelope requires non-empty sessionId and anonymousId; a caller
+   *  may override either per event (event.sessionId / event.anonymousId). */
+  private readonly sessionId = randomUUID();
+  private readonly anonymousId = randomUUID();
 
   /** Typed helpers for common server observation patterns. */
   readonly observe: ReturnType<typeof makeServerClient>;
@@ -132,6 +147,14 @@ export class AetherServerSDK {
     const ts = event.timestamp ?? new Date().toISOString();
     const prepared = {
       ...event,
+      // Canonical BaseEvent identity the ingestion API requires (id/sessionId/
+      // anonymousId, all non-empty). id is minted per event so retries dedupe;
+      // sessionId/anonymousId fall back to the per-process identity.
+      // `||` (not `??`) so an empty-string id/sessionId/anonymousId is also
+      // replaced — the backend BaseEvent requires all three to be non-empty.
+      id: event.id || randomUUID(),
+      sessionId: event.sessionId || this.sessionId,
+      anonymousId: event.anonymousId || this.anonymousId,
       timestamp: ts,
       properties: event.properties ? scrubSensitiveFields(event.properties) : undefined,
       context: {
@@ -187,18 +210,27 @@ export class AetherServerSDK {
           item.events,
           grantedConsents,
         );
-        if (result.ok) {
+        if (result.ok && result.counters) {
+          // Confirmed delivery: credit only what the backend reported, never a
+          // fabricated "the whole batch landed".
+          const counters = result.counters;
           this.health.recordDelivered(item.events.length);
           const health: BatchHealth = {
-            accepted: result.counters?.accepted ?? item.events.length,
-            duplicate: result.counters?.duplicate ?? 0,
-            rejected: result.counters?.rejected ?? 0,
+            accepted: counters.accepted,
+            duplicate: counters.duplicate,
+            rejected: counters.rejected,
             // Server SDK sends consent as a hint and does not drop locally.
             dropped_by_consent: 0,
             queue_depth: this.queue.size,
           };
           this.lastBatchHealth = health;
           this.config.onBatchResult(health);
+        } else if (result.ok) {
+          // 2xx but no parseable acceptance counters — delivery is unconfirmed,
+          // so requeue rather than assume the batch landed. The minted event id
+          // makes the retry idempotent (backend dedups → duplicate).
+          this.queue.requeue(item);
+          this.health.recordFailed(item.events.length);
         } else if (result.status >= 500 || result.status === 429 || result.status === 0) {
           this.queue.requeue(item);
           this.health.recordFailed(item.events.length);

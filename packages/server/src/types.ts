@@ -47,10 +47,17 @@ export interface ServerEvent {
   type: string;
   userId?: string;
   anonymousId?: string;
+  sessionId?: string;
   properties?: Record<string, unknown>;
   context?: Record<string, unknown>;
   timestamp?: string;
-  messageId?: string;
+  /**
+   * Client-generated canonical event id — the backend idempotency key
+   * (packages/shared/ingestion-contract.ts). Minted per event when omitted so
+   * retries dedupe instead of duplicating. Named `id` to match the canonical
+   * BaseEvent envelope the ingestion API validates.
+   */
+  id?: string;
 }
 
 export interface AetherServerConfig {

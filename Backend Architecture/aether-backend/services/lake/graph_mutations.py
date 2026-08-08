@@ -28,7 +28,8 @@ async def build_wallet_protocol_edges(
     wallet_address: str,
 ) -> int:
     """Create INTERACTS_WITH edges from wallet to protocols based on Silver on-chain data."""
-    records = await silver_onchain.get_entity(wallet_address, "wallet")
+    # Global graph-building job with no owning tenant — explicit cross-tenant read.
+    records = await silver_onchain.get_entity(wallet_address, "wallet", tenant_id=None)
     count = 0
     for rec in records:
         protocol = rec.get("protocol")
@@ -70,7 +71,7 @@ async def build_wallet_social_edges(
     wallet_address: str,
 ) -> int:
     """Create identity edges from wallet to social profiles based on Silver identity data."""
-    records = await silver_identity.get_entity(wallet_address, "wallet")
+    records = await silver_identity.get_entity(wallet_address, "wallet", tenant_id=None)
     count = 0
     for rec in records:
         social_id = rec.get("social_id") or rec.get("entity_id")
@@ -105,7 +106,7 @@ async def build_governance_edges(
     entity_id: str,
 ) -> int:
     """Create governance participation edges from Silver governance data."""
-    records = await silver_governance.get_entity(entity_id, "voter")
+    records = await silver_governance.get_entity(entity_id, "voter", tenant_id=None)
     count = 0
     for rec in records:
         proposal_id = rec.get("proposal_id")

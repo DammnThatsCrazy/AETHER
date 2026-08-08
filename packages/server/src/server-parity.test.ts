@@ -122,6 +122,74 @@ describe('server SDK — surface stamping', () => {
   });
 });
 
+describe('server SDK — canonical envelope identity (id/sessionId/anonymousId)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('mints non-empty id/sessionId/anonymousId the ingestion API requires', async () => {
+    const { bodies } = captureFetch();
+    const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    sdk.track({ type: 'api_request_observed', properties: { path: '/a' } });
+    sdk.track({ type: 'api_request_observed', properties: { path: '/b' } });
+    await sdk.flush();
+    await sdk.shutdown();
+    const events = bodies.flatMap((b) => b.batch);
+    expect(events).toHaveLength(2);
+    for (const e of events) {
+      expect(typeof e.id).toBe('string');
+      expect(e.id.length).toBeGreaterThan(0);
+      expect(typeof e.sessionId).toBe('string');
+      expect(e.sessionId.length).toBeGreaterThan(0);
+      expect(typeof e.anonymousId).toBe('string');
+      expect(e.anonymousId.length).toBeGreaterThan(0);
+    }
+    // Distinct event ids (idempotency keys); stable per-process session/anon.
+    expect(events[0].id).not.toBe(events[1].id);
+    expect(events[0].sessionId).toBe(events[1].sessionId);
+    expect(events[0].anonymousId).toBe(events[1].anonymousId);
+  });
+
+  it('honours a caller-supplied event id and session/anonymous ids', async () => {
+    const { bodies } = captureFetch();
+    const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    sdk.track({ type: 'api_request_observed', id: 'evt-fixed-1', sessionId: 's-1', anonymousId: 'a-1' });
+    await sdk.flush();
+    await sdk.shutdown();
+    const e = bodies[0].batch[0];
+    expect(e.id).toBe('evt-fixed-1');
+    expect(e.sessionId).toBe('s-1');
+    expect(e.anonymousId).toBe('a-1');
+  });
+});
+
+describe('server SDK — delivery crediting (no fabricated acceptance)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('does NOT credit delivery on a 2xx without parseable counters (requeues)', async () => {
+    (globalThis as unknown as { fetch: unknown }).fetch = vi.fn(async () => ({
+      ok: true, status: 200, headers: { get: () => null }, json: async () => ({}),
+    }));
+    const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    sdk.track({ type: 'api_request_observed' });
+    await sdk.flush();
+    // Unconfirmed delivery: not credited, and no BatchHealth reported.
+    expect(sdk.healthSnapshot().eventsDelivered).toBe(0);
+    expect(sdk.healthSnapshot().eventsFailed).toBe(1);
+    expect(sdk.lastBatchResult()).toBeNull();
+    await sdk.shutdown();
+  });
+
+  it('credits from backend counters on a 2xx with a counter body', async () => {
+    captureFetch();
+    const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    sdk.track({ type: 'api_request_observed' });
+    await sdk.flush();
+    const health = sdk.lastBatchResult();
+    expect(health).not.toBeNull();
+    expect(health!.accepted).toBe(1);
+    await sdk.shutdown();
+  });
+});
+
 describe('server SDK — recursive scrubber (cycle/depth safe)', () => {
   it('redacts sensitive keys nested in objects and arrays', () => {
     const out = scrubSensitiveFields({

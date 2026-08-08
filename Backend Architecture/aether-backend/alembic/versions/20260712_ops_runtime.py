@@ -12,7 +12,14 @@ from alembic import op
 revision = "20260712_ops_runtime"
 down_revision = "20260711_targeting"
 branch_labels = None
-depends_on = None
+# Cross-branch dependency: this migration indexes agent_worker_runs, which is
+# created by 20260604_agent_control_plane on a different branch of the graph.
+# Without this declaration Alembic's topological sort is not guaranteed to
+# apply the table-creating revision first, so `alembic upgrade head` against a
+# fresh database can fail with "relation agent_worker_runs does not exist"
+# (surfaced by the production-equivalent CI lane; harmless to already-migrated
+# databases, which are past both revisions).
+depends_on = ("20260604_agent_control_plane",)
 
 # Backs the get_store(...) durable stores used by
 # services/agent/briefings.py and services/agent/ops_alerts.py.

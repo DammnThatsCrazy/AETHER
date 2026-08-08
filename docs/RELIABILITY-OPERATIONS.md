@@ -21,7 +21,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "559be979"
+last_synced_commit: "d7dc6d8"
 ---
 # Reliability Operations
 
@@ -77,6 +77,11 @@ holding only the `admin` permission is not a Kyber operator.
 - Paging/alerting integrations and on-call schedules.
 - Status-page subscriptions/notifications for tenants.
 - Historical SLO trend storage and error-budget burn-rate alerting.
+- Five deeper, multi-milestone architectural programs (truth-chain event
+  ledger, a single `/v1/batch` ingestion owner + Node SDK durability,
+  deletion/replay/re-attribution, a production-equivalent CI lane, and
+  multi-currency) are sequenced as design-only proposals in
+  `docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md` — not yet implemented.
 
 ## Models
 

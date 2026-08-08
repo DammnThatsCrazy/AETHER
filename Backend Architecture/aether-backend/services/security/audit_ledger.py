@@ -6,13 +6,19 @@ event for the same tenant, so deletion or reordering is detectable.
 
 The ledger answers: who accessed what, who approved what, what policy allowed or
 blocked an action.
+
+The hash-chain math itself (``compute_integrity_hash`` / ``verify_chain``) now
+lives in ``shared/integrity/hash_chain.py`` as a table-agnostic primitive —
+see ``docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md`` Program 1, M1. This
+module owns only the audit-event-specific pieces: which fields are canonical,
+the per-tenant chain-tail cache, and the audit-specific v1/v2 hash-shape
+tolerance. Behavior is unchanged from before the extraction.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 from typing import Any, Optional
 
+from shared.integrity import hash_chain
 from shared.logger.logger import get_logger
 
 from .contracts import (
@@ -33,8 +39,11 @@ _TENANT_TAIL: dict[str, str] = {}
 _TENANT_SEQ: dict[str, int] = {}
 
 
-def _canonical(event: SecurityAuditEvent, prev_hash: str, *, include_detail: bool = True) -> str:
-    payload = {
+def _canonical_fields(event: SecurityAuditEvent, *, include_detail: bool = True) -> dict[str, Any]:
+    """The audit event's canonical fields to hash (excludes prev_hash — the
+    shared primitive adds that itself so every caller chains consistently).
+    """
+    payload: dict[str, Any] = {
         "audit_event_id": event.audit_event_id,
         "tenant_id": event.tenant_id,
         "actor_id": event.actor_id,
@@ -48,7 +57,6 @@ def _canonical(event: SecurityAuditEvent, prev_hash: str, *, include_detail: boo
         # created_at is intentionally excluded: the persistence layer assigns its
         # own created_at on insert, so hashing it would break verification. Order
         # and tamper-evidence come from the chained prev_hash + immutable ids.
-        "prev_hash": prev_hash,
     }
     if include_detail:
         # v2: persisted "what / from where" detail is part of the tamper-evident
@@ -57,11 +65,13 @@ def _canonical(event: SecurityAuditEvent, prev_hash: str, *, include_detail: boo
         payload["metadata"] = event.metadata
         payload["ip_address"] = event.ip_address
         payload["user_agent"] = event.user_agent
-    return json.dumps(payload, sort_keys=True, default=str)
+    return payload
 
 
 def compute_integrity_hash(event: SecurityAuditEvent, prev_hash: str = "", *, include_detail: bool = True) -> str:
-    return hashlib.sha256(_canonical(event, prev_hash, include_detail=include_detail).encode("utf-8")).hexdigest()
+    return hash_chain.compute_integrity_hash(
+        _canonical_fields(event, include_detail=include_detail), prev_hash
+    )
 
 
 class AuditLedger:
@@ -122,37 +132,47 @@ class AuditLedger:
         Events are chained per tenant (chain_key = tenant_id or ""), so a global
         verification (tenant_id omitted) must track a separate previous hash per
         chain — otherwise the first event of the second tenant would be compared
-        against the first tenant's tail and falsely reported as broken.
+        against the first tenant's tail and falsely reported as broken. The
+        walk/compare/advance mechanics themselves are the shared, table-agnostic
+        ``hash_chain.verify_chain`` primitive; this method supplies only the
+        audit-event-specific field/partition/variant accessors.
         """
         raw_events = (
             await self._repo.list_for_tenant(tenant_id or "", limit=10_000)
             if tenant_id else await self._repo.list_all(limit=10_000)
         )
-        events = sorted(
-            raw_events,
-            key=lambda e: (e.get("tenant_id") or "", e.get("created_at", ""), e.get("_chain_seq", 0)),
-        )
-        prev_by_chain: dict[str, str] = {}
-        broken: list[str] = []
-        for raw in events:
-            ev = SecurityAuditEvent(**raw)
-            chain_key = ev.tenant_id or ""
-            prev = prev_by_chain.get(chain_key, "")
+        # (raw dict, parsed model) pairs — kept together because `_chain_seq` is
+        # a repository-only bookkeeping field, not part of the SecurityAuditEvent
+        # schema, so it must be read off the raw dict for sort ordering.
+        parsed = [(raw, SecurityAuditEvent(**raw)) for raw in raw_events]
+
+        result = hash_chain.verify_chain(
+            parsed,
+            partition_key=lambda item: item[1].tenant_id or "",
+            sort_key=lambda item: (
+                item[1].tenant_id or "",
+                item[0].get("created_at", ""),
+                item[0].get("_chain_seq", 0),
+            ),
             # v2 events hash metadata/ip/user_agent; pre-existing v1 events do
             # not. Accept either so historical, untouched rows verify cleanly
             # after the canonical shape changed (backcompat), while still
-            # detecting tampering of v2 events.
-            expected_v2 = compute_integrity_hash(ev, prev, include_detail=True)
-            expected_v1 = compute_integrity_hash(ev, prev, include_detail=False)
-            if ev.integrity_hash not in (expected_v2, expected_v1):
-                broken.append(ev.audit_event_id)
-            prev_by_chain[chain_key] = ev.integrity_hash or expected_v2
+            # detecting tampering of v2 events. v2 is listed first so it is the
+            # canonical fallback the shared primitive advances the chain on
+            # when a record's stored hash is missing.
+            canonical_field_variants=lambda item: [
+                _canonical_fields(item[1], include_detail=True),
+                _canonical_fields(item[1], include_detail=False),
+            ],
+            stored_hash=lambda item: item[1].integrity_hash,
+            record_id=lambda item: item[1].audit_event_id,
+        )
         return {
             "tenant_id": tenant_id,
-            "events_checked": len(events),
-            "chains_verified": len(prev_by_chain),
-            "chain_intact": not broken,
-            "broken_event_ids": broken,
+            "events_checked": result["records_checked"],
+            "chains_verified": result["chains_verified"],
+            "chain_intact": result["chain_intact"],
+            "broken_event_ids": result["broken_record_ids"],
         }
 
 

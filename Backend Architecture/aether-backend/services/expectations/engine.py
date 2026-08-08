@@ -50,7 +50,15 @@ def _parse_event_time(event: dict) -> Optional[datetime]:
     """Parse an event's canonical ``created_at`` to an aware UTC instant, or None.
 
     Lets callers window by real event-time instead of list position (events[:20])
-    or lexical string comparison."""
+    or lexical string comparison.
+
+    Deliberately NOT delegated to ``shared.common.common.parse_event_time``:
+    that helper mirrors ``BaseEvent.validate_timestamp`` and ACCEPTS a naive
+    (timezone-less) ISO string by assuming UTC, whereas ``parse_instant_strict``
+    below REJECTS naive values outright (``timestamp_naive``) per the Temporal
+    Integrity kernel's platform invariant (see ``shared/temporal/instant.py``).
+    Swapping in the shared helper would silently loosen that rejection, so the
+    two parsers are intentionally kept separate."""
     raw = event.get("created_at", "")
     if not raw:
         return None
@@ -116,7 +124,9 @@ class ExpectationEngine:
     ) -> list[dict]:
         """Detect contradictory identity evidence from multiple sources."""
         signals = []
-        identity_records = await silver_identity.get_entity(entity_id, "wallet")
+        identity_records = await silver_identity.get_entity(
+            entity_id, "wallet", tenant_id=tenant_id
+        )
 
         # Check for conflicting source claims about the same entity
         sources_seen: dict[str, list[dict]] = {}
@@ -335,7 +345,7 @@ class ExpectationEngine:
             ("onchain", silver_onchain),
             ("social", silver_social),
         ]:
-            records = await repo.get_entity(entity_id, "wallet")
+            records = await repo.get_entity(entity_id, "wallet", tenant_id=tenant_id)
             if not records:
                 continue
 

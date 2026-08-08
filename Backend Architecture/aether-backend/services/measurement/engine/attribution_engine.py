@@ -16,6 +16,7 @@ from services.measurement.repositories.attribution_run_repo import AttributionRu
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
 from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+from shared.common.common import parse_event_time
 
 logger = logging.getLogger("aether.measurement.attribution_engine")
 
@@ -206,7 +207,13 @@ class AttributionEngine:
             exclusion_reasons: dict[str, str] = {}
 
             occurred_at_str = conversion.get("occurred_at", "")
-            conversion_ts = _parse_ts(occurred_at_str) or datetime.now(timezone.utc)
+            conversion_ts = parse_event_time(occurred_at_str)
+            if conversion_ts is None:
+                # A conversion with no valid event time cannot anchor a lookback
+                # window. Silently substituting now() widens the window and
+                # over-credits touchpoints, so fail the run with a surfaced
+                # reason (recorded as failure_reason by the except below).
+                raise ValueError("invalid_conversion_timestamp")
             click_cutoff = conversion_ts - timedelta(hours=effective_lookback_hours)
             view_cutoff = conversion_ts - timedelta(hours=effective_view_lookback_hours)
 
@@ -477,9 +484,16 @@ class AttributionEngine:
         Neither run is marked is_active=TRUE.
         """
         results: list[dict[str, Any]] = []
+        skipped_invalid_ts: list[str] = []
         for conv_id in conversion_ids:
             conversion = await self._conversion_repo.get(tenant_id, conv_id)
             if conversion is None:
+                continue
+            conversion_ts = parse_event_time(conversion.get("occurred_at"))
+            if conversion_ts is None:
+                # No valid conversion event time — skip rather than anchoring the
+                # comparison window to now() (which would over-credit).
+                skipped_invalid_ts.append(conv_id)
                 continue
             if conversion.get("profile_id"):
                 identity_type = "profile"
@@ -499,8 +513,7 @@ class AttributionEngine:
                 tp for tp in raw_touchpoints
                 if _touchpoint_exclusion_reason(
                     tp,
-                    conversion_ts=_parse_ts(conversion.get("occurred_at"))
-                    or datetime.now(timezone.utc),
+                    conversion_ts=conversion_ts,
                     click_cutoff=datetime.min.replace(tzinfo=timezone.utc),
                     view_cutoff=datetime.min.replace(tzinfo=timezone.utc),
                     identity_confidence_min=0.0,
@@ -509,7 +522,6 @@ class AttributionEngine:
                     engaged_view_threshold_ms=0,
                 ) is None
             ]
-            conversion_ts = _parse_ts(conversion.get("occurred_at")) or datetime.now(timezone.utc)
 
             result_a = await _resolver.resolve(
                 user_id=profile_id or conv_id,
@@ -538,6 +550,7 @@ class AttributionEngine:
             "model_b": model_b,
             "conversion_count": len(results),
             "comparisons": results,
+            "skipped_invalid_timestamp": skipped_invalid_ts,
         }
 
 
@@ -592,7 +605,7 @@ def _comms_eligibility(tp: dict[str, Any]) -> tuple[bool, Optional[str]]:
 def _build_resolver_touchpoints(raw: list[dict[str, Any]]) -> list[Touchpoint]:
     result = []
     for tp in raw:
-        ts = _parse_ts(tp.get("occurred_at")) or datetime.now(timezone.utc)
+        ts = parse_event_time(tp.get("occurred_at")) or datetime.now(timezone.utc)
         # Carry the same immutable identity and source snapshot the resolver
         # receives on the production path.
         props = _touchpoint_to_resolver_dict(tp)["properties"]
@@ -665,7 +678,7 @@ def _touchpoint_exclusion_reason(
     ):
         return "fraud_policy"
 
-    tp_ts = _parse_ts(tp.get("occurred_at"))
+    tp_ts = parse_event_time(tp.get("occurred_at"))
     if tp_ts is None:
         return "missing_timestamp"
     if tp_ts > conversion_ts:
@@ -720,16 +733,4 @@ def _to_decimal(value: Any) -> Optional[Decimal]:
     try:
         return Decimal(str(value))
     except Exception:
-        return None
-
-
-def _parse_ts(value: Any) -> Optional[datetime]:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    except (ValueError, AttributeError):
         return None

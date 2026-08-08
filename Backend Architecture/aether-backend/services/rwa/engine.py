@@ -117,7 +117,7 @@ async def compute_exposure(
 
     # Inferred exposure from on-chain data
     if include_inferred:
-        onchain_records = await silver_onchain.get_entity(entity_id, "wallet")
+        onchain_records = await silver_onchain.get_entity(entity_id, "wallet", tenant_id=tenant_id)
         for rec in onchain_records:
             if rec.get("entity_type") == "token_holder":
                 exposures.append({

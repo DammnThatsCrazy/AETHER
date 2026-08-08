@@ -87,7 +87,11 @@ def upgrade() -> None:
         sa.Column(
             "operator_review_required",
             ARRAY(TEXT),
-            server_default="ARRAY['P0','P1']",
+            # Must be a raw SQL expression, not a quoted string literal — a
+            # plain string emits DEFAULT 'ARRAY[...]' which Postgres cannot
+            # cast to text[] (fresh-DB migration failure surfaced by the
+            # production-equivalent CI lane).
+            server_default=sa.text("ARRAY['P0','P1']"),
         ),
         sa.Column("auto_propagate_on_approve", sa.Boolean, server_default="true"),
         sa.Column("auto_suppress_on_expire", sa.Boolean, server_default="true"),
@@ -150,7 +154,10 @@ def upgrade() -> None:
         sa.Column(
             "severity_filter",
             ARRAY(TEXT),
-            server_default="ARRAY['P0','P1','P2']",
+            # Raw SQL expression, not a quoted string literal (see the
+            # operator_review_required column above) — Postgres cannot cast
+            # the string 'ARRAY[...]' to text[].
+            server_default=sa.text("ARRAY['P0','P1','P2']"),
         ),
         sa.Column("event_type_filter", ARRAY(TEXT)),
         sa.Column("active", sa.Boolean, server_default="true"),

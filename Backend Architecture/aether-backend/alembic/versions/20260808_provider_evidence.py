@@ -46,7 +46,7 @@ _DDL = """
     CREATE TABLE IF NOT EXISTS provider_evidence (
         id TEXT PRIMARY KEY,
         tenant_id TEXT,
-        data JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+        data JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );

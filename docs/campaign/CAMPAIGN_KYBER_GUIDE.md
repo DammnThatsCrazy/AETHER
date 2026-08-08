@@ -9,7 +9,7 @@ source_files:
   - Backend Architecture/aether-backend/services/traffic/repair.py
   - frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx
   - frontend/kyber/src/pages/measurement/kyber-measurement-ops-page.tsx
-last_synced_commit: "99da74c0"
+last_synced_commit: "22c9879"
 ---
 
 # Campaign Intelligence — Kyber Operator Guide

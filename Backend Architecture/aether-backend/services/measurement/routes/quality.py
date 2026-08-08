@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query, Request
 from shared.common.common import APIResponse
 from shared.logger.logger import get_logger
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-from services.measurement.repositories.connector_repo import ConnectorRepository
+from services.measurement.repositories.measurement_connector_repo import MeasurementConnectorRepository
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.spend_repo import SpendRepository
 from services.measurement.repositories.touchpoint_repo import TouchpointRepository
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/v1/measurement", tags=["Measurement Quality"])
 
 _run_repo = AttributionRunRepository()
 _conversion_repo = ConversionRepository()
-_connector_repo = ConnectorRepository()
+_connector_repo = MeasurementConnectorRepository()
 _spend_repo = SpendRepository()
 _touchpoint_repo = TouchpointRepository()
 
