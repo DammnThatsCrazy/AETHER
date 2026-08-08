@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "c1969d0"
+last_synced_commit: "bac7f92"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -1164,6 +1164,18 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | GET | `/v1/diagnostics/commerce/reconciliation-drift` | Payment intents with no corresponding settlement event (`commerce:read`) |
 
 All general diagnostics endpoints require `admin` permission. Commerce diagnostics require `commerce:read`.
+
+**x402 environment & credential-only verification.** Every authorization,
+receipt, and settlement carries a credential `environment` (`sandbox` | `live`)
+resolved server-side from the tenant's x402 capability activation state — never
+from the client. Verification resolves the tenant's own RPC endpoint+key pair
+from the credential authority (atomic `{url, api_key, auth_mode}`); a deployed
+environment with no configured pair yields the `verification_unavailable`
+verdict (fail-closed). `GET /v1/x402/commerce/health` derives its status from
+real facilitator health + settlement backlog (never a hardcoded healthy).
+Provision RPC/facilitator credentials via the credential API (providers
+`rpc_evm_base` / `rpc_svm_mainnet` / … slot `rpc_endpoint_pair`; facilitator
+providers slot `facilitator_api_key`).
 
 **Query Parameters (GET /errors):**
 - `service` (optional) — filter by service name

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "45067ae"
+last_synced_commit: "bac7f92"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -297,4 +297,4 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 
 **Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
 
-Direct on-chain RPC verification is now implemented for EVM (Base) and Solana chains via `_verify_evm()` and `_verify_solana()` in `verification.py`. These run as the fallback path when facilitator delegation is unavailable, active in all non-local environments. Arbitrary EVM-compatible chains beyond Base are not yet supported; adding a new chain requires a `_ASSET_CONTRACT` entry and an RPC URL setting.
+Direct on-chain RPC verification is implemented for EVM (Base) and Solana chains via `_verify_evm()` and `_verify_solana()` in `verification.py`. These run when facilitator delegation is unavailable, active in all non-local environments. As of the credential-only x402 closure, RPC is resolved **per-tenant** from the credential authority (atomic `{url, api_key, auth_mode}`; providers `rpc_evm_base` / `rpc_svm_mainnet` / …) rather than a deployment-global URL; a deployed environment with no configured pair returns the `verification_unavailable` verdict (fail-closed). Verification additionally binds the payer and enforces finality (confirmation depth / `finalized` commitment) and strict asset decimals. Arbitrary EVM-compatible chains beyond Base are not yet supported; adding a new chain requires a `_ASSET_CONTRACT` entry and an RPC provider mapping.

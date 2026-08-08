@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "45067ae"
+last_synced_commit: "bac7f92"
 ---
 # Commerce Operator Runbook
 
@@ -70,7 +70,22 @@ last_synced_commit: "45067ae"
 2. If malicious replay: revoke approval via `POST /v1/approvals/{id}/revoke`.
 3. Revoke entitlement: `POST /v1/entitlements/{id}/revoke`.
 
-## 5. Reconciliation drift (graph vs lake)
+## 5. Settlement reconciliation backlog
+
+**Symptom:** PENDING settlements accumulate; `x402_reconciliation_cursor`
+`last_pending` climbs across runs.
+
+**Steps:**
+1. The `X402ReconciliationWorker` (`services/x402/reconciliation.py`) re-checks
+   each PENDING settlement against the tenant's RPC and advances it to SETTLED
+   only on confirmed finality; a reverted/underpaid/payer-mismatched payment is
+   failed. Persistent PENDING means `verification_unavailable` (RPC not
+   configured/reachable) or `not_finalized` — check the tenant's
+   `rpc_endpoint_pair` credential and RPC health, not the worker.
+2. The worker skips tenants whose x402 capability is SUSPENDED (kill switch) —
+   resume the capability to re-enable reconciliation.
+
+## 6. Reconciliation drift (graph vs lake)
 
 **Symptom:** Nightly job reports drift > 0.
 
