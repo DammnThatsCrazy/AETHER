@@ -154,7 +154,10 @@ def upgrade() -> None:
         sa.Column(
             "severity_filter",
             ARRAY(TEXT),
-            server_default="ARRAY['P0','P1','P2']",
+            # Raw SQL expression, not a quoted string literal (see the
+            # operator_review_required column above) — Postgres cannot cast
+            # the string 'ARRAY[...]' to text[].
+            server_default=sa.text("ARRAY['P0','P1','P2']"),
         ),
         sa.Column("event_type_filter", ARRAY(TEXT)),
         sa.Column("active", sa.Boolean, server_default="true"),
