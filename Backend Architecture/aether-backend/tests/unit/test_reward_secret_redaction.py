@@ -93,14 +93,47 @@ async def test_configure_and_get_rail_routes_return_redacted_config():
     )
     created = await configure_rail(request, body)
     created_data = created["data"] if isinstance(created, dict) and "data" in created else created
-    assert created_data["config"]["signing_secret"] == "<redacted>"
-    assert created_data["config"]["has_signing_secret"] is True
+    # tenant_webhook dual-writes the secret into the credential authority and
+    # replaces it with a secret_ref — the plaintext key is GONE entirely, not
+    # merely redacted, and a resolvable secret_ref is persisted instead.
+    assert "signing_secret" not in created_data["config"]
+    assert created_data["config"]["secret_ref"].startswith(
+        "credref://rewards/tenant_webhook/"
+    )
 
     listed = await list_rails(request)
     listed_data = listed["data"] if isinstance(listed, dict) and "data" in listed else listed
     for rec in listed_data:
+        # never any plaintext secret in a list response
         assert rec.get("config", {}).get("signing_secret") in (None, "<redacted>")
 
     got = await get_rail(request, created_data["id"])
     got_data = got["data"] if isinstance(got, dict) and "data" in got else got
-    assert got_data["config"]["signing_secret"] == "<redacted>"
+    assert "signing_secret" not in got_data["config"]
+    assert got_data["config"]["secret_ref"].startswith("credref://rewards/")
+
+
+@pytest.mark.asyncio
+async def test_non_webhook_rail_config_still_redacted_defensively():
+    """A non-tenant_webhook rail carrying an inline secret is redacted (the
+    dual-write path is tenant_webhook-specific; other rails must still never
+    echo secret material)."""
+    from starlette.requests import Request as StarletteRequest
+
+    from services.rewards.routes import RailConfigCreate, configure_rail
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = StarletteRequest(
+        {"type": "http", "method": "POST", "path": "/", "headers": []}, receive
+    )
+    body = RailConfigCreate(
+        rail="manual_export",
+        enabled=False,
+        config={"api_key": "sk_should_be_redacted"},
+    )
+    created = await configure_rail(request, body)
+    data = created["data"] if isinstance(created, dict) and "data" in created else created
+    assert data["config"]["api_key"] == "<redacted>"
+    assert data["config"]["has_api_key"] is True

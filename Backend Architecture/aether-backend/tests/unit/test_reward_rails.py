@@ -43,7 +43,15 @@ from services.rewards.rails import (
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # Robust against asyncio-auto-mode tests having closed the thread's
+    # loop earlier in the same worker: drive on a fresh loop each call.
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
 
 
 def _make_decision(

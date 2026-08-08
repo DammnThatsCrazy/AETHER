@@ -504,7 +504,7 @@ class OnchainClaimAdapter(RewardRailAdapter):
         env = os.getenv("AETHER_ENV", "local").lower()
         is_local = env in ("local", "test")
 
-        signer_key = self._resolve_signer_key(is_local)
+        signer_key = await self._resolve_signer_key(tenant_id, is_local)
         chain_id = int(campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
         contract_address = campaign.get("contract_address") or os.getenv(
             "EVM_CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3"
@@ -589,21 +589,28 @@ class OnchainClaimAdapter(RewardRailAdapter):
             },
         }
 
-    def _resolve_signer_key(self, is_local: bool) -> str:
-        key = os.environ.get("ORACLE_SIGNER_KEY", "")
-        disable_local_in_prod = os.getenv("REWARD_DISABLE_LOCAL_SIGNER_IN_PROD", "1") == "1"
+    async def _resolve_signer_key(self, tenant_id: str, is_local: bool) -> str:
+        """Tenant-scoped signer resolution through the credential authority.
 
-        if not key:
-            if is_local:
-                return self._TEST_KEY
-            raise RuntimeError(
-                "ORACLE_SIGNER_KEY must be set in non-local environments. "
-                "Configure via REWARD_SIGNER_KEY_REF pointing to a secret manager entry."
-            )
-        if key == self._TEST_KEY and not is_local and disable_local_in_prod:
-            raise RuntimeError(
-                "Default Hardhat/Anvil test key detected in non-local environment. "
-                "Configure ORACLE_SIGNER_KEY via secret manager (REWARD_SIGNER_KEY_REF)."
+        Local/test keeps the env-var/Hardhat bootstrap; everywhere else the
+        tenant's ``reward_signer`` credential is the ONLY source (fail-closed —
+        the deployment-global ORACLE_SIGNER_KEY is retired from deployed
+        paths). The Hardhat dev key is refused outside local regardless of how
+        it was supplied.
+        """
+        from services.rewards.signing import (
+            SignerUnavailableError,
+            resolve_reward_signer,
+            reward_credential_environment,
+        )
+
+        key = await resolve_reward_signer(
+            tenant_id, reward_credential_environment(), "evm"
+        )
+        if key == self._TEST_KEY and not is_local:
+            raise SignerUnavailableError(
+                "Default Hardhat/Anvil test key detected in non-local environment; "
+                "supply a real tenant reward_signer credential."
             )
         return key
 

@@ -114,12 +114,31 @@ Required fields per registration:
 
 ## Signer Key Management
 
-In non-local environments:
+Reward proof signer keys are **tenant-scoped credentials** resolved through the
+durable credential authority — never a deployment-global environment variable.
+`services/rewards/signing.py::resolve_reward_signer(tenant_id, environment,
+chain_family)` is the only sanctioned path:
 
-- `ORACLE_SIGNER_KEY` must be set via secret manager reference (`REWARD_SIGNER_KEY_REF`).
-- The default Hardhat/Anvil test key (`ac0974bec...`) is blocked by `REWARD_DISABLE_LOCAL_SIGNER_IN_PROD`.
-- Key rotation via `POST /v1/oracle/rotate` updates the signer and all future proofs.
-  Existing unexpired proofs remain valid until their expiry.
+- Production/staging: the tenant's `reward_signer` provider slot
+  (`evm_reward_signer_key` / `svm_reward_signer_key`) for the credential
+  environment (`sandbox` | `live`), stored KMS-encrypted, versioned, rotatable,
+  and revocable. The slot's `key_derivation_check` validation derives the public
+  identity (secp256k1 address / ed25519 verify key) to prove the material is a
+  usable signing key before activation.
+- Local/test only: `ORACLE_SIGNER_KEY` (or the Hardhat dev key) as a
+  credential-free bootstrap. **There is no environment-variable fallback
+  outside local/test** — a tenant with no ACTIVE `reward_signer` credential
+  gets `SignerUnavailableError` (fail-closed) and the capability stays at
+  `credential_waiting`. The retired global `ORACLE_SIGNER_KEY` no longer signs
+  any tenant's proofs in a deployed environment, and the module no longer reads
+  a signer key at import time.
+- Contract-registry verification (`POST /v1/rewards/contracts/{id}/verify`)
+  compares `oracle_signer_address` against the tenant's **resolved** signer
+  (fail-closed: verification never passes if `eth_account` is unavailable or the
+  signer cannot be resolved).
+- Credential rotation demotes bound capabilities to `credential_supplied`
+  (re-certification required); revocation demotes to `revoked` — propagated to
+  the capability lifecycle authority automatically.
 - On the smart contract side, oracle rotation uses `rotateOracle(oldOracle, newOracle)` to
   keep the on-chain oracle address in sync.
 

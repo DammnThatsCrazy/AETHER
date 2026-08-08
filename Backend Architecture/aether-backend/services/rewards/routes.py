@@ -84,38 +84,14 @@ _PROOF_EXPIRY_SECONDS = int(os.environ.get("PROOF_EXPIRY_SECONDS", "3600"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# SIGNER KEY GUARD
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _get_oracle_signer_key() -> str:
-    """Return the oracle signer private key with production safety guard."""
-    key = os.environ.get("ORACLE_SIGNER_KEY", "")
-    env = os.getenv("AETHER_ENV", "local").lower()
-
-    if not key:
-        if env in ("local", "test"):
-            return _HARDHAT_TEST_KEY
-        raise RuntimeError(
-            "ORACLE_SIGNER_KEY must be configured via REWARD_SIGNER_KEY_REF or "
-            "ORACLE_SIGNER_KEY in non-local environments. "
-            "Do not use the default test key in production."
-        )
-
-    if key == _HARDHAT_TEST_KEY and env not in ("local", "test"):
-        raise RuntimeError(
-            "Default Hardhat/Anvil test key detected in non-local environment. "
-            "Set ORACLE_SIGNER_KEY via secret manager. "
-            "Set REWARD_DISABLE_LOCAL_SIGNER_IN_PROD=1 to enforce this check everywhere."
-        )
-
-    return key
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 # LEGACY SINGLETONS (local/test backward compatibility)
 # ═══════════════════════════════════════════════════════════════════════════
-
-_ORACLE_SIGNER_KEY = _get_oracle_signer_key()
+# The legacy in-memory eligibility/queue/proof stack signs with the LOCAL
+# bootstrap key only. It is initialized lazily so importing this module never
+# reads a signer key: in staging/production the durable policy-engine path
+# resolves TENANT signer credentials via services/rewards/signing.py, and the
+# legacy endpoints fail closed with SignerUnavailableError instead of ever
+# touching a deployment-global ORACLE_SIGNER_KEY.
 
 _chain_configs: dict[VMType, ChainConfig] = {
     VMType.EVM: ChainConfig(
@@ -155,18 +131,38 @@ _chain_configs: dict[VMType, ChainConfig] = {
     ),
 }
 
-_multichain_config = MultiChainProofConfig(signer_private_key=_ORACLE_SIGNER_KEY, chain_configs=_chain_configs)
-_oracle_config = ProofConfig(
-    signer_private_key=_ORACLE_SIGNER_KEY,
-    contract_address=_chain_configs[VMType.EVM].contract_address,
-    chain_id=_chain_configs[VMType.EVM].chain_id,
-    proof_expiry_seconds=_PROOF_EXPIRY_SECONDS,
-)
+class _LegacyProofStack:
+    """Lazily-initialized local/test proof stack (bootstrap-key-signed)."""
 
-_multichain_oracle = MultiChainSigner(_multichain_config)
-_legacy_oracle = OracleSigner(_oracle_config)
+    def __init__(self) -> None:
+        self._initialized = False
+        self.multichain_config: Optional[MultiChainProofConfig] = None
+        self.multichain_oracle: Optional[MultiChainSigner] = None
+        self.legacy_oracle: Optional[OracleSigner] = None
+        self.queue: Optional[RewardQueue] = None
+
+    def get(self) -> "_LegacyProofStack":
+        if not self._initialized:
+            from services.rewards.signing import local_bootstrap_key
+
+            key = local_bootstrap_key()  # raises outside local/test — fail closed
+            self.multichain_config = MultiChainProofConfig(
+                signer_private_key=key, chain_configs=_chain_configs
+            )
+            self.multichain_oracle = MultiChainSigner(self.multichain_config)
+            self.legacy_oracle = OracleSigner(ProofConfig(
+                signer_private_key=key,
+                contract_address=_chain_configs[VMType.EVM].contract_address,
+                chain_id=_chain_configs[VMType.EVM].chain_id,
+                proof_expiry_seconds=_PROOF_EXPIRY_SECONDS,
+            ))
+            self.queue = RewardQueue(self.legacy_oracle)
+            self._initialized = True
+        return self
+
+
+_legacy_stack = _LegacyProofStack()
 _engine = EligibilityEngine()
-_queue = RewardQueue(_legacy_oracle)
 _policy_engine = RewardPolicyEngine()
 # Durable, concurrency-safe campaign budget reservations (reserve→commit→release).
 _budget_service = BudgetReservationService()
@@ -474,6 +470,19 @@ def _require_permission(request: Request, permission: str) -> None:
     """Enforce tenant permission via auth middleware; bypass in local mode."""
     if hasattr(request.state, "tenant") and request.state.tenant:
         request.state.tenant.require_permission(permission)
+
+
+def _actor_id(request: Request) -> str:
+    """Best-effort actor identity for audit/credential attribution."""
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        return "system"
+    return str(
+        getattr(tenant, "principal_id", None)
+        or getattr(tenant, "user_id", None)
+        or getattr(tenant, "tenant_id", None)
+        or "system"
+    )
 
 
 async def _get_repos() -> dict:
@@ -1203,7 +1212,7 @@ async def _legacy_evaluate(
         vm_type = VMType.from_string(campaign.vm_type)
         resp.vm_type = vm_type.value
 
-        multichain_proof = await _multichain_oracle.generate_proof(
+        multichain_proof = await _legacy_stack.get().multichain_oracle.generate_proof(
             user=body.effective_wallet_address,
             action_type=body.event_type,
             amount=result.reward_tier.amount_wei,
@@ -1212,7 +1221,7 @@ async def _legacy_evaluate(
         )
         resp.proof = multichain_proof.to_dict()
 
-        reward_id = await _queue.enqueue(
+        reward_id = await _legacy_stack.get().queue.enqueue(
             user_address=body.effective_wallet_address,
             action_type=body.event_type,
             campaign_id=result.campaign_id,
@@ -1474,12 +1483,12 @@ async def verify_proof_endpoint(request: Request, body: ProofVerifyRequest):
         message_hash=body.message_hash,
     )
     expired = is_proof_expired(proof)
-    valid = verify_reward_proof(proof, expected_signer=_legacy_oracle.signer_address)
+    valid = verify_reward_proof(proof, expected_signer=_legacy_stack.get().legacy_oracle.signer_address)
     return {
         "valid": valid,
         "expired": expired,
         "signer_match": valid and not expired,
-        "expected_signer": _legacy_oracle.signer_address,
+        "expected_signer": _legacy_stack.get().legacy_oracle.signer_address,
     }
 
 
@@ -1606,6 +1615,24 @@ async def configure_rail(request: Request, body: RailConfigCreate):
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+
+    # Credential-only: a submitted tenant_webhook signing secret is dual-written
+    # into the credential authority and replaced by a secret_ref before the rail
+    # config is ever persisted — plaintext never reaches the JSONB row or audit.
+    if body.rail == "tenant_webhook":
+        inner = config_data.get("config") or {}
+        submitted = inner.get("signing_secret") or config_data.get("signing_secret")
+        if submitted:
+            from services.rewards.webhook_secret import store_secret
+
+            actor = _actor_id(request)
+            secret_ref = await store_secret(tenant_id, submitted, actor=actor)
+            inner.pop("signing_secret", None)
+            config_data.pop("signing_secret", None)
+            inner["secret_ref"] = secret_ref
+            config_data["config"] = inner
+            config_data["secret_ref"] = secret_ref
+
     rail_config = await repos["rail_configs"].create_or_update(tenant_id, body.rail, config_data)
     await _audit(repos, tenant_id, "rail.configured", "rail_config", rail_config.get("id"),
                  after_state=_redact_rail_config(rail_config))
@@ -1754,23 +1781,45 @@ async def verify_contract(request: Request, registry_id: str):
                    "Re-register with oracle_signer_address set to Aether's oracle address.",
         )
 
-    # Compare against the live oracle signer when eth_account is available.
-    _oracle_key = os.getenv("ORACLE_SIGNER_KEY", "")
-    if _oracle_key:
-        try:
-            from eth_account import Account as _Account  # noqa: PLC0415
-            _expected = _Account.from_key(_oracle_key).address.lower()
-            if registered_signer.lower() != _expected:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"oracle_signer_address {registered_signer!r} does not match "
-                        "Aether's current oracle signer. Update the registry entry and "
-                        "re-verify, or rotate the oracle key and update the tenant contract."
-                    ),
-                )
-        except ImportError:
-            pass  # eth_account not available in this env; skip address comparison
+    # Compare against the TENANT's resolved reward signer — fail closed: a
+    # contract may never verify without proving the registered signer matches
+    # the key that will actually sign this tenant's proofs.
+    from services.rewards.signing import (
+        SignerUnavailableError,
+        resolve_reward_signer,
+        reward_credential_environment,
+    )
+
+    try:
+        signer_key = await resolve_reward_signer(
+            tenant_id, reward_credential_environment(), "evm"
+        )
+    except SignerUnavailableError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"cannot verify contract without a resolvable reward signer: {exc}",
+        )
+    try:
+        from eth_account import Account as _Account  # noqa: PLC0415
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "eth_account is unavailable — signer-address verification cannot "
+                "run, and contract verification never passes unverified."
+            ),
+        )
+    _key = signer_key[2:] if signer_key.startswith("0x") else signer_key
+    _expected = _Account.from_key(bytes.fromhex(_key)).address.lower()
+    if registered_signer.lower() != _expected:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"oracle_signer_address {registered_signer!r} does not match the "
+                "tenant's resolved reward signer. Update the registry entry and "
+                "re-verify, or rotate the signer credential and update the contract."
+            ),
+        )
 
     updated = await repos["contracts"].verify(registry_id, tenant_id)
     await _audit(repos, tenant_id, "contract.verified", "contract_registry", registry_id,
@@ -1914,14 +1963,14 @@ async def redeliver_action(request: Request, action_id: str):
 @api_response
 async def queue_stats():
     """Return current reward queue statistics (legacy local-mode endpoint)."""
-    return _queue.get_stats()
+    return _legacy_stack.get().queue.get_stats()
 
 
 @router.get("/user/{address}", response_model=None)
 @api_response
 async def get_user_rewards(address: str):
     """Return all rewards for a given wallet address (legacy local-mode endpoint)."""
-    rewards = _queue.get_user_rewards(address)
+    rewards = _legacy_stack.get().queue.get_user_rewards(address)
     return [r.to_dict() for r in rewards]
 
 
@@ -1929,7 +1978,7 @@ async def get_user_rewards(address: str):
 @api_response
 async def process_queue():
     """Trigger processing of pending rewards in the queue (legacy local-mode endpoint)."""
-    results = await _queue.process_all()
+    results = await _legacy_stack.get().queue.process_all()
     return {"processed": len(results), "results": [r.to_dict() for r in results]}
 
 
@@ -1937,7 +1986,7 @@ async def process_queue():
 @api_response
 async def get_reward_proof(reward_id: str):
     """Retrieve proof for a queued reward (legacy local-mode endpoint)."""
-    reward = _queue.get_reward(reward_id)
+    reward = _legacy_stack.get().queue.get_reward(reward_id)
     if reward.proof is None:
         raise HTTPException(
             status_code=409,
@@ -1975,7 +2024,7 @@ def _register_legacy_campaign(campaign_id: str, body: CampaignCreate) -> None:
             for r in body.rules
             if isinstance(r, dict) and "event_types" in r and "reward_tier" in r
         ]
-        chain_cfg = _multichain_config.get_chain_config(VMType.from_string(body.vm_type))
+        chain_cfg = _legacy_stack.get().multichain_config.get_chain_config(VMType.from_string(body.vm_type))
         campaign = Campaign(
             id=campaign_id,
             name=body.name,

@@ -24,7 +24,15 @@ from services.oracle.signer import OracleProofSigner, ProofConfig, ProofFormat
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # Robust against asyncio-auto-mode tests having closed the thread's loop
+    # earlier in the same worker: always drive the coroutine on a fresh loop.
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
 
 
 _HARDHAT_KEY = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -308,17 +316,38 @@ def test_proof_eip191_to_dict_no_extra_fields():
 # Hardhat key blocked in non-local environments
 # ═══════════════════════════════════════════════════════════════════════════
 
-def test_hardhat_key_blocked_in_staging():
+@pytest.mark.asyncio
+async def test_hardhat_key_blocked_in_staging():
+    """Outside local, signer resolution is tenant-scoped and fail-closed:
+    no env-var fallback exists, and a tenant with no ACTIVE reward_signer
+    credential gets SignerUnavailableError — even with ORACLE_SIGNER_KEY set."""
     original_env = os.environ.get("AETHER_ENV", "local")
     os.environ["AETHER_ENV"] = "staging"
+    os.environ["ORACLE_SIGNER_KEY"] = _HARDHAT_KEY  # must be ignored in staging
     try:
         from services.rewards.rails import OnchainClaimAdapter
         adapter = OnchainClaimAdapter()
-        # The adapter should raise when trying to use the hardhat key in staging
         with pytest.raises((RuntimeError, ValueError)):
-            adapter._resolve_signer_key({})
+            await adapter._resolve_signer_key("tenant-no-signer", is_local=False)
     finally:
         os.environ["AETHER_ENV"] = original_env
+        os.environ.pop("ORACLE_SIGNER_KEY", None)
+
+
+@pytest.mark.asyncio
+async def test_hardhat_key_from_authority_refused_outside_local(monkeypatch):
+    """Even a credential-authority-supplied Hardhat dev key is refused."""
+    from services.rewards import rails as rails_mod
+
+    async def _fake_resolver(tenant_id, environment, chain_family="evm"):
+        return _HARDHAT_KEY
+
+    monkeypatch.setattr(
+        "services.rewards.signing.resolve_reward_signer", _fake_resolver
+    )
+    adapter = rails_mod.OnchainClaimAdapter()
+    with pytest.raises(RuntimeError):
+        await adapter._resolve_signer_key("tenant-x", is_local=False)
 
 
 def test_hardhat_key_allowed_in_local():

@@ -159,11 +159,29 @@ class RewardWebhookSender:
     async def send(self, job: dict) -> SenderResult:
         provider_config = job.get("provider_config") or {}
         webhook_url = provider_config.get("webhook_url")
-        # Shape rail_config exactly as TenantWebhookAdapter.deliver expects.
+        # Resolve the signing secret from the credential authority at the narrow
+        # send site — the job row carries only a secret_ref (plus an optional
+        # local/test inline secret), never durable plaintext.
+        from services.rewards.webhook_secret import resolve_signing_secret
+
+        tenant_id = job.get("tenant_id", "")
+        rail_config_for_resolve = {
+            "config": {
+                "secret_ref": provider_config.get("secret_ref"),
+                "signing_secret": provider_config.get("signing_secret", ""),
+            }
+        }
+        signing_secret = await resolve_signing_secret(tenant_id, rail_config_for_resolve)
+        if not signing_secret:
+            return SenderResult(
+                "fatal",
+                error="reward webhook signing secret could not be resolved "
+                      "(no active credential for secret_ref)",
+            )
         rail_config = {
             "webhook_url": webhook_url,
             "config": {
-                "signing_secret": provider_config.get("signing_secret", ""),
+                "signing_secret": signing_secret,
                 "timeout_ms": provider_config.get("timeout_ms", 10000),
             },
         }
@@ -244,7 +262,16 @@ class RewardDeliveryOutbox:
             or config.get("webhook_url")
             or (rail_config.get("config", {}) or {}).get("webhook_url")
         )
-        signing_secret = config.get("signing_secret", "") or rail_config.get("signing_secret", "")
+        # Persist a secret_ref, NEVER the plaintext secret. The secret is
+        # resolved from the credential authority at the narrow signing call
+        # site (RewardWebhookSender.send). A legacy inline secret is tolerated
+        # in local/test only.
+        from services.rewards.webhook_secret import make_secret_ref
+
+        secret_ref = config.get("secret_ref") or rail_config.get("secret_ref") or make_secret_ref()
+        inline_secret = ""
+        if os.getenv("AETHER_ENV", "local").lower() in ("local", "test"):
+            inline_secret = config.get("signing_secret", "") or rail_config.get("signing_secret", "")
         timeout_ms = int(config.get("timeout_ms", rail_config.get("timeout_ms", 10000)))
 
         # PR-1 SSRF / transport validation before persisting a durable job.
@@ -266,7 +293,9 @@ class RewardDeliveryOutbox:
             "payload": payload,
             "provider_config": {
                 "webhook_url": webhook_url,
-                "signing_secret": signing_secret,
+                "secret_ref": secret_ref,
+                # Local/test convenience only; never populated in deployed envs.
+                "signing_secret": inline_secret,
                 "timeout_ms": timeout_ms,
                 "host": urlparse(webhook_url).hostname if isinstance(webhook_url, str) else None,
             },
