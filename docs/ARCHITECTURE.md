@@ -452,6 +452,40 @@ Canonical contract plane (single source of truth, codegen twins via
 | Model catalog | `packages/shared/contracts/model-registry.json` | `packages/shared/model-registry.ts`; `shared/model_governance/generated_model_registry.py`; `docs/_generated/model-registry-table.md` |
 | Task profiles | `packages/shared/contracts/task-profile-registry.json` | `packages/shared/task-profile.ts`; `shared/model_governance/generated_task_profiles.py`; `docs/_generated/task-profile-table.md` |
 
+### Provider transport adapters
+
+Provider SDKs live only behind the harness's provider-neutral `AsyncModelProvider`
+contract (`services/model_runtime/provider.py`); orchestrators such as Noesis
+never import them. Real transport for the first two providers lives in
+`services/model_runtime/adapters/`:
+
+| Adapter | Transport | Env surface |
+|---|---|---|
+| `AnthropicModelProvider` (`adapters/anthropic.py`) | Anthropic SDK (lazy-imported in `complete()`) | `ANTHROPIC_API_KEY`, `NOESIS_LLM_MODEL` |
+| `OpenAIModelProvider` (`adapters/openai.py`) | `httpx` POST to `{base_url}/chat/completions` (no OpenAI SDK) | `OPENAI_API_KEY`, `NOESIS_LLM_MODEL`, `OPENAI_API_BASE` |
+
+Both adapters read credentials/config from the process environment at
+construction (constructor kwargs take precedence), expose `is_configured()`,
+and complete a `ModelRequest` → `ModelResponse` asynchronously via `complete()`.
+Failures surface as `ModelNotConfigured`, `ModelTimeoutError`, or
+`ModelProviderError`; request content and credentials are never logged. The
+Anthropic adapter is capability-driven: it never sends sampling parameters
+(`temperature`/`top_p`/`top_k`) because newer Anthropic models reject them with
+HTTP 400 — it sends only `model`, `max_tokens`, `system`, and `messages`. The
+OpenAI adapter emits `response_format={"type":"json_object"}` when the request
+asks for it.
+
+The Noesis LLM plan providers (`AnthropicNoesisPlanProvider` and
+`OpenAINoesisPlanProvider` in `services/noesis/provider.py`) now build a
+`ModelRequest` and delegate the actual API call to the matching adapter via
+`.complete()`, converting the `ModelResponse` back to the legacy `_call_api`
+dict shape (`text`, `tokens_used`, `input_tokens`, `output_tokens`). Plan
+validation (`_validate_provider_plan` / `_parse_plan_json`), the `plan()`
+retry/budget/metrics loops, the `EnvironmentNoesisPlanProvider` test stub, and
+the `ProductionNoesisPlanProvider` factory / `NOESIS_LLM_PROVIDER` routing are
+unchanged. No direct Anthropic SDK or `httpx` imports remain in `provider.py`;
+the fail-closed behavior on missing credentials or config is preserved.
+
 Binding security invariants: credentials never in source/frontend bundles/logs/
 prompts/persisted content; the model never receives direct database authority;
 the model may propose only allowlisted structured plans; Aether executes all
