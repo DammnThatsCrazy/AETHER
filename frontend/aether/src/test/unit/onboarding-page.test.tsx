@@ -42,7 +42,10 @@ describe('Aether Onboarding Center', () => {
   it('lists every registered communications provider in the comms onboarding step', async () => {
     render(<OnboardingPage />);
     await waitFor(() => expect(screen.getByTestId('comms-connect-onboarding-step')).toBeInTheDocument());
-    const select = screen.getByLabelText('Communications provider');
+    // findByLabelText (not getByLabelText) so the query retries until the comms
+    // <select> has mounted — the step testid can appear a tick before the
+    // provider select renders, which flaked this assertion in CI.
+    const select = await screen.findByLabelText('Communications provider');
     for (const label of ['Klaviyo', 'SendGrid', 'Customer.io', 'Mailchimp', 'Postmark']) {
       expect(within(select).getByText(label)).toBeInTheDocument();
     }
