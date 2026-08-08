@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "085ca1a9"
+last_synced_commit: "bf8a5fbd"
 ---
 # Aether vNext — Architecture Guide
 
@@ -303,6 +303,9 @@ Resolution Consumer (real-time)
 | `/v1/providers/usage` | GET | Per-tenant provider usage stats |
 | `/v1/providers/health` | GET | Provider health + circuit breaker states |
 | `/v1/providers/test` | POST | Test a provider call |
+| `/v1/provider-connections/*` | GET/POST/PATCH/DELETE | Provider runtime connection lifecycle (feature-gated `AETHER_PROVIDER_RUNTIME_ENABLED`, default OFF) |
+| `/v1/provider-webhooks/{identity_key}` | POST | Provider webhook delivery gateway (unauthenticated; HMAC/endpoint-secret verified; `X-Aether-Tenant-ID` is a routing hint, not auth) |
+| `/v1/admin/kyber/provider-connections/*` | GET/POST | Provider runtime operator plane (additional `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED`, default OFF) |
 
 ## Event Flow
 
@@ -521,6 +524,54 @@ the model may propose only allowlisted structured plans; Aether executes all
 retrieval; tenant scope is server-authoritative; staging/production fail closed
 on missing credentials/config; no cross-tenant evidence leakage; the model never
 selects or overrides tenant scope.
+
+## Universal Provider Runtime (8.12.0)
+
+The Universal Provider Runtime (UPR) makes provider integrations pluggable: a
+new provider is a self-contained plugin (manifest + capability adapters +
+normalizer + fixtures + registration) that registers at runtime with **zero
+core-system edits**. The legacy `BaseConnector` system, `/v1/integrations/
+connectors/*` routes, credential service, Bronze ingestion, sync-run ledger,
+and webhook inbox are untouched and remain authoritative; legacy connectors
+are re-exposed through the runtime by a compatibility plugin. The design
+decision record is [ADR-009](decisions/ADR-009-universal-provider-runtime.md).
+
+Provider identity is `family.product.capability` (e.g. `shopify.admin.orders_read`);
+legacy connectors map onto the identity `(connector_type, "ingestion", "connector")`
+with manifests byte-identical to the catalog, so plugin and catalog can never drift.
+
+Contract plane — `shared/integration_contracts/` (provider plugin protocol,
+capability adapters, `RawProviderRecord`/`AetherEvent` envelopes, normalizer,
+acquisition, health, reconciliation, certification) and `shared/commerce_contracts/`
+(canonical `Money`/`CommerceOrder`/`OrderSnapshot` + `commerce.*` event families):
+
+| Layer | Modules |
+|---|---|
+| Contract plane | `shared/integration_contracts/{plugin,capabilities,events,normalization,acquisition,health,reconciliation,certification}.py`; `shared/commerce_contracts/{money,order,events}.py` |
+| Runtime service | `services/provider_runtime/` — registry, validation (capability honesty), legacy compat plugin, credential broker, raw store, normalization engine, event bridge, connection orchestrator, scheduler, webhook gateway, rate-limit/retry coordinators, reconciliation, health, certification, routes |
+| Reference plugin | `services/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe `shop_domain` allowlist, HMAC webhook verify, order normalizer, incremental pull with page-info cursor |
+
+Data flow is **raw-before-canonical**: `RawProviderRecord`s are persisted
+idempotently to `bronze` (`provider_records`, dedup key
+`tenant:provider_identity:provider_record_id:schema_version`) before
+normalization; canonical `AetherEvent`s are written to `bronze_connectors`
+before the event-bus publish (bronze-before-publish, mirroring the comms
+pattern). Publish failure never fails ingestion.
+
+Feature gating: all UPR routes are off by default
+(`AETHER_PROVIDER_RUNTIME_ENABLED=False`); the operator plane additionally
+requires `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED`; `AETHER_PROVIDER_ENTRY_POINTS_ENABLED`
+controls `importlib.metadata` entry-point discovery. Legacy paths are
+unaffected regardless.
+
+Binding security invariants: credentials only via `credential_service` refs
+(never plaintext); the webhook gateway is **fail-closed** — a signature scheme
+without a secret denies, and `endpoint_secret` providers require a
+constant-time-matching presented token; `X-Aether-Tenant-ID` is a routing hint
+only, not auth; connection loads enforce tenant ownership (cross-tenant id →
+404); `shop_domain` is allowlisted to `*.myshopify.com` (SSRF gate); errors
+carry `safe_message` only; manifest capability claims are verified against
+actual adapters at registration and certification.
 
 ## Unified On-Chain Intelligence Graph
 

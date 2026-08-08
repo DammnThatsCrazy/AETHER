@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "67271129"
+last_synced_commit: "bf8a5fbd"
 ---
 # Operations Runbook v8.12.0
 
@@ -471,3 +471,26 @@ via the shared durable store (`agent_deployments` / `agent_deployment_audit`
 tables — run Alembic migrations first in hosted modes). Disable by clearing
 the flags and restarting; registry data is preserved. See
 `docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md` for the full runbook.
+
+---
+
+## Universal Provider Runtime
+
+The provider runtime mounts conditionally in `main.py` (all default OFF):
+
+```
+AETHER_PROVIDER_RUNTIME_ENABLED=true       → mounts provider_runtime router at /v1/provider-connections
+                                              + webhook gateway at /v1/provider-webhooks
+KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED=true → additionally mounts the operator plane at
+                                              /v1/admin/kyber/provider-connections
+AETHER_PROVIDER_ENTRY_POINTS_ENABLED=true  → enable importlib.metadata entry-point plugin discovery
+```
+
+Enable by setting the flags and restarting; provider registries auto-populate
+at startup from local plugins plus (when entry points are enabled) installed
+distribution entry points. Disable by clearing the flags and restarting;
+stored provider connections/raw records are preserved. Webhook delivery is
+fail-closed: a signature scheme without a configured secret denies the
+delivery, and `endpoint_secret` providers require a constant-time-matching
+presented token. See
+`docs/UNIVERSAL-PROVIDER-RUNTIME.md` for the full runtime guide.
