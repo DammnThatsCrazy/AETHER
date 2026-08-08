@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "bdc99eac"
+last_synced_commit: "b9828011"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -177,7 +177,7 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. | no (delegates) |
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; its only action is an ECS scale-to-zero, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
-| `repo-consistency.yml` | PR / push to `main` | `make ci-check`. | no |
+| `repo-consistency.yml` | PR / push to `main` | `make ci-check`, including documentation consistency, contract checks, and the targeted frontend-brand guardrail. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
 | `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers, applies the full Alembic graph to a **fresh** database (`alembic upgrade head` → single head), and runs one real-pool ingestion smoke test against the real stack — exercises the fresh-DB provisioning and transactional paths the in-memory (`AETHER_ENV=local`) lanes skip entirely (that path never runs Alembic). **Non-blocking** (not a required check); the smoke test skips without `DATABASE_URL`. | no |
 
@@ -257,6 +257,20 @@ local Terraform binary.
 `make test-workflow-controls`
 (`tests/unit/test_release_workflow_controls.py`) is the structural guard on all
 of the above: no automatic apply, no false-green, reviewed-plan integrity.
+
+### Frontend visual-system guardrail
+
+`make frontend-branding` (also exposed as `npm run
+validate:frontend-branding`) runs the lightweight static guard for the
+deliberately migrated identity seams: the Aether shell mark and navigation,
+Kyber navigation/top bar, and central provider-mark renderers. It rejects the
+retired raw navigation glyph paths, feature-local provider SVG or asset maps,
+and non-token motion/elevation additions in those surfaces. The guard is
+intentionally narrow: it protects completed migrations without turning
+unrelated legacy routes into a false CI block. Any temporary exception is an
+exact path-and-rule entry with a human-readable reason and is reported by the
+validator; the current migration has none. The canonical contracts and
+component usage are documented in [`docs/brand-system/`](brand-system/README.md).
 
 ## Quality gates reference
 

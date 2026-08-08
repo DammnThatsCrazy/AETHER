@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "99da74c0"
+last_synced_commit: "81b3059f"
 ---
 # Aether Profile360 Frontend Architecture
 
@@ -41,6 +41,18 @@ Reusable building blocks retained:
 - Runtime fixture files were removed as part of the fail-closed data-truth work; edge-case coverage now lives inline in the Profile360 component tests (`frontend/kyber/src/test/component/profile360.test.ts`).
 
 No stable component was replaced. The new implementation layers Profile360 components above and alongside the existing `Entity360View` detail tabs.
+
+### Canonical entity identity treatment
+
+Profile360 keeps backend entity semantics authoritative: `entity_type` selects
+the canonical entity avatar/icon and its accompanying text label, while
+provider/source attribution renders independently through the shared provider
+registry. Do not infer an entity's type from provider branding, replace a
+missing avatar with a provider logo, or represent status/severity with a raw
+Unicode glyph. The visual renderer boundary is `@aether/ui`; the framework-free
+taxonomy lives in `@olympus/brand`. This preserves the operator's ability to
+distinguish entity identity, source provenance, confidence, freshness, status,
+and severity when several values coexist in a compact Profile360 header.
 
 ## 3. Extension strategy
 
