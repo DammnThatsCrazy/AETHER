@@ -108,9 +108,11 @@ profiles:
     budget:
       currency: USD
       region: us-east-1
-      # Placeholder FIXED ceilings for the ephemeral demo footprint. These are
-      # design intent, to be validated against a real plan by the
-      # `validate-ephemeral-budget` gate.
+      # FIXED ceilings for the ephemeral demo footprint, validated by
+      # `validate-ephemeral-budget` against the committed demo-valid fixture:
+      # the fixture prices a fixed baseline of ~USD 145.60/mo, inside target
+      # and well under the hard ceiling. target is the design goal, not a
+      # forecast; the fixture drives the floor of what target must allow.
       target_fixed_monthly: 150
       hard_fixed_monthly: 220
       # Reference month length used to convert hourly prices to monthly ones.
@@ -165,11 +167,15 @@ profiles:
     budget:
       currency: USD
       region: us-east-1
-      # Placeholder FIXED ceilings for the ephemeral preview footprint. These are
-      # design intent, to be validated against a real plan by the
-      # `validate-ephemeral-budget` gate.
-      target_fixed_monthly: 120
-      hard_fixed_monthly: 180
+      # FIXED ceilings for the ephemeral preview footprint, validated by
+      # `validate-ephemeral-budget` against the committed demo-valid/preview-valid
+      # fixtures. Preview clones staging's consolidated footprint (the same as
+      # demo), so the honest ceilings are the same: the fixture prices a fixed
+      # baseline of ~USD 145.60/mo, which is under target and inside the hard
+      # ceiling. target is the design goal, not a forecast; the fixture drives
+      # the floor of what target must allow.
+      target_fixed_monthly: 150
+      hard_fixed_monthly: 220
       # Reference month length used to convert hourly prices to monthly ones.
       pricing_hours_per_month: 730
       # Usage-driven cost is not bounded by the ceilings above; it must still be
