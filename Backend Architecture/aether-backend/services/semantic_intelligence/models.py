@@ -336,6 +336,11 @@ class SentimentObservation(BaseModel):
     baseline_ref: str | None = None
     consent_snapshot_id: str | None = None
     privacy_class: str = "behavioral"
+    # Consent state — a consent restriction/erasure marks a subject's (or actor's)
+    # rows so the Gold sentiment reducer drops them, mirroring
+    # SemanticObservation.status. Defaults CLASSIFIED so existing/new rows are
+    # active; only a retraction moves a row out of the active set.
+    status: ObservationStatus = ObservationStatus.CLASSIFIED
     occurred_at: datetime = Field(default_factory=utc_now)
     created_at: datetime = Field(default_factory=utc_now)
 

@@ -320,6 +320,33 @@ class SemanticFactRepository:
 
     # ── reads ─────────────────────────────────────────────────────────────────
 
+    async def subjects_touched_by(self, tenant_id: str, ref: str) -> set[str]:
+        """Distinct subject_refs of rows ``ref`` participates in — as subject OR actor.
+
+        Used by the DSR flow to find every Gold aggregate a retracted/erased ref
+        fed: its own subject rows plus the OTHER subjects it acted on. Mirrors the
+        subject/actor predicates of ``delete_by_subject`` / ``delete_by_actor``.
+        """
+        pool = await self._pool()
+        if pool is None:
+            subjects: set[str] = set()
+            for row in self._store.values():
+                if row.get("tenant_id") != tenant_id:
+                    continue
+                if _row_subject(row) == ref or _row_actor(row) == ref:
+                    subject = _row_subject(row)
+                    if subject is not None:
+                        subjects.add(str(subject))
+            return subjects
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT DISTINCT subject_ref FROM {self.table_name} "
+                "WHERE tenant_id = $1 AND (subject_ref = $2 OR data->>'actor_ref' = $2)",
+                tenant_id,
+                ref,
+            )
+        return {r["subject_ref"] for r in rows if r["subject_ref"] is not None}
+
     async def list_by_tenant(
         self, tenant_id: str, subject: Optional[str] = None, *, limit: int = 500
     ) -> list[dict[str, Any]]:

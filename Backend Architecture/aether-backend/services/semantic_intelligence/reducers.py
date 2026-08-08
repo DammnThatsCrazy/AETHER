@@ -255,14 +255,20 @@ def reduce_entity_sentiment(
         "observation_count": len(sentiments),
         "reducer_version": REDUCER_VERSION,
     }
-    if not sentiments:
+    # Only active (non-retracted) rows contribute — mirrors reduce_entity_state.
+    # A consent restriction/erasure moves a subject's/actor's rows out of _ACTIVE,
+    # so recomputing after a retraction drops the retracted sentiment from Gold.
+    active = [
+        s for s in sentiments if getattr(s, "status", ObservationStatus.CLASSIFIED) in _ACTIVE
+    ]
+    if not active:
         return {**base, "insufficient_data": True, "valence": 0.0, "confidence": 0.0}
 
-    newest_at = max(s.occurred_at for s in sentiments)
+    newest_at = max(s.occurred_at for s in active)
     total_w = 0.0
     wv = wa = wi = wconf = 0.0
     emotion_w: dict[str, float] = defaultdict(float)
-    for s in sentiments:
+    for s in active:
         w = max(0.0, s.confidence) * _recency_decay(s.occurred_at, newest_at)
         if w <= 0:
             continue
