@@ -4,11 +4,11 @@
 # Precedent: docs/integration-control-plane/PROGRAM_STATE.yaml.
 
 program:
-  branch: claude/aether-turnkey-completion-7m3x9
+  branch: claude/aether-turnkey-completion-m8-f8b2e
   base_commit: "ead4ba6c7b53783958bebc03bddcede1a2ea7429"   # == origin/main at completion-program start (feat: payment-rails financial-plane provider readiness (#509))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of the original C0 base
   platform_version: "8.12.0"
-  last_landed_checkpoint: C7   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program landed C2-remainder (M1), C5 (M2/M3/M4), C6 (M5), C7 (M6), M7 design-partner demo + distribution/compliance docs (M7 complete: demo seed + make targets + MOBILE_DISTRIBUTION + KYBER_MOBILE_COMMAND_SECURITY); C9 (M8) remaining
+  last_landed_checkpoint: M8   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program M0-M8 LANDED via PR #515 (C2-remainder M1, C5 M2/M3/M4, C6 M5, C7 M6, M7 design-partner demo + distribution/compliance docs, M8 C9 six-lens adversarial review + remediation + final gate); release-gate supply-chain red (node-tar via Expo, externally_blocked) + owner merge decision remaining
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits
   gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
@@ -20,7 +20,7 @@ program:
 # (claude/aether-comms-multi-provider) is PARKED and out of scope (services/comms/ untouched).
 completion:
   scope: full-remaining-program
-  pr_train: one-branch-one-pr                      # claude/aether-turnkey-completion-7m3x9 -> single PR -> milestone commits
+  pr_train: one-branch-one-pr                      # claude/aether-turnkey-completion-m8-f8b2e (PR #515) -> single PR -> milestone commits
   plan: docs/../.claude/plans/identify-what-was-complete-smooth-lake.md   # approved finish plan (M0-M8)
   parked: "claude/aether-comms-multi-provider (ADR-C11 comms cohort; separate observe-external-ESP domain; untouched)"
   external_blockers: reports/mobile-productization/external-blockers.json
@@ -122,7 +122,7 @@ milestones:
       KYBER_MOBILE.md. HONEST CEILING: the native iOS-simulator/Android-emulator compile
       needs macOS+Xcode+Android SDK+Expo (absent in this Linux CI container) →
       externally_blocked, runs in hosted (macOS) CI; NOT a 'compiled' claim. Full feature
-      screens + governed mobile actions are C5-C7 (staged).
+      screens + governed mobile actions landed via C5-C7 (M2/M3/M4 + M6).
   - id: C8
     name: dsr-compliance-completeness
     depends_on: [C4]
@@ -228,14 +228,22 @@ milestones:
   - id: C9
     name: adversarial-review-remediation
     depends_on: [C7, M7]
-    status: staged
+    status: landed
     lands: [six-lens-review, remediation-commits, final-gate]
     note: >
       C9 is the six-lens adversarial review (architecture/duplication, tenant-operator security,
       data truth/evidence, concurrency/delivery/reliability, mobile privacy/store compliance,
       operational/release honesty) run in parallel with an adversarial refute pass, remediation
-      commits, and the final make ci-check + release-gate decision. Driven by M8 of the completion
-      program. Not started (staged).
+      commits, and the final make ci-check + release-gate decision. LANDED via M8 (PR #515): the
+      review recorded 30 findings, 0 refuted; remediation landed in waves (A1 wire-contracts,
+      A2 intra-tenant isolation, B1/B4/B5 delivery-reliability/DSR-principal/inbox-snapshot,
+      then B7 lease-guards + C demo-seed truth + D3 tenant scope + E1 DSR erasure + E2 privacy
+      manifests + F readiness docs at the final batch), plus the alembic re-chain to the comms
+      merge head and the contact XSS hardening. Final gate make ci-check 55/55 (GATE_EXIT=0);
+      docs_drift --strict 388 clean, 0 stale. Release-gate assessed: only red is supply-chain
+      (node-tar via Expo, externally_blocked, Expo SDK 51->57 bump). Owner merge decision on
+      PR #515 pending. Per-lens report files (reports/mobile-productization/review-lenses/) were
+      never committed; the 30-findings/0-refuted outcome is recorded in docs/PRODUCTIZATION.md.
 
 # Wave / architecture rollup (reuse-first). "reuse" = exists complete; "extend" = exists, add surface;
 # "build" = net-new this program. Authoritative detail: reports/mobile-productization/repo-baseline.json.
@@ -331,7 +339,7 @@ open_pr_overlap:
     disposition: parked
 
 quality:                                     # updated at each milestone boundary from real gate runs
-  ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the M7a tip — demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores (DurableStoreSeedRepository → same get_store singleton the agent runtime reads; ContinuationScopedSeedRepository → canonical create()/get_scoped/delete_scoped) with no parallel copy; make design-partner-demo-{up,seed,check,down} targets wrap the existing demo-seed/reset-smoke machinery"
+  ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the M8 final tip (58ecad11 GATE_EXIT=0; also green at 619cba2c); docs_drift --strict 388 clean, 0 stale at 93f6a134/739bd63c. (M7a tip evidence retained: demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores — DurableStoreSeedRepository → same get_store singleton the agent runtime reads; ContinuationScopedSeedRepository → canonical create()/get_scoped/delete_scoped — with no parallel copy; make design-partner-demo-{up,seed,check,down} targets wrap the existing demo-seed/reset-smoke machinery)"
   demo_seed: "services/demo_seed suite 14 tests green incl. test_m7a_six_domains_seed_and_are_visible_via_canonical_read_paths (each domain read through the SAME store/read path the real APIs use: notification_inbox find_by_id, kyber ops find_many, agent get_run/list_review_batches, continuation get_scoped); manifest 25 records, checksum-stable, all offsets <= 0; ownership sidecar + exact-confirmation reset + production refusal unchanged"
   mobile_sdk: "packages/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 46 tests green (client/PKCE/secure-store/offline + 11 kyber-client step-up/proof-keys/actions/receipts + 12 P256 signer incl. RFC 6979 A.2.5 KAT + derivePublicKey round-trip) via npm test --workspaces"
   mobile_apps: "apps/aether-mobile + apps/kyber-mobile scaffolds; scripts/mobile_build_check.py enforces distinct planes/bundles + scaffold completeness (4 tests); native compile externally_blocked (no macOS/Xcode/Android SDK/Expo here)"
@@ -346,10 +354,11 @@ quality:                                     # updated at each milestone boundar
   ci_note: "intermediate superseded SHAs show a `validate` failure caused solely by E2E_TENANT_RESULT=cancelled (concurrency cancellation from the next push); every real gate passed. Only the final tip SHA is authoritative."
 
 # Honest readiness verdict (per productization dimension). No fake production-ready claims.
-# Completion program is IN FLIGHT (M0-M8): C9 (M8 review) + M7 demo/distribution additions are not
-# yet landed; update this section only where evidence (make ci-check / gates / review) supports it.
+# Completion program M0-M8 LANDED (PR #515); the release-gate still carries the externally-blocked
+# supply-chain red (node-tar via Expo) and the owner's merge decision. Update this section only
+# where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7 LANDED via M6 (mobile action adapter — read-only availability digest reusing services/kyber/ops, NO second command plane; Kyber Mobile Tier 0-3 Actions + durable Receipts tabs with step-up via existing StepUpService/device_proof; mobile-bound proof-key attestation reusing the browser-proof store/verify path); M7 LANDED (design-partner demo: demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores — DurableStore singleton + continuation scope/idempotency — with design-partner-demo-{up,seed,check,down} make targets; distribution + command-security source-of-truth docs MOBILE_DISTRIBUTION.md + KYBER_MOBILE_COMMAND_SECURITY.md, reviewed against code); M8 LANDED (C9 six-lens adversarial review + remediation: M8-A1/A2/B-series landed; M8-D3 mobile-actions tenant scope — scoped command digest binds to the operator's tenant, unscoped keeps the global list, repo-level tenant filter verified; M8-E1 kyber device DSR erasure — operator-keyed device stores reachable by DSR via delete_by_operator + fail-closed coverage-gate binding; M8-E2 privacy-manifest honesty — data-safety.json no longer claims in-app account deletion, deletion is the backend DSR flow; M8-F readiness-honesty docs — PRODUCTIZATION/REWARD_ENABLEMENT/CONNECTORS aligned to the canonical scorecard (release-ready 4/5 bands, never production-ready without scorecard evidence)); final `make ci-check` + release-gate assessment + merge decision remaining on claude/aether-turnkey-completion-7m3x9"
+  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7 LANDED via M6 (mobile action adapter — read-only availability digest reusing services/kyber/ops, NO second command plane; Kyber Mobile Tier 0-3 Actions + durable Receipts tabs with step-up via existing StepUpService/device_proof; mobile-bound proof-key attestation reusing the browser-proof store/verify path); M7 LANDED (design-partner demo: demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores — DurableStore singleton + continuation scope/idempotency — with design-partner-demo-{up,seed,check,down} make targets; distribution + command-security source-of-truth docs MOBILE_DISTRIBUTION.md + KYBER_MOBILE_COMMAND_SECURITY.md, reviewed against code); M8 LANDED (C9 six-lens adversarial review + remediation: M8-A1/A2/B-series landed; M8-D3 mobile-actions tenant scope — scoped command digest binds to the operator's tenant, unscoped keeps the global list, repo-level tenant filter verified; M8-E1 kyber device DSR erasure — operator-keyed device stores reachable by DSR via delete_by_operator + fail-closed coverage-gate binding; M8-E2 privacy-manifest honesty — data-safety.json no longer claims in-app account deletion, deletion is the backend DSR flow; M8-F readiness-honesty docs — PRODUCTIZATION/REWARD_ENABLEMENT/CONNECTORS aligned to the canonical scorecard (release-ready 4/5 bands, never production-ready without scorecard evidence)); COMPLETE: final `make ci-check` 55/55 (GATE_EXIT=0) + docs_drift 388 clean at the M8 tip (58ecad11 + 93f6a134); release-gate assessed — only red is supply-chain (node-tar critical via @expo/cli, tar@6.2.1, build-time use only, no same-major fix, Expo SDK 51->57 bump required; recorded as expo_supply_chain_tar in external-blockers.json, externally_blocked). Owner merge decision on PR #515 pending (branch claude/aether-turnkey-completion-m8-f8b2e)."
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
   mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store; M6: step-up/proof-key/actions/receipts typed methods + zero-import pure-TS P256Signer verified against RFC 6979 A.2.5 + Node crypto)"
   mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth; M5: continue-on-desktop/resume via ContinueOnDesktopPanel) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client; M5: OperatorContinuationsPanel with 404-safe resume; M6: Actions Tier 0-3 + durable Receipts tabs, step-up via attestation.ts ensureProofKey/elevate, verification:null rendered as 'Not verified' — never omitted); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"
@@ -357,4 +366,4 @@ readiness:
   design_partner: partial
   store_submission: externally_blocked
   controlled_production: externally_blocked
-  overall: "COMPLETION_PROGRAM_IN_FLIGHT (C0-C8 + C5 + C6 + C7 + M7 landed; C9/M8 six-lens adversarial review + remediation + final gate remaining; native app compile + credentials + store distribution remain externally_blocked, not faked)"
+  overall: "COMPLETION_PROGRAM_LANDED (C0-C8 + C5 + C6 + C7 + M7 + M8/C9 all landed via PR #515; final gate make ci-check 55/55; remaining = owner merge decision on PR #515 + external blockers (native app compile + credentials + store distribution + node-tar/Expo supply-chain), tracked in external-blockers.json, not faked)"

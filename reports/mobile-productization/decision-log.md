@@ -99,7 +99,9 @@ Noesis conversation store · second deployment-profile taxonomy. Each is reused 
 ## D10 — Completion program: full remaining scope on one branch → one PR
 - **Decision (owner-approved):** drive C2-pending + C5/C6/C7/C9 to `make ci-check` green as one
   milestone-commit train on `claude/aether-turnkey-completion-7m3x9` (base `ead4ba6c` = origin/main
-  @ #509) → single PR to main. Mirrors the C0-C4 precedent. See `PROGRAM_STATE.yaml` `completion:`.
+  @ #509) → single PR to main. *(Branch later renamed to `claude/aether-turnkey-completion-m8-f8b2e`
+  for the M0–M8 train that landed as PR #515.)* Mirrors the C0-C4 precedent. See `PROGRAM_STATE.yaml`
+  `completion:`.
 - **Comms branch parked:** `claude/aether-comms-multi-provider` (ADR-C11 comms cohort) is out of
   scope — separate observe-external-ESP domain (`services/comms/`); its 12 unmerged commits stay
   untouched. No completion commit touches `services/comms/`.
@@ -237,3 +239,44 @@ distribution · second sync feed · generic mobile mutation channel. Each is reu
   vocabulary — "release-ready (4/5)" instead of "production-ready", a readiness-terms note in
   PRODUCTIZATION.md clarifying ✅ = code-state (implemented + CI-verified), and the scorecard
   declared the canonical authority. `scripts/production_status.py` untouched.
+
+## D13 — C9 six-lens adversarial review + remediation LANDED (M8/C9 complete)
+- **Decision (recap, now complete):** run C9 as a six-lens adversarial review —
+  architecture/duplication, tenant-operator security, data truth/evidence,
+  concurrency/delivery/reliability, mobile privacy/store compliance, and
+  operational/release honesty — followed by remediation batches and a final
+  `make ci-check` gate, all on `claude/aether-turnkey-completion-m8-f8b2e` as one
+  PR (#515) to main. Outcome recorded in `docs/PRODUCTIZATION.md`: **30 findings,
+  0 refuted**. The per-lens report files under
+  `reports/mobile-productization/review-lenses/` were **never committed** — the
+  review ran and the remediation landed, but the per-finding detail is not part of
+  the committed record.
+- **What landed:** projection wire-contract reconciliation `3563eed6` (M8-A1);
+  intra-tenant ownership isolation for installations + continuations `bd1daf06`
+  (M8-A2); delivery-reliability / DSR-principal / inbox-snapshot remediation
+  `619cba2c` (B1/B4/B5) + docs restamp `c480102c`; final batch `58ecad11` — B7
+  lease-guards closing the stale-worker split-brain double-delivery, C demo-seed
+  truth + policy binding, D3 kyber mobile-actions tenant scope, E1 kyber device
+  DSR erasure, E2 privacy-manifest honest `deletion_mechanism`, F readiness-honesty
+  docs. Post-rebase alembic re-chain `93f6a134` (app-version migration re-chained
+  to the comms merge head, single-alembic-head preserved) + reviewed docs restamp;
+  contact email XSS hardening + supply-chain blocker recorded `6e059b45`;
+  BACKEND-API restamp `739bd63c`; M0–M8 completion narrative `5c0269c8`.
+- **Gate evidence:** `make ci-check` **55/55 (GATE_EXIT=0)** at `619cba2c` and
+  `58ecad11`; `docs_drift --strict` **388 clean, 0 stale** at `93f6a134`/`739bd63c`.
+- **Release-gate assessment:** repo-doctor + production_status --strict +
+  ops_readiness + foundation + ledger + profile/cost/delivery/terraform gates PASS.
+  **Supply-chain check is the single RED** — npm audit critical on node-tar
+  (`tar@6.2.1`, transitive build-time dep of `@expo/cli`; no same-major fix; Expo
+  SDK 51→57 bump required), recorded as `expo_supply_chain_tar` in
+  `reports/mobile-productization/external-blockers.json`.
+- **Decision (supply chain):** this RED is an **external blocker, not an in-repo
+  gap** — the fail-closed supply-chain policy requires the audit to pass, the fix
+  is an Expo SDK major bump (51→57 in `apps/aether-mobile` + `apps/kyber-mobile`)
+  with no verifiable same-major remediation, so it is tracked as an external
+  activation item rather than patched around in-repo.
+- **Status / what remains:** production scorecard **3.77/5, pre-production
+  (release-shaped)** — no production-readiness or green release-gate claim. The
+  remaining steps are the **owner merge decision on PR #515** plus external
+  blockers (credentials / infra / audits / `expo_supply_chain_tar`) tracked in
+  `reports/mobile-productization/external-blockers.json`.
