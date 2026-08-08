@@ -478,6 +478,8 @@ forbidden_resources:
     expected_by_profile_resource_type: aws_nat_gateway
     expected_by_profile:
       staging: zero
+      demo: zero
+      preview: zero
       production-lean: zero
       production-scale: exactly:1
       enterprise-isolated: exactly:3

@@ -78,6 +78,46 @@ profiles:
       object: s3
       ml: inline
     runs: [shared-nonproduction-backend, explicit-backend-seed, synthetic-tenant, ttl-cleanup]
+    cost_policy:
+      # The demo runs the shared foundation footprint: shared-foundation
+      # ALB/frontend, Aurora Serverless v2, SQS/SNS, DynamoDB, S3 object lake,
+      # secrets+credential KMS, CloudWatch alarms, inline ML and Postgres graph.
+      # It must not provision the heavy dedicated services production-scale buys.
+      required_resources:
+        - cloudfront_s3_frontends
+        - alb
+        - aurora_serverless_v2
+        - sqs_sns
+        - dynamodb
+        - s3_object_lake
+        - secrets_kms
+        - credential_kms
+        - cloudwatch_alarms
+        - inline_ml
+        - postgres_graph
+      forbidden_resources:
+        - msk
+        - elasticache
+        - neptune
+        - clickhouse
+        - dedicated_ml_service
+        - frontend_ecs_services
+        - legacy_rds
+        - nat_gateway_unless_explicit
+        - prometheus_grafana_servers
+    budget:
+      currency: USD
+      region: us-east-1
+      # Placeholder FIXED ceilings for the ephemeral demo footprint. These are
+      # design intent, to be validated against a real plan by the
+      # `validate-ephemeral-budget` gate.
+      target_fixed_monthly: 150
+      hard_fixed_monthly: 220
+      # Reference month length used to convert hourly prices to monthly ones.
+      pricing_hours_per_month: 730
+      # Usage-driven cost is not bounded by the ceilings above; it must still be
+      # modelled and reported as low/expected/high scenarios.
+      variable_cost_model_required: true
 
   preview:
     purpose: PR-specific live environment, only when explicitly requested.
@@ -94,6 +134,47 @@ profiles:
       ml: inline
     must: [shared-foundation, temporary-tenant-schema-prefix-route, auto-expire]
     forbids: [dedicated-vpc, dedicated-alb, dedicated-aurora, dedicated-neptune, run-forever]
+    cost_policy:
+      # The preview runs the same shared foundation footprint as demo: a
+      # shared-foundation ALB/frontend, Aurora Serverless v2, SQS/SNS, DynamoDB,
+      # S3 object lake, secrets+credential KMS, CloudWatch alarms, inline ML and
+      # Postgres graph. It must not provision the heavy dedicated services
+      # production-scale buys, or any dedicated infrastructure of its own.
+      required_resources:
+        - cloudfront_s3_frontends
+        - alb
+        - aurora_serverless_v2
+        - sqs_sns
+        - dynamodb
+        - s3_object_lake
+        - secrets_kms
+        - credential_kms
+        - cloudwatch_alarms
+        - inline_ml
+        - postgres_graph
+      forbidden_resources:
+        - msk
+        - elasticache
+        - neptune
+        - clickhouse
+        - dedicated_ml_service
+        - frontend_ecs_services
+        - legacy_rds
+        - nat_gateway_unless_explicit
+        - prometheus_grafana_servers
+    budget:
+      currency: USD
+      region: us-east-1
+      # Placeholder FIXED ceilings for the ephemeral preview footprint. These are
+      # design intent, to be validated against a real plan by the
+      # `validate-ephemeral-budget` gate.
+      target_fixed_monthly: 120
+      hard_fixed_monthly: 180
+      # Reference month length used to convert hourly prices to monthly ones.
+      pricing_hours_per_month: 730
+      # Usage-driven cost is not bounded by the ceilings above; it must still be
+      # modelled and reported as low/expected/high scenarios.
+      variable_cost_model_required: true
 
   staging:
     purpose: Release rehearsal.
