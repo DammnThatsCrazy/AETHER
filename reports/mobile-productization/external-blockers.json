@@ -138,19 +138,6 @@
    "implementation_status": "privacy artifacts DONE: generated Apple Privacy Manifest + Play Data Safety per app (scripts/generate_privacy_manifests.py, make privacy-manifest-check), drift-gated. Mobile DSR erasure end-to-end DONE. Distribution pipeline (signing + upload) is C8-remaining/staged.",
    "activation": "C8: signing + upload pipelines; out of this session scope",
    "evidence_required": "internal build available on TestFlight and Play internal track"
-  },
-  {
-   "id": "expo_supply_chain_tar",
-   "capability": "npm production dependency tree — node-tar critical (via Expo tooling)",
-   "provider": "npm audit (node-tar advisory family: hardlink/symlink path traversal + decompression DoS)",
-   "state": "externally_blocked",
-   "blocked_on": [
-    "Expo SDK 51 -> 57 major bump (npm audit fixAvailable = expo@57.0.11, isSemVerMajor)",
-    "post-bump verification of expo prebuild/export on a macOS/hosted-CI runner"
-   ],
-   "implementation_status": "tar@6.2.1 is a transitive prod dep of @expo/cli (build-time use only: template extraction during expo prebuild/export; tar is not shipped in the compiled app or backend runtime). npm audit --omit=dev --audit-level=critical fails fail-closed on the 'Decompression/parse DoS via unlimited input' advisory (range <=7.5.18). No same-major fix exists — node-tar 6.x is EOL and the fixes landed only in >=7.5.21 — so forcing tar@7.x against Expo SDK 51's @expo/cli is an unverifiable breakage risk. Correct fix is the Expo SDK major bump.",
-   "activation": "upgrade Expo SDK 51 -> 57 in apps/aether-mobile + apps/kyber-mobile; re-run npm audit --omit=dev --audit-level=critical, make ci-check, and the mobile-app gates; verify expo prebuild on a hosted runner",
-   "evidence_required": "npm audit prod critical count = 0; expo prebuild + platform build succeed post-bump"
   }
  ]
 }
