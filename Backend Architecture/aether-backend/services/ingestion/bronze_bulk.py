@@ -660,7 +660,14 @@ FROM jsonb_to_recordset($1::jsonb) AS r(
     payload jsonb, payload_bytes integer, payload_hash text, source text,
     source_tag text, prev_hash text, integrity_hash text
 )
-ON CONFLICT (tenant_id, event_id, schema_version) DO NOTHING
+-- Arbiter is the PRIMARY KEY id (a deterministic sha256 of
+-- tenant_id|event_id|schema_version, so it is 1:1 with the composite unique
+-- key). Under concurrent inserts of the same event, ON CONFLICT DO NOTHING
+-- only suppresses a conflict detected on its arbiter index; with the composite
+-- as the arbiter, a racing insert could still raise on the SEPARATE id PK
+-- (bronze_sdk_events_pkey) before the composite arbiter resolved. Making the
+-- PK the arbiter serializes the race on that one index — exactly-once holds.
+ON CONFLICT (id) DO NOTHING
 RETURNING tenant_id, event_id, schema_version
 """
 
@@ -701,7 +708,11 @@ FROM jsonb_to_recordset($1::jsonb) AS r(
     partition_key text, payload jsonb, status text, available_at timestamptz,
     prev_hash text, integrity_hash text
 )
-ON CONFLICT (tenant_id, event_id, topic) DO NOTHING
+-- Arbiter is the PK id (deterministic sha256 of tenant_id|event_id|topic, 1:1
+-- with the composite unique key) for the same concurrency reason as the Bronze
+-- insert above: it serializes a racing duplicate on the one PK index rather
+-- than risking a raise on the separate event_outbox PK.
+ON CONFLICT (id) DO NOTHING
 """
 
 # Which of this batch's (tenant_id, event_id, topic) keys already exist? Only

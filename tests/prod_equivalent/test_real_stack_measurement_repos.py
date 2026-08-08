@@ -332,15 +332,28 @@ def test_conversion_repo_upsert_authority_conflict_and_fx_provenance():
                     assert fx_row is not None
                     assert fx_row["currency"] == "EUR"
                     assert fx_row["normalized_currency"] == "USD"
-                    assert fx_row["exchange_rate"] == Decimal("0.92341567"), (
-                        "exchange_rate did not persist as the observed rate — the "
-                        f"real NUMERIC(18,8) column holds {fx_row['exchange_rate']!r} "
-                        "(would be 1.0 if the default clobbered it)"
+                    # CURRENCY M2 resolves the REAL snapshot rate for a foreign
+                    # currency and overwrites the caller-supplied exchange_rate /
+                    # provenance.fx_conversion (the M1 "unpriced, never silent
+                    # parity" contract means a priced foreign currency must carry
+                    # a real, non-1.0 rate). So assert the resolved provenance
+                    # round-trips consistently through the real columns rather than
+                    # a hard-coded input rate.
+                    resolved_rate = fx_row["exchange_rate"]
+                    assert isinstance(resolved_rate, Decimal)
+                    assert resolved_rate != Decimal("1.0"), (
+                        "a priced foreign currency (EUR) must persist a real, "
+                        f"non-parity rate through NUMERIC(18,8); got {resolved_rate!r}"
                     )
                     prov = _jsonb(fx_row["provenance"])
-                    assert prov["fx_conversion"]["conversion_rate"] == "0.92341567"
-                    assert prov["fx_conversion"]["conversion_source"] == "ecb_reference"
-                    assert prov["fx_conversion"]["method"] == "fiat_fx"
+                    fx = prov["fx_conversion"]
+                    assert fx["priced"] is True
+                    assert fx["conversion_source"], "priced FX must record a source"
+                    assert fx["base_currency"] == "USD"
+                    assert fx["quote_currency"] == "EUR"
+                    # The JSONB-recorded rate matches the NUMERIC column (round-trip).
+                    assert Decimal(str(fx["exchange_rate"])) == resolved_rate
+                    # Non-fx provenance keys are preserved (M2 only sets fx_conversion).
                     assert prov["ingest_source"] == "commerce_webhook"
                 finally:
                     await conn.close()
@@ -440,11 +453,24 @@ def test_spend_repo_idempotent_upsert_and_fx_provenance():
                     assert str(row["spend_record_id"]) == sr_first
                     assert row["impressions"] == 1000
                     assert row["total_cost"] == Decimal("50")
-                    assert row["exchange_rate"] == Decimal("1.27193846")
+                    # CURRENCY M2 resolves the real snapshot rate for GBP and
+                    # overwrites the caller's exchange_rate / provenance.fx_conversion
+                    # (a priced foreign currency never keeps a fabricated 1.0 or an
+                    # unverified caller rate). Assert the resolved provenance
+                    # round-trips through the real NUMERIC + JSONB columns.
+                    resolved_rate = row["exchange_rate"]
+                    assert isinstance(resolved_rate, Decimal)
+                    assert resolved_rate != Decimal("1.0"), (
+                        "priced GBP spend must persist a real, non-parity rate; "
+                        f"got {resolved_rate!r}"
+                    )
                     assert row["billing_currency"] == "GBP"
                     prov = _jsonb(row["provenance"])
-                    assert prov["fx_conversion"]["conversion_rate"] == "1.27193846"
-                    assert prov["fx_conversion"]["conversion_source"] == "ecb_reference"
+                    fx = prov["fx_conversion"]
+                    assert fx["priced"] is True
+                    assert fx["conversion_source"], "priced FX must record a source"
+                    assert Decimal(str(fx["exchange_rate"])) == resolved_rate
+                    assert prov["connector"] == "google_ads"
 
                     # 2. Replay the SAME idempotency_key WITHOUT a spend_record_id
                     #    (repo mints a new one) and with changed mutable metrics.
@@ -475,10 +501,14 @@ def test_spend_repo_idempotent_upsert_and_fx_provenance():
                         "FROM spend_records WHERE tenant_id=$1 AND idempotency_key=$2",
                         tenant, idem,
                     )
-                    # Mutable columns updated from EXCLUDED ...
+                    # Mutable columns updated from EXCLUDED (impressions/total_cost
+                    # change on replay) ...
                     assert row2["impressions"] == 2000
                     assert row2["total_cost"] == Decimal("60")
-                    assert row2["exchange_rate"] == Decimal("1.3")
+                    # exchange_rate is pinned to the resolved GBP snapshot rate on
+                    # both inserts (CURRENCY M2 resolves it, ignoring the caller's
+                    # replay input), so it stays consistent rather than the 1.30 input.
+                    assert row2["exchange_rate"] == resolved_rate
                     # ... but the surrogate PK is STILL the first-insert value.
                     assert str(row2["spend_record_id"]) == sr_first, (
                         "spend_record_id changed on replay — real ON CONFLICT DO "
