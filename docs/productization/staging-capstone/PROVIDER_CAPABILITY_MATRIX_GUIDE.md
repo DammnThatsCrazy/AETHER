@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/descriptor.py
 canonical_owner: platform@aether
-last_synced_commit: "71d96f6"
+last_synced_commit: "aa51393"
 ---
 
 # Provider Capability Matrix Guide

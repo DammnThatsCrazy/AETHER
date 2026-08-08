@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "bac7f92"
+last_synced_commit: "aa51393"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -909,8 +909,11 @@ Configure a reward delivery rail for the authenticated tenant.
 }
 ```
 
-Rails: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim`.
-Beta (config only, no delivery): `stripe_credit` | `loyalty_points` | `coupon` | `internal_credit` | `x402_credit`.
+Rails (see `docs/_generated/reward-rail-matrix.json` for the canonical tiers):
+- Production: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim` | `internal_credit`.
+- Sandbox: `stripe_credit` (Stripe test mode; live key external). Explicit beta: `x402_credit` (sandbox-only).
+- Intentionally unsupported (configuring is refused, HTTP 422): `loyalty_points` | `coupon`.
+`internal_credit` / `stripe_credit` / `x402_credit` deliver through the same durable outbox as `tenant_webhook`.
 
 For `tenant_webhook`, a submitted `signing_secret` is **dual-written into the
 credential authority** (provider `tenant_webhook`, slot `webhook_signing_secret`)
