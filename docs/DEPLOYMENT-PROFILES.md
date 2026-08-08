@@ -27,11 +27,14 @@ is the canonical matrix — backend selectors, cost policy and numeric budgets �
 and `scripts/release/check_profile_config.py` validates it.
 
 Four of the eight are **cloud profiles**: `staging`, `production-lean`,
-`production-scale`, `enterprise-isolated`. Only those four are selectable in
-Terraform through `var.deployment_profile`, and only those four have a
-`profiles/*.tfvars` file, a plan test and a policy contract. The other four are
-declared so the architecture stays viable through them; they are described
-honestly below, including where the automation does not exist.
+`production-scale`, `enterprise-isolated`. Six of the eight are
+Terraform-selectable through `var.deployment_profile` — the four cloud
+profiles plus the two ephemeral-class profiles `demo` and `preview` — and all
+six have a `profiles/*.tfvars` file, a plan test and a policy contract (the
+parity checker pins the selectable set to cloud ∪ ephemeral). The remaining two
+(`local`, `local-full`) are local-only and are never selectable in Terraform;
+they are described honestly below, including where the automation does not
+exist.
 
 `scripts/release/check_profile_parity.py` enforces that every profile-count
 statement in the docs stays in lockstep with the canonical matrix, so a ninth
@@ -83,8 +86,8 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 |---|---|---|---|---|---|
 | `local` | local | no | n/a | single process | n/a |
 | `local-full` | local | no | n/a | compose per-role | n/a |
-| `demo` | demo | no | yes | backend-seeded shared non-production | n/a |
-| `preview` | preview | no | yes | not implemented | n/a |
+| `demo` | demo | **yes** | yes (USD 150 / 220) | `consolidated` — 2 tasks | **0** |
+| `preview` | preview | **yes** | yes (USD 150 / 220) | `consolidated` — 2 tasks | **0** |
 | `staging` | staging | **yes** | yes (USD 25 / 50) | `consolidated` — 2 tasks | **0** |
 | `production-lean` | production | **yes** | yes (USD 150 / 200) | `consolidated` — 2 tasks | **0** |
 | `production-scale` | production | **yes** | no | `dedicated` — 9 services | 1 (`single`) |
@@ -131,16 +134,16 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 | | |
 |---|---|
 | **Purpose** | Temporary live demo against a shared non-production backend. |
-| **Selection** | **Not implemented as automation in this repository.** No Terraform selector, no workflow, no TTL job exists. |
-| **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. |
-| **Runtime topology** | Shared non-production backend; no browser-side data service. |
+| **Selection** | Terraform-selectable via the same root (`AWS Deployment/aether-aws/terraform/profiles/demo.tfvars`); `variables.tf` accepts `demo`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service (`cost_policy` forbids them). |
+| **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling) — the same footprint shape as staging, one step down. |
 | **Data behaviour** | Versioned backend-seeded synthetic tenant only. Never real customer data; normal startup remains empty. |
-| **Network behaviour** | Shared non-production network. |
-| **Cost posture** | `cost_capped: true`; no numeric budget declared. |
-| **TTL / lifecycle** | `ttl_cleanup_required: true` is **declared but not enforced by any shipped job**. |
+| **Network behaviour** | Shared non-production network, `network_egress_mode = public_ip` — no NAT Gateway. |
+| **Cost posture** | `cost_capped: true`; FIXED budget target 150 / hard 220 USD/mo, validated by `validate-ephemeral-budget` against the committed demo-valid fixture (~USD 145.60/mo fixed baseline). |
+| **TTL / lifecycle** | `ttl_cleanup_required: true`. Enforced by the ephemeral TTL guard: an SSM lease at `/aether/demo/demo/lifecycle/expires-at` written by `ephemeral_env.py provision`, checked hourly by `.github/workflows/ephemeral-ttl-guard.yml` (fail-closed — missing/expired lease ends the run red), and torn down by `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). |
 | **Security posture** | Would inherit the shared non-production account's posture. Seed/reset additionally require an explicit staging demo policy and tenant allowlist. Unproven. |
-| **Validation** | `make validate-profile-config` only. |
-| **Limitations** | The TTL requirement has no enforcement, which is the exact failure mode that leaves demo environments running. Treat the declaration as a design constraint, not a control. |
+| **Validation** | `make validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-profile-parity validate-ephemeral-budget test-ephemeral-lifecycle` + profile-doctor. |
+| **Limitations** | The TTL guard is the tripwire; enforcement (scale-to-zero) is the operator-run `ephemeral_env.py teardown` — it is not an automatic destroy. |
 | **Promotion path** | None. A demo is never promoted; a release is rehearsed in `staging`. |
 
 ## `preview`
@@ -148,16 +151,16 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 | | |
 |---|---|
 | **Purpose** | PR-specific live environment, created only when explicitly requested. |
-| **Selection** | **Not implemented as automation in this repository.** |
-| **Resource inventory** | Shared foundation Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, with a temporary tenant schema/prefix route. |
-| **Runtime topology** | Undeclared in `config/runtime_deployment.yaml`. |
+| **Selection** | Terraform-selectable via the same root (`AWS Deployment/aether-aws/terraform/profiles/preview.tfvars`); `variables.tf` accepts `preview`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Resource inventory** | Shared foundation Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, with a temporary tenant schema/prefix route. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service. |
+| **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling). |
 | **Data behaviour** | Temporary tenant on the shared foundation; auto-expiring. |
-| **Network behaviour** | Shared foundation network. Explicitly **forbids** a dedicated VPC, dedicated ALB, dedicated Aurora or dedicated Neptune. |
-| **Cost posture** | `cost_capped: true`; no numeric budget declared. |
-| **TTL / lifecycle** | `ttl_cleanup_required: true` and `auto-expire` are declared; **no shipped job enforces either**. `run-forever` is a declared forbidden behaviour. |
+| **Network behaviour** | Shared foundation network, `network_egress_mode = public_ip` — no NAT Gateway. `cost_policy` and `forbids` keep it off a dedicated VPC, dedicated ALB, dedicated Aurora or dedicated Neptune. |
+| **Cost posture** | `cost_capped: true`; FIXED budget target 150 / hard 220 USD/mo, validated by `validate-ephemeral-budget` against the committed preview-valid fixture (~USD 145.60/mo fixed baseline — same cloned footprint as demo). |
+| **TTL / lifecycle** | `ttl_cleanup_required: true` and `auto-expire` enforced. The ephemeral TTL guard runs hourly over the demo/preview matrix: SSM lease at `/aether/preview/preview/lifecycle/expires-at`, fail-closed (missing/expired lease ends the run red), torn down by `ephemeral_env.py teardown`. `run-forever` is forbidden and the guard makes it unachievable. |
 | **Security posture** | Would share a foundation database with other previews; isolation would rest entirely on the tenant schema prefix. Unproven. |
-| **Validation** | `make validate-profile-config` only. |
-| **Limitations** | As above — declared constraints without enforcement. |
+| **Validation** | `make validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-profile-parity validate-ephemeral-budget test-ephemeral-lifecycle` + profile-doctor. |
+| **Limitations** | The TTL guard is the tripwire; enforcement (scale-to-zero) is the operator-run `ephemeral_env.py teardown`. |
 | **Promotion path** | None. Preview environments are discarded, not promoted. |
 
 ## `staging`
@@ -341,11 +344,13 @@ moment it is written. It runs in `release-gate` and
 
 `make test-terraform-profiles` runs `terraform validate` and then
 `terraform test -filter=tests/profile_plan.tftest.hcl`. **`terraform validate`
-passes, and `terraform test` passes for all four cloud profiles.** Five
-provider-mocked run blocks — `staging_profile_plan`,
-`staging_asleep_profile_plan`, `production_lean_profile_plan`,
-`production_scale_profile_plan`, `enterprise_isolated_profile_plan` — assert
-against the **planned module graph**, not against the locals that produced it:
+passes, and `terraform test` passes for all six selectable profiles.** Ten
+provider-mocked run blocks — `staging_profile_plan`, `demo_profile_plan`,
+`preview_profile_plan`, `staging_asleep_profile_plan`,
+`production_lean_profile_plan`, `production_scale_profile_plan`,
+`enterprise_isolated_profile_plan`, plus the applied-state and egress-rejection
+blocks — assert against the **planned module graph**, not against the locals
+that produced it:
 
 ```hcl
 length(module.msk)              == 0    # production-lean
@@ -403,10 +408,12 @@ property enforced by the staging automation, not a plan assertion.
 applies Terraform.** The `apply-production-lean` job that auto-applied on every
 push to `main` has been **deleted**. What remains there:
 
-- a provider-mocked configuration plan for each of the four profiles on every
-  PR, publishing an immutable `terraform-configuration-plan-*` artifact;
-- an OIDC remote plan per profile when the complete credential set is present,
-  publishing `terraform-remote-plan-*` plus the policy and cost reports;
+- a provider-mocked configuration plan for each of the six selectable profiles
+  on every PR, publishing an immutable `terraform-configuration-plan-*` artifact
+  (the two ephemeral-class profiles are included here and deliberately excluded
+  from remote-plan);
+- an OIDC remote plan per cloud profile when the complete credential set is
+  present, publishing `terraform-remote-plan-*` plus the policy and cost reports;
 - `require-production-credentials`, which on a push to `main` gates
   **promotability**, not an apply: a commit is only dispatchable for promotion
   if its main-branch run proved the credential set exists and all four profiles
@@ -537,15 +544,19 @@ make deployment-profile-gate          # every profile gate that runs without AWS
 make validate-profile-config          # profile matrix + posture schema
 make validate-cost-policy             # forbidden/required resource declarations
 make validate-cost-policy-terraform   # Terraform locals statically encode the policy
+make validate-profile-parity          # cross-source profile-set agreement (selectable = cloud ∪ ephemeral)
 make validate-delivery-topology       # every worker role owned by exactly one service
 make validate-terraform-profile-policy # score a real plan JSON against the contracts
 make validate-cost-model              # price the inventory against the numeric budget
+make validate-staging-budget          # staging awake/asleep budget (plan-policy + cost model)
+make validate-ephemeral-budget        # demo/preview budget off their committed fixtures
 make test-terraform-profiles          # provider-mocked per-profile plan tests
 make test-runtime-topology            # execution-group topology
 make test-plan-policy                 # plan-policy validator against fixtures
 make test-workflow-controls           # no automatic apply, reviewed-plan integrity
 make test-cost-model                  # ceilings, fail-closed pricing, exception expiry
 make test-staging-lifecycle           # wake/sleep + TTL guard structural controls
+make test-ephemeral-lifecycle         # demo/preview TTL guard + provision/teardown ops
 make deployment-readiness-score       # the three-column scorecard
 make collect-deployment-evidence      # materialise release-evidence/ with its checksum
 ```

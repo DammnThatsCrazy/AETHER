@@ -32,8 +32,8 @@
         validate-route-registry validate-implementation-ledger validate-reference-packs \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults \
         validate-terraform-profile-policy validate-cost-model test-terraform-profiles test-runtime-topology \
-        test-workflow-controls test-cost-model test-staging-lifecycle test-plan-policy \
-        deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget
+        test-workflow-controls test-cost-model test-staging-lifecycle test-ephemeral-lifecycle test-plan-policy \
+        deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget validate-ephemeral-budget
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -715,6 +715,25 @@ validate-staging-budget: ## Plan-policy + cost gate for staging, awake and aslee
 		--inventory artifacts/staging-asleep/profile-resource-inventory.json \
 		--out-dir reports/cost/staging-asleep
 
+# demo and preview are the ephemeral-class profiles. They share staging's
+# consolidated footprint (so the fixtures clone staging-awake) but are
+# cost-capped against their OWN FIXED budgets, not staging's awake-hours budget
+# or production-lean's. This target prices both so a budget regression in the
+# ephemeral class surfaces offline, with no AWS credentials.
+validate-ephemeral-budget: ## Plan-policy + cost gate for demo and preview, off their committed fixtures
+	python scripts/release/check_terraform_plan_policy.py --profile demo \
+		--plan-json tests/fixtures/terraform_plans/demo-valid.json \
+		--out-dir artifacts/demo
+	python scripts/release/check_cost_model.py --profile demo \
+		--inventory artifacts/demo/profile-resource-inventory.json \
+		--out-dir reports/cost/demo
+	python scripts/release/check_terraform_plan_policy.py --profile preview \
+		--plan-json tests/fixtures/terraform_plans/preview-valid.json \
+		--out-dir artifacts/preview
+	python scripts/release/check_cost_model.py --profile preview \
+		--inventory artifacts/preview/profile-resource-inventory.json \
+		--out-dir reports/cost/preview
+
 test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile module cardinality
 	cd "$(TF_DIR)" && terraform init -backend=false -input=false >/dev/null && \
 		terraform validate && \
@@ -731,6 +750,9 @@ test-cost-model: ## Cost-model unit tests (ceilings, fail-closed pricing, except
 
 test-staging-lifecycle: ## Staging wake/sleep + TTL guard structural controls
 	python -m pytest tests/unit/test_staging_lifecycle_controls.py -q
+
+test-ephemeral-lifecycle: ## Ephemeral TTL guard + provision/teardown ops unit tests
+	python -m pytest tests/unit/test_ephemeral_ttl_guard.py -q
 
 test-plan-policy: ## Plan-policy validator against the pass/fail plan fixtures
 	python -m pytest tests/unit/test_terraform_plan_policy.py tests/unit/test_terraform_resource_contracts.py -q
