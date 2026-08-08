@@ -24,20 +24,30 @@ name: Production-Equivalent CI (M1)
 #   - Adds no database migration and changes no runtime behavior; it only
 #     runs already-existing migrations against a fresh, ephemeral database.
 #
-# KNOWN LIMITATION (found while building this lane, not fixed by it): running
-# `alembic upgrade head` against a genuinely fresh Postgres 16 database can
-# currently fail before reaching the ingestion-v2 revision this lane cares
-# about, due to pre-existing, unrelated migration-graph issues that this M1
-# change does not touch or fix (e.g. a malformed array server_default in
-# alembic/versions/20260529_notification_intelligence.py, and an undeclared
-# cross-branch dependency in alembic/versions/20260712_ops_runtime.py on a
-# table created by alembic/versions/20260604_agent_control_plane.py, which
-# Alembic's topological sort is not guaranteed to order before it). That is
-# precisely the class of gap this program exists to surface — this lane
-# intentionally does NOT work around it, since routing around a real
-# migration-graph bug in CI would hide the exact signal M1 exists to produce.
-# If this job is red at the "Apply database migrations" step, that is the
-# expected, honest signal until those migrations are separately fixed.
+# FRESH-DB MIGRATION BUGS THIS LANE FOUND (and that are now fixed): booting a
+# genuinely fresh Postgres 16 database and running `alembic upgrade head` — the
+# thing no other workflow did, because they all run AETHER_ENV=local and never
+# touch Alembic — surfaced five pre-existing defects that were invisible to the
+# in-memory path, every one of them a real production-provisioning failure:
+#   1. alembic/versions/20260604_agent_control_plane.py created agent_worker_runs
+#      that 20260712_ops_runtime.py indexed, with no declared dependency, so the
+#      topological sort could order the index before the table → fixed by adding
+#      depends_on to 20260712_ops_runtime.py.
+#   2/3. Two malformed ARRAY server_defaults (string 'ARRAY[...]' instead of
+#      sa.text("ARRAY[...]")) in 20260529_notification_intelligence.py that
+#      Postgres could not cast to text[] → fixed to sa.text(...).
+#   4. 13 revision ids exceed Alembic's default alembic_version.version_num
+#      VARCHAR(32) (up to 47 chars), overflowing on the first over-length stamp
+#      → fixed by widening the column in alembic/env.py (backward compatible).
+#   5. A plain-string (non-f-string) DDL in 20260808_provider_evidence.py carried
+#      a doubled-brace '{{}}'::jsonb that leaked literally as invalid JSON →
+#      fixed to '{}'.
+# This lane deliberately did NOT route around any of them — routing around a real
+# migration-graph bug would hide the exact signal M1 exists to produce. With the
+# fixes above, `alembic upgrade head` against a fresh database now completes to a
+# single head (verified locally against postgres:16), so the "Apply database
+# migrations" step is expected to be GREEN. A red at that step now signals a NEW
+# fresh-DB regression to fix at its source, not a known-accepted gap.
 
 on:
   pull_request:
