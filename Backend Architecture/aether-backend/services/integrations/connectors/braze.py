@@ -29,7 +29,8 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, NoReturn, Optional
+from urllib.parse import urlsplit
 
 from shared.security.ssrf import validated_https_host
 
@@ -59,6 +60,17 @@ BRAZE_ALLOW_SUFFIXES = ("braze.com",)
 
 def _err(connector_type: str, detail: str) -> ConnectionTestResult:
     return ConnectionTestResult(connector_type=connector_type, ok=False, status="error", detail=detail)  # type: ignore[arg-type]
+
+
+def _raise_pull_denied(connector_type: str) -> NoReturn:
+    """Typed pull-denial failure for a denied ``rest_api_base`` (F-4).
+
+    Never a silent empty pull: delegates to the shared adapter helper (log +
+    metrics + raise ``ConnectorPullDeniedError`` with a safe_message) so the
+    sync surfaces as a failed run instead of "provider returned none".
+    """
+    from services.integrations.connectors.adapters import _raise_pull_denied as _impl
+    _impl(connector_type)  # always raises; typed for static analyzers below
 
 # Braze message-event names (Currents ``users.messages.email.*`` as they appear
 # in event exports and REST pushes) → canonical communication event type.
@@ -310,10 +322,26 @@ class BrazeConnector(BaseConnector):
     def _base_for(config: ConnectorConfig) -> str:
         """Allowlisted Braze REST base URL (or ``""`` when the configured
         ``rest_api_base`` is missing-or-rejected; falls back to ``_API_BASE``,
-        which is itself an allowlisted subdomain)."""
+        which is itself an allowlisted subdomain).
+
+        The tenant-configured PATH PREFIX is preserved (F-1 regression fix):
+        only the HOST is validated against the allowlist, then the URL is
+        reconstructed as ``https://<host><path>`` with the original path
+        stripped of a trailing slash only. A denied base still fails closed to
+        ``""`` — the path can never smuggle a host change past the gate because
+        ``validated_https_host`` rejects userinfo/port/query/fragment tricks and
+        the allowlist binds the hostname.
+        """
         base = (config.config or {}).get("rest_api_base") or _API_BASE
-        host = validated_https_host(str(base).rstrip("/"), allow_suffixes=BRAZE_ALLOW_SUFFIXES)
-        return f"https://{host}" if host else ""
+        raw = str(base)
+        host = validated_https_host(raw, allow_suffixes=BRAZE_ALLOW_SUFFIXES)
+        if host is None:
+            return ""
+        # ``urlsplit`` of a scheme-less bare host assigns the whole value to
+        # ``path``; only a real URL path (leading ``/``) is preserved.
+        parts = urlsplit(raw)
+        path = parts.path.rstrip("/") if parts.path.startswith("/") else ""
+        return f"https://{host}{path}"
 
     async def test_connection(self, config: ConnectorConfig, secret: Optional[str] = None) -> ConnectionTestResult:
         base_result = await super().test_connection(config, secret)
@@ -389,7 +417,7 @@ class BrazeConnector(BaseConnector):
         """
         base = self._base_for(config)
         if not base:
-            return []
+            _raise_pull_denied(self.connector_type)
         today = datetime.now(timezone.utc).date().isoformat()
         if since:
             # Accept ISO datetime cursors (service stamps ``now_iso()``) and
@@ -433,7 +461,7 @@ class BrazeConnector(BaseConnector):
     async def _pull_campaigns(self, config: ConnectorConfig, secret: str) -> list[NormalizedEvent]:
         base = self._base_for(config)
         if not base:
-            return []
+            _raise_pull_denied(self.connector_type)
         status, body = await _get(
             f"{base}/campaigns/list?page=0", secret,
         )
@@ -459,7 +487,7 @@ class BrazeConnector(BaseConnector):
     async def _pull_canvases(self, config: ConnectorConfig, secret: str) -> list[NormalizedEvent]:
         base = self._base_for(config)
         if not base:
-            return []
+            _raise_pull_denied(self.connector_type)
         status, body = await _get(
             f"{base}/canvas/list?page=0", secret,
         )

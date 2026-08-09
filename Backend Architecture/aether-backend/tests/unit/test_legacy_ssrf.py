@@ -23,7 +23,10 @@ from urllib.parse import urlparse
 import pytest
 
 from services.integrations.connectors import adapters
+from services.integrations.connectors import registry as registry_mod
 from services.integrations.connectors.adapters import (
+    ALL_CONNECTORS,
+    ConnectorPullDeniedError,
     DuneConnector,
     JiraConnector,
     PostHogConnector,
@@ -32,6 +35,13 @@ from services.integrations.connectors.adapters import (
     ZendeskConnector,
 )
 from services.integrations.connectors.base import ConnectorConfig
+from services.integrations.connectors.braze import BrazeConnector
+from services.integrations.connectors.registry import (
+    get_connector,
+    is_retired,
+    list_descriptors,
+    retire_connector_type,
+)
 
 
 def _cfg(connector_type: str, config: dict[str, Any]) -> ConnectorConfig:
@@ -46,6 +56,22 @@ def _cfg(connector_type: str, config: dict[str, Any]) -> ConnectorConfig:
 
 def _host_of(url: str) -> str:
     return urlparse(url).hostname or ""
+
+
+@pytest.fixture(autouse=True)
+def _reset_retirement_ledger():
+    """The retirement ledger is module-global; clear it before AND after each
+    test so registry-resolution tests (F-3) are deterministic and never leak a
+    retirement into another test module's registry assertions."""
+    registry_mod._RETIRED_AT.clear()
+    yield
+    registry_mod._RETIRED_AT.clear()
+
+
+def _fresh_registry_state() -> dict[str, Any]:
+    """A fresh registry state (never the shared module global) for the F-3
+    retire-consumption tests."""
+    return {c.connector_type: c() for c in ALL_CONNECTORS}
 
 
 # ── Shopify — shop_domain is a bare `*.myshopify.com` hostname ─────────────
@@ -97,8 +123,12 @@ async def test_shopify_pull_rejects_malicious_shop(monkeypatch, shop: str) -> No
     get = AsyncMock(return_value=(200, {"orders": []}))
     monkeypatch.setattr(adapters, "_http_get", get)
     conn = ShopifyConnector()
-    events = await conn.pull(_cfg("shopify", {"shop_domain": shop}), secret="secret")
-    assert events == []
+    # F-4: a denied host in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(_cfg("shopify", {"shop_domain": shop}), secret="secret")
+    assert "shopify" in excinfo.value.safe_message
+    assert shop not in excinfo.value.safe_message  # safe_message only, never raw host
+    assert shop not in str(excinfo.value)
     assert get.await_count == 0
 
 
@@ -179,8 +209,12 @@ async def test_salesforce_pull_rejects_malicious_instance(monkeypatch, instance:
     get = AsyncMock(return_value=(200, {"records": []}))
     monkeypatch.setattr(adapters, "_http_get", get)
     conn = SalesforceConnector()
-    events = await conn.pull(_cfg("salesforce", {"instance_url": instance}), secret="secret")
-    assert events == []
+    # F-4: a denied host in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(_cfg("salesforce", {"instance_url": instance}), secret="secret")
+    assert "salesforce" in excinfo.value.safe_message
+    assert instance not in excinfo.value.safe_message
+    assert instance not in str(excinfo.value)
     assert get.await_count == 0
 
 
@@ -256,10 +290,14 @@ async def test_posthog_pull_rejects_malicious_host(monkeypatch, host: str) -> No
     get = AsyncMock(return_value=(200, {"results": []}))
     monkeypatch.setattr(adapters, "_http_get", get)
     conn = PostHogConnector()
-    events = await conn.pull(
-        _cfg("posthog", {"host": host, "project_id": "prj1"}), secret="secret"
-    )
-    assert events == []
+    # F-4: a denied host in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(
+            _cfg("posthog", {"host": host, "project_id": "prj1"}), secret="secret"
+        )
+    assert "posthog" in excinfo.value.safe_message
+    assert host not in excinfo.value.safe_message
+    assert host not in str(excinfo.value)
     assert get.await_count == 0
 
 
@@ -333,8 +371,12 @@ async def test_jira_pull_rejects_malicious_domain(monkeypatch, domain: str) -> N
     get = AsyncMock(return_value=(200, {"issues": []}))
     monkeypatch.setattr(adapters, "_http_get", get)
     conn = JiraConnector()
-    events = await conn.pull(_cfg("jira", {"domain": domain}), secret="secret")
-    assert events == []
+    # F-4: a denied host in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(_cfg("jira", {"domain": domain}), secret="secret")
+    assert "jira" in excinfo.value.safe_message
+    assert domain not in excinfo.value.safe_message
+    assert domain not in str(excinfo.value)
     assert get.await_count == 0
 
 
@@ -401,8 +443,12 @@ async def test_zendesk_pull_rejects_malicious_domain(monkeypatch, domain: str) -
     get = AsyncMock(return_value=(200, {"tickets": []}))
     monkeypatch.setattr(adapters, "_http_get", get)
     conn = ZendeskConnector()
-    events = await conn.pull(_cfg("zendesk", {"domain": domain}), secret="secret")
-    assert events == []
+    # F-4: a denied host in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(_cfg("zendesk", {"domain": domain}), secret="secret")
+    assert "zendesk" in excinfo.value.safe_message
+    assert domain not in excinfo.value.safe_message
+    assert domain not in str(excinfo.value)
     assert get.await_count == 0
 
 
@@ -473,9 +519,11 @@ async def test_dune_pull_fails_closed_when_host_denied(monkeypatch) -> None:
     post = AsyncMock(return_value=(200, {"execution_id": "e1"}))
     monkeypatch.setattr(adapters, "_http_post", post)
     conn = DuneConnector()
-    events = await conn.pull(_cfg("dune", {"query_ids": ["1"]}), secret="secret")
-    assert events == []
+    # F-4: a denied host in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(_cfg("dune", {"query_ids": ["1"]}), secret="secret")
     assert seen  # the gate ran before any HTTP
+    assert "dune" in excinfo.value.safe_message
     assert post.await_count == 0
 
 
@@ -493,3 +541,103 @@ async def test_dune_pull_accepts_fixed_host(monkeypatch) -> None:
     assert _host_of(post.await_args.args[0]) == DUNE_VALID_HOST
     get.assert_awaited_once()
     assert _host_of(get.await_args.args[0]) == DUNE_VALID_HOST
+
+
+# ── Braze — allowlisted rest_api_base PATH PREFIX must survive (F-1) ────────
+
+BRAZE_PATH_BASE = "https://rest.iad-01.braze.com/custom-proxy"
+
+
+def test_braze_base_for_preserves_allowlisted_path_prefix() -> None:
+    conn = BrazeConnector()
+    base = conn._base_for(_cfg("braze", {"rest_api_base": BRAZE_PATH_BASE}))
+    assert base == "https://rest.iad-01.braze.com/custom-proxy"
+
+
+def test_braze_base_for_strips_only_trailing_slash_from_path() -> None:
+    conn = BrazeConnector()
+    base = conn._base_for(
+        _cfg("braze", {"rest_api_base": "https://rest.iad-01.braze.com/custom-proxy/"})
+    )
+    assert base == "https://rest.iad-01.braze.com/custom-proxy"
+
+
+def test_braze_base_for_fails_closed_on_denied_base() -> None:
+    conn = BrazeConnector()
+    base = conn._base_for(_cfg("braze", {"rest_api_base": "https://attacker.com/path"}))
+    assert base == ""
+
+
+@pytest.mark.asyncio
+async def test_braze_pull_denied_base_raises_typed_failure(monkeypatch) -> None:
+    import services.integrations.connectors.braze as braze_mod
+
+    get = AsyncMock(return_value=(200, {}))
+    monkeypatch.setattr(braze_mod, "_get", get)
+    conn = BrazeConnector()
+    # F-4: a denied base in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(_cfg("braze", {"rest_api_base": "https://attacker.com"}),
+                        secret="secret")
+    assert "braze" in excinfo.value.safe_message
+    assert "attacker.com" not in excinfo.value.safe_message
+    assert get.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_braze_pull_preserves_path_prefix_on_allowlisted_base(monkeypatch) -> None:
+    import services.integrations.connectors.braze as braze_mod
+
+    get = AsyncMock(return_value=(200, {"emails": [], "campaigns": [], "canvases": []}))
+    monkeypatch.setattr(braze_mod, "_get", get)
+    conn = BrazeConnector()
+    events = await conn.pull(_cfg("braze", {"rest_api_base": BRAZE_PATH_BASE}),
+                             secret="secret")
+    assert events == []
+    assert get.await_count >= 4  # hard_bounces, unsubscribes, campaigns, canvases
+    for call in get.await_args_list:
+        url = str(call.args[0])
+        assert url.startswith("https://rest.iad-01.braze.com/custom-proxy/"), url
+
+
+# ── WS7 retire consumption — the marker has real in-process effect (F-3) ────
+
+
+def test_retired_connector_resolves_to_none() -> None:
+    assert get_connector("shopify") is not None
+    result = retire_connector_type(_fresh_registry_state(), "shopify")
+    assert result.status == "retired"
+    assert is_retired("shopify") is True
+    assert get_connector("shopify") is None
+
+
+def test_list_descriptors_excludes_retired_type() -> None:
+    types_before = {d["connector_type"] for d in list_descriptors()}
+    assert "shopify" in types_before
+    retire_connector_type(_fresh_registry_state(), "shopify")
+    types_after = {d["connector_type"] for d in list_descriptors()}
+    assert "shopify" not in types_after
+
+
+def test_descriptor_for_excludes_retired_type() -> None:
+    from services.integrations.connectors.registry import descriptor_for
+
+    assert descriptor_for("shopify") is not None
+    retire_connector_type(_fresh_registry_state(), "shopify")
+    assert descriptor_for("shopify") is None
+
+
+def test_repeat_retire_is_already_retired() -> None:
+    state = _fresh_registry_state()
+    first = retire_connector_type(state, "shopify")
+    second = retire_connector_type(state, "shopify")
+    assert first.status == "retired"
+    assert second.status == "already_retired"
+    assert second.retired_at == first.retired_at
+
+
+def test_retired_other_connector_untouched() -> None:
+    retire_connector_type(_fresh_registry_state(), "shopify")
+    assert get_connector("shopify") is None
+    # A non-retired connector resolves normally.
+    assert get_connector("dune") is not None

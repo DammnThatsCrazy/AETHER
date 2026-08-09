@@ -7,8 +7,10 @@ hits the EC2 metadata service). The base URL is now validated against the
 ``braze.com`` allowlist suffix via ``validated_https_host`` BEFORE any URL is
 built:
 
-* (a) a denied base returns the connector's existing failure shape and NEVER
-  reaches ``_get``;
+* (a) a denied base NEVER reaches ``_get``: ``test_connection`` returns the
+  existing error shape and ``pull`` raises the typed
+  ``ConnectorPullDeniedError`` (F-4 — a denied host is a failed sync run,
+  never a silent empty that reads as "provider returned none");
 * (b) a valid allowlisted base still works (``https://rest.iad-01.braze.com``,
   the bare form, and the ``_API_BASE`` default) and reaches ``_get`` with a
   URL whose host equals the allowlisted host.
@@ -82,11 +84,15 @@ async def test_braze_test_connection_rejects_malicious_base(monkeypatch, base: s
 @pytest.mark.asyncio
 @pytest.mark.parametrize("base", BRAZE_MALICIOUS_BASE)
 async def test_braze_pull_rejects_malicious_base(monkeypatch, base: str) -> None:
+    from services.integrations.connectors.adapters import ConnectorPullDeniedError
+
     get = AsyncMock(return_value=(200, {}))
     monkeypatch.setattr(braze_mod, "_get", get)
     conn = BrazeConnector()
-    events = await conn.pull(_cfg(base), secret="secret")
-    assert events == []
+    # F-4: a denied base in a pull path is a TYPED failure (never a silent []).
+    with pytest.raises(ConnectorPullDeniedError) as excinfo:
+        await conn.pull(_cfg(base), secret="secret")
+    assert base not in excinfo.value.safe_message  # safe_message only, never the raw value
     assert get.await_count == 0
 
 

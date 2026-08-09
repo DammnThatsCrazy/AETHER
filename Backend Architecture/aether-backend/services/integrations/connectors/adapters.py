@@ -7,8 +7,9 @@ ConnectorService from the vault and passed per-request.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, NoReturn, Optional
 
+from shared.logger.logger import get_logger
 from shared.security.ssrf import validated_https_host
 
 from services.integrations.connectors.base import (
@@ -66,6 +67,44 @@ POSTHOG_ALLOW_SUFFIXES = ("posthog.com",)
 ATLASSIAN_ALLOW_SUFFIXES = ("atlassian.net",)
 ZENDESK_ALLOW_SUFFIXES = ("zendesk.com",)
 DUNE_ALLOW_SUFFIXES = ("dune.com",)
+
+
+class ConnectorPullDeniedError(RuntimeError):
+    """Typed failure when an SSRF-hardened pull path rejects a tenant host.
+
+    Raised instead of a silent ``[]``/``continue`` so a denied host surfaces as
+    a failed sync run (``pull`` callers catch exceptions and mark the run
+    ``failed``) — never an empty result that reads as "provider returned none".
+    The message is a ``safe_message``: connector type + reason only, never the
+    raw host/domain value and never a secret.
+    """
+
+    def __init__(
+        self,
+        connector_type: str,
+        *,
+        reason: str = "pull host rejected by SSRF allowlist",
+    ) -> None:
+        self.connector_type = connector_type
+        self.safe_message = f"{connector_type}: {reason}"
+        super().__init__(self.safe_message)
+
+
+def _raise_pull_denied(connector_type: str) -> NoReturn:
+    """Log, metric, and raise the typed pull-denial failure (F-4).
+
+    A denied host in a pull path must never look like "provider returned none":
+    log a safe_message, increment the pull-denied counter, and raise
+    ``ConnectorPullDeniedError`` so the sync run surfaces as failed.
+    """
+    logger = get_logger("aether.service.connectors")
+    logger.warning(
+        "connector pull denied: tenant host rejected by SSRF allowlist "
+        f"(connector={connector_type}, safe_message only)"
+    )
+    from shared.logger.logger import metrics as _metrics
+    _metrics.increment("connector_pull_denied_total", labels={"connector": connector_type})
+    raise ConnectorPullDeniedError(connector_type)
 
 
 class SlackConnector(BaseConnector):
@@ -183,7 +222,7 @@ class ShopifyConnector(BaseConnector):
             return []
         host = validated_https_host(shop, allow_suffixes=SHOPIFY_ALLOW_SUFFIXES)
         if host is None:
-            return []
+            _raise_pull_denied(self.connector_type)
         params = "?status=any&limit=50"
         if since:
             params += f"&updated_at_min={since}"
@@ -538,7 +577,7 @@ class SalesforceConnector(BaseConnector):
             return []
         host = validated_https_host(instance_url, allow_suffixes=SALESFORCE_ALLOW_SUFFIXES)
         if host is None:
-            return []
+            _raise_pull_denied(self.connector_type)
         soql = "SELECT+Id,Email,FirstName,LastName,Company+FROM+Lead+ORDER+BY+LastModifiedDate+DESC+LIMIT+50"
         if since:
             soql = f"SELECT+Id,Email,FirstName,LastName,Company+FROM+Lead+WHERE+LastModifiedDate+>={since}+ORDER+BY+LastModifiedDate+DESC+LIMIT+50"
@@ -617,7 +656,7 @@ class PostHogConnector(BaseConnector):
         host = config.config.get("host", "https://app.posthog.com")
         validated = validated_https_host(host, allow_suffixes=POSTHOG_ALLOW_SUFFIXES)
         if validated is None:
-            return []
+            _raise_pull_denied(self.connector_type)
         project_id = config.config.get("project_id", "")
         if not project_id:
             return []
@@ -768,9 +807,12 @@ class JiraConnector(BaseConnector):
     async def pull(self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None) -> list[NormalizedEvent]:
         if not _is_live(secret):
             return []
+        domain = config.config.get("domain", "")
+        if not domain:
+            return []
         base_url = self._base_url(config)
         if not base_url:
-            return []
+            _raise_pull_denied(self.connector_type)
         jql = "ORDER BY updated DESC"
         if since:
             jql = f"updated >= '{since}' ORDER BY updated DESC"
@@ -900,9 +942,12 @@ class ZendeskConnector(BaseConnector):
     async def pull(self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None) -> list[NormalizedEvent]:
         if not _is_live(secret):
             return []
+        domain = config.config.get("domain", "")
+        if not domain:
+            return []
         base_url = self._base_url(config)
         if not base_url:
-            return []
+            _raise_pull_denied(self.connector_type)
         url = f"{base_url}/api/v2/tickets.json?sort_by=updated_at&sort_order=desc&per_page=50"
         status, body = await _http_get(url, {"Authorization": f"Bearer {secret}"})
         if status != 200:
@@ -1019,7 +1064,7 @@ class DuneConnector(BaseConnector):
             # if the constructed URL is rejected.
             exec_url = f"https://api.dune.com/api/v1/query/{query_id}/execute"
             if validated_https_host(exec_url, allow_suffixes=DUNE_ALLOW_SUFFIXES) is None:
-                continue
+                _raise_pull_denied(self.connector_type)
             exec_status, exec_body = await _http_post(
                 exec_url,
                 {},
@@ -1033,13 +1078,13 @@ class DuneConnector(BaseConnector):
             # Fetch results (latest cached results, not waiting for full execution)
             res_url = f"https://api.dune.com/api/v1/execution/{execution_id}/results"
             if validated_https_host(res_url, allow_suffixes=DUNE_ALLOW_SUFFIXES) is None:
-                continue
+                _raise_pull_denied(self.connector_type)
             res_status, res_body = await _http_get(res_url, {"X-Dune-API-Key": secret})
             if res_status != 200:
                 # Fall back to latest results directly
                 fallback_url = f"https://api.dune.com/api/v1/query/{query_id}/results"
                 if validated_https_host(fallback_url, allow_suffixes=DUNE_ALLOW_SUFFIXES) is None:
-                    continue
+                    _raise_pull_denied(self.connector_type)
                 res_status, res_body = await _http_get(fallback_url, {"X-Dune-API-Key": secret})
             if res_status != 200:
                 continue
