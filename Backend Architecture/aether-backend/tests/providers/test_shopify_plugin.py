@@ -129,6 +129,30 @@ def orders() -> list[dict]:
     return _load_orders()
 
 
+@pytest.fixture(autouse=True)
+def _restore_plugin_store() -> None:
+    """Restore the module-level plugin store after every test.
+
+    The store is process-global mutable state that other test files (and the
+    registry's ``load_all``) read. A few tests here clear it to prove fresh
+    registration; those clears must never leak — otherwise a later
+    ``ProviderRegistry().load_all()`` re-imports the already-cached plugin
+    modules (no re-registration) and silently ships an incomplete registry.
+    Snap it before and restore after, exactly like ``test_plugin.py``.
+    """
+    from services.provider_runtime.plugin import (
+        clear_registered_providers,
+        register_provider,
+        registered_providers,
+    )
+
+    before = registered_providers()
+    yield
+    clear_registered_providers()
+    for plugin in before.values():
+        register_provider(plugin)
+
+
 # ── Manifest honesty + identity ─────────────────────────────────────────────
 
 

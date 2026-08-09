@@ -105,12 +105,14 @@ def test_discover_entry_points_disabled_by_default() -> None:
 
 def test_load_all_installs_local_and_legacy() -> None:
     from services.integrations.connectors.registry import CONNECTORS
+    from services.provider_runtime.plugin import LOCAL_PLUGIN_MODULES
 
     r = ProviderRegistry()  # auto_install_legacy=True by default
     n = r.load_all()
-    # Exactly one local plugin (Shopify) + every connector in the live registry
-    # — asserted against the real CONNECTORS count, never a hardcoded number.
-    assert n == 1 + len(CONNECTORS)
+    # Every local/native plugin in LOCAL_PLUGIN_MODULES (Shopify + the six
+    # UPR follow-on providers) + every connector in the live registry —
+    # asserted against the real lists, never a hardcoded number.
+    assert n == len(LOCAL_PLUGIN_MODULES) + len(CONNECTORS)
     assert "shopify.admin.orders_read" in r
     assert "klaviyo.ingestion.connector" in r
     assert r.sources()["shopify.admin.orders_read"] == "local"

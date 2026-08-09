@@ -193,14 +193,17 @@ that does.
 The following are deliberately deferred; they are scoped in
 `SDK-COMMERCE-BRIDGES.md` where relevant and are NOT built in this program:
 
-**Update (follow-on program, in progress):** These items are now tracked by
-the UPR follow-on program, executed as PR-A (shared seams + legacy SSRF
-hardening) → PR-B (six native provider plugins, scheduled-worker cron,
-config/secret migration projections) → PR-C (web SDK detection engine +
-commerce bridges) → PR-D (Kyber manifest-driven UI + convergence tracker +
-final docs). The SDK event-registry convergence merge remains a dedicated
-program (tracker-only in the follow-on). This note is status only — nothing
-listed below is shipped yet.
+**Update (follow-on program — SHIPPED):** the UPR follow-on program delivered
+WS1 (six native provider plugins: WooCommerce, Etsy, Amazon, eBay, Walmart,
+TikTok), WS2 (web SDK detection engine + commerce bridges), WS3 (Kyber
+manifest-driven operator UI), WS5 (scheduled-worker cron for provider sync),
+WS6 (config/secret migration projections — engine + Shopify mapping ship;
+other families are table rows + framework, explicitly unbuilt), WS7 (legacy
+decommission plumbing, Shopify only), and WS8 (legacy SSRF hardening). The
+SDK event-registry convergence merge (WS4) remains a dedicated program —
+tracker-only in this follow-on. Live credential certification for the new
+plugins (real OAuth exchanges, real replay, SigV4 round-trips) is
+certification-level follow-on work, not a build claim.
 
 **WS8 hardening scope:** the six host-bearing legacy connectors (Shopify, Salesforce, PostHog, Jira, Zendesk, Dune) and the Braze connector now validate tenant-supplied base URLs against provider allowlists (fail-closed). Intentional consequences: self-hosted PostHog on custom domains, Salesforce instances outside `*.salesforce.com` / `*.force.com`, and explicit `:443` in URLs are now denied; Salesforce `*.lightning.force.com` and `*.my.salesforce.com` remain covered. Empty-label and resolver-IP spellings are rejected by the shared seam.
 

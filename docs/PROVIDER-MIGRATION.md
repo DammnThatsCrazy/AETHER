@@ -11,11 +11,18 @@ source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/registry.py
   - Backend Architecture/aether-backend/services/integrations/adapter.py
   - Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
+  - Backend Architecture/aether-backend/shared/integration_contracts/migration.py
   - Backend Architecture/aether-backend/services/providers/shopify/
+  - Backend Architecture/aether-backend/services/providers/woocommerce/
+  - Backend Architecture/aether-backend/services/providers/etsy/
+  - Backend Architecture/aether-backend/services/providers/amazon/
+  - Backend Architecture/aether-backend/services/providers/ebay/
+  - Backend Architecture/aether-backend/services/providers/walmart/
+  - Backend Architecture/aether-backend/services/providers/tiktok/
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "c6aa7606"
+last_synced_commit: "78b69dec"
 ---
 
 # Provider Migration
@@ -120,6 +127,53 @@ None of the following are touched by the UPR migration:
 - The legacy system and core type unions are never rewritten as part of a
   provider migration; decommissioning happens per-provider after the native
   path is live and tenants have moved.
+
+## 5. Per-provider migration status (shipped)
+
+The UPR follow-on program (PR-B) ships six native-only providers and one
+per-provider decommission, plus the config/secret projection engine (WS6).
+
+| Provider | Legacy connector | Path (shipped) |
+|---|---|---|
+| WooCommerce | none | native plugin only — no legacy decommission |
+| Etsy | none | native plugin only — no legacy decommission |
+| Amazon | none | native plugin only — no legacy decommission |
+| eBay | none | native plugin only — no legacy decommission |
+| Walmart | none | native plugin only — no legacy decommission |
+| TikTok | none | native plugin only — no legacy decommission |
+
+Because these six ship **no legacy `BaseConnector`**, there is no legacy path
+to decommission: they land directly as native plugins (path b). Each lives at
+`services/providers/<family>/` with an `install_<family>_providers(registry)`
+entry in its `__init__.py`, self-registers through the runtime's
+`LOCAL_PLUGIN_MODULES` discovery list
+(`services/provider_runtime/plugin.py`), and is covered by
+`tests/unit/test_provider_plugins.py` (55 collected tests: registry install,
+pull fetch/cursor/error-classification, and the claimed webhook schemes).
+The manifests are honest by construction: `certification_state` stays
+`uncertified` (best `replay_certified` via the offline `certify_provider`
+harness) and availability is local/integration only — the evidence basis is
+offline fixture-replay determinism, not live verification; live steps remain
+certification-level follow-ons and are not claimed as build facts.
+
+Shopify is the one provider in this build that carries a legacy connector to
+decommission. The decommission procedure uses the retire helper in
+`services/integrations/connectors/registry.py`:
+`retire_connector_type(registry_state, connector_type)` returns a typed
+`RetireResult` (`retired` / `already_retired` / `unknown` /
+`not_eligible`) and is idempotent + audited (first success records
+`retired_at`; repeats preserve it). Only `shopify` is in
+`DECOMMISSIONABLE_CONNECTOR_TYPES`, so the decommission is enforced as an
+explicit per-provider set — never core-first.
+
+**Projection engine (WS6):** the config/secret migration projections live in
+`shared/integration_contracts/migration.py`. `MigrationProjection` is one
+fully-mapped legacy connector — target native identity, config/secret field
+maps, target credential ref (`provider:{tenant}:{identity}`), and a confidence
+verdict. `ProjectionCandidate` is the lighter pre-projection snapshot with
+`native_identity=None` until a native counterpart exists and
+`requires_manual_mapping` flagging fields that need a human decision. Both
+models are strict (`extra="forbid"`).
 
 ## Related docs
 
