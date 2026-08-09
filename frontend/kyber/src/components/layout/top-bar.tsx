@@ -1,6 +1,6 @@
 import { useAuth } from '@kyber/features/auth';
 import { getEnvironment } from '@kyber/lib/env';
-import { EnvironmentBadge, Icon, StatusIcon, TimeLensControl } from '@aether/ui';
+import { Badge, EnvironmentBadge, Icon, StatusIcon, TimeLensControl } from '@aether/ui';
 import { useNotifications } from '@kyber/features/notifications';
 
 export function TopBar() {
