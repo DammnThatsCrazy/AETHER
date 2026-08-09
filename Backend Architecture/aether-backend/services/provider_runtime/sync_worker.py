@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger, metrics
+from shared.temporal import try_parse_instant
 
 logger = get_logger("aether.provider_runtime.sync_worker")
 
@@ -66,14 +67,16 @@ def _config_value(settings: Any, name: str, default: Any) -> Any:
 
 
 def _parse_iso(value: str) -> Optional[datetime]:
-    """Parse an ISO-8601 UTC timestamp; None when unparseable."""
-    try:
-        parsed = datetime.fromisoformat(str(value))
-    except (ValueError, TypeError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    """Parse an ISO-8601 exact instant; None when unparseable or naive.
+
+    Delegates to the temporal kernel (``shared.temporal``) — aware values
+    normalize to UTC; timezone-naive values are rejected rather than given an
+    assumed offset (temporal-integrity policy). A naive stored timestamp
+    therefore surfaces as never-synced in ``is_due``, which is the documented
+    fail-open scheduling for an unparseable value.
+    """
+    instant, _reason = try_parse_instant(value)
+    return instant
 
 
 def _now() -> datetime:
