@@ -1,0 +1,303 @@
+"""AETHER model-runtime routing engine — model selection per routing mode.
+
+Implements ADR-008 D4. The router selects a model for a request according to
+one of four modes:
+
+* ``auto`` — the harness picks the best model for the task from the registry
+  (preferring ``recommended`` then ``stable`` status, in deterministic registry
+  order), filtered by the request's entitlement allowlist when present.
+* ``tenant_default`` — the tenant-configured default model.
+* ``explicit`` — the operator/tenant requests a specific model id.
+* ``policy_required`` — a policy mandates a specific model (strict).
+
+Every route is subject to entitlement checks. When the requested route is
+unavailable, misconfigured, or not entitled, the router engages a fallback
+chain and records the decision (``fallback=True`` + reason) on the returned
+``RouteSelection``. ``policy_required`` is strict: a denied or unmandated
+policy route raises ``RoutingPolicyViolation`` / ``RoutingUnavailable`` rather
+than silently routing elsewhere.
+
+Security: this module never logs, returns, or exposes tenant PII or
+credentials — it carries only model ids. The server is authoritative for
+tenant scope; a routing decision can never widen or override tenant scope.
+The engine is deterministic — no randomness, no wall-clock-dependent choice.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Mapping, Sequence
+
+from services.model_runtime.models import ModelProvider
+from services.model_runtime.routing.models import (
+    RoutingMode,
+    RoutingNotEntitled,
+    RoutingPolicyViolation,
+    RoutingRequest,
+    RoutingUnavailable,
+    RouteSelection,
+)
+from shared.model_governance.generated_model_registry import MODEL_REGISTRY_MODELS
+from shared.model_governance.generated_task_profiles import TASK_PROFILES
+
+if TYPE_CHECKING:
+    from services.model_runtime.routing.entitlements import EntitlementResolver
+    from services.model_runtime.routing.fallback import FallbackChain
+
+# Status ordering for auto routing: recommended beats stable beats everything.
+_STATUS_PRIORITY: Mapping[str, int] = {"recommended": 0, "stable": 1}
+
+# Profile registry default: index the generated TASK_PROFILES tuple by profileId.
+_DEFAULT_PROFILE_REGISTRY: dict[str, Mapping[str, object]] = {
+    str(profile["profileId"]): dict(profile) for profile in TASK_PROFILES
+}
+
+# Key a policy profile may use to mandate a specific model when the policy
+# (not the request) selects the model for policy_required routing.
+_POLICY_MANDATED_MODEL_KEY = "mandatedModel"
+
+
+class ModelRouter:
+    """Selects a model for a routing request and records the route/fallback.
+
+    ``entitlements`` is the authoritative ``EntitlementResolver``; the router
+    never second-guesses a denial. ``registry_models`` defaults to the
+    generated model registry, ``profile_registry`` to the generated
+    ``TASK_PROFILES`` index (keyed by ``profileId``). ``fallback`` is an
+    optional ``FallbackChain``; when ``None`` the router lazily builds a
+    registry-status-based chain on first fallback.
+    """
+
+    def __init__(
+        self,
+        entitlements: EntitlementResolver,
+        *,
+        registry_models: Sequence[Mapping[str, object]] | None = None,
+        profile_registry: Mapping[str, Mapping[str, object]] | None = None,
+        fallback: FallbackChain | None = None,
+        default_provider: ModelProvider = ModelProvider.DETERMINISTIC,
+    ) -> None:
+        self._entitlements = entitlements
+        self._fallback = fallback
+        self._default_provider = default_provider
+
+        models: Sequence[Mapping[str, object]] = (
+            registry_models if registry_models is not None else MODEL_REGISTRY_MODELS
+        )
+        self._models: list[Mapping[str, object]] = list(models)
+        self._model_index: dict[str, Mapping[str, object]] = {
+            str(entry["modelId"]): entry for entry in self._models
+        }
+
+        self._profile_registry: Mapping[str, Mapping[str, object]] = (
+            profile_registry if profile_registry is not None else _DEFAULT_PROFILE_REGISTRY
+        )
+
+    # ------------------------------------------------------------------ public
+
+    async def route(self, request: RoutingRequest) -> RouteSelection:
+        """Resolve a routing request to a single model selection.
+
+        Raises ``RoutingUnavailable`` when no route can be constructed at all,
+        ``RoutingPolicyViolation`` when a strict policy route is denied, and
+        (from the entitlement resolver) ``RoutingNotEntitled`` on denials the
+        router cannot reconcile with a fallback.
+        """
+        mode = self._resolve_mode(request)
+        if mode is RoutingMode.AUTO:
+            return await self._route_auto(request)
+        if mode is RoutingMode.TENANT_DEFAULT:
+            return await self._route_tenant_default(request)
+        if mode is RoutingMode.EXPLICIT:
+            return await self._route_explicit(request)
+        return await self._route_policy_required(request)
+
+    def describe_selection(self, sel: RouteSelection) -> str:
+        """Audit-safe one-liner for a selection. No PII, no credentials.
+
+        Carries only model id / mode / provider / entitlement / fallback.
+        """
+        parts = [
+            f"model={sel.model_id}",
+            f"mode={sel.mode.value}",
+            f"provider={sel.provider.value}",
+            f"entitled={'yes' if sel.entitled else 'no'}",
+            f"fallback={'yes' if sel.fallback else 'no'}",
+        ]
+        if sel.fallback_reason:
+            parts.append(f"reason={sel.fallback_reason}")
+        return " | ".join(parts)
+
+    # ------------------------------------------------------------- mode dispatch
+
+    def _resolve_mode(self, request: RoutingRequest) -> RoutingMode:
+        if request.mode is not None:
+            return request.mode
+        profile = self._profile_for(request.profile_id)
+        if profile is not None:
+            default = profile.get("defaultRoutingMode")
+            if default is not None:
+                try:
+                    return RoutingMode(str(default))
+                except ValueError as exc:
+                    raise RoutingUnavailable(
+                        f"profile default routing mode is invalid: {default!r}"
+                    ) from exc
+        return RoutingMode.AUTO
+
+    # -------------------------------------------------------------- route modes
+
+    async def _route_auto(self, request: RoutingRequest) -> RouteSelection:
+        candidates = list(self._models)
+        if request.entitled_model_ids is not None:
+            allow = request.entitled_model_ids
+            candidates = [
+                entry for entry in candidates if entry.get("modelId") in allow
+            ]
+        if not candidates:
+            raise RoutingUnavailable("no eligible models in registry for auto routing")
+
+        ordered = sorted(
+            enumerate(candidates),
+            key=lambda pair: (_STATUS_PRIORITY.get(str(pair[1].get("status", "")), 99), pair[0]),
+        )
+        best = ordered[0][1]
+        model_id = str(best["modelId"])
+        if not await self._is_entitled(request.tenant_id, model_id):
+            return await self._fallback_selection(
+                request, RoutingMode.AUTO, "best auto model not entitled for tenant"
+            )
+        return self._selection(model_id, RoutingMode.AUTO, fallback=False)
+
+    async def _route_tenant_default(self, request: RoutingRequest) -> RouteSelection:
+        model_id = request.tenant_default_model
+        if not model_id:
+            return await self._fallback_selection(
+                request, RoutingMode.TENANT_DEFAULT, "tenant default model not configured"
+            )
+        if model_id not in self._model_index:
+            return await self._fallback_selection(
+                request, RoutingMode.TENANT_DEFAULT, "tenant default model unavailable in registry"
+            )
+        if not await self._is_entitled(request.tenant_id, model_id):
+            return await self._fallback_selection(
+                request, RoutingMode.TENANT_DEFAULT, "tenant default model not entitled for tenant"
+            )
+        return self._selection(model_id, RoutingMode.TENANT_DEFAULT, fallback=False)
+
+    async def _route_explicit(self, request: RoutingRequest) -> RouteSelection:
+        model_id = request.requested_model
+        if not model_id:
+            return await self._fallback_selection(
+                request, RoutingMode.EXPLICIT, "explicit routing requested no model"
+            )
+        if model_id not in self._model_index:
+            return await self._fallback_selection(
+                request, RoutingMode.EXPLICIT, "requested model unavailable in registry"
+            )
+        if not await self._is_entitled(request.tenant_id, model_id):
+            return await self._fallback_selection(
+                request, RoutingMode.EXPLICIT, "requested model not entitled for tenant"
+            )
+        return self._selection(model_id, RoutingMode.EXPLICIT, fallback=False)
+
+    async def _route_policy_required(self, request: RoutingRequest) -> RouteSelection:
+        profile = self._profile_for(request.profile_id)
+        if profile is not None:
+            allowed = profile.get("allowedRoutingModes")
+            if allowed is not None and "policy_required" not in allowed:
+                raise RoutingPolicyViolation(
+                    "profile does not allow policy_required routing"
+                )
+
+        model_id = request.requested_model
+        if not model_id and profile is not None:
+            mandated = profile.get(_POLICY_MANDATED_MODEL_KEY)
+            model_id = str(mandated) if mandated else None
+        if not model_id:
+            raise RoutingUnavailable("policy_required routing with no mandated model")
+        if model_id not in self._model_index:
+            raise RoutingPolicyViolation("policy-mandated model unavailable in registry")
+        if not await self._is_entitled(request.tenant_id, model_id):
+            raise RoutingPolicyViolation("policy-mandated model denied by entitlement")
+
+        return self._selection(model_id, RoutingMode.POLICY_REQUIRED, fallback=False)
+
+    # ------------------------------------------------------------- fallback
+
+    async def _fallback_selection(
+        self, request: RoutingRequest, mode: RoutingMode, reason: str
+    ) -> RouteSelection:
+        """Engage the fallback chain; raise RoutingPolicyViolation if unusable."""
+        # Lazy import so the module loads even before the sibling fallback
+        # module lands; select_fallback is the Agent C contract helper.
+        from services.model_runtime.routing.fallback import (
+            RegistryFallbackChain,
+            select_fallback,
+        )
+
+        chain = self._fallback
+        if chain is None:
+            chain = RegistryFallbackChain()
+
+        entitled: set[str] = set()
+        for candidate in chain.candidates():
+            if candidate in self._model_index and await self._is_entitled(
+                request.tenant_id, candidate
+            ):
+                entitled.add(candidate)
+
+        def _must_entitle(model_id: str) -> bool:
+            return model_id in entitled
+
+        try:
+            selected = select_fallback(
+                request.requested_model or "", chain, must_entitle=_must_entitle
+            )
+        except Exception as exc:  # no fallback candidate passes the chain
+            raise RoutingPolicyViolation(f"no entitled fallback route: {reason}") from exc
+        if not selected:
+            raise RoutingPolicyViolation(f"no entitled fallback route: {reason}")
+
+        return RouteSelection(
+            model_id=selected,
+            provider=self._provider_for(selected),
+            mode=mode,
+            entitled=True,
+            fallback=True,
+            fallback_reason=reason,
+        )
+
+    # ------------------------------------------------------------------ helpers
+
+    def _profile_for(self, profile_id: str | None) -> Mapping[str, object] | None:
+        if not profile_id:
+            return None
+        return self._profile_registry.get(profile_id)
+
+    async def _is_entitled(self, tenant_id: str, model_id: str) -> bool:
+        """Ask the resolver; treat both raise-denial and decision-denial as no."""
+        try:
+            decision = await self._entitlements.assert_model_entitled(tenant_id, model_id)
+        except RoutingNotEntitled:
+            return False
+        return bool(decision.entitled)
+
+    def _selection(self, model_id: str, mode: RoutingMode, *, fallback: bool) -> RouteSelection:
+        return RouteSelection(
+            model_id=model_id,
+            provider=self._provider_for(model_id),
+            mode=mode,
+            entitled=True,
+            fallback=fallback,
+            fallback_reason=None,
+        )
+
+    def _provider_for(self, model_id: str) -> ModelProvider:
+        entry = self._model_index.get(model_id)
+        provider_name = entry.get("provider") if entry is not None else None
+        if isinstance(provider_name, str):
+            try:
+                return ModelProvider(provider_name)
+            except ValueError:
+                pass
+        return self._default_provider
