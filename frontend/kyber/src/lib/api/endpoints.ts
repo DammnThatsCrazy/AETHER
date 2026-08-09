@@ -61,6 +61,80 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
   return s ? `?${s}` : '';
 };
 
+// ─── Provider Runtime (Universal Provider Runtime) contract schemas ──────────
+// The manifest-driven catalog shape for the Kyber provider-connections UI.
+// Agreed contract with the backend (Team C) — the UI renders ONLY from this
+// shape and never adds connector-specific code. Extra manifest keys survive via
+// passthrough so operators can still see raw payload bytes.
+const providerRuntimeEnvironmentAvailabilitySchema = z
+  .object({
+    local: z.boolean().default(false),
+    integration: z.boolean().default(false),
+    staging: z.boolean().default(false),
+    production: z.boolean().default(false),
+  })
+  .passthrough();
+
+const providerRuntimeReadinessSchema = z
+  .object({
+    // Coarse 1-5 productization level. 0 is the backend's fallback for a
+    // manifest with no readiness (renders as unscored, not as a page failure).
+    level: z.number().int().min(0).max(5),
+    // Readiness token (replay_validated / credential_waiting / ...), if present.
+    state: z.string().nullish(),
+  })
+  .passthrough();
+
+const providerRuntimeAvailabilitySchema = z
+  .object({
+    environments: providerRuntimeEnvironmentAvailabilitySchema,
+    tenant_self_service: z.boolean().nullish(),
+    kyber_managed: z.boolean().nullish(),
+    olympus_system: z.boolean().nullish(),
+  })
+  .passthrough();
+
+const providerRuntimeAuthenticationSchema = z
+  .object({
+    // oauth2 | api_key | composite | webhook_only | none
+    type: z.string(),
+  })
+  .passthrough();
+
+const providerRuntimeCatalogEntrySchema = z
+  .object({
+    identity: z.string(),
+    display_name: z.string(),
+    category: z.string(),
+    readiness: providerRuntimeReadinessSchema,
+    availability: providerRuntimeAvailabilitySchema,
+    authentication: providerRuntimeAuthenticationSchema,
+    // Capability badges read from the plugin's honest adapter accessors:
+    // auth/account/pull/webhook/report/stream/reconciliation → boolean.
+    capabilities: z.record(z.boolean()),
+    certification_state: z.string(),
+    // Installed-source attribution ("legacy" | "plugin" | ...).
+    source: z.string().nullish(),
+  })
+  .passthrough();
+
+/** The S3 envelope: { providers: [...], count }. */
+const providerRuntimeCatalogEnvelopeSchema = z
+  .object({
+    providers: z.array(providerRuntimeCatalogEntrySchema),
+    count: z.number(),
+  })
+  .passthrough();
+
+const providerRuntimeHealthSchema = z
+  .object({
+    providers_loaded: z.number(),
+    legacy_count: z.number().nullish(),
+    native_count: z.number().nullish(),
+    environment: z.string().nullish(),
+  })
+  .passthrough();
+
 // ─── Shared schemas ───────────────────────────────────────────────────────────
 const healthSchema = z.object({
   status: z.string(),
@@ -1322,6 +1396,19 @@ export const api = {
       restClient.post('/v1/providers/test', wrap(unknownSchema), params).then(r => r.data),
   },
 
+  // ── Provider connections (tenant-scoped; read-only here) ───────────────────
+  // Tenant-scoped provider-connection lifecycle lives under /v1/provider-connections/*.
+  // The Kyber UI is aggregate-only by design and does NOT claim create/test/sync;
+  // these read endpoints exist for the manifest-driven catalog only.
+  providerConnections: {
+    /** Merged provider manifest list (catalog + installed), tenant-scoped. */
+    providers: () =>
+      restClient.get('/v1/provider-connections/providers', wrap(unknownSchema)).then(r => r.data),
+    /** One provider manifest, tenant-scoped. */
+    manifest: (identityKey: string) =>
+      restClient.get(`/v1/provider-connections/providers/${encodeURIComponent(identityKey)}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
   // ── Realtime (returns URLs for EventSource / WebSocket) ────────────────────
   realtime: {
     sseUrl: (entityId?: string) => `/v1/realtime/sse${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}`,
@@ -1857,6 +1944,38 @@ export const api = {
       // ── Connector health (aggregate-only) ─────────────────────────────────
       connectorsOverview: () =>
         restClient.get('/v1/admin/kyber/connectors/overview', wrap(unknownSchema)).then(r => r.data),
+
+      // ── Provider Runtime (Universal Provider Runtime; aggregate-only) ─────
+      // Operator-gated Kyber views over the provider-runtime registry and
+      // connection ledger. Never tenant-scoped create/test/sync — those stay
+      // under /v1/provider-connections/* (tenant API key).
+      providerConnections: {
+        /** Merged provider manifest catalog (the manifest-driven UI surface). */
+        providers: () =>
+          restClient.get(
+            '/v1/admin/kyber/provider-connections/providers',
+            wrap(providerRuntimeCatalogEnvelopeSchema),
+          ).then(r => r.data),
+        /** Per-provider connection counts by lifecycle state (aggregate-only). */
+        overview: () =>
+          restClient.get('/v1/admin/kyber/provider-connections/overview', wrap(unknownSchema)).then(r => r.data),
+        /** Registry summary: providers loaded, legacy vs native plugin counts. */
+        health: () =>
+          restClient.get('/v1/admin/kyber/provider-connections/health', wrap(providerRuntimeHealthSchema)).then(r => r.data),
+        /** Connections + health for one tenant (operator drill-down). */
+        tenant: (tenantId: string) =>
+          restClient.get(
+            `/v1/admin/kyber/provider-connections/tenants/${encodeURIComponent(tenantId)}`,
+            wrap(unknownSchema),
+          ).then(r => r.data),
+        /** Run the certification harness against an installed provider plugin. */
+        certify: (identityKey: string) =>
+          restClient.post(
+            '/v1/admin/kyber/provider-connections/certify',
+            wrap(unknownSchema),
+            { identity_key: identityKey },
+          ).then(r => r.data),
+      },
 
       // ── External agent telemetry (fleet observability) ────────────────────
       agentTelemetryDeployments: () =>

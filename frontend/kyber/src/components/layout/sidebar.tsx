@@ -62,6 +62,12 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   { path: '/payment-rails', label: 'Payment Rails', destination: 'kyber-payment-rails', requirement: { domain: 'payments' }, envFlag: 'enablePaymentRails' },
   { path: '/ai-efficiency', label: 'AI Efficiency', destination: 'kyber-ai-efficiency', requirement: { domain: 'economic' }, envFlag: 'enableAiEfficiency' },
   { path: '/targeting', label: 'Targeting', destination: 'kyber-targeting', envFlag: 'enableTargetingIntelligence' },
+  // Provider Runtime reuses the 'kyber-connectors' icon taxonomy — adding a brand
+  // destination for it would touch packages/brand (out of scope). Frontend-only
+  // flag mirrors the backend KYBER_PROVIDER_RUNTIME_UI_ENABLED; the admin
+  // provider-connections routes it reads mount when EITHER that flag OR
+  // KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED is set.
+  { path: '/provider-connections', label: 'Provider Runtime', destination: 'kyber-connectors', envFlag: 'enableProviderRuntime' },
   { path: '/dune-feeder', label: 'Dune Feeder', destination: 'kyber-dune-feeder' },
   { path: '/revops',          label: 'RevOps',          destination: 'kyber-revops' },
   { path: '/sales-readiness', label: 'Sales Ready',     destination: 'kyber-sales-readiness' },

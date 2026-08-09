@@ -20,6 +20,8 @@ interface FeatureFlags {
   readonly kyberStablecoinOps: boolean;
   readonly kyberDerivativesOps: boolean;
   readonly kyberInteropOps: boolean;
+  /** Kyber provider-connections UI (read/monitor + operator-certify). Default OFF. */
+  readonly enableProviderRuntime: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -45,6 +47,9 @@ const DEFAULT_FLAGS: FeatureFlags = {
   kyberStablecoinOps: false,
   kyberDerivativesOps: false,
   kyberInteropOps: false,
+  // Provider Runtime UI is aggregate-only (read/monitor + certify); default OFF
+  // (fail-closed) until the backend runtime flag is enabled in an environment.
+  enableProviderRuntime: false,
 };
 
 function loadFlags(): FeatureFlags {
