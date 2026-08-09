@@ -174,16 +174,6 @@ class StablecoinOperatorDiagnostics:
         return {"repaired": False, "checkpoint_id": checkpoint_id, "from": current, "reason": "not_repairable"}
 
 
-#: Dedicated operator-diagnostics router — the integration pass may mount this
-#: as-is; the same handlers are ALSO exposed on ``kyber_router`` (already
-#: mounted at /v1/admin/kyber/stablecoin in main.py).
-diagnostics_router = APIRouter(
-    prefix="/v1/admin/kyber/stablecoin/diagnostics",
-    tags=["kyber-stablecoin-diagnostics"],
-    dependencies=[Depends(require_kyber_operator)],
-)
-
-
 def _diagnostics(request: Request) -> StablecoinOperatorDiagnostics:
     return StablecoinOperatorDiagnostics()
 
@@ -195,7 +185,6 @@ def _scope_tenant(request: Request, tenant_id: str) -> str:
 
 
 @kyber_router.get("/reconciliation")
-@diagnostics_router.get("/reconciliation")
 async def operator_reconciliation(
     request: Request,
     tenant_id: str = Query(""),
@@ -209,7 +198,6 @@ async def operator_reconciliation(
 
 
 @kyber_router.get("/finality")
-@diagnostics_router.get("/finality")
 async def operator_finality(
     request: Request,
     tenant_id: str = Query(""),
@@ -223,7 +211,6 @@ async def operator_finality(
 
 
 @kyber_router.get("/cursors")
-@diagnostics_router.get("/cursors")
 async def operator_cursors(
     request: Request,
     tenant_id: str = Query(""),
@@ -236,7 +223,6 @@ async def operator_cursors(
 
 
 @kyber_router.get("/health/providers")
-@diagnostics_router.get("/health/providers")
 async def operator_provider_health(
     request: Request,
     tenant_id: str = Query(""),
@@ -249,7 +235,6 @@ async def operator_provider_health(
 
 
 @kyber_router.post("/repair/{checkpoint_id}")
-@diagnostics_router.post("/repair/{checkpoint_id}")
 async def operator_repair(
     request: Request,
     checkpoint_id: str = Path(..., description="stablecoin poll checkpoint id"),

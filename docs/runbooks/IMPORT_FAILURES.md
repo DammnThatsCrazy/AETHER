@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/kyber_routes.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
   - Backend Architecture/aether-backend/shared/graph/graph.py
-last_synced_commit: "99da74c0"
+last_synced_commit: "4ce7e0fc"
 ---
 
 # Runbook — Tenant Import Failures
@@ -26,13 +26,25 @@ is never exposed cross-tenant.
 
 ## Lifecycle recap
 
-`created → files_pending → uploaded → analyzing → analyzed → mapping → mapped →
-validating → validated → review_required → approved → committing →
-committed | partially_committed`. Terminal: `committed`, `partially_committed`,
-`failed`, `cancelled`, `rolled_back`. Only an **approved** import commits; the
-commit stages every row to Bronze (`BronzeRepository("tenant_import")`, tagged by
-commit id) and to the graph (entity/identifier/resource vertices + relationship
-edges, each carrying `import_commit_id`).
+The session row's `lifecycle_state` is authoritative (the import-session FSM);
+the legacy `status` column remains as a parity-safe projection so the frontend
+enum keeps parsing, and retains fine-grained states (`analyzing`, `mapped`,
+`review_required`, …) the FSM does not model.
+
+Program lifecycle: `CREATED → UPLOADED → VALIDATING → VALIDATED →
+NORMALIZING → COMMITTING → PROJECTING → RECONCILING → COMPLETED`.
+- Failed validation lands in **REJECTED** (projected `review_required`) — never
+  `validated`/`review_required` as if it passed.
+- Approval enters **NORMALIZING** (projected `approved`); a cancelled session is
+  **ROLLED_BACK** (projected `cancelled`).
+- Hard stops: `COMMITTED`/`partially_committed`, `FAILED` (retryable up to the
+  budget), `DEAD_LETTERED` (sweeper), `ROLLED_BACK`.
+
+Only a `NORMALIZING`/`approved`, retryable `FAILED`, or stranded `COMMITTING`
+session commits; the commit stages every row to Bronze
+(`BronzeRepository("tenant_import")`, tagged by commit id) and to the graph
+(entity/identifier/resource vertices + relationship edges, each carrying
+`import_commit_id`).
 
 ## Triage
 
@@ -46,15 +58,23 @@ edges, each carrying `import_commit_id`).
 ### Import stuck in `committing`
 A commit job is in-flight or its worker died mid-flight. Check the job platform:
 `GET /v1/kyber/jobs/timeline?tenant_id=…` for the `import.commit` job. If the job
-is `failed`/`expired`, the import session will be `failed` — recover it (below).
-If the job is genuinely running, wait; the commit is idempotent (edge creation is
-existence-checked, Bronze ingest de-dupes on `provider_record_id`).
+is `failed`/`expired`, the session is marked `FAILED` with a `failure_reason` —
+recover it (below). If the job is genuinely running, wait; the commit is
+idempotent (edge creation is existence-checked, Bronze ingest de-dupes on
+`provider_record_id`). A `COMMITTING` session whose worker died without a record
+(unrecorded crash) becomes **stranded**: after 5 minutes (`REQUEUE_COMMITTING_TIMEOUT_S`)
+it is requeueable (below), and after 24 h the sweeper dead-letters it.
 
 ### Import in `failed`
 The commit raised before completing. **Recover:** `POST /v1/kyber/imports/{id}/requeue`
-— this resets the session to `approved` and re-enqueues `import.commit`. The
-mapping and validation are stored and unchanged, so the replay is safe. Confirm
-via the detail endpoint that a new commit lands `committed`.
+— the FSM re-stages a `FAILED` (or stranded `COMMITTING`) session into
+`COMMITTING` and re-enqueues `import.commit`. This is *not* a reset: the mapping,
+validation, `failure_reason`, and `retry_count` are preserved for audit, and the
+commit resumes idempotently under the same commit id. Confirm via the detail
+endpoint that a new commit lands `committed`. Each requeue increments
+`retry_count`; at the retry budget (5) the session becomes **dead-letterable** —
+`POST /v1/kyber/imports/sweep-stranded` (or the periodic sweeper) moves it to
+`DEAD_LETTERED`, and no further requeue is accepted.
 
 ### `partially_committed`
 Some rows failed a transform at commit time (rare — validation runs first). The
@@ -81,9 +101,12 @@ support). Have the tenant export to CSV/JSON.
 
 ## Escalation
 
-If a requeue does not resolve a `failed` import after two attempts, capture the
-commit's `row_errors` and the `import.commit` job's `job_events`, and escalate to
-`platform@aether` — do not hand-edit graph edges or Bronze rows.
+A `FAILED` session is dead-lettered once its `retry_count` reaches the retry
+budget (5) — `POST /v1/kyber/imports/sweep-stranded` runs one sweeper pass, or
+the periodic sweeper handles it. If a requeue does not resolve a `failed` import
+before then, capture the commit's `row_errors` and the `import.commit` job's
+`job_events`, and escalate to `platform@aether` — do not hand-edit graph edges,
+Bronze rows, or a session's `lifecycle_state`.
 ## Rollback vertex garbage collection
 
 Rollback and replay now attempt conservative vertex cleanup after revoking the
