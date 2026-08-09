@@ -230,6 +230,17 @@ The pipeline honors three invariants:
 
 ## Limits & follow-on
 
+**Update (follow-on program, in progress):** These items are now tracked by
+the UPR follow-on program, executed as PR-A (shared seams + legacy SSRF
+hardening) → PR-B (six native provider plugins, scheduled-worker cron,
+config/secret migration projections) → PR-C (web SDK detection engine +
+commerce bridges) → PR-D (Kyber manifest-driven UI + convergence tracker +
+final docs). The SDK event-registry convergence merge remains a dedicated
+program (tracker-only in the follow-on). This note is status only — nothing
+listed below is shipped yet.
+
+**WS8 hardening scope:** the six host-bearing legacy connectors (Shopify, Salesforce, PostHog, Jira, Zendesk, Dune) and the Braze connector now validate tenant-supplied base URLs against provider allowlists (fail-closed). Intentional consequences: self-hosted PostHog on custom domains, Salesforce instances outside `*.salesforce.com` / `*.force.com`, and explicit `:443` in URLs are now denied; Salesforce `*.lightning.force.com` and `*.my.salesforce.com` remain covered. Empty-label and resolver-IP spellings are rejected by the shared seam.
+
 - **Not built in this program**: WooCommerce/Etsy/Amazon/eBay/Walmart/TikTok
   plugins; the web SDK detection engine + commerce bridges
   ([SDK-COMMERCE-BRIDGES](SDK-COMMERCE-BRIDGES.md)); Kyber manifest-driven UI;

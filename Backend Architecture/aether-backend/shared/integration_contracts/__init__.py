@@ -112,6 +112,10 @@ from shared.integration_contracts.reconciliation import (
     ProviderReconciliationReport,
     ReconciliationCheck,
 )
+from shared.integration_contracts.migration import (
+    MigrationProjection,
+    ProjectionCandidate,
+)
 
 __all__ = [
     # identity
@@ -199,4 +203,7 @@ __all__ = [
     # reconciliation
     "ProviderReconciliationReport",
     "ReconciliationCheck",
+    # migration
+    "MigrationProjection",
+    "ProjectionCandidate",
 ]

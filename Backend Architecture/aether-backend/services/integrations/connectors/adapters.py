@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from shared.security.ssrf import validated_https_host
+
 from services.integrations.connectors.base import (
     BaseConnector,
     ConnectorConfig,
@@ -50,6 +52,20 @@ def _ok(connector_type: str, detail: str = "ok") -> ConnectionTestResult:
 
 def _err(connector_type: str, detail: str) -> ConnectionTestResult:
     return ConnectionTestResult(connector_type=connector_type, ok=False, status="error", detail=detail)  # type: ignore[arg-type]
+
+
+# SSRF hardening (WS8): tenant-supplied hosts are validated against these
+# allowlists (exact or `.<suffix>` subdomain at a label boundary) BEFORE any
+# URL is built. `shared.security.ssrf.validated_https_host` rejects IP
+# literals (loopback / link-local / private / metadata) and any host outside
+# the allowlist, failing closed (None) — so a denied host never reaches
+# `_http_get` / `_http_post`.
+SHOPIFY_ALLOW_SUFFIXES = ("myshopify.com",)
+SALESFORCE_ALLOW_SUFFIXES = ("salesforce.com", "force.com")
+POSTHOG_ALLOW_SUFFIXES = ("posthog.com",)
+ATLASSIAN_ALLOW_SUFFIXES = ("atlassian.net",)
+ZENDESK_ALLOW_SUFFIXES = ("zendesk.com",)
+DUNE_ALLOW_SUFFIXES = ("dune.com",)
 
 
 class SlackConnector(BaseConnector):
@@ -148,12 +164,15 @@ class ShopifyConnector(BaseConnector):
         shop = config.config.get("shop_domain", "")
         if not shop:
             return _err(self.connector_type, "shop_domain missing from config")
+        host = validated_https_host(shop, allow_suffixes=SHOPIFY_ALLOW_SUFFIXES)
+        if host is None:
+            return _err(self.connector_type, "shopify: invalid shop URL")
         status, body = await _http_get(
-            f"https://{shop}/admin/api/2023-10/shop.json",
+            f"https://{host}/admin/api/2023-10/shop.json",
             {"X-Shopify-Access-Token": secret or ""},
         )
         if status == 200 and body.get("shop"):
-            return _ok(self.connector_type, f"Shopify shop: {body['shop'].get('name', shop)}")
+            return _ok(self.connector_type, f"Shopify shop: {body['shop'].get('name', host)}")
         return _err(self.connector_type, f"HTTP {status}")
 
     async def pull(self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None) -> list[NormalizedEvent]:
@@ -162,11 +181,14 @@ class ShopifyConnector(BaseConnector):
         shop = config.config.get("shop_domain", "")
         if not shop:
             return []
+        host = validated_https_host(shop, allow_suffixes=SHOPIFY_ALLOW_SUFFIXES)
+        if host is None:
+            return []
         params = "?status=any&limit=50"
         if since:
             params += f"&updated_at_min={since}"
         status, body = await _http_get(
-            f"https://{shop}/admin/api/2023-10/orders.json{params}",
+            f"https://{host}/admin/api/2023-10/orders.json{params}",
             {"X-Shopify-Access-Token": secret or ""},
         )
         if status != 200:
@@ -497,8 +519,11 @@ class SalesforceConnector(BaseConnector):
         instance_url = config.config.get("instance_url", "")
         if not instance_url:
             return _err(self.connector_type, "instance_url missing from config")
+        host = validated_https_host(instance_url, allow_suffixes=SALESFORCE_ALLOW_SUFFIXES)
+        if host is None:
+            return _err(self.connector_type, "salesforce: invalid instance_url URL")
         status, body = await _http_get(
-            f"{instance_url}/services/data/v57.0",
+            f"https://{host}/services/data/v57.0",
             {"Authorization": f"Bearer {secret}"},
         )
         if status == 200:
@@ -511,11 +536,14 @@ class SalesforceConnector(BaseConnector):
         instance_url = config.config.get("instance_url", "")
         if not instance_url:
             return []
+        host = validated_https_host(instance_url, allow_suffixes=SALESFORCE_ALLOW_SUFFIXES)
+        if host is None:
+            return []
         soql = "SELECT+Id,Email,FirstName,LastName,Company+FROM+Lead+ORDER+BY+LastModifiedDate+DESC+LIMIT+50"
         if since:
             soql = f"SELECT+Id,Email,FirstName,LastName,Company+FROM+Lead+WHERE+LastModifiedDate+>={since}+ORDER+BY+LastModifiedDate+DESC+LIMIT+50"
         status, body = await _http_get(
-            f"{instance_url}/services/data/v57.0/query?q={soql}",
+            f"https://{host}/services/data/v57.0/query?q={soql}",
             {"Authorization": f"Bearer {secret}"},
         )
         if status != 200:
@@ -572,8 +600,11 @@ class PostHogConnector(BaseConnector):
         if not base.ok or not _is_live(secret):
             return base
         host = config.config.get("host", "https://app.posthog.com")
+        validated = validated_https_host(host, allow_suffixes=POSTHOG_ALLOW_SUFFIXES)
+        if validated is None:
+            return _err(self.connector_type, "posthog: invalid host URL")
         status, body = await _http_get(
-            f"{host}/api/projects/",
+            f"https://{validated}/api/projects/",
             {"Authorization": f"Bearer {secret}"},
         )
         if status == 200:
@@ -584,10 +615,13 @@ class PostHogConnector(BaseConnector):
         if not _is_live(secret):
             return []
         host = config.config.get("host", "https://app.posthog.com")
+        validated = validated_https_host(host, allow_suffixes=POSTHOG_ALLOW_SUFFIXES)
+        if validated is None:
+            return []
         project_id = config.config.get("project_id", "")
         if not project_id:
             return []
-        url = f"{host}/api/projects/{project_id}/persons/?limit=50"
+        url = f"https://{validated}/api/projects/{project_id}/persons/?limit=50"
         status, body = await _http_get(url, {"Authorization": f"Bearer {secret}"})
         if status != 200:
             return []
@@ -697,8 +731,17 @@ class JiraConnector(BaseConnector):
         return constant_time_compare(expected, sig_header)
 
     def _base_url(self, config: ConnectorConfig) -> str:
+        """Allowlisted Jira base URL (or "" when the domain is missing or the
+        constructed ``https://<domain>.atlassian.net`` host is rejected)."""
         domain = config.config.get("domain", "")
-        return f"https://{domain}.atlassian.net" if domain else ""
+        if not domain:
+            return ""
+        host = validated_https_host(
+            f"https://{domain}.atlassian.net", allow_suffixes=ATLASSIAN_ALLOW_SUFFIXES
+        )
+        if host is None:
+            return ""
+        return f"https://{host}"
 
     def _auth_header(self, config: ConnectorConfig, secret: str) -> str:
         import base64
@@ -712,7 +755,7 @@ class JiraConnector(BaseConnector):
             return base
         base_url = self._base_url(config)
         if not base_url:
-            return _err(self.connector_type, "domain missing from config")
+            return _err(self.connector_type, "jira: invalid domain URL")
         status, body = await _http_get(
             f"{base_url}/rest/api/3/myself",
             {"Authorization": self._auth_header(config, secret or ""),
@@ -827,8 +870,17 @@ class ZendeskConnector(BaseConnector):
                                 properties={"subject": payload.get("subject"), "status": payload.get("status")})]
 
     def _base_url(self, config: ConnectorConfig) -> str:
+        """Allowlisted Zendesk base URL (or "" when the domain is missing or
+        the constructed ``https://<domain>.zendesk.com`` host is rejected)."""
         domain = config.config.get("domain", "")
-        return f"https://{domain}.zendesk.com" if domain else ""
+        if not domain:
+            return ""
+        host = validated_https_host(
+            f"https://{domain}.zendesk.com", allow_suffixes=ZENDESK_ALLOW_SUFFIXES
+        )
+        if host is None:
+            return ""
+        return f"https://{host}"
 
     async def test_connection(self, config: ConnectorConfig, secret: Optional[str] = None) -> ConnectionTestResult:
         base = await super().test_connection(config, secret)
@@ -836,7 +888,7 @@ class ZendeskConnector(BaseConnector):
             return base
         base_url = self._base_url(config)
         if not base_url:
-            return _err(self.connector_type, "domain missing from config")
+            return _err(self.connector_type, "zendesk: invalid domain URL")
         status, body = await _http_get(
             f"{base_url}/api/v2/users/me",
             {"Authorization": f"Bearer {secret}", "Accept": "application/json"},
@@ -943,11 +995,13 @@ class DuneConnector(BaseConnector):
         base = await super().test_connection(config, secret)
         if not base.ok or not _is_live(secret):
             return base
-        # Dune API auth: check /api/v1/user endpoint
-        status, body = await _http_get(
-            "https://api.dune.com/api/v1/user",
-            {"X-Dune-API-Key": secret},
-        )
+        # Dune API auth: check /api/v1/user endpoint. The host is fixed, but
+        # the full URL is still gated so a denied value never reaches the HTTP
+        # helper (WS8).
+        url = "https://api.dune.com/api/v1/user"
+        if validated_https_host(url, allow_suffixes=DUNE_ALLOW_SUFFIXES) is None:
+            return _err(self.connector_type, "dune: invalid query URL")
+        status, body = await _http_get(url, {"X-Dune-API-Key": secret})
         if status == 200 and body.get("username"):
             return _ok(self.connector_type, f"Dune user: {body['username']}")
         return _err(self.connector_type, body.get("error", f"HTTP {status}"))
@@ -960,9 +1014,14 @@ class DuneConnector(BaseConnector):
             return []
         events: list[NormalizedEvent] = []
         for query_id in query_ids[:10]:  # cap at 10 queries per sync
-            # Execute query and fetch latest results
+            # Execute query and fetch latest results. Each full URL is gated
+            # by the allowlist validator (WS8) — fail closed (skip the query)
+            # if the constructed URL is rejected.
+            exec_url = f"https://api.dune.com/api/v1/query/{query_id}/execute"
+            if validated_https_host(exec_url, allow_suffixes=DUNE_ALLOW_SUFFIXES) is None:
+                continue
             exec_status, exec_body = await _http_post(
-                f"https://api.dune.com/api/v1/query/{query_id}/execute",
+                exec_url,
                 {},
                 {"X-Dune-API-Key": secret, "Content-Type": "application/json"},
             )
@@ -972,16 +1031,16 @@ class DuneConnector(BaseConnector):
             if not execution_id:
                 continue
             # Fetch results (latest cached results, not waiting for full execution)
-            res_status, res_body = await _http_get(
-                f"https://api.dune.com/api/v1/execution/{execution_id}/results",
-                {"X-Dune-API-Key": secret},
-            )
+            res_url = f"https://api.dune.com/api/v1/execution/{execution_id}/results"
+            if validated_https_host(res_url, allow_suffixes=DUNE_ALLOW_SUFFIXES) is None:
+                continue
+            res_status, res_body = await _http_get(res_url, {"X-Dune-API-Key": secret})
             if res_status != 200:
                 # Fall back to latest results directly
-                res_status, res_body = await _http_get(
-                    f"https://api.dune.com/api/v1/query/{query_id}/results",
-                    {"X-Dune-API-Key": secret},
-                )
+                fallback_url = f"https://api.dune.com/api/v1/query/{query_id}/results"
+                if validated_https_host(fallback_url, allow_suffixes=DUNE_ALLOW_SUFFIXES) is None:
+                    continue
+                res_status, res_body = await _http_get(fallback_url, {"X-Dune-API-Key": secret})
             if res_status != 200:
                 continue
             rows = res_body.get("result", {}).get("rows", [])
