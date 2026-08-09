@@ -4026,6 +4026,21 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/brand-system/aether-consumer-matrix.md",
+      "title": "Aether context, ownership, and consumer matrix",
+      "slug": "architecture/brand-system/aether-consumers",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
       "path": "docs/brand-system/aether.md",
       "title": "Aether identity",
       "slug": "architecture/brand-system/aether",
