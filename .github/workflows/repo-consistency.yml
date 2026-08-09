@@ -51,6 +51,9 @@ jobs:
       - name: Frontend route-state coverage
         run: npm run validate:frontend-route-state
 
+      - name: Frontend brand migration guardrail
+        run: npm run validate:frontend-branding
+
       - name: Clean-install and demo seed safety smokes
         run: make clean-install-smoke demo-seed-smoke demo-reset-smoke
 

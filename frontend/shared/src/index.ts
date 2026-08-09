@@ -50,6 +50,41 @@ export { ToastProvider, Toaster, useToast } from './components/toast';
 export { Popover } from './components/popover';
 export { SocialProviderIcon } from './components/social-provider-icon';
 export type { SocialProvider } from './components/social-provider-icon';
+export {
+  BrandMark,
+  ProductLockup,
+  OlympusLockup,
+  AetherLockup,
+  KyberLockup,
+} from './components/brand-mark';
+export type { BrandMarkProps, ProductLockupProps, ProductLockupVariant } from './components/brand-mark';
+export { Icon, hasIconArtwork } from './components/icon';
+export type { IconName, IconProps } from './components/icon';
+export { NavigationIcon } from './components/navigation-icon';
+export type { NavigationIconProps } from './components/navigation-icon';
+export { ProviderMark, ProviderCard, ProviderSourceChip } from './components/provider-mark';
+export type { ProviderMarkProps, ProviderCardProps, ProviderSourceChipProps } from './components/provider-mark';
+export {
+  EntityIcon,
+  EntityAvatar,
+  StatusIcon,
+  SeverityIcon,
+  ProvenanceIcon,
+  ConfidenceIndicator,
+  FreshnessIcon,
+  SemanticIcon,
+} from './components/semantic-indicators';
+export type {
+  EntityIconProps,
+  EntityAvatarProps,
+  StatusIconProps,
+  SeverityIconProps,
+  ProvenanceIconProps,
+  ConfidenceIndicatorProps,
+  FreshnessIconProps,
+} from './components/semantic-indicators';
+export { Surface, ElevatedSurface, PremiumSurface } from './components/surface';
+export type { SurfaceProps } from './components/surface';
 
 export { ThemeProvider, useTheme } from './hooks/use-theme';
 export type { Theme } from './hooks/use-theme';

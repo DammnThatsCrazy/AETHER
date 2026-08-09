@@ -1,4 +1,4 @@
-import { Badge, CapabilityStateBadge, formatInstant, resolveCapabilityState, type TimeContext } from '@aether/ui';
+import { Badge, CapabilityStateBadge, ProviderMark, formatInstant, resolveCapabilityState, type TimeContext } from '@aether/ui';
 import type {
   FundingFlowType,
   FundingSessionStatus,
@@ -22,7 +22,12 @@ export function providerLabel(provider: PaymentRailProvider): string {
 }
 
 export function ProviderBadge({ provider }: { readonly provider: PaymentRailProvider }) {
-  return <Badge variant="info">{providerLabel(provider)}</Badge>;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded border border-border-subtle bg-surface-sunken px-2 py-1 text-xs text-text-secondary">
+      <ProviderMark provider={provider} decorative size={16} />
+      <span>{providerLabel(provider)}</span>
+    </span>
+  );
 }
 
 const SESSION_STATUS_VARIANTS: Record<FundingSessionStatus, 'success' | 'warning' | 'danger' | 'info' | 'default'> = {

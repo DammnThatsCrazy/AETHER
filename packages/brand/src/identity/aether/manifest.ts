@@ -1,0 +1,65 @@
+import { aetherAssets } from '../assets';
+import type { BrandManifest } from '../types';
+
+export const aetherManifest = {
+  id: 'aether',
+  label: 'Aether',
+  relationship: 'Customer-facing Olympus Labs product identity.',
+  mark: aetherAssets.layers,
+  favicon: aetherAssets.favicon,
+  lockups: [
+    {
+      id: 'aether-horizontal',
+      layout: 'horizontal',
+      variant: 'full',
+      context: 'light',
+      asset: aetherAssets.horizontal,
+      minimumWidth: 112,
+      minimumClearSpace: 8,
+      monochrome: false,
+      usage: ['Application shell', 'Authentication', 'Product marketing'],
+    },
+    {
+      id: 'aether-compact',
+      layout: 'composed',
+      variant: 'compact',
+      context: 'either',
+      composition: {
+        mark: aetherAssets.layers,
+        wordmark: 'Aether',
+        parent: 'olympus',
+      },
+      minimumWidth: 72,
+      minimumClearSpace: 6,
+      monochrome: false,
+      usage: ['Compact application navigation', 'Tablet chrome'],
+    },
+    {
+      id: 'aether-mark',
+      layout: 'mark',
+      variant: 'mark',
+      context: 'either',
+      asset: aetherAssets.layers,
+      minimumWidth: 20,
+      minimumClearSpace: 4,
+      monochrome: false,
+      usage: ['Collapsed navigation', 'Mobile app chrome', 'Favicon'],
+    },
+    {
+      id: 'aether-mark-mono',
+      layout: 'mark',
+      variant: 'mark',
+      context: 'either',
+      asset: aetherAssets.layersMono,
+      minimumWidth: 20,
+      minimumClearSpace: 4,
+      monochrome: true,
+      usage: ['Single-color production constraints only'],
+    },
+  ],
+  rules: [
+    'Use the established layered mark without recoloring individual layers.',
+    'Keep the Aether mark primary on customer product surfaces.',
+    'Use the supplied monochrome asset rather than applying arbitrary CSS color treatments to the color mark.',
+  ],
+} as const satisfies BrandManifest;

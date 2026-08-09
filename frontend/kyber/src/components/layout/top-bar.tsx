@@ -1,6 +1,6 @@
 import { useAuth } from '@kyber/features/auth';
 import { getEnvironment } from '@kyber/lib/env';
-import { EnvironmentBadge, Badge, TimeLensControl } from '@aether/ui';
+import { Badge, EnvironmentBadge, Icon, StatusIcon, TimeLensControl } from '@aether/ui';
 import { useNotifications } from '@kyber/features/notifications';
 
 export function TopBar() {
@@ -12,15 +12,15 @@ export function TopBar() {
     <header className="flex items-center justify-between border-b border-border-default bg-surface-sunken px-4 py-2">
       <div className="flex items-center gap-3">
         <EnvironmentBadge environment={environment} />
-        <Badge variant="info">LIVE</Badge>
+        <StatusIcon status="live" size="xs" className="text-info" />
       </div>
       <div className="flex items-center gap-4">
         <TimeLensControl className="hidden md:flex" />
         <button
-          className="relative text-text-secondary hover:text-text-primary transition-colors text-sm"
+          className="aether-focus-visible relative p-1 text-text-secondary hover:text-text-primary transition-colors"
           aria-label={`${unreadCount} unread notifications`}
         >
-          {'\u2709'}
+          <Icon name="bell" size="sm" decorative />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-2 bg-danger text-text-inverse text-[9px] rounded-full w-4 h-4 flex items-center justify-center">
               {unreadCount > 9 ? '9+' : unreadCount}
@@ -36,10 +36,10 @@ export function TopBar() {
             <Badge>{principal.role_template_ids[0] ?? 'no role'}</Badge>
             <button
               onClick={() => void logout()}
-              className="text-xs text-text-muted hover:text-text-primary transition-colors"
+              className="aether-focus-visible inline-flex items-center p-1 text-xs text-text-muted hover:text-text-primary transition-colors"
               aria-label="Sign out"
             >
-              \u2190
+              <Icon name="arrow-left-right" size="sm" decorative />
             </button>
           </div>
         )}

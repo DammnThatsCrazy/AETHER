@@ -84,6 +84,16 @@ There are two separate frontend applications. **Do not mix them up.**
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**
 - Design system components used by both Aether and Kyber
+- **Olympus brand rendering boundary:** `packages/brand` (`@olympus/brand`)
+  owns framework-free identity, provider, entity, status, token, motion, and
+  responsive metadata. `@aether/ui` owns the React renderers (`AetherLockup`,
+  `KyberLockup`, `NavigationIcon`, `ProviderMark`, `EntityAvatar`, semantic
+  indicators, and surfaces). Applications consume those renderers rather than
+  embedding marks, provider assets, raw navigation glyphs, or per-route visual
+  theme forks. Unreviewed provider marks render the named neutral fallback.
+  See the [Aether consumer matrix](brand-system/aether-consumer-matrix.md),
+  [brand-system architecture](brand-system/architecture.md), and
+  [migration guide](brand-system/migration.md).
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
