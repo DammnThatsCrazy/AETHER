@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "bf8a5fbd"
+last_synced_commit: "762619b6"
 ---
 # Operations Runbook v8.12.0
 
@@ -191,6 +191,36 @@ in-memory only and is **not durable** until Redis returns.
 | Backend | `GET /v1/health` | `{"status": "healthy"}` |
 | ML Serving | `GET /health` | `{"status": "healthy", "models_loaded": [...]}` |
 | Defense | `GET /v1/defense/status` | `{"enabled": true/false}` |
+
+---
+
+## Model Runtime Operations (v8.12.0)
+
+The multi-model intelligence harness (`services/model_runtime/`) is
+feature-gated OFF by default (`MODEL_RUNTIME_ENABLED=false`, ADR-008 D9).
+While OFF the `/v1/model-runtime/*` routes are inert — every request returns
+HTTP 503 `model_runtime_disabled` and no data is served.
+
+**Enabling in staging/production.** Set `MODEL_RUNTIME_ENABLED=true` and —
+because the runtime fails closed — a production-safe credential backend
+(`MODEL_RUNTIME_CREDENTIAL_BACKEND=env` or `aws_secrets`, never `in_memory`)
+and a real default provider (never `deterministic`). A violation raises
+`ConfigError` at startup and the process refuses to serve. All `MODEL_RUNTIME_*`
+variables are declared in `.env.example` and `deploy/model-runtime/.env.example`;
+the deploy-contract suite
+(`tests/model_runtime/test_model_runtime_deploy_contract.py`) keeps the
+templates in lock-step with the settings layer.
+
+**Tenant scoping.** Every route requires the `X-Tenant-ID` header; a client can
+never select tenant scope from the body or query.
+
+**Credential hygiene.** Responses are credential-free; health/entitlement
+reasons are sanitized. Never place API keys or secrets in the env templates —
+placeholders only (the templates are scanned by the deploy-contract suite).
+
+**Health.** `GET /v1/model-runtime/health` reports per-provider
+configured/healthy state over the deterministic seed set until real adapters
+are wired; `status` ∈ `ok` / `degraded` / `unhealthy`.
 
 ---
 

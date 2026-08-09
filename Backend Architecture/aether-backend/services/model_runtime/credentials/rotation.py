@@ -37,19 +37,13 @@ from services.model_runtime.credentials.models import (
     RotationDecision,
 )
 from shared.credentials.interface import CredentialMetadata
+from shared.temporal.instant import ensure_aware_utc
 
 __all__ = [
     "ExpiryBasedRotationPolicy",
     "RotationOrchestrator",
     "RotationPolicy",
 ]
-
-
-def _aware_utc(value: datetime) -> datetime:
-    """Normalize to an aware UTC datetime (naive input is assumed UTC)."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 class RotationPolicy(Protocol):
@@ -98,11 +92,11 @@ class ExpiryBasedRotationPolicy:
         *,
         now: datetime | None = None,
     ) -> RotationDecision:
-        reference = _aware_utc(now or datetime.now(timezone.utc))
+        reference = ensure_aware_utc(now or datetime.now(timezone.utc))
 
         modified = self._last_modified(meta)
         if self._max_age is not None and modified is not None:
-            if reference - _aware_utc(modified) > self._max_age:
+            if reference - ensure_aware_utc(modified) > self._max_age:
                 return RotationDecision(
                     ref=meta.ref,
                     should_rotate=True,
@@ -111,7 +105,7 @@ class ExpiryBasedRotationPolicy:
                 )
 
         if meta.expires_at is not None:
-            expires = _aware_utc(meta.expires_at)
+            expires = ensure_aware_utc(meta.expires_at)
             if reference + self._grace >= expires:
                 return RotationDecision(
                     ref=meta.ref,

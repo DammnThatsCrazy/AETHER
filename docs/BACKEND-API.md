@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "56047cd6"
+last_synced_commit: "762619b6"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -3172,3 +3172,53 @@ proof system. Every route is gated by `require_kyber_access(SELF_CAPABILITY)`.
 The `label` field is accepted on the wire for contract stability but is not
 persisted on the `DeviceProofKey` row; it is carried in the re-key audit event
 instead.
+
+---
+
+## Model Runtime — Multi-Model Intelligence Harness (v8.12.0)
+
+Operator + tenant surfaces for the provider-neutral model runtime
+(`Backend Architecture/aether-backend/services/model_runtime/`). Serves the
+generated model registry, per-provider health, tenant entitlements, usage, and
+routing traces, plus the tenant model-selection preference.
+
+**Feature-gated (ADR-008 D9).** The entire surface is inert while
+`MODEL_RUNTIME_ENABLED=false` (the default): every route returns HTTP 503
+`{"status":"disabled","code":"model_runtime_disabled"}` — no data is ever
+served and the response shapes leak nothing. The gate is read from
+`services/model_runtime/config.py` (`ModelRuntimeSettings`), not the app
+settings module, and any configuration error resolves to OFF.
+
+**Tenant scope is server-authoritative.** Every route requires the
+`X-Tenant-ID` header (missing → HTTP 400
+`{"status":"error","code":"tenant_required"}`). A client can never select
+tenant scope from the body or query string.
+
+**Credential-free responses.** Health and entitlement reasons pass through a
+sanitizer that blanks secret-shaped material (`sk-`, `pk_`, `rk_live_`,
+`whsec_`, `AKIA`, `Bearer `, `Authorization:`, `X-Api-Key:`, `password=`,
+`secret=`, `key=`, `eyJ`). No route returns credentials or raw
+request/response content; trace summaries carry routing-decision fields only.
+
+**Backing stores.** The registry is the generated model catalog
+(`shared/model_governance/generated_model_registry.py`). Health is probed by
+`RuntimeHealthProbe` over a deterministic seed provider set — all
+network-backed registry providers report unconfigured (fail-closed). Usage and
+traces are deterministic, clearly-marked seed data (all-zero usage); a real
+metering/trace store plugs in later.
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/model-runtime/models` | Tenant model registry + default | Aether `ModelSelectionPanel`. `tenantDefaultModel` comes from a non-durable in-memory seed (`null` for unknown tenants). |
+| PUT | `/v1/model-runtime/tenant-default` | Set the tenant default model | Body `{ "modelId" }`; unknown model id → HTTP 400 `unknown_model`; persists to the in-memory seed only; returns 204. |
+| GET | `/v1/model-runtime/registry` | Full model catalog | Kyber `ModelRegistryPage`. No per-tenant data. |
+| GET | `/v1/model-runtime/health` | Provider health summary | Kyber `ModelRuntimeHealthPage`. `status` ∈ `ok` / `degraded` / `unhealthy`; reasons sanitized. |
+| GET | `/v1/model-runtime/entitlements` | Per-model entitlement rows | Kyber `EntitlementsPage`. Resolved by `AllowlistEntitlementResolver` for the requesting tenant only. |
+| GET | `/v1/model-runtime/usage` | Aggregate + per-model usage | Kyber `UsagePage`. Deterministic all-zero seed data (fail-closed) until metering is wired. |
+| GET | `/v1/model-runtime/traces` | Routing trace summaries | Kyber `TracesPage`. Tenant-scoped, content-free decision summaries only. |
+
+All routes share the `tags=["model-runtime"]` group and carry the D9 gate
+dependency; the Aether (`models`, `tenant-default`) and Kyber (`registry`,
+`health`, `entitlements`, `usage`, `traces`) clients are typed to these exact
+paths in `frontend/aether/src/features/model-selection/types.ts` and
+`frontend/kyber/src/features/model-runtime/types.ts` respectively.

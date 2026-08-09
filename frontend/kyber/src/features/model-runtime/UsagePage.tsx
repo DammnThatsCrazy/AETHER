@@ -14,20 +14,12 @@ import {
   CardTitle,
   EmptyState,
   ErrorState,
+  formatUSD,
   LoadingState,
 } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import type { ModelRuntimeAdminApi, UsageByModel, UsageResponse } from './types';
 import { defaultModelRuntimeAdminApi } from './types';
-
-/** Locale-explicit, deterministic USD rendering — display-only currency. */
-function formatUsd(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
-}
 
 interface UsagePageProps {
   /** Injectable typed client — defaults to the real model-runtime admin client. */
@@ -90,7 +82,7 @@ export function UsagePage({ api = defaultModelRuntimeAdminApi }: UsagePageProps)
             <SummaryCard label="Calls" value={totals.calls} />
             <SummaryCard label="Input tokens" value={totals.inputTokens} />
             <SummaryCard label="Output tokens" value={totals.outputTokens} />
-            <SummaryCard label="Cost in USD" value={formatUsd(totals.costUsd)} />
+            <SummaryCard label="Cost in USD" value={formatUSD(totals.costUsd)} />
           </div>
 
           <Card aria-label="Model usage">
@@ -122,7 +114,7 @@ export function UsagePage({ api = defaultModelRuntimeAdminApi }: UsagePageProps)
                           <td className="py-2 px-2 text-right">{row.calls}</td>
                           <td className="py-2 px-2 text-right">{row.inputTokens}</td>
                           <td className="py-2 px-2 text-right">{row.outputTokens}</td>
-                          <td className="py-2 px-2 text-right whitespace-nowrap">{formatUsd(row.costUsd)}</td>
+                          <td className="py-2 px-2 text-right whitespace-nowrap">{formatUSD(row.costUsd)}</td>
                         </tr>
                       ))}
                     </tbody>

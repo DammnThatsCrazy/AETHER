@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "bf8a5fbd"
+last_synced_commit: "762619b6"
 ---
 # Aether vNext — Architecture Guide
 
@@ -517,6 +517,34 @@ retry/budget/metrics loops, the `EnvironmentNoesisPlanProvider` test stub, and
 the `ProductionNoesisPlanProvider` factory / `NOESIS_LLM_PROVIDER` routing are
 unchanged. No direct Anthropic SDK or `httpx` imports remain in `provider.py`;
 the fail-closed behavior on missing credentials or config is preserved.
+
+### Intelligence planes
+
+The intelligence layers build on the provider adapters as a single package
+under `services/model_runtime/`, with an 83-name root barrel
+(`services/model_runtime/__init__.py`) as the public surface:
+
+| Plane | Package | Responsibility | ADR-008 |
+|---|---|---|---|
+| Routing / policy | `routing/` | Four routing modes (auto / entitlement / static / audit), entitlement resolution, static fallback chains, route audit entries | D4 |
+| Credentials | `credentials/` | Per-tenant LLM credential resolution: BYOK/static + AWS Secrets Manager backends, secret-token rotation, cache TTL; never logs credential material | D5 |
+| Task profiles | `task_profiles/` | Versioned, validated task-profile registry (output schemas + prompt loaders) that routing plans consume | D3/D4/D7 |
+| Context | `context/` | Retrieval-before-synthesis: an allowlisted `EvidenceSet` is built, scoped, and assembled into a grounded prompt; injection/size guards fail closed | D6 |
+| Synthesis | `synthesis/` | Grounded answering path: allowlisted plan kinds, a grounding gate (insufficient/stale evidence fails), cited `EvidenceCitation` rendering, secret screening | D6 |
+| Verification | `verification/` | Post-synthesis faithfulness + claim checks and cross-tenant secret-leak detection; any failure blocks the result | D7 |
+| Evaluation | `evaluation/` | Scenario runner, faithfulness scorers, and a `RegressionGate` that fails when measured quality drops | D7/D8 |
+| Observability | `observability/` | Provider health/readiness probes, circuit breakers, metrics recorder, incident classification, runbooks | D8 |
+| Config | `config.py` | Single `MODEL_RUNTIME_*` settings source; feature gate OFF by default; staging/production fail closed (never `in_memory`, never `deterministic`) | D5/D8/D9 |
+| Pipeline | `pipeline.py` | `HarnessPipeline.run()` wires context → synthesis → verification into one facade with content-free stage errors | D6/D7 |
+| HTTP | `routes.py` | `/v1/model-runtime/*` — feature-gated OFF (503 when disabled), `X-Tenant-ID` required | D8/D9 |
+
+The pipeline error contract is intentionally short: `HarnessPipelineError`
+messages name the failing stage and exception class only — never evidence,
+synthesis content, or credential material. Expected failures map to their
+stage (`context` / `grounding` / `plans` / `synthesis` / `verification`);
+anything unexpected still fails closed under a stage name. Rendering is
+downstream of the pipeline: it returns the structured `SynthesisResult` plus an
+optional `VerificationResult`, and evaluation/routing decide how to surface it.
 
 Binding security invariants: credentials never in source/frontend bundles/logs/
 prompts/persisted content; the model never receives direct database authority;

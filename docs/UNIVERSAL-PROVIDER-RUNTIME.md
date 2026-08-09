@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
-last_synced_commit: "7fc280ea"
+last_synced_commit: "762619b6"
 ---
 
 # Universal Provider Runtime
@@ -249,3 +249,4 @@ The pipeline honors three invariants:
 - [COMMERCE-EVENT-CONTRACT](COMMERCE-EVENT-CONTRACT.md) — the canonical commerce vocabulary
 - [SDK-COMMERCE-BRIDGES](SDK-COMMERCE-BRIDGES.md) — the follow-on (documentation only)
 - [PROVIDER-MIGRATION](PROVIDER-MIGRATION.md) — migrating a legacy connector
+- [ARCHITECTURE.md](ARCHITECTURE.md) → "Multi-Model Intelligence Harness" / "Intelligence planes" — the intelligence layers (routing, credentials, task profiles, context, synthesis, verification, evaluation, observability) that consume the UPR's provider adapters through the `AsyncModelProvider` contract

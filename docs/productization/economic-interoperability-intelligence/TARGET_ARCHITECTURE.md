@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/config/settings.py
 canonical_owner: platform@aether
-last_synced_commit: "bf8a5fbd"
+last_synced_commit: "762619b6"
 ---
 
 # Target Architecture
@@ -31,6 +31,18 @@ same wiring pattern: `main.py` mounts
 `/v1/admin/kyber/payment-rails/card-linked` when either the master or
 `KYBER_CARD_LINKED_PAYMENT_RAILS_ENABLED` flag is on. Its source of
 truth is `docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md`.
+
+A fifth flag-gated surface follows the same `main.py` mount pattern: the
+multi-model intelligence harness (`services/model_runtime/`) mounts under
+`/v1/model-runtime` when `MODEL_RUNTIME_ENABLED=true` (default OFF). Unlike the
+economic/interop domains it is read-mostly control-plane — model registry,
+provider health, entitlements, usage, traces, and the tenant default-model
+preference — served against the generated model catalog with deterministic
+seed data until live stores wire in. Every route requires `X-Tenant-ID`;
+responses are credential-free. Its settings live in
+`services/model_runtime/config.py` (not `config/settings.py`) and fail closed
+in staging/production (`MODEL_RUNTIME_ENABLED=true` requires a production-safe
+credential backend and a real default provider).
 
 ```
 provider evidence (RPC logs / venue snapshots / simulator fixtures)
@@ -59,6 +71,10 @@ Aether tenant pages · Kyber operator ops pages (flag-gated, honest states)
   (`AETHER_STABLECOIN_*`, `AETHER_DERIVATIVES_*`, `AETHER_INTEROP_*`,
   `KYBER_*_OPS_ENABLED`); `Settings.__post_init__` enforces coherence
   (LayerZero requires the adapters flag).
+- Model-runtime fail-closed: `MODEL_RUNTIME_ENABLED` defaults OFF; enabling in
+  staging/production requires a production-safe credential backend
+  (`env`/`aws_secrets`) and a real default provider —
+  `services/model_runtime/config.py` raises `ConfigError` otherwise.
 - Tenant isolation: every tenant table keyed and filtered by
   `tenant_id`; public reference data (registries, topology) in the
   public scope only.

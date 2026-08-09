@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/config/settings.py
   - .env.example
 canonical_owner: platform@aether
-last_synced_commit: "bf8a5fbd"
+last_synced_commit: "762619b6"
 ---
 
 # Deployment Profile Matrix
@@ -27,8 +27,14 @@ All flags default OFF; enabling is per-capability and per-domain.
 | LayerZero live scanning | ❌ (CREDENTIAL_GATED) | needs per-chain RPC | blocked |
 | Gold materialization | in-memory GoldRepository | ClickHouse not provisioned | blocked |
 | Frontend surfaces | ✅ against local backend | flag-gated | flag-gated |
+| Model runtime harness (`MODEL_RUNTIME_*`) | ✅ deterministic provider locally | flag-gated OFF (fail-closed) | flag-gated OFF (fail-closed) |
 
 Env blocks are documented in `.env.example`
 (`AETHER_STABLECOIN_*`, `AETHER_DERIVATIVES_*`, `AETHER_INTEROP_*`,
-`KYBER_*_OPS_ENABLED`); `Settings.__post_init__` rejects incoherent
-combinations (LayerZero without adapters).
+`KYBER_*_OPS_ENABLED`, `MODEL_RUNTIME_*`); `Settings.__post_init__` rejects
+incoherent combinations (LayerZero without adapters). The model runtime
+additionally enforces its own fail-closed rule in
+`services/model_runtime/config.py`: enabling `MODEL_RUNTIME_ENABLED` in
+staging/production requires a production-safe credential backend
+(`env`/`aws_secrets`, never `in_memory`) and a real default provider (never
+`deterministic`) — otherwise `ConfigError` at startup.

@@ -4766,6 +4766,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/deployment/model-runtime-deployment.md",
+      "title": "Model Runtime Deployment",
+      "slug": "operations/model-runtime-deployment",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/derivatives/ARCHITECTURE.md",
       "title": "Derivatives Architecture",
       "slug": "derivatives/architecture",

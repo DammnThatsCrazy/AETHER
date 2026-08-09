@@ -16,7 +16,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "bf8a5fbd"
+last_synced_commit: "762619b6"
 ---
 
 # Backend Execution Model
@@ -137,3 +137,28 @@ covered by ownership tests. Broker-backed staging evidence for assignment,
 processing lag, restart counts, and bounded deployment drain remains required;
 the ledger therefore remains `implementation_in_progress` rather than claiming
 production validation.
+
+## Model runtime execution flow (v8.12.0)
+
+The provider-neutral harness
+(`Backend Architecture/aether-backend/services/model_runtime/`) executes as a
+cross-plane pipeline behind a single facade — `HarnessPipeline.run()`:
+routing → context → grounded synthesis → verification, with evaluation as the
+regression gate and observability throughout. Every stage is tenant-scoped
+(`X-Tenant-ID`) and evidence-backed; see `docs/ARCHITECTURE.md` →
+"Intelligence planes".
+
+Fail-closed settings (`services/model_runtime/config.py`, `MODEL_RUNTIME_*`):
+
+- `MODEL_RUNTIME_ENABLED=false` by default (ADR-008 D9) — the HTTP surface
+  returns 503 while OFF and serves no data.
+- Staging/production with `MODEL_RUNTIME_ENABLED=true` must use a
+  production-safe credential backend (`env` or `aws_secrets`, never
+  `in_memory`/`disabled`) and a real default provider (never `deterministic`);
+  a violation raises `ConfigError` at startup — the process refuses to serve.
+- `credential_backend=aws_secrets` requires a non-empty
+  `MODEL_RUNTIME_CREDENTIAL_AWS_REGION` in every environment.
+
+The pipeline normalizes every stage failure into a content-free
+`HarnessPipelineError` (stage name + exception class only), so evidence content
+and credentials never appear in errors or logs.
