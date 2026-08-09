@@ -31,6 +31,10 @@ const kindLabel: Record<NodeKind, string> = {
   system: 'System',
 }
 
+// STATIC PROTOTYPE — these health values are mock/sample data, NOT live signals.
+// No live API is wired to this surface yet; the numbers below are illustrative
+// and must not be presented as current fleet state. Live wiring is tracked as
+// wiringNeeds (aggregate/fleet + /v1/kyber/tenants/{id}/operational-envelope).
 const healthItems = [
   { label: 'Graph freshness', value: '98.2%', status: 'healthy', width: 98 },
   { label: 'Evidence density', value: '86%', status: 'healthy', width: 86 },
@@ -357,7 +361,7 @@ function NavigationRail({ activeItem, onSelect }: { activeItem: string; onSelect
       </div>
       <div className="rail-bottom">
         <button className="nav-item" type="button" onClick={() => onSelect('Settings')} title="Settings"><Icon name="settings" size={16} /><span>Settings</span></button>
-        <div className="rail-health"><span className="status-dot status-dot--good" /><span>Intelligence healthy</span></div>
+        <div className="rail-health"><span className="status-dot" /><span>static prototype · no live health</span></div>
       </div>
     </aside>
   )

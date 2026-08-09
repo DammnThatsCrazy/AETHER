@@ -122,6 +122,50 @@ _SLOT_AUGMENTATION: dict[str, dict] = {
         rotation_policy="replace",
         sensitive=True,
     ),
+    "webhook_secret": dict(
+        display_name="Webhook secret",
+        purpose="Verify the HMAC signature of inbound provider webhooks.",
+        secret_type="hmac_secret",
+        required_for=("webhook_verification",),
+        scope_policy="verify_only",
+        needs_endpoint=False,
+        validation_strategy="signature_selfcheck",
+        rotation_policy="overlap",
+        sensitive=True,
+    ),
+    "signer_key": dict(
+        display_name="Signer key",
+        purpose="Sign outbound payloads (payouts, claims); key reference only.",
+        secret_type="signing_key",
+        required_for=("payout_signing", "payload_signing"),
+        scope_policy="sign_only",
+        needs_endpoint=False,
+        validation_strategy="signature_selfcheck",
+        rotation_policy="replace",
+        sensitive=True,
+    ),
+    "signing_key": dict(
+        display_name="Signing key",
+        purpose="Signing key reference for message/transaction signing.",
+        secret_type="signing_key",
+        required_for=("payload_signing",),
+        scope_policy="sign_only",
+        needs_endpoint=False,
+        validation_strategy="signature_selfcheck",
+        rotation_policy="replace",
+        sensitive=True,
+    ),
+    "token_ref": dict(
+        display_name="OAuth token reference",
+        purpose="OAuth access/refresh token reference for authorized API access.",
+        secret_type="oauth_token",
+        required_for=("authorized_api_access",),
+        scope_policy="authorized_scopes",
+        needs_endpoint=True,
+        validation_strategy="token_probe",
+        rotation_policy="replace",
+        sensitive=True,
+    ),
 }
 
 # Fallback policy for a slot name an adapter declares that we have not enriched.
@@ -137,6 +181,172 @@ _DEFAULT_AUGMENTATION: dict = dict(
     rotation_policy="replace",
     sensitive=True,
 )
+
+
+# ── Domain slot declarations ────────────────────────────────────────────────
+# Payment-rail slots are DERIVED from the adapters (see ``build_slot_registry``).
+# The additional credentialed domains have no adapter to derive from yet, so
+# their slots are DECLARED here by the server — no live values, no concrete
+# provider hosts, just the operational policy each slot will enforce. Each entry
+# is ``(slot_name, overrides)`` merged over the ``_SLOT_AUGMENTATION`` entry of
+# that name. ``environment`` stays ``"any"`` on the template: sandbox and live
+# bind the concrete value at the credential-version level.
+_DOMAIN_SLOT_DECLARATIONS: dict[str, tuple[tuple[str, dict], ...]] = {
+    "stablecoin_rpc": (
+        (
+            "api_key",
+            dict(
+                purpose=(
+                    "Authenticate read-only polling of a stablecoin RPC/API "
+                    "endpoint (balance, transfer history)."
+                ),
+                required_for=("rpc_call", "status_poll", "connection_test"),
+            ),
+        ),
+    ),
+    "derivatives": (
+        (
+            "api_key",
+            dict(
+                purpose=(
+                    "Authenticate read-only market-data access to a derivatives "
+                    "venue (order book, positions, funding)."
+                ),
+                required_for=("market_data", "status_poll", "connection_test"),
+            ),
+        ),
+    ),
+    "interop": (
+        (
+            "api_key",
+            dict(
+                purpose=(
+                    "Authenticate read-only bridge/relayer API and RPC access "
+                    "(transfer status, message relay)."
+                ),
+                required_for=("relay_status", "rpc_call", "connection_test"),
+            ),
+        ),
+    ),
+    "rewards": (
+        (
+            "signer_key",
+            dict(
+                purpose=(
+                    "Sign reward payout payloads; a key REFERENCE slot, never "
+                    "raw key material in a response."
+                ),
+            ),
+        ),
+        (
+            "webhook_secret",
+            dict(
+                purpose="Verify inbound rewards-rail webhook signatures.",
+            ),
+        ),
+    ),
+    "x402": (
+        (
+            "api_key",
+            dict(
+                purpose="Authenticate to an x402 payment facilitator.",
+            ),
+        ),
+        (
+            "webhook_secret",
+            dict(
+                purpose="Verify inbound x402 facilitator webhook signatures.",
+            ),
+        ),
+    ),
+    "signing": (
+        (
+            "signing_key",
+            dict(
+                purpose=(
+                    "Signing key reference for message/transaction signing; "
+                    "the reference rotates without exposing key material."
+                ),
+            ),
+        ),
+    ),
+    "webhook": (
+        (
+            "webhook_signing_secret",
+            dict(
+                purpose="Verify the HMAC signature of inbound provider webhooks.",
+            ),
+        ),
+    ),
+    "oauth": (
+        (
+            "token_ref",
+            dict(
+                purpose=(
+                    "OAuth access/refresh token reference for authorized API "
+                    "access; refresh rotates the token independently."
+                ),
+            ),
+        ),
+    ),
+}
+
+
+def _domain_slot(domain: str, slot_name: str, overrides: dict) -> CredentialSlot:
+    """Build one domain-declaration slot from the shared slot augmentation."""
+    aug = dict(_SLOT_AUGMENTATION.get(slot_name, _DEFAULT_AUGMENTATION))
+    aug.update(overrides)
+    needs_endpoint = aug.pop("needs_endpoint", False)
+    endpoint_policy = aug.pop("endpoint_policy", None)
+    if needs_endpoint and not endpoint_policy:
+        # Declaration hint only — never a concrete host (no live values).
+        endpoint_policy = "endpoint required; read_only"
+    return CredentialSlot(
+        provider=domain,
+        domain=domain,
+        slot_name=slot_name,
+        display_name=aug["display_name"],
+        purpose=aug["purpose"],
+        environment="any",
+        required=True,
+        secret_type=aug["secret_type"],
+        required_for=tuple(aug["required_for"]),
+        scope_policy=aug["scope_policy"],
+        endpoint_policy=endpoint_policy,
+        validation_strategy=aug["validation_strategy"],
+        rotation_policy=aug["rotation_policy"],
+        sensitive=aug["sensitive"],
+    )
+
+
+@lru_cache(maxsize=1)
+def _domain_slots_cache() -> dict[str, tuple[CredentialSlot, ...]]:
+    """Cached domain -> declared slots (static declarations)."""
+    return {
+        domain: tuple(
+            _domain_slot(domain, slot_name, overrides)
+            for slot_name, overrides in declarations
+        )
+        for domain, declarations in _DOMAIN_SLOT_DECLARATIONS.items()
+    }
+
+
+def slots_for_domain(domain: str) -> tuple[CredentialSlot, ...]:
+    """Declared credential slots for a credentialed *domain* (not a specific
+    payment adapter). ``payments`` aggregates every payment-adapter slot; the
+    additional domains resolve from the server-owned domain declarations.
+    """
+    if domain == PAYMENTS_DOMAIN:
+        out: list[CredentialSlot] = []
+        for provider_slots in build_slot_registry().values():
+            out.extend(provider_slots)
+        return tuple(out)
+    return _domain_slots_cache().get(domain, ())
+
+
+def declared_domains() -> tuple[str, ...]:
+    """Every credentialed domain with at least one declared slot."""
+    return tuple(sorted({PAYMENTS_DOMAIN, *_DOMAIN_SLOT_DECLARATIONS.keys()}))
 
 
 def _safe_host(url: str) -> str | None:
@@ -188,11 +398,16 @@ def build_slot_registry() -> dict[str, tuple[CredentialSlot, ...]]:
 def slots_for(provider: str, environment: str | None = None) -> tuple[CredentialSlot, ...]:
     """All declared slots for ``provider`` (environment-agnostic templates).
 
+    Payment adapters resolve from the derived registry; a domain token (e.g.
+    ``stablecoin_rpc``) resolves from the server-owned domain declarations.
     ``environment`` is accepted for symmetry with the version-level binding and
     to leave room for future per-environment slots; today every environment
     requires the same slot set.
     """
-    return build_slot_registry().get(provider, ())
+    registry = build_slot_registry()
+    if provider in registry:
+        return registry[provider]
+    return slots_for_domain(provider)
 
 
 def get_slot(provider: str, slot_name: str, environment: str | None = None) -> CredentialSlot | None:
@@ -204,14 +419,21 @@ def get_slot(provider: str, slot_name: str, environment: str | None = None) -> C
 
 
 def known_providers() -> tuple[str, ...]:
-    """Providers that declare at least one credential slot."""
+    """Payment providers that declare at least one credential slot.
+
+    Deliberately payment-adapter-scoped: the additional domain slots are served
+    through ``slots_for_domain`` / ``declared_domains`` until those domains are
+    wired as enableable providers by the integration pass.
+    """
     return tuple(build_slot_registry().keys())
 
 
 __all__ = [
     "CredentialSlot",
     "build_slot_registry",
-    "slots_for",
+    "declared_domains",
     "get_slot",
     "known_providers",
+    "slots_for",
+    "slots_for_domain",
 ]

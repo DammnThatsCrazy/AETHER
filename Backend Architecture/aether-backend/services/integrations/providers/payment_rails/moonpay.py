@@ -42,7 +42,12 @@ class MoonPayAdapter(PaymentRailAdapter):
     webhook_supported = True
     polling_supported = True
     default_rail = "moonpay"
-    signature_scheme = "timestamped_hex"
+    # MoonPay signs webhooks with the compound ``Moonpay-Signature-V2:
+    # t=<unix>,s=<hexmac>`` header — the s-tag compound scheme, not the generic
+    # timestamped_hex placeholder. The declaration MUST match what
+    # ``native_signature_scheme()`` / ``verify_signature`` actually do (the
+    # previous declaration of ``timestamped_hex`` disagreed with behavior).
+    signature_scheme = "moonpay_compound"
 
     # Pull path — MoonPay transactions API, time-window paginated by updatedAt.
     poll_base_url = "https://api.moonpay.com"

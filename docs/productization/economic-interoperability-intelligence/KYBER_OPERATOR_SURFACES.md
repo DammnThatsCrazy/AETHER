@@ -25,7 +25,7 @@ Three ops pages against `/v1/admin/kyber/{stablecoins,derivatives/runtime,intero
 |---|---|
 | `/stablecoins/ops` | Registry status + seed-from-x402, finality checkpoints, reconciliation + unresolved-observation review |
 | `/derivatives/ops` | Adapter fleet (honest ImplementationStatus + read-only credential badges), checkpoints, stream gaps, variances, conformance trigger |
-| `/interoperability/ops` | Provider health + checkpoint lag, correlation health, security-policy drift, governed-scan trigger (scaffolds refuse honestly) |
+| `/interoperability/ops` | Provider health + checkpoint lag, correlation health, security-policy drift, per-provider operational-state surface, governed-scan trigger (credential-gated providers refuse honestly — 409 until an RPC client is wired) |
 
 Zod schemas in `lib/schemas/economic-ops.ts` parse the raw
 `{items, count}` admin payloads with passthrough rows so provider-specific

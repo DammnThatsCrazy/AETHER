@@ -9,7 +9,14 @@ routes never expose one tenant's data to another tenant.
 Endpoints:
     GET  /v1/kyber/imports/timeline              Cross-tenant import sessions feed
     GET  /v1/kyber/imports/{import_id}           A single import (any tenant) + commits
-    POST /v1/kyber/imports/{import_id}/requeue   Recover a failed import (reset → re-commit)
+    POST /v1/kyber/imports/{import_id}/requeue   Recover a failed / stranded-committing import
+    POST /v1/kyber/imports/sweep-stranded        Run one session-sweeper pass (dead-letter)
+
+The requeue surface is backed by the import-session FSM (program sec16): a
+``FAILED`` session and a ``COMMITTING`` session stranded past its requeue
+window (crash recovery) are both requeueable; a COMPLETED / DEAD_LETTERED /
+ROLLED_BACK session is not. ``failure_reason`` and ``retry_count`` are
+preserved across requeues for audit.
 
 Only ``router`` is exported; mounting is done by main.py.
 """
@@ -25,9 +32,6 @@ from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.imports.kyber_routes")
 router = APIRouter(prefix="/v1/kyber/imports", tags=["Imports (Kyber)"])
-
-# A failed import can be recovered; a terminal-success or cancelled one cannot.
-_REQUEUEABLE = {"failed"}
 
 
 @router.get("/timeline")
@@ -60,26 +64,60 @@ async def import_detail(
     ).to_dict()
 
 
+@router.post("/sweep-stranded")
+async def sweep_stranded_imports(
+    request: Request,
+    actor=Depends(require_kyber_operator),
+):
+    """Run one import-session sweeper pass (operator-triggered).
+
+    Dead-letters FAILED sessions whose retry budget is exhausted and sessions
+    stranded in an in-flight state past the hard deadline (crash recovery gone
+    cold). States waiting on a human are never touched. The supervisor also
+    runs this hook periodically (see wiringNeeds for ``build_sweeper_coro``).
+    """
+    from services.imports.session_persistence import sweep_stranded_sessions
+
+    report = await sweep_stranded_sessions(get_imports_repository())
+    metrics.increment(
+        "import_kyber_sweeps_total",
+        value=report.get("dead_lettered", 0),
+    )
+    return APIResponse(data=report).to_dict()
+
+
 @router.post("/{import_id}/requeue")
 async def requeue_import(
     import_id: str,
     request: Request,
     actor=Depends(require_kyber_operator),
 ):
-    """Recover a failed import: reset it to ``approved`` and re-enqueue the
-    durable commit job. The mapping and validation are unchanged (they are
-    stored), so this is a safe replay of a commit that failed mid-flight."""
+    """Recover a recoverable import and re-enqueue the durable commit job.
+
+    Backed by the import-session FSM: a ``FAILED`` session and a ``COMMITTING``
+    session stranded past its requeue window (crash recovery) are requeueable;
+    COMPLETED / DEAD_LETTERED / ROLLED_BACK are not. ``failure_reason`` and
+    ``retry_count`` are preserved for audit; the mapping and validation are
+    unchanged (they are stored), so this is a safe replay of a commit that
+    failed mid-flight. The requeued session lands in ``COMMITTING`` and the
+    resumable ``commit_import`` re-stages idempotently under the same commit id.
+    """
+    from services.imports.session_persistence import requeue_session
+
     repo = get_imports_repository()
     session = await repo.get_session_any(import_id)
     if session is None:
         raise NotFoundError("import session")
-    if session.get("status") not in _REQUEUEABLE:
-        raise ConflictError(
-            f"cannot requeue import in status '{session.get('status')}' "
-            f"(requeueable: {sorted(_REQUEUEABLE)})"
-        )
     tenant_id = session["tenant_id"]
-    await repo.update_session(tenant_id, import_id, status="approved")
+
+    try:
+        await requeue_session(
+            repo, tenant_id, import_id, requested_by=actor.actor_id
+        )
+    except ConflictError as exc:
+        raise ConflictError(
+            f"cannot requeue import session {import_id}: {exc}"
+        )
 
     from services.jobs.service import get_jobs_service
 

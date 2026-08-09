@@ -24,6 +24,7 @@ Design guarantees:
 
 from __future__ import annotations
 
+import functools
 import uuid
 from datetime import timedelta
 from typing import Any, Optional
@@ -35,6 +36,7 @@ from shared.store import get_store
 from services.providers.credentials.repository import CredentialVersionRepo
 from services.providers.credentials.schema import (
     CREDENTIAL_ENVIRONMENTS,
+    CREDENTIAL_STATES,
     CredentialEnvironment,
     CredentialState,
 )
@@ -70,6 +72,47 @@ _DECRYPT_CACHE_MAX = 512
 
 class SlotError(ValueError):
     """A client referenced a slot the server never declared for the provider."""
+
+
+# SQLSTATE 23505 = unique_violation. asyncpg surfaces the partial-unique-index
+# races (at most one ACTIVE / at most one PREVIOUS per slot) as
+# ``asyncpg.exceptions.UniqueViolationError``; a conformance fake carries the
+# same ``sqlstate`` so the mapping is exercised offline too.
+_UNIQUE_VIOLATION_SQLSTATE = "23505"
+
+
+def _is_unique_violation(exc: BaseException) -> bool:
+    """True for an asyncpg UniqueViolationError (or a faithful fake)."""
+    if getattr(exc, "sqlstate", None) == _UNIQUE_VIOLATION_SQLSTATE:
+        return True
+    return type(exc).__name__ == "UniqueViolationError"
+
+
+def _map_unique_violation(method):
+    """Turn a concurrent-mutation ``UniqueViolationError`` into a clean 409.
+
+    Two racing rotations that both pass the in-process optimistic-concurrency
+    check can still collide on the Postgres partial-unique index; the resulting
+    ``UniqueViolationError`` must surface as a retryable ``ConflictError`` (409),
+    never as an uncaught 500.
+    """
+
+    @functools.wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        try:
+            return await method(self, *args, **kwargs)
+        except ConflictError:
+            raise
+        except Exception as exc:
+            if _is_unique_violation(exc):
+                raise ConflictError(
+                    "concurrent credential mutation detected: the single-active "
+                    "and bounded-overlap slot invariants were contested; retry "
+                    "the request with the current active version"
+                ) from exc
+            raise
+
+    return wrapper
 
 
 class CredentialAuthority:
@@ -363,6 +406,7 @@ class CredentialAuthority:
         except Exception:  # noqa: BLE001 — probe must never raise into the state machine
             return "probe_error"
 
+    @_map_unique_violation
     async def activate(
         self,
         tenant_id: str,
@@ -380,6 +424,8 @@ class CredentialAuthority:
         active version does not match, raise ``ConflictError`` (someone else
         rotated concurrently). Webhook secrets keep the previous version in a
         bounded overlap window; other slots revoke the old version immediately.
+        A concurrent commit that trips the Postgres partial-unique index is
+        mapped to a ``ConflictError`` too (never an uncaught 500).
         """
         slot = self._require_slot(provider, slot_name, environment)
         target = await self._find_version(
@@ -440,6 +486,7 @@ class CredentialAuthority:
         )
         return self._safe_view(activated)
 
+    @_map_unique_violation
     async def rotate(
         self,
         tenant_id: str,
@@ -452,7 +499,12 @@ class CredentialAuthority:
         expected_active_version: Optional[int] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict:
-        """Create a new pending version and activate it (with overlap/replace)."""
+        """Create a new pending version and activate it (with overlap/replace).
+
+        Concurrency: ``expected_active_version`` gives optimistic control, and a
+        race that reaches the durable partial-unique index is mapped to a 409
+        ``ConflictError`` (never an uncaught 500).
+        """
         pending = await self.create_pending(
             tenant_id,
             provider,
@@ -741,6 +793,50 @@ class CredentialAuthority:
             "slots": slot_views,
         }
 
+    async def health(self) -> dict:
+        """Operational health of the credential authority (never secret material).
+
+        Reports authority reachability, backend durability, aggregate counts by
+        environment and lifecycle state, and the declared provider/slot surface.
+        A count query that fails (e.g. DB unavailable) is reported as ``-1`` for
+        that bucket rather than failing the whole probe. A health *router* for
+        this payload is wired by the integration pass (see wiringNeeds).
+        """
+        from repositories.repos import get_pool
+
+        pool = None
+        try:
+            pool = await get_pool()
+        except Exception:  # noqa: BLE001 — a broken pool is a health signal, not a crash
+            pool = None
+        durable = pool is not None
+
+        by_env: dict[str, int] = {}
+        by_state: dict[str, int] = {}
+        for env in CREDENTIAL_ENVIRONMENTS:
+            try:
+                by_env[env] = int(await self._repo.count(filters={"environment": env}))
+            except Exception:  # noqa: BLE001
+                by_env[env] = -1
+        for state in CREDENTIAL_STATES:
+            try:
+                by_state[state] = int(await self._repo.count(filters={"state": state}))
+            except Exception:  # noqa: BLE001
+                by_state[state] = -1
+
+        providers = _known()
+        total_slots = sum(len(slots_for(p)) for p in providers)
+        return {
+            "authority": "reachable",
+            "backend": {"available": True, "durable": durable},
+            "counts": {
+                "by_environment": by_env,
+                "by_state": by_state,
+                "declared_providers": len(providers),
+                "declared_slots": total_slots,
+            },
+        }
+
     async def _is_enabled(self, tenant_id: str, provider: str, environment: str) -> bool:
         try:
             row = await get_store("provider_enablement").get(
@@ -901,4 +997,14 @@ def _readiness_state(
 credential_authority = CredentialAuthority()
 
 
-__all__ = ["CredentialAuthority", "credential_authority", "SlotError"]
+async def credential_authority_health() -> dict:
+    """Module-level health probe over the shared authority (for router wiring)."""
+    return await credential_authority.health()
+
+
+__all__ = [
+    "CredentialAuthority",
+    "SlotError",
+    "credential_authority",
+    "credential_authority_health",
+]

@@ -73,7 +73,7 @@ A 20-minute arc that follows the intelligence loop end to end.
 
 Say these plainly if asked — the honesty is the sales asset:
 
-- **No live economic provider.** All 18 first-release providers are
+- **No live economic provider.** All 29 first-release providers are
   `CREDENTIAL_WAITING`. Economic domains (stablecoin, derivatives, interop,
   payment rails, card-linked) can be *shown as wired and tested* but **not** as
   carrying live data. Demo them in seeded/flag-off form only.

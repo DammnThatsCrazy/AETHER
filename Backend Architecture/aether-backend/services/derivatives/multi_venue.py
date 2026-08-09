@@ -7,9 +7,11 @@ runtime sample records and performs no provider I/O.
 """
 from __future__ import annotations
 
+import asyncio
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Coroutine
 
 from services.derivatives.models import (
     BronzeObservation,
@@ -19,9 +21,15 @@ from services.derivatives.models import (
     SourceRef,
     decimal_from_provider,
 )
+from shared.logger.logger import get_logger, metrics
 
 NORMALIZATION_VERSION = "derivatives-multivenue-normalization-v1"
 SUPPORTED_VENUES = ("hyperliquid", "dydx", "gmx", "drift", "centralized_futures")
+# Venues that appear in SUPPORTED_VENUES only as a scaffolded declaration. A
+# scaffolded venue has NO read-only venue connector, NO live endpoints, and NO
+# normalization evidence — it MUST NOT be claimed as supported. Operators and
+# docs read this set to distinguish honest support from declared-but-unbuilt.
+SCAFFOLDED_VENUES = ("centralized_futures",)
 CANONICAL_CONCEPTS = ("markets", "orders", "fills", "positions", "funding", "fees", "margin", "liquidations", "account_state")
 
 
@@ -32,6 +40,7 @@ class VenueCapabilityProfile:
     supported_concepts: tuple[str, ...]
     missing_concepts: tuple[str, ...]
     limitations: tuple[str, ...] = ()
+    scaffolded: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +49,7 @@ class VenueCapabilityProfile:
             "supported_concepts": list(self.supported_concepts),
             "missing_concepts": list(self.missing_concepts),
             "limitations": list(self.limitations),
+            "scaffolded": self.scaffolded,
             "normalization_version": NORMALIZATION_VERSION,
         }
 
@@ -120,7 +130,18 @@ def build_scaffolded_adapters() -> dict[str, VenueNormalizationAdapter]:
             "centralized_futures",
             "centralized_futures_exchange",
             {"fill_id": "tradeId", "account": "accountId", "market": "symbol", "side": "side", "price": "avgPrice", "quantity": "contracts", "fee": "commission", "fee_asset": "commissionAsset", "executed_at": "time", "liquidity": "makerTaker"},
-            VenueCapabilityProfile("centralized_futures", "centralized_futures_exchange", full, ()),
+            VenueCapabilityProfile(
+                "centralized_futures",
+                "centralized_futures_exchange",
+                (),
+                full,
+                (
+                    "SCAFFOLDED ONLY — no read-only venue connector or live "
+                    "endpoints exist for this venue family; declared unsupported "
+                    "until a real adapter is implemented. Do not claim support.",
+                ),
+                scaffolded=True,
+            ),
         ),
     }
 
@@ -131,12 +152,130 @@ def cross_venue_parity_report(adapters: Mapping[str, VenueNormalizationAdapter])
         concept: sorted(venue_id for venue_id, adapter in adapters.items() if concept in adapter.capabilities.missing_concepts)
         for concept in CANONICAL_CONCEPTS
     }
+    scaffolded = sorted(
+        venue_id for venue_id, adapter in adapters.items() if adapter.capabilities.scaffolded
+    )
     return {
         "normalization_version": NORMALIZATION_VERSION,
         "canonical_concepts": list(CANONICAL_CONCEPTS),
         "venues": venue_reports,
         "missing_by_concept": missing_by_concept,
+        "scaffolded_venues": scaffolded,
+        "supported_venues": sorted(
+            venue_id for venue_id, adapter in adapters.items()
+            if not adapter.capabilities.scaffolded
+        ),
         "provider_specific_api_leakage": False,
         "availability": "scaffolded",
         "operational_observations": None,
     }
+
+
+def available_venues(adapters: Mapping[str, VenueNormalizationAdapter]) -> tuple[str, ...]:
+    """Venues that are genuinely supported (not scaffolded-only declarations)."""
+    return tuple(
+        venue_id
+        for venue_id, adapter in adapters.items()
+        if not adapter.capabilities.scaffolded
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Supervised venue reconciliation sweep (program sec10/sec11 no-orphan sweep).
+# ``build_venue_sweep_coro`` is the zero-arg coroutine factory the runtime
+# WorkerSpec imports. Each iteration sweeps the genuinely-supported venues
+# (``available_venues`` — SCAFFOLDED_VENUES excluded) through
+# ``SupervisedStreamWorker.run_once``, which restarts each venue from its
+# persisted cursor, and isolates one venue's failure from the rest.
+# ─────────────────────────────────────────────────────────────────────────────
+
+logger = get_logger("aether.derivatives.multi_venue")
+
+DEFAULT_SWEEP_INTERVAL_SECONDS = 600.0
+DEFAULT_SWEEP_TENANT = os.getenv("DEFAULT_TENANT_ID", "tenant_local_dev")
+
+
+def _supported_venue_ids() -> tuple[str, ...]:
+    """Genuinely supported venue ids from the scaffolded adapters."""
+    return available_venues(build_scaffolded_adapters())
+
+
+async def run_venue_sweep_iteration(
+    *,
+    tenant_id: str = DEFAULT_SWEEP_TENANT,
+    venue_ids: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """One supervised venue sweep pass: restore cursor -> stream -> persist.
+
+    Returns a deterministic summary dict — counters only, never fabricated
+    success. Each venue is swept through :class:`SupervisedStreamWorker`, which
+    restarts from the last persisted cursor (at-least-once) and persists the
+    advanced cursor before returning. A venue whose adapter is unavailable, or
+    whose cycle raises, is counted and logged — never allowed to abort the pass.
+    """
+    from services.derivatives.sequence import SupervisedStreamWorker
+
+    targets = venue_ids if venue_ids is not None else _supported_venue_ids()
+    summary: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "venues_targeted": len(targets),
+        "venues_scanned": 0,
+        "completed": 0,
+        "skipped": 0,
+        "errors": [],
+    }
+
+    for venue_id in targets:
+        try:
+            from services.derivatives.adapters import get_adapter
+
+            adapter = get_adapter(venue_id)
+            if adapter is None:
+                summary["skipped"] += 1
+                continue
+            worker = SupervisedStreamWorker(
+                adapter, tenant_id=tenant_id, connector_id=venue_id
+            )
+            result = await worker.run_once()
+            summary["venues_scanned"] += 1
+            if bool(getattr(result, "completed", False)):
+                summary["completed"] += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — one venue must not abort the sweep
+            summary["errors"].append(f"{venue_id}:{exc}")
+
+    return summary
+
+
+async def venue_sweep_loop(
+    interval_s: float = DEFAULT_SWEEP_INTERVAL_SECONDS,
+) -> None:
+    """Supervised derivatives venue reconciliation sweep (heartbeat, isolated)."""
+    logger.info("derivatives_venue_sweep_loop started interval=%ss", interval_s)
+    while True:
+        try:
+            summary = await run_venue_sweep_iteration()
+            metrics.gauge("derivatives_venue_sweep_heartbeat", 1.0)
+            if summary["errors"]:
+                logger.warning(
+                    "venue sweep pass errors=%d scanned=%d skipped=%d",
+                    len(summary["errors"]), summary["venues_scanned"], summary["skipped"],
+                )
+            elif summary["venues_scanned"]:
+                logger.debug(
+                    "venue sweep pass scanned=%d completed=%d",
+                    summary["venues_scanned"], summary["completed"],
+                )
+        except asyncio.CancelledError:
+            logger.info("derivatives_venue_sweep_loop stopped")
+            raise
+        except Exception as exc:  # noqa: BLE001 — loop survives a bad pass
+            metrics.increment("derivatives_venue_sweep_error_total")
+            logger.error("venue sweep iteration failed: %s", exc)
+        await asyncio.sleep(interval_s)
+
+
+def build_venue_sweep_coro() -> Coroutine[Any, Any, None]:
+    """Zero-arg coroutine factory for the runtime WorkerSpec (INT-C wires it)."""
+    return venue_sweep_loop()

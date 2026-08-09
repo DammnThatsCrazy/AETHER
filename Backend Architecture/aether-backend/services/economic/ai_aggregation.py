@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
@@ -40,12 +41,27 @@ def _round(value: float) -> float:
     return round(value, 10)
 
 
-def _known_cost(fact: dict[str, Any]) -> Optional[float]:
-    """Selected cost when known; None otherwise (never coerced to zero)."""
+def _money_output(value: Decimal) -> float:
+    """Public money aggregates stay float for wire/API backward compat; all
+    internal arithmetic is exact Decimal (program sec19)."""
+    return float(value)
+
+
+def _known_cost(fact: dict[str, Any]) -> Optional[Decimal]:
+    """Selected cost as Decimal when known; None otherwise (never coerced to zero).
+
+    Accepts float/str/Decimal payloads (stored facts serialize money as float;
+    Pydantic models hold Decimal).
+    """
     if fact.get("cost_basis") == "unknown":
         return None
     cost = fact.get("selected_cost")
-    return float(cost) if cost is not None else None
+    if cost is None:
+        return None
+    try:
+        return Decimal(str(cost))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
 
 
 async def list_facts(
@@ -75,19 +91,27 @@ async def list_facts(
 
 # ── Monetary aggregates (always per-currency; never mixed) ─────────────────
 
-def total_cost_by_currency(facts: list[dict[str, Any]]) -> dict[str, float]:
-    totals: dict[str, float] = defaultdict(float)
+def _total_cost_by_currency(facts: list[dict[str, Any]]) -> dict[str, Decimal]:
+    """Internal Decimal-summed per-currency totals (exact money arithmetic)."""
+    totals: dict[str, Decimal] = defaultdict(Decimal)
     for fact in facts:
         cost = _known_cost(fact)
         if cost is None:
             continue
         totals[fact.get("currency", "")] += cost
-    return {currency: _round(total) for currency, total in totals.items()}
+    return dict(totals)
+
+
+def total_cost_by_currency(facts: list[dict[str, Any]]) -> dict[str, float]:
+    return {
+        currency: _money_output(total)
+        for currency, total in _total_cost_by_currency(facts).items()
+    }
 
 
 def cost_per_invocation(facts: list[dict[str, Any]]) -> dict[str, float]:
     """Average known cost per invocation, per currency."""
-    totals: dict[str, float] = defaultdict(float)
+    totals: dict[str, Decimal] = defaultdict(Decimal)
     counts: dict[str, int] = defaultdict(int)
     for fact in facts:
         cost = _known_cost(fact)
@@ -96,7 +120,7 @@ def cost_per_invocation(facts: list[dict[str, Any]]) -> dict[str, float]:
         currency = fact.get("currency", "")
         totals[currency] += cost
         counts[currency] += 1
-    return {c: _round(totals[c] / counts[c]) for c in totals if counts[c]}
+    return {c: _money_output(totals[c] / counts[c]) for c in totals if counts[c]}
 
 
 def failed_execution_cost(facts: list[dict[str, Any]]) -> dict[str, float]:
@@ -112,28 +136,28 @@ def retry_waste_cost(facts: list[dict[str, Any]]) -> dict[str, float]:
     For a fact with ``retry_count`` retries the waste approximation is
     ``selected_cost * retry_count / (retry_count + 1)``.
     """
-    totals: dict[str, float] = defaultdict(float)
+    totals: dict[str, Decimal] = defaultdict(Decimal)
     for fact in facts:
-        retries = fact.get("retry_count") or 0
+        retries = int(fact.get("retry_count") or 0)
         if retries <= 0:
             continue
         cost = _known_cost(fact)
         if cost is None:
             continue
         totals[fact.get("currency", "")] += cost * retries / (retries + 1)
-    return {currency: _round(total) for currency, total in totals.items()}
+    return {currency: _money_output(total) for currency, total in totals.items()}
 
 
 def quality_adjusted_cost(facts: list[dict[str, Any]]) -> dict[str, float]:
     """Sum of cost / quality_score over quality-scored facts, per currency."""
-    totals: dict[str, float] = defaultdict(float)
+    totals: dict[str, Decimal] = defaultdict(Decimal)
     for fact in facts:
         quality = fact.get("quality_score")
         cost = _known_cost(fact)
         if cost is None or quality is None or quality <= 0:
             continue
-        totals[fact.get("currency", "")] += cost / quality
-    return {currency: _round(total) for currency, total in totals.items()}
+        totals[fact.get("currency", "")] += cost / Decimal(str(quality))
+    return {currency: _money_output(total) for currency, total in totals.items()}
 
 
 def cost_per_completed_workflow(facts: list[dict[str, Any]]) -> dict[str, float]:
@@ -147,16 +171,16 @@ def cost_per_completed_workflow(facts: list[dict[str, Any]]) -> dict[str, float]
         if run_id:
             by_workflow[run_id].append(fact)
 
-    totals: dict[str, float] = defaultdict(float)
+    totals: dict[str, Decimal] = defaultdict(Decimal)
     counts: dict[str, int] = defaultdict(int)
     for wf_facts in by_workflow.values():
         if any(f.get("status") != "succeeded" for f in wf_facts):
             continue
-        wf_totals = total_cost_by_currency(wf_facts)
+        wf_totals = _total_cost_by_currency(wf_facts)
         for currency, amount in wf_totals.items():
             totals[currency] += amount
             counts[currency] += 1
-    return {c: _round(totals[c] / counts[c]) for c in totals if counts[c]}
+    return {c: _money_output(totals[c] / counts[c]) for c in totals if counts[c]}
 
 
 # ── Ratio aggregates ────────────────────────────────────────────────────────
@@ -212,11 +236,14 @@ async def recompute_workflow(
     if not facts:
         return None
 
-    totals = total_cost_by_currency(facts)
+    # Exact Decimal totals flow straight into the Decimal model fields (program
+    # sec19) — the float wire shape is produced at JSON serialization, never by
+    # round-tripping through float arithmetic here.
+    totals = _total_cost_by_currency(facts)
     known_currencies = sorted(totals)
     if len(known_currencies) == 1:
         currency = known_currencies[0]
-        total_model_cost: Optional[float] = totals[currency]
+        total_model_cost: Optional[Decimal] = totals[currency]
     else:
         # Zero or several currencies: never mix — leave the total unknown.
         currency = known_currencies[0] if known_currencies else facts[0].get("currency", "")

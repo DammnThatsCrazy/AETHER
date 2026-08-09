@@ -77,14 +77,18 @@ async def select_cost(
     """Apply the cost selection hierarchy to one observed invocation."""
     if observed.billed_cost is not None:
         return CostSelection(
-            selected_cost=observed.billed_cost,
+            # CostSelection.selected_cost is the wire/API float boundary:
+            # ai_models money fields are Decimal (program sec19) — serialize to
+            # float here so downstream fact builders / existing float-typed
+            # callers keep their historical number shape.
+            selected_cost=float(observed.billed_cost),
             cost_basis="billed",
             pricing_version=observed.pricing_version,
             currency=observed.currency,
         )
     if observed.actual_cost is not None:
         return CostSelection(
-            selected_cost=observed.actual_cost,
+            selected_cost=float(observed.actual_cost),
             cost_basis="provider_reported",
             pricing_version=observed.pricing_version,
             currency=observed.currency,
@@ -120,7 +124,7 @@ async def select_cost(
 
     if observed.estimated_cost is not None:
         return CostSelection(
-            selected_cost=observed.estimated_cost,
+            selected_cost=float(observed.estimated_cost),
             cost_basis="estimated",
             pricing_version=observed.pricing_version,
             currency=observed.currency,

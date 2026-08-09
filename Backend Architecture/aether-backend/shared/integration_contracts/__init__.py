@@ -45,6 +45,7 @@ from shared.integration_contracts.manifest import (
     Authentication,
     AuthType,
     Availability,
+    CertificationState,
     ConfigFieldSpec,
     ConfigFieldType,
     Configuration,
@@ -57,7 +58,9 @@ from shared.integration_contracts.manifest import (
     OAuthSpec,
     ProviderManifest,
     Sync,
+    TransportProtocol,
     Webhooks,
+    is_financial_provider,
     validate_manifest,
 )
 from shared.integration_contracts.results import (
@@ -131,6 +134,7 @@ __all__ = [
     "AuthType",
     "Authentication",
     "Availability",
+    "CertificationState",
     "ConfigFieldSpec",
     "ConfigFieldType",
     "Configuration",
@@ -143,7 +147,9 @@ __all__ = [
     "OAuthSpec",
     "ProviderManifest",
     "Sync",
+    "TransportProtocol",
     "Webhooks",
+    "is_financial_provider",
     "validate_manifest",
     # results
     "AdapterResult",

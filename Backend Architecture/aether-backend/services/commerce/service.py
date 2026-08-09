@@ -52,6 +52,12 @@ class CommerceService:
         if not payment.payment_id:
             payment.payment_id = str(uuid.uuid4())
 
+        # Persist the tenant on the record so tenant-scoped reads
+        # (get_fee_elimination_report / get_agent_spend) can never observe
+        # another tenant's payments. An empty caller tenant stays empty (the
+        # record is then visible to unscoped/operator reads only).
+        payment.tenant_id = tenant_id or None
+
         # Calculate fee elimination if using crypto/x402 instead of card
         if payment.method in ("x402", "usdc", "eth", "sol", "sponge"):
             payment.fee_eliminated_usd = round(payment.amount * CARD_FEE_RATE, 4)
@@ -172,10 +178,15 @@ class CommerceService:
         return hire
 
     async def get_fee_elimination_report(self, period: str = "all", tenant_id: str = "") -> FeeEliminationReport:
-        """Generate fee elimination report for a period."""
+        """Generate fee elimination report for a period.
+
+        Tenant-scoped: when ``tenant_id`` is given, only payments recorded for
+        that tenant are aggregated — a foreign tenant can never observe the
+        global aggregate.
+        """
         payments = self._payments
         if tenant_id:
-            payments = [p for p in payments if getattr(p, 'tenant_id', '') == tenant_id]
+            payments = [p for p in payments if (p.tenant_id or "") == tenant_id]
 
         total_volume = sum(p.amount for p in payments)
         total_eliminated = sum(p.fee_eliminated_usd for p in payments)
@@ -191,13 +202,18 @@ class CommerceService:
         )
 
     async def get_agent_spend(self, agent_id: str, tenant_id: str = "") -> dict:
-        """Get spending history for an agent."""
+        """Get spending history for an agent.
+
+        Tenant-scoped: when ``tenant_id`` is given, only payments recorded for
+        that tenant are counted — a foreign tenant can never observe another
+        tenant's spend.
+        """
         agent_payments = [
             p for p in self._payments
             if p.payer_id == agent_id and p.payer_type == "agent"
         ]
         if tenant_id:
-            agent_payments = [p for p in agent_payments if getattr(p, 'tenant_id', '') == tenant_id]
+            agent_payments = [p for p in agent_payments if (p.tenant_id or "") == tenant_id]
 
         return {
             "agent_id": agent_id,

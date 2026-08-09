@@ -226,8 +226,19 @@ class CorrelationEngine:
         return {"accepted": True, "reorg_affected": affected, "emitted_events": emitted}
 
     def _correlated_event(self, tenant_id: str, message: dict[str, Any]) -> dict[str, Any]:
+        # Entity reference for Profile360 projection (best-effort: source
+        # application, else provider_extension.application_id). Absent for
+        # wallet-keyed observations — Profile360 skips those rather than
+        # fabricating an entity.
+        source = message.get("source") or {}
+        extension = message.get("provider_extension") or {}
+        initiator_entity_id = (
+            source.get("application_id")
+            or extension.get("application_id")
+        )
         return make_event("interop_message_correlated", tenant_id, {
             "interop_message_id": message["interop_message_id"],
             "correlation_key": message["correlation_key"],
             "path_id": message.get("path_id"),
+            "initiator_entity_id": initiator_entity_id,
         })

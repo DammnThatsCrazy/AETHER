@@ -24,17 +24,29 @@ higher state; you must produce the evidence.
 ## The ladder
 
 ```
-credential_waiting (2)  ->  replay_validated (3)  ->  sandbox_validated (4)  ->  partner_live (5)
+scaffolded (1) -> implementation_in_progress (2) -> credential_waiting (3)
+  -> replay_validated (4) -> offline_validated (5) -> connection_testing (6)
+  -> sandbox_validated (7) -> partner_live (8)
 ```
 
 `production_ready` is a SEPARATE claim layered on top — never inferred from
 structure.
+
+Every off-ramp state (`error` −6 / `credential_invalid` −5 / `suspended` −4 /
+`degraded` −1 / `disabled` −2) ranks below all forward tokens, so an "at least
+`credential_waiting`" assertion never admits an off-ramped provider. The
+credential authority's expiry/overlap sweeper can demote a capability to
+`credential_invalid` when its credential is tombstoned/revoked — promotion is
+evidence-driven, and demotion is automatic; re-promoting requires fresh evidence
+again.
 
 ## Gate at each rung (enforced by readiness.py + checks.py)
 
 | Target | Required evidence | Also enforced by `check_honest_status` |
 |---|---|---|
 | `replay_validated` | `replay_validated=True` | a declared `fixture_schema_version` or `ctx['replay_evidence']` |
+| `offline_validated` | `offline_validated=True` (implies `replay_validated`) | offline/mock validation evidence |
+| `connection_testing` | `connection_testing=True` (implies `credential_supplied`) | a supplied credential (no live evidence required yet) |
 | `sandbox_validated` | `sandbox_validated=True` (implies `replay_validated`) | live evidence (`ctx['live_evidence']` or `last_certified_at`) |
 | `partner_live` | `live_validated=True` (implies `credential_supplied`) | live evidence present |
 | `production_ready` | `live_validated AND security_reviewed` (+ `externally_audited` if `requires_external_audit`) | — |

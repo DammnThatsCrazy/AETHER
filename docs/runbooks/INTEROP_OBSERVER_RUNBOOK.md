@@ -22,8 +22,28 @@ For provider enable/disable and health triage see the companion
 `docs/runbooks/INTEROP_PROVIDER_OPERATIONS_RUNBOOK.md`.
 
 The seven providers (LayerZero, Wormhole, Axelar, Chainlink CCIP, Hyperlane,
-IBC, deBridge) are `CREDENTIAL_WAITING`: fixture-proven decode, live scanning
-needs per-network JSON-RPC credentials. No live provider is validated.
+IBC, deBridge) are `CREDENTIAL_GATED` (implementation status; credential
+readiness `CREDENTIAL_WAITING`): fixture-proven decode AND correlation, live
+scanning needs per-network JSON-RPC credentials. None is `SCAFFOLDED` and none
+claims provider-live status.
+
+## Operational-state surface
+
+`GET /v1/admin/kyber/interop/providers/{provider_id}/operational` returns the
+adapter's canonical operational fields — `configured`, `credential_status`,
+`reachable`, `latest_cursor`, `latest_observation_at`, `lag`, `decode_failures`,
+`reorg_count`, `reconciliation_conflicts`, `dead_letter_count`, `last_success`,
+`last_failure` — derived from the persisted checkpoint (runtime telemetry that
+survives worker restarts), never a live network call. Use it to answer "is this
+provider actually scanning?" before assuming a data problem.
+
+Every scan cycle is supervised (`ScanWorker.run_cycle`): load checkpoint →
+scan → correlation ingest → dead-letter quarantine → reconciliation evidence →
+graph projection → security-policy snapshot → checkpoint persist → event
+publish → usage metering. A cycle reports `skipped` (credential-gated guard),
+`rate_limited`, `error` (checkpoint not advanced), or `ok`. The checkpoint is
+persisted per `(tenant, provider, network="*")`; a worker killed mid-cycle
+restarts from the last persisted checkpoint — never from scratch.
 
 ## Scan degraded / rate-limited
 

@@ -171,6 +171,7 @@ class VenueDerivativesAdapter(DerivativesAdapter):
         max_retries: int = 3,
         backoff_base: float = 0.2,
         max_pages: int = 50,
+        auth_headers: Optional[Mapping[str, str]] = None,
     ) -> None:
         self._deployment = deployment or self.default_deployment
         self._account_ref = account_ref
@@ -195,6 +196,10 @@ class VenueDerivativesAdapter(DerivativesAdapter):
         else:
             self._rest = None
         self._stream_factory = stream_factory
+        # Read-only credential injection seam (set by the credential resolver).
+        self._resolved_credential: Any = None
+        self._auth_headers: dict[str, str] = dict(auth_headers or {})
+        self._last_stream: Any = None
 
     # ── DerivativesAdapter surface ─────────────────────────────────────────
     def validate_config(self, config: dict[str, Any]) -> None:
@@ -354,9 +359,15 @@ class VenueDerivativesAdapter(DerivativesAdapter):
 
     async def run_stream(
         self, *, resume_cursor: Optional[int] = None, max_reconnects: int = 5,
-        market_id: Optional[str] = None,
+        market_id: Optional[str] = None, should_stop: Optional[Callable[[], bool]] = None,
     ) -> StreamResult:
-        """Drive the venue WS feed through gap tracking + bounded reconnect."""
+        """Drive the venue WS feed through gap tracking + bounded reconnect.
+
+        Production-shaped: ``should_stop`` enables cooperative shutdown and
+        ``resume_cursor`` enables restart-from-persisted-cursor (see
+        :class:`ReconnectingStream`). The next contiguous sequence is exposed
+        via :meth:`last_stream_cursor` so a supervisor can persist it.
+        """
         if self._stream_factory is None:
             return StreamResult(completed=True)
         stream = ReconnectingStream(
@@ -366,8 +377,18 @@ class VenueDerivativesAdapter(DerivativesAdapter):
             channel=self.stream_channel(),
             max_reconnects=max_reconnects,
             sleeper=self._sleeper,
+            should_stop=should_stop,
         )
-        return await stream.run(resume_cursor=resume_cursor)
+        result = await stream.run(resume_cursor=resume_cursor)
+        self._last_stream = stream
+        return result
+
+    def last_stream_cursor(self) -> Optional[int]:
+        """Next contiguous stream sequence (restart/resume point), or None."""
+        stream = getattr(self, "_last_stream", None)
+        if stream is None:
+            return None
+        return stream.last_cursor
 
     def checkpoint(
         self, observations: list[BronzeObservation],
@@ -462,13 +483,19 @@ class VenueDerivativesAdapter(DerivativesAdapter):
 
     def build_request(self, ctx: dict[str, Any]) -> dict[str, Any]:
         """Sample read-request construction with credential injection seam."""
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = dict(self._auth_headers)
         credential = ctx.get("credential") if isinstance(ctx, dict) else None
         secret = None
         if isinstance(credential, dict):
             secret = credential.get("api_key") or credential.get("secret")
         elif isinstance(credential, str):
             secret = credential
+        elif (
+            secret is None
+            and self._resolved_credential is not None
+            and isinstance(self._resolved_credential, dict)
+        ):
+            secret = self._resolved_credential.get("api_key")
         if secret:
             headers["Authorization"] = f"Bearer {secret}"
         return {

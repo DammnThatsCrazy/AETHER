@@ -77,3 +77,31 @@ async def tenant_diagnostics(tenant_id: str, request: Request, provider: Optiona
         get_payment_rails_service(), tenant_id, provider
     )
     return APIResponse(data=response.model_dump(mode="json")).to_dict()
+
+
+@kyber_router.post("/{tenant_id}/replay")
+async def replay_tenant_dead_lettered(
+    tenant_id: str,
+    request: Request,
+    provider: Optional[str] = None,
+    rid: Optional[str] = None,
+    limit: int = 500,
+):
+    """Operator replay of a tenant's dead-lettered receipts into the pipeline.
+
+    Same semantics as the tenant-admin replay route (``/payment-rails/replay``)
+    but operator-gated and tenant-explicit: the operator resolves the tenant from
+    the path — never a header — and both ``provider``/``rid`` selectors are
+    re-scoped to that tenant. Flips each terminal dead-lettered receipt back to a
+    recoverable state and re-drives ONE idempotent canonical-repair pass. Returns
+    per-receipt outcomes plus the repair-pass counters.
+    """
+    _require_kyber_enabled()
+    _require_operator(request)
+    bounded = max(1, min(int(limit), 2000))
+    service = get_payment_rails_service()
+    result = await service.replay_dead_lettered(
+        tenant_id, provider=provider, rid=rid, limit=bounded,
+        actor="kyber_operator",
+    )
+    return APIResponse(data=result).to_dict()

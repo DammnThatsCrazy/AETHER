@@ -470,25 +470,34 @@ class TenantWebhookAdapter(RewardRailAdapter):
 
 class OnchainClaimAdapter(RewardRailAdapter):
     """
-    Generates a cryptographic claim proof for tenant-owned EVM contracts.
+    Generates a cryptographic claim proof for tenant-owned on-chain programs.
     Aether signs the proof; the tenant's dApp or the user submits the claim.
     Aether never holds tokens or submits transactions.
+
+    Supported VM types: ``evm`` (production-warrantied) and ``svm`` (wired and
+    exercised against devnet/test programs; sandbox). The honest support bucket
+    for each vm_type is declared in services/commerce/rail_matrix.py.
     """
 
     rail_name = "onchain_claim"
 
-    # VM types that are production-verified
-    _PRODUCTION_VM_TYPES = {"evm"}
+    # VM types that are wired into the production adapter path (EVM proofs are
+    # production-warrantied; SVM proofs are exercised on devnet — sandbox tier).
+    _SUPPORTED_VM_TYPES = {"evm", "svm"}
     # Anvil/Hardhat test key
     _TEST_KEY = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
     def validate_config(self, config: dict) -> list[str]:
         errors = []
         vm_type = (config.get("vm_type") or "evm").lower()
-        if vm_type not in self._PRODUCTION_VM_TYPES:
-            errors.append(f"vm_type={vm_type!r} is in beta; only 'evm' is production-supported")
+        if vm_type not in self._SUPPORTED_VM_TYPES:
+            errors.append(
+                f"vm_type={vm_type!r} is not wired; only {sorted(self._SUPPORTED_VM_TYPES)} are supported"
+            )
         if not config.get("chain_id"):
             errors.append("chain_id is required")
+        if vm_type == "svm" and not config.get("program_id") and not config.get("contract_address"):
+            errors.append("program_id (or contract_address) is required for svm")
         if not config.get("signer_key_ref") and not config.get("oracle_signer_key"):
             errors.append("signer_key_ref or oracle_signer_key is required")
         return errors
@@ -504,11 +513,19 @@ class OnchainClaimAdapter(RewardRailAdapter):
         env = os.getenv("AETHER_ENV", "local").lower()
         is_local = env in ("local", "test")
 
+        vm_type = (campaign.get("vm_type") or os.getenv("REWARD_VM_TYPE", "evm")).lower()
+        if vm_type not in self._SUPPORTED_VM_TYPES:
+            raise ValueError(
+                f"vm_type={vm_type!r} is not wired for onchain_claim; "
+                f"supported: {sorted(self._SUPPORTED_VM_TYPES)}"
+            )
+
         signer_key = self._resolve_signer_key(is_local)
         chain_id = int(campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
         contract_address = campaign.get("contract_address") or os.getenv(
             "EVM_CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3"
         )
+        program_id = campaign.get("program_id") or os.getenv("SVM_PROGRAM_ID", "")
         wallet_address = (decision.identity or {}).get("wallet_address", "")
 
         if not wallet_address:
@@ -528,9 +545,39 @@ class OnchainClaimAdapter(RewardRailAdapter):
                 )
             amount_atomic = _reward_amount_to_atomic(raw_amount, decimals)
 
-        # Generate proof
-        from services.oracle.signer import OracleProofSigner, ProofConfig
         proof_expiry = int(os.getenv("REWARD_PROOF_EXPIRY_SECONDS", "3600"))
+
+        if vm_type == "svm":
+            return await self._build_svm_proof_payload(
+                decision=decision,
+                rule=rule,
+                campaign=campaign,
+                tenant_id=tenant_id,
+                signer_key=signer_key,
+                chain_id=chain_id,
+                program_id=program_id or contract_address,
+                wallet_address=wallet_address,
+                amount_atomic=amount_atomic,
+                proof_expiry=proof_expiry,
+            )
+        return await self._build_evm_proof_payload(
+            decision=decision,
+            rule=rule,
+            campaign=campaign,
+            tenant_id=tenant_id,
+            signer_key=signer_key,
+            chain_id=chain_id,
+            contract_address=contract_address,
+            wallet_address=wallet_address,
+            amount_atomic=amount_atomic,
+            proof_expiry=proof_expiry,
+        )
+
+    async def _build_evm_proof_payload(
+        self, *, decision, rule, campaign, tenant_id, signer_key, chain_id,
+        contract_address, wallet_address, amount_atomic, proof_expiry,
+    ) -> dict:
+        from services.oracle.signer import OracleProofSigner, ProofConfig
         signer = OracleProofSigner(ProofConfig(
             signer_private_key=signer_key,
             contract_address=contract_address,
@@ -542,8 +589,6 @@ class OnchainClaimAdapter(RewardRailAdapter):
             action_type=rule.get("name", "reward"),
             amount_wei=amount_atomic,
         )
-
-        metrics.increment("rewards_proofs_generated_total", labels={"tenant_id": tenant_id})
         proof_data = {
             "proof_format": "eip191",
             "wallet_address": wallet_address,
@@ -560,10 +605,9 @@ class OnchainClaimAdapter(RewardRailAdapter):
         return {
             "rail": self.rail_name,
             "execution_mode": "onchain_claim",
+            "vm_type": "evm",
             "status": "ready",
             "proof_data": proof_data,
-            # Canonical proof view consumed by routes (`payload.get("proof")`) and
-            # returned to the tenant. `user` mirrors the on-chain claim recipient.
             "proof": {
                 "user": wallet_address,
                 "action_type": rule.get("name", "reward"),
@@ -576,6 +620,7 @@ class OnchainClaimAdapter(RewardRailAdapter):
                 "signature": proof.signature,
                 "signer_address": signer.signer_address,
                 "proof_format": "eip191",
+                "vm_type": "evm",
             },
             "payload": {
                 "type": "onchain_claim_proof",
@@ -589,15 +634,90 @@ class OnchainClaimAdapter(RewardRailAdapter):
             },
         }
 
+    async def _build_svm_proof_payload(
+        self, *, decision, rule, campaign, tenant_id, signer_key, chain_id,
+        program_id, wallet_address, amount_atomic, proof_expiry,
+    ) -> dict:
+        from services.oracle.multichain_signer import (
+            ChainConfig,
+            MultiChainProofConfig,
+            MultiChainSigner,
+            VMType,
+        )
+        signer = MultiChainSigner(MultiChainProofConfig(
+            signer_private_key=signer_key,
+            chain_configs={
+                VMType.SVM: ChainConfig(
+                    chain_id=chain_id,
+                    contract_address=program_id,
+                    proof_expiry_seconds=proof_expiry,
+                ),
+            },
+        ))
+        proof = await signer.generate_proof(
+            user=wallet_address,
+            action_type=rule.get("name", "reward"),
+            amount=amount_atomic,
+            vm_type=VMType.SVM,
+            chain_id=chain_id,
+        )
+        proof_data = {
+            "proof_format": "svm",
+            "wallet_address": wallet_address,
+            "action_type": rule.get("name", "reward"),
+            "amount": str(amount_atomic),
+            "nonce": proof.nonce,
+            "expiry": proof.expiry,
+            "chain_id": proof.chain_id,
+            "program_id": proof.program_id,
+            "message_hash": proof.message_hash,
+            "signature": proof.signature,
+            "signer_address": signer.get_signer_address(VMType.SVM),
+            "vm_type": "svm",
+        }
+        return {
+            "rail": self.rail_name,
+            "execution_mode": "onchain_claim",
+            "vm_type": "svm",
+            "status": "ready",
+            "proof_data": proof_data,
+            "proof": {
+                "user": wallet_address,
+                "action_type": rule.get("name", "reward"),
+                "amount_wei": str(amount_atomic),
+                "nonce": proof.nonce,
+                "expiry": proof.expiry,
+                "chain_id": proof.chain_id,
+                "program_id": proof.program_id,
+                "contract_address": proof.program_id,
+                "message_hash": proof.message_hash,
+                "signature": proof.signature,
+                "signer_address": signer.get_signer_address(VMType.SVM),
+                "proof_format": "svm",
+                "vm_type": "svm",
+            },
+            "payload": {
+                "type": "onchain_claim_proof",
+                "campaign_id": decision.campaign_id,
+                "rule_id": decision.rule_id,
+                "tenant_id": tenant_id,
+                "vm_type": "svm",
+                "chain_id": chain_id,
+                "program_id": program_id,
+                "instruction": "Tenant dApp or user invokes the Anchor reward program using this proof. Aether does not submit the transaction.",
+            },
+        }
+
     def _resolve_signer_key(self, is_local: bool) -> str:
-        key = os.environ.get("ORACLE_SIGNER_KEY", "")
+        key = os.environ.get("ORACLE_SIGNER_KEY") or os.environ.get("ORACLE_SIGNER_PRIVATE_KEY", "")
         disable_local_in_prod = os.getenv("REWARD_DISABLE_LOCAL_SIGNER_IN_PROD", "1") == "1"
 
         if not key:
             if is_local:
                 return self._TEST_KEY
             raise RuntimeError(
-                "ORACLE_SIGNER_KEY must be set in non-local environments. "
+                "ORACLE_SIGNER_KEY (or legacy ORACLE_SIGNER_PRIVATE_KEY) must be set "
+                "in non-local environments. "
                 "Configure via REWARD_SIGNER_KEY_REF pointing to a secret manager entry."
             )
         if key == self._TEST_KEY and not is_local and disable_local_in_prod:

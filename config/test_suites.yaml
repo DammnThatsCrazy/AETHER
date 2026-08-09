@@ -84,6 +84,165 @@ suites:
     evidence_artifact: null
     quarantine: null
 
+  # Credential-turnkey (sec24) build-wave suites — the fault/adversarial/
+  # interop/payment-rail/activation cohorts and the cross-cutting backend
+  # sweeps the build waves added under the backend tree. Registered so the
+  # credential-turnkey evidence bundle enumerates them and repo_doctor --ci
+  # exercises them (the pre-existing full-tree `backend` suite above already
+  # covers these paths once; these entries make each cohort explicit and
+  # individually evidence-trackable).
+
+  - id: backend-faults
+    subsystem: backend-faults
+    paths: ["Backend Architecture/aether-backend/tests/faults"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/tests/faults",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: backend-adversarial
+    subsystem: backend-adversarial
+    paths: ["Backend Architecture/aether-backend/tests/adversarial"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/tests/adversarial",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: backend-interop
+    subsystem: backend-interop
+    paths: ["Backend Architecture/aether-backend/tests/unit/interop"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/tests/unit/interop",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: backend-payment-rails
+    subsystem: backend-payment-rails
+    paths: ["Backend Architecture/aether-backend/tests/payment_rails"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/tests/payment_rails",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: backend-activation
+    subsystem: backend-activation
+    paths: ["Backend Architecture/aether-backend/tests/activation"]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/tests/activation",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
+  - id: backend-sweeps
+    subsystem: backend-sweeps
+    # Cross-cutting repo/backend integrity sweeps from the credential-turnkey
+    # build waves: certification, tenant-isolation, generated-artifact parity,
+    # and secret-scan. Batched into one invocation (multi-path, same pattern as
+    # backend-observability) so repo_doctor --ci gets them as a single gate.
+    paths:
+      [
+        "Backend Architecture/aether-backend/tests/test_certification_sweep.py",
+        "Backend Architecture/aether-backend/tests/test_tenant_isolation_sweep.py",
+        "Backend Architecture/aether-backend/tests/test_generated_artifact_parity.py",
+        "Backend Architecture/aether-backend/tests/test_secret_scan.py",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "Backend Architecture/aether-backend/tests/test_certification_sweep.py",
+        "Backend Architecture/aether-backend/tests/test_tenant_isolation_sweep.py",
+        "Backend Architecture/aether-backend/tests/test_generated_artifact_parity.py",
+        "Backend Architecture/aether-backend/tests/test_secret_scan.py",
+        "-v",
+        "--tb=short",
+      ]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: null
+    quarantine: null
+
   - id: ml
     subsystem: ml
     paths: ["ML Models/aether-ml/tests"]

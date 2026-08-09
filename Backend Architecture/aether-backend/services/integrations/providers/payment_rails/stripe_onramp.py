@@ -30,7 +30,11 @@ class StripeOnrampAdapter(PaymentRailAdapter):
     # a SUPPORTED terminal capability, not an unfinished adapter.
     webhook_only = True
     default_rail = "stripe"
-    signature_scheme = "timestamped_hex"  # Stripe `t=…,v1=…` HMAC scheme
+    # Stripe signs webhooks with the compound ``Stripe-Signature: t=<unix>,v1=<hex>``
+    # header. Declaring the compound scheme here (not the timestamped_hex
+    # placeholder) makes the declaration match what ``native_signature_scheme()``
+    # and ``verify_signature`` actually do.
+    signature_scheme = "stripe_compound"
 
     cert_supported_operations = ("webhook_ingest", "normalize", "reconcile")
     cert_unsupported_operations = ("status_poll", "backfill", "reconciliation_pull")

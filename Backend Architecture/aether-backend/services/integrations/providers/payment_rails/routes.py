@@ -69,11 +69,21 @@ def _require_legacy_header_route() -> None:
 
 
 def _tenant_id(request: Request, permission: str = "read") -> str:
-    request.state.tenant.require_permission(permission)
-    tid = getattr(request.state.tenant, "tenant_id", None)
-    if not tid:
-        raise ForbiddenError("Tenant context is required")
-    return tid
+    """Resolve the calling tenant for a payment-rails route.
+
+    Delegates to :func:`require_payment_rails_entitlement`, which runs the
+    permission check AND the plan-tier entitlement gate. The entitlement gate is
+    default-OFF (``entitlement_gate_enabled``) so behavior is byte-for-byte
+    unchanged until the integration pass opts in; when enabled, a tenant whose
+    plan ranks below ``min_plan_tier`` is denied 403 even though its role holds
+    the permission. Every tenant route on this router funnels through here, so
+    the payment-rails entitlement key is enforced centrally.
+    """
+    from services.integrations.providers.payment_rails.entitlement_gate import (
+        require_payment_rails_entitlement,
+    )
+
+    return require_payment_rails_entitlement(request, permission)
 
 
 async def _rate_limit_tenant_action(action: str, tenant_id: str, limit: int) -> None:
@@ -438,3 +448,35 @@ async def repair_canonical_backlog(request: Request, limit: int = 500):
         "detail": stats,
     })
     return APIResponse(data=stats).to_dict()
+
+
+@router.post("/payment-rails/replay")
+async def replay_dead_lettered(
+    request: Request,
+    provider: Optional[str] = None,
+    rid: Optional[str] = None,
+    limit: int = 500,
+):
+    """On-demand (admin) replay of dead-lettered receipts into the pipeline.
+
+    Manual escape hatch paired with the repair worker's automatic dead-lettering:
+    flips each terminal dead-lettered receipt back to a recoverable
+    ``repair_pending`` state (resetting its bounded repair counter) and re-drives
+    ONE idempotent canonical-repair pass so the replayed deliveries actually
+    progress. Idempotent — a receipt already out of the dead-letter state is
+    skipped — and audited. Tenant-scoped, authorized (admin); ``provider`` and
+    ``rid`` scope the selection and are re-scoped to the caller's tenant. ``limit``
+    bounds the scan (clamped to 1..2000).
+    """
+    _require_rails_enabled()
+    tenant_id = _tenant_id(request, "admin")
+    await _rate_limit_tenant_action(
+        "replay", tenant_id, settings.payment_rails.tenant_repair_rate_limit_per_minute
+    )
+    bounded = max(1, min(int(limit), 2000))
+    service = get_payment_rails_service()
+    result = await service.replay_dead_lettered(
+        tenant_id, provider=provider, rid=rid, limit=bounded,
+        actor=_endpoint_actor(request),
+    )
+    return APIResponse(data=result).to_dict()

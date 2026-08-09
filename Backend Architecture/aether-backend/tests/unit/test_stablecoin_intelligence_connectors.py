@@ -281,9 +281,15 @@ async def test_evm_reorg_detection_rolls_back_orphaned_and_reemits_canonical():
     mock.add_block()  # extend so safe head advances past reorged blocks
 
     r2 = await scheduler.poll_provider(tenant_id="t", connector=connector, source_execution_id="exec-2")
-    txs = {o["transaction_hash"] for o in await obs_repo.find_many(filters={"tenant_id": "t"}, limit=50)}
-    assert "0xORPHAN" not in txs  # rolled back through the runner
-    assert "0xCANON" in txs       # canonical chain re-emitted
+    rows = await obs_repo.find_many(filters={"tenant_id": "t"}, limit=50)
+    orphan = [o for o in rows if o["transaction_hash"] == "0xORPHAN"]
+    canonical = [o for o in rows if o["transaction_hash"] == "0xCANON"]
+    # Append-only-correct rollback: the orphan SURVIVES as demoted evidence
+    # (demotion markers + remediation audit), never physically deleted.
+    assert orphan, "orphaned observation must remain as evidence (append-only)"
+    assert all(o.get("demoted") is True for o in orphan)
+    assert all(o.get("demotion_reason") == "reorg_rollback" for o in orphan)
+    assert canonical and any(o.get("demoted") is not True for o in canonical)
 
 
 @pytest.mark.asyncio
@@ -515,9 +521,15 @@ async def test_solana_fork_detection_rolls_back_and_reemits():
     mock.set_slot(3, salt="y")
     mock.set_slot(4, salt="y")  # extend
     await scheduler.poll_provider(tenant_id="t", connector=connector, source_execution_id="s-exec-2")
-    txs = {o["transaction_hash"] for o in await obs_repo.find_many(filters={"tenant_id": "t"}, limit=50)}
-    assert "sigFORKED" not in txs
-    assert "sigCANON" in txs
+    rows = await obs_repo.find_many(filters={"tenant_id": "t"}, limit=50)
+    forked = [o for o in rows if o["transaction_hash"] == "sigFORKED"]
+    canonical = [o for o in rows if o["transaction_hash"] == "sigCANON"]
+    # Append-only-correct fork rollback: the forked observation SURVIVES as
+    # demoted evidence, the canonical replacement is emitted non-demoted.
+    assert forked, "forked observation must remain as evidence (append-only)"
+    assert all(o.get("demoted") is True for o in forked)
+    assert all(o.get("demotion_reason") == "reorg_rollback" for o in forked)
+    assert canonical and any(o.get("demoted") is not True for o in canonical)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

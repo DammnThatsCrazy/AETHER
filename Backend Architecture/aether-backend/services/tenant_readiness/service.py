@@ -134,12 +134,25 @@ class TenantLaunchReadiness:
 
     # ── Pure evaluation ──────────────────────────────────────────────────────
 
-    def evaluate(self, tenant_id: str, signals: dict[str, Any]) -> dict[str, Any]:
+    def evaluate(
+        self,
+        tenant_id: str,
+        signals: dict[str, Any],
+        *,
+        demotion_reason: Optional[str] = None,
+        demotion_at: Optional[str] = None,
+    ) -> dict[str, Any]:
         """Evaluate the checklist for ``tenant_id`` against ``signals``.
 
-        Returns ``{"tenant_id", "checks": [...], "ready": bool, "blocking": [...]}``.
+        Returns ``{"tenant_id", "checks": [...], "ready": bool, "blocking":
+        [...], "demotion_reason": str|None, "demotion_at": str|None}``.
         ``ready`` is True iff every required check is satisfied. ``blocking``
         lists the required checks still ``pending`` or ``failed``.
+
+        ``demotion_reason`` / ``demotion_at`` record the LAST automatic
+        demotion a tenant suffered (operator-facing diagnostics). They default
+        to ``None`` — absence of a demotion is reported as unknown, never as a
+        fabricated empty reason.
         """
         signals = signals or {}
         checks: list[dict[str, Any]] = []
@@ -159,21 +172,34 @@ class TenantLaunchReadiness:
             "checks": checks,
             "ready": not blocking,
             "blocking": blocking,
+            "demotion_reason": demotion_reason,
+            "demotion_at": demotion_at,
         }
 
     # ── Persistence ──────────────────────────────────────────────────────────
 
     async def record(
-        self, tenant_id: str, signals: dict[str, Any],
+        self,
+        tenant_id: str,
+        signals: dict[str, Any],
+        *,
+        demotion_reason: Optional[str] = None,
+        demotion_at: Optional[str] = None,
     ) -> dict[str, Any]:
         """Evaluate and persist the latest readiness snapshot for a tenant."""
-        evaluation = self.evaluate(tenant_id, signals)
+        evaluation = self.evaluate(
+            tenant_id, signals,
+            demotion_reason=demotion_reason,
+            demotion_at=demotion_at,
+        )
         record = {
             "readiness_id": tenant_id,
             "tenant_id": tenant_id,
             "checks": evaluation["checks"],
             "ready": evaluation["ready"],
             "blocking": evaluation["blocking"],
+            "demotion_reason": evaluation["demotion_reason"],
+            "demotion_at": evaluation["demotion_at"],
             "recorded_at": utc_now().isoformat(),
         }
         stored = await self._repo.insert(tenant_id, record)
@@ -187,9 +213,13 @@ class TenantLaunchReadiness:
         """Return the latest recorded readiness snapshot for a tenant (or None).
 
         Tenant-scoped: a snapshot whose ``tenant_id`` does not match is never
-        returned.
+        returned. Legacy snapshots recorded before the demotion fields existed
+        are back-filled with explicit ``None`` so consumers always find the
+        fields (absent is reported as unknown, never omitted).
         """
         record = await self._repo.find_by_id(tenant_id)
         if record is None or record.get("tenant_id") != tenant_id:
             return None
+        record.setdefault("demotion_reason", None)
+        record.setdefault("demotion_at", None)
         return record

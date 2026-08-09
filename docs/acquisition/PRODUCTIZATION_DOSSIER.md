@@ -148,7 +148,7 @@ moves without live + security evidence.
 Stated first, not buried (`scripts/production_status.py` +
 `docs/productization/staging-capstone/LIMITATIONS_AND_NON_GOALS.md`):
 
-- **No live economic provider.** All 18 first-release providers are
+- **No live economic provider.** All 29 first-release providers are
   `CREDENTIAL_WAITING`. The economic domains sit at 2–3/5.
 - **Mainnet / real-funds rails / paid production traffic: NO-GO.** Contracts
   unaudited; infra unprovisioned; agent hosted-mode needs durable storage.

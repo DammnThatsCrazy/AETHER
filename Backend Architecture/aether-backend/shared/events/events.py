@@ -440,6 +440,40 @@ class Topic(str, Enum):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# DECLARATIVE TOPIC REGISTRY (provisioning contract)
+#
+# This enum IS the declarative registry of every Kafka topic Aether declares.
+# MSK is provisioned with auto.create.topics.enable=false (modules/msk), so a
+# topic that is not created by provisioning simply does not exist — the broker
+# will never materialise it on first publish, and the producer fails with an
+# UNKNOWN_TOPIC_OR_PARTITION error instead of self-healing.
+#
+# The topic-provisioning init (deploy/kafka/topic_provisioner.py, wired by
+# modules/kafka_topic_provisioner) consumes these helpers to create exactly the
+# declared set, idempotently, at apply time. The checked-in machine-readable
+# copy lives at deploy/kafka/topics.json and is generated from this enum; the
+# drift test (deploy/kafka/tests/test_topics_registry_sync.py) fails if the two
+# ever diverge, so provisioning can never silently lag a newly added topic.
+#
+# Consumers of this file must treat the set as ADDITIVE-ONLY: renaming or
+# deleting a topic here is a breaking schema change for every consumer group
+# that reads it, and is not what provisioning is for.
+# ============================================================================
+
+TOPIC_VALUES: tuple[str, ...] = tuple(topic.value for topic in Topic)
+
+
+def declared_topics() -> list[str]:
+    """Every declared Kafka topic value, in enum declaration order.
+
+    The canonical, order-stable list a provisioner creates. Returns a fresh
+    list so callers (the provisioner included) can reorder or slice it without
+    mutating the module-level tuple.
+    """
+    return list(TOPIC_VALUES)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # EVENT SCHEMA
 # ═══════════════════════════════════════════════════════════════════════════
 

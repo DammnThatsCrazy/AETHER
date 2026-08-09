@@ -110,11 +110,16 @@ class StablecoinIngestionPipeline:
         silver: SilverRepository | None = None,
         observations: StablecoinObservationRepository | None = None,
         registry: StablecoinDeploymentRegistry | None = None,
+        readiness_gate: Any = None,
     ) -> None:
         self.bronze = bronze or BronzeRepository("stablecoin")
         self.silver = silver or SilverRepository("stablecoin")
         self.observations = observations or StablecoinObservationRepository()
         self.registry = registry or PLATFORM_STABLECOIN_REGISTRY
+        # Explicit tenant readiness gate (optional, fail-closed when set): an
+        # observation is blocked until the tenant's support state for the
+        # deployment is met. None = gate not enforced (backward compatible).
+        self.readiness_gate = readiness_gate
 
     async def ingest_provider_observation(self, obs: ProviderObservation) -> NormalizedStablecoinFact:
         deployment = self.registry.resolve(
@@ -124,6 +129,14 @@ class StablecoinIngestionPipeline:
         )
         if deployment is None:
             raise ValueError("unknown stablecoin deployment; quarantine or operator registration required")
+        if self.readiness_gate is not None:
+            # Fail-closed: raises StablecoinReadinessError until the tenant's
+            # support state is met — a blocked observation is NEVER ingested as
+            # a healthy empty dataset.
+            await self.readiness_gate.require_observation(
+                tenant_id=obs.tenant_id,
+                deployment_id=deployment.deployment_id,
+            )
 
         payload = {
             **dict(obs.raw_payload),

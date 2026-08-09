@@ -106,6 +106,33 @@ All modules live in `Backend Architecture/aether-backend/services/card_linked_pa
    behavior is never deterministic identity-merge evidence. Benchmark rows
    are never projected.
 
+## Import-session lifecycle (tenant-import path)
+
+Tenant imports run through the canonical import-session state machine
+(`services/card_linked_payments/import_session.py` — the authoritative program
+vocabulary; `services/imports/session_persistence.py` is the durable, guarded
+transition home; `services/imports/commit.py` drives the resumable commit arc):
+
+```
+CREATED → UPLOADED → VALIDATING → VALIDATED → NORMALIZING → COMMITTING
+                                        ↓                │
+                                      REJECTED           ↓
+                                        PROJECTING → RECONCILING → COMPLETED
+any in-flight state → FAILED → COMMITTING (retry) / DEAD_LETTERED
+COMPLETED → ROLLED_BACK
+```
+
+Key rules: `COMMITTING` is re-entrant (a crash mid-commit leaves the session in
+`COMMITTING`; restart or operator requeue resumes it); `FAILED` is retryable and
+only dead-letters once its retry budget is exhausted or it is stranded in an
+in-flight state past a hard deadline; every transition persists the full program
+field set (`failure_reason`, `retry_count`, projection/reconciliation state,
+accepted/rejected/duplicate/quarantine counts, `schema_version`,
+`source_checksum`) as JSONB on the session row. `sweep_stranded_sessions`
+dead-letters budget-exhausted / hard-stranded sessions. A legacy lowercase
+`status` is projected alongside `lifecycle_state` so the existing
+commit/approve/import surface keeps working unchanged.
+
 ## Surfaces
 
 - Tenant API: `/v1/integrations/providers/payment-rails/card-linked/*`

@@ -41,6 +41,19 @@ column types, and the barrel export).
   analyzing → analyzed → mapping → mapped → validating → validated →
   review_required → approved → committing → committed`, with terminal states
   `committed`, `partially_committed`, `failed`, `cancelled`, `rolled_back`.
+- **Program-spec import-session FSM** (`services/imports/session_persistence.py`
+  backed by `services/card_linked_payments/import_session.py`) is the
+  authoritative `lifecycle_state` on the session row:
+  `CREATED → UPLOADED → VALIDATING → VALIDATED → REJECTED → NORMALIZING →
+  COMMITTING → PROJECTING → RECONCILING → COMPLETED`, with `FAILED` (retryable),
+  `DEAD_LETTERED`, and `ROLLED_BACK` terminals; `COMMITTING` is re-entrant so a
+  crash mid-commit resumes under the same commit id. A legacy lowercase `status`
+  is projected alongside it (zod-parity-locked `ImportStatus` keeps the existing
+  commit/approve surface unchanged); program states are authoritative. Every
+  transition persists `failure_reason`, `retry_count`, projection/reconciliation
+  state, accepted/rejected/duplicate/quarantine counts, `schema_version`, and
+  `source_checksum` as JSONB on the session row. `sweep_stranded_sessions`
+  dead-letters budget-exhausted / hard-stranded sessions.
 - **Primitives** (9): `entity`, `identifier`, `action`, `relationship`,
   `resource`, `evidence`, `metric`, `governance_fact`, and `unmapped_record`.
   A row that maps to no primitive is preserved as an `unmapped_record` — never

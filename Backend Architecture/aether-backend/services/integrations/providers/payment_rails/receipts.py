@@ -253,6 +253,42 @@ class ProviderReceiptRepository:
         record["current_stage"] = state
         return record
 
+    async def reset_repair(
+        self,
+        tenant_id: str,
+        rid: str,
+        *,
+        state: str = ReceiptState.REPAIR_PENDING,
+        reason: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Operator replay: move a terminal dead-lettered receipt back into the
+        recoverable pipeline and reset its bounded repair counter.
+
+        A dead-lettered receipt is terminal; ``advance`` is forward-only so it
+        cannot re-enter the pipeline. This is the manual escape hatch an operator
+        pulls after fixing whatever dead-lettered the delivery (a corrected
+        session, a key rotation). Sets ``current_stage`` to a recoverable state
+        (default ``repair_pending``), zeroes ``repair_attempts`` and the last
+        error classification, and stamps the replay in ``repair_history`` so the
+        reset is itself auditable on the receipt. Returns the updated record, or
+        ``None`` when no such receipt exists.
+        """
+        key = self._key(tenant_id, rid)
+        record = await self._store.get(key)
+        if record is None:
+            return None
+        record["current_stage"] = state
+        record["repair_attempts"] = 0
+        record["last_error_classification"] = None
+        if reason is not None:
+            record["rejection_reason"] = reason
+        history = list(record.get("repair_history", []))
+        history.append({"at": utc_now_iso(), "outcome": "operator_replay_reset", "detail": reason})
+        record["repair_history"] = history[-20:]  # bounded
+        record["last_attempted_at"] = utc_now_iso()
+        await self._store.set(key, record)
+        return record
+
     async def record_repair(
         self, tenant_id: str, rid: str, *, outcome: str, detail: Optional[str] = None
     ) -> Optional[dict]:

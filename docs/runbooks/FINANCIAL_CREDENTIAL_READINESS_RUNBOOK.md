@@ -63,6 +63,19 @@ The gate **fails closed**:
   state with no live evidence — no `ctx['live_evidence']`, no `last_certified_at`)
   fails the `honest_status` check → not READY.
 
+The ladder also has **off-ramp states** (`DEGRADED` / `DISABLED` / `SUSPENDED` /
+`CREDENTIAL_INVALID` / `ERROR`), ranked below every forward token so "at least
+`CREDENTIAL_WAITING`" can never admit them. The durable credential authority's
+expiry/overlap **sweeper** (`services/providers/credentials/sweeper.py`,
+`build_credential_expiry_sweeper`) demotes a capability to `CREDENTIAL_INVALID`
+when a credential is tombstoned or revoked (overlap window lapsed), via the
+canonical readiness-demotion seam. A `CREDENTIAL_INVALID` capability reads as
+not-READY — that is the correct verdict for a credential that no longer exists,
+not a bug. New forward tokens (`IMPLEMENTATION_IN_PROGRESS`, `OFFLINE_VALIDATED`,
+`CONNECTION_TESTING`) sit between `SCAFFOLDED` and `CREDENTIAL_WAITING`+; they
+do not change the cohort's honest ceiling, which remains `CREDENTIAL_WAITING`
+until live validation evidence exists.
+
 ## Secret references a founding tenant must provision
 
 The financial observation pilot manifest

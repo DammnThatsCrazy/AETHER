@@ -6,8 +6,10 @@ Tracks settlement attempts, retries with backoff, emits transition events.
 
 from __future__ import annotations
 
+import asyncio
+import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Coroutine, Optional
 
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
@@ -157,3 +159,75 @@ def get_settlement_tracker() -> SettlementTracker:
     if _tracker is None:
         _tracker = SettlementTracker()
     return _tracker
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Supervised x402 settlement reconciliation (program sec10/sec11 no-orphan
+# sweep). ``build_x402_reconciliation_coro`` is the zero-arg coroutine factory
+# the runtime WorkerSpec imports. It delegates to the commerce reconciliation
+# engine (:mod:`services.commerce.reconciliation`) — the same read-only
+# reconcile-commerce path ``build_reconciliation_loop`` drives — but stays
+# tenant-scoped and adds its own heartbeat.
+# ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_X402_RECONCILIATION_INTERVAL_SECONDS = 300.0
+DEFAULT_X402_RECONCILIATION_TENANT = os.getenv("DEFAULT_TENANT_ID", "tenant_local_dev")
+
+
+async def run_x402_reconciliation_iteration(
+    *,
+    tenant_id: str = DEFAULT_X402_RECONCILIATION_TENANT,
+) -> dict[str, Any]:
+    """One read-only commerce reconciliation pass for the tenant.
+
+    Delegates to the commerce reconciliation engine (:mod:`services.commerce.reconciliation`,
+    the same engine ``build_reconciliation_loop`` drives) and returns a
+    deterministic summary — never fabricated: ``drift_count`` is what the engine
+    actually reported.
+    """
+    from services.commerce.reconciliation import get_commerce_reconciler
+
+    report = await get_commerce_reconciler().reconcile_commerce(tenant_id)
+    return {
+        "tenant_id": tenant_id,
+        "drift_count": int(report.get("drift_count", 0)),
+    }
+
+
+async def x402_reconciliation_loop(
+    *,
+    tenant_id: str = DEFAULT_X402_RECONCILIATION_TENANT,
+    interval_s: float = DEFAULT_X402_RECONCILIATION_INTERVAL_SECONDS,
+) -> None:
+    """Tenant-scoped commerce reconciliation loop (heartbeat, isolated errors).
+
+    Each iteration runs the read-only :meth:`CommerceReconciler.reconcile_commerce`
+    for the tenant — idempotent by construction (the engine only reads and
+    reports drift; it never mutates commerce state). Mirrors the commerce
+    worker builder ``build_reconciliation_loop`` (services/commerce/workers.py)
+    but keeps this loop scoped to a single tenant and stamps a heartbeat.
+    """
+    logger.info(
+        "x402_reconciliation_loop started interval=%ss tenant=%s", interval_s, tenant_id
+    )
+    while True:
+        try:
+            summary = await run_x402_reconciliation_iteration(tenant_id=tenant_id)
+            metrics.gauge("x402_reconciliation_heartbeat", 1.0)
+            if summary["drift_count"]:
+                logger.warning(
+                    "x402 commerce reconciliation found drift tenant=%s count=%d",
+                    tenant_id, summary["drift_count"],
+                )
+        except asyncio.CancelledError:
+            logger.info("x402_reconciliation_loop stopped")
+            raise
+        except Exception as exc:  # noqa: BLE001 — loop survives a bad iteration
+            metrics.increment("x402_reconciliation_error_total")
+            logger.error("x402 reconciliation iteration failed: %s", exc)
+        await asyncio.sleep(interval_s)
+
+
+def build_x402_reconciliation_coro() -> Coroutine[Any, Any, None]:
+    """Zero-arg coroutine factory for the runtime WorkerSpec (INT-C wires it)."""
+    return x402_reconciliation_loop()

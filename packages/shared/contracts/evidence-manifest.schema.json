@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.xyz/contracts/evidence-manifest.schema.json",
+  "title": "Aether Evidence Manifest",
+  "description": "Canonical evidence-manifest schema for the Aether certification plane. A manifest records the current certification state of one capability together with the human-reviewed evidence that backs it. The certificationState enum is the single binding target declared by readiness-vocabulary.json (certificationStateEnumPointer = #/$defs/certificationState/enum); every token here is a certification-category vocabulary token, ranked and ordered exactly as readiness-vocabulary.json defines. presentation-category tokens (stale, partial, error, connection_testing, credential_required, credential_invalid, not_entitled, not_configured, kill_switch_active) are never valid certification states and never appear in this enum.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "capabilityId",
+    "certificationState",
+    "evidence"
+  ],
+  "properties": {
+    "manifestVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "capabilityId": {
+      "type": "string",
+      "description": "Domain-scoped capability identifier, e.g. 'agentic_commerce:x402'."
+    },
+    "provider": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "adapter": {
+      "type": "string"
+    },
+    "certificationState": {
+      "$ref": "#/$defs/certificationState"
+    },
+    "stateRank": {
+      "type": "integer",
+      "description": "Ordinal rank of the certification state; must agree with the rank the vocabulary assigns to the token."
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Human-reviewed evidence backing the certification state.",
+      "items": {
+        "$ref": "#/$defs/evidenceItem"
+      }
+    },
+    "certifiedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reviewedBy": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "certificationState": {
+      "type": "string",
+      "enum": [
+        "not_in_release",
+        "disabled",
+        "externally_blocked",
+        "degraded",
+        "mocked_local",
+        "scaffolded",
+        "implemented",
+        "configured",
+        "credential_waiting",
+        "replay_validated",
+        "sandbox_validated",
+        "partner_live",
+        "production_ready"
+      ]
+    },
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "type",
+        "observedAt",
+        "payload"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Where the evidence was collected (PR, test run, replay fixture, live probe, external audit)."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "code_review",
+            "replay",
+            "offline_probe",
+            "connection_probe",
+            "sandbox",
+            "live",
+            "security_review",
+            "external_audit"
+          ]
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "type": "object",
+          "description": "Evidence-specific details (fixture path, tx hash, probe result, reviewer)."
+        },
+        "audited": {
+          "type": "boolean",
+          "description": "Whether an independent reviewer confirmed this evidence."
+        }
+      }
+    }
+  }
+}

@@ -130,7 +130,8 @@ async def import_spend(request: Request, body: SpendImportRequest):
                 "period_start": rec.period_start,
                 "period_end": rec.period_end,
                 "billing_currency": rec.billing_currency,
-                "normalized_currency": "USD",
+                # normalized_currency + exchange_rate are computed by the repo
+                # from billing_currency via the FX seam — never hardcoded USD.
                 "impressions": rec.impressions,
                 "reach": rec.reach,
                 "clicks": rec.clicks,

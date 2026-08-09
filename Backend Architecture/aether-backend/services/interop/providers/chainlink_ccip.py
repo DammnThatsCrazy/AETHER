@@ -47,7 +47,8 @@ from eth_utils import keccak
 
 from services.integrations.connectors.base import ImplementationStatus
 from services.interop.foundation import utc_now_iso
-from services.interop.providers.base import InteropProviderAdapter
+from services.interop.providers.base import InteropProviderAdapter, OperationalFieldsMixin
+from services.interop.providers.transport import RpcRateLimited
 from shared.certification.descriptor import AdapterCertificationDescriptor
 from shared.certification.readiness import CredentialReadiness
 
@@ -83,10 +84,9 @@ DEFAULT_MAX_BLOCK_SPAN = 2_000
 _RECENT_HASHES_KEPT = 32
 
 
-class CcipRateLimitError(Exception):
+class CcipRateLimitError(RpcRateLimited):
     def __init__(self, message: str = "rate limited", retry_after: Optional[int] = None) -> None:
-        super().__init__(message)
-        self.retry_after = retry_after
+        super().__init__(message, retry_after=retry_after)
 
 
 class RpcClient(Protocol):
@@ -228,7 +228,7 @@ def _seq_index_key(source_chain_selector: int, sequence_number: int) -> str:
     return f"{source_chain_selector}:{sequence_number}"
 
 
-class ChainlinkCcipAdapter(InteropProviderAdapter):
+class ChainlinkCcipAdapter(OperationalFieldsMixin, InteropProviderAdapter):
     provider_id = "chainlink_ccip"
     provider_kind = "chainlink_ccip"
     display_name = "Chainlink CCIP (DON+RMN observation adapter)"
@@ -383,7 +383,7 @@ class ChainlinkCcipAdapter(InteropProviderAdapter):
 
     # ── scanning ─────────────────────────────────────────────────────────────
 
-    async def scan(
+    async def _scan_cycle(
         self, checkpoint: Optional[dict[str, Any]] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if self.rpc is None:
@@ -422,6 +422,7 @@ class ChainlinkCcipAdapter(InteropProviderAdapter):
         network_id = meta["network_id"]
         head = await self.rpc.get_head(network_id)
         head_number = int(head["number"])
+        state["head_number"] = head_number
         safe_head = head_number - self.confirmations
         last = int(state["last_scanned_block"])
         recent = state.setdefault("recent_hashes", {})
@@ -467,7 +468,7 @@ class ChainlinkCcipAdapter(InteropProviderAdapter):
             window_to = min(cursor + self.max_block_span, safe_head)
             try:
                 raw_logs = await self.rpc.get_logs(network_id, cursor + 1, window_to)
-            except CcipRateLimitError as exc:
+            except RpcRateLimited as exc:
                 health.append({"provider_id": self.provider_id, "network_id": network_id,
                                "state": "rate_limited", "retry_after": exc.retry_after,
                                "resumed_from_block": cursor})
@@ -475,7 +476,7 @@ class ChainlinkCcipAdapter(InteropProviderAdapter):
             for raw_log in raw_logs:
                 raw_log.setdefault("network_id", network_id)
                 raw_log.setdefault("native_chain_id", meta["native_chain_id"])
-                decoded = self.decode_log(raw_log)
+                decoded = self._decode_safely(raw_log)
                 if decoded is None:
                     continue
                 if decoded["phase"] == "verified_interval":

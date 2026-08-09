@@ -48,7 +48,8 @@ from eth_utils import keccak
 
 from services.integrations.connectors.base import ImplementationStatus
 from services.interop.foundation import utc_now_iso
-from services.interop.providers.base import InteropProviderAdapter
+from services.interop.providers.base import InteropProviderAdapter, OperationalFieldsMixin
+from services.interop.providers.transport import RpcRateLimited
 
 # ── event signatures (Hyperlane V3 Mailbox) ─────────────────────────────────
 SIG_DISPATCH = "Dispatch(address,uint32,bytes32,bytes)"
@@ -86,7 +87,7 @@ _H_BODY = 77
 _HEADER_MIN = 77
 
 
-class RateLimited(Exception):
+class RateLimited(RpcRateLimited):
     """Raised by the injected RPC client when the provider rate-limits us.
 
     ``scan`` catches this, keeps the checkpoint at the last fully-scanned block
@@ -166,7 +167,7 @@ def decode_dispatch_data(data_hex: str) -> bytes:
     return data[offset + 32: offset + 32 + length]
 
 
-class HyperlaneAdapter(InteropProviderAdapter):
+class HyperlaneAdapter(OperationalFieldsMixin, InteropProviderAdapter):
     provider_id = "hyperlane"
     provider_kind = "hyperlane"
     display_name = "Hyperlane (Mailbox observation adapter)"
@@ -310,7 +311,7 @@ class HyperlaneAdapter(InteropProviderAdapter):
 
     # ── scanning ────────────────────────────────────────────────────────────
 
-    async def scan(
+    async def _scan_cycle(
         self, checkpoint: Optional[dict[str, Any]] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Scan every configured chain from the checkpoint to head minus the
@@ -340,6 +341,7 @@ class HyperlaneAdapter(InteropProviderAdapter):
             )
             head = await self.rpc.get_head(network_id)
             head_number = int(head["number"])
+            state["head_number"] = head_number
             safe_head = head_number - self.confirmations
             last = int(state["last_scanned_block"])
 
@@ -379,7 +381,7 @@ class HyperlaneAdapter(InteropProviderAdapter):
                     recent[str(window_end)] = block_hash
                     _prune_recent(recent)
                     window_start = window_end + 1
-            except RateLimited:
+            except RpcRateLimited:
                 # Keep progress up to the last completed window; resume next poll.
                 pass
             state["recent_hashes"] = recent
@@ -403,7 +405,11 @@ class HyperlaneAdapter(InteropProviderAdapter):
             topic0 = (raw_log.get("topics") or ["0x"])[0].lower()
             tx = raw_log.get("transactionHash", "")
             if topic0 == TOPIC_PROCESS:
-                proc = self._decode_process(raw_log)
+                try:
+                    proc = self._decode_process(raw_log)
+                except Exception:  # noqa: BLE001 — malformed Process log
+                    self._scan_decode_failures += 1
+                    proc = None
                 if proc:
                     process_by_tx[tx] = proc
             elif topic0 == TOPIC_DISPATCH:
@@ -416,7 +422,7 @@ class HyperlaneAdapter(InteropProviderAdapter):
         for raw_log in raw_logs:
             topic0 = (raw_log.get("topics") or ["0x"])[0].lower()
             tx = raw_log.get("transactionHash", "")
-            decoded = self.decode_log(raw_log)
+            decoded = self._decode_safely(raw_log)
             if decoded is None:
                 continue
             if decoded["provider_native_stage"] == "DispatchId":

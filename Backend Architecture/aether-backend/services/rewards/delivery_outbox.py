@@ -449,6 +449,26 @@ class RewardDeliveryOutbox:
             raw_response=result.raw,
         )
         await self._receipts().insert(receipt.id, receipt.model_dump())
+
+        # DURABLE AUDIT EVIDENCE: the delivery receipt must leave an append-only
+        # trace on the reward audit trail (with bounded-retry + DLQ if the append
+        # fails). Never raises — evidence failures route to the evidence outbox.
+        try:
+            from services.rewards.receipt_evidence import get_receipt_evidence_service
+            await get_receipt_evidence_service().record(
+                "delivery",
+                tenant_id=job.get("tenant_id", ""),
+                receipt_id=receipt.id,
+                rail=_WEBHOOK_PROVIDER,
+                external_id=result.external_id or receipt.id,
+                status="delivered",
+                action_id=job.get("action_id"),
+                decision_id=(job.get("payload") or {}).get("decision_id"),
+                amount=(job.get("payload") or {}).get("reward", {}).get("amount") if isinstance((job.get("payload") or {}).get("reward"), dict) else None,
+                metadata={"response_code": result.response_code, "job_id": job.get("id")},
+            )
+        except Exception as exc:  # noqa: BLE001 - evidence is never on the critical path
+            logger.warning("reward delivery receipt evidence record failed (non-fatal): %s", exc)
         return receipt.id
 
     async def _mark_action_delivered(self, job: dict, receipt_id: str) -> None:

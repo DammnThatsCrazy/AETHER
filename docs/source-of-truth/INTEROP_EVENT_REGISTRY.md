@@ -32,6 +32,10 @@ for registry/ops; facts retain `financial_7y`, checkpoints/ops shorter.
 Graph projection only on material events (e.g. `SENT_VIA_PATH`,
 `VERIFIED_BY`, `SECURED_BY_POLICY`).
 
-Meters: `interop_observation_ingested`, `interop_message_correlated`,
-`interop_reconciliation_run` — canonical names only
-(`scripts/validate_meter_names.py` must agree with `MeteringEventType`).
+Billable usage dimensions (canonical names from `services/interop/metering.py`,
+recorded as `metering_evidence.usage_dimension` values, best-effort and
+dedupe-safe — a restart replay of the same checkpoint is recorded non-billable):
+`interop_observations_ingested`, `interop_messages_correlated`,
+`interop_reconciliation_runs`, `interop_security_policy_snapshots`, and
+`interop_provider_cycles`. Dimensions are measured here; pricing is not invented
+by this service.

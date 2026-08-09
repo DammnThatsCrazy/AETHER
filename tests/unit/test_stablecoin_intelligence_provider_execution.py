@@ -12,6 +12,7 @@ from repositories.stablecoin_repos import (
     StablecoinIngestionCheckpointRepository,
     StablecoinObservationRepository,
     StablecoinProviderHealthRepository,
+    StablecoinRemediationAuditRepository,
 )
 from services.stablecoins.ingestion import ProviderObservation, StablecoinIngestionPipeline
 from services.stablecoins.models import FinalityState, StablecoinEventType
@@ -121,11 +122,15 @@ async def test_rollback_execution_is_tenant_and_execution_scoped():
     bronze = BronzeRepository("stablecoin")
     silver = SilverRepository("stablecoin")
     observations = StablecoinObservationRepository()
+    checkpoints = StablecoinIngestionCheckpointRepository()
+    remediation = StablecoinRemediationAuditRepository()
     runner = StablecoinProviderIngestionRunner(
         pipeline=StablecoinIngestionPipeline(bronze=bronze, silver=silver, observations=observations),
         observations=observations,
         bronze=bronze,
         silver=silver,
+        checkpoints=checkpoints,
+        remediation=remediation,
     )
     await runner.run_execution(
         tenant_id="tenant-a",
@@ -137,7 +142,24 @@ async def test_rollback_execution_is_tenant_and_execution_scoped():
 
     result = await runner.rollback_execution(tenant_id="tenant-a", provider="rpc", source_execution_id="exec-1")
 
-    assert result["deleted_observations"] == 1
-    assert result["deleted_bronze"] == 1
-    assert result["deleted_silver"] == 1
-    assert await observations.count(filters={"tenant_id": "tenant-a"}) == 0
+    # Rollback is append-only: rows are DEMOTED, never destroyed. The legacy
+    # deleted_* keys remain 0 for caller compatibility.
+    assert result["deleted_observations"] == 0
+    assert result["deleted_bronze"] == 0
+    assert result["deleted_silver"] == 0
+    assert result["demoted_observations"] == 1
+    assert result["demoted_bronze"] == 1
+    assert result["demoted_silver"] == 1
+    # Evidence survives the reorg for the audit trail — marked demoted, not gone.
+    surviving = await observations.find_many(filters={"tenant_id": "tenant-a", "source_execution_id": "exec-1"})
+    assert len(surviving) == 1
+    assert surviving[0]["demoted"] is True
+    assert surviving[0]["demotion_reason"] == "reorg_rollback"
+    # The execution checkpoint is marked rolled_back.
+    checkpoint = await checkpoints.find_by_id("stablecoin_checkpoint:tenant-a:rpc:exec-1")
+    assert checkpoint["status"] == "rolled_back"
+    # A durable remediation-audit entry records the demotion.
+    audit = await remediation.find_many(filters={"tenant_id": "tenant-a", "source_execution_id": "exec-1"})
+    assert len(audit) == 1
+    assert audit[0]["action"] == "rollback_demotion"
+    assert audit[0]["demoted_observations"] == 1

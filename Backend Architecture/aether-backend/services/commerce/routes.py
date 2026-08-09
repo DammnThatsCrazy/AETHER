@@ -42,17 +42,25 @@ async def record_hire(body: AgentHireRecord, request: Request):
 
 @router.get("/fees/report")
 async def fee_elimination_report(request: Request, period: str = "all"):
-    """Get fee elimination report showing savings from crypto payments vs cards."""
+    """Get fee elimination report showing savings from crypto payments vs cards.
+
+    Tenant-scoped: the caller's tenant id is threaded into the service so the
+    report never aggregates another tenant's payments.
+    """
     request.state.tenant.require_permission("commerce:read")
-    report = await _service.get_fee_elimination_report(period)
+    report = await _service.get_fee_elimination_report(period, request.state.tenant.tenant_id)
     return APIResponse(data=report.model_dump()).to_dict()
 
 
 @router.get("/agent/{agent_id}/spend")
 async def agent_spend_history(agent_id: str, request: Request):
-    """Get spending history for a specific agent."""
+    """Get spending history for a specific agent.
+
+    Tenant-scoped: the caller's tenant id is threaded into the service so the
+    history never counts another tenant's payments.
+    """
     request.state.tenant.require_permission("commerce:read")
-    result = await _service.get_agent_spend(agent_id)
+    result = await _service.get_agent_spend(agent_id, request.state.tenant.tenant_id)
     return APIResponse(data=result).to_dict()
 
 

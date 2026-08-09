@@ -9,9 +9,17 @@ validation time.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 AI_EXECUTION_SCHEMA_VERSION = "ai.execution.v1"
 
@@ -50,6 +58,16 @@ USAGE_DIMENSIONS: tuple[str, ...] = (
 )
 
 _MAX_FREE_TEXT = 256
+
+
+def _serialize_money(value: Optional[Decimal]) -> Optional[float]:
+    """Serialize Decimal money as float on the wire (backward compat).
+
+    In-memory values stay ``Decimal`` for exact arithmetic; JSON output keeps
+    the historical number shape that callers/stores already depend on. A
+    genuinely unknown cost stays ``None`` — never coerced to 0.
+    """
+    return None if value is None else float(value)
 
 
 def _scan_banned_keys(value: Any, path: str = "") -> None:
@@ -133,9 +151,12 @@ class AIInvocationObserved(BaseModel):
     status: AIInvocationStatus
     error_code: Optional[str] = Field(default=None, max_length=_MAX_FREE_TEXT)
 
-    estimated_cost: Optional[float] = Field(default=None, ge=0)
-    actual_cost: Optional[float] = Field(default=None, ge=0)
-    billed_cost: Optional[float] = Field(default=None, ge=0)
+    # Money is Decimal (program sec19): float/str inputs still validate, but the
+    # in-memory values are exact Decimals. JSON output keeps the historical
+    # float shape via _serialize_money (when_used="json").
+    estimated_cost: Optional[Decimal] = Field(default=None, ge=0)
+    actual_cost: Optional[Decimal] = Field(default=None, ge=0)
+    billed_cost: Optional[Decimal] = Field(default=None, ge=0)
     currency: str = Field(min_length=1, max_length=16)
     pricing_version: Optional[str] = Field(default=None, max_length=_MAX_FREE_TEXT)
     customer_managed_key: Optional[bool] = None
@@ -165,6 +186,10 @@ class AIInvocationObserved(BaseModel):
             raise ValueError("must be a non-empty string")
         return value
 
+    @field_serializer("estimated_cost", "actual_cost", "billed_cost", when_used="json")
+    def _serialize_cost_fields(self, value: Optional[Decimal]) -> Optional[float]:
+        return _serialize_money(value)
+
     def usage_present(self) -> bool:
         """True when at least one of the ten usage dimensions was reported."""
         return any(getattr(self, dim) is not None for dim in USAGE_DIMENSIONS)
@@ -178,11 +203,15 @@ class AIExecutionFact(AIInvocationObserved):
     silently becomes zero.
     """
 
-    selected_cost: Optional[float] = None
+    selected_cost: Optional[Decimal] = None
     cost_basis: CostBasis
     received_at: str
     computed_at: str
     data_quality_status: AIDataQualityStatus
+
+    @field_serializer("selected_cost", when_used="json")
+    def _serialize_selected_cost(self, value: Optional[Decimal]) -> Optional[float]:
+        return _serialize_money(value)
 
 
 class AIPriceCardRates(BaseModel):
@@ -245,10 +274,10 @@ class AIWorkflowEconomics(BaseModel):
     total_retries: int = Field(ge=0)
     total_latency_ms: float = Field(ge=0)
 
-    total_model_cost: Optional[float] = None
-    tool_cost: Optional[float] = None
-    retrieval_cost: Optional[float] = None
-    fully_loaded_cost: Optional[float] = None
+    total_model_cost: Optional[Decimal] = None
+    tool_cost: Optional[Decimal] = None
+    retrieval_cost: Optional[Decimal] = None
+    fully_loaded_cost: Optional[Decimal] = None
     currency: str
     cost_coverage: float = Field(ge=0.0, le=1.0)
 
@@ -258,7 +287,14 @@ class AIWorkflowEconomics(BaseModel):
     technical_success: bool = False
 
     qualified_outcome_count: int = Field(ge=0)
-    attributed_value: Optional[float] = None
+    attributed_value: Optional[Decimal] = None
+
+    @field_serializer(
+        "total_model_cost", "tool_cost", "retrieval_cost",
+        "fully_loaded_cost", "attributed_value", when_used="json",
+    )
+    def _serialize_workflow_money(self, value: Optional[Decimal]) -> Optional[float]:
+        return _serialize_money(value)
 
     first_observed_at: str
     last_observed_at: str

@@ -42,6 +42,9 @@ from services.integrations.providers.payment_rails.receipts import (
     ReceiptStage,
     ReceiptState,
 )
+from services.integrations.providers.payment_rails.lifecycle import (
+    rollout_control_permitted,
+)
 from services.integrations.providers.payment_rails.repository import (
     PaymentRailsRepositories,
     get_payment_rails_repositories,
@@ -192,6 +195,8 @@ class PaymentRailsService:
             ))
             metrics.increment("payment_rail_webhook_rejected_total",
                               labels={"provider": adapter.provider_name})
+            # Readiness demotion hook (best-effort) — same as the verified path.
+            await self._maybe_demote(tenant_id, adapter.provider_name, actor="webhook_legacy_ingestion")
             return {"handled": False, "reason": result.reason}
 
         try:
@@ -304,6 +309,10 @@ class PaymentRailsService:
                 state=ReceiptState.REJECTED, reason=result.reason or "signature_invalid",
                 environment=environment, endpoint_id=endpoint_id,
             )
+            # Readiness demotion hook: a signature failure is the canonical
+            # "credential regressed" signal — feed the capability off-ramp
+            # (best-effort, monotonic, gated behind readiness_demotion_enabled).
+            await self._maybe_demote(tenant_id, adapter.provider_name, actor="webhook_verified_ingestion")
             # A signature mismatch / stale / bad-format is a permanent 4xx; a
             # missing secret is a configuration state, still a 4xx (not a retry).
             return {"handled": False, "reason": result.reason}
@@ -354,6 +363,41 @@ class PaymentRailsService:
             )
         except Exception as exc:  # noqa: BLE001 — forensic side effect, never fatal
             logger.warning(f"payment webhook quarantine failed (non-fatal): {exc}")
+
+    async def _maybe_demote(
+        self,
+        tenant_id: str,
+        provider: str,
+        *,
+        actor: str = "webhook_ingestion",
+    ) -> dict[str, Any]:
+        """Best-effort readiness demotion hook on a rejection/degradation signal.
+
+        Feeds the canonical capability-readiness off-ramp (:mod:`readiness_
+        demotion`): repeated webhook signature failures, provider poll
+        degradation, or a provider rejecting the credential demote the
+        payment-rails capability to DEGRADED / CREDENTIAL_INVALID. Gated by
+        ``settings.payment_rails.readiness_demotion_enabled`` (default OFF)
+        inside :func:`apply_demotion_if_warranted`; monotonic (never promotes);
+        audited on the payment-rails audit trail; never raises — a demotion
+        failure must never change the webhook/poll outcome. Returns the apply
+        result so callers/tests can assert on it.
+        """
+        from services.integrations.providers.payment_rails.readiness_demotion import (
+            apply_demotion_if_warranted,
+        )
+
+        try:
+            result = await apply_demotion_if_warranted(self, tenant_id, provider, actor=actor)
+        except Exception as exc:  # noqa: BLE001 — best-effort, never fatal
+            logger.warning("payment_rail readiness demotion hook failed (non-fatal): %s", exc)
+            return {"applied": False, "reason": "hook_failed"}
+        if result.get("applied"):
+            logger.warning(
+                "payment_rail readiness demoted tenant=%s provider=%s target=%s signals=%s",
+                tenant_id, provider, result.get("target"), result.get("signals"),
+            )
+        return result
 
     async def _webhook_secrets(
         self, tenant_id: str, provider: str, environment: str, adapter: Any
@@ -475,6 +519,14 @@ class PaymentRailsService:
         elif adapter.webhook_only:
             account_changes["provider_poll_health"] = "webhook_only"
         await self.repos.accounts.upsert(tenant_id, adapter.provider_name, account_changes)
+
+        # Readiness demotion hook: a poll health other than "ok" (auth_error →
+        # CREDENTIAL_INVALID, rate_limited/server_error/timeout/... → DEGRADED)
+        # is a durable regression signal. The account was just upserted with the
+        # fresh health, so the evaluator reads it. Best-effort + monotonic.
+        poll_health = (poll_state or {}).get("health")
+        if poll_health is not None and poll_health != "ok":
+            await self._maybe_demote(tenant_id, adapter.provider_name, actor="provider_poll")
 
         await self.repos.audit.record(tenant_id, adapter.audit_record(
             tenant_id, "status_sync",
@@ -646,7 +698,11 @@ class PaymentRailsService:
             tenant_id, rid, ReceiptStage.CANONICAL_EVENT_WRITTEN,
             canonical_event_ids=canonical_ids or None,
         )
-        if getattr(settings.payment_rails, "canonical_outbox_enabled", False):
+        # Lifecycle gate: the durable canonical-event outbox is a rollout control.
+        # It engages only when its flag is ON AND the payment-rails capability
+        # lifecycle stage is at/above the outbox minimum (fails open to the flag
+        # when no stage is declared, so un-declared deployments are unchanged).
+        if await rollout_control_permitted("canonical_outbox", tenant_id=tenant_id):
             await self._receipt_advance(
                 tenant_id, rid, ReceiptStage.OUTBOX_ENQUEUED,
                 outbox_record_id=(canonical_ids[0] if canonical_ids else None),
@@ -757,8 +813,13 @@ class PaymentRailsService:
         session = FundingSession.model_validate(record)
         implied = adapter.normalize_to_aether_events(session)
         already = set(record.setdefault("metadata", {}).get("emitted_canonical", []))
-        to_outbox = getattr(settings.payment_rails, "canonical_outbox_enabled", False)
-        meter_on = getattr(settings.payment_rails, "usage_metering_enabled", False)
+        # Lifecycle gate for the rollout controls (mirrors the alert evaluator):
+        # each runs only when its flag is ON AND the capability lifecycle stage is
+        # at/above the control's minimum. With no declared stage the gates fail
+        # open to the raw flags, so un-declared deployments are byte-for-byte
+        # unchanged.
+        to_outbox = await rollout_control_permitted("canonical_outbox", tenant_id=tenant_id)
+        meter_on = await rollout_control_permitted("usage_metering", tenant_id=tenant_id)
         emitted: list[str] = []
         emitted_ids: list[str] = []
         for canonical in implied:
@@ -985,6 +1046,70 @@ class PaymentRailsService:
         stats["sessions_repaired"] = session_stats["repaired"]
         stats["events_reemitted"] += session_stats["events_reemitted"]
         return stats
+
+    async def replay_dead_lettered(
+        self,
+        tenant_id: str,
+        *,
+        provider: Optional[str] = None,
+        rid: Optional[str] = None,
+        limit: int = 500,
+        actor: str = "operator_replay",
+    ) -> dict[str, Any]:
+        """Manual replay of dead-lettered receipts back into the pipeline.
+
+        Operator escape hatch (paired with the repair worker's automatic
+        dead-lettering): flips each terminal dead-lettered receipt back to a
+        recoverable ``repair_pending`` state via ``reset_repair`` (resetting its
+        bounded repair counter), then re-drives ONE idempotent canonical-repair
+        pass so the replayed deliveries actually progress. Idempotent — a
+        receipt already out of the dead-letter state is skipped. Audited on the
+        payment-rails audit trail. Returns per-receipt outcomes plus the repair
+        pass counters.
+
+        Security/ownership: the operator route resolves the tenant from the
+        caller (never a header); ``provider``/``rid`` scope the selection and
+        both are re-scoped to ``tenant_id`` for every read/write.
+        """
+        if rid:
+            r = await self.repos.receipts.get(tenant_id, rid)
+            candidate = [r] if r else []
+        else:
+            candidate = await self.repos.receipts.list_for_tenant(
+                tenant_id, provider=provider, limit=max(1, min(limit, 2000))
+            )
+        dead = [
+            r for r in candidate
+            if r.get("current_stage") == ReceiptState.DEAD_LETTERED
+        ][: max(1, min(limit, 2000))]
+
+        replayed: list[str] = []
+        for r in dead:
+            rid_ = r.get("receipt_id")
+            if not rid_:
+                continue
+            reset = await self.repos.receipts.reset_repair(
+                tenant_id, rid_, reason=f"operator_replay:{actor}"
+            )
+            if reset is not None:
+                replayed.append(rid_)
+
+        repair = await self.run_canonical_repair(tenant_id, limit=limit) if replayed else {
+            "receipts_scanned": 0, "receipts_repaired": 0, "receipts_dead_lettered": 0,
+            "sessions_scanned": 0, "sessions_repaired": 0, "events_reemitted": 0,
+        }
+
+        await self.repos.audit.record(tenant_id, {
+            "provider": provider or "*",
+            "action": "dead_lettered_replayed",
+            "detail": {
+                "receipt_ids": replayed,
+                "count": len(replayed),
+                "actor": actor,
+                "repair": repair,
+            },
+        })
+        return {"replayed": replayed, "count": len(replayed), "repair": repair}
 
     # ── Health ────────────────────────────────────────────────────────────
 

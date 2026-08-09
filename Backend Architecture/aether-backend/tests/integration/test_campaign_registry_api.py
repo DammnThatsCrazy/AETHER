@@ -436,6 +436,7 @@ class TestCampaignOverviewQuality:
             "reach": 10,
             "clicks": 50,
             "media_spend": "100.00",
+            "billing_currency": "USD",
             "idempotency_key": f"test-reach-{campaign_id}",
         }))
 

@@ -57,15 +57,26 @@ Keys are `<domain>:<provider>`. Each entry carries `state`, `state_rank`,
 
 | State | Rank | Meaning |
 |---|---|---|
+| `error` | −6 | off-ramp: runtime/transport failure (ranked below all) |
+| `credential_invalid` | −5 | off-ramp: credential expired/revoked/tombstoned (sweeper demotion) |
+| `suspended` | −4 | off-ramp: operator-suspended |
+| `degraded` | −1 | off-ramp: regressed or pulled |
+| `disabled` | −2 | off-ramp: disabled |
 | `scaffolded` | 1 | descriptor only, unimplemented paths (forbidden for first release) |
-| `credential_waiting` | 2 | code-complete + infra-defined, credential-gated, NOT yet validated |
-| `replay_validated` | 3 | validated against recorded fixtures |
-| `sandbox_validated` | 4 | validated against a provider sandbox |
-| `partner_live` | 5 | validated against a live provider |
-| `degraded` / `disabled` | −1 / −2 | off-ramp: regressed or pulled (ranked below all) |
+| `implementation_in_progress` | 2 | implementation started, not code-complete |
+| `credential_waiting` | 3 | code-complete + infra-defined, credential-gated, NOT yet validated |
+| `replay_validated` | 4 | validated against recorded fixtures |
+| `offline_validated` | 5 | validated offline against mock/recorded evidence |
+| `connection_testing` | 6 | live connection test in progress (requires supplied credential) |
+| `sandbox_validated` | 7 | validated against a provider sandbox |
+| `partner_live` | 8 | validated against a live provider |
 
-`degraded`/`disabled` rank below everything so an "at least CREDENTIAL_WAITING"
-assertion never admits an off-ramped provider.
+Every off-ramp state (`error` / `credential_invalid` / `suspended` / `degraded` /
+`disabled`) ranks below all forward tokens so an "at least CREDENTIAL_WAITING"
+assertion never admits an off-ramped provider. The credential authority's
+expiry/overlap sweeper demotes a capability to `credential_invalid` when its
+credential is tombstoned or revoked — that is the correct verdict for a
+credential that no longer exists, not a bug.
 
 ## Current first-release scope (all `credential_waiting`)
 

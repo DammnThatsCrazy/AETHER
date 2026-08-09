@@ -183,9 +183,11 @@ def metrics_summary() -> dict:
 # is set. Full OTel (SDK, exporters, spans) is a declared production_status
 # blocker — this seam must not be mistaken for observability coverage.
 
+import contextvars
 import os
 import re
 import secrets
+from typing import Mapping
 
 _TRACEPARENT_RE = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$")
 
@@ -220,3 +222,105 @@ def parse_traceparent(header: Optional[str]) -> Optional[tuple[str, str]]:
     if match is None:
         return None
     return match.group(1), match.group(2)
+
+
+# =========================================================================
+# In-process trace-continuation seam (contextvars)
+# =========================================================================
+# ``current_traceparent`` is the traceparent the *current* async context is
+# executing under. Async boundaries that hand work off (a job enqueue, an
+# outbox row, a worker cycle) read it to continue the trace into the next hop
+# instead of minting a fresh one — that is what makes request → job → worker a
+# single trace. Like the rest of this seam it is a strict no-op (None
+# passthrough, nothing set) when AETHER_OTEL_ENABLED is off, so instrumented
+# code adds no runtime behavior until the seam is switched on.
+
+_TRACEPARENT_PAYLOAD_KEY = "_traceparent"
+
+_current_traceparent: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "current_traceparent", default=None
+)
+
+
+def current_traceparent() -> Optional[str]:
+    """The traceparent the current async context is running under, if any."""
+    return _current_traceparent.get()
+
+
+def set_current_traceparent(value: Optional[str]) -> Optional[str]:
+    """Bind ``value`` to the current async context (None clears it)."""
+    _current_traceparent.set(value)
+    return value
+
+
+def continue_trace(parent: Optional[str] = None) -> Optional[str]:
+    """Advance the trace into a new span and bind it to the current context.
+
+    ``parent`` wins when given; otherwise the current context's traceparent is
+    continued (or a fresh trace started when neither exists).
+    """
+    tp = child_traceparent(parent if parent is not None else _current_traceparent.get())
+    return set_current_traceparent(tp)
+
+
+def begin_async_cycle() -> Optional[str]:
+    """Start (or continue) a trace for a fresh async worker cycle.
+
+    Background loops that are not launched from a request — a supervised worker
+    cycle, the heartbeat bridge, the alert evaluator sweep — call this once per
+    cycle so each iteration is a child span of the previous one when a trace is
+    already active, or starts a fresh trace otherwise. ``continue_trace`` with
+    no parent already does this; this alias documents the async-boundary intent
+    and gives the fleet of async call sites one canonical entry point.
+    """
+    return continue_trace()
+
+
+def inject_traceparent(payload: Optional[dict]) -> Optional[str]:
+    """Stamp the payload with a traceparent for the next async boundary.
+
+    A payload that already carries a ``_traceparent`` is left intact (it is the
+    trace this hop continues). Otherwise the current context's trace is
+    continued and bound to this context. Returns the stamped value, or None
+    when the seam is disabled (payload untouched).
+    """
+    if payload is None or not isinstance(payload, dict):
+        return None
+    existing = payload.get(_TRACEPARENT_PAYLOAD_KEY)
+    if existing:
+        return existing
+    tp = continue_trace()
+    if tp is not None:
+        payload[_TRACEPARENT_PAYLOAD_KEY] = tp
+    return tp
+
+
+def extract_traceparent(payload: Optional[Mapping]) -> Optional[str]:
+    """Resume a trace from an inbound async payload.
+
+    Reads ``_traceparent`` off ``payload``, derives a child span for the work
+    done *here*, and binds it to the current context (so subsequent
+    ``inject_traceparent`` hops continue the same trace). Returns the bound
+    value, or None when the seam is disabled or no parent is present.
+    """
+    if not payload:
+        return None
+    parent = payload.get(_TRACEPARENT_PAYLOAD_KEY)
+    if not parent:
+        return None
+    return continue_trace(parent=parent)
+
+
+def traceparent_metadata() -> dict[str, str]:
+    """The current trace id, as metadata safe to stamp on a durable record.
+
+    Async boundaries that write an audit/trace/log line (the observability trace
+    writer, the fleet-health aggregate, a worker heartbeat bridge) call this so
+    the stored record is trace-linked to the hop that produced it. Returns an
+    empty dict (nothing stamped) when the seam is disabled or no trace is
+    active — a strict no-op, matching the rest of the seam.
+    """
+    tp = _current_traceparent.get()
+    if not tp:
+        return {}
+    return {"traceparent": tp}

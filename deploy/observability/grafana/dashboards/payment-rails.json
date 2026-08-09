@@ -1,0 +1,261 @@
+{
+  "uid": "aether-payment-rails",
+  "title": "Payment Rails Observability",
+  "tags": ["aether", "payment-rails", "payments", "observability"],
+  "schemaVersion": 36,
+  "version": 1,
+  "timezone": "utc",
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "pluginId": "prometheus",
+        "label": "Datasource"
+      },
+      {
+        "name": "provider",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "label": "Provider",
+        "query": "label_values(payment_rail_webhook_handled_total, provider)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Derived Condition Severity",
+      "description": "In-process classified conditions (reconciliation-conflict backlog, provider silence, backlog growth) emitted by the alert evaluator. 0=ok, 1=unknown, 2=warning, 3=critical — the signal behind PaymentRailDerivedCondition alerts.",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "payment_rail_alert_condition_severity",
+          "legendFormat": "{{condition}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 3,
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "orange", "value": 2},
+              {"color": "red", "value": 3}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}}
+    },
+    {
+      "id": 2,
+      "title": "Webhook Handled vs Rejected",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (provider) (rate(payment_rail_webhook_handled_total[$__rate_interval]))",
+          "legendFormat": "handled {{provider}}"
+        },
+        {
+          "expr": "sum by (provider) (rate(payment_rail_webhook_rejected_total[$__rate_interval]))",
+          "legendFormat": "rejected {{provider}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {"mode": "palette-classic"}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Provider Poll Health",
+      "description": "1 = last poll ok; 0 = degraded/auth_error. Drop to 0 sustained is PaymentRailProviderPollDegraded.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "payment_rail_provider_poll_health",
+          "legendFormat": "{{provider}} {{health}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Provider Freshness (silence)",
+      "description": "Seconds since the last verified webhook (mode=webhook_only) or successful poll (mode=poll). Flat rise = provider silence.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "max by (provider, mode) (payment_rail_provider_freshness_seconds)",
+          "legendFormat": "{{provider}} {{mode}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 7200},
+              {"color": "red", "value": 86400}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Canonical Delivery Backlog",
+      "description": "Incomplete receipt backlog (count) and oldest incomplete receipt age (seconds).",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "payment_rail_canonical_backlog",
+          "legendFormat": "backlog count"
+        },
+        {
+          "expr": "payment_rail_oldest_incomplete_receipt_seconds",
+          "legendFormat": "oldest age (s)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Reconciliation Conflicts & Stale",
+      "description": "Sessions transitioning to conflict (integrity discrepancy) or stale (unconfirmed) per hour.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 23},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "increase(payment_rail_sync_transitioned_total{state=\"conflict\"}[1h])",
+          "legendFormat": "conflict"
+        },
+        {
+          "expr": "increase(payment_rail_sync_transitioned_total{state=\"stale\"}[1h])",
+          "legendFormat": "stale"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "palette-classic"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Workers & Delivery",
+      "description": "Sync cycle rate (provider-truth pull), repair heartbeat, and outbox relay claimed-vs-published delivery health.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 23},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "rate(payment_rail_sync_cycle_total[5m])",
+          "legendFormat": "sync cycles/s"
+        },
+        {
+          "expr": "payment_rail_repair_heartbeat",
+          "legendFormat": "repair heartbeat"
+        },
+        {
+          "expr": "rate(ingestion_outbox_relay_claimed_total[5m])",
+          "legendFormat": "outbox claimed/s"
+        },
+        {
+          "expr": "rate(ingestion_outbox_relay_published_total[5m])",
+          "legendFormat": "outbox published/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Dead-lettered (1h) — needs replay",
+      "description": "Receipts dead-lettered by canonical repair in the last hour. >0 means an operator should replay via POST /v1/integrations/providers/payment-rails/replay.",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 31},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum(increase(payment_rail_repair_dead_lettered_total[1h]))",
+          "legendFormat": "dead-lettered"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 10}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "horizontal"}
+    }
+  ]
+}

@@ -135,6 +135,73 @@ A running checklist of the productization surfaces and their readiness. See
 - [x] Frontend: Aether tenant (campaign-builder, decisions, approval-queue, rail-setup);
       Kyber operator (rewards-health, rewards-drilldown)
 
+## Credential-Turnkey Pre-Staging Build Waves (2026-08-09)
+
+Status of the credential-turnkey build waves on `claude/credential-turnkey-pre-staging`.
+`[x]` = repository-controlled evidence present on this branch; `[ ]` = repo-local
+integration item OR external/credential item still pending. Release verdict
+remains **NO-GO** until live provider validation (0/29 `PARTNER_LIVE` today).
+
+### Credential authority (durable, multi-slot, encrypted)
+
+- [x] Durable multi-slot credential authority (`provider_credential_versions`, partial-unique
+      indexes: one active + one previous per slot), encrypted at rest, single decrypt site,
+      restart/replica-safe (migration landed `20260812_provider_credential_versions`)
+- [x] Server-owned slot registry derived from adapter descriptors (unknown slot → 400);
+      write-only tenant-admin API `/v1/providers/credentials/*`; operator-safe cross-tenant
+      views never leak secrets (Kyber routes + `services/kyber/aggregate.py`)
+- [x] Credential expiry/overlap sweep worker authored (`services/providers/credentials/sweeper.py`)
+- [ ] Sweep worker import path in `services/runtime/specs.py` points at `credentials.sweep`; must
+      resolve to `credentials.sweeper` (integration pass)
+- [ ] Actual secret values + KMS CMK (`CREDENTIAL_CIPHER=aws_kms`) supplied in staging/production
+      (external — see `reports/credential-turnkey-external-blockers.md`)
+
+### Provider conformance / certification plane
+
+- [x] Certification matrix now resolves **29 providers — all `CREDENTIAL_WAITING`** (added
+      communications ×8 and agentic-commerce ×3 to the original 18 first-release economic
+      providers); `credentialless-certification-strict` floor holds (no `SCAFFOLDED`)
+- [x] Provider conformance contracts (`shared/integration_contracts/*`) with manifests for
+      15 connectors + 5 observe-only payment rails + 3 deferred credit bureaus
+- [ ] Zero `PARTNER_LIVE` providers — replay/sandbox/partner-live promotion is live-credential
+      work (external P0); readiness remains pre-production
+
+### Lifecycle / readiness plane
+
+- [x] Tenant launch readiness (`/v1/tenant/readiness`, `/trust-states`) + tenant hook
+      `use-tenant-readiness.ts`; fail-closed checklist (all-pending until recorded)
+- [x] Capability readiness graph + supervised revalidation worker (auto-demote, never promote),
+      fail-closed node resolvers (absence is not health)
+- [ ] `capability_readiness` / `tenant_launch_readiness` / `metering_evidence` tables need
+      alembic DDL (integration pass); Kyber readiness-graph router authored but unwired
+
+### Durable delivery / reconciliation across the economic domains
+
+- [x] Durable cursors: derivatives pull/stream cursors + stream-gap persistence, interop
+      `interop_provider_checkpoints` checkpoint-resume contract (crash-safe, idempotent replay)
+- [x] Reconciliation: stablecoin multi-provider price reconcile + payment/onchain reconcile,
+      interop cross-leg variance evidence, reward claim reconciliation (proof nonce replay guard)
+- [x] Repair: payment-rail canonical-repair safety net + readiness demotion (auth-error →
+      `CREDENTIAL_INVALID`, silence → `DEGRADED`), reward reservation-release TTL sweep,
+      reward durable delivery outbox (durable-before-ack, dead-letter)
+- [x] Entitlement/meter seams: derivatives entitlement gate, payment-rail plan-tier gate,
+      interop/derivatives/commerce/x402 usage meters (some durable sinks pending wiring)
+- [ ] Worker builder/import mismatches in `services/runtime/specs.py` (stablecoin polling,
+      derivatives venue sweep, x402 reconciliation, reward reservation/claim paths) must be
+      corrected/authored (integration pass; all default-OFF so no startup impact)
+- [ ] Reward delivery/evidence/reservation tables (`reward_delivery_jobs`,
+      `reward_evidence_outbox`, `reward_reservation_release_jobs`,
+      `reward_budget_reservations`/`reward_budget_ledger`) need alembic DDL for staging/prod
+      durability (integration pass)
+
+### Infra definition (provisioning-READY, not provisioned)
+
+- [x] `deploy/DEPLOYMENT_CONTRACT.yaml` declares per-capability required services/secrets/
+      public URLs/registration steps; Kafka topic provisioner + `topics.json`; ClickHouse DDL
+      schemas; KMS credential module; `scripts/bootstrap_aws_secrets.py`
+- [ ] Cloud apply, credential supply, public URL routing, provider-app registration, and live
+      certification remain external (staging/cloud access required)
+
 ## Partner ecosystem / marketplace / developer platform
 
 Partner ecosystem, marketplace, and developer-platform functionality are

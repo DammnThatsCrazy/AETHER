@@ -5,6 +5,15 @@ payment-rail stores. Cross-tenant reads are a control-plane aggregate (operator
 only) — never surfaced to a tenant — and carry only sanitized counters / health,
 never tenant-private payment payloads. Distinguishes real zeros from unknowns:
 an uncomputable value is ``None`` (unknown), never a misleading ``0``.
+
+Worker-liveness fields (``worker_heartbeat``, ``last_successful_worker_cycle``)
+are folded from the live ``WorkerSupervisor`` state via
+:func:`shared.supervisor_handle.get_worker_supervisor` (bound by the lifespan).
+``outbox_lag`` and ``polling_cursor_age_seconds`` are computed from the durable
+receipt + provider-account ledgers. When no supervisor is bound (or a ledger
+value cannot be computed) the field stays ``None`` — "no signal observed", never
+a fabricated zero. Fleet-health gauges are emitted alongside so a Grafana/Kyber
+dashboard has a metric source, not just a JSON endpoint.
 """
 
 from __future__ import annotations
@@ -13,6 +22,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from shared.logger.logger import metrics
+from shared.supervisor_handle import get_worker_supervisor
 from shared.temporal.instant import ensure_aware_utc
 
 from services.integrations.providers.payment_rails import ADAPTERS
@@ -31,11 +42,16 @@ from services.integrations.providers.payment_rails.kyber_contract import (
 from services.integrations.providers.payment_rails.receipts import (
     COMPLETE_STAGES,
     TERMINAL_STATES,
+    ReceiptStage,
     ReceiptState,
 )
 from services.integrations.providers.payment_rails.service import provider_enabled
 
 _PENDING = ("pending", "submitted", "initiated")
+
+# Live worker states per WorkerSupervisor.status(); a worker in one of these
+# whose heartbeat is fresh is evidence the worker plane is advancing.
+_LIVE_WORKER_STATES = ("running", "restarting")
 
 
 def _age_seconds(iso_value: Optional[str], now: datetime) -> Optional[float]:
@@ -60,7 +76,116 @@ def _incomplete(receipts: list[dict]) -> list[dict]:
     ]
 
 
-async def build_fleet_health(service: Any) -> FleetHealthResponse:
+def _fleet_cursor_age_by_provider(
+    accounts: list[dict], now: datetime
+) -> dict[str, Optional[float]]:
+    """Per-provider fleet polling-cursor age — the stalest observed cursor.
+
+    For each provider, the age of the OLDEST ``last_poll_at`` across its durable
+    provider-account records: that cursor is the one lagging most behind
+    provider truth, so it bounds the operator's "is our pull plane advancing?"
+    answer. A provider with no account that ever recorded a poll stays ``None``
+    (unknown) — never a fabricated 0. Webhook-only providers naturally have no
+    ``last_poll_at`` and therefore no entry; the caller additionally gates on
+    ``polling_supported`` so an unknown is never rendered where polling is
+    architecturally absent.
+    """
+    ages_by_provider: dict[str, list[float]] = defaultdict(list)
+    for account in accounts:
+        provider = account.get("provider")
+        last_poll_at = account.get("last_poll_at")
+        if not provider or not last_poll_at:
+            continue
+        age = _age_seconds(last_poll_at, now)
+        if age is not None:
+            ages_by_provider[provider].append(age)
+    return {provider: max(ages) for provider, ages in ages_by_provider.items()}
+
+
+def _emit_fleet_gauges(
+    totals: "FleetTotals",
+    providers: list["ProviderFleetRow"],
+    *,
+    worker_heartbeat: Optional[bool],
+    last_successful_worker_cycle: Optional[str],
+    now: datetime,
+) -> None:
+    """Emit ``kyber_fleet_*`` gauges so a Grafana/Kyber dashboard has a metric
+    source, not just a JSON endpoint.
+
+    Honesty mirrors the contract: an unknown liveness is *absent*, never a
+    fabricated 0. ``kyber_fleet_worker_heartbeat`` / ``..._cycle_seconds`` are
+    simply not emitted when no supervisor was observed; the backlog/cursor
+    gauges are real zeros (the ledgers are always readable) and always emitted.
+    """
+    if worker_heartbeat is not None:
+        metrics.gauge("kyber_fleet_worker_heartbeat", 1.0 if worker_heartbeat else 0.0)
+    if last_successful_worker_cycle is not None:
+        cycle_age = _age_seconds(last_successful_worker_cycle, now)
+        if cycle_age is not None:
+            metrics.gauge("kyber_fleet_last_successful_worker_cycle_seconds", cycle_age)
+    metrics.gauge("kyber_fleet_outbox_lag", float(totals.outbox_lag or 0.0))
+    metrics.gauge("kyber_fleet_canonical_backlog", float(totals.canonical_backlog))
+    metrics.gauge("kyber_fleet_dead_lettered", float(totals.dead_lettered))
+    metrics.gauge("kyber_fleet_providers_degraded", float(totals.providers_degraded))
+    if totals.oldest_incomplete_receipt_age_seconds is not None:
+        metrics.gauge(
+            "kyber_fleet_oldest_incomplete_receipt_seconds",
+            totals.oldest_incomplete_receipt_age_seconds,
+        )
+    for row in providers:
+        if row.polling_cursor_age_seconds is not None:
+            metrics.gauge(
+                "kyber_fleet_provider_cursor_age_seconds",
+                row.polling_cursor_age_seconds,
+                labels={"provider": row.provider},
+            )
+
+
+def _fleet_worker_liveness(
+    supervisor: Any, now: datetime
+) -> tuple[Optional[bool], Optional[str]]:
+    """Fold WorkerSupervisor state into (worker_heartbeat, last_successful_worker_cycle).
+
+    Honest tri-state semantics (never a fabricated signal):
+    - no supervisor bound, or the supervisor exposes no workers → ``None``
+      (nothing observed this process — unknown).
+    - at least one worker live (running/restarting with a heartbeat within the
+      supervisor's own liveness window) → ``True``.
+    - workers exist but none is live → ``False`` (deliberately not healthy).
+    ``last_successful_worker_cycle`` is the newest ``last_success_at`` across
+    workers (already RFC 3339 UTC from ``status()``), or ``None`` when no worker
+    has completed a unit of work yet.
+    """
+    if supervisor is None:
+        return None, None
+    try:
+        status = supervisor.status()
+    except Exception:  # noqa: BLE001 — a broken status read is unknown, not dead
+        return None, None
+    if not status:
+        return None, None
+
+    from services.runtime.supervisor import HEARTBEAT_TIMEOUT_S
+
+    live = any(
+        info.get("state") in _LIVE_WORKER_STATES
+        and info.get("heartbeat_age_s") is not None
+        and float(info.get("heartbeat_age_s")) <= HEARTBEAT_TIMEOUT_S
+        for info in status.values()
+    )
+    successes = [
+        info.get("last_success_at")
+        for info in status.values()
+        if info.get("last_success_at")
+    ]
+    last_success = max(successes, default=None)
+    return live, last_success
+
+
+async def build_fleet_health(
+    service: Any, *, supervisor: Any = None
+) -> FleetHealthResponse:
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=24)).isoformat()
 
@@ -69,6 +194,27 @@ async def build_fleet_health(service: Any) -> FleetHealthResponse:
     reconciliations = await service.repos.reconciliation.list_all()
     audits = await service.repos.audit.list_all()
     receipts = await service.repos.receipts.list_all()
+    accounts = await service.repos.accounts.list_all()  # provider accounts (poll cursors)
+
+    supervisor = supervisor if supervisor is not None else get_worker_supervisor()
+    worker_heartbeat, last_successful_worker_cycle = _fleet_worker_liveness(supervisor, now)
+
+    # Durable-outbox lag: receipts parked at OUTBOX_ENQUEUED with the
+    # publication state still "enqueued" are canonical events written to the
+    # Bronze + event_outbox spine but not yet published by the supervised relay.
+    # A direct-publish deployment never passes through OUTBOX_ENQUEUED, so the
+    # count is 0 there — a real zero, not an unknown. None is never returned
+    # here because the receipt ledger is always readable; the honest-unknown
+    # path is reserved for worker liveness, which depends on an external handle.
+    outbox_lag = sum(
+        1 for r in receipts
+        if r.get("current_stage") == ReceiptStage.OUTBOX_ENQUEUED
+        and r.get("outbox_publication_state") == "enqueued"
+    )
+
+    # Fleet polling-cursor age per provider, derived from the durable
+    # provider-account ledgers (the stalest observed ``last_poll_at``).
+    cursor_age_by_provider = _fleet_cursor_age_by_provider(accounts, now)
 
     tenants_observed = sorted({s.get("tenant_id") for s in sessions if s.get("tenant_id")})
 
@@ -123,7 +269,10 @@ async def build_fleet_health(service: Any) -> FleetHealthResponse:
             ),
             reconciliation_matched_rate=_rate(matched, len(p_recons)),
             reconciliation_conflicts=conflicts,
-            polling_cursor_age_seconds=None,
+            polling_cursor_age_seconds=(
+                cursor_age_by_provider.get(name)
+                if adapter.polling_supported else None
+            ),
             provider_probe_status=None,
         ))
 
@@ -181,11 +330,20 @@ async def build_fleet_health(service: Any) -> FleetHealthResponse:
         reconciliation_conflicts=sum(p.reconciliation_conflicts for p in providers),
         oldest_incomplete_receipt_age_seconds=_age_seconds(oldest, now),
         canonical_backlog=len(incomplete),
-        outbox_lag=None,
+        outbox_lag=outbox_lag,
         repair_backlog=sum(1 for r in incomplete if int(r.get("repair_attempts", 0)) > 0),
         dead_lettered=dead_lettered,
-        worker_heartbeat=None,
-        last_successful_worker_cycle=None,
+        worker_heartbeat=worker_heartbeat,
+        last_successful_worker_cycle=last_successful_worker_cycle,
+    )
+
+    # Emit operator-surface gauges so a Grafana/Kyber fleet-health dashboard has
+    # a metric source, not just a JSON endpoint (unknown liveness stays absent).
+    _emit_fleet_gauges(
+        totals, providers,
+        worker_heartbeat=worker_heartbeat,
+        last_successful_worker_cycle=last_successful_worker_cycle,
+        now=now,
     )
 
     return FleetHealthResponse(

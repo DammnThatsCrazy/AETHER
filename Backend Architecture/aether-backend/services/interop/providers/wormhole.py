@@ -40,7 +40,8 @@ from eth_utils import keccak
 
 from services.integrations.connectors.base import ImplementationStatus
 from services.interop.foundation import utc_now_iso
-from services.interop.providers.base import InteropProviderAdapter
+from services.interop.providers.base import InteropProviderAdapter, OperationalFieldsMixin
+from services.interop.providers.transport import RpcRateLimited
 from shared.certification.descriptor import AdapterCertificationDescriptor
 from shared.certification.readiness import CredentialReadiness
 
@@ -66,13 +67,12 @@ _GUARDIAN_QUORUM = 13
 _GUARDIAN_SET_SIZE = 19
 
 
-class WormholeRateLimitError(Exception):
+class WormholeRateLimitError(RpcRateLimited):
     """Raised by an RPC/API client when a provider rate limit is hit. Carries an
     optional ``retry_after`` (seconds, int) the adapter surfaces via health."""
 
     def __init__(self, message: str = "rate limited", retry_after: Optional[int] = None) -> None:
-        super().__init__(message)
-        self.retry_after = retry_after
+        super().__init__(message, retry_after=retry_after)
 
 
 class RpcClient(Protocol):
@@ -238,7 +238,7 @@ def vaa_correlation_key(emitter_chain: int, emitter_address: str, sequence: int)
     return f"wh:{emitter_chain}/{addr}/{sequence}"
 
 
-class WormholeAdapter(InteropProviderAdapter):
+class WormholeAdapter(OperationalFieldsMixin, InteropProviderAdapter):
     provider_id = "wormhole"
     provider_kind = "wormhole"
     display_name = "Wormhole (guardian-VAA observation adapter)"
@@ -382,7 +382,7 @@ class WormholeAdapter(InteropProviderAdapter):
 
     # ── scanning ─────────────────────────────────────────────────────────────
 
-    async def scan(
+    async def _scan_cycle(
         self, checkpoint: Optional[dict[str, Any]] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Scan every configured chain from its checkpoint to head-minus-
@@ -433,6 +433,7 @@ class WormholeAdapter(InteropProviderAdapter):
         network_id = meta["network_id"]
         head = await self.rpc.get_head(network_id)
         head_number = int(head["number"])
+        state["head_number"] = head_number
         safe_head = head_number - self.confirmations
         last = int(state["last_scanned_block"])
         recent = state.setdefault("recent_hashes", {})
@@ -483,7 +484,7 @@ class WormholeAdapter(InteropProviderAdapter):
             window_to = min(cursor + self.max_block_span, safe_head)
             try:
                 raw_logs = await self.rpc.get_logs(network_id, cursor + 1, window_to)
-            except WormholeRateLimitError as exc:
+            except RpcRateLimited as exc:
                 health.append({"provider_id": self.provider_id, "network_id": network_id,
                                "state": "rate_limited", "retry_after": exc.retry_after,
                                "resumed_from_block": cursor})
@@ -492,7 +493,7 @@ class WormholeAdapter(InteropProviderAdapter):
                 raw_log.setdefault("network_id", network_id)
                 raw_log.setdefault("native_chain_id", meta["native_chain_id"])
                 raw_log.setdefault("wormhole_chain_id", chain_id)
-                decoded = self.decode_log(raw_log)
+                decoded = self._decode_safely(raw_log)
                 if decoded is None:
                     continue
                 observations.append(decoded)
@@ -514,7 +515,7 @@ class WormholeAdapter(InteropProviderAdapter):
             vaa_bytes = await self.guardian.get_signed_vaa(
                 emitter_chain, emitter_address, sequence,
             )
-        except WormholeRateLimitError as exc:
+        except RpcRateLimited as exc:
             health.append({"provider_id": self.provider_id, "state": "attestation_rate_limited",
                            "retry_after": exc.retry_after})
             return

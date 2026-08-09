@@ -367,6 +367,51 @@ class ServicePlan(BaseModel):
     active: bool = True
 
 
+# ─── Tenant Signer Authority ────────────────────────────────────────────
+
+class SignerRef(BaseModel):
+    """A tenant-scoped signer reference (public address only — never a key).
+
+    The signer authority is observation-only: it records and resolves which
+    addresses a tenant authorizes to present payment proofs / sign challenges,
+    but it holds NO private key material and performs NO signing. Only the
+    control plane may mutate commerce state.
+    """
+    signer_ref_id: str = Field(default_factory=lambda: _new_id("sgn"))
+    tenant_id: str
+    address: str  # public address (EVM hex or SVM base58)
+    chain: str = "eip155:8453"  # CAIP-2
+    label: str = ""
+    role: str = "payment"  # payment|challenge|observer
+    active: bool = True
+    added_by: str = "operator"
+    added_at: str = Field(default_factory=_now_iso)
+
+
+# ─── Commerce Metering ──────────────────────────────────────────────────
+
+class MeterRecord(BaseModel):
+    """One metering record for challenged/paid/entitled commerce usage.
+
+    Written by CommerceMeteringService at each control-plane stage so tenant
+    metering (which usage was challenged, which paid, which entitled) is
+    auditable and reconcilable against silver facts.
+    """
+    meter_record_id: str = Field(default_factory=lambda: _new_id("mtr"))
+    tenant_id: str
+    resource_id: str = ""
+    holder_id: str = ""
+    meter_type: str  # challenge_issued|payment_paid|access_granted|entitled
+    amount_usd: float = 0.0
+    chain: Optional[str] = None
+    asset_symbol: Optional[str] = None
+    challenge_id: Optional[str] = None
+    authorization_id: Optional[str] = None
+    entitlement_id: Optional[str] = None
+    observed_at: str = Field(default_factory=_now_iso)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 # ─── Explainability / Diagnostics ─────────────────────────────────────
 
 class LifecycleTrace(BaseModel):

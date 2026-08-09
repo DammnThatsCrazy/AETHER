@@ -1,6 +1,92 @@
 {
   "generated_from": "Backend Architecture/aether-backend/shared/certification/registry.py",
   "providers": {
+    "agentic_commerce:commerce": {
+      "adapter": "CommerceLifecycle",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "graph_consistency_check",
+        "lifecycle_reconciliation",
+        "rail_classification",
+        "supervised_workers",
+        "unsupported_reason",
+        "usage_metering"
+      ],
+      "domain": "agentic_commerce",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "commerce",
+      "required_credentials": [],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 3,
+      "streaming_model": "none",
+      "unsupported": []
+    },
+    "agentic_commerce:rewards_onchain_claim": {
+      "adapter": "OnchainClaimAdapter",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "claim_reconciliation",
+        "eip191_claim_proof",
+        "nonce_replay_guard",
+        "svm_claim_proof"
+      ],
+      "domain": "agentic_commerce",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "rewards_onchain_claim",
+      "required_credentials": [
+        "oracle_signer_key"
+      ],
+      "required_endpoints": [
+        "base_rpc_for_rewards",
+        "solana_rpc_for_rewards"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 3,
+      "streaming_model": "none",
+      "unsupported": [
+        "ach_live",
+        "bitcoin_claim_proof",
+        "card_surcharge",
+        "crypto_custody",
+        "wire_live"
+      ]
+    },
+    "agentic_commerce:x402": {
+      "adapter": "X402ControlPlane",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "approval_workflow",
+        "challenge_issue",
+        "entitlement_issue",
+        "grant_issue",
+        "onchain_verification",
+        "payment_authorization",
+        "policy_evaluation",
+        "settlement",
+        "usage_metering"
+      ],
+      "domain": "agentic_commerce",
+      "first_release": true,
+      "pagination_model": "cursor",
+      "provider": "x402",
+      "required_credentials": [
+        "commerce_rpc_access"
+      ],
+      "required_endpoints": [
+        "commerce_base_rpc",
+        "commerce_solana_rpc"
+      ],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 3,
+      "streaming_model": "none",
+      "unsupported": []
+    },
     "communications:braze": {
       "adapter": "BrazeConnector",
       "adapter_version": "1.0.0",
@@ -27,7 +113,7 @@
         "connector:{tenant}:braze"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -57,7 +143,7 @@
         "connector:{tenant}:customerio"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -90,7 +176,7 @@
         "connector:{tenant}:hubspot"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -123,7 +209,7 @@
         "connector:{tenant}:iterable"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -158,7 +244,7 @@
         "connector:{tenant}:klaviyo"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -184,7 +270,7 @@
         "connector:{tenant}:mailchimp"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -212,7 +298,7 @@
         "connector:{tenant}:postmark"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -242,7 +328,7 @@
         "connector:{tenant}:sendgrid"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": [
         "send",
@@ -270,7 +356,7 @@
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -296,7 +382,7 @@
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -320,7 +406,7 @@
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -347,7 +433,7 @@
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "websocket",
       "unsupported": []
     },
@@ -374,7 +460,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -401,7 +487,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -427,7 +513,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -452,7 +538,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -478,7 +564,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -502,7 +588,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -528,7 +614,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -554,7 +640,7 @@
         "payment_bridge"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": []
     },
@@ -579,7 +665,7 @@
         "payment_coinbase"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": []
     },
@@ -604,7 +690,7 @@
         "payment_moonpay"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": []
     },
@@ -629,7 +715,7 @@
         "payment_privy"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": []
     },
@@ -652,7 +738,7 @@
         "payment_stripe_onramp"
       ],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "webhook",
       "unsupported": []
     },
@@ -673,7 +759,7 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -694,13 +780,14 @@
       ],
       "secret_ref_names": [],
       "state": "credential_waiting",
-      "state_rank": 2,
+      "state_rank": 3,
       "streaming_model": "none",
       "unsupported": []
     }
   },
   "summary": {
     "by_domain": {
+      "agentic_commerce": 3,
       "communications": 8,
       "derivatives": 4,
       "interop": 7,
@@ -708,10 +795,10 @@
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 26
+      "credential_waiting": 29
     },
-    "first_release": 26,
-    "total": 26
+    "first_release": 29,
+    "total": 29
   },
   "version": "8.12.0"
 }

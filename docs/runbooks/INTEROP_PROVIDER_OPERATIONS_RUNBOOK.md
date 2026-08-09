@@ -43,8 +43,14 @@ Aether's job is honest evidence.
 1. Provider health shows checkpoints per provider. Lag beyond the
    confirmation horizon means scans aren't running.
 2. LayerZero requires `AETHER_INTEROP_LAYERZERO_ENABLED` + RPC
-   credentials; scaffolded providers refuse scans by design
-   (409 with an honest message) — that is not an incident.
+   credentials; a provider whose RPC client is not wired refuses scans by
+   design (the supervised worker reports `skipped`; the governed scan
+   endpoint answers 409 with an honest message) — that is not an incident,
+   it is the credential-gated guard.
+3. `GET /v1/admin/kyber/interop/providers/{provider_id}/operational` reads
+   `decode_failures`, `dead_letter_count`, `reconciliation_conflicts`, and
+   `latest_observation_at` from the persisted checkpoint — the first place
+   to look when lag is real.
 
 ## Reorg observed
 

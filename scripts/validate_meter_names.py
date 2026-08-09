@@ -131,6 +131,8 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "interop_observation_ingested",
     "interop_message_correlated",
     "interop_reconciliation_run",
+    # Payment-rail settlement reconciliation (services/integrations/providers/payment_rails/settlement.py)
+    "settlement_reconciliation_error_total",
     # Feeds / Dune
     "api_feeds_ingested",
     "api_feeds_duplicate",

@@ -451,22 +451,43 @@ AREAS: list[Area] = [
         "eliminated) → analyze (CSV/JSON/JSONL schema + PII/secret/identifier/"
         "governance detection) → map (source columns → 9 canonical primitives, "
         "structural + governance validation) → validate (dry-run, capped row errors, "
-        "governance review gate) → approve → commit. Commit stages every row to "
-        "Bronze (BronzeRepository, tagged by commit id) and upserts entity/identifier/"
-        "resource vertices + relationship edges into the graph with import_commit_id "
-        "lineage, idempotently, on the durable jobs platform (import.commit/replay). "
-        "Reversible: rollback revokes exactly the commit's edges + deletes its Bronze "
-        "rows (source bytes untouched); replay re-stages under a fresh commit. "
-        "TS⇄Python contract parity; direct-SQL BYTEA file store (DDL parity-tested); "
-        "tenant-isolated at the repo boundary; per-tenant concurrency cap; Kyber "
-        "operator console (/v1/kyber/imports) + IMPORT_FAILURES runbook. "
-        "Gaps: Silver import projector deferred; tenant-facing UI is a follow-on; "
+        "governance review gate) → approve → commit. A durable import-session state "
+        "machine (program sec16) carries the full lifecycle vocabulary "
+        "(CREATED/UPLOADED/VALIDATING/VALIDATED/REJECTED/NORMALIZING/COMMITTING/"
+        "PROJECTING/RECONCILING/COMPLETED/FAILED/DEAD_LETTERED/ROLLED_BACK) with "
+        "legal transitions; commit_import is resumable + idempotent (commit id "
+        "persisted on the session; Bronze/graph/commit-row upserts, so a crash "
+        "mid-commit restarts under the same id without duplicates or a silent "
+        "stop). FAILED and stranded-COMMITTING sessions are requeueable; a "
+        "session-level sweeper dead-letters budget-exhausted / hard-stranded "
+        "sessions; failure_reason + retry_count + accepted/rejected/duplicate/"
+        "quarantine counts + schema_version + source_checksum persist per session. "
+        "Commit stages every row to Bronze (BronzeRepository, tagged by commit id), "
+        "upserts entity/identifier/resource vertices + relationship edges into the "
+        "graph with import_commit_id lineage, and projects silver_import_facts "
+        "inline (import_projector.py) on the durable jobs platform "
+        "(import.commit/replay). Reversible: rollback revokes exactly the commit's "
+        "edges + deletes its Bronze rows (source bytes untouched); replay re-stages "
+        "under a fresh commit. TS⇄Python contract parity; direct-SQL BYTEA file "
+        "store (DDL parity-tested); tenant-isolated at the repo boundary; "
+        "per-tenant concurrency cap; Kyber operator console (/v1/kyber/imports: "
+        "timeline, detail, requeue, sweeper) + card-linked graph-projection "
+        "drain/reconcile/repair operator routes + IMPORT_FAILURES runbook. "
+        "Tenant-facing UI shipped (frontend/aether imports + frontend/kyber "
+        "imports-ops). "
+        "Gaps: reconciliation is provider-webhook-driven rather than a dedicated "
+        "session reconcile job; the TS frontend still consumes the legacy lowercase "
+        "status vocabulary (program states are authoritative on the session row); "
         "no production traffic at scale.",
         [
             "Backend Architecture/aether-backend/services/imports/",
             "Backend Architecture/aether-backend/services/imports/service.py",
             "Backend Architecture/aether-backend/services/imports/commit.py",
+            "Backend Architecture/aether-backend/services/imports/session_persistence.py",
             "Backend Architecture/aether-backend/services/imports/kyber_routes.py",
+            "Backend Architecture/aether-backend/services/card_linked_payments/import_session.py",
+            "Backend Architecture/aether-backend/services/card_linked_payments/projection_routes.py",
+            "Backend Architecture/aether-backend/services/silver/projectors/import_projector.py",
             "Backend Architecture/aether-backend/repositories/import_files.py",
             "packages/shared/imports.ts",
             "docs/source-of-truth/IMPORTS.md",
@@ -564,8 +585,9 @@ AREAS: list[Area] = [
         "run_certification executes offline checks (secret redaction, out-of-order, "
         "duplicate, idempotent replay, honest-status). build_capability_matrix resolves "
         "every provider's state FROM SOURCE (never assumed) into a deterministic, "
-        "byte-stable matrix. All 18 first-release providers (derivatives x4, interop x7, "
-        "payments x5, stablecoin-chain x2) currently resolve to CREDENTIAL_WAITING — "
+        "byte-stable matrix. All 29 first-release providers (agentic_commerce x3, "
+        "communications x8, derivatives x4, interop x7, payments x5, stablecoin-chain x2) "
+        "currently resolve to CREDENTIAL_WAITING — "
         "code-complete + infra-defined + credential-gated, NOT replay/sandbox/live "
         "validated. `make credentialless-certification-strict` fails if any first-release "
         "provider is below CREDENTIAL_WAITING or is SCAFFOLDED. Gap: the plane certifies "
@@ -781,9 +803,11 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "release-blocker",
-        "Economic domains have zero PARTNER_LIVE providers: all 18 first-release "
-        "providers resolve to CREDENTIAL_WAITING (code-complete, infra-defined, "
-        "credential-gated), none validated against a live endpoint",
+        "Economic domains have zero PARTNER_LIVE providers: all 29 first-release "
+        "providers (agentic_commerce x3, communications x8, derivatives x4, interop x7, "
+        "payments x5, stablecoin-chain x2) resolve to CREDENTIAL_WAITING "
+        "(code-complete, infra-defined, credential-gated), none validated against a live "
+        "endpoint",
         "provider certification plane",
         "Follow docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md: "
         "supply per-provider credentials/RPC, replay -> sandbox -> partner_live validate, "

@@ -114,3 +114,69 @@ class StablecoinGovernanceService:
             "raw_tenant_data_included": False,
         }
         return await self.market.insert(benchmark_id, record)
+
+
+class StablecoinEntitlementError(Exception):
+    """A tenant lacks the capability entitlement for the observation path.
+
+    Fail-closed: a missing entitlement is a typed denial, never an empty
+    healthy result.
+    """
+
+    def __init__(self, *, tenant_id: str, capability: str, reason: str) -> None:
+        self.tenant_id = tenant_id
+        self.capability = capability
+        self.reason = reason
+        super().__init__(
+            f"stablecoin entitlement denied: tenant={tenant_id} capability={capability} reason={reason}"
+        )
+
+
+class StablecoinEntitlementGuard:
+    """Enforce ``StablecoinCapabilityEntitlement`` on observation paths.
+
+    Composes the governance capability check with the optional tenant readiness
+    gate (support-state ladder). Denial is typed and fail-closed — the caller
+    records it as a blocked observation, never as healthy empty data.
+    """
+
+    def __init__(
+        self,
+        governance: StablecoinGovernanceService | None = None,
+        readiness_gate: Any = None,
+    ) -> None:
+        self.governance = governance or StablecoinGovernanceService()
+        self.readiness_gate = readiness_gate
+
+    def capability_allowed(
+        self,
+        granted: Iterable[str],
+        required: StablecoinCapabilityEntitlement = StablecoinCapabilityEntitlement.OBSERVATION,
+    ) -> dict[str, Any]:
+        return self.governance.capability_allowed(granted, required)
+
+    async def require_observation(
+        self,
+        *,
+        tenant_id: str,
+        granted_capabilities: Iterable[str],
+        deployment_id: str,
+        capability: StablecoinCapabilityEntitlement = StablecoinCapabilityEntitlement.OBSERVATION,
+    ) -> dict[str, Any]:
+        """Raise on entitlement or readiness denial; else return the grant."""
+        check = self.governance.capability_allowed(granted_capabilities, capability)
+        if not check["allowed"]:
+            raise StablecoinEntitlementError(
+                tenant_id=tenant_id, capability=capability.value, reason=check["reason"]
+            )
+        if self.readiness_gate is not None:
+            await self.readiness_gate.require_observation(
+                tenant_id=tenant_id, deployment_id=deployment_id
+            )
+        return {
+            "tenant_id": tenant_id,
+            "capability": capability.value,
+            "deployment_id": deployment_id,
+            "allowed": True,
+            "reason": "granted",
+        }

@@ -26,7 +26,7 @@ last_synced_commit: "41c79d4"
 | Graph contract (8 vertices, 82 edges, TS parity) | ✅ |
 | Derivatives runtime (FSMs, adapters, streams, reconciliation, P&L) | ✅ |
 | Stablecoin domain (registry, observations, valuation, finality, flows) | ✅ |
-| Interop domain + LayerZero V2 reference adapter + 6 scaffolds | ✅ |
+| Interop domain — all 7 adapters CREDENTIAL_GATED (fixture-proven decode + correlation, supervised scan worker, operational-state surface) | ✅ |
 | Silver/gold projections + Profile360 sub-resources | ✅ |
 | Noesis intents/adapters, OODA suggestion adapters, alert policies, metering | ✅ |
 | API mounting (6 flag-gated routers) | ✅ |
@@ -40,7 +40,7 @@ last_synced_commit: "41c79d4"
 | Live venue WebSocket adapters | Requires venue credentials | RELEASE_READINESS blockers |
 | LayerZero live scanning | Requires hosted RPC credentials | adapter is CREDENTIAL_GATED |
 | Chainlink price feeds for valuation | Requires feed credentials | valuation source CREDENTIAL_GATED |
-| 6 non-LayerZero providers | Scaffolds with documented topic refs | scaffold honesty test |
+| All 7 interop providers (incl. the 6 non-LayerZero) | CREDENTIAL_GATED with fixture-proven decode + correlation; live scanning requires wired per-network RPC clients | provider honesty test (no SCAFFOLDED, no fabricated PROVIDER_LIVE) |
 | Kafka topic provisioning | Infra change outside this repo | streams use local transport |
 | ClickHouse gold query tests | No ClickHouse in CI | TEST_EVIDENCE deferred list |
 | Staging soak / load / chaos | Requires staging environment | RELEASE_READINESS |

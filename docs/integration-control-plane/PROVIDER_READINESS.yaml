@@ -27,7 +27,7 @@ baseline:
   economic_first_release:        # derivatives x4, interop x7, payments x5, stablecoin-chain x2
     state: credential_waiting
     level: 3
-    note: "18 providers resolve to CREDENTIAL_WAITING; none partner_live, none scaffolded."
+    note: "29 providers resolve to CREDENTIAL_WAITING; none partner_live, none scaffolded."
   gateway_streaming_social:      # instagram, linkedin, youtube, spotify, tiktok, telegram
     state: credential_waiting
     level: 2

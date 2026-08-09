@@ -54,6 +54,35 @@ async def providers_health(request: Request):
     }
 
 
+@admin_router.get("/providers/{provider_id}/operational")
+async def provider_operational(provider_id: str, request: Request):
+    """One adapter's canonical operational fields: configured, credential_status,
+    reachable, latest_cursor, latest_observation_at, lag, decode_failures,
+    reorg_count, reconciliation_conflicts, dead_letter_count, last_success,
+    last_failure. Read from the persisted checkpoint (runtime telemetry survives
+    worker restarts); never a live network call."""
+    _gate(request)
+    if provider_id == "layerzero_v2":
+        require_flag(settings.interop.layerzero_enabled, "LayerZero adapter")
+    adapter = get_provider(provider_id)
+    if adapter is None:
+        raise HTTPException(status_code=404, detail=f"unknown provider: {provider_id}")
+
+    tenant = request.state.tenant
+    stored = await InteropProviderCheckpointRepo().find_one({
+        "tenant_id": tenant.tenant_id, "provider_id": provider_id, "network_id": "*",
+    })
+    evidence = (stored or {}).get("evidence") or None
+    operational = adapter.operational_state(evidence)
+    operational["last_scan_advanced_at"] = (stored or {}).get("advanced_at")
+    return {
+        "provider_id": provider_id,
+        "descriptor": adapter.descriptor(),
+        "operational": operational,
+        "checkpoint_present": stored is not None,
+    }
+
+
 @admin_router.get("/checkpoints")
 async def list_checkpoints(request: Request, limit: int = Query(default=100, ge=1, le=500)):
     _gate(request)

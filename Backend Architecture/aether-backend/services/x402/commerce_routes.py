@@ -36,6 +36,7 @@ from .resources import (
     get_resource_registry,
     seed_aether_native_resources,
 )
+from .signer_authority import SignerAuthority
 
 logger = get_logger("aether.service.x402.commerce_routes")
 router = APIRouter(prefix="/v1/x402", tags=["x402-commerce"])
@@ -578,6 +579,78 @@ async def revoke_entitlement(entitlement_id: str, request: Request, reason: str 
         return APIResponse(data=result.model_dump()).to_dict()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+# ─── Tenant Signer Authority (observation-only) ────────────────────────
+# Binds the tenant to the signer *references* authorized to present payment
+# proofs and sign x402 challenges on its behalf. Public addresses only —
+# Aether never holds private key material.
+
+signers_router = APIRouter(prefix="/v1/signers", tags=["signers"])
+
+
+class SignerRegisterBody(BaseModel):
+    address: str
+    chain: str = "eip155:8453"
+    label: str = ""
+    role: str = "payment"  # payment|challenge|observer
+
+
+class SignerDeactivateBody(BaseModel):
+    deactivated_by: str = "operator"
+
+
+@signers_router.get("")
+async def list_signers(request: Request, active: Optional[str] = None, role: Optional[str] = None):
+    """List the tenant's signer references (observation-only)."""
+    _require_perm(request, "x402:read")
+    authority = SignerAuthority()
+    items = await authority.list_signers(
+        _tenant_id(request),
+        active=None if active is None else (active.lower() == "true"),
+        role=role,
+    )
+    return APIResponse(data=[s.model_dump() for s in items]).to_dict()
+
+
+@signers_router.post("")
+async def register_signer(body: SignerRegisterBody, request: Request):
+    """Register a tenant-authorized signer reference (public address only)."""
+    _require_perm(request, "x402:write")
+    authority = SignerAuthority()
+    try:
+        ref = await authority.register_signer(
+            tenant_id=_tenant_id(request),
+            address=body.address,
+            chain=body.chain,
+            label=body.label,
+            role=body.role,
+        )
+        return APIResponse(data=ref.model_dump()).to_dict()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@signers_router.get("/authorized/{address}")
+async def is_authorized_signer(address: str, request: Request, role: Optional[str] = None):
+    """Fail-closed check: is this address a tenant-authorized signer?"""
+    _require_perm(request, "x402:read")
+    authority = SignerAuthority()
+    ok = await authority.is_authorized_signer(
+        _tenant_id(request), address, role=role
+    )
+    return APIResponse(data={"address": address, "authorized": ok}).to_dict()
+
+
+@signers_router.delete("/{signer_ref_id}")
+async def deactivate_signer(signer_ref_id: str, request: Request):
+    """Deactivate a signer reference (revocation; row retained for audit)."""
+    _require_perm(request, "x402:write")
+    authority = SignerAuthority()
+    updated = await authority.deactivate_signer(_tenant_id(request), signer_ref_id)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Signer reference not found")
+    return APIResponse(data=updated.model_dump()).to_dict()
 
 
 # ─── Diagnostics ───────────────────────────────────────────────────────

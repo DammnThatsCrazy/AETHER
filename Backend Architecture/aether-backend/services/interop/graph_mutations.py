@@ -123,7 +123,9 @@ def _edge(edge_type: str, from_vid: str, to_vid: str, tenant_id: str,
             edge_type=edge_type,
             from_vertex_id=from_vid,
             to_vertex_id=to_vid,
-            actor_kind="service",
+            # Graph write validator admits only agent|human|system; the
+            # interop intelligence plane is a system actor.
+            actor_kind="system",
             actor_id="interop_intelligence",
             provenance=_PROVENANCE,
             valid_from=utc_now_iso(),

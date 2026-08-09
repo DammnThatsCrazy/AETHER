@@ -284,12 +284,12 @@ class TestConversionEndpoint:
         await repo.upsert({
             "tenant_id": TENANT_ID, "campaign_id": CAMPAIGN_ID,
             "source_event_id": f"ev-mine-{uuid.uuid4()}", "conversion_type": "purchase",
-            "gross_value": 100.0, "occurred_at": _ts(),
+            "gross_value": 100.0, "currency": "USD", "occurred_at": _ts(),
         })
         await repo.upsert({
             "tenant_id": TENANT_ID, "campaign_id": other_campaign,
             "source_event_id": f"ev-other-{uuid.uuid4()}", "conversion_type": "purchase",
-            "gross_value": 999.0, "occurred_at": _ts(),
+            "gross_value": 999.0, "currency": "USD", "occurred_at": _ts(),
         })
 
         results = await repo.list_by_campaign(TENANT_ID, CAMPAIGN_ID, include_unattributed=True)

@@ -88,8 +88,12 @@ _PROOF_EXPIRY_SECONDS = int(os.environ.get("PROOF_EXPIRY_SECONDS", "3600"))
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _get_oracle_signer_key() -> str:
-    """Return the oracle signer private key with production safety guard."""
-    key = os.environ.get("ORACLE_SIGNER_KEY", "")
+    """Return the oracle signer private key with production safety guard.
+
+    ORACLE_SIGNER_KEY is canonical; the legacy ORACLE_SIGNER_PRIVATE_KEY name
+    remains honored as a fallback so existing deployments keep working.
+    """
+    key = os.environ.get("ORACLE_SIGNER_KEY") or os.environ.get("ORACLE_SIGNER_PRIVATE_KEY", "")
     env = os.getenv("AETHER_ENV", "local").lower()
 
     if not key:
@@ -1102,9 +1106,41 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                     extra={"last_delivery_error": delivery.error} if delivery.error else None,
                 )
 
-            # Extract proof for onchain_claim rail
+            # Extract proof for onchain_claim rail and persist it to the durable
+            # proof ledger with a nonce/replay guard: the same nonce is never
+            # issued twice, so the on-chain claim contract cannot be replayed.
             if decision.rail == "onchain_claim":
                 proof_dict = payload.get("proof")
+                if proof_dict and proof_dict.get("nonce"):
+                    from services.rewards.reconcile import (
+                        NonceReplayError,
+                        get_reward_claim_reconciler,
+                    )
+                    try:
+                        await get_reward_claim_reconciler().guard_and_persist_proof(
+                            tenant_id,
+                            {
+                                "decision_id": decision_id,
+                                "action_payload_id": action_id,
+                                "user": proof_dict.get("user"),
+                                "chain_id": proof_dict.get("chain_id"),
+                                "vm_type": proof_dict.get("vm_type", "evm"),
+                                "proof_format": proof_dict.get("proof_format", "eip191"),
+                                "message_hash": proof_dict.get("message_hash"),
+                                "signature": proof_dict.get("signature"),
+                                "amount_wei": proof_dict.get("amount_wei"),
+                                "status": "issued",
+                            },
+                            nonce=str(proof_dict.get("nonce")),
+                        )
+                    except NonceReplayError:
+                        # A proof with this nonce already exists (replay attempt or
+                        # idempotent retry) — surface the conflict instead of
+                        # silently double-issuing a claimable proof.
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"proof nonce {proof_dict.get('nonce')!r} is already used — replay blocked",
+                        )
 
         except RailUnavailableError as exc:
             logger.warning(f"Rail {exc.rail} unavailable: {exc.reason}")
@@ -1520,6 +1556,28 @@ async def create_receipt(request: Request, body: ReceiptCreate):
             logger.warning(f"receipt reservation lookup failed (non-fatal): {exc}")
         await _commit_reservation(res_id, tenant_id, "receipt.recorded")
 
+    # DURABLE SETTLEMENT EVIDENCE: every tenant-submitted execution receipt must
+    # leave an append-only audit trace (with bounded-retry + DLQ if the append
+    # fails) so the claim-reconciliation loop can prove settlement durably.
+    try:
+        from services.rewards.receipt_evidence import get_receipt_evidence_service
+        await get_receipt_evidence_service().record(
+            "settlement",
+            tenant_id=tenant_id,
+            receipt_id=receipt.get("id"),
+            rail=body.rail,
+            external_id=body.external_execution_id or receipt.get("id", ""),
+            status=body.status,
+            action_id=body.action_payload_id,
+            decision_id=body.decision_id,
+            proof_id=body.proof_id,
+            tx_hash=body.tx_hash,
+            chain_id=body.chain_id,
+            metadata={"provider": body.provider, "execution_mode": body.execution_mode},
+        )
+    except Exception as exc:  # noqa: BLE001 - evidence is never on the critical path
+        logger.warning(f"reward settlement receipt evidence record failed (non-fatal): {exc}")
+
     metrics.increment("rewards_receipts_created_total", labels={"rail": body.rail, "tenant_id": tenant_id})
     return receipt
 
@@ -1548,6 +1606,36 @@ async def get_receipt(request: Request, receipt_id: str):
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
     return await repos["receipts"].get(receipt_id, tenant_id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CLAIM RECONCILIATION ROUTES (durable proof ledger ↔ delivery receipts)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.post("/claims/reconcile", response_model=None)
+@api_response
+async def reconcile_claims(request: Request, limit: int = Query(200, ge=1, le=1000)):
+    """Trigger claim reconciliation: tie confirmed delivery receipts to
+    on-chain claim proofs and mark proofs used (single-use replay guard).
+
+    Idempotent: re-running is a no-op for receipts already reconciled.
+    """
+    _require_permission(request, "rewards:write")
+    tenant_id = _get_tenant_id(request)
+    from services.rewards.reconcile import get_reward_claim_reconciler
+    summary = await get_reward_claim_reconciler().reconcile_tenant(tenant_id, limit=limit)
+    metrics.increment("rewards_claim_reconcile_requests", labels={"tenant_id": tenant_id})
+    return summary
+
+
+@router.get("/claims/reconcile/status", response_model=None)
+@api_response
+async def claim_reconcile_status(request: Request):
+    """Operator-facing snapshot of proof ledger vs receipt state for a tenant."""
+    _require_permission(request, "rewards:read")
+    tenant_id = _get_tenant_id(request)
+    from services.rewards.reconcile import get_reward_claim_reconciler
+    return await get_reward_claim_reconciler().claim_reconciliation_status(tenant_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1876,13 +1964,32 @@ async def redeliver_action(request: Request, action_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# LEGACY COMPATIBILITY ROUTES (local/test mode)
+# LEGACY COMPATIBILITY ROUTES (local/test mode only)
 # ═══════════════════════════════════════════════════════════════════════════
+
+def _legacy_mode() -> bool:
+    """True when the in-memory RewardQueue legacy surface is available."""
+    return os.getenv("AETHER_ENV", "local").lower() in ("local", "test")
+
+
+def _require_legacy_mode() -> None:
+    """Fail closed: legacy in-memory queue endpoints must never serve prod."""
+    if not _legacy_mode():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Legacy in-memory reward queue endpoints are only available in "
+                "local/test mode; use the durable proof/action/receipt API in "
+                "non-local environments"
+            ),
+        )
+
 
 @router.get("/queue/stats", response_model=None)
 @api_response
 async def queue_stats():
     """Return current reward queue statistics (legacy local-mode endpoint)."""
+    _require_legacy_mode()
     return _queue.get_stats()
 
 
@@ -1890,6 +1997,7 @@ async def queue_stats():
 @api_response
 async def get_user_rewards(address: str):
     """Return all rewards for a given wallet address (legacy local-mode endpoint)."""
+    _require_legacy_mode()
     rewards = _queue.get_user_rewards(address)
     return [r.to_dict() for r in rewards]
 
@@ -1898,6 +2006,7 @@ async def get_user_rewards(address: str):
 @api_response
 async def process_queue():
     """Trigger processing of pending rewards in the queue (legacy local-mode endpoint)."""
+    _require_legacy_mode()
     results = await _queue.process_all()
     return {"processed": len(results), "results": [r.to_dict() for r in results]}
 
@@ -1906,6 +2015,7 @@ async def process_queue():
 @api_response
 async def get_reward_proof(reward_id: str):
     """Retrieve proof for a queued reward (legacy local-mode endpoint)."""
+    _require_legacy_mode()
     reward = _queue.get_reward(reward_id)
     if reward.proof is None:
         raise HTTPException(

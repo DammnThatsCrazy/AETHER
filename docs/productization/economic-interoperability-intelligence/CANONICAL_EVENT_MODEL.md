@@ -35,5 +35,11 @@ Rules:
   (`services/silver/projectors/registry_handles.py`) — adding an event
   to a family automatically routes it; a cross-cutting test asserts
   every declared `silverProjection` token maps to a registered projector.
-- Metering uses ONLY the 8 canonical meter names validated by
+- Metric-name metering uses ONLY canonical names validated by
   `scripts/validate_meter_names.py` against `MeteringEventType`.
+- Billable usage additionally records `metering_evidence.usage_dimension`
+  rows; the interop dimensions are canonical in `services/interop/metering.py`
+  (`interop_observations_ingested`, `interop_messages_correlated`,
+  `interop_reconciliation_runs`, `interop_security_policy_snapshots`,
+  `interop_provider_cycles`) and are dedupe-safe on checkpoint replay — a
+  re-run of the same checkpoint is recorded non-billable.

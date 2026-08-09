@@ -62,7 +62,8 @@ from typing import Any, Optional, Protocol
 
 from services.integrations.connectors.base import ImplementationStatus
 from services.interop.foundation import utc_now_iso
-from services.interop.providers.base import InteropProviderAdapter
+from services.interop.providers.base import InteropProviderAdapter, OperationalFieldsMixin
+from services.interop.providers.transport import RpcRateLimited
 
 # CometBFT/IBC event types.
 EVT_SEND_PACKET = "send_packet"
@@ -86,7 +87,7 @@ DEFAULT_MAX_HEIGHTS_PER_SCAN = 500
 _RECENT_HASHES_KEPT = 64
 
 
-class RateLimited(Exception):
+class RateLimited(RpcRateLimited):
     """Raised by the injected RPC client on RPC throttling; scan resumes."""
 
 
@@ -124,7 +125,7 @@ def parse_attributes(event: dict[str, Any]) -> dict[str, str]:
     return attributes
 
 
-class IbcAdapter(InteropProviderAdapter):
+class IbcAdapter(OperationalFieldsMixin, InteropProviderAdapter):
     provider_id = "ibc"
     provider_kind = "ibc"
     display_name = "IBC (CometBFT packet-lifecycle observation adapter)"
@@ -255,7 +256,7 @@ class IbcAdapter(InteropProviderAdapter):
 
     # ── scanning ────────────────────────────────────────────────────────────
 
-    async def scan(
+    async def _scan_cycle(
         self, checkpoint: Optional[dict[str, Any]] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Walk CometBFT block_results per height from the checkpoint to the
@@ -286,6 +287,7 @@ class IbcAdapter(InteropProviderAdapter):
             )
             status = await self.rpc.get_status(chain_id)
             latest_height = int(status["latest_block_height"])
+            state["head_number"] = latest_height
             safe_head = latest_height - self.finality_depth
             last = int(state["last_scanned_height"])
 
@@ -322,7 +324,7 @@ class IbcAdapter(InteropProviderAdapter):
                     recent[str(height)] = block.get("block_hash", "")
                     _prune_recent(recent)
                     height += 1
-            except RateLimited:
+            except RpcRateLimited:
                 pass
             state["recent_hashes"] = recent
 
@@ -348,7 +350,7 @@ class IbcAdapter(InteropProviderAdapter):
                     "event_index": event_index,
                 }
                 event_index += 1
-                decoded = self.decode_log(raw)
+                decoded = self._decode_safely(raw)
                 if decoded:
                     observations.append(decoded)
 

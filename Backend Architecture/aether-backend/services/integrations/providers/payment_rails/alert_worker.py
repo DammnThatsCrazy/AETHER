@@ -37,6 +37,10 @@ from services.integrations.providers.payment_rails.alert_eval import (
     AlertSeverity,
     evaluate_payment_rail_alerts,
 )
+from services.integrations.providers.payment_rails.lifecycle import (
+    rollout_control_permitted,
+)
+from services.integrations.providers.payment_rails.models import utc_now_iso
 
 logger = get_logger("aether.payment_rails.alert_worker")
 
@@ -63,6 +67,16 @@ async def run_alert_eval_cycle(*, service: Optional[Any] = None) -> AlertReport:
     only metrics + logs; never mutates payment state. ``service`` is injectable
     so tests exercise this against a seeded in-memory service with no globals.
     """
+    # Lifecycle gate: the derived-condition evaluator is a rollout control. It
+    # may only emit when its flag is on AND the payment-rails capability
+    # lifecycle stage is at/above the control's minimum. When the stage is not
+    # declared the gate fails open to the flag, so an un-declared deployment is
+    # byte-for-byte unchanged. Blocked → emit an empty report (never run the
+    # evaluator): observability must not silently go dark when demoted, it must
+    # report "no data".
+    if not await rollout_control_permitted("derived_alert_evaluator"):
+        return AlertReport(conditions=(), generated_at=utc_now_iso())
+
     report = await evaluate_payment_rail_alerts(service=service)
 
     # One labelled gauge per condition so each derived signal is independently

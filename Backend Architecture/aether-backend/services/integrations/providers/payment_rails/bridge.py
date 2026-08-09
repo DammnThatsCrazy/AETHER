@@ -41,6 +41,19 @@ class BridgeAdapter(PaymentRailAdapter):
     webhook_supported = True
     polling_supported = True
     default_rail = "bridge"
+    # SOURCE OF TRUTH — Bridge webhook signature scheme.
+    #
+    # Bridge sends ``X-Webhook-Signature`` headers shaped ``t=<unix>,v0=<hex>``
+    # (per Bridge's webhook docs), but the EXACT signed-payload construction is
+    # UNCONFIRMED against a live Bridge sandbox on this branch. Rather than
+    # fabricate a ``bridge_compound`` scheme whose digest we cannot golden-vector,
+    # the adapter HONESTLY declares the generic ``timestamped_hex`` placeholder
+    # (``HMAC-SHA256(secret, f"{ts}.{raw_body}")`` with the timestamp supplied
+    # out-of-band). ``native_signature_scheme()`` returns this same declaration,
+    # so what Bridge DECLARES is exactly what the verifier DOES — there is no
+    # declaration/behavior drift. The moment a live Bridge test vector confirms
+    # the ``t=,v0=`` compound construction, this becomes ``bridge_compound`` and
+    # a golden-vector test is added in ``signature_verify.py``.
     signature_scheme = "timestamped_hex"
 
     # Pull path — Bridge virtual-account activity history, cursor-paginated.

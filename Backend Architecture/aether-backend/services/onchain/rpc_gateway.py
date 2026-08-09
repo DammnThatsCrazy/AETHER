@@ -46,6 +46,11 @@ class RPCGateway:
         # scoping) uses ITS paired key verbatim — even None, meaning "no key" —
         # so a tenant endpoint is NEVER sent with the global key. No endpoint
         # (the default) uses the global config pair (identity behavior).
+        # ``_explicit_endpoint`` distinguishes a tenant-scoped gateway (an
+        # explicit (endpoint, key) pair) from the DEFAULT gateway that uses the
+        # global config pair. The default gateway reports scope/fingerprint
+        # ``global`` even when the config endpoint resolves to an empty string.
+        self._explicit_endpoint = endpoint is not None
         if endpoint is not None:
             self._endpoint = endpoint
             self._api_key = api_key
@@ -58,6 +63,10 @@ class RPCGateway:
         self._cache: dict[str, Any] = {}
         self._connected = False
         self._rate_lock = asyncio.Lock()
+        self._credential_fingerprint = self._compute_fingerprint(
+            self._endpoint if self._explicit_endpoint else None,
+            self._api_key if self._explicit_endpoint else None,
+        )
 
     @staticmethod
     async def resolve_tenant_rpc_endpoint(
@@ -114,6 +123,58 @@ class RPCGateway:
         self._connected = False
         self._cache.clear()
         logger.info("RPC Gateway closed")
+
+    # ── credential rotation seam (tenant BYOK) ──────────────────────────────
+
+    @staticmethod
+    def _compute_fingerprint(endpoint: Optional[str], api_key: Optional[str]) -> str:
+        """Deterministic, secret-free id of the active (endpoint, key) pair.
+
+        A credential rotation changes this fingerprint; callers compare it over
+        time to detect that an in-flight gateway is holding a stale credential.
+        """
+        if endpoint is None:
+            return "global"
+        material = f"{endpoint}::{api_key or ''}"
+        return hashlib.sha256(material.encode()).hexdigest()[:16]
+
+    @property
+    def credential_fingerprint(self) -> str:
+        """The id of the credential pair currently in force (``global`` when the
+        gateway is not tenant-scoped). Changes on every credential rotation."""
+        return self._credential_fingerprint
+
+    @property
+    def credential_scope(self) -> str:
+        """``tenant`` when the gateway holds an explicit (endpoint, key) pair,
+        ``global`` when it uses the global config pair (identity behavior)."""
+        return "tenant" if self._explicit_endpoint else "global"
+
+    async def refresh_credentials(
+        self, endpoint: Optional[str], api_key: Optional[str]
+    ) -> str:
+        """Rotate the gateway's credential pair and return the new fingerprint.
+
+        Atomic: the (endpoint, key) pair is always replaced together — a tenant
+        endpoint is NEVER paired with a different key. When the pair actually
+        changes, the read cache is cleared so no stale response is served from
+        an earlier credential; unchanged credentials are a no-op. Passing
+        ``(None, None)`` reverts to the global config pair (scope ``global``).
+        """
+        new_fingerprint = self._compute_fingerprint(endpoint, api_key)
+        changed = new_fingerprint != self._credential_fingerprint
+        self._endpoint = endpoint
+        self._api_key = api_key
+        self._explicit_endpoint = endpoint is not None
+        self._credential_fingerprint = new_fingerprint
+        if changed:
+            self._cache.clear()
+            self._request_times = []
+            logger.info(
+                f"RPC Gateway credentials rotated | scope={self.credential_scope} "
+                f"fingerprint={new_fingerprint}"
+            )
+        return new_fingerprint
 
     async def execute(
         self,
@@ -219,4 +280,6 @@ class RPCGateway:
             "total_requests": self._request_count,
             "cache_size": len(self._cache),
             "x402_enabled": self._config.x402_enabled,
+            "credential_scope": self.credential_scope,
+            "credential_fingerprint": self._credential_fingerprint,
         }

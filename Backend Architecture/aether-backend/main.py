@@ -348,6 +348,14 @@ from services.data_quality import (
 
 from services.kyber_operator.routes import router as kyber_operator_router
 
+# Credential-turnkey closure surfaces (build-wave output; all self-gating).
+from services.readiness_graph.routes import (
+    router as readiness_graph_router,
+    kyber_router as readiness_graph_kyber_router,
+)
+from services.kyber.aggregate import router as kyber_aggregate_router
+from services.rewards.operator_routes import router as rewards_operator_router
+
 # Kyber workforce plane — Olympus operator identity, BYOD device trust, durable
 # sessions and purpose-bound tenant access scopes. Each router carries its own
 # /v1/kyber prefix; do not add another here.
@@ -648,6 +656,77 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "(set KYBER_MISSION_MONITORING_ENABLED=true to enable)"
         )
 
+    # ── Credential-turnkey background loops (flag-gated, default OFF) ──────
+    # Independent asyncio background tasks (NOT WorkerSpec-supervised workers —
+    # specs.py drives those). Refs are kept on app.state and cancelled during
+    # shutdown below. Each loop fails open per-tick and survives a bad cycle.
+    app.state.credential_turnkey_tasks: list[asyncio.Task] = []
+
+    # Commerce settlement/approval/entitlement/reconciliation sweepers.
+    if settings.ig.enable_x402_layer or settings.ig.enable_commerce_layer:
+        from services.commerce.workers import launch_commerce_workers
+
+        app.state.credential_turnkey_tasks.extend(
+            launch_commerce_workers(
+                settlement_interval_s=30,
+                approval_interval_s=60,
+                entitlement_interval_s=120,
+                reconciliation_interval_s=300,
+            )
+        )
+        logger.info(
+            "Commerce sweepers launched (settlement/approval/entitlement/reconciliation, "
+            "x402_or_commerce_layer enabled)"
+        )
+
+    # Rewards claim reconciliation (per default tenant).
+    if settings.rewards.claim_reconciliation_enabled:
+        from services.rewards.reconcile import get_reward_claim_reconciler
+
+        _claim_tenant_id = os.getenv("DEFAULT_TENANT_ID", "tenant_local_dev")
+        _reconcile_loop = get_reward_claim_reconciler().build_reconcile_loop(
+            _claim_tenant_id, interval_s=300
+        )
+        app.state.credential_turnkey_tasks.append(asyncio.create_task(_reconcile_loop()))
+        logger.info("Rewards claim reconciliation loop started (tenant=%s)", _claim_tenant_id)
+
+    # Rewards abandoned-reservation release.
+    if settings.rewards.reservation_release_enabled:
+        from services.rewards.reservation_release import get_reservation_release_service
+
+        _release_loop = get_reservation_release_service().build_release_loop(
+            ttl_seconds=settings.rewards.reservation_ttl_seconds,
+        )
+        app.state.credential_turnkey_tasks.append(asyncio.create_task(_release_loop()))
+        logger.info(
+            "Rewards reservation release loop started (ttl=%ss)",
+            settings.rewards.reservation_ttl_seconds,
+        )
+
+    # Rewards receipt-evidence retry.
+    if settings.rewards.receipt_evidence_enabled:
+        from services.rewards.receipt_evidence import get_receipt_evidence_service
+
+        _evidence_loop = get_receipt_evidence_service().build_evidence_loop()
+        app.state.credential_turnkey_tasks.append(asyncio.create_task(_evidence_loop()))
+        logger.info("Rewards receipt-evidence retry loop started")
+
+    # Worker-supervisor → reliability registry heartbeat bridge.
+    if settings.runtime.worker_heartbeat_bridge_enabled:
+        from services.reliability.service import run_worker_heartbeat_bridge_loop
+
+        app.state.credential_turnkey_tasks.append(
+            asyncio.create_task(
+                run_worker_heartbeat_bridge_loop(
+                    interval_seconds=settings.runtime.worker_heartbeat_bridge_interval_seconds
+                )
+            )
+        )
+        logger.info(
+            "Worker heartbeat bridge loop started (interval=%ss)",
+            settings.runtime.worker_heartbeat_bridge_interval_seconds,
+        )
+
     from services.demo_seed.startup import maybe_seed_demo_on_start
 
     if await maybe_seed_demo_on_start(app, environment=settings.env.value):
@@ -673,6 +752,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await _mission_monitor_task
         except asyncio.CancelledError:
             pass
+    # Cancel the credential-turnkey background loops.
+    _cred_tasks = getattr(app.state, "credential_turnkey_tasks", [])
+    for _cred_task in _cred_tasks:
+        _cred_task.cancel()
+    if _cred_tasks:
+        await asyncio.gather(*_cred_tasks, return_exceptions=True)
     if supervisor is not None:
         await supervisor.stop_all()
     # Stop the local in-memory bus pump before the registry closes so no
@@ -713,6 +798,33 @@ def _mount_demo_seed_routes(app: FastAPI, environment: str) -> None:
         app.include_router(build_demo_seed_mutation_router())
 
 
+def _build_credential_authority_health_router():
+    """Ops health probe for the durable provider-credential authority.
+
+    Ops-scoped (Kyber operator gate — Olympus ops identity), never tenant-admin.
+    Returns CredentialAuthority.health(), which reports reachability + durable
+    backend + aggregate counts by environment/lifecycle state and NEVER exposes
+    secret material (see services/providers/credentials/authority.py).
+    """
+    from fastapi import APIRouter, Depends
+
+    from services.security.request_context import require_kyber_operator
+
+    _router = APIRouter(
+        prefix="/v1/ops/providers/credentials",
+        tags=["Ops — Credential Authority"],
+        dependencies=[Depends(require_kyber_operator)],
+    )
+
+    @_router.get("/health", response_model=dict)
+    async def credential_authority_health_probe() -> dict:
+        from services.providers.credentials.authority import credential_authority_health
+
+        return await credential_authority_health()
+
+    return _router
+
+
 def create_app() -> FastAPI:
     _docs = None if settings.is_production else "/docs"
     _redoc = None if settings.is_production else "/redoc"
@@ -749,6 +861,12 @@ def create_app() -> FastAPI:
 
     # ── Auth / Logging / Rate Limit / Error Handling Middleware ────
     register_middleware(app)
+
+    # ── Observability trace middleware ──────────────────────────────
+    # Registered AFTER register_middleware so the dispatch has
+    # request.state.tenant available for auto-record trace attribution.
+    from services.diagnostics.observability_middleware import register_observability_middleware
+    register_observability_middleware(app)
 
     # ── Mount all 17 core service routers ──────────────────────────
     app.include_router(gateway_router)
@@ -906,6 +1024,19 @@ def create_app() -> FastAPI:
     app.include_router(dsr_propagation_router)     # /v1/dsr — DSR propagation records + impact indexes
     app.include_router(tenant_readiness_router)    # /v1/tenant/readiness — launch readiness + trust states
     app.include_router(metering_evidence_router)   # /v1/metering/evidence — usage metering evidence
+
+    # ── Credential-turnkey closure surfaces ────────────────────────────────
+    # Readiness Graph: tenant-scoped capability graph + operator overlay
+    # (both self-gating via require_permission('read')/tenant_actor and
+    # require_kyber_operator respectively).
+    app.include_router(readiness_graph_router)          # /v1/tenant/readiness-graph (tenant)
+    app.include_router(readiness_graph_kyber_router)    # /v1/kyber/readiness-graph (operator)
+    # Kyber fleet aggregate (operator-gated inside the handler).
+    app.include_router(kyber_aggregate_router)          # /v1/kyber/aggregate/fleet
+    # Rewards operator surfaces (/v1/admin/kyber/rewards/health, /tenants/{id}/...).
+    app.include_router(rewards_operator_router)
+    # Ops health probe for the durable credential authority (ops-scoped).
+    app.include_router(_build_credential_authority_health_router())  # GET /v1/ops/providers/credentials/health
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
@@ -1089,9 +1220,16 @@ def create_app() -> FastAPI:
 
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router
-        from services.x402.challenge_middleware import register_challenge_middleware
         app.include_router(x402_router)
-        register_challenge_middleware(app)
+        # Challenge middleware is gated by COMMERCE_ENABLE_CHALLENGE_MIDDLEWARE
+        # (default OFF): the flag was previously undefined so the call no-oped;
+        # making it explicit keeps the off-default and the mount opt-in.
+        if ig.commerce_enable_challenge_middleware:
+            from services.x402.challenge_middleware import register_challenge_middleware
+            register_challenge_middleware(app)
+            logger.info("Intelligence Graph: x402 challenge middleware enabled")
+        else:
+            logger.info("Intelligence Graph: x402 challenge middleware disabled (COMMERCE_ENABLE_CHALLENGE_MIDDLEWARE=false)")
         logger.info("Intelligence Graph: x402 Interceptor service (L3b) mounted")
 
         # Agentic Commerce control plane (L3b+) — mounted alongside legacy capture.
@@ -1100,11 +1238,13 @@ def create_app() -> FastAPI:
             approvals_router,
             entitlements_router,
             diagnostics_router as commerce_diag_router,
+            signers_router,
         )
         app.include_router(commerce_cp_router)
         app.include_router(approvals_router)
         app.include_router(entitlements_router)
         app.include_router(commerce_diag_router)
+        app.include_router(signers_router)  # /v1/signers — x402 authorized signers
         logger.info("Intelligence Graph: Agentic Commerce control plane (L3b+) mounted")
 
     # ── Suggestion Intelligence (OODA) ────────────────────────────────────
@@ -1233,7 +1373,11 @@ def create_app() -> FastAPI:
         )
     if card_linked_flags.enabled or card_linked_flags.kyber_enabled:
         from services.card_linked_payments.kyber_routes import card_linked_kyber_router
+        from services.card_linked_payments.projection_routes import (
+            router as card_linked_projection_router,
+        )
         app.include_router(card_linked_kyber_router)
+        app.include_router(card_linked_projection_router)  # /v1/kyber/card-linked/graph-projection drain/reconcile/repair
         logger.info(
             "Card-Linked Payment Rails: Kyber diagnostics mounted "
             "(/v1/admin/kyber/payment-rails/card-linked)"

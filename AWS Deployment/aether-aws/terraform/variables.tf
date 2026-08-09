@@ -247,6 +247,23 @@ variable "msk_broker_volume_size" {
   default     = 100
 }
 
+# Kafka topic provisioning (used only when enable_msk, i.e. the profile also
+# declares auto.create.topics.enable=false). These match the MSK cluster's own
+# num.partitions / default.replication.factor in modules/msk so the provisioned
+# topics inherit the broker defaults by construction.
+
+variable "kafka_topic_partitions" {
+  type        = number
+  description = "Partition count for each provisioned Kafka topic"
+  default     = 3
+}
+
+variable "kafka_topic_replication_factor" {
+  type        = number
+  description = "Replication factor for each provisioned Kafka topic (must be <= MSK broker_count)"
+  default     = 3
+}
+
 # --------------------------------------------------------------------------
 # ECS / Compute
 # --------------------------------------------------------------------------
@@ -338,6 +355,38 @@ variable "neptune_cluster_size" {
   type        = number
   description = "Number of Neptune cluster instances (1 writer + N-1 readers)"
   default     = 1
+}
+
+# --------------------------------------------------------------------------
+# ClickHouse (analytics backend for production-scale / enterprise-isolated)
+# --------------------------------------------------------------------------
+
+# The clickhouse root module is count-gated on local.enable_clickhouse, so
+# these variables are only consumed by profiles that actually declare
+# analytics: clickhouse. No default enables the appliance by accident: it stays
+# absent unless the profile selects it, and the AMI id is a region-pinned
+# Amazon Linux 2023 image (override per region via clickhouse_ami_id).
+
+variable "clickhouse_ami_id" {
+  type        = string
+  description = <<-EOT
+    Amazon Linux 2023 AMI id for the ClickHouse appliance. Defaults to a
+    us-east-1 AL2023 image; override per region (e.g. via a map lookup keyed on
+    var.aws_region) so the appliance tracks the deployment region.
+  EOT
+  default     = "ami-066784287e314f8f2"
+}
+
+variable "clickhouse_instance_type" {
+  type        = string
+  description = "EC2 instance type for the ClickHouse appliance"
+  default     = "m6i.large"
+}
+
+variable "clickhouse_data_volume_size" {
+  type        = number
+  description = "Dedicated ClickHouse data volume size in GiB"
+  default     = 100
 }
 
 # --------------------------------------------------------------------------

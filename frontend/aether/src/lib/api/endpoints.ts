@@ -2096,4 +2096,15 @@ export const api = {
       `/v1/client-sync${buildQS({ cursor, limit })}`,
       wrap(clientSyncResponseSchema),
     ).then(r => r.data as ClientSyncResponse),
+
+  // ─── Tenant Launch Readiness + Trust States (tenant-scoped) ────────────────
+  readiness: {
+    /** Latest recorded launch-readiness snapshot (all-pending when not yet recorded). */
+    snapshot: () =>
+      restClient.get('/v1/tenant/readiness', wrap(unknownSchema)).then(r => r.data),
+
+    /** Trust states derived from the tenant's current readiness signals. */
+    trustStates: () =>
+      restClient.get('/v1/tenant/readiness/trust-states', wrap(unknownSchema)).then(r => r.data),
+  },
 };

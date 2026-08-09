@@ -16,6 +16,7 @@ inside the method, so module import stays offline-safe). A source raises
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Mapping, Optional
 
@@ -44,6 +45,7 @@ class StreamResult:
     gaps_recovered: int = 0
     completed: bool = False
     disconnected_out: bool = False
+    cancelled: bool = False
     emitted_events: list[dict] = field(default_factory=list)
 
 
@@ -80,6 +82,7 @@ class ReconnectingStream:
         gap_threshold: int = 3,
         sleeper: Optional[Callable[[float], Awaitable[Any]]] = None,
         reconnect_backoff: float = 0.0,
+        should_stop: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._factory = source_factory
         self._venue_id = venue_id
@@ -91,6 +94,8 @@ class ReconnectingStream:
         self._max_reconnects = max(0, int(max_reconnects))
         self._sleeper = sleeper
         self._reconnect_backoff = float(reconnect_backoff)
+        self._should_stop = should_stop
+        self._last_result: Optional[StreamResult] = None
         self.tracker = SequenceTracker(
             venue_id,
             market_id,
@@ -100,36 +105,82 @@ class ReconnectingStream:
             gap_threshold=gap_threshold,
         )
 
+    @property
+    def last_cursor(self) -> Optional[int]:
+        """The next contiguous provider sequence — the restart/resume cursor.
+
+        After a clean completion, a disconnect, or a cooperative shutdown this
+        is exactly where a restart should resume from (at-least-once: the
+        boundary sequence is re-fetched and deduped downstream).
+        """
+        return self.tracker.expected_next
+
+    @property
+    def last_result(self) -> Optional[StreamResult]:
+        """The most recent run's partial/final result (available after a
+        ``CancelledError`` too, so a supervisor can persist evidence)."""
+        return self._last_result
+
     async def run(self, *, resume_cursor: Optional[int] = None) -> StreamResult:
         """Consume the stream to completion, reconnecting on disconnects.
 
         ``resume_cursor`` is the next contiguous sequence to resume from (e.g.
         a persisted checkpoint). Returns a :class:`StreamResult` aggregating
         accepted messages, reconnect count, and gap statistics.
+
+        Production behavior:
+        * Cooperative shutdown — when ``should_stop()`` returns True the run
+          finishes the current frame, marks ``result.cancelled`` and returns
+          promptly (a supervisor can persist the partial cursor + gap evidence).
+        * Cancellation — an ``asyncio.CancelledError`` closes the frame source,
+          records the partial result on :attr:`last_result`, marks
+          ``result.cancelled`` and re-raises, so task cancellation is never
+          swallowed and the restart cursor is never lost.
+        * Restart-from-cursor — the caller reads :attr:`last_cursor` after any
+          exit and resumes a fresh run with ``resume_cursor=last_cursor``.
         """
         result = StreamResult()
         cursor = resume_cursor
-        while True:
-            source = self._factory(cursor)
-            try:
-                async for frame in source:
-                    self._consume(frame, result)
-                result.completed = True
-                break
-            except StreamDisconnect:
-                # Recoverable drop: resume from the next contiguous sequence.
-                cursor = self.tracker.expected_next
-                if result.reconnects >= self._max_reconnects:
-                    result.disconnected_out = True
+        try:
+            while True:
+                source = self._factory(cursor)
+                try:
+                    async for frame in source:
+                        self._consume(frame, result)
+                        if self._should_stop is not None and self._should_stop():
+                            result.cancelled = True
+                            break
+                    else:
+                        result.completed = True
+                        break
+                    # Cooperative shutdown (or a source that ended while the
+                    # stop flag flipped): no more frames to consume.
+                    if result.completed:
+                        break
+                except StreamDisconnect:
+                    # Recoverable drop: resume from the next contiguous sequence.
+                    cursor = self.tracker.expected_next
+                    if result.reconnects >= self._max_reconnects:
+                        result.disconnected_out = True
+                        break
+                    result.reconnects += 1
+                    if self._sleeper is not None and self._reconnect_backoff:
+                        await self._sleeper(self._reconnect_backoff * result.reconnects)
+                    continue
+                finally:
+                    aclose = getattr(source, "aclose", None)
+                    if callable(aclose):
+                        await aclose()
+                if result.cancelled or result.disconnected_out or result.completed:
                     break
-                result.reconnects += 1
-                if self._sleeper is not None and self._reconnect_backoff:
-                    await self._sleeper(self._reconnect_backoff * result.reconnects)
-                continue
-            finally:
-                aclose = getattr(source, "aclose", None)
-                if callable(aclose):
-                    await aclose()
+        except asyncio.CancelledError:
+            result.cancelled = True
+            self._finalize(result)
+            raise
+        self._finalize(result)
+        return result
+
+    def _finalize(self, result: StreamResult) -> None:
         result.emitted_events = list(self.tracker.emitted_events)
         result.gaps_detected = sum(
             1
@@ -141,7 +192,7 @@ class ReconnectingStream:
             for event in self.tracker.emitted_events
             if event["event_name"] == "derivatives_stream_gap_recovered"
         )
-        return result
+        self._last_result = result
 
     def _consume(self, frame: Mapping[str, Any], result: StreamResult) -> None:
         sequence = self._sequence_of(frame)

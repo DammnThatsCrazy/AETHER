@@ -39,7 +39,7 @@ promotion criterion by design:
   deployment. Inert code carries no production traffic, so it cannot lift an area
   toward 5 (production + scale ready).
 - **No live provider added.** None of the waves validates an economic provider
-  against a live endpoint. The 18 first-release providers remain
+  against a live endpoint. The 29 first-release providers remain
   `CREDENTIAL_WAITING`, so no economic domain moves.
 - **Tested against in-memory / local fallbacks.** Consistent with the scorecard's
   standing rule, code tested only against fallbacks is capped at release-ready

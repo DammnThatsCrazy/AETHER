@@ -93,6 +93,11 @@ class AgenticEconomicResponse(BaseModel):
     service_call_count: Optional[int] = None
     roi: Optional[float] = None
     settlement_success_rate: Optional[float] = None
+    # Native per-currency spend (never mixed) + explicit conversion warnings.
+    # ``spend`` carries the FX-converted USD total; when any currency is
+    # unpriced ``spend.usd_amount`` is None and the reason is listed here.
+    spend_by_currency: Optional[dict[str, EconomicAmountResponse]] = None
+    spend_conversion_warnings: Optional[list[str]] = None
 
 
 class CampaignEconomicResponse(BaseModel):
@@ -146,6 +151,95 @@ def _get_tenant_id(request: Request) -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _aggregate_spend(spend_by_currency: dict[str, Any]) -> tuple[
+    Optional[EconomicAmountResponse],
+    dict[str, EconomicAmountResponse],
+    list[str],
+]:
+    """Aggregate native per-currency spend into a labeled USD total.
+
+    Never sums mixed native currencies into one scalar (program sec19):
+    - per-currency native amounts are returned verbatim;
+    - the USD total is computed by converting EACH currency through the FX seam
+      (``services/value/fx_provider`` snapshot);
+    - a currency with no available rate is flagged and excluded from the total
+      — if ANY currency is unpriced, ``spend.usd_amount`` is None so an
+      incomplete total is never presented as a complete one.
+    """
+    from decimal import Decimal as _Decimal
+
+    from services.value import fx_provider as _fx  # noqa: F401  (registers snapshot)
+    from services.value.price_sources import price as _price
+
+    per_currency: dict[str, EconomicAmountResponse] = {}
+    usd_total = _Decimal("0")
+    priced_any = False
+    unpriced: list[str] = []
+
+    for currency, amount_value in spend_by_currency.items():
+        try:
+            amount = _Decimal(str(amount_value))
+        except Exception:
+            continue  # skip unparseable amounts
+        per_currency[currency] = EconomicAmountResponse(
+            native_amount=float(amount),
+            native_currency=currency,
+            price_source="aether_intent_aggregation",
+        )
+        valuation = _price(amount, currency)
+        if valuation is None or valuation.get("usd_value") is None:
+            unpriced.append(currency)
+            continue
+        usd_total += _Decimal(str(valuation["usd_value"]))
+        per_currency[currency].usd_amount = float(valuation["usd_value"])
+        priced_any = True
+
+    warnings: list[str] = []
+    if unpriced:
+        warnings.append(
+            "FX rate unavailable for currency(ies) "
+            f"{', '.join(sorted(set(unpriced)))} — USD total is incomplete"
+        )
+
+    if not per_currency:
+        return None, {}, warnings
+
+    # A converted total is only trustworthy when every currency priced.
+    spend = EconomicAmountResponse(
+        usd_amount=float(usd_total) if priced_any and not unpriced else None,
+        normalized_amount=float(usd_total) if priced_any and not unpriced else None,
+        normalized_currency="USD",
+        native_currency=None,
+        price_source="aether_intent_aggregation_fx",
+    )
+    return spend, per_currency, warnings
+
+
+def _spend_rows_to_usd_total(rows: list[dict[str, Any]]) -> Decimal:
+    """Convert a list of spend rows to a single USD total via each row's
+    recorded ``exchange_rate`` (program sec19).
+
+    ``total_cost`` is the row's NATIVE amount; the USD total is
+    ``total_cost * exchange_rate`` per row — never a raw sum of mixed native
+    currencies. A row not normalized to USD raises: un-normalized money is
+    never silently summed (callers surface the error loudly).
+    """
+    from decimal import Decimal as _Decimal
+
+    total = _Decimal("0")
+    for row in rows:
+        amount = _Decimal(str(row.get("total_cost") or "0"))
+        norm = str(row.get("normalized_currency") or "USD").strip().upper()
+        if norm != "USD":
+            raise ValueError(
+                f"spend row {row.get('spend_record_id')!r} is normalized to "
+                f"{norm!r}, not USD — refusing to total mixed currencies"
+            )
+        rate = _Decimal(str(row.get("exchange_rate") or "1"))
+        total += amount * rate
+    return total
 
 
 # ── Profile-scoped routes ────────────────────────────────────────────
@@ -238,17 +332,16 @@ async def get_entity_agentic_economic(
         trust = composed.get("trust", {})
         behavioral = composed.get("behavioral", {})
 
-        # Aggregate spend_by_currency into a single normalized USD amount
+        # Aggregate spend_by_currency per-currency (never mixed) into a labeled
+        # FX-converted USD total. spend.usd_amount is None when any currency is
+        # unpriced — an incomplete total is never presented as a complete one.
         spend_by_currency: dict = economic.get("spend_by_currency", {})
-        total_spend_usd = sum(float(v) for v in spend_by_currency.values() if v)
-        spend_response = EconomicAmountResponse(
-            usd_amount=round(total_spend_usd, 4),
-            native_currency="USD",
-            price_source="aether_intent_aggregation",
-        ) if total_spend_usd else None
+        spend_response, per_currency, conv_warnings = _aggregate_spend(spend_by_currency)
 
         response = AgenticEconomicResponse(
             spend=spend_response,
+            spend_by_currency=per_currency or None,
+            spend_conversion_warnings=conv_warnings or None,
             service_call_count=behavioral.get("execution_count") or economic.get("payment_intent_count"),
             settlement_success_rate=trust.get("settlement_reliability"),
         )
@@ -409,11 +502,13 @@ async def get_tenant_economic_overview(
         spend_repo = SpendRepository()
         conv_repo = ConversionRepository()
 
-        # Aggregate spend across all campaigns for the tenant
+        # Aggregate spend across all campaigns for the tenant. Each row's
+        # native total_cost is converted to USD via its recorded exchange_rate
+        # — never a raw sum of mixed native currencies (program sec19).
         spend_rows = await spend_repo.list_by_tenant(
             tenant_id, period_start=period_start, limit=5000
         )
-        total_spend = sum((Decimal(str(r.get("total_cost") or "0")) for r in spend_rows), Decimal("0"))
+        total_spend = _spend_rows_to_usd_total(spend_rows)
 
         # Aggregate attributed revenue across all conversions
         conversions = await conv_repo.list_by_tenant(

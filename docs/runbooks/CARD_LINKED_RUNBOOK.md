@@ -47,6 +47,20 @@ only and never reads tenant-authorized provider evidence.
 2. When enabled, Gold materialization is best-effort and periodic; a single
    failed cycle is retried next sweep and should not be hand-repaired.
 
+## Tenant import stuck / failed mid-import
+
+Tenant imports run through the canonical import-session FSM
+(`services/card_linked_payments/import_session.py` +
+`services/imports/session_persistence.py`): `CREATED → UPLOADED → VALIDATING →
+VALIDATED → NORMALIZING → COMMITTING → PROJECTING → RECONCILING → COMPLETED`,
+with `REJECTED`, `FAILED` (retryable), `DEAD_LETTERED`, and `ROLLED_BACK`
+terminals. `COMMITTING` is re-entrant — a crash mid-commit is resumed by a
+restart or operator requeue, never re-staged from scratch. A session dead-letters
+only after its retry budget is exhausted or it strands in an in-flight state past
+the hard deadline (`sweep_stranded_sessions`). Inspect the session's
+`failure_reason` / `retry_count` and the `import.commit` job timeline before
+requeueing.
+
 ## Never do
 
 - Never enable card-linked flags in production without a tenant-authorized

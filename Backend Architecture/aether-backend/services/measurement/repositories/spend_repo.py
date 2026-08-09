@@ -28,13 +28,22 @@ class SpendRepository:
         return await get_pool()
 
     async def upsert(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Insert or update spend record. ON CONFLICT updates mutable spend columns."""
+        """Insert or update spend record. ON CONFLICT updates mutable spend columns.
+
+        Currency is REQUIRED — there is no silent USD default (program sec19).
+        ``billing_currency`` is resolved to ``normalized_currency=USD`` via the
+        FX seam (``services/value/fx_provider`` snapshot); a non-USD currency
+        without an available rate raises instead of being recorded 1:1.
+        """
         row.setdefault("spend_record_id", str(uuid4()))
         row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
-        row.setdefault("billing_currency", "USD")
-        row.setdefault("normalized_currency", "USD")
-        row.setdefault("exchange_rate", "1.0")
         row.setdefault("schema_version", 1)
+
+        billing_currency = row.get("billing_currency")
+        norm_currency, exchange_rate = normalize_currency_for_usd(billing_currency)
+        row["billing_currency"] = billing_currency
+        row["normalized_currency"] = norm_currency
+        row["exchange_rate"] = str(exchange_rate)
 
         key = row.get("idempotency_key")
         if not key:
@@ -176,16 +185,20 @@ class SpendRepository:
         period_end: Optional[datetime] = None,
         currency: str = "USD",
     ) -> Decimal:
-        """Sum normalized total_cost for a campaign within a period."""
+        """Sum USD-normalized total_cost for a campaign within a period.
+
+        Each row's native ``total_cost`` is converted to USD via its recorded
+        ``exchange_rate`` (rows written since sec19 always carry a correct
+        rate). A row normalized to anything other than USD raises — mixed or
+        un-normalized money is never silently summed.
+        """
         rows = await self.list_by_campaign(
             tenant_id, campaign_id,
             period_start=period_start,
             period_end=period_end,
             limit=10000,
         )
-        return sum(
-            (_to_decimal(r.get("total_cost")) or Decimal("0")) for r in rows
-        )
+        return sum((_usd_total_cost(r) for r in rows), Decimal("0"))
 
     async def reconciliation_report(
         self,
@@ -206,9 +219,7 @@ class SpendRepository:
             ps = r.get("period_start")
             if ps:
                 day_key = str(ps)[:10]
-                by_day[day_key] = by_day.get(day_key, Decimal("0")) + (
-                    _to_decimal(r.get("total_cost")) or Decimal("0")
-                )
+                by_day[day_key] = by_day.get(day_key, Decimal("0")) + _usd_total_cost(r)
 
         return {
             "tenant_id": tenant_id,
@@ -275,6 +286,63 @@ class SpendRepository:
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+def normalize_currency_for_usd(billing_currency: Any) -> tuple[str, Decimal]:
+    """Resolve ``billing_currency`` to ``(normalized_currency, exchange_rate)``.
+
+    Invariants (program sec19):
+    - Currency is REQUIRED — a missing/empty value raises instead of silently
+      defaulting to USD.
+    - USD is the identity base (rate 1.0) — no FX needed.
+    - A non-USD currency is resolved through the FX snapshot seam
+      (``services/value/fx_provider``). No available rate raises — a non-USD
+      amount is NEVER recorded as a silent 1:1 USD amount.
+    """
+    norm = str(billing_currency or "").strip().upper()
+    if not norm:
+        raise ValueError(
+            "billing_currency is required for money records — refusing to "
+            "default to USD"
+        )
+    if norm == "USD":
+        return "USD", Decimal("1")
+    return "USD", _usd_rate_for(norm)
+
+
+def _usd_rate_for(currency: str) -> Decimal:
+    """USD value of one unit of ``currency`` via the FX snapshot seam."""
+    # Importing fx_provider registers the snapshot PriceProvider with
+    # services.value.price_sources (self-registering module). Lazy so the
+    # dependency only activates when a non-USD amount is actually converted.
+    from services.value import fx_provider as _fx  # noqa: F401  (registers snapshot)
+    from services.value.price_sources import price
+
+    valuation = price(Decimal("1"), currency)
+    if valuation is None or valuation.get("usd_value") is None:
+        raise ValueError(
+            f"No FX rate available for currency {currency!r} — refusing to "
+            "record a silent 1:1 USD normalization"
+        )
+    return Decimal(str(valuation["usd_value"]))
+
+
+def _usd_total_cost(row: dict[str, Any]) -> Decimal:
+    """Convert a row's native ``total_cost`` to USD via its recorded rate.
+
+    Raises when the row is not normalized to USD (mixed/un-normalized money is
+    never silently summed). A USD-normalized row with no rate is treated as
+    identity (legacy rows always carried rate 1.0).
+    """
+    amount = _to_decimal(row.get("total_cost")) or Decimal("0")
+    norm = str(row.get("normalized_currency") or "USD").strip().upper()
+    if norm != "USD":
+        raise ValueError(
+            f"spend row {row.get('spend_record_id')!r} is normalized to {norm!r}, "
+            "not USD — refusing to total mixed currencies"
+        )
+    rate = _to_decimal(row.get("exchange_rate"))
+    return amount * rate if rate is not None else amount
+
 
 def _to_decimal(value: Any) -> Optional[Decimal]:
     if value is None:

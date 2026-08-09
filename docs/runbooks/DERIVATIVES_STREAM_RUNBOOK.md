@@ -23,8 +23,19 @@ detection/recovery, reconnect). For projection-vs-snapshot variance triage see
 `docs/runbooks/DERIVATIVES_RECONCILIATION_RUNBOOK.md`.
 
 The four venue adapters (Hyperliquid, dYdX, GMX, Drift) are `CREDENTIAL_WAITING`
-and the stream currently runs on the local transport — Kafka topics are not
-provisioned, so there are zero `PARTNER_LIVE` venues.
+(credential readiness; implementation status `CREDENTIAL_GATED`) and the stream
+currently runs on the local transport — the Kafka topics they would stream to
+are **declared** in the broker-free declarative contract
+(`services/derivatives/topic_contract.py`:
+`DERIVATIVES_TOPIC_CONTRACTS`, per-topic partitions/retention/DLQ/consumer
+ownership, validated by `assert_valid_topic_contracts`) but are **not
+provisioned** in this environment, so there are zero `PARTNER_LIVE` venues.
+Two new preconditions gate a live stream: the read-only credential resolver
+(`services/derivatives/credentials.py` —
+`resolve_read_only_credential` rejects mutating/expired/revoked scopes) and the
+entitlement gate (`services/derivatives/guards.py` —
+`require_derivatives_entitlement`, fail-closed until a resolver is installed).
+Until both are wired, no venue may be promoted to live.
 
 ## Stream gap detected (`derivatives_stream_gap_detected`)
 
@@ -54,6 +65,10 @@ provisioned, so there are zero `PARTNER_LIVE` venues.
 - Never hand-edit fills, positions, or sequence state.
 - Never enable venue adapters without read-only credentials and a validated
   staging stream (see `CREDENTIAL_WAITING_PROMOTION_GUIDE`).
+- Never bypass the derivatives entitlement gate
+  (`require_derivatives_entitlement`) or the read-only credential resolver —
+  a tenant without `derivatives.enabled` entitlement is denied by design
+  (fail-closed) until a real resolver is installed.
 
 See also: `docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md`,
 `docs/runbooks/DERIVATIVES_RECONCILIATION_RUNBOOK.md`,

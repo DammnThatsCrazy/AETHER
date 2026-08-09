@@ -23,13 +23,20 @@ plan access mirroring the existing premium-vertical pattern.
 
 ## Metering
 
-Nine canonical meters (validated by `scripts/validate_meter_names.py`
-against `MeteringEventType`):
-`stablecoin_observation_ingested`, `stablecoin_flow_materialized`,
+The economic domains meter through `scripts/validate_meter_names.py`-validated
+metric names AND billable `metering_evidence.usage_dimension` records
+(`services/metering_evidence/`). Stablecoin / derivatives / payment-rail metric
+names: `stablecoin_observation_ingested`, `stablecoin_flow_materialized`,
 `derivatives_event_ingested`, `derivatives_reconciliation_run`,
-`derivatives_stream_gap_detected`, `interop_observation_ingested`,
-`interop_message_correlated`, `interop_reconciliation_run`,
-`payment_rail_observation_ingested`.
+`derivatives_stream_gap_detected`, `payment_rail_observation_ingested`.
+
+Interop billable usage dimensions (canonical in `services/interop/metering.py`,
+recorded as `metering_evidence.usage_dimension` values, dedupe-safe on
+checkpoint replay):
+`interop_observations_ingested`, `interop_messages_correlated`,
+`interop_reconciliation_runs`, `interop_security_policy_snapshots`,
+`interop_provider_cycles`.
+
 Emission is best-effort at intake/materialization/run sites and never
 blocks the request path — the payment-rail and stablecoin observation
 meters are default-off, accept-then-meter, and fail-open (a metering-store

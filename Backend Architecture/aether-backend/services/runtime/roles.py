@@ -132,19 +132,44 @@ CONSUMER_ROLES: frozenset[str] = frozenset(
 # identity/graph/measurement therefore need no artificial loop spec here.
 ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "outbox-relay": frozenset({"notification_outbox", "event_outbox_relay"}),
-    "stream-worker": frozenset({"event_replay", "dune_polling"}),
+    # Provider-truth polling ingestion rides the stream worker alongside the
+    # Dune poller: these loops pull external provider/chain state into the
+    # canonical observation spine, they are not materialization/reconciliation.
+    "stream-worker": frozenset(
+        {
+            "event_replay",
+            "dune_polling",
+            "stablecoin_provider_polling",
+            "interop_scan",
+        }
+    ),
     "identity-worker": frozenset(),
     # The Kyber Graph projector consumes the graph mutation ledger into platform
-    # topology. It is the first loop spec this role owns; the role was otherwise
-    # consumer-attached only.
-    "graph-writer": frozenset({"kyber_graph_projector"}),
+    # topology, and the card-linked graph outbox projects card-linked ingestion
+    # through the same mutation gateway. Both are graph projection sinks, so
+    # both are owned here.
+    "graph-writer": frozenset({"kyber_graph_projector", "card_linked_graph_outbox"}),
     "measurement-worker": frozenset(),
     # Stream consumer is owned by consumer_specs.py; Phase B adds replay/reconciler
     # supervised loop specs here.
     "semantic-worker": frozenset(),
+    # Materialization / reconciliation / repair loops: the payment-rail
+    # observability cluster (sync, canonical repair, derived-condition alert
+    # eval, settlement reconciliation), storage-plane compaction, the
+    # derivatives venue reconciliation sweep, x402 settlement reconciliation,
+    # and the shared dead-letter requeue sweeper.
     "materializer": frozenset(
-        {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
-         "bronze_object_compaction"}
+        {
+            "export_expiry_sweep",
+            "payment_rail_sync",
+            "payment_canonical_repair",
+            "payment_alert_eval",
+            "bronze_object_compaction",
+            "derivatives_venue_sweep",
+            "x402_reconciliation",
+            "settlement_reconciliation",
+            "dead_letter_sweeper",
+        }
     ),
     "maintenance": frozenset(
         {
@@ -170,6 +195,25 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # above rather than justifying a runtime role of its own. Not
             # graph-writer: it reads no ledger.
             "kyber_incident_correlation",
+            # Durable reward-delivery outbox drain: same maintenance posture as
+            # delivery_worker / webhook_inbox — a drain loop that idles when the
+            # rewards job table is empty, owned by no execution surface.
+            "reward_delivery_outbox",
+            # Credential-authority expiry/overlap sweep: tombstones rotation
+            # overlaps whose bounded window expired. A sweep, so it rides
+            # maintenance like retention_sweep.
+            "credential_expiry_sweep",
+            # Capability-readiness revalidation: periodically revalidates that
+            # declared platform capabilities are still ready and marks stale
+            # ones down. A readiness staleness sweep, so it rides maintenance.
+            "readiness_revalidation",
+            # Reward budget reservation release + claim reconciliation +
+            # receipt evidence: reward lifecycle maintenance loops (expired
+            # reservations, claim-state drift, durable receipt-evidence retry)
+            # with no execution surface of their own.
+            "reward_reservation_release",
+            "reward_claim_reconciliation",
+            "reward_receipt_evidence",
         }
     ),
 }

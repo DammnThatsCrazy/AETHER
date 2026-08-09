@@ -88,7 +88,7 @@ The four P0 release-blockers (`scripts/production_status.py`):
    exists but is not stood up; production secrets are not loaded.
 3. **Agent Layer hosted mode requires durable storage.** In-memory fallback is
    blocked in hosted modes; needs Redis-or-equivalent provisioned.
-4. **Zero PARTNER_LIVE providers.** All 18 first-release providers resolve to
+4. **Zero PARTNER_LIVE providers.** All 29 first-release providers resolve to
    `CREDENTIAL_WAITING` — code-complete, infra-defined, credential-gated, none
    validated against a live endpoint. Economic domains cannot carry real traffic
    without at least one validated live provider per enabled domain.

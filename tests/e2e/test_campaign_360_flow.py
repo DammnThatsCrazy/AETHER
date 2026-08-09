@@ -118,6 +118,7 @@ class TestScenarioAMultiChannelFlow:
                 "conversion_type": "purchase",
                 "gross_value": 300.0,
                 "net_value": 250.0,
+                "currency": "USD",
                 "occurred_at": _ts(),
             }
         )

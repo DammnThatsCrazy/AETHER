@@ -831,3 +831,66 @@ groups:
         annotations:
           summary: "Payment outbox relay claiming rows but publishing none"
           description: "The transactional outbox relay has claimed rows without publishing any for 15m — canonical payment event delivery is stalled."
+
+      # Derived-condition severity gauge emitted by the in-process alert
+      # evaluator (services/integrations/providers/payment_rails/alert_worker.py):
+      # payment_rail_alert_condition_severity{condition=...} encodes ok=0,
+      # unknown=1, warning=2, critical=3 per derived condition key
+      # (reconciliation-conflict backlog, provider silence, backlog growth).
+      # unknown (1) is deliberately NOT alerting — "no data" is graphed as its
+      # own distinct signal but is not an action item. Any condition at/above
+      # warning means the evaluator classified a real degradation the absolute
+      # PromQL rules cannot see (e.g. a conflict backlog with no counter).
+      - alert: PaymentRailDerivedCondition
+        expr: max by (condition) (payment_rail_alert_condition_severity) >= 2
+        for: 15m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Payment-rail derived condition {{ $labels.condition }} is warning/critical"
+          description: "Derived condition `{{ $labels.condition }}` severity is {{ $value }} (2=warning, 3=critical). Inspect the payment-rails observability dashboard."
+
+      - alert: PaymentRailDerivedConditionCritical
+        expr: max by (condition) (payment_rail_alert_condition_severity) >= 3
+        for: 5m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Payment-rail derived condition {{ $labels.condition }} is critical"
+          description: "Derived condition `{{ $labels.condition }}` is CRITICAL (severity {{ $value }}). Immediate operator attention required."
+
+      # Fleet aggregate severity (payment_rail_alert_worst_severity): the
+      # evaluator's worst severity across ALL derived conditions in the last
+      # cycle. A critical aggregate means at least one condition is critical —
+      # but unlike the per-condition rule above this fires on the aggregate
+      # series, so a graph/alerts consumer that only watches the fleet gauge is
+      # covered too.
+      - alert: PaymentRailWorstSeverityCritical
+        expr: payment_rail_alert_worst_severity >= 3
+        for: 5m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Payment-rail derived-condition fleet severity is CRITICAL"
+          description: "The fleet worst-severity gauge ({{ $value }}; 3=critical) indicates at least one derived condition is critical. Inspect the payment-rails observability dashboard."
+
+      # The derived-condition evaluator heartbeat is the single source that
+      # emits payment_rail_alert_condition_severity / _alerts_firing /
+      # _worst_severity. If that supervised worker dies, every derived signal
+      # goes silent AND no condition rule above can fire — a present-but-inert
+      # evaluator is exactly the failure mode alert_worker.py exists to prevent.
+      # absent(...) fires when the series disappears for 15m (≥ the worker's
+      # 5m cadence), so an operator is paged the moment derived alerting stops,
+      # not when the next incident arrives.
+      - alert: PaymentRailAlertEvaluatorDown
+        expr: absent(payment_rail_alert_eval_heartbeat)
+        for: 15m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Payment-rail derived-condition alert evaluator is not running"
+          description: "payment_rail_alert_eval_heartbeat has been absent for 15m — the derived reconciliation-conflict / provider-silence / backlog-growth evaluator is not emitting. All derived-condition alerts are blind until it resumes."

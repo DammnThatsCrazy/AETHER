@@ -6173,3 +6173,742 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: billable_usage_summaries
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: capability_readiness
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_approvals
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_assets
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_authorizations
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_budget_policies
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_challenges
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_entitlements
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_facilitators
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_fulfillments
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_grants
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_metering
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_policies
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_receipts
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_resources
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_settlements
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_signer_refs
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: commerce_treasuries
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: invoice_previews
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: metering_evidence
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: payment_rail_provider_accounts
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: payment_rail_receipts
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: payment_rail_reconciliation_records
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: revenue_leakage_signals
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: reward_budget_ledger
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: reward_budget_reservations
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: reward_delivery_jobs
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: reward_evidence_outbox
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: reward_external_audit_evidence
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: reward_reservation_release_jobs
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: security_audit_events
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: security_policy_decisions
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: tenant_contract_profiles
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: tenant_entitlements
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: tenant_launch_readiness
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: usage_metering_events
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Credential-turnkey BaseRepository JSONB table (alembic 20260901_credential_turnkey_tables). Generic operational store:
+  # postgres-authoritative, no projection, standard retention, hard-delete
+  # on tenant erasure. Not consent-derived and not permission-hash gated.
+  - resource_type: value_created_events
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false

@@ -134,3 +134,16 @@ class LifecycleEngine:
             "execution_by_aether": False,
         }
         return LifecycleResult(True, incoming_status, "applied", record)
+
+
+def build_interop_scan_coro(*args, **kwargs):
+    """Durable interop scan-loop coroutine (runtime worker registry entry).
+
+    Consumed by ``services/runtime/specs.py`` under the ``interop_scan`` spec,
+    gated on ``settings.interop.adapters_enabled``. Defined in
+    :mod:`services.interop.scan_worker`; re-exported here (lazily) so the
+    runtime spec's import path stays stable without a module-level import cycle
+    (scan_worker -> correlation -> lifecycle).
+    """
+    from services.interop.scan_worker import build_interop_scan_coro as _builder
+    return _builder(*args, **kwargs)

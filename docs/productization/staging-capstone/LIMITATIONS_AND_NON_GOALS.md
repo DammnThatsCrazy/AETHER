@@ -20,7 +20,7 @@ credential-waiting / pilot-ready — NOT production-ready**.
 
 ## Current limitations (things we intend to do, not done yet)
 
-- **No live economic provider.** All 18 first-release providers are
+- **No live economic provider.** All 29 first-release providers are
   `credential_waiting`: code-complete and credential-gated, none validated
   against a live endpoint. See `PROVIDER_CAPABILITY_MATRIX_GUIDE.md`.
 - **No mainnet smart-contract deployment.** Blocked pending external audit

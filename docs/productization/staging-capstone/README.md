@@ -15,7 +15,7 @@ toc_depth: 2
 
 This directory is the operating documentation for the state AETHER reached
 across the staging-readiness PR series (1–6): canonicalization, the
-credentialless certification plane, all 18 first-release providers at
+credentialless certification plane, all 29 first-release providers at
 `CREDENTIAL_WAITING`, security correctness fixes, durable budget/outbox, and the
 supervised agent real seam with approval invariants.
 

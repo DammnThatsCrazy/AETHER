@@ -264,6 +264,98 @@ def _resolve_stablecoin_chain() -> list[AdapterCertificationDescriptor]:
     return descriptors
 
 
+def _resolve_agentic_commerce() -> list[AdapterCertificationDescriptor]:
+    """x402 / commerce / rewards descriptors — the agentic-commerce domain.
+
+    Honest, evidence-based states:
+        - x402 control plane: code complete (challenge → authorize → verify →
+          settle → entitle → grant), infra defined (durable store + RPC
+          endpoints declared), credential-gated (needs configured commerce
+          RPC endpoints) → CREDENTIAL_WAITING.
+        - commerce lifecycle (rail matrix, reconciliation, metering, supervised
+          workers): code complete, infra defined, no external credential
+          (reads the durable store + Silver) → CREDENTIAL_WAITING.
+        - rewards onchain_claim: EVM proofs production-shaped and SVM proofs
+          wired (sandbox bucket per the rail matrix); signer-key credential
+          required → CREDENTIAL_WAITING.
+
+    Nothing here claims sandbox_validated or above without live-credential
+    evidence, per the readiness honesty rules.
+    """
+    waiting_state = ReadinessDimensions.derive(
+        code_complete=True, infra_defined=True, credential_required=True
+    ).state
+
+    return [
+        AdapterCertificationDescriptor(
+            provider="x402",
+            domain="agentic_commerce",
+            adapter="X402ControlPlane",
+            adapter_version="0.1.0",
+            supported_operations=[
+                "challenge_issue",
+                "policy_evaluation",
+                "payment_authorization",
+                "approval_workflow",
+                "onchain_verification",
+                "settlement",
+                "entitlement_issue",
+                "grant_issue",
+                "usage_metering",
+            ],
+            required_credentials=["commerce_rpc_access"],
+            required_endpoints=["commerce_base_rpc", "commerce_solana_rpc"],
+            pagination_model="cursor",
+            streaming_model="none",
+            implementation_state=waiting_state,
+            first_release=True,
+        ),
+        AdapterCertificationDescriptor(
+            provider="commerce",
+            domain="agentic_commerce",
+            adapter="CommerceLifecycle",
+            adapter_version="0.1.0",
+            supported_operations=[
+                "rail_classification",
+                "unsupported_reason",
+                "lifecycle_reconciliation",
+                "graph_consistency_check",
+                "usage_metering",
+                "supervised_workers",
+            ],
+            pagination_model="none",
+            streaming_model="none",
+            implementation_state=waiting_state,
+            first_release=True,
+        ),
+        AdapterCertificationDescriptor(
+            provider="rewards_onchain_claim",
+            domain="agentic_commerce",
+            adapter="OnchainClaimAdapter",
+            adapter_version="0.1.0",
+            supported_operations=[
+                "eip191_claim_proof",
+                "svm_claim_proof",
+                "claim_reconciliation",
+                "nonce_replay_guard",
+            ],
+            unsupported_operations=[
+                "bitcoin_claim_proof",
+                "ach_live",
+                "wire_live",
+                "card_surcharge",
+                "crypto_custody",
+            ],
+            required_credentials=["oracle_signer_key"],
+            required_endpoints=["base_rpc_for_rewards", "solana_rpc_for_rewards"],
+            pagination_model="none",
+            streaming_model="none",
+            implementation_state=waiting_state,
+            first_release=True,
+        ),
+    ]
+
+
 def _resolve_communications() -> list[AdapterCertificationDescriptor]:
     """Communications provider descriptors — one per registered comms connector
     (any connector whose manifest declares ``comms.*`` data outputs), resolved
@@ -299,6 +391,7 @@ _RESOLVERS = (
     _resolve_derivatives,
     _resolve_stablecoin_chain,
     _resolve_communications,
+    _resolve_agentic_commerce,
 )
 
 

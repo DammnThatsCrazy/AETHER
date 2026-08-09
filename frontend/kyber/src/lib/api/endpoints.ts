@@ -2562,5 +2562,13 @@ export const api = {
 
     tenantEnvelope: (tenantId: string) =>
       restClient.get(`/v1/kyber/tenants/${encodeURIComponent(tenantId)}/operational-envelope`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Cross-tenant credential slot states (safe views only — never secrets). */
+    operatorSlotOverview: (params?: { limit?: number }) =>
+      restClient.get(`/v1/providers/credentials/operator/slots${buildQS(params ?? {})}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Fleet-wide operator aggregate (workers, credentials, providers, activation, readiness). */
+    fleetAggregate: () =>
+      restClient.get('/v1/kyber/aggregate/fleet', wrap(unknownSchema)).then(r => r.data),
   },
 };

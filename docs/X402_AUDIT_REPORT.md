@@ -298,3 +298,19 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 **Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
 
 Direct on-chain RPC verification is now implemented for EVM (Base) and Solana chains via `_verify_evm()` and `_verify_solana()` in `verification.py`. These run as the fallback path when facilitator delegation is unavailable, active in all non-local environments. Arbitrary EVM-compatible chains beyond Base are not yet supported; adding a new chain requires a `_ASSET_CONTRACT` entry and an RPC URL setting.
+
+**Update (build-wave):** three observation-only additions extend the x402 surface without changing the no-custody posture:
+- **Tenant Signer Authority** (`services/x402/signer_authority.py` + `signer_repos.py`,
+  table `commerce_signer_refs`) binds a tenant to the signer *references* (public
+  addresses) authorized to present payment proofs and sign x402 challenges on its
+  behalf. It never holds private key material, never signs, and is fail-closed: a
+  tenant with zero signer refs resolves to `False` for any address.
+- **Commerce rail support matrix** (`services/commerce/rail_matrix.py`) declares an
+  honest support bucket per rail (supported_production / supported_sandbox /
+  supported_beta / intentionally_unsupported) — a mis-configured rail is refused
+  loudly, never silently supported. `x402_credit` is `supported_beta` (export-only).
+- **Usage metering** — the control plane meters challenged/paid/entitled usage as
+  immutable audit facts (`services/metering_evidence/`), and an observability
+  middleware (`services/diagnostics/observability_middleware.py` +
+  `trace_writer.py`) ships per-request trace/span telemetry for the commerce and
+  x402 write paths. None of these surfaces execute, settle, or custody anything.

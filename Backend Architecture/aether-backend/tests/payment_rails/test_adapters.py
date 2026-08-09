@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import time
 import uuid
 
 import pytest
@@ -67,16 +68,19 @@ class TestWebhookVerification:
             tenant_id, adapter.vault_provider_name, "payment", secret
         )
         payload = json.dumps({"type": "transaction_updated", "data": {"id": "tx1"}}).encode()
-        timestamp = "1720500000"
+        # MoonPay signs with the compound `Moonpay-Signature-V2: t=<unix>,s=<hex>`
+        # header; the HMAC is over `f"{t}.".encode() + payload` and the timestamp
+        # must be within the freshness tolerance of the live clock.
+        timestamp = str(int(time.time()))
         signature = hmac.new(
             secret.encode(), f"{timestamp}.".encode() + payload, hashlib.sha256
         ).hexdigest()
 
         assert await adapter.verify_webhook(
-            tenant_id, payload, f"v1={signature}", timestamp
+            tenant_id, payload, f"t={timestamp},s={signature}", timestamp
         ) is True
         assert await adapter.verify_webhook(
-            tenant_id, payload, "v1=deadbeef", timestamp
+            tenant_id, payload, f"t={timestamp},s=deadbeef", timestamp
         ) is False
         assert await adapter.verify_webhook(tenant_id, payload, None, timestamp) is False
 

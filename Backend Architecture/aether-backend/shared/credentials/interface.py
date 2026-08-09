@@ -73,15 +73,33 @@ def _aware(value: Optional[datetime]) -> Optional[datetime]:
     return ensure_aware_utc(value)
 
 
+# Known invalid/unreachable lifecycle statuses that must project to an off-ramp
+# readiness token — none of them may ever read as healthy.
+_INVALID_STATUSES = ("invalid", "test_failed", "expired")
+
+
 def _readiness_for(lifecycle_status: str, expires_at: Optional[datetime]) -> CredentialReadiness:
     """Project the durable lifecycle status onto a readiness token.
 
     active + unexpired -> PARTNER_LIVE (a supplied, usable credential)
     active + expired   -> DEGRADED
     revoked            -> DISABLED
+    invalid states     -> CREDENTIAL_INVALID
+    anything unknown/unreachable -> ERROR  (never PARTNER_LIVE)
+
+    The final guard is the point of this function: a lifecycle status we do not
+    positively understand (or ``None``) must project ERROR, never the healthy
+    token — an unreachable/unknown credential is not evidence of readiness.
     """
+    if lifecycle_status is None:
+        return CredentialReadiness.ERROR
     if lifecycle_status == STATUS_REVOKED:
         return CredentialReadiness.DISABLED
+    if lifecycle_status in _INVALID_STATUSES:
+        return CredentialReadiness.CREDENTIAL_INVALID
+    if lifecycle_status != STATUS_ACTIVE:
+        # Unknown / unreachable lifecycle state — never claim healthy.
+        return CredentialReadiness.ERROR
     exp = _aware(expires_at)
     if exp is not None and datetime.now(timezone.utc) >= exp:
         return CredentialReadiness.DEGRADED

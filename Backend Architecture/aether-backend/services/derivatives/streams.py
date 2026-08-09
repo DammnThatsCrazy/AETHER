@@ -4,7 +4,10 @@ Pure in-process sequence tracking per (venue, market, channel): duplicate
 detection, bounded out-of-order buffering, gap detection with recovery.
 Transport is deliberately out of scope — this runtime consumes whatever
 feed the caller wires (local asyncio today; Kafka topic provisioning is
-deferred and documented as such, never claimed).
+deferred and documented as such, never claimed). The DECLARATIVE topic
+contract (topics, schemas, partitions, retention, DLQ routing, consumer
+ownership) lives in :mod:`services.derivatives.topic_contract`, validated
+with no broker.
 """
 
 from __future__ import annotations

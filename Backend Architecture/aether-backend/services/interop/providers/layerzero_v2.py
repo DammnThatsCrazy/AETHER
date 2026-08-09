@@ -22,7 +22,7 @@ from typing import Any, Optional, Protocol
 
 from services.integrations.connectors.base import ImplementationStatus
 from services.interop.foundation import utc_now_iso
-from services.interop.providers.base import InteropProviderAdapter
+from services.interop.providers.base import InteropProviderAdapter, OperationalFieldsMixin
 from services.interop.providers.layerzero_abi import (
     TOPIC_PACKET_DELIVERED,
     TOPIC_PACKET_SENT,
@@ -53,7 +53,7 @@ class RpcClient(Protocol):
     async def get_block_hash(self, network_id: str, block_number: int) -> str: ...
 
 
-class LayerZeroV2Adapter(InteropProviderAdapter):
+class LayerZeroV2Adapter(OperationalFieldsMixin, InteropProviderAdapter):
     provider_id = "layerzero_v2"
     provider_kind = "layerzero_v2"
     display_name = "LayerZero V2 (reference adapter)"
@@ -171,7 +171,7 @@ class LayerZeroV2Adapter(InteropProviderAdapter):
 
     # ── scanning ────────────────────────────────────────────────────────────
 
-    async def scan(
+    async def _scan_cycle(
         self, checkpoint: Optional[dict[str, Any]] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Scan every configured network from the checkpoint to head minus
@@ -193,6 +193,7 @@ class LayerZeroV2Adapter(InteropProviderAdapter):
                 network_id, {"last_scanned_block": 0, "recent_hashes": {}},
             )
             head = await self.rpc.get_head(network_id)
+            state["head_number"] = int(head["number"])
             safe_head = int(head["number"]) - self.confirmations
             last = int(state["last_scanned_block"])
 
@@ -225,7 +226,7 @@ class LayerZeroV2Adapter(InteropProviderAdapter):
                 raw_log.setdefault("network_id", network_id)
                 raw_log.setdefault("native_chain_id", meta["native_chain_id"])
                 raw_log.setdefault("local_eid", eid)
-                decoded = self.decode_log(raw_log)
+                decoded = self._decode_safely(raw_log)
                 if decoded:
                     observations.append(decoded)
             state["last_scanned_block"] = safe_head

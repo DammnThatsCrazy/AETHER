@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import hmac
 import json
 import os
 import re
@@ -319,9 +318,14 @@ class PaymentRailAdapter(ABC):
     # adapter — the connection test resolves to a typed ``webhook_only`` result.
     webhook_only: bool = False
     default_rail: str = "fiat"
-    # HMAC scheme: "timestamped_hex" signs f"{timestamp}.{payload}" (Stripe /
-    # MoonPay / Privy style); "body_hex" signs the raw body (Coinbase / Bridge
-    # style).
+    # HMAC scheme token — the source of truth for webhook verification. The
+    # DECLARED scheme must always be the scheme the verifier actually applies
+    # (``native_signature_scheme()`` returns this value unchanged), so a scheme
+    # named here is a scheme ``signature_verify.verify_signature`` supports:
+    # "stripe_compound" / "moonpay_compound" (compound ``t=,v1=/s=`` headers),
+    # "body_hex" (raw-body HMAC), or "timestamped_hex" (f"{timestamp}.{payload}"
+    # with an out-of-band timestamp — used by adapters whose exact native header
+    # is not yet confirmed; see each adapter's source-of-truth note).
     signature_scheme: str = "timestamped_hex"
     # provider-native status → canonical FundingSessionStatus
     STATUS_MAP: dict[str, str] = {}
@@ -535,41 +539,47 @@ class PaymentRailAdapter(ABC):
     ) -> bool:
         """Verify a provider webhook signature against the tenant's signing secret.
 
-        HMAC-SHA256 per provider scheme, constant-time compare. Accepts a match
-        against ANY resolved secret (flag-OFF: the single vault secret — identical
-        behavior; flag-ON: active + rotation-overlap previous from the credential
-        authority). Never logs the secret or the expected signature.
+        Delegates to :func:`signature_verify.verify_signature` under the
+        adapter's NATIVE scheme (``native_signature_scheme()``), so a compound
+        ``t=…,v1=/s=…`` header verifies correctly on this legacy path exactly as
+        it does on the service's live ingestion path — the two can never drift.
+        Accepts a match against ANY resolved secret (flag-OFF: the single vault
+        secret — identical behavior; flag-ON: active + rotation-overlap previous
+        from the credential authority). Never logs the secret or the expected
+        signature.
         """
         if not signature:
             return False
         secrets = await self._resolve_signing_secrets(tenant_id, environment)
         if not secrets:
             return False
-        if self.signature_scheme == "timestamped_hex":
-            if not timestamp:
-                return False
-            signed_payload = f"{timestamp}.".encode("utf-8") + payload
-        else:
-            signed_payload = payload
-        provided = signature.strip()
-        for prefix in ("v1=", "s=", "sha256="):
-            provided = provided.removeprefix(prefix)
-        for secret in secrets:
-            expected = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
-            if hmac.compare_digest(expected, provided):
-                return True
-        return False
+        from datetime import datetime, timezone
+
+        from services.integrations.providers.payment_rails.signature_verify import (
+            verify_signature,
+        )
+
+        result = verify_signature(
+            self.native_signature_scheme(),
+            secrets,
+            payload,
+            signature,
+            timestamp=timestamp,
+            now_epoch=int(datetime.now(timezone.utc).timestamp()),
+        )
+        return result.ok
 
     def native_signature_scheme(self) -> str:
         """Provider-native scheme token for ``signature_verify.verify_signature``.
 
-        Stripe and MoonPay send compound ``t=…,<tag>=…`` headers (parsed
-        natively); the others use their declared ``signature_scheme``.
+        The declared ``signature_scheme`` IS the native scheme: every adapter
+        declares exactly the scheme its webhooks are verified under (Stripe
+        ``stripe_compound``, MoonPay ``moonpay_compound``, Coinbase ``body_hex``,
+        Bridge ``timestamped_hex`` placeholder, Privy ``timestamped_hex``). The
+        invariant ``signature_scheme == native_signature_scheme()`` is enforced
+        by test, so a declaration can never drift from behavior again.
         """
-        return {
-            "stripe": "stripe_compound",
-            "moonpay": "moonpay_compound",
-        }.get(self.provider_name, self.signature_scheme)
+        return self.signature_scheme
 
     # ── Parsing / normalization ───────────────────────────────────────────
 

@@ -17,7 +17,14 @@ from services.providers.credentials.models import (
     SlotRotateRequest,
     SlotValueWrite,
 )
+from services.providers.credentials.operator_view import (
+    collect_credential_slot_states,
+    tenant_credential_slot_states,
+)
 from services.providers.credentials.slot_registry import known_providers
+from services.security.request_context import (
+    require_kyber_operator as _require_kyber_operator,
+)
 from shared.common.common import BadRequestError, NotFoundError
 from shared.decorators import api_response
 from shared.logger.logger import get_logger
@@ -32,6 +39,11 @@ def _tenant_admin(request: Request) -> str:
     return request.state.tenant.tenant_id
 
 
+def _kyber_operator(request: Request) -> None:
+    """Canonical fail-closed Kyber operator gate (denies all Aether tenants)."""
+    _require_kyber_operator(request)
+
+
 def _actor(request: Request) -> str:
     tenant = request.state.tenant
     return (
@@ -44,6 +56,34 @@ def _actor(request: Request) -> str:
 def _require_known(provider: str) -> None:
     if provider not in known_providers():
         raise NotFoundError("provider")
+
+
+# ── operator cross-tenant view (never secrets) ─────────────────────────────
+# Registered before the provider-scoped routes. Gated by the canonical
+# require_kyber_operator gate, which denies every Aether tenant — including
+# Role.ADMIN — so only a verified Kyber operator reads across tenants.
+
+
+@router.get("/operator/slots")
+@api_response
+async def operator_slot_overview(request: Request, limit: int = 1000):
+    """Cross-tenant credential slot states for Kyber operators.
+
+    Returns each tenant's non-tombstoned credential slot states (environment,
+    lifecycle state, credential version, last test outcome, activation and
+    revocation timestamps) built STRICTLY from the authority's safe-field
+    filter. Secrets are never decrypted and never returned.
+    """
+    _kyber_operator(request)
+    return await collect_credential_slot_states(limit=limit)
+
+
+@router.get("/operator/tenants/{tenant_id}/slots")
+@api_response
+async def operator_tenant_slots(tenant_id: str, request: Request):
+    """One tenant's credential slot states for Kyber operators (no secrets)."""
+    _kyber_operator(request)
+    return await tenant_credential_slot_states(tenant_id)
 
 
 # ── read ──────────────────────────────────────────────────────────────────

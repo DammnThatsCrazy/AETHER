@@ -1,0 +1,10 @@
+# kafka-python provides the KafkaAdminClient the topic provisioner uses for
+# idempotent topic creation. It is pure-Python (no compiled extensions required)
+# and is the same library scripts/validate_infra.py already relies on for its
+# Kafka connectivity check, so the deploy toolchain carries it today.
+#
+# The Lambda packaging for modules/kafka_topic_provisioner must bundle this into
+# the deploy/kafka archive (e.g. `pip install -r deploy/kafka/requirements.txt
+# --target deploy/kafka` in the packaging step). The archive_file data source
+# hashes whatever is present in the directory at plan time.
+kafka-python>=2.0.2

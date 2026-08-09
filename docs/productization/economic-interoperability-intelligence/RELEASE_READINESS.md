@@ -29,7 +29,7 @@ environment.
 | Registries & governance | 5/5 | 110 events, 2 purposes, 18 permissions, 8 meters, DSR scopes, plans |
 | Storage & migrations | 5/5 | 4 Alembic revisions, typed Decimal repos, constraints |
 | Domain runtimes | 5/5 | FSMs, correlation, finality, reconciliation, P&L — fully tested |
-| Provider adapters | 4/5 | All 18 first-release adapters CREDENTIAL_WAITING (payments 5, interop 7, derivatives 4, stablecoin-chain 2); 0 SCAFFOLDED; `make credentialless-certification --strict` passes; zero PROVIDER_LIVE (no live validation in this environment) |
+| Provider adapters | 4/5 | All 29 first-release adapters CREDENTIAL_WAITING (agentic_commerce 3, communications 8, payments 5, interop 7, derivatives 4, stablecoin-chain 2); 0 SCAFFOLDED; `make credentialless-certification --strict` passes; zero PROVIDER_LIVE (no live validation in this environment) |
 | Provider certification plane | 4/5 | Source-generated capability matrix + reusable credentialless checks + mock-server certification; gate-enforced |
 | Projections (silver/gold/graph/P360) | 4/5 | Silver+graph+P360 tested; gold DDL unexecuted (no ClickHouse) |
 | Intelligence (Noesis/OODA/alerts) | 4/5 | Wired + tested; no staging signal validation |

@@ -1,8 +1,9 @@
 """Import Engine — Kyber operator surface + per-tenant concurrency cap.
 
 Proves the cross-tenant operator routes see every tenant's imports (Kyber is the
-internal console), the failed-import requeue resets and re-enqueues a commit,
-and a tenant cannot pile up unbounded in-flight imports.
+internal console), the failed-import requeue re-stages a FAILED session into
+COMMITTING and re-enqueues a durable commit, and a tenant cannot pile up
+unbounded in-flight imports.
 """
 from __future__ import annotations
 
@@ -84,11 +85,21 @@ async def test_detail_missing_404(clean):
 
 async def test_requeue_resets_failed_and_enqueues(clean):
     session = await svc.create_import("tenant-a")
-    await clean.set_status("tenant-a", session["id"], "failed")
+    # Record a real failure through the FSM (legacy set_status only writes the
+    # `status` column and leaves lifecycle_state=CREATED, which the requeue
+    # correctly refuses).
+    from services.imports.session_persistence import mark_failed
+    failed = await mark_failed(clean, "tenant-a", session["id"],
+                               failure_reason="test failure")
+    assert failed["lifecycle_state"] == "FAILED"
     body = await kr.requeue_import(session["id"], _Req(), actor=_Actor())
     assert body["data"]["job"]["job_type"] == "import.commit"
     refreshed = await clean.get_session("tenant-a", session["id"])
-    assert refreshed["status"] == "approved"
+    # Requeue re-stages into COMMITTING (retryable), preserving the failure
+    # reason for audit; it no longer resets the session to "approved".
+    assert refreshed["lifecycle_state"] == "COMMITTING"
+    assert refreshed["status"] == "committing"
+    assert refreshed["failure_reason"] == "test failure"
 
 
 async def test_requeue_rejects_non_failed(clean):

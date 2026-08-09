@@ -10,12 +10,15 @@ that matter:
   conflict/backlog surfaces as firing conditions, the cycle counter increments,
   and the heartbeat/firing gauges are emitted — without mutating any state; and
 * **it is off by default** — the worker only runs when both the payment-rails
-  master flag and its own ``alert_eval_enabled`` flag are set, so it can never
-  fire on a plane that is not turned on.
+  master flag and its own ``alert_eval_enabled`` flag are set AND the capability
+  lifecycle stage permits the rollout control (the lifecycle gate fails open to
+  the flag when no stage is declared), so it can never fire on a plane that is
+  not turned on.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timezone
 
 import pytest
@@ -83,9 +86,18 @@ async def _put_reconciliation(svc, tenant, fsid, state):
     )
 
 
+def _enable_eval(monkeypatch) -> None:
+    """Turn the derived-alert rollout-control flag on (lifecycle gate fails open
+    with no declared stage, so the evaluator actually runs)."""
+    monkeypatch.setattr(
+        settings, "payment_rails", dataclasses.replace(settings.payment_rails, alert_eval_enabled=True),
+    )
+
+
 @pytest.mark.asyncio
-async def test_cycle_runs_evaluator_and_publishes_observations():
+async def test_cycle_runs_evaluator_and_publishes_observations(monkeypatch):
     """A seeded conflict + dead-letter → firing report, counter + gauges emitted."""
+    _enable_eval(monkeypatch)
     reset_in_memory_stores()
     svc = _svc()
     # Deterministic isolation: empty the two backing dicts the evaluator reads
@@ -116,13 +128,14 @@ async def test_cycle_runs_evaluator_and_publishes_observations():
 
 
 @pytest.mark.asyncio
-async def test_empty_plane_cycle_is_not_firing_but_still_heartbeats():
+async def test_empty_plane_cycle_is_not_firing_but_still_heartbeats(monkeypatch):
     """No records: no firing conditions, but the worker still runs + heartbeats.
 
     UNKNOWN (e.g. no-webhook-ever) must not be treated as firing — a
     never-configured plane should not page, but the evaluator must still prove it
     is alive.
     """
+    _enable_eval(monkeypatch)
     reset_in_memory_stores()
     svc = _svc()
     # Guarantee a genuinely empty plane for the service the evaluator reads —

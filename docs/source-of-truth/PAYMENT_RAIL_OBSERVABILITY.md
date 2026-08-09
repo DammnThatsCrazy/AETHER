@@ -201,6 +201,37 @@ Frontend: aether payment-rails tests (93-suite green), kyber component tests
 - No payment execution, settlement, custody, refund initiation, or
   provider-account provisioning. No generic webhook receiver.
 
+## Entitlement, demotion & durability (rollout controls, all default OFF)
+
+Three build-wave controls ship default-OFF and change nothing until wired:
+
+- **Plan-tier entitlement gate** (`entitlement_gate.py`,
+  `AETHER_PAYMENT_ENTITLEMENT_GATE_ENABLED` default off, minimum tier
+  `AETHER_PAYMENT_MIN_PLAN_TIER` default `P1`). `require_payment_rails_entitlement`
+  is the single choke point: it enforces the existing permission AND the plan
+  gate, so a tenant holding the role permission but ranking below the minimum
+  tier is denied 403. Separate from the x402 token entitlement service.
+- **Readiness demotion** (`readiness_demotion.py`,
+  `AETHER_PAYMENT_READINESS_DEMOTION_ENABLED` default off). Promotion is
+  evidence-gated and manual; this is the automatic, monotonic off-ramp that
+  previously did not exist — a rotated signing secret rejecting every webhook,
+  a provider rejecting the polling key (`poll_health == "auth_error"` →
+  `CREDENTIAL_INVALID`), repeated signature-verification failures, or provider
+  silence past the window → `DEGRADED`. Honesty rules: a provider that NEVER
+  observed a webhook is `UNKNOWN` (no data), never demoted; a missing/unseeded
+  capability snapshot is never demoted.
+- **Capability-lifecycle rollout gating** (`lifecycle.py`). The derived-condition
+  alert evaluator, the durable canonical-event outbox, and observation usage
+  metering each declare a minimum `CredentialReadiness` stage; they run only when
+  their flag is ON and the current per-tenant capability lifecycle is at/above
+  the minimum. Until a stage is declared the gate fails open to the raw flag.
+- **Relational durability seam** (`durability.py`,
+  `settings.payment_rails.durability_seam_enabled` default off). An OPTIONAL
+  Postgres mirror of the receipt/reconciliation ledger (source of truth stays the
+  KV store); mirror failures are logged and never break the live webhook/repair
+  path. `LedgerDurabilitySeam.migration_ddl` is the exact DDL the migration must
+  carry. No secret or raw payload is ever written.
+
 ## Certification & readiness (staging-capstone)
 
 The five adapters (Privy, Stripe onramp, Coinbase, MoonPay, Bridge) resolve to

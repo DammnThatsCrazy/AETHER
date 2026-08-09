@@ -105,3 +105,74 @@ class SecurityPolicyService:
             "distinct_policies": len(set(hashes)),
             "latest_hash": hashes[0] if hashes else None,
         }
+
+
+def _policy_from_observation(provider: Any, observation: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Derive a deterministic, offline security policy for one observation.
+
+    Uses the adapter's structural ``security_model()`` (available without
+    credentials) plus the observation's network confirmations. The content
+    hash changes when the provider's structural verification model changes —
+    the drift surface the SecurityPolicyService exists to detect.
+    """
+    model = getattr(provider, "security_model", None)
+    if not callable(model):
+        return None
+    try:
+        sm = model() or {}
+    except Exception:  # noqa: BLE001 — structural model unavailable
+        return None
+    if not sm:
+        return None
+    endpoint = observation.get("endpoint_ref") or {}
+    confirmations = endpoint.get("confirmations_required")
+    return {
+        "verification_model": sm.get("verification_model", "unknown"),
+        "required_verifier_ids": sm.get("required_verifier_ids", []),
+        "optional_verifier_ids": sm.get("optional_verifier_ids", []),
+        "optional_threshold": sm.get("optional_threshold"),
+        "confirmations_required": confirmations if confirmations is not None
+        else sm.get("confirmations_required"),
+        "delivery_actor_ids": sm.get("delivery_actor_ids", []),
+        "module_addresses": sm.get("module_addresses", {}),
+        "effective_block_number": endpoint.get("block_number"),
+    }
+
+
+async def scan_security_policy_snapshots(
+    tenant_id: str,
+    observations: list[dict[str, Any]],
+    service: Optional[SecurityPolicyService] = None,
+) -> list[dict[str, Any]]:
+    """Snapshot-time caller for :meth:`SecurityPolicyService.snapshot_policy`.
+
+    Wired into the scan worker (gated on the caller's own flag). For every
+    observation that references a path and a provider whose structural
+    security model is available offline, snapshots the derived policy and
+    collects the emitted events (snapshot recorded / policy changed). Paths
+    whose provider exposes no structural model are skipped — a snapshot is
+    never fabricated.
+    """
+    service = service or SecurityPolicyService()
+    emitted: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for observation in observations:
+        provider_id = observation.get("provider_id") or observation.get("provider_kind")
+        path_id = observation.get("path_id")
+        if not provider_id or not path_id:
+            continue
+        if (provider_id, path_id) in seen:
+            continue
+        seen.add((provider_id, path_id))
+        from services.interop.providers import get_provider
+        provider = get_provider(provider_id)
+        if provider is None:
+            continue
+        policy = _policy_from_observation(provider, observation)
+        if not policy:
+            continue
+        result = await service.snapshot_policy(
+            tenant_id, provider_id, path_id, policy,
+        )
+        emitted.extend(result.get("emitted_events", []))
+    return emitted

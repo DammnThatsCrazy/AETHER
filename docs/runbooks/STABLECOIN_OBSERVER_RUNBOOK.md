@@ -33,6 +33,14 @@ observation has been validated in staging.
 gated; keep them off until per-chain RPC endpoints are configured and one
 finality checkpoint has been validated in staging.
 
+The connector-neutral polling scheduler (`services/stablecoins/polling.py` —
+`StablecoinPollingScheduler`) invokes configured read-only provider connectors
+and re-checks already-stored observations through the EVM/SVM verifiers; it is
+observation-first (no signing/submitting/routing) and records provider
+health/checkpoints durably. Price observations are persisted by default with an
+unavailable-safe sink (`services/stablecoins/price_persistence.py`): an
+unavailable read is recorded as unavailable, never fabricated as 0/1 USD.
+
 ## Finality checkpoint not advancing
 
 1. A stalled finality checkpoint usually means the RPC endpoint is unreachable

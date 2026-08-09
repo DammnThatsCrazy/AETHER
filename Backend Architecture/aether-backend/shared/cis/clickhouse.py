@@ -34,6 +34,15 @@ def _is_local_env() -> bool:
     return os.getenv("AETHER_ENV", "local").lower() == "local"
 
 
+class ClickHouseUnavailableError(RuntimeError):
+    """Raised when a ClickHouse query/insert fails at the transport or store layer.
+
+    Distinct from an empty result: a genuine no-rows read still returns ``[]``;
+    a transport/store failure raises so callers can never mistake "store is
+    down" for "no data". Zero Silent Failure (program sec7).
+    """
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # IN-MEMORY BACKEND (local/dev only)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -194,17 +203,28 @@ class ClickHouseClient:
             await self.connect()
         try:
             await self._backend.insert(table, rows)  # type: ignore[union-attr]
+        except ClickHouseUnavailableError:
+            raise
         except Exception as e:
             logger.error(f"ClickHouse insert failed (table={table}): {e}")
+            raise ClickHouseUnavailableError(
+                f"ClickHouse insert failed (table={table}): {e}"
+            ) from e
 
     async def query(self, sql: str, params: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
         if self._backend is None:
             await self.connect()
         try:
             return await self._backend.query(sql, params)  # type: ignore[union-attr]
+        except ClickHouseUnavailableError:
+            raise
         except Exception as e:
             logger.error(f"ClickHouse query failed: {e}")
-            return []
+            # Never return a bare [] on failure: a failed read is NOT an empty
+            # read (Zero Silent Failure). Callers distinguish via the raise.
+            raise ClickHouseUnavailableError(
+                f"ClickHouse query failed: {e}"
+            ) from e
 
     async def health_check(self) -> bool:
         if self._backend is None:

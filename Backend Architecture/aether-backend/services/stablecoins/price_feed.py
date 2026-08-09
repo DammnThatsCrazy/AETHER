@@ -22,8 +22,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Protocol, runtime_checkable
 
+from repositories.repos import BaseRepository
 from services.stablecoin.valuation import classify_peg
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
@@ -58,6 +59,134 @@ PEG_UNKNOWN = "unknown"
 _BPS = Decimal("10000")
 _PAR = Decimal("1")
 
+#: Provider-price disagreement (in basis points) beyond which snapshots for the
+#: same deployment are classified as a CONFLICT rather than consensus.
+CONFLICT_THRESHOLD_BPS = Decimal("5")
+
+#: Conflict-classification tokens.
+CONSENSUS_STATE = "consensus"
+CONFLICT_STATE = "conflict"
+PRICE_UNAVAILABLE_STATE = "unavailable"
+
+
+@runtime_checkable
+class StablecoinPriceSink(Protocol):
+    """Persistence seam for price-feed snapshots.
+
+    The connector emits each snapshot through this seam; the integration pass
+    (agent 1E) owns the durable write. Implementations MUST be idempotent on
+    the snapshot identity (re-emitting the same snapshot must not duplicate)
+    and MUST NOT change the snapshot's availability/price semantics.
+    """
+
+    async def persist_snapshot(
+        self, snapshot: "StablecoinPriceObservation", *, tenant_id: str
+    ) -> dict: ...
+
+
+class StablecoinPriceObservationSink:
+    """Default JSONB persistence sink for price-feed snapshots.
+
+    Writes one row per (tenant, deployment, observed_at, provider) into an
+    auto-created ``stablecoin_price_observations`` table keyed deterministically
+    so replays collapse instead of duplicating. This is the same JSONB
+    ``BaseRepository`` idiom as the rest of the observer stack — no Alembic
+    migration required. A snapshot is persisted exactly as observed: an
+    unavailable price is stored as ``available=False`` with an empty
+    ``price_usd``, never fabricated as 0/1 USD.
+    """
+
+    def __init__(self, repo: BaseRepository | None = None) -> None:
+        self.repo = repo or BaseRepository("stablecoin_price_observations")
+
+    @staticmethod
+    def _record_id(snapshot: "StablecoinPriceObservation", *, tenant_id: str) -> str:
+        import hashlib
+
+        raw = f"{tenant_id}:{snapshot.deployment_id}:{snapshot.observed_at}:{snapshot.source.get('provider', '')}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:40]
+
+    async def persist_snapshot(
+        self, snapshot: "StablecoinPriceObservation", *, tenant_id: str
+    ) -> dict:
+        if not tenant_id:
+            raise ValueError("tenant_id is required to persist a price snapshot")
+        record = {
+            "snapshot_id": self._record_id(snapshot, tenant_id=tenant_id),
+            "tenant_id": tenant_id,
+            "deployment_id": snapshot.deployment_id,
+            "chain_id": snapshot.chain_id,
+            "canonical_asset_id": snapshot.canonical_asset_id,
+            "available": snapshot.available,
+            "price_usd": str(snapshot.price_usd) if snapshot.price_usd is not None else "",
+            "peg_status": snapshot.peg_status,
+            "peg_deviation_bps": str(snapshot.peg_deviation_bps) if snapshot.peg_deviation_bps is not None else "",
+            "confidence": snapshot.confidence,
+            "stale": snapshot.stale,
+            "observed_at": snapshot.observed_at,
+            "reason": snapshot.reason,
+            "source": dict(snapshot.source),
+        }
+        record_id = record["snapshot_id"]
+        existing = await self.repo.find_by_id(record_id)
+        return await self.repo.update(record_id, {**existing, **record}) if existing else await self.repo.insert(record_id, record)
+
+
+@dataclass(frozen=True)
+class StablecoinPriceConflictResult:
+    """Multi-provider price agreement verdict for one deployment."""
+
+    deployment_id: str
+    state: str
+    providers: tuple[str, ...]
+    prices: tuple[Optional[Decimal], ...]
+    reason: str = ""
+
+
+class StablecoinPriceConflictDetector:
+    """Classify a set of same-deployment price snapshots from different feeds.
+
+    Honest-availability rule: any unavailable provider is recorded as-is; a
+    snapshot that cannot produce a price can never pull a consensus. Disagreement
+    beyond ``CONFLICT_THRESHOLD_BPS`` between the highest and lowest *available*
+    prices is a CONFLICT (never silently averaged); otherwise CONSENSUS.
+    """
+
+    def __init__(self, threshold_bps: Decimal = CONFLICT_THRESHOLD_BPS) -> None:
+        if threshold_bps < 0:
+            raise ValueError("threshold_bps must be non-negative")
+        self.threshold_bps = Decimal(threshold_bps)
+
+    def detect(self, snapshots: list[StablecoinPriceObservation]) -> StablecoinPriceConflictResult:
+        if not snapshots:
+            return StablecoinPriceConflictResult("", PRICE_UNAVAILABLE_STATE, (), (), "no_price_providers")
+        deployment_id = snapshots[0].deployment_id
+        providers = tuple(s.provider for s in snapshots)
+        prices = tuple(s.price_usd for s in snapshots)
+        available = [s for s in snapshots if s.available and s.price_usd is not None]
+        if not available:
+            return StablecoinPriceConflictResult(
+                deployment_id, PRICE_UNAVAILABLE_STATE, providers, prices,
+                "all_providers_unavailable",
+            )
+        if len(available) == 1:
+            return StablecoinPriceConflictResult(
+                deployment_id, CONSENSUS_STATE, providers, prices,
+                "single_provider",
+            )
+        hi = max(p.price_usd for p in available)  # type: ignore[type-var]
+        lo = min(p.price_usd for p in available)  # type: ignore[type-var]
+        spread_bps = (hi - lo) * _BPS
+        if abs(spread_bps) > self.threshold_bps:
+            return StablecoinPriceConflictResult(
+                deployment_id, CONFLICT_STATE, providers, prices,
+                f"provider_disagreement_{abs(spread_bps):.2f}_bps",
+            )
+        return StablecoinPriceConflictResult(
+            deployment_id, CONSENSUS_STATE, providers, prices,
+            f"provider_spread_{abs(spread_bps):.2f}_bps",
+        )
+
 
 @dataclass(frozen=True)
 class StablecoinPriceObservation:
@@ -75,6 +204,18 @@ class StablecoinPriceObservation:
     observed_at: str
     reason: str = ""
     source: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def provider(self) -> str:
+        """Source provider of this snapshot, read from the attributed source.
+
+        A snapshot is NEVER anonymized: multi-provider conflict detection and the
+        operator audit trail attribute every price to the feed that produced it.
+        """
+        source = self.source
+        if isinstance(source, Mapping):
+            return str(source.get("provider", ""))
+        return ""
 
 
 class StablecoinChainlinkPriceConnector(ConnectorCertificationMixin):
@@ -115,6 +256,8 @@ class StablecoinChainlinkPriceConnector(ConnectorCertificationMixin):
         feed_decimals: int = 8,
         staleness_threshold_seconds: int = 3600,
         source_manifest_id: str = "",
+        sink: Optional[StablecoinPriceSink] = None,
+        emit: bool = False,
     ) -> None:
         if not feed_address:
             raise ValueError("feed_address is required for the price-feed connector")
@@ -129,6 +272,11 @@ class StablecoinChainlinkPriceConnector(ConnectorCertificationMixin):
         self.staleness_threshold_seconds = int(staleness_threshold_seconds)
         self.source_manifest_id = source_manifest_id or f"chainlink:{deployment.deployment_id}"
         self.rpc: StablecoinRpcClient = rpc if rpc is not None else _default_rpc()
+        # Persistence seam: when a sink is provided AND emit is enabled the
+        # connector emits every snapshot through it (idempotent, fail-open — a
+        # sink failure never changes the snapshot's honest availability).
+        self.sink = sink
+        self.emit_enabled = bool(emit)
         self._feed_decimals: Optional[int] = None
 
     # ── public surface ───────────────────────────────────────────────────────
@@ -138,30 +286,42 @@ class StablecoinChainlinkPriceConnector(ConnectorCertificationMixin):
         decimals = await self._decimals()
         return {"ok": True, "feed_address": self.feed_address, "feed_decimals": decimals}
 
-    async def get_price_observation(self) -> StablecoinPriceObservation:
+    async def get_price_observation(self, *, tenant_id: str = "") -> StablecoinPriceObservation:
         """Fetch ``latestRoundData`` and classify the peg honestly.
 
         Any failure (revert, empty result, rate limit, non-positive answer)
         yields an UNAVAILABLE snapshot — the price is ``None``, never 0/1 USD.
+
+        When a persistence ``sink`` is configured (``emit=True``) every snapshot
+        — including UNAVAILABLE ones — is emitted through the seam so a
+        rate-limited or unpriced feed leaves a durable, distinguishable record
+        instead of vanishing into an empty result set.
         """
         observed_at = to_iso_utc(utc_now())
+        snapshot: StablecoinPriceObservation
         try:
             decimals = await self._decimals()
             round_data = await self._latest_round_data()
         except StablecoinConnectorError as exc:
-            return self._unavailable(observed_at, reason=exc.classification)
+            snapshot = self._unavailable(observed_at, reason=exc.classification)
+            await self._emit(snapshot, tenant_id=tenant_id)
+            return snapshot
 
         if round_data is None:
-            return self._unavailable(observed_at, reason="empty_round_data")
+            snapshot = self._unavailable(observed_at, reason="empty_round_data")
+            await self._emit(snapshot, tenant_id=tenant_id)
+            return snapshot
 
         round_id, answer, _started_at, updated_at, answered_in_round = round_data
         if answer <= 0:
             # A zero/negative feed answer is NOT a price. Never emit 0.
-            return self._unavailable(
+            snapshot = self._unavailable(
                 observed_at,
                 reason="non_positive_answer",
                 source=self._source(round_id, updated_at, answered_in_round, None),
             )
+            await self._emit(snapshot, tenant_id=tenant_id)
+            return snapshot
 
         price_usd = atomic_from_answer(answer, decimals)  # Decimal, never float
         now_ts = int(utc_now().timestamp())
@@ -174,7 +334,7 @@ class StablecoinChainlinkPriceConnector(ConnectorCertificationMixin):
         if stale:
             # A stale price is real evidence but untrusted for peg — do NOT
             # assume on-peg / 1 USD. Surface the value with stale confidence.
-            return StablecoinPriceObservation(
+            snapshot = StablecoinPriceObservation(
                 deployment_id=self.deployment.deployment_id,
                 chain_id=self.chain_id,
                 canonical_asset_id=self.canonical_asset_id,
@@ -188,24 +348,49 @@ class StablecoinChainlinkPriceConnector(ConnectorCertificationMixin):
                 reason="stale_round",
                 source=source,
             )
+        else:
+            deviation_bps = (price_usd - _PAR) * _BPS
+            peg_status = classify_peg(deviation_bps)  # reuse singular depeg thresholds
+            confidence = CONFIDENCE_DEGRADED if incomplete else CONFIDENCE_HIGH
+            snapshot = StablecoinPriceObservation(
+                deployment_id=self.deployment.deployment_id,
+                chain_id=self.chain_id,
+                canonical_asset_id=self.canonical_asset_id,
+                available=True,
+                price_usd=price_usd,
+                peg_status=peg_status,
+                peg_deviation_bps=deviation_bps,
+                confidence=confidence,
+                stale=False,
+                observed_at=observed_at,
+                reason="" if not incomplete else "incomplete_round",
+                source=source,
+            )
+        await self._emit(snapshot, tenant_id=tenant_id)
+        return snapshot
 
-        deviation_bps = (price_usd - _PAR) * _BPS
-        peg_status = classify_peg(deviation_bps)  # reuse singular depeg thresholds
-        confidence = CONFIDENCE_DEGRADED if incomplete else CONFIDENCE_HIGH
-        return StablecoinPriceObservation(
-            deployment_id=self.deployment.deployment_id,
-            chain_id=self.chain_id,
-            canonical_asset_id=self.canonical_asset_id,
-            available=True,
-            price_usd=price_usd,
-            peg_status=peg_status,
-            peg_deviation_bps=deviation_bps,
-            confidence=confidence,
-            stale=False,
-            observed_at=observed_at,
-            reason="" if not incomplete else "incomplete_round",
-            source=source,
-        )
+    async def emit(
+        self, snapshot: StablecoinPriceObservation, *, tenant_id: str = ""
+    ) -> Optional[dict]:
+        """Emit one snapshot through the configured persistence seam.
+
+        Returns the sink result when a sink is configured, ``None`` otherwise.
+        Fail-open: a sink failure is logged and NEVER changes the snapshot's
+        honest availability/price semantics.
+        """
+        if self.sink is None or not self.emit_enabled:
+            return None
+        try:
+            return await self.sink.persist_snapshot(snapshot, tenant_id=tenant_id)
+        except Exception as exc:  # noqa: BLE001 — persistence must never corrupt value
+            logger.warning(
+                f"price snapshot persistence failed (snapshot kept): {type(exc).__name__}: {exc}"
+            )
+            return None
+
+    async def _emit(self, snapshot: StablecoinPriceObservation, *, tenant_id: str) -> None:
+        if self.sink is not None and self.emit_enabled:
+            await self.emit(snapshot, tenant_id=tenant_id)
 
     # ── RPC + ABI decoding ───────────────────────────────────────────────────
 
@@ -318,6 +503,10 @@ def _default_rpc() -> StablecoinRpcClient:
 __all__ = [
     "StablecoinChainlinkPriceConnector",
     "StablecoinPriceObservation",
+    "StablecoinPriceSink",
+    "StablecoinPriceObservationSink",
+    "StablecoinPriceConflictDetector",
+    "StablecoinPriceConflictResult",
     "LATEST_ROUND_DATA_SELECTOR",
     "DECIMALS_SELECTOR",
     "PEG_UNKNOWN",
@@ -325,4 +514,8 @@ __all__ = [
     "CONFIDENCE_DEGRADED",
     "CONFIDENCE_STALE",
     "CONFIDENCE_UNAVAILABLE",
+    "CONSENSUS_STATE",
+    "CONFLICT_STATE",
+    "PRICE_UNAVAILABLE_STATE",
+    "CONFLICT_THRESHOLD_BPS",
 ]

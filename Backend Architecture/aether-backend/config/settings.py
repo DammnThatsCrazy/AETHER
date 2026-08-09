@@ -192,6 +192,9 @@ class IntelligenceGraphConfig:
     commerce_solana_rpc: str = _env("COMMERCE_SOLANA_RPC", "https://api.mainnet-beta.solana.com")
     commerce_enable_v2: bool = _env_bool("COMMERCE_ENABLE_V2", True)
     commerce_feature_flag: str = _env("COMMERCE_FEATURE_FLAG", "ga")
+    commerce_enable_challenge_middleware: bool = _env_bool(
+        "COMMERCE_ENABLE_CHALLENGE_MIDDLEWARE", False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -728,6 +731,22 @@ class RuntimeConfig:
     # lifespan. Default-ON for non-local so the API process stops starting every
     # worker; OFF keeps the historical single-process lifespan byte-identical.
     worker_roles_enabled: bool = _env_bool("WORKER_ROLES_ENABLED", _TRUST_DEFAULT_ON)
+
+    # ── Credential-turnkey background task flags (all default OFF) ─────────
+    # Each gates an independent asyncio background task launched in the FastAPI
+    # lifespan (NOT a WorkerSpec-supervised worker — specs.py drives those).
+    capability_readiness_revalidation_enabled: bool = _env_bool(
+        "AETHER_CAPABILITY_READINESS_REVALIDATION_ENABLED", False
+    )
+    dead_letter_sweeper_enabled: bool = _env_bool(
+        "AETHER_DEAD_LETTER_SWEEPER_ENABLED", False
+    )
+    worker_heartbeat_bridge_enabled: bool = _env_bool(
+        "AETHER_WORKER_HEARTBEAT_BRIDGE_ENABLED", False
+    )
+    worker_heartbeat_bridge_interval_seconds: int = _env_int(
+        "AETHER_WORKER_HEARTBEAT_BRIDGE_INTERVAL_SECONDS", 60
+    )
 
     @property
     def allowed_roles(self) -> frozenset[str]:
@@ -1405,6 +1424,48 @@ class PaymentRailsConfig:
         "AETHER_PAYMENT_ALERT_EVAL_INTERVAL_SECONDS", 5 * 60
     )
 
+    # ── Settlement / entitlement / readiness lifecycle gates (default OFF) ──
+    settlement_reconciliation_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_SETTLEMENT_RECONCILIATION_ENABLED", False
+    )
+    entitlement_gate_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_ENTITLEMENT_GATE_ENABLED", False
+    )
+    # Minimum self-serve plan tier required for entitlement-gated surfaces
+    # (P1-P4 ladder; P1 is the floor).
+    min_plan_tier: str = _env("AETHER_PAYMENT_MIN_PLAN_TIER", "P1")
+    readiness_demotion_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_READINESS_DEMOTION_ENABLED", False
+    )
+    # Capability lifecycle stage label consumed by the readiness/lifecycle
+    # reporters ('' = inert / unset).
+    capability_lifecycle_stage: str = _env("AETHER_PAYMENT_CAPABILITY_LIFECYCLE_STAGE", "")
+    durability_seam_enabled: bool = _env_bool(
+        "AETHER_PAYMENT_DURABILITY_SEAM_ENABLED", False
+    )
+
+
+@dataclass(frozen=True)
+class RewardsConfig:
+    """Rewards background-loop rollout flags (all default OFF).
+
+    Each loop is an independent asyncio background task launched in the FastAPI
+    lifespan and gated by its own flag. ``reservation_ttl_seconds`` drives the
+    abandoned-reservation release window for the reservation release loop.
+    """
+    reservation_release_enabled: bool = _env_bool(
+        "AETHER_REWARDS_RESERVATION_RELEASE_ENABLED", False
+    )
+    claim_reconciliation_enabled: bool = _env_bool(
+        "AETHER_REWARDS_CLAIM_RECONCILIATION_ENABLED", False
+    )
+    receipt_evidence_enabled: bool = _env_bool(
+        "AETHER_REWARDS_RECEIPT_EVIDENCE_ENABLED", False
+    )
+    reservation_ttl_seconds: int = _env_int(
+        "AETHER_REWARDS_RESERVATION_TTL_SECONDS", 3600
+    )
+
 
 @dataclass(frozen=True)
 class CardLinkedPaymentRailsConfig:
@@ -1517,6 +1578,9 @@ class InteropIntelligenceConfig:
     api_enabled: bool = _env_bool("AETHER_INTEROP_API_ENABLED", False)
     noesis_enabled: bool = _env_bool("AETHER_INTEROP_NOESIS_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_INTEROP_OPS_ENABLED", False)
+    security_snapshots_enabled: bool = _env_bool(
+        "AETHER_INTEROP_SECURITY_SNAPSHOTS_ENABLED", False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1733,6 +1797,9 @@ class Settings:
     # Payment Rail Observability rollout flags
     payment_rails: PaymentRailsConfig = field(default_factory=PaymentRailsConfig)
     card_linked_payment_rails: CardLinkedPaymentRailsConfig = field(default_factory=CardLinkedPaymentRailsConfig)
+
+    # Rewards background-loop rollout flags
+    rewards: RewardsConfig = field(default_factory=RewardsConfig)
 
     # AI Outcome Efficiency / AI Economics rollout flags
     ai_economics: AIEconomicsConfig = field(default_factory=AIEconomicsConfig)

@@ -30,9 +30,15 @@ here are also directly callable (and tested) without a worker.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from repositories.imports_repo import get_imports_repository
+from services.card_linked_payments.import_session import (
+    MAX_SESSION_RETRIES,
+    ImportSessionState,
+    lifecycle_state_of,
+)
 from services.imports.contracts import FieldMapping
 from shared.common.common import BadRequestError, ConflictError
 from shared.logger.logger import get_logger, metrics
@@ -375,23 +381,134 @@ async def graph_preview(tenant_id: str, import_id: str) -> dict:
     }
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _commit_entry_allowed(state: Optional[ImportSessionState], session: dict) -> bool:
+    """The retry-safe commit entry guard.
+
+    Accepts: a fresh commit (NORMALIZING, legacy ``approved``); a retry
+    (FAILED — set by ``mark_failed`` after an in-process failure); and a
+    crash-recovery resume (COMMITTING — a hard crash leaves the session in
+    ``committing`` with no failure recorded). Both the retry and the resume are
+    refused once the session's recorded-failure budget is exhausted, so a
+    deterministically failing commit cannot loop forever inside the FSM.
+    """
+    if state is ImportSessionState.NORMALIZING:
+        return True
+    if state in (ImportSessionState.FAILED, ImportSessionState.COMMITTING):
+        return int(session.get("retry_count", 0) or 0) < MAX_SESSION_RETRIES
+    return False
+
+
 async def commit_import(tenant_id: str, import_id: str) -> dict:
-    """Commit an approved import to Bronze + the graph."""
+    """Resumable, idempotent commit of an approved import to Bronze + the graph.
+
+    Entry states (retry-safe): NORMALIZING (legacy ``approved``) for a fresh
+    commit; FAILED for a job retry / operator requeue; COMMITTING for a
+    crash-recovery resume. The commit id is persisted on the session
+    (``active_commit_id``) at entry, so a crash mid-commit resumes under the
+    SAME id: Bronze ingest, graph upserts and the commit row are idempotent, so
+    replaying never duplicates rows/edges and never silently stops mid-import.
+
+    On failure the session is marked FAILED with ``failure_reason`` +
+    ``retry_count`` (both preserved across retries) instead of being stuck in
+    ``committing`` forever — a retry then re-enters COMMITTING and resumes.
+    """
+    from services.imports.session_persistence import (
+        mark_failed,
+        transition_session,
+    )
+
     repo = get_imports_repository()
     session = await repo.get_session(tenant_id, import_id)
-    if session.get("status") != "approved":
+    state = lifecycle_state_of(session)
+    if not _commit_entry_allowed(state, session):
         raise ConflictError(
-            f"import must be approved before commit (current: {session.get('status')!r})"
+            f"import is not commit-eligible in state {state.value if state else 'UNKNOWN'!r} "
+            "(eligible: NORMALIZING/approved, FAILED, or a stranded COMMITTING)"
         )
-    await repo.set_status(tenant_id, import_id, "committing")
-    commit_id = f"impc_{uuid.uuid4().hex}"
+
+    commit_id = session.get("active_commit_id")
+    if not commit_id:
+        commit_id = f"impc_{uuid.uuid4().hex}"
+        await transition_session(
+            repo,
+            tenant_id,
+            import_id,
+            ImportSessionState.COMMITTING,
+            patch={"active_commit_id": commit_id, "commit_started_at": _now_iso()},
+        )
+    else:
+        # Resume: re-enter COMMITTING (self arc) and refresh the commit anchor
+        # so the sweeper/requeue grant a fresh stranded-detection window.
+        await transition_session(
+            repo,
+            tenant_id,
+            import_id,
+            ImportSessionState.COMMITTING,
+            patch={"commit_started_at": _now_iso()},
+        )
+
     try:
         record = await _stage_and_mutate(tenant_id, import_id, session, commit_id)
-    except Exception:
-        await repo.set_status(tenant_id, import_id, "failed")
+    except Exception as exc:
+        await mark_failed(
+            repo, tenant_id, import_id,
+            failure_reason="commit staging failed",
+            exc=exc,
+        )
         raise
+
+    # The commit row upserts by commit_id, so a resume overwrites the prior
+    # (partial) record instead of accumulating duplicates.
     await repo.create_commit(tenant_id, import_id, record)
-    await repo.set_status(tenant_id, import_id, record["status"])
+
+    # Drive the program lifecycle: Bronze+graph staging was COMMITTING; Silver
+    # projection is PROJECTING; provider corroboration is RECONCILING.
+    await transition_session(
+        repo,
+        tenant_id,
+        import_id,
+        ImportSessionState.PROJECTING,
+        patch={"projection_state": "completed"},
+    )
+    await transition_session(
+        repo,
+        tenant_id,
+        import_id,
+        ImportSessionState.RECONCILING,
+        patch={"reconciliation_state": "pending_provider_corroboration"},
+    )
+    legacy = (
+        "partially_committed"
+        if record["status"] == "partially_committed"
+        else "committed"
+    )
+    counts = record.get("counts", {})
+    await transition_session(
+        repo,
+        tenant_id,
+        import_id,
+        ImportSessionState.COMPLETED,
+        legacy_status=legacy,
+        patch={
+            "projection_state": "completed",
+            "reconciliation_state": "cleared",
+            "accepted_count": int(counts.get("records", 0) or 0),
+            "rejected_count": int(counts.get("row_errors", 0) or 0),
+            "duplicate_count": max(
+                0,
+                int(counts.get("records", 0) or 0)
+                - int(counts.get("bronze_rows", 0) or 0),
+            ),
+            "quarantine_count": 0,
+            "schema_version": record.get("mapping_version"),
+            "source_checksum": session.get("source_checksum"),
+            "completed_at": _now_iso(),
+        },
+    )
     metrics.increment("import_committed_total", labels={"status": record["status"]})
     await _emit("IMPORT_COMMITTED", tenant_id, {"import_id": import_id, "commit_id": commit_id,
                                                 "counts": record["counts"]})
@@ -434,7 +551,11 @@ async def rollback_import(
     }
     await repo.create_rollback(tenant_id, import_id, commit_id, manifest)
     await repo.update_commit(tenant_id, commit_id, rolled_back=True)
-    await repo.set_status(tenant_id, import_id, "rolled_back")
+    from services.imports.session_persistence import transition_session
+
+    await transition_session(
+        repo, tenant_id, import_id, ImportSessionState.ROLLED_BACK
+    )
     metrics.increment("import_rolled_back_total")
     await _emit("IMPORT_ROLLED_BACK", tenant_id, {"import_id": import_id, "commit_id": commit_id,
                                                   **manifest})

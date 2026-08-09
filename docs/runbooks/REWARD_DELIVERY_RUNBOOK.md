@@ -19,8 +19,21 @@ Reward delivery runs on the durable delivery outbox
 (`RewardDeliveryOutbox`): enqueue → leased dispatch → provider receipt →
 mark delivered. Aether operates a **no-custody** model — it never holds or moves
 funds; the on-chain rails are oracle-signed claims gated by
-`EVM_REWARD_PROOFS_ENABLED`. Core invariant: a reward action is **never** marked
-`delivered` without a persisted `ProviderReceipt`.
+`EVM_REWARD_PROOFS_ENABLED` (EVM proofs production-warrantied) with an SVM
+(`program_id`) proof path exercised on devnet (sandbox tier). The `onchain_claim`
+rail completes through the claim reconciler (`services/rewards/reconcile.py`):
+a receipt confirming an on-chain claim marks the linked proof `used` (single-use
+— nonce replay protection) and transitions the action to `delivered`; a proof
+whose nonce is already used is refused. Core invariant: a reward action is
+**never** marked `delivered` without a persisted `ProviderReceipt`.
+
+Abandoned budget reservations are reclaimed by the reservation-release worker
+(`services/rewards/reservation_release.py`): a `reserved`-only reservation older
+than `REWARD_RESERVATION_TTL_SECONDS` (default 3600s) is resolved — committed if
+the linked action was actually delivered, otherwise released and the leaked
+non-terminal action marked failed/abandoned. A reservation that never reaches a
+terminal state otherwise leaks budget until a human intervenes, so a rising
+`reward_reservation_release` dead-letter count is a real signal.
 
 ## Deliveries stuck in `failed` (retrying)
 

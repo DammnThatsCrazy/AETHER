@@ -34,6 +34,8 @@ read by the off-chain oracle; it holds no funds.
 | `DEPENDENCIES.md` | Pinned toolchain + library inventory |
 | `REPRODUCIBLE_BUILD.md` | Deterministic build + how to reproduce analysis |
 | `AUDIT_FINDING_TEMPLATE.md` | Issue template for reporting findings |
+| `CODE_REVIEW_CHECKLIST.md` | Itemized verification list the auditor must complete |
+| `DEPLOYMENT_GUARDS.md` | Summary of every fail-closed deploy/activation gate |
 | `AUDIT_EVIDENCE.template.json` | Shape of the sign-off file that unblocks mainnet |
 
 ## Mainnet is gated on this package

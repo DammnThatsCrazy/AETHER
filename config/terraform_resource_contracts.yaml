@@ -337,11 +337,13 @@ forbidden_resources:
 
   clickhouse:
     description: >-
-      Self-managed or managed ClickHouse for analytics. No ClickHouse resource
-      exists in this root at any profile today; scale/enterprise express the
-      intent through local.analytics_backend only. The rule is declared so the
-      contract stays complete and a future ClickHouse module cannot appear in a
-      lean plan unnoticed.
+      Self-managed ClickHouse for analytics, provisioned by modules/clickhouse
+      (a single EC2 appliance plus a dedicated EBS data volume, count-gated on
+      local.enable_clickhouse and wired into the root as module "clickhouse";
+      the runtime consumes it through CLICKHOUSE_HOST/CLICKHOUSE_PORT).
+      Scale/enterprise profiles (enable_clickhouse true) host the appliance; the
+      rule keeps it OUT of a lean plan — an aws_instance/aws_ecs_service/
+      aws_ebs_volume named clickhouse* must never appear there unnoticed.
     module_address: any
     resource_types:
       - aws_instance
@@ -358,7 +360,7 @@ forbidden_resources:
     terraform_gate: local.enable_clickhouse
     also_applies_to: [staging]
     permitted_in: [production-scale, enterprise-isolated]
-    currently_unimplemented: true
+    currently_unimplemented: false
 
   dedicated_ml_service:
     description: >-

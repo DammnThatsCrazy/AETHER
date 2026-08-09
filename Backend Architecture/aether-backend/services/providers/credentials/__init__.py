@@ -19,9 +19,11 @@ from services.providers.credentials.schema import (
 from services.providers.credentials.slot_registry import (
     CredentialSlot,
     build_slot_registry,
+    declared_domains,
     get_slot,
     known_providers,
     slots_for,
+    slots_for_domain,
 )
 
 __all__ = [
@@ -35,7 +37,9 @@ __all__ = [
     # slot registry
     "CredentialSlot",
     "build_slot_registry",
+    "declared_domains",
     "slots_for",
+    "slots_for_domain",
     "get_slot",
     "known_providers",
 ]

@@ -150,7 +150,7 @@ class TestReconciliationInvariants:
             await repo.upsert({
                 "tenant_id": TENANT, "campaign_id": CAMPAIGN,
                 "source_event_id": f"ev-{uuid4()}", "conversion_type": "purchase",
-                "gross_value": 100.0, "occurred_at": _ts(),
+                "gross_value": 100.0, "currency": "USD", "occurred_at": _ts(),
             })
 
         # Write only 1 attributed credit

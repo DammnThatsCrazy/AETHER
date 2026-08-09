@@ -566,6 +566,14 @@ credentialless-certification: ## Provider certification matrix + honest Credenti
 credentialless-certification-strict: ## Enforce every first-release provider >= CREDENTIAL_WAITING (no SCAFFOLDED); PR7-time gate
 	python scripts/credentialless_certification.py --strict
 
+.PHONY: credential-turnkey credential-turnkey-strict
+
+credential-turnkey: ## Credential-turnkey capability matrix (sec24) — machine-readable evidence report; exit 0
+	python scripts/credential_turnkey_gate.py
+
+credential-turnkey-strict: ## Credential-turnkey strict gate (sec24) — FAIL on scaffolding, unsupervised workers, hardcoded creds, silent failure, false-success health, missing persistence, non-idempotent retry, absent repair, undeclared metering/entitlement, or live-readiness claims without evidence; NOT wired into ci-check
+	python scripts/credential_turnkey_gate.py --strict
+
 .PHONY: financial-credential-readiness financial-credential-readiness-strict payment-rails-certification stablecoin-observer-certification financial-pilot-preflight
 
 financial-credential-readiness: ## Financial cohort (payments + stablecoin_chain) credential-readiness truth (report; exit 0)

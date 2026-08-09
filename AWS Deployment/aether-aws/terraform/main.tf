@@ -231,6 +231,33 @@ module "msk" {
 }
 
 # ---------------------------------------------------------------------------
+# 4c-E2. Kafka topic provisioning — production-scale / enterprise-isolated only.
+#
+# MSK runs with auto.create.topics.enable=false (see modules/msk
+# server_properties), so every topic the runtime declares must be created
+# before the first producer connects. This module deploys a one-shot Lambda
+# (source: deploy/kafka, registry: topics.json generated from the Topic enum in
+# shared/events/events.py) and invokes it after the MSK cluster exists. The
+# count is gated on local.enable_msk, so cost-capped profiles provision no
+# Lambda and no invocation.
+# ---------------------------------------------------------------------------
+
+module "kafka_topic_provisioner" {
+  source = "./modules/kafka_topic_provisioner"
+  count  = local.enable_msk ? 1 : 0
+
+  environment              = var.environment
+  project                  = var.project
+  bootstrap_servers        = module.msk[0].bootstrap_brokers_tls
+  subnet_ids               = module.vpc.private_subnet_ids
+  lambda_security_group_id = module.vpc.ecs_sg_id
+  topic_partitions         = var.kafka_topic_partitions
+  topic_replication_factor = var.kafka_topic_replication_factor
+
+  depends_on = [module.msk[0]]
+}
+
+# ---------------------------------------------------------------------------
 # 4c-E1. SQS + SNS fanout (replaces MSK as active event broker)
 # ---------------------------------------------------------------------------
 
@@ -261,6 +288,33 @@ module "neptune" {
 }
 
 # ---------------------------------------------------------------------------
+# 4d-E1. ClickHouse analytics — production-scale / enterprise-isolated only.
+#
+# This is the provisioning counterpart to local.analytics_backend == "clickhouse":
+# the profile selector is only honest once an appliance exists to connect to.
+# The cost-capped profiles declare analytics: postgres and provision nothing
+# here; modules/clickhouse is count-gated so a lean plan contains no clickhouse
+# resource at any address (enforced by config/terraform_resource_contracts.yaml
+# for the profiles that forbid it). The appliance sits in the first isolated
+# subnet and is reachable only from the ECS task security group.
+# ---------------------------------------------------------------------------
+
+module "clickhouse" {
+  source = "./modules/clickhouse"
+  count  = local.enable_clickhouse ? 1 : 0
+
+  environment        = var.environment
+  project            = var.project
+  vpc_id             = module.vpc.vpc_id
+  subnet_id          = module.vpc.isolated_subnet_ids[0]
+  allowed_sg_id      = module.vpc.ecs_sg_id
+  ami_id             = var.clickhouse_ami_id
+  instance_type      = var.clickhouse_instance_type
+  data_volume_size   = var.clickhouse_data_volume_size
+  log_retention_days = var.log_retention_days
+}
+
+# ---------------------------------------------------------------------------
 # 4z. Normalized data-store connection surface
 #
 # Every consumer of a profile-gated data store reads these locals, never the
@@ -286,6 +340,9 @@ locals {
 
   # Neptune (absent unless local.graph_backend == "neptune").
   neptune_endpoint = try(module.neptune[0].cluster_endpoint, "")
+
+  # ClickHouse analytics (absent unless local.analytics_backend == "clickhouse").
+  clickhouse_host = try(module.clickhouse[0].hostname, "")
 
   # Legacy RDS. Always absent on a fresh plan; kept so the root outputs stay
   # index-safe for a state that still carries an adopted instance.
@@ -460,6 +517,7 @@ module "ecs" {
   redis_host              = local.redis_host
   redis_port              = local.redis_port
   neptune_endpoint        = local.neptune_endpoint
+  clickhouse_host         = local.clickhouse_host
 
   # ML_SERVING_URL: set to ALB DNS once DNS/cert is in place; empty = backend uses "not_trained" fallback
   ml_serving_url = ""

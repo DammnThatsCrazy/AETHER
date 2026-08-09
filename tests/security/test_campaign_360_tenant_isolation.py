@@ -121,13 +121,13 @@ class TestCampaignConversionTenantIsolation:
         cv_a = {
             "tenant_id": TENANT_A, "campaign_id": CAMPAIGN_A,
             "source_event_id": f"ev-a-{uuid4()}", "conversion_type": "purchase",
-            "gross_value": 100.0, "occurred_at": _ts(),
+            "gross_value": 100.0, "currency": "USD", "occurred_at": _ts(),
         }
         # Insert attributed conversion for tenant B with same campaign ID
         cv_b = {
             "tenant_id": TENANT_B, "campaign_id": CAMPAIGN_A,
             "source_event_id": f"ev-b-{uuid4()}", "conversion_type": "purchase",
-            "gross_value": 999.0, "occurred_at": _ts(),
+            "gross_value": 999.0, "currency": "USD", "occurred_at": _ts(),
         }
         await repo.upsert(cv_a)
         await repo.upsert(cv_b)
@@ -147,12 +147,12 @@ class TestCampaignConversionTenantIsolation:
             await repo.upsert({
                 "tenant_id": TENANT_A, "campaign_id": CAMPAIGN_A,
                 "source_event_id": f"ev-a-{uuid4()}", "conversion_type": "purchase",
-                "gross_value": 50.0, "occurred_at": _ts(),
+                "gross_value": 50.0, "currency": "USD", "occurred_at": _ts(),
             })
         await repo.upsert({
             "tenant_id": TENANT_B, "campaign_id": CAMPAIGN_A,
             "source_event_id": f"ev-b-{uuid4()}", "conversion_type": "purchase",
-            "gross_value": 10000.0, "occurred_at": _ts(),
+            "gross_value": 10000.0, "currency": "USD", "occurred_at": _ts(),
         })
 
         summary = await repo.campaign_population_summary(TENANT_A, CAMPAIGN_A)

@@ -14,6 +14,7 @@ from repositories.stablecoin_repos import (
     StablecoinIngestionCheckpointRepository,
     StablecoinObservationRepository,
     StablecoinProviderHealthRepository,
+    StablecoinRemediationAuditRepository,
 )
 from repositories.lake import BronzeRepository, SilverRepository
 from shared.common.common import utc_now
@@ -57,6 +58,7 @@ class StablecoinProviderIngestionRunner:
         bronze: BronzeRepository | None = None,
         silver: SilverRepository | None = None,
         registry: StablecoinDeploymentRegistry | None = None,
+        remediation: StablecoinRemediationAuditRepository | None = None,
     ) -> None:
         self.pipeline = pipeline or StablecoinIngestionPipeline()
         self.health = health or StablecoinProviderHealthRepository()
@@ -65,6 +67,7 @@ class StablecoinProviderIngestionRunner:
         self.bronze = bronze or BronzeRepository("stablecoin")
         self.silver = silver or SilverRepository("stablecoin")
         self.registry = registry or PLATFORM_STABLECOIN_REGISTRY
+        self.remediation = remediation or StablecoinRemediationAuditRepository()
 
     async def run_execution(
         self,
@@ -175,34 +178,81 @@ class StablecoinProviderIngestionRunner:
         return await self.health.update(record_id, {**existing, **record}) if existing else await self.health.insert(record_id, record)
 
     async def rollback_execution(self, *, tenant_id: str, provider: str, source_execution_id: str) -> dict[str, Any]:
+        """Append-only reorg rollback: DEMOTE, never destroy evidence.
+
+        Historically this physically deleted bronze/silver/observation rows, which
+        broke the append-only contract: a reorg erased the orphaned records and
+        their provenance. Rollback now DEMOTES — every affected row is marked
+        ``demoted=True`` with a ``demotion_reason``/``demoted_at`` (the row and
+        its evidence survive for the audit trail), a ``stablecoin_remediation_audit``
+        entry is appended, and the execution checkpoint is marked ``rolled_back``.
+
+        Re-emission after the reorg re-observes the chain from the rewound anchor;
+        the observation conflict keys dedup the re-observed boundary. Returns a
+        summary with ``demoted_*`` counts (the previous ``deleted_*`` keys remain
+        for caller compatibility and are always 0).
+        """
         if not tenant_id:
             raise ValueError("tenant_id is required for stablecoin rollback")
         source_tag = f"tenant:{tenant_id}:stablecoin:{provider}"
-        deleted_observations = 0
+        now = utc_now().isoformat()
+        demotion = {
+            "demoted": True,
+            "demotion_reason": "reorg_rollback",
+            "demoted_at": now,
+        }
+
+        demoted_observations = 0
         for row in await self.observations.find_many(filters={"tenant_id": tenant_id, "source_execution_id": source_execution_id}, limit=10000):
-            if await self.observations.delete(row["id"]):
-                deleted_observations += 1
-        deleted_silver = 0
+            row_id = str(row.get("id") or row.get("observation_id") or "")
+            if row_id and await self.observations.update(row_id, {**row, **demotion}):
+                demoted_observations += 1
+
+        demoted_silver = 0
         for row in await self.silver.find_many(filters={"tenant_id": tenant_id, "source_tag": source_tag, "source_execution_id": source_execution_id}, limit=10000):
             if str(row.get("source", "")) == provider:
-                if await self.silver.delete(row["id"]):
-                    deleted_silver += 1
-        deleted_bronze = 0
+                row_id = str(row.get("id") or "")
+                if row_id and await self.silver.update(row_id, {**row, **demotion}):
+                    demoted_silver += 1
+
+        demoted_bronze = 0
         for row in await self.bronze.find_many(filters={"tenant_id": tenant_id, "source_tag": source_tag}, limit=10000):
             if str(row.get("provider_record_id", "")).startswith(f"{source_execution_id}:"):
-                if await self.bronze.delete(row["id"]):
-                    deleted_bronze += 1
+                row_id = str(row.get("id") or "")
+                if row_id and await self.bronze.update(row_id, {**row, **demotion}):
+                    demoted_bronze += 1
+
         checkpoint_id = f"stablecoin_checkpoint:{tenant_id}:{provider}:{source_execution_id}"
         checkpoint = await self.checkpoints.find_by_id(checkpoint_id)
         if checkpoint:
-            await self.checkpoints.update(checkpoint_id, {**checkpoint, "status": "rolled_back", "rolled_back_at": utc_now().isoformat()})
+            await self.checkpoints.update(checkpoint_id, {**checkpoint, "status": "rolled_back", "rolled_back_at": now})
+
+        # Append durable demotion evidence to the remediation audit trail.
+        audit_id = f"stablecoin_remediation_audit:{tenant_id}:{provider}:{source_execution_id}:{now}"
+        await self.remediation.insert(audit_id, {
+            "audit_id": audit_id,
+            "tenant_id": tenant_id,
+            "provider": provider,
+            "source_execution_id": source_execution_id,
+            "action": "rollback_demotion",
+            "reason": "reorg_rollback",
+            "demoted_observations": demoted_observations,
+            "demoted_silver": demoted_silver,
+            "demoted_bronze": demoted_bronze,
+            "evidence_preserved": True,
+            "created_at": now,
+        })
         return {
             "tenant_id": tenant_id,
             "provider": provider,
             "source_execution_id": source_execution_id,
-            "deleted_bronze": deleted_bronze,
-            "deleted_silver": deleted_silver,
-            "deleted_observations": deleted_observations,
+            "deleted_bronze": 0,
+            "deleted_silver": 0,
+            "deleted_observations": 0,
+            "demoted_bronze": demoted_bronze,
+            "demoted_silver": demoted_silver,
+            "demoted_observations": demoted_observations,
+            "evidence_preserved": True,
         }
 
     async def _record_checkpoint(self, **data: Any) -> str:

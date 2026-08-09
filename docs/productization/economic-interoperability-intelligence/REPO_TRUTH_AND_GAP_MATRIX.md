@@ -21,7 +21,7 @@ Pre-implementation truth (verified by audit, 2026-07-08) and what 8.12.0 changed
 | Derivatives contracts | PR1 (#395): `derivatives.ts`, `financial_activity` purpose, raw-SQL DDL, 5 doc stubs — zero runtime code | Full runtime: registries, adapters+simulator+conformance, FSMs, streams, reconciliation, P&L |
 | Derivatives migrations | Raw SQL outside Alembic (`Backend Architecture/migrations/2026_07_derivatives_foundation.sql`) | Alembic adoption revision (idempotent IF NOT EXISTS replay); Alembic owns the tables |
 | Stablecoin | x402 verification + web3 registries only; no stablecoin domain | Full observation domain: registry, observations, valuation/depeg, support, finality/reorg, flows |
-| Interop | Nothing (greenfield); graph had no interop types | Full domain + LayerZero V2 reference adapter + 6 scaffolds |
+| Interop | Nothing (greenfield); graph had no interop types | Full domain — all 7 adapters CREDENTIAL_GATED (fixture-proven decode + correlation; LayerZero V2 was the reference; the other six were scaffolds before the build wave and are now CREDENTIAL_GATED with supervised scan + operational-state surfaces) |
 | Consent enforcement | Hardcoded stale purpose set missing `financial_activity` (defect) | Registry-derived at import; regression test |
 | Consent purposes | No `economic_observability` / `cross_chain_observability` | Both added, fail-closed, 7y retention, no training |
 | Events | No stablecoin/derivatives/interop families | 110 events, registry-driven projector routing |

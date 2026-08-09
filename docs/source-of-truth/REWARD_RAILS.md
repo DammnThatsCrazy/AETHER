@@ -11,7 +11,7 @@ the tenant's system for execution. Aether generates the payload; the tenant exec
 | `manual_approval` | None until approved | Tenant operator | Production |
 | `manual_export` | CSV/JSON download | Tenant batch process | Production |
 | `tenant_webhook` | HTTPS POST to tenant URL | Tenant webhook handler | Production |
-| `onchain_claim` | Proof returned in payload | User or tenant dApp | Production (EVM) |
+| `onchain_claim` | Proof returned in payload | User or tenant dApp | EVM production-warrantied; SVM sandbox |
 | `stripe_credit` | Action payload only | Tenant Stripe integration | Beta |
 | `loyalty_points` | Action payload only | Tenant loyalty platform | Beta |
 | `coupon` | Action payload only | Tenant coupon system | Beta |
@@ -93,12 +93,25 @@ the tenant's system for execution. Aether generates the payload; the tenant exec
 
 ## onchain_claim
 
-- Generates a cryptographic proof (EIP-191 or EIP-712) signed by Aether's oracle key.
-- Proof is returned in the action payload for the tenant dApp or user to submit on-chain.
-- The tenant's smart contract verifies the oracle signature and transfers reward tokens.
-- Aether never submits the transaction (no-custody model).
-- Tenant dApp submits claim; tenant contract validates; tenant contract transfers tokens.
-- After claim, tenant or chain watcher submits receipt via `POST /v1/rewards/receipts`.
+- Generates a cryptographic claim proof signed by Aether's oracle key, returned
+  in the action payload for the tenant dApp or user to submit on-chain.
+- The tenant's contract/program verifies the oracle signature and transfers
+  reward tokens. Aether never submits the transaction (no-custody model).
+- VM support is declared in `services/commerce/rail_matrix.py`
+  (`onchain_claim` buckets): **EVM** proofs are production-warrantied
+  (EIP-191/EIP-712, audit-gated); **SVM** proofs are wired and exercised against
+  devnet/test programs (sandbox tier, `program_id` or `contract_address`
+  required); other VMs (bitcoin, movevm, near, tvm, cosmos) are explicitly
+  unsupported or beta and never silently accepted.
+- `vm_type` is resolved from the campaign config or `REWARD_VM_TYPE` (default
+  `evm`); an unwired `vm_type` is rejected before any proof is built.
+- Tenant dApp submits claim; tenant contract validates; tenant contract
+  transfers tokens.
+- After claim, tenant or chain watcher submits receipt via
+  `POST /v1/rewards/receipts`; the claim reconciler
+  (`services/rewards/reconcile.py`) marks the linked proof `used` (single-use /
+  nonce replay protection) and transitions the action to `delivered` only when
+  a receipt confirms the on-chain claim happened.
 - See `REWARD_PROOFS.md` for proof format and lifecycle.
 - Configuration requires `tenant_contract_registry` entry.
 

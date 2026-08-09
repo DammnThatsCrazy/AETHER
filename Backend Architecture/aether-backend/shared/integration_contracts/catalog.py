@@ -19,16 +19,22 @@ Honesty is enforced two ways:
 
 from __future__ import annotations
 
+from typing import Optional
+
 from services.integrations.connectors.base import ConnectorDescriptor
 from services.integrations.connectors.registry import CONNECTORS
 from services.integrations.providers.payment_rails import ADAPTERS as PAYMENT_RAIL_ADAPTERS
 from services.integrations.providers.payment_rails.base import PaymentRailAdapter
+from services.integrations.providers.payment_rails.models import (
+    PAYMENT_RAILS_SCHEMA_VERSION,
+)
 from shared.certification.readiness import CredentialReadiness, to_readiness
 from shared.integration_contracts.manifest import (
     Accounts,
     Authentication,
     AuthType,
     Availability,
+    CertificationState,
     Configuration,
     CredentialFieldSpec,
     Deployment,
@@ -37,6 +43,7 @@ from shared.integration_contracts.manifest import (
     OAuthSpec,
     ProviderManifest,
     Sync,
+    TransportProtocol,
     Webhooks,
     validate_manifest,
 )
@@ -61,8 +68,16 @@ DEFAULT_INCREMENTAL_CURSOR = "updated_at"
 
 # Conservative projection of a readiness state onto the manifest's coarse 1-5
 # productization level. Level >= 4 is NEVER emitted below sandbox_validated.
+# Every CredentialReadiness member must have a level here so no path that
+# indexes a readiness token KeyErrors (a test asserts the tokens stay indexed).
 _READINESS_LEVEL: dict[CredentialReadiness, int] = {
     CredentialReadiness.SCAFFOLDED: 1,
+    CredentialReadiness.IMPLEMENTATION_IN_PROGRESS: 1,
+    CredentialReadiness.OFFLINE_VALIDATED: 1,
+    CredentialReadiness.CONNECTION_TESTING: 1,
+    CredentialReadiness.SUSPENDED: 1,
+    CredentialReadiness.CREDENTIAL_INVALID: 1,
+    CredentialReadiness.ERROR: 1,
     CredentialReadiness.DISABLED: 1,
     CredentialReadiness.DEGRADED: 1,
     CredentialReadiness.CREDENTIAL_WAITING: 3,
@@ -97,11 +112,49 @@ _NATIVE_WEBHOOK_SCHEMES: dict[str, str] = {
     "braze": "hmac",
 }
 
-# Real, non-empty OAuth scopes keyed by connector_type. Empty today: no
-# registry connector declares honest scopes, so no manifest emits oauth2 with
-# empty scopes (which validate_manifest would reject). Populate this — never the
-# mapping below — to turn a connector's authentication into real OAuth.
-_OAUTH_SCOPES: dict[str, list[str]] = {}
+# Real, non-empty OAuth scopes keyed by connector_type. A connector only emits
+# ``oauth2`` once BOTH its descriptor declares ``supports_oauth=True`` AND it has
+# a scopes entry here — the mapping never invents scopes, and an OAuth connector
+# without scopes honestly falls through to its secret-based auth (the "never
+# emit empty-scope oauth2" invariant, enforced by the ``oauth2 ⇒ non-empty
+# scopes`` rule in validate_manifest). Scope strings are the providers' own
+# documented OAuth scopes, so the required-scopes path is exercised with real
+# vocabulary. These are the connectors that genuinely speak OAuth; the secret-
+# based / webhook-only cohort stays out on purpose.
+_OAUTH_SCOPES: dict[str, list[str]] = {
+    "shopify": ["read_orders", "read_products", "read_customers"],
+    "hubspot": [
+        "crm.objects.contacts.read",
+        "crm.objects.companies.read",
+        "crm.objects.deals.read",
+    ],
+    "salesforce": ["api", "refresh_token"],
+    "slack": ["channels:history", "channels:read", "team:read"],
+    "jira": ["read:jira-user", "read:jira-work", "offline_access"],
+    "linear": ["read"],
+    "intercom": ["read"],
+}
+
+
+# Canonical event types a payment-rail capability observes — the exact set the
+# adapters' ``normalize_to_aether_events`` can emit (payment_initiated is
+# implied by every observed session; completed/refunded and failed/cancelled add
+# the terminal events). Declared once here so the manifest and the parity test
+# share one source.
+PAYMENT_RAIL_EVENT_TYPES: list[str] = [
+    "payment_initiated",
+    "payment_completed",
+    "payment_failed",
+]
+
+# Framework normalization envelope version (shared.integration_contracts.events
+# AetherEvent.schema_version) that every connector capability normalizes into.
+EVENT_ENVELOPE_NORMALIZATION_VERSION = "1"
+
+# Honest certification posture for every capability in this wave: nothing is
+# sandbox/live certified, so "uncertified" is the only true value until a real
+# certification run upgrades it.
+DEFAULT_CERTIFICATION_STATE: CertificationState = "uncertified"
 
 
 # ── Sub-mappers ────────────────────────────────────────────────────────────
@@ -154,9 +207,7 @@ def _authentication_for(desc: ConnectorDescriptor) -> Authentication:
             return Authentication(
                 type="oauth2",
                 credential_schema=[
-                    CredentialFieldSpec(
-                        name="oauth_token", type="oauth_token", secret=True
-                    )
+                    CredentialFieldSpec(name="oauth_token", type="oauth_token", secret=True)
                 ],
                 oauth=OAuthSpec(scopes=list(scopes), refresh_supported=True),
             )
@@ -174,9 +225,7 @@ def _authentication_for(desc: ConnectorDescriptor) -> Authentication:
     if desc.requires_secret:
         return Authentication(
             type="api_key",
-            credential_schema=[
-                CredentialFieldSpec(name="api_key", type="secret", secret=True)
-            ],
+            credential_schema=[CredentialFieldSpec(name="api_key", type="secret", secret=True)],
         )
 
     return Authentication(type="none")
@@ -218,6 +267,68 @@ def _accounts_for(desc: ConnectorDescriptor) -> Accounts:
     )
 
 
+def _transport_protocol_for(desc: ConnectorDescriptor) -> TransportProtocol:
+    """Primary transport projected from the descriptor's capability flags.
+
+    A webhook-only connector receives events (no pull API) → ``webhook``; a
+    pull-capable connector advances its recency cursor over REST reads →
+    ``rest`` (webhooks may be a secondary channel, expressed through
+    ``webhooks.supported``); a realtime-stream connector → ``stream``. Never a
+    hand-maintained parallel map: this is a pure projection of the descriptor.
+    """
+    if desc.supports_webhook and not desc.supports_pull and not desc.supports_realtime_stream:
+        return "webhook"
+    if desc.supports_pull:
+        return "rest"
+    if desc.supports_realtime_stream:
+        return "stream"
+    return "rest"
+
+
+def _base_url_config_for(desc: ConnectorDescriptor) -> Optional[str]:
+    """Declared pull-API base URL from the connector class (single source).
+
+    The descriptor does not carry the base URL; the connector class does
+    (``pull_api_base``). Read through the registry so the manifest names the
+    provider host the pull path actually targets — without branching on provider
+    name. ``None`` when the connector declares no pull host.
+    """
+    connector = CONNECTORS.get(desc.connector_type)
+    if connector is None:
+        return None
+    return getattr(connector, "pull_api_base", None) or None
+
+
+def _connector_declarative(
+    desc: ConnectorDescriptor,
+) -> dict:
+    """Declarative conformance surface projected from a connector descriptor.
+
+    Every value is read out of the descriptor/connector (event types, transport,
+    base URL) or is a framework-honest constant (envelope version, uncertified
+    posture). This is the single place the behavior fields are derived for
+    connectors — the parity test asserts nothing hand-maintained parallel map
+    shadows them.
+    """
+    return {
+        "transport_protocol": _transport_protocol_for(desc),
+        "base_url_config": _base_url_config_for(desc),
+        "callback_requirements": [],
+        "idempotency_semantics": ("provider_event_id (dedupe on the provider-reported event id)"),
+        "rate_limit_behavior": None,
+        "read_only_mutating_boundary": (
+            "ingest + normalize into Bronze only; never writes to provider resources"
+        ),
+        "health_probe": (
+            "connector.test_connection (credential-gated; no live probe in local mode)"
+        ),
+        "normalization_version": EVENT_ENVELOPE_NORMALIZATION_VERSION,
+        "supported_event_types": list(desc.ingest_event_types),
+        "known_unsupported_behavior": [],
+        "certification_state": DEFAULT_CERTIFICATION_STATE,
+    }
+
+
 # ── Public API ─────────────────────────────────────────────────────────────
 
 
@@ -237,6 +348,7 @@ def manifest_from_connector_descriptor(desc: ConnectorDescriptor) -> ProviderMan
     # defaults. The connector class stays the single source of truth.
     data_outputs = list(desc.manifest_data_outputs) or list(DEFAULT_DATA_OUTPUTS)
     product_destinations = list(desc.manifest_product_destinations)
+    declarative = _connector_declarative(desc)
 
     return ProviderManifest(
         provider_family=desc.connector_type,
@@ -254,6 +366,7 @@ def manifest_from_connector_descriptor(desc: ConnectorDescriptor) -> ProviderMan
         data_outputs=data_outputs,
         product_destinations=product_destinations,
         deployment=Deployment(required_secrets=required_secrets),
+        **declarative,
     )
 
 
@@ -267,9 +380,7 @@ def build_connector_manifests() -> list[ProviderManifest]:
     manifests: list[ProviderManifest] = []
     for connector in CONNECTORS.values():
         descriptor = connector.descriptor()
-        manifests.append(
-            validate_manifest(manifest_from_connector_descriptor(descriptor))
-        )
+        manifests.append(validate_manifest(manifest_from_connector_descriptor(descriptor)))
     return manifests
 
 
@@ -301,6 +412,26 @@ PAYMENT_RAIL_DATA_OUTPUTS: list[str] = ["bronze.payment_rail_events"]
 # adapters order by a "created"-style field, so "created" is the honest cursor.
 PAYMENT_RAIL_INCREMENTAL_CURSOR = "created"
 
+# Declarative behavior of every payment rail. These are constants because the
+# observation boundary is identical across rails (Aether OBSERVES, never moves
+# funds); per-rail variation (transport, base URL, rate limits) is read from the
+# adapter itself.
+PAYMENT_RAIL_READ_ONLY_BOUNDARY = (
+    "observe-only: Aether reads provider-reported funding flows and normalizes "
+    "them; it never executes, settles, originates, or custodies funds"
+)
+PAYMENT_RAIL_HEALTH_PROBE = (
+    "adapter.test_connection (credential-gated; webhook-only resolves to the "
+    "typed webhook_only terminal state)"
+)
+PAYMENT_RAIL_IDEMPOTENCY_SEMANTICS = (
+    "provider_event_id + raw_hash (exact-redelivery detection on the raw payload)"
+)
+PAYMENT_RAIL_UNSUPPORTED_BEHAVIOR: list[str] = [
+    "execution/settlement/origination/custody (observe-only capability)",
+    "live provider certification (credential-gated, awaiting tenant credentials)",
+]
+
 # The one credential every rail needs is the inbound webhook signing secret;
 # the adapters name it "webhook_signing_secret" in their cert declaration and we
 # surface it as the manifest field "webhook_secret".
@@ -329,9 +460,7 @@ def _payment_rail_credential_schema(
     """
     fields: list[CredentialFieldSpec] = []
     for name in adapter.cert_required_credentials:
-        field_name = (
-            _WEBHOOK_SECRET_FIELD if name == _WEBHOOK_SIGNING_CREDENTIAL else name
-        )
+        field_name = _WEBHOOK_SECRET_FIELD if name == _WEBHOOK_SIGNING_CREDENTIAL else name
         fields.append(CredentialFieldSpec(name=field_name, type="secret", secret=True))
     return fields
 
@@ -375,9 +504,7 @@ def manifest_from_payment_rail_adapter(
                 production=False,
             ),
         ),
-        authentication=Authentication(
-            type=auth_type, credential_schema=credential_schema
-        ),
+        authentication=Authentication(type=auth_type, credential_schema=credential_schema),
         configuration=Configuration(),
         accounts=Accounts(),
         webhooks=Webhooks(
@@ -396,6 +523,20 @@ def manifest_from_payment_rail_adapter(
         deployment=Deployment(
             required_secrets=[field.name for field in credential_schema],
         ),
+        # Declarative conformance surface — per-rail variation comes from the
+        # adapter (transport, base URL, rate-limit posture); the observation
+        # boundary is the shared rail constant.
+        transport_protocol="webhook" if adapter.webhook_only else "polling",
+        base_url_config=adapter.poll_base_url or None,
+        callback_requirements=[],
+        idempotency_semantics=PAYMENT_RAIL_IDEMPOTENCY_SEMANTICS,
+        rate_limit_behavior=adapter.cert_rate_limit_behavior,
+        read_only_mutating_boundary=PAYMENT_RAIL_READ_ONLY_BOUNDARY,
+        health_probe=PAYMENT_RAIL_HEALTH_PROBE,
+        normalization_version=PAYMENT_RAILS_SCHEMA_VERSION,
+        supported_event_types=list(PAYMENT_RAIL_EVENT_TYPES),
+        known_unsupported_behavior=list(PAYMENT_RAIL_UNSUPPORTED_BEHAVIOR),
+        certification_state=DEFAULT_CERTIFICATION_STATE,
     )
 
 
@@ -451,12 +592,8 @@ def _credit_bureau_credential_schema() -> list[CredentialFieldSpec]:
     not a claim of readiness.
     """
     return [
-        CredentialFieldSpec(
-            name="client_id", type="string", required=True, secret=False
-        ),
-        CredentialFieldSpec(
-            name="client_secret", type="secret", required=True, secret=True
-        ),
+        CredentialFieldSpec(name="client_id", type="string", required=True, secret=False),
+        CredentialFieldSpec(name="client_secret", type="secret", required=True, secret=True),
         CredentialFieldSpec(name="api_key", type="secret", required=True, secret=True),
     ]
 
@@ -492,9 +629,7 @@ def manifest_from_credit_bureau(bureau: str) -> ProviderManifest:
                 production=False,
             ),
         ),
-        authentication=Authentication(
-            type="composite", credential_schema=credential_schema
-        ),
+        authentication=Authentication(type="composite", credential_schema=credential_schema),
         configuration=Configuration(),
         accounts=Accounts(),
         webhooks=Webhooks(supported=False),
@@ -510,6 +645,24 @@ def manifest_from_credit_bureau(bureau: str) -> ProviderManifest:
             required_secrets=[f.name for f in credential_schema if f.secret],
             provider_registration_steps=list(_CREDIT_BUREAU_ACTIVATION_STEPS),
         ),
+        # Declarative conformance surface: credit bureaus are financial, so the
+        # §32 gate requires the read/mutate boundary, health probe, and
+        # certification posture to be explicitly declared — here they are.
+        transport_protocol="rest",
+        base_url_config=None,
+        callback_requirements=[],
+        idempotency_semantics="report_id (per permissible-purpose credit pull)",
+        rate_limit_behavior=None,
+        read_only_mutating_boundary=(
+            "read-only credit-report query; never writes to the bureau or to consumer PII"
+        ),
+        health_probe="none (DEFERRED §26: not enabled in any environment)",
+        normalization_version=EVENT_ENVELOPE_NORMALIZATION_VERSION,
+        supported_event_types=[],
+        known_unsupported_behavior=[
+            "activation (legal/consent/security/commercial/certification approvals all pending)"
+        ],
+        certification_state=DEFAULT_CERTIFICATION_STATE,
     )
 
 
@@ -529,9 +682,7 @@ def build_deferred_credit_bureau_manifests() -> list[ProviderManifest]:
 
 # Computed once at import — each list is already honesty-validated at build.
 PAYMENT_RAIL_MANIFESTS: list[ProviderManifest] = build_payment_rail_manifests()
-DEFERRED_CREDIT_BUREAU_MANIFESTS: list[ProviderManifest] = (
-    build_deferred_credit_bureau_manifests()
-)
+DEFERRED_CREDIT_BUREAU_MANIFESTS: list[ProviderManifest] = build_deferred_credit_bureau_manifests()
 
 # The full catalog: inbound connectors + observe-only payment rails + deferred
 # (non-tenant-visible) credit bureaus.
@@ -576,6 +727,8 @@ __all__ = [
     "DEFAULT_DATA_OUTPUTS",
     "DEFAULT_INCREMENTAL_CURSOR",
     "DEFERRED_CREDIT_BUREAU_MANIFESTS",
+    "DEFAULT_CERTIFICATION_STATE",
+    "PAYMENT_RAIL_EVENT_TYPES",
     "PAYMENT_RAIL_MANIFESTS",
     "build_connector_manifests",
     "build_deferred_credit_bureau_manifests",

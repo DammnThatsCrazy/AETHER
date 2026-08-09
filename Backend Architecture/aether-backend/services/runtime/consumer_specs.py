@@ -94,10 +94,10 @@ def _attach_notifications(registry: Any) -> None:
 # ``ConsumerSpec.topics`` is a *truthful declaration* of everything the spec's
 # handler_factory subscribes: it is the field anyone reasoning about ownership —
 # or later building SNS filter policies — will read. The tuples below are
-# therefore enumerated in full rather than summarised, and
-# tests/unit/test_runtime_execution_groups.py asserts equality between what a
-# spec declares and what its factory actually subscribes, so a handler added to
-# one of these pipelines cannot silently escape its declaration.
+# therefore enumerated in full rather than summarised. The ownership invariants
+# (unique names, exactly one non-api role per spec, per-role group scoping) are
+# pinned by tests/test_runtime_consumer_specs.py, so a handler added to one of
+# these pipelines cannot silently escape its declared role.
 
 # Notification-intelligence alert fan-in. Previously subscribed as a side effect
 # of _attach_stream_ingestion, which left "stream-ingestion-projection"
@@ -129,6 +129,7 @@ GRAPH_PROJECTION_TOPICS: tuple[Topic, ...] = (
     Topic.BEHAVIOR_PATTERN_DETECTED,
     Topic.BEHAVIOR_SESSION_ENDED,
     Topic.BEHAVIOR_SESSION_STARTED,
+    Topic.CANONICAL_ACTIVITY_INGESTED,
     Topic.DELEGATION_CREATED,
     Topic.DELEGATION_REJECTED,
     Topic.DELEGATION_REVOKED,
@@ -137,6 +138,8 @@ GRAPH_PROJECTION_TOPICS: tuple[Topic, ...] = (
     Topic.FLOW_TRANSFER,
     Topic.FRAUD_DECISION_CREATED,
     Topic.FRAUD_EVALUATION_COMPLETED,
+    Topic.INTEROP_MESSAGE_STUCK,
+    Topic.INTEROP_SECURITY_POLICY_CHANGED,
     Topic.JOURNEY_ABANDONED,
     Topic.JOURNEY_ACTOR_JOINED,
     Topic.JOURNEY_ACTOR_LEFT,

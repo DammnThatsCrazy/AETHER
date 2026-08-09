@@ -43,9 +43,11 @@ locals {
   enable_msk         = local.scale || local.enterprise
   enable_neptune     = local.scale || local.enterprise
 
-  # ClickHouse is a selector today: production-scale / enterprise-isolated
-  # declare `analytics: clickhouse`, but this root provisions no ClickHouse
-  # resource yet. The toggle drives local.analytics_backend only.
+  # ClickHouse is count-gated on the same selector: production-scale /
+  # enterprise-isolated declare `analytics: clickhouse` and modules/clickhouse
+  # (EC2 + dedicated EBS appliance) is created for exactly those profiles. Lean
+  # profiles stay at count 0, so no appliance, no cost. The toggle drives both
+  # local.analytics_backend and the clickhouse module's count in main.tf.
   enable_clickhouse = local.scale || local.enterprise
 
   # Dedicated ML serving. Mirrors config/runtime_deployment.yaml `remote_ml`,

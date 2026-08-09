@@ -11,7 +11,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from repositories.repos import BaseRepository
-from shared.common.common import BadRequestError, NotFoundError, utc_now
+from shared.common.common import (
+    AetherError,
+    BadRequestError,
+    ErrorCode,
+    NotFoundError,
+    utc_now,
+)
 
 ContractStatus = Literal['draft','active','pending_signature','expired','cancelled','renewal_pending']
 BillingModel = Literal['flat_subscription','usage_based','hybrid','enterprise_contract','value_based','pilot']
@@ -84,6 +90,36 @@ def sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
         else:
             cleaned[key] = value
     return cleaned
+
+
+class EntitlementDeniedError(AetherError):
+    """Fail-closed dimension-level entitlement denial (HTTP 403).
+
+    Raised by capability-execution paths (and the enforcement seam) when a
+    tenant is not entitled to use a dimension: feature disabled, no
+    entitlement record, or usage beyond ``included_quantity`` with overage
+    not allowed. Never silent — the caller must surface this to the tenant.
+    """
+
+    def __init__(self, dimension: str, reason: str = "not_entitled", **kwargs: Any):
+        super().__init__(
+            ErrorCode.FORBIDDEN,
+            f"Entitlement denied for dimension '{dimension}' ({reason})",
+            details={"dimension": dimension, "reason": reason},
+            **kwargs,
+        )
+
+
+# Canonical fail-closed entitlement decision states. ``included`` and
+# ``overage`` are allowed; ``denied`` is enforced (never silently passed).
+ENTITLEMENT_STATE_INCLUDED = "included"
+ENTITLEMENT_STATE_OVERAGE = "overage"
+ENTITLEMENT_STATE_DENIED = "denied"
+
+# Machine-readable denial reasons (stable API contract).
+ENTITLEMENT_DENY_NOT_ENTITLED = "not_entitled"
+ENTITLEMENT_DENY_DISABLED = "disabled"
+ENTITLEMENT_DENY_OVERAGE_NOT_ALLOWED = "overage_not_allowed"
 
 
 class TenantContractProfile(BaseModel):
@@ -276,6 +312,62 @@ class EntitlementService:
                     unpriced.append(dim)
         package_mismatch = bool(contract and package_id and contract.get('package_id') and package_id != contract.get('package_id'))
         return {'contract_profile': contract, 'entitlements': ents, 'enabled_features': [k for k,e in by_feature.items() if e.get('enabled', True)], 'included_usage': included, 'overages': overages, 'disabled_feature_usage': disabled, 'package_mismatch': package_mismatch, 'unpriced_overages': unpriced}
+
+    async def enforce_dimension(
+        self, tenant_id: str, dimension: str, quantity: float, package_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Fail-closed dimension-level entitlement decision.
+
+        Deterministic (never raises): returns a decision dict with ``state``
+        ``included`` | ``overage`` | ``denied`` plus the machine-readable
+        ``reason``. Callers that must fail-closed convert ``denied`` into an
+        :class:`EntitlementDeniedError` (see ``services/capabilities/
+        enforcement.py``). Dimension-level semantics:
+
+        * no entitlement record for ``dimension``            -> denied (not_entitled)
+        * entitlement present but ``enabled`` is false       -> denied (disabled)
+        * ``quantity`` within ``included_quantity``          -> included
+        * ``quantity`` beyond ``included_quantity`` when
+          ``overage_allowed`` is true                        -> overage
+        * ``quantity`` beyond ``included_quantity`` when
+          overage is not allowed                             -> denied (overage_not_allowed)
+        """
+        ents = await self.entitlements.list_for_tenant(tenant_id)
+        by_feature = {e['feature_key']: e for e in ents}
+        ent = by_feature.get(dimension)
+        quantity = float(quantity or 0)
+        included = float(ent.get('included_quantity') or 0) if ent else 0.0
+        overage_allowed = bool(ent and ent.get('overage_allowed', False))
+        decision: dict[str, Any] = {
+            'tenant_id': tenant_id,
+            'dimension': dimension,
+            'quantity': quantity,
+            'entitlement': ent,
+            'enabled': bool(ent and ent.get('enabled', True)),
+            'included_quantity': included,
+            'overage_allowed': overage_allowed,
+            'overage_quantity': 0.0,
+            'state': ENTITLEMENT_STATE_INCLUDED,
+            'reason': ENTITLEMENT_STATE_INCLUDED,
+        }
+        if ent is None:
+            decision['state'] = ENTITLEMENT_STATE_DENIED
+            decision['reason'] = ENTITLEMENT_DENY_NOT_ENTITLED
+            return decision
+        if not ent.get('enabled', True):
+            decision['state'] = ENTITLEMENT_STATE_DENIED
+            decision['reason'] = ENTITLEMENT_DENY_DISABLED
+            return decision
+        if quantity > included and not overage_allowed:
+            decision['state'] = ENTITLEMENT_STATE_DENIED
+            decision['reason'] = ENTITLEMENT_DENY_OVERAGE_NOT_ALLOWED
+            decision['overage_quantity'] = quantity - included
+            return decision
+        if quantity > included:
+            decision['state'] = ENTITLEMENT_STATE_OVERAGE
+            decision['reason'] = ENTITLEMENT_STATE_OVERAGE
+            decision['overage_quantity'] = quantity - included
+        return decision
 
 
 class UsageSummaryService:

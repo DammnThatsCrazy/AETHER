@@ -168,6 +168,17 @@ class X402ControlPlane:
         await self._mutations.write_resource(resource)
         await self._mutations.write_challenge(requirement, resource)
 
+        # Meter the challenged usage (immutable audit fact).
+        await self._meter_challenged(
+            tenant_id,
+            resource_id=resource_id,
+            holder_id=requester_id,
+            amount_usd=price,
+            chain=chain,
+            asset_symbol=asset_symbol,
+            challenge_id=requirement.challenge_id,
+        )
+
         await self._producer.publish(
             Event(
                 topic=Topic.COMMERCE_CHALLENGE_ISSUED,
@@ -398,6 +409,26 @@ class X402ControlPlane:
         )
         await self._mutations.write_entitlement(entitlement)
 
+        # Meter the paid + entitled usage (immutable audit facts).
+        await self._meter_paid(
+            tenant_id,
+            resource_id=requirement.resource_id if requirement else "",
+            holder_id=auth.payer,
+            amount_usd=auth.amount_usd,
+            chain=auth.chain,
+            asset_symbol=auth.asset_symbol,
+            challenge_id=auth.challenge_id,
+            authorization_id=auth.authorization_id,
+        )
+        await self._meter_entitled(
+            tenant_id,
+            resource_id=requirement.resource_id if requirement else "",
+            holder_id=entitlement.holder_id,
+            amount_usd=auth.amount_usd,
+            challenge_id=auth.challenge_id,
+            entitlement_id=entitlement.entitlement_id,
+        )
+
         result = {
             "verified": True,
             "receipt_id": receipt.receipt_id,
@@ -450,6 +481,15 @@ class X402ControlPlane:
         await self._store.put_fulfillment(fulfillment)
         await self._mutations.write_grant_and_fulfillment(grant, fulfillment)
 
+        # Meter the granted access (immutable audit fact).
+        await self._meter_access_granted(
+            tenant_id,
+            resource_id=entitlement.resource_id,
+            holder_id=entitlement.holder_id,
+            challenge_id="",
+            entitlement_id=entitlement.entitlement_id,
+        )
+
         await self._producer.publish(
             Event(
                 topic=Topic.COMMERCE_ACCESS_GRANTED,
@@ -469,6 +509,30 @@ class X402ControlPlane:
             "resource_id": entitlement.resource_id,
             "status": "granted",
         }
+
+    # ─── Commerce metering (write-side audit facts) ───────────────────
+    # Each stage records one immutable MeterRecord so challenged/paid/entitled
+    # usage is auditable and reconcilable against silver facts. Best-effort: a
+    # metering write failure must never break the commerce lifecycle.
+
+    async def _meter(self, meter_type: str, tenant_id: str, **kw) -> None:
+        try:
+            from services.commerce.metering import get_metering_service
+            await get_metering_service().record(tenant_id, meter_type, **kw)
+        except Exception as exc:  # noqa: BLE001 - metering is best-effort
+            logger.warning("commerce metering failed type=%s tenant=%s: %s", meter_type, tenant_id, exc)
+
+    async def _meter_challenged(self, tenant_id: str, **kw) -> None:
+        await self._meter("challenge_issued", tenant_id, **kw)
+
+    async def _meter_paid(self, tenant_id: str, **kw) -> None:
+        await self._meter("payment_paid", tenant_id, **kw)
+
+    async def _meter_entitled(self, tenant_id: str, **kw) -> None:
+        await self._meter("entitled", tenant_id, **kw)
+
+    async def _meter_access_granted(self, tenant_id: str, **kw) -> None:
+        await self._meter("access_granted", tenant_id, **kw)
 
     # ─── Explainability ───────────────────────────────────────────────
 

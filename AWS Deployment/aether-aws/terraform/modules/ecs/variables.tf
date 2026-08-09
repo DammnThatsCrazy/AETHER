@@ -428,6 +428,19 @@ variable "analytics_backend" {
   }
 }
 
+variable "clickhouse_host" {
+  type        = string
+  description = <<-EOT
+    ClickHouse appliance hostname (CLICKHOUSE_HOST). Only injected when the
+    profile provisions ClickHouse (analytics_backend = "clickhouse"); "" for
+    every postgres-analytics profile. scripts/validate_infra.py requires
+    CLICKHOUSE_HOST to be set exactly when a profile declares
+    analytics: clickhouse, so this host must be non-empty for scale/enterprise
+    or that gate fails at deploy time.
+  EOT
+  default     = ""
+}
+
 variable "credential_kms_key_id" {
   type        = string
   description = "KMS CMK key id for provider-credential envelope encryption (modules/kms_credentials). Injected as CREDENTIAL_KMS_KEY_ID so the AwsKmsEnvelopeCredentialCipher resolves its key. Empty string when the profile provisions no such key (there is no such cloud profile today)."

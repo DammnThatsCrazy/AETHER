@@ -35,7 +35,13 @@ class ConversionRepository:
         return await get_pool()
 
     async def upsert(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Insert conversion or update if incoming authority_rank is higher."""
+        """Insert conversion or update if incoming authority_rank is higher.
+
+        Currency is REQUIRED — there is no silent USD default (program sec19).
+        ``currency`` is resolved to ``normalized_currency=USD`` via the FX seam
+        (``services/value/fx_provider`` snapshot); a non-USD currency without an
+        available rate raises instead of being recorded 1:1.
+        """
         key = row.get("deduplication_key") or _derive_dedup_key(row)
         row.setdefault("deduplication_key", key)
         row.setdefault("conversion_id", str(uuid4()))
@@ -43,11 +49,15 @@ class ConversionRepository:
         row.setdefault("conversion_status", "confirmed")
         row.setdefault("authority_rank", 50)
         row.setdefault("attribution_eligible", True)
-        row.setdefault("currency", "USD")
-        row.setdefault("normalized_currency", "USD")
-        row.setdefault("exchange_rate", "1.0")
         row.setdefault("quantity", 1)
         row.setdefault("schema_version", 1)
+
+        from services.measurement.repositories.spend_repo import normalize_currency_for_usd
+        currency = row.get("currency")
+        norm_currency, exchange_rate = normalize_currency_for_usd(currency)
+        row["currency"] = currency
+        row["normalized_currency"] = norm_currency
+        row["exchange_rate"] = str(exchange_rate)
 
         pool = await self._pool()
         if pool is None:

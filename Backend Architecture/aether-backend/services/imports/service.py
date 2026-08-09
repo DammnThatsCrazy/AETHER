@@ -17,10 +17,15 @@ from __future__ import annotations
 from typing import Optional
 
 from repositories.imports_repo import get_imports_repository
+from services.card_linked_payments.import_session import ImportSessionState
 from services.imports.contracts import (
     FieldMapping,
     is_terminal_status,
     mapping_requires_review,
+)
+from services.imports.session_persistence import (
+    ensure_program_fields,
+    transition_session,
 )
 from services.imports.storage import get_import_storage
 from shared.common.common import BadRequestError, ConflictError
@@ -82,6 +87,9 @@ async def create_import(tenant_id: str, *, created_by: Optional[str] = None) -> 
             "finish, cancel, or roll back an existing import first"
         )
     session = await repo.create_session(tenant_id, created_by=created_by)
+    # Seed the program-spec lifecycle fields (JSONB) so the operator surface
+    # and sweeper can rely on them being present on every session.
+    await ensure_program_fields(repo, tenant_id, session["id"])
     metrics.increment("import_sessions_created_total")
     await _emit("IMPORT_CREATED", tenant_id, {"import_id": session["id"]})
     return session
@@ -144,8 +152,21 @@ async def store_file(
         content_type=content_type,
     )
     files = await get_import_storage().list_for_import(tenant_id, import_id)
-    await repo.update_session(
-        tenant_id, import_id, status="uploaded", file_count=len(files)
+    # Program-spec fields: a deterministic batch checksum over every stored
+    # file's sha256 (single-file imports use the file's own checksum) and the
+    # UPLOADED lifecycle transition.
+    checksums = sorted(f.get("sha256") or "" for f in files)
+    import hashlib
+
+    checksum = checksums[0] if len(checksums) == 1 else hashlib.sha256(
+        "\n".join(checksums).encode("utf-8")
+    ).hexdigest()
+    await transition_session(
+        repo,
+        tenant_id,
+        import_id,
+        ImportSessionState.UPLOADED,
+        patch={"file_count": len(files), "source_checksum": checksum},
     )
     metrics.increment("import_files_uploaded_total", labels={"format": fmt})
     await _emit(
@@ -306,6 +327,11 @@ async def validate_import(tenant_id: str, import_id: str) -> dict:
     storage = get_import_storage()
     from services.imports.analyzer import detect_format  # lazy
 
+    # Program-spec lifecycle: the dry-run is VALIDATING.
+    await transition_session(
+        repo, tenant_id, import_id, ImportSessionState.VALIDATING
+    )
+
     # Aggregate rows + columns across files (single-file is the common case).
     all_rows: list[dict] = []
     all_columns = []
@@ -333,8 +359,45 @@ async def validate_import(tenant_id: str, import_id: str) -> dict:
     await repo.save_validation(tenant_id, import_id, result_dict)
 
     review_required, reasons = mapping_requires_review(fields, all_columns)
-    next_status = "review_required" if review_required else "validated"
-    await repo.set_status(tenant_id, import_id, next_status)
+    schema_version = int(mapping.get("version", 1))
+    # Failed validation is REJECTED (program spec) — never left sitting in
+    # 'validated'/'review_required' as if it passed. Governance review is an
+    # orthogonal signal: the session is VALIDATED but awaiting explicit
+    # approval (legacy status stays review_required for the frontend).
+    if not result_dict.get("ok", False):
+        await transition_session(
+            repo,
+            tenant_id,
+            import_id,
+            ImportSessionState.REJECTED,
+            legacy_status="review_required",
+            patch={
+                "failure_reason": (
+                    f"validation failed: {result_dict.get('rows_invalid')} of "
+                    f"{result_dict.get('rows_total')} rows invalid"
+                ),
+                "accepted_count": int(result_dict.get("rows_valid", 0) or 0),
+                "rejected_count": int(result_dict.get("rows_invalid", 0) or 0),
+                "duplicate_count": 0,
+                "quarantine_count": 0,
+                "schema_version": schema_version,
+            },
+        )
+        next_status = "review_required"
+    else:
+        await transition_session(
+            repo,
+            tenant_id,
+            import_id,
+            ImportSessionState.VALIDATED,
+            legacy_status="review_required" if review_required else "validated",
+            patch={
+                "accepted_count": int(result_dict.get("rows_valid", 0) or 0),
+                "rejected_count": int(result_dict.get("rows_invalid", 0) or 0),
+                "schema_version": schema_version,
+            },
+        )
+        next_status = "review_required" if review_required else "validated"
     metrics.increment(
         "import_validated_total",
         labels={"ok": str(result_dict.get("ok", False)).lower()},
@@ -365,11 +428,24 @@ async def approve_import(
         raise ConflictError(
             f"import must be validated before approval (current: {status!r})"
         )
+    # A REJECTED session projects 'review_required' for the frontend, but the
+    # FSM is authoritative: it must be VALIDATED (not REJECTED) to approve.
+    from services.card_linked_payments.import_session import lifecycle_state_of
+
+    if lifecycle_state_of(session) is ImportSessionState.REJECTED:
+        raise ConflictError("cannot approve: the latest validation did not pass")
     validation = await repo.get_latest_validation(tenant_id, import_id)
     if validation is None or not validation.get("ok", False):
         raise ConflictError("cannot approve: the latest validation did not pass")
-    updated = await repo.update_session(
-        tenant_id, import_id, status="approved", approved_by=approver
+    # Approval enters NORMALIZING (records ready to build / commit); the legacy
+    # status stays 'approved' so the existing commit route + frontend keep
+    # working.
+    updated = await transition_session(
+        repo,
+        tenant_id,
+        import_id,
+        ImportSessionState.NORMALIZING,
+        patch={"approved_by": approver},
     )
     metrics.increment("import_approved_total")
     return updated
@@ -382,6 +458,15 @@ async def cancel_import(tenant_id: str, import_id: str) -> dict:
         raise ConflictError(
             f"import is already terminal ({session.get('status')!r})"
         )
-    updated = await repo.set_status(tenant_id, import_id, "cancelled")
+    # The program FSM has no CANCELLED state — a cancelled session is a stopped
+    # session, mapped to the ROLLED_BACK hard-stop (legacy status stays
+    # 'cancelled' so the frontend's enum keeps parsing).
+    updated = await transition_session(
+        repo,
+        tenant_id,
+        import_id,
+        ImportSessionState.ROLLED_BACK,
+        legacy_status="cancelled",
+    )
     metrics.increment("import_cancelled_total")
     return updated

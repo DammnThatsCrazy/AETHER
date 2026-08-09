@@ -376,6 +376,55 @@ class FraudSummaryProjector:
         metrics.increment("profile360_fraud_summary_updated")
 
 
+# ── InteropActivityProjector ───────────────────────────────────────────
+
+class InteropActivityProjector:
+    """Tracks cross-chain activity in behavior profiles.
+
+    Listens to the interop generic topic (CANONICAL_ACTIVITY_INGESTED) plus the
+    notification-bound interop topics, filters payloads whose ``event_name`` is
+    an interop registry event, and upserts a behavior-profile snapshot for the
+    referencing entity with a ``cross_chain_activity`` pattern label. Keyed on
+    the entity reference (initiator entity / actor / source application); interop
+    events that carry no entity are skipped — a profile is never fabricated.
+    """
+
+    def __init__(self, repo: Optional[BehaviorProfileRepository] = None) -> None:
+        self._repo = repo or BehaviorProfileRepository()
+
+    async def handle(self, event: Event) -> None:
+        p = event.payload or {}
+        event_name = p.get("event_name") or ""
+        if not str(event_name).startswith("interop_"):
+            return
+        entity_id = (
+            _entity_from_event(event)
+            or p.get("initiator_entity_id")
+            or (p.get("source") or {}).get("application_id")
+            or (p.get("provider_extension") or {}).get("application_id")
+        )
+        if not entity_id or not event.tenant_id:
+            return
+        existing = await self._repo.find_by_id(entity_id) or {}
+        now = datetime.now(timezone.utc)
+        patterns = list(existing.get("top_patterns") or [])
+        if "cross_chain_activity" not in patterns:
+            patterns.append("cross_chain_activity")
+        await self._repo.upsert_snapshot(
+            entity_id=entity_id,
+            tenant_id=event.tenant_id,
+            window_start=existing.get("window_start") or now.isoformat(),
+            window_end=now.isoformat(),
+            automation_ratio=float(existing.get("automation_ratio") or 0.0),
+            decision_latency_ms=int(existing.get("decision_latency_ms") or 0),
+            top_patterns=patterns,
+            anomaly_flags=existing.get("anomaly_flags"),
+            risk_score=float(existing.get("risk_score") or 0.0),
+            predicted_next=existing.get("predicted_next"),
+        )
+        metrics.increment("profile360_interop_activity_scored")
+
+
 # ── Wiring ─────────────────────────────────────────────────────────────
 
 def attach_profile360_workers(consumer: EventConsumer, graph: GraphClient) -> None:
@@ -387,6 +436,7 @@ def attach_profile360_workers(consumer: EventConsumer, graph: GraphClient) -> No
     projector = DelegationProjector(graph=graph)
     anomaly = AnomalyFlagger()
     fraud_summary = FraudSummaryProjector()
+    interop_activity = InteropActivityProjector()
 
     # BehaviorScorer + JourneyChainLinker + IntentInferrer listen broadly.
     broad_topics = (
@@ -428,5 +478,15 @@ def attach_profile360_workers(consumer: EventConsumer, graph: GraphClient) -> No
     # FraudSummaryProjector keeps behavior profile in sync with FraudDecision store.
     for t in (Topic.FRAUD_DECISION_CREATED, Topic.FRAUD_EVALUATION_COMPLETED):
         consumer.subscribe(t, fraud_summary.handle)
+
+    # InteropActivityProjector tracks cross-chain activity for entity profiles.
+    # The interop publisher routes fine-grained interop registry events through
+    # the generic interop topic plus the notification-bound interop topics.
+    for t in (
+        Topic.CANONICAL_ACTIVITY_INGESTED,
+        Topic.INTEROP_MESSAGE_STUCK,
+        Topic.INTEROP_SECURITY_POLICY_CHANGED,
+    ):
+        consumer.subscribe(t, interop_activity.handle)
 
     logger.info("Profile 360 workers attached to consumer")

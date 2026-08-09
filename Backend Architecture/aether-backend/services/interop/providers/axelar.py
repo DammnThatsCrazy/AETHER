@@ -40,7 +40,8 @@ from eth_utils import keccak
 
 from services.integrations.connectors.base import ImplementationStatus
 from services.interop.foundation import utc_now_iso
-from services.interop.providers.base import InteropProviderAdapter
+from services.interop.providers.base import InteropProviderAdapter, OperationalFieldsMixin
+from services.interop.providers.transport import RpcRateLimited
 from shared.certification.descriptor import AdapterCertificationDescriptor
 from shared.certification.readiness import CredentialReadiness
 
@@ -71,10 +72,9 @@ DEFAULT_MAX_BLOCK_SPAN = 2_000
 _RECENT_HASHES_KEPT = 32
 
 
-class AxelarRateLimitError(Exception):
+class AxelarRateLimitError(RpcRateLimited):
     def __init__(self, message: str = "rate limited", retry_after: Optional[int] = None) -> None:
-        super().__init__(message)
-        self.retry_after = retry_after
+        super().__init__(message, retry_after=retry_after)
 
 
 class RpcClient(Protocol):
@@ -233,7 +233,7 @@ def gmp_correlation_key(source_chain: str, source_tx_hash: str, source_event_ind
     return f"axl:{source_chain.lower()}/{tx}/{source_event_index}"
 
 
-class AxelarAdapter(InteropProviderAdapter):
+class AxelarAdapter(OperationalFieldsMixin, InteropProviderAdapter):
     provider_id = "axelar"
     provider_kind = "axelar"
     display_name = "Axelar (GMP observation adapter)"
@@ -401,7 +401,7 @@ class AxelarAdapter(InteropProviderAdapter):
 
     # ── scanning ─────────────────────────────────────────────────────────────
 
-    async def scan(
+    async def _scan_cycle(
         self, checkpoint: Optional[dict[str, Any]] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if self.rpc is None:
@@ -443,6 +443,7 @@ class AxelarAdapter(InteropProviderAdapter):
     ) -> bool:
         head = await self.rpc.get_head(network_id)
         head_number = int(head["number"])
+        state["head_number"] = head_number
         safe_head = head_number - self.confirmations
         last = int(state["last_scanned_block"])
         recent = state.setdefault("recent_hashes", {})
@@ -488,7 +489,7 @@ class AxelarAdapter(InteropProviderAdapter):
             window_to = min(cursor + self.max_block_span, safe_head)
             try:
                 raw_logs = await self.rpc.get_logs(network_id, cursor + 1, window_to)
-            except AxelarRateLimitError as exc:
+            except RpcRateLimited as exc:
                 health.append({"provider_id": self.provider_id, "network_id": network_id,
                                "state": "rate_limited", "retry_after": exc.retry_after,
                                "resumed_from_block": cursor})
@@ -498,7 +499,7 @@ class AxelarAdapter(InteropProviderAdapter):
                 raw_log.setdefault("native_chain_id", meta["native_chain_id"])
                 raw_log.setdefault("axelar_chain", meta["axelar_chain"])
                 raw_log["command_bindings"] = bindings
-                decoded = self.decode_log(raw_log)
+                decoded = self._decode_safely(raw_log)
                 if decoded is None:
                     continue
                 observations.append(decoded)
@@ -519,7 +520,7 @@ class AxelarAdapter(InteropProviderAdapter):
         message_id = source_obs["correlation_key"]
         try:
             record = await self.confirmations_client.get_confirmation(message_id)
-        except AxelarRateLimitError as exc:
+        except RpcRateLimited as exc:
             health.append({"provider_id": self.provider_id, "state": "attestation_rate_limited",
                            "retry_after": exc.retry_after})
             return

@@ -5,11 +5,14 @@ projections are deliberately stripped of infrastructure internals.
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from shared.logger.logger import get_logger
+from shared.observability import begin_async_cycle
+from shared.supervisor_handle import get_worker_supervisor
 
 from services.reliability.definitions import (
     LOWER_IS_BETTER_SUFFIXES,
@@ -137,6 +140,142 @@ class ServiceHealthRegistry:
 
 
 service_registry = ServiceHealthRegistry()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Production heartbeat writers (observability write path, agent 1E)
+# ═══════════════════════════════════════════════════════════════════════════
+# Callable from any async boundary (worker loops, supervisors, schedulers)
+# WITHOUT an HTTP round-trip. The registry singleton backs them, so a heartbeat
+# recorded here is immediately visible on every reliability surface
+# (/v1/reliability/services, the readiness scorecard, dashboards).
+
+
+async def record_service_heartbeat(
+    service_key: str,
+    *,
+    latency_ms: float | None = None,
+    error_rate: float | None = None,
+) -> dict[str, Any]:
+    """Durably record one heartbeat for a service (production writer).
+
+    Idempotent by nature: heartbeats are a current-state projection (the
+    ``last_heartbeat_at`` is advanced in place), never an append-only trail, so a
+    supervisor crash/restart that re-emits the same cycle cannot duplicate a row.
+    """
+    if not service_key:
+        raise ValueError("service_key is required to record a heartbeat")
+    return await service_registry.heartbeat(
+        service_key, latency_ms=latency_ms, error_rate=error_rate,
+    )
+
+
+async def record_worker_heartbeat(
+    worker_key: str,
+    *,
+    latency_ms: float | None = None,
+    error_rate: float | None = None,
+    status: str | None = None,
+) -> dict[str, Any]:
+    """Durably record one heartbeat for a worker process/loop (production writer).
+
+    ``worker_key`` is a namespaced process identifier (e.g. ``worker:interop:scan``).
+    The record is created on first heartbeat if the worker is not a declared
+    service definition (``_update`` seeds on demand) — so the reliability surface
+    observes every supervised worker, not only the statically declared services.
+    """
+    if not worker_key:
+        raise ValueError("worker_key is required to record a heartbeat")
+    record = await record_service_heartbeat(
+        worker_key, latency_ms=latency_ms, error_rate=error_rate,
+    )
+    if status and status != record.get("status"):
+        await service_registry.set_status(worker_key, status)
+        record["status"] = status
+    return record
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# WorkerSupervisor → reliability heartbeat bridge (agent 3B)
+# ═══════════════════════════════════════════════════════════════════════════
+# The reliability service-health registry (19 declared services) has no live
+# heartbeat writer in production. The WorkerSupervisor already maintains a
+# per-worker liveness heartbeat + last-success + workload telemetry map
+# (status()); this bridge folds that LIVE state into the registry every cycle,
+# so the reliability surface observes real supervised workers, not only the
+# statically declared definitions. Honest verdicts only: `running`/`restarting`
+# certify healthy, `failed` is critical, `stopped` is degraded, and a worker in
+# no observed state stays unknown — never a fabricated "healthy".
+
+#: WorkerSupervisor.state() token → reliability ServiceHealthStatus verdict.
+_SUPERVISOR_STATE_STATUS = {
+    "running": "healthy",
+    "restarting": "healthy",
+    "failed": "critical",
+    "stopped": "degraded",
+    "disabled": "unknown",
+}
+
+
+def worker_heartbeat_key(name: str, role: str | None) -> str:
+    """Namespaced reliability registry key for one supervised worker."""
+    return f"worker:{role or 'unattributed'}:{name}"
+
+
+async def bridge_worker_supervisor_heartbeats(
+    supervisor: Any = None,
+) -> dict[str, dict[str, Any]]:
+    """Fold live WorkerSupervisor state into the reliability registry.
+
+    For every supervised worker, records a heartbeat under
+    ``worker:<role>:<name>`` with an honest status verdict and, when the worker
+    has a recent successful cycle (``last_success_at``), advances
+    ``last_successful_job_at`` on the same record. Fail-open: an unbounded
+    (None) supervisor or a ``status()`` that raises is observed as silence —
+    the registry rows simply do not advance — never an error, never a
+    fabricated healthy.
+
+    Returns the per-worker registry records so callers/tests can assert on them.
+    """
+    if supervisor is None:
+        supervisor = get_worker_supervisor()
+    try:
+        status = supervisor.status() if supervisor is not None else {}
+    except Exception as exc:  # noqa: BLE001 — a broken status read is silence
+        logger.warning("worker_heartbeat_bridge status() failed: %s", exc)
+        return {}
+
+    records: dict[str, dict[str, Any]] = {}
+    for name, info in status.items():
+        worker_key = worker_heartbeat_key(name, info.get("role"))
+        state = info.get("state") or "unknown"
+        verdict = _SUPERVISOR_STATE_STATUS.get(state, "unknown")
+        records[worker_key] = await record_worker_heartbeat(
+            worker_key, status=verdict,
+        )
+        if info.get("last_success_at"):
+            await service_registry.record_successful_job(worker_key)
+    return records
+
+
+async def run_worker_heartbeat_bridge_loop(
+    interval_seconds: float = 60.0,
+) -> None:
+    """Periodic supervised loop bridging WorkerSupervisor heartbeats to the
+    reliability registry.
+
+    Each cycle starts (or continues) a trace via the OTel seam so bridge writes
+    are trace-linked. Fail-open: a failed cycle is logged and the loop resumes.
+    The integration pass registers this coroutine as a supervised worker (see
+    wiringNeeds) with an optional per-environment cadence.
+    """
+    while True:
+        begin_async_cycle()
+        try:
+            await bridge_worker_supervisor_heartbeats()
+        except Exception as exc:  # pragma: no cover — guarded, fail-open
+            logger.warning("worker_heartbeat_bridge cycle failed: %s", exc)
+        await asyncio.sleep(interval_seconds)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

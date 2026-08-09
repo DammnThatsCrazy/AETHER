@@ -228,6 +228,8 @@ run "staging_profile_plan" {
       length(module.elasticache) == 0,
       length(module.neptune) == 0,
       length(module.rds) == 0,
+      length(module.clickhouse) == 0,
+      length(module.kafka_topic_provisioner) == 0,
     ])
     error_message = "The staging plan provisions a cost-capped data store it must not."
   }
@@ -385,6 +387,8 @@ run "demo_profile_plan" {
       length(module.elasticache) == 0,
       length(module.neptune) == 0,
       length(module.rds) == 0,
+      length(module.clickhouse) == 0,
+      length(module.kafka_topic_provisioner) == 0,
     ])
     error_message = "The demo plan provisions a cost-capped data store it must not."
   }
@@ -542,6 +546,8 @@ run "preview_profile_plan" {
       length(module.elasticache) == 0,
       length(module.neptune) == 0,
       length(module.rds) == 0,
+      length(module.clickhouse) == 0,
+      length(module.kafka_topic_provisioner) == 0,
     ])
     error_message = "The preview plan provisions a cost-capped data store it must not."
   }
@@ -764,6 +770,8 @@ run "production_lean_profile_plan" {
       length(module.elasticache) == 0,
       length(module.neptune) == 0,
       length(module.rds) == 0,
+      length(module.clickhouse) == 0,
+      length(module.kafka_topic_provisioner) == 0,
     ])
     error_message = "The production-lean plan provisions a forbidden data store."
   }
@@ -987,6 +995,8 @@ run "production_scale_profile_plan" {
       length(module.msk) == 1,
       length(module.elasticache) == 1,
       length(module.neptune) == 1,
+      length(module.clickhouse) == 1,
+      length(module.kafka_topic_provisioner) == 1,
       length(module.kms_credentials) == 1,
     ])
     error_message = "The production-scale plan does not provision the heavy backends its profile enables."
@@ -1137,6 +1147,8 @@ run "enterprise_isolated_profile_plan" {
       length(module.msk) == 1,
       length(module.elasticache) == 1,
       length(module.neptune) == 1,
+      length(module.clickhouse) == 1,
+      length(module.kafka_topic_provisioner) == 1,
       length(module.rds) == 0,
       length(module.kms_credentials) == 1,
     ])

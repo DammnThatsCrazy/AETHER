@@ -20,13 +20,13 @@ from shared.certification.readiness import (
 from shared.certification.registry import build_capability_matrix
 
 
-# ── all 26 first-release providers are uniformly credential_waiting ───────────
+# ── all 29 first-release providers are uniformly credential_waiting ───────────
 def test_all_first_release_providers_are_credential_waiting():
     matrix = build_capability_matrix()
     summary = matrix["summary"]
-    assert summary["total"] == 26
-    assert summary["first_release"] == 26
-    assert summary["by_state"] == {"credential_waiting": 26}
+    assert summary["total"] == 29
+    assert summary["first_release"] == 29
+    assert summary["by_state"] == {"credential_waiting": 29}
     # none are production/partner-live, none are scaffolded (forbidden for release)
     states = {p["state"] for p in matrix["providers"].values()}
     assert states == {"credential_waiting"}
@@ -37,8 +37,11 @@ def test_provider_domains_match_the_shipped_scope():
     # communications: the eight-provider cohort (ADR-C11 + follow-up) — Klaviyo
     # is the certified reference pull adapter; SendGrid/Customer.io/Mailchimp/
     # Postmark are webhook-only, and HubSpot/Iterable/Braze (ADR-C11 follow-up)
-    # extend the cohort with pull-capable adapters.
+    # extend the cohort with pull-capable adapters. agentic_commerce (x402,
+    # onchain-reward claim, commerce) extends the first-release scope for the
+    # credential-turnkey closures.
     assert matrix["summary"]["by_domain"] == {
+        "agentic_commerce": 3,
         "communications": 8, "derivatives": 4, "interop": 7, "payments": 5,
         "stablecoin_chain": 2,
     }

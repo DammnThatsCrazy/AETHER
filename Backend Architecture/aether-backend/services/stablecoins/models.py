@@ -57,6 +57,10 @@ class StablecoinEventType(str, Enum):
 
 
 class StablecoinCapability(str, Enum):
+    # Read-only observation capability — the canonical capability the tenant
+    # readiness gate / entitlement guard enforce before ANY observation of a
+    # tenant's stablecoin activity is allowed.
+    OBSERVATION = "observation"
     SEND = "send"
     RECEIVE = "receive"
     HOLD = "hold"

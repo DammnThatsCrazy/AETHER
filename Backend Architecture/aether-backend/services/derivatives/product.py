@@ -119,7 +119,6 @@ class DerivativesProductService:
     def __init__(self) -> None:
         self._snapshots: dict[str, DerivativesProductSnapshot] = {}
         self._operator_audit: list[dict[str, Any]] = []
-        self._usage: dict[tuple[str, str], Decimal] = {}
 
     def seed_snapshot(self, snapshot: DerivativesProductSnapshot) -> None:
         self._snapshots[snapshot.tenant_id] = snapshot
@@ -204,44 +203,56 @@ class DerivativesProductService:
         }
 
     def meter_usage(self, tenant_id: str, meter: str, quantity: Decimal) -> dict[str, Any]:
-        if meter not in USAGE_METERS:
-            raise ValueError(f"unknown derivatives usage meter: {meter}")
-        if quantity < 0:
-            raise ValueError("usage quantity must be non-negative")
-        key = (tenant_id, meter)
-        self._usage[key] = self._usage.get(key, Decimal("0")) + quantity
-        return {"tenant_id": tenant_id, "meter": meter, "quantity": str(self._usage[key]), "billable": meter != "history_retention_days"}
+        # Delegates to the shared DerivativesMeter hook so the in-memory rollup
+        # AND any installed durable sink observe one consistent view.
+        from services.derivatives.meter import derivatives_meter
+
+        return derivatives_meter.record(tenant_id, meter, quantity)
 
     def kyber_fleet(self, operator_tenant_id: str) -> dict[str, Any]:
-        tenants = sorted(self._snapshots)
+        from services.derivatives import counters
+
+        computed = counters.compute_kyber_fleet_sync(operator_tenant_id=operator_tenant_id)
+        snapshot_tenants = sorted(self._snapshots)
+        snapshot_accounts = sum(len(s.accounts) for s in self._snapshots.values())
+        snapshot_venues = len({a.venue_id for s in self._snapshots.values() for a in s.accounts})
         return {
             "operator_tenant_id": operator_tenant_id,
-            "tenant_count": len(tenants),
-            "account_count": sum(len(s.accounts) for s in self._snapshots.values()),
-            "venue_count": len({a.venue_id for s in self._snapshots.values() for a in s.accounts}),
-            "authentication_failures": 0,
-            "rate_limit_events": 0,
-            "snapshot_age_seconds_max": 0,
-            "stream_lag_seconds_max": 0,
-            "checkpoint_lag_seconds_max": 0,
-            "backfill_state": "idle",
+            "tenant_count": max(computed["tenant_count"], len(snapshot_tenants)),
+            "account_count": max(computed["account_count"], snapshot_accounts),
+            "venue_count": max(computed["venue_count"], snapshot_venues),
+            "authentication_failures": computed["authentication_failures"],
+            "rate_limit_events": computed["rate_limit_events"],
+            "snapshot_age_seconds_max": computed["snapshot_age_seconds_max"],
+            "stream_lag_seconds_max": computed["stream_lag_seconds_max"],
+            "checkpoint_lag_seconds_max": computed["checkpoint_lag_seconds_max"],
+            "backfill_state": computed["backfill_state"],
             "execution_by_aether": False,
         }
 
     def kyber_data_quality(self, operator_tenant_id: str) -> dict[str, Any]:
-        variance_count = sum(len(s.reconciliation_variances) for s in self._snapshots.values())
+        from services.derivatives import counters
+
+        computed = counters.compute_kyber_data_quality_sync(
+            operator_tenant_id=operator_tenant_id,
+        )
+        variance_count = sum(
+            len(s.reconciliation_variances) for s in self._snapshots.values()
+        )
         return {
             "operator_tenant_id": operator_tenant_id,
-            "duplicates": 0,
-            "reordered_records": 0,
-            "missing_intervals": 0,
-            "schema_drift": 0,
-            "mapping_failures": 0,
-            "price_gaps": 0,
-            "funding_gaps": 0,
-            "snapshot_delta_mismatches": variance_count,
-            "stale_positions": 0,
-            "orphan_records": 0,
+            "duplicates": computed["duplicates"],
+            "reordered_records": computed["reordered_records"],
+            "missing_intervals": computed["missing_intervals"],
+            "schema_drift": computed["schema_drift"],
+            "mapping_failures": computed["mapping_failures"],
+            "price_gaps": computed["price_gaps"],
+            "funding_gaps": computed["funding_gaps"],
+            "snapshot_delta_mismatches": (
+                computed["snapshot_delta_mismatches"] + variance_count
+            ),
+            "stale_positions": computed["stale_positions"],
+            "orphan_records": computed["orphan_records"],
         }
 
     def kyber_reconciliation(self, operator_tenant_id: str, tenant_id: str | None = None) -> dict[str, Any]:
@@ -250,15 +261,20 @@ class DerivativesProductService:
         return {"operator_tenant_id": operator_tenant_id, "tenant_id": tenant_id, "variance_count": len(variances), "variances": variances}
 
     def kyber_graph_quality(self, operator_tenant_id: str) -> dict[str, Any]:
+        from services.derivatives import counters
+
+        computed = counters.compute_kyber_graph_quality_sync(
+            operator_tenant_id=operator_tenant_id,
+        )
         return {
             "operator_tenant_id": operator_tenant_id,
-            "projection_lag_seconds": 0,
-            "failed_mutations": 0,
-            "unknown_edge_attempts": 0,
-            "missing_evidence": 0,
-            "low_confidence_links": 0,
-            "orphan_positions": 0,
-            "tenant_isolation_rejections": 0,
+            "projection_lag_seconds": computed["projection_lag_seconds"],
+            "failed_mutations": computed["failed_mutations"],
+            "unknown_edge_attempts": computed["unknown_edge_attempts"],
+            "missing_evidence": computed["missing_evidence"],
+            "low_confidence_links": computed["low_confidence_links"],
+            "orphan_positions": computed["orphan_positions"],
+            "tenant_isolation_rejections": computed["tenant_isolation_rejections"],
         }
 
     def kyber_intelligence_quality(self, operator_tenant_id: str) -> dict[str, Any]:

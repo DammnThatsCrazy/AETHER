@@ -133,6 +133,7 @@ async def _seed_full_journey():
             "conversion_type": "purchase",
             "gross_value": 199.99,
             "net_value": 169.99,
+            "currency": "USD",
             "occurred_at": _ts(),
         }
     )

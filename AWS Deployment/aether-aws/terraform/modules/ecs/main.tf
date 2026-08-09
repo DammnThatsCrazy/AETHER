@@ -397,6 +397,15 @@ resource "aws_ecs_task_definition" "backend" {
         var.graph_backend == "neptune" ? [
           { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },
         ] : [],
+        # Analytics backend — the ClickHouse host is only injected when the
+        # profile actually provisions the appliance (analytics_backend ==
+        # "clickhouse"); postgres-analytics profiles never see it. The host
+        # comes from the clickhouse module's hostname output, so this stays
+        # empty for profiles with no appliance.
+        var.analytics_backend == "clickhouse" && var.clickhouse_host != "" ? [
+          { name = "CLICKHOUSE_HOST", value = var.clickhouse_host },
+          { name = "CLICKHOUSE_PORT", value = "9000" },
+        ] : [],
         # Event broker selected explicitly by the profile, not inferred from
         # whether sqs_queue_url happens to be set. SNS_TOPIC_ARN makes the
         # producer publish through the fanout topic so every per-role consumer
@@ -586,6 +595,12 @@ resource "aws_ecs_task_definition" "runtime_service" {
       # Neptune endpoint only on the Neptune graph backend (mirrors the API task).
       var.graph_backend == "neptune" ? [
         { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },
+      ] : [],
+      # ClickHouse host only on the ClickHouse analytics backend (mirrors the
+      # API task). Kept empty for postgres-analytics profiles.
+      var.analytics_backend == "clickhouse" && var.clickhouse_host != "" ? [
+        { name = "CLICKHOUSE_HOST", value = var.clickhouse_host },
+        { name = "CLICKHOUSE_PORT", value = "9000" },
       ] : [],
       # Same explicit broker selection as the API task: without it workers
       # default to kafka and never consume SQS.

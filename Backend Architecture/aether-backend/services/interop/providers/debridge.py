@@ -47,7 +47,8 @@ from eth_utils import keccak
 
 from services.integrations.connectors.base import ImplementationStatus
 from services.interop.foundation import utc_now_iso
-from services.interop.providers.base import InteropProviderAdapter
+from services.interop.providers.base import InteropProviderAdapter, OperationalFieldsMixin
+from services.interop.providers.transport import RpcRateLimited
 
 # ── event signatures ────────────────────────────────────────────────────────
 # DLN Order modelled as a dynamic tuple (production carries variable-length
@@ -80,7 +81,7 @@ DEFAULT_MAX_BLOCK_SPAN = 2000
 _RECENT_HASHES_KEPT = 32
 
 
-class RateLimited(Exception):
+class RateLimited(RpcRateLimited):
     """Raised by the injected RPC client on provider throttling; scan resumes."""
 
 
@@ -180,7 +181,7 @@ def encode_claimed_data(submission_id: bytes, amount: int, nonce: int) -> str:
     return "0x" + (submission_id + _word(amount) + _word(nonce)).hex()
 
 
-class DebridgeAdapter(InteropProviderAdapter):
+class DebridgeAdapter(OperationalFieldsMixin, InteropProviderAdapter):
     provider_id = "debridge"
     provider_kind = "debridge"
     display_name = "deBridge (DLN + Gate observation adapter)"
@@ -366,11 +367,11 @@ class DebridgeAdapter(InteropProviderAdapter):
 
     # ── scanning ────────────────────────────────────────────────────────────
 
-    async def scan(
+    async def _scan_cycle(
         self, checkpoint: Optional[dict[str, Any]] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Windowed multi-chain scan with reorg detection, cursor-drift rewind,
-        and rate-limit-safe resume (see the docstring on HyperlaneAdapter.scan
+        and rate-limit-safe resume (see the docstring on HyperlaneAdapter._scan_cycle
         for the identical resilience contract)."""
         if self.rpc is None:
             raise NotImplementedError(
@@ -388,6 +389,7 @@ class DebridgeAdapter(InteropProviderAdapter):
             )
             head = await self.rpc.get_head(network_id)
             head_number = int(head["number"])
+            state["head_number"] = head_number
             safe_head = head_number - self.confirmations
             last = int(state["last_scanned_block"])
 
@@ -422,7 +424,7 @@ class DebridgeAdapter(InteropProviderAdapter):
                     for raw_log in raw_logs:
                         raw_log.setdefault("network_id", network_id)
                         raw_log.setdefault("native_chain_id", meta["native_chain_id"])
-                        decoded = self.decode_log(raw_log)
+                        decoded = self._decode_safely(raw_log)
                         if decoded:
                             observations.append(decoded)
                     state["last_scanned_block"] = window_end
@@ -430,7 +432,7 @@ class DebridgeAdapter(InteropProviderAdapter):
                     recent[str(window_end)] = block_hash
                     _prune_recent(recent)
                     window_start = window_end + 1
-            except RateLimited:
+            except RpcRateLimited:
                 pass
             state["recent_hashes"] = recent
 
