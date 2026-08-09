@@ -21,6 +21,9 @@ a second asset library or a request to redraw product identity.
   semantic boundaries, and do/don't rules.
 - [Architecture](./architecture.md) maps the public APIs, package ownership,
   responsive rules, accessibility, and documentation/marketing constraints.
+- [Aether context and consumer matrix](./aether-consumer-matrix.md) explains
+  why the system exists, who owns each layer, and the acceptance path for each
+  Aether consumer.
 - [Migration](./migration.md) is the safe adoption checklist for a route,
   provider, entity, or icon migration.
 - [Final audit](./final-audit.md) is a living acceptance report. It records
@@ -32,7 +35,7 @@ a second asset library or a request to redraw product identity.
 
 | Topic | Operational reference |
 | --- | --- |
-| Product hierarchy | [Olympus](./olympus.md), [Aether](./aether.md), [Kyber](./kyber.md) |
+| Product hierarchy | [Olympus](./olympus.md), [Aether](./aether.md), [Kyber](./kyber.md), [Aether consumer matrix](./aether-consumer-matrix.md) |
 | Foundations | [Typography](./typography.md), [iconography](./iconography.md), [surfaces](./surfaces.md), [motion](./motion.md), [responsive behavior](./responsive.md) |
 | Truthful product semantics | [Providers](./providers.md), [entities](./entities.md), [status and severity](./status-severity.md), [provenance and confidence](./provenance-confidence.md) |
 | Inclusive and external communication | [Accessibility](./accessibility.md), [marketing](./marketing.md), [documentation](./documentation.md), [do and don't](./do-dont.md) |

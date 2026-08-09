@@ -25,6 +25,9 @@ not own authorization, data truth, route visibility, or a React component.
 `@aether/ui` is the rendering boundary. Product-specific application code owns
 route behavior and capability enforcement.
 
+For the Aether-specific context, ownership, dependency sequence, and consumer
+acceptance matrix, see [Aether context and consumer matrix](./aether-consumer-matrix.md).
+
 Reviewed Aether/Olympus asset geometry lives once in
 `packages/brand/src/identity/marks/`. The Aether and Kyber Vite public
 directories point there, so a manifest `publicPath` resolves without duplicating

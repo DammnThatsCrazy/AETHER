@@ -14,6 +14,9 @@ canonical_owner: frontend@aether
 Use this checklist for a focused route or component migration. Do not combine a
 visual migration with a backend, authorization, or data-contract rewrite.
 
+For the owner and acceptance evidence expected for the Aether consumer being
+changed, start with the [Aether context and consumer matrix](./aether-consumer-matrix.md).
+
 ## 1. Classify what changes
 
 | You are changing | Use | Preserve |

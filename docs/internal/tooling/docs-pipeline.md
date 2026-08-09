@@ -124,6 +124,15 @@ on the first failure (or with `--continue-on-error`, after collecting all
 failures). This is the single command agents, developers, and CI should
 use for full consistency validation.
 
+`make frontend-branding` is the fast focused frontend counterpart. It invokes
+`scripts/validate_frontend_branding.py`, which scans only explicitly migrated
+brand seams rather than attempting a repo-wide style rewrite. It is called by
+`repo_doctor.py` and by the repository-consistency workflow; use it while
+editing Aether/Kyber shells or the shared identity/provider renderers. The
+consumer scope, owner, dependency sequence, and required evidence are
+recorded in `docs/brand-system/aether-consumer-matrix.md`; that matrix is
+context, not a substitute for this gate or for hosted CI.
+
 ## Enforcement points
 
 **Pre-commit** (`.pre-commit-config.yaml`) — opt-in via
