@@ -113,8 +113,17 @@ from shared.integration_contracts.reconciliation import (
     ReconciliationCheck,
 )
 from shared.integration_contracts.migration import (
+    MIGRATION_PROJECTION_SCHEMA_VERSION,
     MigrationProjection,
     ProjectionCandidate,
+)
+from shared.integration_contracts.commerce_bridge import (
+    SDK_SIGNAL_SCHEMA_VERSION,
+    SDKCommerceSignal,
+    BridgeResult,
+    confirm_interaction,
+    envelope_bridge,
+    payload_bridge,
 )
 
 __all__ = [
@@ -204,6 +213,14 @@ __all__ = [
     "ProviderReconciliationReport",
     "ReconciliationCheck",
     # migration
+    "MIGRATION_PROJECTION_SCHEMA_VERSION",
     "MigrationProjection",
     "ProjectionCandidate",
+    # commerce bridge (S2)
+    "SDK_SIGNAL_SCHEMA_VERSION",
+    "SDKCommerceSignal",
+    "BridgeResult",
+    "confirm_interaction",
+    "envelope_bridge",
+    "payload_bridge",
 ]
