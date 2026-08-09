@@ -103,3 +103,6 @@ export * from './comparison-contract';
 // Multi-model intelligence harness contracts (8.12.0)
 export * from './model-registry';
 export * from './task-profile';
+
+// Commerce bridge (S2): SDK signal ↔ server snapshot reconciliation contract.
+export * from './commerce-bridge';

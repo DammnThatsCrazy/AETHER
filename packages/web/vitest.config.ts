@@ -14,6 +14,12 @@ export default defineConfig({
           new URL('../shared/consent-receipt.ts', import.meta.url),
         ),
       },
+      {
+        find: /^@aether\/shared\/commerce-bridge$/,
+        replacement: fileURLToPath(
+          new URL('../shared/commerce-bridge.ts', import.meta.url),
+        ),
+      },
     ],
   },
   test: {
