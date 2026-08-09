@@ -102,6 +102,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/packages` | solution packages | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
 | `/packages/:packageId` | solution package detail | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
 | `/deployment-readiness` | deployment readiness | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
+| `/provider-connections` | UPR provider manifest, health, overview, certify | no | A | A | A | A | A | `provider-connections-route-states.test.tsx` |
 | `/kyber-graph` | operator topology | yes | A | A | A | A | I | `kyber-graph-page.test.tsx` |
 | `/tenant-mirror` | tenant mirror | yes | I | A | A | A | A | `tenant-mirror-page.test.tsx` |
 | `/kyber-exceptions` | exception queue | yes | A | A | A | A | A | `kyber-exceptions-page.test.tsx` |
