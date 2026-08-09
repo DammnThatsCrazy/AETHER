@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "c6aa7606"
+last_synced_commit: "7fc280ea"
 ---
 
 # Provider Plugin Spec
