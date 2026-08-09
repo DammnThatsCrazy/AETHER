@@ -49,7 +49,15 @@ PLUGIN_ABI_VERSION = plugin_version
 # down. A module that imports but registers a dishonest plugin fails loudly at
 # registration (never silently accepted). The legacy connector install is never
 # skipped.
-LOCAL_PLUGIN_MODULES: list[str] = ["services.providers.shopify"]
+LOCAL_PLUGIN_MODULES: list[str] = [
+    "services.providers.shopify",
+    "services.providers.woocommerce",
+    "services.providers.etsy",
+    "services.providers.amazon",
+    "services.providers.ebay",
+    "services.providers.walmart",
+    "services.providers.tiktok",
+]
 
 
 class BaseProviderPlugin(ABC):

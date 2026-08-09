@@ -20,6 +20,7 @@ lazily so tests can inject fakes by patching the accessors below.
 """
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request
@@ -140,6 +141,30 @@ def _require_operator(request: Request):
     from services.security.request_context import require_kyber_operator
 
     return require_kyber_operator(request)
+
+
+def _provider_migrations_available() -> bool:
+    """WS6 migration routes are gated on the runtime master flag AND the
+    migrations follow-on flag (DECISION 3). With the follow-on flag off the
+    routes are inert — a real gate, never a no-op claim."""
+    from config.settings import settings
+
+    return bool(
+        settings.provider_runtime.enabled
+        and settings.provider_runtime.provider_migrations_enabled
+    )
+
+
+def _legacy_decommission_available() -> bool:
+    """WS7 decommission route is gated on the runtime master flag AND the
+    legacy-decommission follow-on flag (DECISION 3). With the follow-on flag
+    off the route is inert — a real gate, never a no-op claim."""
+    from config.settings import settings
+
+    return bool(
+        settings.provider_runtime.enabled
+        and settings.provider_runtime.provider_legacy_decommission
+    )
 
 
 # ── Error translation (safe_message only; never details / raw text) ─────────
@@ -289,7 +314,137 @@ class CertifyBody(BaseModel):
     identity_key: str
 
 
+class ConfirmSignalBody(BaseModel):
+    """An SDK commerce signal to confirm against Bronze lineage (WS2).
+
+    Mirrors ``SDKCommerceSignal``'s closed field set exactly; converted into the
+    S2 model inside the handler. ``lineage`` values are optional refs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal_id: str
+    signal_type: str
+    occurred_at: str
+    source_url: str
+    lineage: dict[str, Optional[str]] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 # ── Providers (merged manifest surface) ─────────────────────────────────────
+
+
+def _plugin_identity_key(plugin: Any) -> str:
+    """Best-effort canonical identity for a plugin object (shape-agnostic)."""
+    try:
+        from shared.integration_contracts.plugin import plugin_identity_key
+
+        return plugin_identity_key(plugin)
+    except Exception:
+        pass
+    try:
+        return str(plugin.identity().key)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    return str(getattr(plugin, "identity_key", "") or "")
+
+
+def _capability_badges(plugin: Any) -> dict[str, bool]:
+    """Capability badges read from the plugin's HONEST adapter accessors.
+
+    A capability is true only when the accessor returns a non-None adapter — the
+    same surface the registry's ``assert_plugin_honest`` derives from, so the
+    badge can never overclaim a manifest claim the plugin does not back.
+    """
+    badges: dict[str, bool] = {}
+    for name in (
+        "auth",
+        "account",
+        "pull",
+        "webhook",
+        "report",
+        "stream",
+        "reconciliation",
+    ):
+        try:
+            accessor = getattr(plugin, name, None)
+            value = accessor() if callable(accessor) else accessor
+            badges[name] = value is not None
+        except Exception:  # pragma: no cover - a broken accessor is no badge
+            badges[name] = False
+    return badges
+
+
+def _stringify(value: Any) -> Any:
+    return value.value if hasattr(value, "value") else value
+
+
+def _environment_flags(env: Any) -> dict[str, bool]:
+    return {
+        "local": bool(getattr(env, "local", False)),
+        "integration": bool(getattr(env, "integration", False)),
+        "staging": bool(getattr(env, "staging", False)),
+        "production": bool(getattr(env, "production", False)),
+    }
+
+
+def _admin_provider_item(plugin: Any, source: str) -> dict[str, Any]:
+    """Merged operator manifest surface for one installed provider plugin.
+
+    Identity + honest manifest fields + capability badges from the plugin's
+    accessors + a certification verdict. Never echoes config or credential
+    material.
+    """
+    manifest = plugin.manifest()
+    readiness = getattr(manifest, "readiness", None)
+    availability = getattr(manifest, "availability", None)
+    auth = getattr(manifest, "authentication", None)
+    certification_state = "unknown"
+    try:
+        from services.provider_runtime.certification import certify_provider
+
+        report = certify_provider(plugin)
+        certification_state = "certified" if report.passed else "not_certified"
+    except Exception:
+        certification_state = "unknown"
+    return {
+        "identity": _plugin_identity_key(plugin),
+        "display_name": str(getattr(manifest, "display_name", "") or ""),
+        "category": str(getattr(manifest, "category", "") or ""),
+        "readiness": {
+            "level": int(getattr(readiness, "level", 0) or 0),
+            "state": _stringify(getattr(readiness, "state", "")),
+        },
+        "availability": {
+            "environments": _environment_flags(
+                getattr(availability, "environments", None)
+            ),
+        },
+        "authentication": {
+            "type": _stringify(getattr(auth, "type", "") or ""),
+        },
+        "capabilities": _capability_badges(plugin),
+        "certification_state": certification_state,
+        "source": source,
+    }
+
+
+def _project_connection_migration(connection: Any) -> Any:
+    """Build a MigrationProjection for a loaded legacy connection (WS6).
+
+    The connector type is the connection's provider family (legacy identities
+    are ``<family>.ingestion.connector``); config/credential come from the
+    connection's own stored non-secret config + credential ref (never secrets).
+    """
+    from services.provider_runtime.migration_projections import project_connection
+
+    connector_type = str(connection.provider_identity).split(".")[0]
+    return project_connection(
+        connection.tenant_id,
+        connector_type,
+        dict(connection.config or {}),
+        str(connection.credential_ref or ""),
+    )
 
 
 def _merged_manifests(reg: Any) -> list[Any]:
@@ -369,6 +524,25 @@ async def get_provider_manifest(identity_key: str, request: Request):
     if plugin is None:
         raise NotFoundError("provider")
     return APIResponse(data=_manifest_to_dict(plugin.manifest())).to_dict()
+
+
+@router.get("/migrations")
+async def list_migration_candidates(request: Request):
+    """WS6 — tenant-scoped list of projectable legacy connector families.
+
+    Built families carry their native identity + confidence;
+    ``requires_manual_mapping=True`` families are explicitly unbuilt. Families
+    the tenant has already migrated are excluded. Gated on
+    ``provider_migrations_enabled`` (DECISION 3).
+    """
+    if not _provider_migrations_available():
+        raise NotFoundError("provider migrations are not enabled")
+    tenant_id = _tenant_id(request)
+    from services.provider_runtime.migration_projections import list_projectable
+
+    candidates = await _await_or_error(list_projectable(tenant_id))
+    items = [c.model_dump() for c in candidates]
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
 
 
 # ── Connection lifecycle ────────────────────────────────────────────────────
@@ -520,6 +694,93 @@ async def list_sync_runs(connection_id: str, request: Request, limit: int = 50):
     return APIResponse(data={"items": runs, "count": len(runs)}).to_dict()
 
 
+# ── Migration projections (WS6) ─────────────────────────────────────────────
+
+
+@router.get("/{connection_id}/migrations")
+async def get_connection_migration(connection_id: str, request: Request):
+    """WS6 — projection of one legacy connection onto a native identity.
+
+    Derives the connector family, config, and credential ref from the loaded
+    connection (never from request-supplied secrets). Unbuilt families and
+    invalid legacy input surface as tenant-safe 4xx errors. Gated on
+    ``provider_migrations_enabled`` (DECISION 3).
+    """
+    if not _provider_migrations_available():
+        raise NotFoundError("provider migrations are not enabled")
+    tenant_id = _tenant_id(request)
+    orchestrator = _get_orchestrator()
+    connection = await _load_connection(orchestrator, connection_id, tenant_id)
+    try:
+        projection = _project_connection_migration(connection)
+    except Exception as exc:
+        _raise_runtime_error(exc)
+    return APIResponse(data=_as_dict(projection)).to_dict()
+
+
+@router.post("/{connection_id}/migrations")
+async def apply_connection_migration(connection_id: str, request: Request):
+    """WS6 — apply a legacy connection's projection: store the migrated
+    structured credential (refs-only) and create the native ProviderConnection.
+
+    The legacy credential is revealed only through the auditable
+    ``to_plaintext_dict`` seam; the returned connection carries only a
+    ``credential_ref``. Tenant-host validation (S1) is enforced inside
+    ``apply_projection`` — a bad provider host fails closed. Gated on
+    ``provider_migrations_enabled`` (DECISION 3).
+    """
+    if not _provider_migrations_available():
+        raise NotFoundError("provider migrations are not enabled")
+    tenant_id = _tenant_id(request, "write")
+    orchestrator = _get_orchestrator()
+    connection = await _load_connection(orchestrator, connection_id, tenant_id)
+    from services.provider_runtime.migration_projections import apply_projection
+
+    connector_type = str(connection.provider_identity).split(".")[0]
+    native = await _await_or_error(
+        apply_projection(
+            tenant_id,
+            connector_type,
+            dict(connection.config or {}),
+            str(connection.credential_ref or ""),
+        )
+    )
+    return APIResponse(data=_as_dict(native)).to_dict()
+
+
+# ── Server-side confirmation (WS2) ──────────────────────────────────────────
+
+
+@router.post("/{connection_id}/confirm")
+async def confirm_interaction_route(connection_id: str, body: ConfirmSignalBody, request: Request):
+    """WS2 — confirm an SDK commerce signal against Bronze raw-record lineage.
+
+    The signal's lineage is resolved against the connection's provider records
+    in Bronze ``provider_records``; the reconciliation verdict (matched /
+    unconfirmed / replay / not_found) comes from the S2 bridge. Replay-safe with
+    no new store (confirmed signal ids persist on the existing raw record).
+    """
+    tenant_id = _tenant_id(request, "write")
+    orchestrator = _get_orchestrator()
+    connection = await _load_connection(orchestrator, connection_id, tenant_id)
+    from shared.integration_contracts.commerce_bridge import SDKCommerceSignal
+
+    try:
+        signal = SDKCommerceSignal(**body.model_dump())
+    except Exception:
+        raise BadRequestError("invalid commerce signal payload")  # noqa: B904
+    from services.provider_runtime.confirmation import ConfirmInteractionService
+
+    result = await _await_or_error(
+        ConfirmInteractionService().confirm(
+            signal,
+            tenant_id=tenant_id,
+            provider_identity=connection.provider_identity,
+        )
+    )
+    return APIResponse(data=_as_dict(result)).to_dict()
+
+
 # ── Health ──────────────────────────────────────────────────────────────────
 
 
@@ -620,6 +881,38 @@ async def provider_runtime_health(request: Request):
     ).to_dict()
 
 
+@admin_router.get("/providers")
+async def admin_providers(request: Request):
+    """S3 — merged operator manifest surface for every installed provider.
+
+    Consumed by Team D's Kyber provider console. Shape per provider:
+    identity, display_name, category, readiness.level/state,
+    availability.environments, authentication.type, capability badges read from
+    the plugin's honest adapter accessors, and a certification verdict.
+    Aggregate-only — never config or credential material.
+    """
+    _require_operator(request)
+    reg = _get_registry()
+    sources: dict[str, str] = {}
+    sources_fn = getattr(reg, "sources", None)
+    if callable(sources_fn):
+        try:
+            sources = dict(sources_fn())
+        except Exception:
+            sources = {}
+    items: list[dict[str, Any]] = []
+    for plugin in reg.list():
+        identity = _plugin_identity_key(plugin)
+        if not identity:
+            continue
+        try:
+            items.append(_admin_provider_item(plugin, sources.get(identity, "")))
+        except Exception as exc:  # pragma: no cover - one broken plugin no-opts
+            logger.warning("admin providers: skipped broken plugin %r", identity)
+            continue
+    return APIResponse(data={"providers": items, "count": len(items)}).to_dict()
+
+
 @admin_router.post("/certify")
 async def certify_provider_route(body: CertifyBody, request: Request):
     """Run the certification harness against an installed provider plugin."""
@@ -653,6 +946,42 @@ async def provider_runtime_tenant_view(tenant_id: str, request: Request):
             item["health_error"] = safe if isinstance(safe, str) and safe.strip() else "health unavailable"
         items.append(item)
     return APIResponse(data={"tenant_id": tenant_id, "items": items}).to_dict()
+
+
+@admin_router.post("/decommission/{connector_type}")
+async def decommission_legacy_connector(connector_type: str, request: Request):
+    """WS7 — operator-gated, per-provider decommission of a legacy connector.
+
+    Shopify is the only decommissionable legacy connector in this build
+    (``DECOMMISSIONABLE_CONNECTOR_TYPES``); the six new providers ship no
+    legacy connector, so the surface is intentionally minimal and never
+    core-first. Retirement is idempotent — a repeat call is a stable
+    ``already_retired`` no-op that preserves the original timestamp. The
+    retirement ledger is process-local; persistence across restarts is a
+    documented follow-on (WS7, F-3) and out of scope here.
+
+    Operator-gated first (``_require_operator``), then flag-gated on the
+    runtime master flag AND ``provider_legacy_decommission`` (DECISION 3) —
+    with the follow-on flag off the route is inert, a real gate rather than a
+    no-op claim. An unknown type surfaces as a typed 404; a native-only
+    provider (registered but outside the decommissionable set) as a 400.
+    """
+    _require_operator(request)
+    if not _legacy_decommission_available():
+        raise NotFoundError("legacy decommission is not enabled")
+    from services.integrations.connectors.registry import (
+        CONNECTORS,
+        retire_connector_type,
+    )
+
+    result = retire_connector_type(CONNECTORS, connector_type)
+    if not result.ok:
+        # Registry today emits only "unknown" / "not_eligible" for ok=False;
+        # the fallback keeps any future typed failure a 4xx, never a 200.
+        if result.status == "unknown":
+            raise NotFoundError(result.detail)
+        raise BadRequestError(result.detail)
+    return APIResponse(data=asdict(result)).to_dict()
 
 
 # ── Public provider webhook ingestion ───────────────────────────────────────
