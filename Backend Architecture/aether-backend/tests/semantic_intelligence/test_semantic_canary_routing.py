@@ -139,10 +139,13 @@ async def test_canary_with_creds_stamps_candidate_provenance(
             "confidence": 0.91,
         }
     )
+    async def _fake_request_completion(self, request):
+        return raw, "claude-opus-5"
+
     monkeypatch.setattr(
         ProductionModelProvider,
         "_request_completion",
-        lambda self, request: (raw, "claude-opus-5"),
+        _fake_request_completion,
     )
     obs, sentiments = await SemanticIntelligenceService().classify_and_persist(
         _payload("evt_canary_creds"), CANARY_TENANT, eligibility=Eligibility.TEXT

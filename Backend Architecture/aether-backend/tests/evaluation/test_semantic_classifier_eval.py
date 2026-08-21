@@ -41,7 +41,7 @@ def _golden_cases() -> list[dict[str, Any]]:
     return doc["cases"]
 
 
-def _classify(case: dict[str, Any]) -> tuple[SemanticObservation, list[SentimentObservation]]:
+async def _classify(case: dict[str, Any]) -> tuple[SemanticObservation, list[SentimentObservation]]:
     payload = {
         "source_event_id": f"evt_eval_{case['id']}",
         "source_type": "feedback",
@@ -52,7 +52,7 @@ def _classify(case: dict[str, Any]) -> tuple[SemanticObservation, list[Sentiment
         "content": case["text"],
         "language": case.get("language", "en"),
     }
-    return classify_event(payload, TENANT)
+    return await classify_event(payload, TENANT)
 
 
 def _valence_sign(sentiments: list[SentimentObservation]) -> Optional[str]:
@@ -66,9 +66,9 @@ def _valence_sign(sentiments: list[SentimentObservation]) -> Optional[str]:
     return "zero"
 
 
-def _case_correct(case: dict[str, Any]) -> tuple[bool, str]:
+async def _case_correct(case: dict[str, Any]) -> tuple[bool, str]:
     """Full-label correctness for a non-abstain case (stance + intent + valence sign)."""
-    obs, sentiments = _classify(case)
+    obs, sentiments = await _classify(case)
     expected = case["expected"]
     actual = {
         "stance": obs.stance.value,
@@ -94,10 +94,10 @@ class TestSemanticClassifierEval:
         for stance in ("supportive", "opposed", "neutral"):
             assert by_group[stance] >= 10, f"{stance} group shrank below 10 cases"
 
-    def test_overall_accuracy(self):
+    async def test_overall_accuracy(self):
         """Overall stance+intent+valence accuracy on classified cases (measured 1.00)."""
         cases = [c for c in _golden_cases() if not c["expected"]["abstain"]]
-        results = [_case_correct(c) for c in cases]
+        results = [await _case_correct(c) for c in cases]
         correct = sum(1 for ok, _ in results if ok)
         accuracy = correct / len(cases)
         assert accuracy >= OVERALL_ACCURACY_FLOOR, (
@@ -106,7 +106,7 @@ class TestSemanticClassifierEval:
             + "\n".join(f"  FAIL {detail}" for ok, detail in results if not ok)
         )
 
-    def test_per_stance_recall(self):
+    async def test_per_stance_recall(self):
         """Stance recall per expected-stance group (measured 1.00 each)."""
         by_stance: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for case in _golden_cases():
@@ -115,9 +115,11 @@ class TestSemanticClassifierEval:
 
         failures: list[str] = []
         for stance, cases in by_stance.items():
-            correct = sum(
-                1 for c in cases if _classify(c)[0].stance.value == c["expected"]["stance"]
-            )
+            correct = 0
+            for c in cases:
+                obs, _ = await _classify(c)
+                if obs.stance.value == c["expected"]["stance"]:
+                    correct += 1
             recall = correct / len(cases)
             if recall < PER_STANCE_RECALL_FLOOR:
                 failures.append(f"  {stance}: recall={recall:.1%} ({correct}/{len(cases)})")
@@ -125,7 +127,7 @@ class TestSemanticClassifierEval:
             f"per-stance recall below {PER_STANCE_RECALL_FLOOR:.0%}:\n" + "\n".join(failures)
         )
 
-    def test_abstention_correctness(self):
+    async def test_abstention_correctness(self):
         """Abstention behavior is structural — it must stay exact (measured 1.00).
 
         Every abstain case abstains with the expected reason and zero sentiment;
@@ -134,7 +136,7 @@ class TestSemanticClassifierEval:
         failures: list[str] = []
         checks = 0
         for case in _golden_cases():
-            obs, sentiments = _classify(case)
+            obs, sentiments = await _classify(case)
             expected = case["expected"]
             checks += 1
             if expected["abstain"]:

@@ -49,7 +49,7 @@ def _isolate():
 
 
 async def _seed(actor: str, subject: str, event: str) -> None:
-    obs, sentiments = classify_event(
+    obs, sentiments = await classify_event(
         {
             "source_event_id": event,
             "source_type": "feedback",

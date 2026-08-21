@@ -33,8 +33,8 @@ def _isolate():
     reset_in_memory_stores()
 
 
-def _obs(actor: str, content: str):
-    obs, _ = classify_event(
+async def _obs(actor: str, content: str):
+    obs, _ = await classify_event(
         {
             "source_event_id": f"e_{actor}",
             "source_type": "feedback",
@@ -48,17 +48,17 @@ def _obs(actor: str, content: str):
     return obs
 
 
-def test_reduce_campaign_impact_bounds_causal_language():
-    impact = reduce_campaign_impact(TENANT, CAMPAIGN, [_obs("a1", "great, recommend")])
+async def test_reduce_campaign_impact_bounds_causal_language():
+    impact = reduce_campaign_impact(TENANT, CAMPAIGN, [await _obs("a1", "great, recommend")])
     assert impact["causal_confidence"] == "observed_sequence"
     assert impact["semantic_mediated_revenue_estimate"] is None
     assert impact["reducer_version"] == REDUCER_VERSION
     assert impact["insufficient_data"] is False
 
 
-def test_reduce_is_weighted():
+async def test_reduce_is_weighted():
     impact = reduce_campaign_impact(
-        TENANT, CAMPAIGN, [_obs("a1", "great, recommend"), _obs("a2", "bad, oppose")]
+        TENANT, CAMPAIGN, [await _obs("a1", "great, recommend"), await _obs("a2", "bad, oppose")]
     )
     # Weighted floats summing to ~1 across stances (not raw counts).
     assert abs(sum(impact["stance_distribution"].values()) - 1.0) < 0.05
@@ -67,7 +67,7 @@ def test_reduce_is_weighted():
 async def test_recompute_persists_and_service_reads_gold():
     svc = service_mod.get_semantic_service()
     store = get_store()
-    await store.put_semantic(_obs("a1", "great, recommend"))
+    await store.put_semantic(await _obs("a1", "great, recommend"))
     impact = await svc.recompute_campaign_impact(TENANT, CAMPAIGN)
     assert impact["observation_count"] == 1
 
