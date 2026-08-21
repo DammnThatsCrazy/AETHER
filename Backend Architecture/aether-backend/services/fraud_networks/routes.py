@@ -99,6 +99,35 @@ async def _get_network(network_id: str, tenant_id: str) -> dict:
     return row
 
 
+# ``FraudNetworkMemberRepository.list_by_network`` returns a single 500-row page
+# and silently drops the rest. A takedown that treats that page as the complete
+# network leaves every member beyond it with active fraudulent attribution while
+# still reporting success. Page the full member set here instead, and if even
+# this hard ceiling is exceeded, surface it rather than under-covering silently.
+_MEMBER_PAGE_SIZE = 500
+_MAX_MEMBER_PAGES = 200  # 100k-member ceiling before truncation is surfaced
+
+
+async def _list_all_network_members(network_id: str) -> tuple[list[dict], bool]:
+    """Load every member of a network by paging past the per-call page cap.
+
+    Returns ``(members, complete)``. ``complete`` is False only when the hard
+    safety ceiling (``_MAX_MEMBER_PAGES`` × ``_MEMBER_PAGE_SIZE``) is reached
+    before the member set is exhausted.
+    """
+    members: list[dict] = []
+    for page_index in range(_MAX_MEMBER_PAGES):
+        page = await _members.find_many(
+            filters={"network_id": network_id},
+            limit=_MEMBER_PAGE_SIZE,
+            offset=page_index * _MEMBER_PAGE_SIZE,
+        )
+        members.extend(page)
+        if len(page) < _MEMBER_PAGE_SIZE:
+            return members, True
+    return members, False
+
+
 def _to_response(row: dict) -> FraudNetworkResponse:
     return FraudNetworkResponse(
         id=row["id"],
@@ -750,7 +779,7 @@ async def takedown_network(
     # The network's member identities are the identities whose attribution this
     # takedown invalidates; their OWN touchpoints are the fraudulent set being
     # voided. Fall back to the anchors if members were never materialized.
-    members = await _members.list_by_network(network_id)
+    members, members_complete = await _list_all_network_members(network_id)
     member_entity_ids = [m["entity_id"] for m in members if m.get("entity_id")]
     if not member_entity_ids:
         member_entity_ids = list(row.get("anchor_entity_ids", []))
@@ -766,6 +795,17 @@ async def takedown_network(
         identity_selectors=member_entity_ids,
         voided_touchpoint_selectors=member_entity_ids,
     )
+
+    if not members_complete:
+        # The full member set could not be loaded (network exceeds the paging
+        # ceiling), so some members' fraudulent attribution may still be active.
+        # Surface it through the same partial_failure channel a per-conversion
+        # failure uses — never report a clean takedown over a truncated network.
+        reattribution.errors.append(
+            f"fraud_takedown_members_truncated: network {network_id} exceeds the "
+            f"{_MAX_MEMBER_PAGES * _MEMBER_PAGE_SIZE}-member load ceiling; some "
+            f"fraudulent attribution may remain active"
+        )
 
     now = _utc_now()
     updated = await _networks.update_status(

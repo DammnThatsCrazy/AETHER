@@ -66,6 +66,34 @@ import path from 'node:path';
 
 import type { EventQueue, QueuedEvent } from './queue';
 
+// In-process single-owner guard for spool files (see the N9 fix below). A
+// DurableEventQueue owns its spool exclusively: journal ids are allocated in
+// memory (`nextId`) and only resynced from disk on replay/compaction, so two
+// live queues writing the same file in one process each start at id 1 and
+// silently clobber each other's journal lines (replay keys entries by id in a
+// Map; compaction rewrites the whole file). The default spool path is derived
+// solely from the write key, so two SDK instances with the same key would
+// otherwise share it unguarded. This registry makes a second writable queue on
+// an already-owned path fail fast instead of corrupting the spool. It is
+// process-local by design — cross-process sharing of one spool file is a
+// separate hazard the class has always documented against and would require an
+// OS file lock; a fresh process starts with an empty registry so cross-restart
+// replay (the whole point of the stable default path) is unaffected.
+const ACTIVE_SPOOL_PATHS = new Set<string>();
+
+/**
+ * TEST-ONLY: clear the in-process spool-ownership registry, faithfully
+ * simulating the abrupt death of the process that held live queues (a crash).
+ * The on-disk spools are untouched, so a fresh queue can reclaim and replay
+ * them — exactly the post-crash restart path a graceful `close()` would model
+ * without the crash. Never call this in production: it defeats the single-owner
+ * guard while queues are still live. Not re-exported from the package entry, so
+ * it is not part of the SDK's public API.
+ */
+export function __resetSpoolOwnershipForTests(): void {
+  ACTIVE_SPOOL_PATHS.clear();
+}
+
 /**
  * The subset of EventQueue's public surface DurableEventQueue promises to
  * behave identically to (see "Interface parity" above). Deriving this type
@@ -175,6 +203,11 @@ export class DurableEventQueue implements EventQueueLike {
   private warned = false;
   private spoolFullWarned = false;
 
+  /** Resolved spool path this queue owns in ACTIVE_SPOOL_PATHS (N9), or null
+   *  when the spool is not writable (degraded, in-memory-only) so it claims no
+   *  ownership. Cleared by close(). */
+  private resolvedSpoolPath: string | null = null;
+
   constructor(opts: DurableQueueOptions) {
     if (!opts || !opts.spoolPath) {
       throw new Error('DurableEventQueue requires a spoolPath (opt-in disk persistence needs an explicit location)');
@@ -206,10 +239,46 @@ export class DurableEventQueue implements EventQueueLike {
       this.warnDegraded(err);
     }
 
+    // N9: claim exclusive in-process ownership of the spool BEFORE replaying it.
+    // Journal ids are allocated in memory from 1 and only resynced on
+    // replay/compaction, so two live writable queues on one path each start at
+    // id 1 and silently clobber each other. The default path is derived solely
+    // from the write key, so two SDK instances with the same key would share it
+    // unguarded — fail the second fast instead of corrupting the spool. Only a
+    // writable spool claims ownership (a degraded, in-memory-only instance
+    // writes nothing to disk and so cannot collide).
+    if (this.spoolWritable) {
+      const resolved = path.resolve(this.spoolPath);
+      if (ACTIVE_SPOOL_PATHS.has(resolved)) {
+        throw new Error(
+          `DurableEventQueue: spool '${resolved}' is already owned by another ` +
+            'DurableEventQueue in this process. Two durable queues must not share ' +
+            'one spool file — give each an explicit, distinct spoolPath. (The ' +
+            'default spool path is derived from the write key, so two SDK ' +
+            'instances constructed with the same write key collide here.)',
+        );
+      }
+      ACTIVE_SPOOL_PATHS.add(resolved);
+      this.resolvedSpoolPath = resolved;
+    }
+
     // Replay before accepting any new work: this constructor runs fully to
     // completion before the returned instance can be used, so "replay on
     // construction" and "replay before new work" are the same guarantee.
     this.replay();
+  }
+
+  /**
+   * Release this queue's in-process ownership of its spool file (N9). After
+   * close(), a fresh DurableEventQueue may be constructed on the same path (an
+   * SDK re-init, or a test). Idempotent; deliberately does NOT flush or delete
+   * the spool — durable state is meant to survive for the next owner to replay.
+   */
+  close(): void {
+    if (this.resolvedSpoolPath !== null) {
+      ACTIVE_SPOOL_PATHS.delete(this.resolvedSpoolPath);
+      this.resolvedSpoolPath = null;
+    }
   }
 
   /** Whether the on-disk spool is currently usable. False once any spool

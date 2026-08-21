@@ -357,13 +357,17 @@ export class AetherServerSDK {
     return this.spoolDrops;
   }
 
-  /** Flush remaining events and stop the flush timer. */
+  /** Flush remaining events, stop the flush timer, and release the durable
+   *  spool's in-process ownership (N9) so a later SDK instance (a re-init, or a
+   *  process that outlives this one) may reclaim the same spool file. The spool
+   *  is NOT deleted — durable state survives for the next owner to replay. */
   async shutdown(): Promise<void> {
     if (this.flushTimer !== null) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
     await this.flush();
+    this.durableQueue?.close();
   }
 
   /**

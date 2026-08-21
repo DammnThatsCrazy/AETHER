@@ -27,6 +27,7 @@ from services.integrity.chain_verifier import (
     record_tenant_status,
     verify_tenant_chain,
 )
+from services.security.request_context import require_kyber_operator
 
 router = APIRouter(prefix="/v1/security/ledger", tags=["Ledger Integrity"])
 
@@ -52,9 +53,17 @@ async def get_chain_verification(request: Request, tenant_id: Optional[str] = No
 
     Aggregate view by default; a live per-tenant re-verification when
     ``tenant_id`` is supplied.
+
+    This is CROSS-TENANT operator data: the aggregate exposes every tenant's id
+    and integrity-failure detail, and ``?tenant_id=`` verifies (and records the
+    status of) an ARBITRARY tenant's chain. A legacy ``admin`` permission is a
+    tenant-scoped grant that any tenant admin holds, so it must not gate this
+    surface. Require an Olympus operator -- the same ``require_kyber_operator``
+    gate the Kyber security control plane uses (services/security/admin_routes.py)
+    -- so no Aether tenant, even a role admin, can read or overwrite another
+    tenant's verification status.
     """
-    tenant = request.state.tenant
-    tenant.require_permission("admin")
+    require_kyber_operator(request)
     if tenant_id:
         result = await verify_tenant_chain(tenant_id)
         await record_tenant_status(result)

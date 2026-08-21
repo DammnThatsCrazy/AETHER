@@ -63,6 +63,15 @@ class SpendRepository:
                 "as_of": fx["priced_at"],
             }
             row["provenance"] = provenance
+        else:
+            # Same-currency rows are real 1.0 parity by definition. A caller may
+            # supply an explicit exchange_rate, which ``setdefault`` above
+            # preserves and this branch (skipping FX normalization) would
+            # otherwise leave in place — a USD->USD row could then persist a
+            # rate like 2.0 with no fx_conversion provenance, silently distorting
+            # normalized spend. Force exact 1.0 parity: never a fabricated
+            # same-currency rate.
+            row["exchange_rate"] = "1.0"
 
         key = row.get("idempotency_key")
         if not key:
@@ -114,6 +123,13 @@ class SpendRepository:
                     other_cost = EXCLUDED.other_cost,
                     total_cost = EXCLUDED.total_cost,
                     exchange_rate = EXCLUDED.exchange_rate,
+                    -- Persist provenance with the rate on an idempotent replay:
+                    -- otherwise the row can carry the newly resolved
+                    -- exchange_rate alongside a stale/absent fx_conversion
+                    -- source, pricing flag, and timestamp, defeating the
+                    -- provenance guarantee. Same last-write-wins semantics as
+                    -- the rate it accompanies.
+                    provenance = EXCLUDED.provenance,
                     external_campaign_id = COALESCE(EXCLUDED.external_campaign_id, spend_records.external_campaign_id),
                     external_account_id = COALESCE(EXCLUDED.external_account_id, spend_records.external_account_id),
                     campaign_resolution_status = COALESCE(EXCLUDED.campaign_resolution_status, spend_records.campaign_resolution_status),

@@ -93,6 +93,10 @@ describe('DurableEventQueue — durability', () => {
     // Simulate a crash: q1 is simply abandoned without ever confirming
     // (no ack, no successful send) — nothing drains it cleanly.
     expect(q1.size).toBe(2);
+    // A crash means the owning process is gone: release q1's in-process spool
+    // claim (N9) so the "restarted" q2 can own the same file. close() does not
+    // flush or delete — the on-disk spool survives, exactly like a real crash.
+    q1.close();
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(2);
@@ -107,6 +111,7 @@ describe('DurableEventQueue — durability', () => {
     const inFlight = q1.dequeueReady();
     expect(inFlight).toBeDefined();
     // q1 "crashes" here — mid-send, before ack() or requeue() is called.
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(1);
@@ -126,6 +131,7 @@ describe('DurableEventQueue — durability', () => {
     expect([first.events[0], second.events[0]]).toEqual([{ id: 'keep' }, { id: 'sent' }]);
     q1.ack(second);
     // `first` remains un-acked (still in-flight / not yet confirmed).
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(1);
@@ -153,6 +159,7 @@ describe('DurableEventQueue — durability', () => {
     const item = q1.dequeueReady()!;
     q1.requeue(item); // attempt(0) >= maxRetries(0) -> permanently dropped
     expect(q1.size).toBe(0);
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(0);
@@ -163,6 +170,7 @@ describe('DurableEventQueue — durability', () => {
     const q1 = new DurableEventQueue({ spoolPath: p });
     q1.enqueue({ writeKey: 'wk', events: [{ id: 'e1' }] });
     q1.drain();
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(0);
@@ -192,6 +200,7 @@ describe('DurableEventQueue — durability', () => {
 
     // "Crash": q1 is abandoned with 4 live (unacked) spool entries — e1/e2
     // in-flight, e3/e4 ready — against a maxSize of 2.
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p, maxSize: 2 });
     // The bound must hold even right after replay: never more than maxSize
@@ -215,8 +224,41 @@ describe('DurableEventQueue — durability', () => {
     expect(delivered.sort()).toEqual(['e1', 'e2', 'e3', 'e4']);
 
     // Once everything has been acked, a fresh instance replays nothing.
+    q2.close(); // release q2's claim before the next owner (N9)
     const q3 = new DurableEventQueue({ spoolPath: p, maxSize: 2 });
     expect(q3.size).toBe(0);
+  });
+});
+
+describe('DurableEventQueue — single-owner spool guard (N9)', () => {
+  it('refuses a second live queue on the same spool file in one process', () => {
+    const p = spoolPath();
+    const q1 = new DurableEventQueue({ spoolPath: p });
+    // Two live queues on one spool each allocate journal ids from 1 and silently
+    // clobber each other (replay keys by id; compaction rewrites the whole file).
+    // The write-key-derived default path makes this reachable from two SDK
+    // instances sharing a write key, so the second must fail fast.
+    expect(() => new DurableEventQueue({ spoolPath: p })).toThrow(/already owned/);
+    q1.close();
+  });
+
+  it('recognizes the same spool through a non-normalized path', () => {
+    const p = spoolPath('own.jsonl');
+    const q1 = new DurableEventQueue({ spoolPath: p });
+    const equivalent = path.join(path.dirname(p), '.', 'own.jsonl');
+    expect(() => new DurableEventQueue({ spoolPath: equivalent })).toThrow(/already owned/);
+    q1.close();
+  });
+
+  it('after close(), a fresh queue may reclaim the same spool and replays it', () => {
+    const p = spoolPath();
+    const q1 = new DurableEventQueue({ spoolPath: p });
+    q1.enqueue({ writeKey: 'wk', events: [{ id: 'e1' }] });
+    q1.close(); // owner released; on-disk spool intact
+
+    const q2 = new DurableEventQueue({ spoolPath: p }); // no throw
+    expect(q2.size).toBe(1);
+    q2.close();
   });
 });
 

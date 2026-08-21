@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AetherServerSDK } from './index';
 import type { SpoolDropInfo } from './index';
+import { __resetSpoolOwnershipForTests } from './durable-queue';
 
 let tmpDir: string;
 
@@ -117,7 +118,11 @@ describe('AetherServerSDK — startup replay', () => {
     expect(sdk1.isDurable()).toBe(true);
     expect(sdk1.queueDepth()).toBe(2);
     expect(fs.existsSync(p)).toBe(true);
-    // sdk1 is deliberately abandoned here: no shutdown(), no flush().
+    // sdk1 is deliberately abandoned here: no shutdown(), no flush(). Simulate
+    // the process holding it dying — its in-process spool ownership (N9) vanishes
+    // while the on-disk spool survives — so the "restarted" sdk2 can reclaim the
+    // same spool and replay the two unsent events.
+    __resetSpoolOwnershipForTests();
 
     // Client 2 over the same spool: its constructor replays the spool AND kicks
     // off a startup flush. Wait deterministically until both events are sent.

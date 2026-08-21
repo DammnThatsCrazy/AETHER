@@ -76,6 +76,15 @@ class ConversionRepository:
                 "as_of": fx["priced_at"],
             }
             row["provenance"] = provenance
+        else:
+            # Same-currency rows are real 1.0 parity by definition. A caller may
+            # supply an explicit exchange_rate, which ``setdefault`` above
+            # preserves and this branch (skipping FX normalization) would
+            # otherwise leave in place — a USD->USD row could then persist a
+            # rate like 2.0 with no fx_conversion provenance, silently distorting
+            # normalized revenue. Force exact 1.0 parity: never a fabricated
+            # same-currency rate.
+            row["exchange_rate"] = "1.0"
 
         pool = await self._pool()
         if pool is None:
@@ -122,6 +131,19 @@ class ConversionRepository:
                         THEN EXCLUDED.gross_value ELSE canonical_conversions.gross_value END,
                     net_value = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
                         THEN EXCLUDED.net_value ELSE canonical_conversions.net_value END,
+                    -- A higher-authority replay updates the monetary value; its
+                    -- FX fields must move with it, or the row keeps the old
+                    -- currency/rate/source (and returns the new values it never
+                    -- persisted), producing incorrect normalized revenue. Gate
+                    -- them on the same authority condition as the amounts.
+                    currency = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
+                        THEN EXCLUDED.currency ELSE canonical_conversions.currency END,
+                    normalized_currency = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
+                        THEN EXCLUDED.normalized_currency ELSE canonical_conversions.normalized_currency END,
+                    exchange_rate = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
+                        THEN EXCLUDED.exchange_rate ELSE canonical_conversions.exchange_rate END,
+                    provenance = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
+                        THEN EXCLUDED.provenance ELSE canonical_conversions.provenance END,
                     conversion_status = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
                         THEN EXCLUDED.conversion_status ELSE canonical_conversions.conversion_status END,
                     authority_rank = GREATEST(EXCLUDED.authority_rank, canonical_conversions.authority_rank),

@@ -239,28 +239,40 @@ async def _supersede_runs_for_conversions(
                 "prior_attribution_run_id": prior_run.get("attribution_run_id"),
                 "started_at": now,
             })
-            deactivated = await run_repo.deactivate_prior_runs(tenant_id, conversion_id)
-            result.runs_deactivated += deactivated
-            completed = await run_repo.update_run(
+            # Switch the active run ATOMICALLY. complete_run_atomically
+            # deactivates the prior active run(s) AND activates this fresh
+            # zero-credit run inside ONE transaction, rolling the whole switch
+            # back on failure — the repo documents it as the only success path
+            # that should activate a run. The previous shape
+            # (deactivate_prior_runs() then a separate update_run()) commits on
+            # independent connections in production, so a transient failure of
+            # update_run() after deactivate_prior_runs() succeeded would strand
+            # the conversion with NO active run: the prior run left inactive and
+            # the replacement stuck inactive/running.
+            completed = await run_repo.complete_run_atomically(
                 new_run["attribution_run_id"],
+                tenant_id,
+                conversion_id,
+                [],  # zero-credit supersession — records the void, credits nothing
                 {
-                    "status": "complete",
-                    "is_active": True,
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
                     "credit_total": "0",
                     "unattributed_credit": "1",
                     "input_touchpoint_ids": [],
                     "excluded_touchpoint_ids": sorted(voided_ids),
                     "exclusion_reasons": {tp_id: reason for tp_id in voided_ids},
                     "trigger_reason": reason,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
                 },
-                tenant_id=tenant_id,
             )
             if completed is None:
                 raise RuntimeError(
                     f"attribution run {new_run['attribution_run_id']} disappeared before completion"
                 )
 
+            # The atomic switch superseded exactly the prior active run found
+            # above (one active run per conversion); it returns no deactivation
+            # count, so record that single superseded run here.
+            result.runs_deactivated += 1
             result.runs_created += 1
             result.conversions_reattributed += 1
             logger.info(
@@ -338,24 +350,37 @@ async def _resolve_touchpoint_ids(
     over-limit identity instead of silently under-covering it."""
     voided: set[str] = set()
     for selector in _dedupe_selectors(selectors):
-        try:
-            rows = await touchpoint_repo.list_by_profile(
-                tenant_id, selector, limit=scope_limit + 1,
-            )
-        except Exception as exc:
-            result.errors.append(f"reattribution_scope:touchpoints:{selector}: {exc}")
-            logger.error(
-                "re-attribution touchpoint scope lookup failed for %s: %s",
-                selector, exc, extra={"tenant_id": tenant_id},
-            )
-            continue
-        if len(rows) > scope_limit:
-            rows = rows[:scope_limit]
-            _mark_truncated(result, tenant_id, "touchpoints", selector, scope_limit)
-        for row in rows:
-            tp_id = row.get("touchpoint_id")
-            if tp_id is not None:
-                voided.add(str(tp_id))
+        # A fraud-network member id (and an erasure identity) is untyped: it may
+        # name a profile/anonymous OR a cluster identity. The conversion side
+        # (``list_by_erasure_identity``) already matches profile_id OR cluster_id
+        # OR account_id, so the voided touchpoint set must cover the SAME
+        # identity dimensions — otherwise a cluster-identified selector resolves
+        # its conversions but an EMPTY voided set, and the "run credits a voided
+        # touchpoint" filter leaves its fraudulent attribution silently active.
+        # ``list_by_profile``'s default matches profile_id OR anonymous_id;
+        # identity_type="cluster" adds the cluster_id dimension the touchpoint
+        # table requires.
+        for identity_type in (None, "cluster"):
+            try:
+                rows = await touchpoint_repo.list_by_profile(
+                    tenant_id, selector,
+                    identity_type=identity_type,
+                    limit=scope_limit + 1,
+                )
+            except Exception as exc:
+                result.errors.append(f"reattribution_scope:touchpoints:{selector}: {exc}")
+                logger.error(
+                    "re-attribution touchpoint scope lookup failed for %s: %s",
+                    selector, exc, extra={"tenant_id": tenant_id},
+                )
+                continue
+            if len(rows) > scope_limit:
+                rows = rows[:scope_limit]
+                _mark_truncated(result, tenant_id, "touchpoints", selector, scope_limit)
+            for row in rows:
+                tp_id = row.get("touchpoint_id")
+                if tp_id is not None:
+                    voided.add(str(tp_id))
     return voided
 
 

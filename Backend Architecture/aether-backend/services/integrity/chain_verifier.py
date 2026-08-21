@@ -39,6 +39,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Optional
 
 from shared.common.common import utc_now
@@ -62,6 +63,30 @@ _MIN_INTERVAL_SECONDS = 60
 # A broken tamper-evidence chain is a serious integrity signal but not an outage.
 _ALERT_SEVERITY = "P1"
 _ALERT_KIND = "ledger_chain_integrity"
+
+# Reserved row key: the authoritative typed Bronze columns, carried alongside the
+# duplicated ``data`` envelope so the verifier can cross-check them (N6). Never a
+# canonical (hashed) field, so it never affects hash re-derivation.
+_TYPED_SIDECAR = "__typed_columns__"
+
+# Typed columns whose text values must be byte-identical to the ``data`` envelope.
+# These are the real Bronze surfaces the chain protects (the envelope is a
+# duplicate the hash is derived from); a typed column edited without the envelope
+# (or vice versa) is tamper even when the envelope-derived hash still checks.
+_TYPED_TEXT_COLUMNS = (
+    "tenant_id",
+    "event_id",
+    "schema_version",
+    "event_type",
+    "payload_hash",
+    "integrity_hash",
+    "prev_hash",
+)
+
+# Synthetic break markers (not real record ids) for the non-hash failure modes.
+_VANISHED_MARKER = "chain_vanished"       # every chained row for a tenant deleted
+_ERROR_MARKER = "verifier_error"          # verification raised for this tenant
+_REGRESSION_MARKER = "chain_regressed"    # append-only chain lost rows since last run
 
 
 # ── Canonical chain shape (mirrors services/ingestion/bronze_bulk.py, M2) ─────
@@ -128,6 +153,12 @@ class ChainVerifierResult:
     broken_record_ids: list[str] = field(default_factory=list)
     break_location: Optional[str] = None
     checked_at: str = ""
+    # N7 cross-run state: the current chain tail hash and the monotonic
+    # high-watermark of rows ever seen. Bronze is append-only, so a later run
+    # that shows fewer rows, or whose chain no longer contains the recorded tail,
+    # has lost rows — tamper the survivors alone cannot reveal.
+    tail_hash: Optional[str] = None
+    max_rows_scanned: int = 0
 
     def to_status(self) -> dict[str, Any]:
         """Flat, JSON-safe status row (also the durable dashboard record)."""
@@ -140,6 +171,8 @@ class ChainVerifierResult:
             "broken_record_ids": list(self.broken_record_ids),
             "break_location": self.break_location,
             "checked_at": self.checked_at,
+            "tail_hash": self.tail_hash,
+            "max_rows_scanned": self.max_rows_scanned,
         }
 
 
@@ -155,11 +188,15 @@ async def _load_tenant_chain_rows(tenant_id: str) -> list[dict]:
 
     Reads the exact serialized form M2 hashed. In-memory (AETHER_ENV=local) the
     stored dicts ARE what the writer chained. On Postgres the ``data`` JSONB
-    envelope is read -- its string fields are byte-identical to what was hashed
-    at write time, whereas the typed ``timestamptz`` columns would re-serialize
-    differently (asyncpg -> datetime) and break re-derivation. Pre-cutover rows
-    (NULL integrity_hash) are not chain anchors and are skipped, matching M2's
-    own tail/anchor selection.
+    envelope is read for hash re-derivation -- its string fields are byte-identical
+    to what was hashed at write time, whereas the typed ``timestamptz`` columns
+    would re-serialize differently (asyncpg -> datetime) and break re-derivation.
+    The AUTHORITATIVE typed columns (``event_type``, ``payload_hash``,
+    ``integrity_hash``, ...) are loaded alongside and attached as a sidecar so the
+    verifier can catch a typed column edited without the duplicated envelope, or
+    vice versa (N6) -- those typed columns are the real Bronze surfaces the chain
+    protects. Pre-cutover rows (NULL integrity_hash) are not chain anchors and are
+    skipped, matching M2's own tail/anchor selection.
     """
     from repositories.repos import get_pool
 
@@ -176,17 +213,128 @@ async def _load_tenant_chain_rows(tenant_id: str) -> list[dict]:
         ]
 
     records = await pool.fetch(
-        "SELECT data FROM bronze_sdk_events "
+        "SELECT data, tenant_id, event_id, schema_version, event_type, "
+        "payload_hash, event_timestamp, prev_hash, integrity_hash, created_at "
+        "FROM bronze_sdk_events "
         "WHERE tenant_id = $1 AND integrity_hash IS NOT NULL",
         tenant_id,
     )
-    rows: list[dict] = []
-    for rec in records:
-        data = rec["data"]
-        if isinstance(data, (str, bytes, bytearray)):
+    return [_augment_pg_row(rec) for rec in records]
+
+
+def _augment_pg_row(rec: Any) -> dict:
+    """Build a verifiable row from a Postgres record.
+
+    The ``data`` envelope (what M2 hashed) drives hash re-derivation; the
+    authoritative typed columns ride along under ``_TYPED_SIDECAR`` for the N6
+    cross-check. A corrupt envelope (NULL / scalar / array -- e.g. a ``data``
+    column overwritten into a non-object) is reconstructed from the typed columns
+    only enough to keep the row walking in the right partition/append order, so it
+    is flagged broken (its missing envelope content fails both the hash and the
+    typed cross-check) instead of raising or silently vanishing.
+    """
+    data = rec["data"]
+    if isinstance(data, (str, bytes, bytearray)):
+        try:
             data = json.loads(data)
-        rows.append(data)
-    return rows
+        except (ValueError, TypeError):
+            data = None
+    typed = {
+        "tenant_id": rec["tenant_id"],
+        "event_id": rec["event_id"],
+        "schema_version": rec["schema_version"],
+        "event_type": rec["event_type"],
+        "payload_hash": rec["payload_hash"],
+        "event_timestamp": rec["event_timestamp"],
+        "prev_hash": rec["prev_hash"],
+        "integrity_hash": rec["integrity_hash"],
+    }
+    if isinstance(data, dict):
+        row = dict(data)
+    else:
+        row = {
+            "tenant_id": rec["tenant_id"],
+            "event_id": rec["event_id"],
+            "schema_version": rec["schema_version"],
+            "created_at": _iso(rec["created_at"]),
+            "prev_hash": rec["prev_hash"],
+            "integrity_hash": rec["integrity_hash"],
+        }
+    row[_TYPED_SIDECAR] = typed
+    return row
+
+
+def _iso(value: Any) -> Any:
+    """``created_at`` as a sort-key-comparable string (datetime -> isoformat)."""
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+def _coerce_dt(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _same_instant(typed_ts: Any, envelope_ts: Any) -> bool:
+    """Instant-equality for ``event_timestamp`` across the typed (datetime) column
+    and the envelope (ISO string).
+
+    Tolerant by design: normal timestamptz<->ISO re-serialization must never read
+    as tamper, so only a confidently-parseable, present-on-both-sides mismatch
+    counts as divergence.
+    """
+    if typed_ts is None and envelope_ts is None:
+        return True
+    if typed_ts is None or envelope_ts is None:
+        return False  # one side present, one absent -> divergence
+    a, b = _coerce_dt(typed_ts), _coerce_dt(envelope_ts)
+    if a is None or b is None:
+        return True  # unparseable somewhere -> defer to text-column checks + hash
+    if (a.tzinfo is None) != (b.tzinfo is None):
+        return True  # naive vs aware -> don't manufacture a mismatch
+    return a == b
+
+
+def _typed_envelope_divergence(row: dict) -> bool:
+    """True when a Postgres row's authoritative typed columns diverge from its
+    duplicated ``data`` envelope (N6). Always False for in-memory rows, which have
+    no sidecar because the stored dict is their only surface."""
+    typed = row.get(_TYPED_SIDECAR)
+    if not typed:
+        return False
+    for col in _TYPED_TEXT_COLUMNS:
+        if typed.get(col) != row.get(col):
+            return True
+    return not _same_instant(typed.get("event_timestamp"), row.get("event_timestamp"))
+
+
+def _backlink_breaks(ordered_rows: list[dict]) -> set[str]:
+    """Record ids whose stored ``prev_hash`` backlink does not match the running
+    predecessor hash (N15).
+
+    ``verify_chain`` re-derives each row's hash from its own running predecessor
+    but reads only ``integrity_hash``; it never checks the stored ``prev_hash``
+    backlink. The writer stores ``prev_hash`` = the previous row's
+    ``integrity_hash`` (None/"" at the head), so a rewritten backlink -- which
+    leaves the exposed chain columns no longer forming the linkage they claim --
+    must be caught here. Advancing on the stored ``integrity_hash`` mirrors the
+    writer's linkage, so a lone tampered backlink is reported once, not cascaded.
+    """
+    prev_by_partition: dict[str, Optional[str]] = {}
+    broken: set[str] = set()
+    for row in ordered_rows:
+        key = _bronze_chain_partition(row)
+        running = prev_by_partition.get(key)  # None at the head (no predecessor)
+        stored_prev = row.get("prev_hash")
+        if (stored_prev or "") != (running or ""):
+            broken.add(_record_id(row))
+        prev_by_partition[key] = row.get("integrity_hash")
+    return broken
 
 
 async def list_tenants_with_chain() -> list[str]:
@@ -216,11 +364,18 @@ async def list_tenants_with_chain() -> list[str]:
 # ── The verifier ──────────────────────────────────────────────────────────────
 
 async def verify_tenant_chain(tenant_id: str) -> ChainVerifierResult:
-    """Load and verify one tenant's Bronze truth-chain (pure read, no side effects).
+    """Load and verify one tenant's Bronze truth-chain (read-only; no writes).
 
     Delegates the walk/compare/advance mechanics to the shared primitive; this
     supplies only the Bronze-specific partition / append-order / canonical-field
-    / stored-hash accessors (all mirrored from M2).
+    / stored-hash accessors (all mirrored from M2), then layers three checks the
+    envelope-only hash walk cannot make on its own:
+
+      * N6 -- the authoritative typed columns must match the duplicated envelope;
+      * N15 -- each stored ``prev_hash`` backlink must match the running hash;
+      * N7 -- the append-only chain must not have LOST rows versus the last
+        recorded state (tail truncation / recorded-tail deletion). This one reads
+        the prior recorded status (a read, not a write) to compare.
     """
     rows = await _load_tenant_chain_rows(tenant_id)
     result = hash_chain.verify_chain(
@@ -231,16 +386,78 @@ async def verify_tenant_chain(tenant_id: str) -> ChainVerifierResult:
         stored_hash=lambda row: row.get("integrity_hash"),
         record_id=_record_id,
     )
-    broken = result["broken_record_ids"]
+    ordered = sorted(rows, key=_bronze_chain_sort_key)
+    hash_broken = set(result["broken_record_ids"])
+    backlink_broken = _backlink_breaks(ordered)  # N15
+    broken: list[str] = []
+    for row in ordered:
+        rid = _record_id(row)
+        if rid in hash_broken or rid in backlink_broken or _typed_envelope_divergence(row):
+            broken.append(rid)
+
+    rows_scanned = result["records_checked"]
+    tail_hash = ordered[-1].get("integrity_hash") if ordered else None
+
+    # N7: append-only regression vs the previously recorded state.
+    prior = await _prior_status(tenant_id)
+    prior_max = _prior_max_rows(prior)
+    regression = _regression_reason(prior, rows, rows_scanned)
+    if regression and regression not in broken:
+        broken.insert(0, regression)  # the headline break for the dashboard/alert
+
     return ChainVerifierResult(
         tenant_id=tenant_id,
-        verified=result["chain_intact"],
-        rows_scanned=result["records_checked"],
+        verified=not broken,
+        rows_scanned=rows_scanned,
         chains_verified=result["chains_verified"],
         broken_record_ids=broken,
         break_location=broken[0] if broken else None,
         checked_at=utc_now().isoformat(),
+        tail_hash=tail_hash,
+        max_rows_scanned=max(rows_scanned, prior_max),
     )
+
+
+async def _prior_status(tenant_id: str) -> Optional[dict]:
+    """The last recorded verification status for a tenant, or None. Never raises."""
+    try:
+        return await get_store(_STATUS_STORE).get(tenant_id or "")
+    except Exception:  # noqa: BLE001 - a missing/unreachable prior must not abort verify
+        return None
+
+
+def _prior_max_rows(prior: Optional[dict]) -> int:
+    """The recorded append-only high-watermark (falls back to a pre-N7 record's
+    plain ``rows_scanned`` so upgrades detect regressions immediately)."""
+    if not prior:
+        return 0
+    try:
+        return int(prior.get("max_rows_scanned") or prior.get("rows_scanned") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _regression_reason(
+    prior: Optional[dict], rows: list[dict], rows_scanned: int
+) -> Optional[str]:
+    """A break marker when the chain regressed vs prior recorded state (N7).
+
+    Bronze is append-only: a tenant's chained row set only ever grows. If the
+    recorded row count shrank, or the previously recorded tail row is no longer
+    present in the chain, rows were deleted or rewritten -- a truncation the
+    internally-consistent survivors cannot reveal.
+    """
+    if not prior:
+        return None
+    prior_max = _prior_max_rows(prior)
+    if rows_scanned < prior_max:
+        return f"{_REGRESSION_MARKER}:rows_shrank:{rows_scanned}<{prior_max}"
+    prior_tail = prior.get("tail_hash")
+    if prior_tail:
+        present = {r.get("integrity_hash") for r in rows}
+        if prior_tail not in present:
+            return f"{_REGRESSION_MARKER}:tail_missing:{str(prior_tail)[:12]}"
+    return None
 
 
 # ── Alert wiring (reuse the existing ops/security alert path) ──────────────────
@@ -306,14 +523,70 @@ async def verify_and_record(tenant_id: str) -> ChainVerifierResult:
     return result
 
 
+async def _record_and_alert_failure(result: ChainVerifierResult) -> None:
+    """Persist a failed result and route it through the metric + alert path.
+
+    Used for the non-hash failure modes -- a verifier exception (N13) and a
+    vanished chain (N7) -- so they surface exactly like an ordinary broken chain
+    instead of leaving a stale-green (or missing) dashboard entry.
+    """
+    await record_tenant_status(result)
+    metrics.increment("ledger_chain_verifier_failure_total")
+    await _emit_chain_failure_alert(result)
+
+
+async def _record_verifier_error(tenant_id: str, exc: Exception) -> None:
+    """N13: a tenant whose verification RAISED must not stay green (or statusless).
+
+    Record an explicit failed result -- carrying the prior high-watermark/tail so a
+    later successful run still detects any regression across the error -- and alert.
+    """
+    prior = await _prior_status(tenant_id)
+    marker = f"{_ERROR_MARKER}:{type(exc).__name__}"
+    result = ChainVerifierResult(
+        tenant_id=tenant_id,
+        verified=False,
+        rows_scanned=int((prior or {}).get("rows_scanned") or 0),
+        chains_verified=0,
+        broken_record_ids=[marker],
+        break_location=marker,
+        checked_at=utc_now().isoformat(),
+        tail_hash=(prior or {}).get("tail_hash"),
+        max_rows_scanned=_prior_max_rows(prior),
+    )
+    await _record_and_alert_failure(result)
+
+
+async def _record_vanished_chain(prior: dict) -> None:
+    """N7: a tenant whose ENTIRE chain was deleted disappears from
+    ``list_tenants_with_chain()``; without this its old (often green) status would
+    persist forever. Record it failed and alert."""
+    result = ChainVerifierResult(
+        tenant_id=prior.get("tenant_id") or "",
+        verified=False,
+        rows_scanned=0,
+        chains_verified=0,
+        broken_record_ids=[_VANISHED_MARKER],
+        break_location=_VANISHED_MARKER,
+        checked_at=utc_now().isoformat(),
+        tail_hash=prior.get("tail_hash"),
+        max_rows_scanned=_prior_max_rows(prior),  # keep the watermark so it stays failed
+    )
+    await _record_and_alert_failure(result)
+
+
 async def run_verification_pass() -> dict[str, Any]:
     """One full sweep: verify every tenant with a chain; record + alert per tenant.
 
     Returns a summary of the sweep (also what the worker logs each cycle).
     """
     tenants = await list_tenants_with_chain()
+    # Snapshot the previously recorded statuses BEFORE this pass records anything,
+    # so vanished-chain reconciliation (N7) compares against last pass, not this one.
+    prior_statuses = await _all_recorded_statuses()
     verified = 0
     failures: list[str] = []
+    errored: list[str] = []
     for tenant_id in tenants:
         try:
             result = await verify_and_record(tenant_id)
@@ -322,20 +595,61 @@ async def run_verification_pass() -> dict[str, Any]:
                 "ledger chain verify errored tenant=%s error=%s", tenant_id, exc
             )
             metrics.increment("ledger_chain_verifier_pass_error")
+            # N13: persist an explicit failed status + alert instead of skipping.
+            try:
+                await _record_verifier_error(tenant_id, exc)
+            except Exception as rec_exc:  # noqa: BLE001 - recording must not abort the sweep
+                logger.error(
+                    "ledger chain error-status record failed tenant=%s error=%s",
+                    tenant_id,
+                    rec_exc,
+                )
+            errored.append(tenant_id)
+            failures.append(tenant_id)
             continue
         if result.verified:
             verified += 1
         else:
             failures.append(tenant_id)
+
+    # N7: a tenant that had a chain last time but is absent now had its whole chain
+    # deleted. Flag it failed so a stale (green) dashboard status can't linger.
+    current = set(tenants)
+    vanished: list[str] = []
+    for status in prior_statuses:
+        tid = status.get("tenant_id") or ""
+        if not tid or tid in current or tid in vanished:
+            continue
+        if _prior_max_rows(status) <= 0:
+            continue  # never had a real chain (e.g. an error-only status) -> nothing lost
+        try:
+            await _record_vanished_chain(status)
+        except Exception as exc:  # noqa: BLE001 - reconciliation must not abort the sweep
+            logger.error(
+                "ledger chain vanished-status record failed tenant=%s error=%s", tid, exc
+            )
+        vanished.append(tid)
+        failures.append(tid)
+
     summary = {
         "tenants_checked": len(tenants),
         "verified": verified,
         "verification_failures": len(failures),
         "failed_tenants": failures,
+        "errored_tenants": errored,
+        "vanished_tenants": vanished,
         "ran_at": utc_now().isoformat(),
     }
     logger.info("ledger chain verification pass complete: %s", summary)
     return summary
+
+
+async def _all_recorded_statuses() -> list[dict]:
+    """Every recorded per-tenant status, or [] if the store is unreachable."""
+    try:
+        return await get_store(_STATUS_STORE).find()
+    except Exception:  # noqa: BLE001 - a down status store must not abort the sweep
+        return []
 
 
 # ── Dashboard read ────────────────────────────────────────────────────────────
