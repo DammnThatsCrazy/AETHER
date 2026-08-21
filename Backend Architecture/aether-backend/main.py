@@ -1062,6 +1062,33 @@ def create_app() -> FastAPI:
     else:
         logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
 
+    # ── Universal Provider Runtime (feature-flagged, additive to connectors) ──
+    if settings.provider_runtime.enabled:
+        # Aliased names: this function already binds a module-level
+        # ``admin_router`` (Kyber admin) earlier, and ``router`` is used for
+        # other core routers; a bare import here would shadow both.
+        from services.provider_runtime import (
+            admin_router as provider_runtime_admin_router,
+            provider_registry,
+            router as provider_runtime_router,
+            webhook_public_router as provider_webhook_public_router,
+        )
+        provider_registry.load_all()
+        app.include_router(provider_runtime_router)
+        # Public provider webhook route always mounted when the runtime is
+        # enabled; security is enforced by provider signature verification
+        # inside the handler.
+        app.include_router(provider_webhook_public_router)
+        if settings.provider_runtime.kyber_health_enabled:
+            app.include_router(provider_runtime_admin_router)
+        logger.info(
+            "Provider Runtime: routes mounted (/v1/provider-connections + /v1/provider-webhooks)"
+        )
+    else:
+        logger.info(
+            "Provider Runtime: disabled (set AETHER_PROVIDER_RUNTIME_ENABLED=true to enable)"
+        )
+
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router
         from services.x402.challenge_middleware import register_challenge_middleware

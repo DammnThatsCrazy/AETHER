@@ -11,6 +11,10 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // Heavy jsdom component tests (multi-panel pages, userEvent typing into
+    // several fields with debounced captures) border the 5s vitest default
+    // and flake under parallel CI workers. Generous per-suite budget.
+    testTimeout: 15_000,
     environment: 'jsdom',
     env: {
       VITE_KYBER_ENV: 'test',

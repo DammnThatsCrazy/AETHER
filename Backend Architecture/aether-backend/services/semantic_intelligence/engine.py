@@ -216,7 +216,7 @@ def keyword_labels(text: str) -> KeywordLabels:
     return KeywordLabels(words, pos, neg, stance, intent, speech, topics)
 
 
-def classify_event(
+async def classify_event(
     payload: dict[str, Any],
     tenant_id: str,
     provider: SemanticClassifierProvider | None = None,
@@ -273,7 +273,7 @@ def classify_event(
         pos = neg = 0
         if not should_abstain:
             # Eligible text only — ineligible text abstains before any network.
-            result = provider.classify(
+            result = await provider.classify(
                 SemanticClassificationRequest(
                     tenant_id=tenant_id,
                     source_event_id=source_event_id,

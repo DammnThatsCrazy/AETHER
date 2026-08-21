@@ -61,13 +61,43 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+
+      # NOT ARMED WITHOUT THE LIFECYCLE ROLE. When the role is absent the guard
+      # has no credential to read the lease or trip the TTL, so it is a NO-OP
+      # until the role is wired; demo/preview may still be running and will NOT
+      # be guarded — this is NOT a claim that demo/preview are asleep. The
+      # moment the role is configured, every step below runs exactly as written:
+      # fail-closed. The secrets context is not available in step `if:`
+      # conditions, so the role is laundered through an env binding and
+      # published as a step output that every credential-gated step below reads.
+      - name: Detect whether the lifecycle role is configured
+        id: check-armed
+        env:
+          AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN:-}" ]; then
+            echo 'armed=true' >> "$GITHUB_OUTPUT"
+            echo 'Lifecycle role is configured; the guard is armed.'
+          else
+            echo 'armed=false' >> "$GITHUB_OUTPUT"
+            echo 'Lifecycle role is absent; the guard is a NO-OP until it is wired.'
+          fi
+
+      - name: TTL guard is not armed without the lifecycle role
+        if: steps.check-armed.outputs.armed == 'false'
+        run: |
+          set -euo pipefail
+          echo '::notice title=Ephemeral TTL guard not armed::AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN is not configured, so the guard has no credential to read the lease or trip the TTL; it is a NO-OP until the role is wired. Demo/preview environments may still be running and will NOT be guarded — this is NOT a claim that demo/preview are asleep.'
       - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check-armed.outputs.armed == 'true'
         with:
           role-to-assume: ${{ secrets.AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Resolve the ephemeral TTL decision
         id: decision
+        if: steps.check-armed.outputs.armed == 'true'
         env:
           PROFILE: ${{ matrix.profile }}
           ENV: ${{ matrix.env }}
@@ -89,7 +119,9 @@ jobs:
       # A blocking alert. When the lease is expired (or unaccountable) the run
       # ends red so the failure is visible rather than buried in a log.
       - name: Blocking alert on an expired ephemeral environment
-        if: steps.decision.outputs.expired == 'true'
+        if: >-
+          steps.check-armed.outputs.armed == 'true'
+          && steps.decision.outputs.expired == 'true'
         env:
           PROFILE: ${{ matrix.profile }}
           ENV: ${{ matrix.env }}

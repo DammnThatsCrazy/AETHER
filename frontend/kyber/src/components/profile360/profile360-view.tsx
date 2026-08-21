@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, FreshnessIndicator, LoadingState, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger, TerminalSeparator, TimeWindowSelector } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, EntityAvatar, FreshnessIndicator, Icon, LoadingState, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger, TerminalSeparator, TimeWindowSelector } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
 import { useProfile360 } from '@kyber/features/profile360';
 import type { Profile360EntityType, Profile360Reference, Profile360ViewId } from '@kyber/types';
@@ -94,12 +94,15 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            {onBack && <Button variant="ghost" size="sm" onClick={onBack}>← Back</Button>}
+            {onBack && <Button variant="ghost" size="sm" onClick={onBack}><Icon name="arrow-left-right" size="xs" decorative className="mr-1" />Back</Button>}
             <Badge variant="accent">Profile 360</Badge>
             <Badge>{entity.type}</Badge>
             <Badge variant={wsVariant(websocketStatus)}>{websocketStatus}</Badge>
           </div>
-          <h1 className="text-xl font-bold text-text-primary">{entity.displayLabel}</h1>
+          <div className="flex items-center gap-2">
+            <EntityAvatar entityType={entity.type} name={entity.displayLabel} size={32} />
+            <h1 className="text-xl font-bold text-text-primary">{entity.displayLabel}</h1>
+          </div>
           <div className="mt-1 flex items-center gap-3 text-xs text-text-secondary font-mono">
             <span>{entity.id}</span>
             <StatusIndicator status={entity.health.status} label={entity.health.status} />

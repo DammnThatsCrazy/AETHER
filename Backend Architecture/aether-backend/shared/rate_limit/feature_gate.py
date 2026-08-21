@@ -61,6 +61,9 @@ PUBLIC_PATH_PREFIXES: frozenset[str] = frozenset({
     "/v1/r/",
     # Provider webhooks: unauthenticated by API key; HMAC-verified inside the handler.
     "/v1/integrations/webhooks/",
+    # UPR provider webhook gateway: unauthenticated by API key; verified via the
+    # provider plugin's webhook signature verification inside the handler.
+    "/v1/provider-webhooks/",
     # Notification-service-mounted inbound provider callbacks (Linear, Jira, generic webhook).
     # Each route verifies its own HMAC signature before processing.
     "/v1/notifications/webhooks/linear/",

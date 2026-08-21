@@ -1,0 +1,630 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+.kyber-app{
+  color-scheme: dark;
+  --ink-0: #f2f4fa;
+  --ink-1: #c7ccda;
+  --ink-2: #858da0;
+  --ink-3: #5c6578;
+  --ink-4: #3f475a;
+  --canvas: #070c16;
+  --surface-0: #0b111d;
+  --surface-1: #0f1624;
+  --surface-2: #141c2b;
+  --surface-3: #1a2334;
+  --surface-hover: #202b3e;
+  --line: #242e40;
+  --line-strong: #334057;
+  --violet: #a28cff;
+  --violet-soft: #6658bd;
+  --violet-wash: #251f43;
+  --teal: #5fe0cf;
+  --teal-soft: #237c83;
+  --teal-wash: #102d35;
+  --blue: #82b5ff;
+  --blue-wash: #162c48;
+  --amber: #e9b86b;
+  --amber-wash: #3b2919;
+  --pink: #e08bbd;
+  --pink-wash: #382237;
+  --green: #81d9a8;
+  --green-wash: #143b32;
+  --red: #f47d8f;
+  --red-wash: #3d1e2a;
+  --graph-edge-muted: #3e4c65;
+  --graph-edge-active: #8c7be7;
+  --shadow-1: 0 18px 44px color-mix(in srgb, var(--canvas) 70%, transparent);
+  --shadow-2: 0 0 0 1px color-mix(in srgb, var(--violet) 14%, transparent), 0 20px 60px color-mix(in srgb, var(--canvas) 85%, transparent);
+  --radius-sm: 7px;
+  --radius-md: 11px;
+  --radius-lg: 16px;
+  --mono: 'DM Mono', 'SFMono-Regular', Consolas, monospace;
+  --sans: 'Manrope', Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.kyber-app, .kyber-app *{ box-sizing: border-box; }
+
+.kyber-app{ min-width: 320px; background: var(--canvas); }
+
+.kyber-app{
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--canvas);
+  color: var(--ink-0);
+  font-family: var(--sans);
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.kyber-app button, .kyber-app input, .kyber-app select{ font: inherit; }
+.kyber-app button{ color: inherit; }
+.kyber-app button:focus-visible, .kyber-app input:focus-visible, .kyber-app select:focus-visible{ outline: 2px solid var(--violet); outline-offset: 2px; }
+
+.kyber-app .skip-link{ position: fixed; top: 10px; left: 10px; z-index: 30; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--violet); color: var(--canvas); transform: translateY(-150%); transition: transform 160ms ease; }
+.kyber-app .skip-link:focus{ transform: translateY(0); }
+.kyber-app .sr-only{ position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.kyber-app .kyber-app{ min-height: 100vh; background: radial-gradient(circle at 70% -30%, color-mix(in srgb, var(--violet) 10%, transparent), transparent 40%), var(--canvas); }
+
+.kyber-app .top-bar{ height: 61px; display: flex; align-items: center; gap: 26px; padding: 0 23px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface-0) 92%, transparent); }
+.kyber-app .brand-lockup{ flex: 0 0 205px; display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+.kyber-app .brand-mark{ position: relative; width: 22px; height: 22px; transform: rotate(30deg); }
+.kyber-app .brand-mark span{ position: absolute; display: block; width: 11px; height: 11px; border: 1.5px solid var(--violet); border-radius: 50%; }
+.kyber-app .brand-mark span:nth-child(1){ left: 0; top: 0; background: color-mix(in srgb, var(--violet) 18%, transparent); }
+.kyber-app .brand-mark span:nth-child(2){ right: 0; top: 0; border-color: var(--teal); background: color-mix(in srgb, var(--teal) 12%, transparent); }
+.kyber-app .brand-mark span:nth-child(3){ left: 5px; bottom: 0; border-color: var(--ink-1); background: color-mix(in srgb, var(--ink-1) 8%, transparent); }
+.kyber-app .brand-name{ letter-spacing: -0.06em; font-weight: 800; font-size: 20px; }
+.kyber-app .brand-product{ color: var(--ink-3); padding-left: 5px; border-left: 1px solid var(--line); font-family: var(--mono); font-size: 9px; letter-spacing: .07em; text-transform: uppercase; }
+.kyber-app .command-trigger{ min-width: 260px; width: min(430px, 36vw); height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--ink-3); cursor: pointer; text-align: left; }
+.kyber-app .command-trigger:hover{ border-color: var(--line-strong); color: var(--ink-1); background: var(--surface-2); }
+.kyber-app .command-trigger span{ flex: 1; }
+.kyber-app kbd{ display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; border: 1px solid var(--line-strong); border-bottom-color: var(--ink-4); border-radius: 4px; color: var(--ink-2); font-family: var(--mono); font-size: 9px; }
+.kyber-app .top-actions{ display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.kyber-app .context-pill, .kyber-app .authority-pill, .kyber-app .evidence-toggle{ height: 32px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--ink-1); }
+.kyber-app .context-pill{ padding: 0 10px; font-family: var(--mono); font-size: 10px; }
+.kyber-app .context-pill svg{ color: var(--ink-3); }
+.kyber-app .status-dot{ display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-3) 10%, transparent); }
+.kyber-app .status-dot--live{ background: var(--teal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 13%, transparent); }
+.kyber-app .status-dot--good{ background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 12%, transparent); }
+.kyber-app .evidence-toggle{ padding: 0 10px; cursor: pointer; color: var(--ink-2); }
+.kyber-app .evidence-toggle:hover, .kyber-app .evidence-toggle.is-active{ border-color: color-mix(in srgb, var(--violet) 46%, var(--line)); color: var(--ink-0); background: var(--violet-wash); }
+.kyber-app .toggle-indicator{ width: 17px; height: 10px; position: relative; border-radius: 99px; background: var(--ink-4); }
+.kyber-app .toggle-indicator::after{ content: ''; position: absolute; left: 2px; top: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-1); transition: transform 160ms ease, background 160ms ease; }
+.kyber-app .evidence-toggle.is-active .toggle-indicator{ background: var(--violet-soft); }
+.kyber-app .evidence-toggle.is-active .toggle-indicator::after{ transform: translateX(7px); background: var(--ink-0); }
+.kyber-app .authority-pill{ padding: 0 8px 0 10px; }
+.kyber-app .authority-pill--propose{ border-color: color-mix(in srgb, var(--amber) 35%, var(--line)); color: var(--amber); }
+.kyber-app .authority-pill--approve, .kyber-app .authority-pill--execute{ border-color: color-mix(in srgb, var(--green) 35%, var(--line)); color: var(--green); }
+.kyber-app .authority-prefix{ color: var(--ink-3); font-size: 10px; }
+.kyber-app .authority-pill select{ max-width: 76px; border: 0; outline: 0; background: transparent; color: inherit; cursor: pointer; appearance: none; }
+.kyber-app .authority-pill select option{ color: var(--ink-0); background: var(--surface-2); }
+.kyber-app .avatar-button{ width: 31px; height: 31px; border: 1px solid color-mix(in srgb, var(--violet) 50%, var(--line)); border-radius: 50%; background: var(--violet-wash); color: var(--violet); cursor: pointer; font-family: var(--mono); font-size: 10px; }
+
+.kyber-app .app-frame{ display: grid; grid-template-columns: 205px minmax(0, 1fr); min-height: calc(100vh - 61px); }
+.kyber-app .navigation-rail{ display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--surface-0); }
+.kyber-app .rail-menu{ width: 34px; height: 32px; margin: 15px 0 13px 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; }
+.kyber-app .rail-menu:hover{ background: var(--surface-2); color: var(--ink-0); }
+.kyber-app .rail-groups{ display: grid; gap: 20px; min-height: 0; overflow-y: auto; padding: 0 11px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.kyber-app .nav-group-label{ padding: 0 10px 7px; color: var(--ink-4); font-family: var(--mono); font-size: 9px; letter-spacing: .11em; text-transform: uppercase; }
+.kyber-app .nav-items{ display: grid; gap: 2px; }
+.kyber-app .nav-item{ min-height: 32px; width: 100%; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; text-align: left; }
+.kyber-app .nav-item:hover{ color: var(--ink-0); background: var(--surface-2); }
+.kyber-app .nav-item.is-active{ border-color: color-mix(in srgb, var(--violet) 24%, transparent); background: color-mix(in srgb, var(--violet) 12%, var(--surface-1)); color: var(--ink-0); }
+.kyber-app .nav-item.is-active .nav-glyph{ color: var(--violet); }
+.kyber-app .nav-glyph{ width: 15px; color: var(--ink-3); font-family: var(--mono); text-align: center; font-size: 14px; }
+.kyber-app .nav-count{ margin-left: auto; min-width: 17px; padding: 2px 4px; border-radius: 4px; background: var(--violet-wash); color: var(--violet); font-family: var(--mono); font-size: 9px; text-align: center; }
+.kyber-app .rail-bottom{ margin-top: auto; display: grid; gap: 12px; padding: 14px 11px 16px; border-top: 1px solid var(--line); }
+.kyber-app .rail-health{ display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--ink-3); font-family: var(--mono); font-size: 9px; }
+
+.kyber-app .workspace{ min-width: 0; padding: 0 22px 22px; overflow: hidden; }
+.kyber-app .workspace-header{ padding: 19px 0 15px; }
+.kyber-app .breadcrumb-row{ display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 10px; }
+.kyber-app .eyebrow, .kyber-app .section-kicker{ color: var(--ink-3); font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+.kyber-app .breadcrumb-separator{ color: var(--ink-4); }
+.kyber-app .breadcrumb-current{ color: var(--ink-1); }
+.kyber-app .scope-chip{ display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-1); color: var(--ink-2); font-family: var(--mono); font-size: 9px; }
+.kyber-app .scope-dot{ width: 5px; height: 5px; border: 1px solid var(--teal); border-radius: 50%; }
+.kyber-app .workspace-title-row{ display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-top: 16px; }
+.kyber-app h1, .kyber-app h2, .kyber-app h3, .kyber-app p{ margin: 0; }
+.kyber-app h1{ max-width: 690px; letter-spacing: -.04em; font-size: clamp(23px, 2.5vw, 33px); line-height: 1.08; font-weight: 700; }
+.kyber-app h1 span{ color: var(--ink-3); font-weight: 500; }
+.kyber-app .workspace-subtitle{ display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--ink-2); font-size: 11px; }
+.kyber-app .workspace-subtitle strong{ color: var(--ink-1); font-weight: 600; }
+.kyber-app .live-marker{ width: 6px; height: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--teal) 12%, transparent); }
+.kyber-app .header-actions{ display: flex; align-items: center; gap: 7px; }
+.kyber-app .quiet-button, .kyber-app .icon-button{ display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--ink-2); cursor: pointer; }
+.kyber-app .quiet-button{ height: 31px; padding: 0 10px; font-size: 10px; }
+.kyber-app .quiet-button:hover, .kyber-app .quiet-button.is-active{ border-color: color-mix(in srgb, var(--violet) 45%, var(--line)); background: var(--violet-wash); color: var(--ink-0); }
+.kyber-app .icon-button{ width: 31px; height: 31px; padding: 0; }
+.kyber-app .icon-button:hover{ border-color: var(--line-strong); background: var(--surface-2); color: var(--ink-0); }
+.kyber-app .icon-button--small{ width: 25px; height: 25px; }
+
+.kyber-app .lifecycle-rail{ min-height: 56px; display: flex; align-items: center; gap: 0; margin-bottom: 13px; padding: 0 13px; border: 1px solid var(--line); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface-1) 76%, transparent); overflow-x: auto; }
+.kyber-app .lifecycle-caption{ flex: 0 0 auto; display: flex; align-items: center; gap: 7px; margin-right: 20px; color: var(--violet); font-family: var(--mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.kyber-app .lifecycle-step{ position: relative; min-width: 76px; display: grid; grid-template-columns: 21px auto; grid-template-rows: 18px 14px; align-items: center; gap: 0 7px; padding: 9px 10px; border: 0; background: transparent; color: var(--ink-3); cursor: pointer; text-align: left; }
+.kyber-app .lifecycle-step::after{ content: ''; position: absolute; left: 100%; top: 25px; width: 24px; height: 1px; background: var(--line-strong); }
+.kyber-app .lifecycle-step:last-child::after{ display: none; }
+.kyber-app .lifecycle-step:hover{ color: var(--ink-1); }
+.kyber-app .lifecycle-step.is-active{ color: var(--ink-0); }
+.kyber-app .lifecycle-step.is-active .lifecycle-dot{ border-color: var(--violet); background: var(--violet-wash); color: var(--violet); box-shadow: 0 0 0 5px color-mix(in srgb, var(--violet) 9%, transparent); }
+.kyber-app .lifecycle-step.is-complete .lifecycle-dot{ border-color: var(--teal-soft); background: var(--teal-wash); color: var(--teal); }
+.kyber-app .lifecycle-dot{ grid-row: 1 / 3; width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--ink-4); border-radius: 50%; color: var(--ink-3); font-family: var(--mono); font-size: 9px; }
+.kyber-app .lifecycle-label{ font-size: 10px; font-weight: 600; }
+.kyber-app .lifecycle-helper{ color: var(--ink-4); font-family: var(--mono); font-size: 8px; }
+.kyber-app .lifecycle-step.is-active .lifecycle-helper{ color: var(--violet-soft); }
+
+.kyber-app .health-bar{ min-height: 61px; display: flex; align-items: center; gap: 16px; margin-bottom: 13px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--teal) 18%, var(--line)); border-radius: var(--radius-md); background: linear-gradient(90deg, color-mix(in srgb, var(--teal) 7%, var(--surface-1)), var(--surface-1) 44%, color-mix(in srgb, var(--violet) 4%, var(--surface-1))); }
+.kyber-app .health-summary{ min-width: 213px; display: flex; align-items: center; gap: 9px; }
+.kyber-app .health-orbit{ position: relative; width: 29px; height: 29px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.kyber-app .health-orbit-ring{ position: absolute; inset: 1px; border: 1px dashed color-mix(in srgb, var(--teal) 56%, transparent); border-radius: 50%; transform: rotate(-28deg); }
+.kyber-app .health-orbit-ring::after{ content: ''; position: absolute; top: -2px; left: 10px; width: 4px; height: 4px; border-radius: 50%; background: var(--teal); }
+.kyber-app .health-orbit-core{ width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--teal-wash); color: var(--teal); }
+.kyber-app .health-summary > div:last-child{ display: grid; gap: 3px; }
+.kyber-app .health-summary strong{ color: var(--ink-1); font-size: 10px; font-weight: 600; }
+.kyber-app .health-metrics{ min-width: 0; flex: 1; display: grid; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap: 13px; }
+.kyber-app .health-metric{ display: grid; gap: 6px; }
+.kyber-app .health-metric > div:first-child{ display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.kyber-app .health-metric span{ color: var(--ink-3); font-family: var(--mono); font-size: 8px; white-space: nowrap; }
+.kyber-app .health-metric strong{ color: var(--teal); font-family: var(--mono); font-size: 9px; font-weight: 500; }
+.kyber-app .health-metric strong.is-watch{ color: var(--amber); }
+.kyber-app .health-meter{ height: 3px; overflow: hidden; border-radius: 99px; background: var(--surface-3); }
+.kyber-app .health-meter span{ display: block; height: 100%; border-radius: inherit; background: var(--teal); }
+.kyber-app .health-meter span.is-watch{ background: var(--amber); }
+.kyber-app .health-detail-button{ height: 29px; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-2); color: var(--ink-2); cursor: pointer; font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+.kyber-app .health-detail-button:hover{ border-color: var(--teal-soft); background: var(--teal-wash); color: var(--teal); }
+
+.kyber-app .domain-lens{ min-height: 76px; display: flex; align-items: center; gap: 15px; margin-bottom: 13px; padding: 10px 12px; border: 1px solid var(--line); border-left: 2px solid var(--lens-accent); border-radius: var(--radius-md); background: linear-gradient(90deg, color-mix(in srgb, var(--lens-accent) 7%, var(--surface-1)), var(--surface-1) 48%); }
+.kyber-app .domain-lens--teal{ --lens-accent: var(--teal); }
+.kyber-app .domain-lens--violet{ --lens-accent: var(--violet); }
+.kyber-app .domain-lens--amber{ --lens-accent: var(--amber); }
+.kyber-app .domain-lens--blue{ --lens-accent: var(--blue); }
+.kyber-app .domain-lens-copy{ min-width: 225px; flex: 1.12; display: grid; gap: 3px; }
+.kyber-app .domain-lens-copy .section-kicker{ display: flex; align-items: center; gap: 5px; color: var(--lens-accent); }
+.kyber-app .domain-lens-copy strong{ color: var(--ink-0); font-size: 10px; font-weight: 600; }
+.kyber-app .domain-lens-copy p{ max-width: 410px; color: var(--ink-3); font-size: 8px; line-height: 1.4; }
+.kyber-app .domain-lens-metrics{ min-width: 0; flex: 1.32; display: grid; grid-template-columns: repeat(3, minmax(84px, 1fr)); gap: 7px; }
+.kyber-app .lens-metric{ min-height: 40px; display: flex; align-items: center; gap: 7px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--surface-2) 68%, transparent); }
+.kyber-app .lens-metric-icon{ width: 23px; height: 23px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 6px; background: color-mix(in srgb, var(--lens-accent) 12%, transparent); color: var(--lens-accent); }
+.kyber-app .lens-metric > div{ min-width: 0; display: grid; gap: 2px; }
+.kyber-app .lens-metric span:not(.lens-metric-icon){ overflow: hidden; color: var(--ink-4); font-family: var(--mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.kyber-app .lens-metric strong{ color: var(--ink-1); font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.kyber-app .lens-action{ height: 28px; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 0 8px; border: 1px solid color-mix(in srgb, var(--lens-accent) 35%, var(--line)); border-radius: 6px; background: color-mix(in srgb, var(--lens-accent) 9%, var(--surface-1)); color: var(--lens-accent); cursor: pointer; font-family: var(--mono); font-size: 8px; text-transform: uppercase; white-space: nowrap; }
+.kyber-app .lens-action:hover{ background: color-mix(in srgb, var(--lens-accent) 16%, var(--surface-1)); }
+.kyber-app .lens-health-action{ width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--ink-3); cursor: pointer; }
+.kyber-app .lens-health-action:hover{ border-color: var(--teal-soft); color: var(--teal); }
+
+.kyber-app .workspace-grid{ display: grid; grid-template-columns: minmax(0, 1fr) 362px; gap: 13px; min-height: 510px; }
+.kyber-app .graph-column{ min-width: 0; }
+.kyber-app .graph-card{ min-height: 510px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.kyber-app .graph-card--evidence{ border-color: color-mix(in srgb, var(--teal) 38%, var(--line)); }
+.kyber-app .graph-card--compare{ border-color: color-mix(in srgb, var(--amber) 38%, var(--line)); }
+.kyber-app .graph-card--focus{ border-color: color-mix(in srgb, var(--violet) 42%, var(--line)); }
+.kyber-app .graph-card--pinned{ box-shadow: 0 0 0 1px color-mix(in srgb, var(--teal) 17%, transparent), var(--shadow-1); }
+.kyber-app .graph-card-topline, .kyber-app .graph-footer{ display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; }
+.kyber-app .graph-card-topline{ border-bottom: 1px solid var(--line); }
+.kyber-app .graph-heading{ display: flex; align-items: center; gap: 10px; }
+.kyber-app .graph-heading strong{ color: var(--ink-1); font-size: 11px; }
+.kyber-app .graph-live{ display: inline-flex; align-items: center; gap: 6px; padding-left: 9px; border-left: 1px solid var(--line); color: var(--teal); font-family: var(--mono); font-size: 9px; }
+.kyber-app .state-boundary{ display: inline-flex; align-items: center; gap: 6px; padding-left: 9px; border-left: 1px solid var(--line); color: var(--ink-3); font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+.kyber-app .state-boundary .status-dot{ width: 5px; height: 5px; box-shadow: none; background: currentColor; }
+.kyber-app .state-boundary--resolving{ color: var(--violet); }
+.kyber-app .state-boundary--streaming{ color: var(--teal); }
+.kyber-app .state-boundary--reconciling{ color: var(--amber); }
+.kyber-app .state-boundary--settled{ color: var(--green); }
+.kyber-app .graph-tools{ display: flex; gap: 4px; }
+.kyber-app .graph-tool{ width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--ink-3); cursor: pointer; }
+.kyber-app .graph-tool:hover{ border-color: var(--line); background: var(--surface-2); color: var(--ink-1); }
+.kyber-app .graph-tool.is-active{ border-color: color-mix(in srgb, var(--violet) 38%, var(--line)); background: var(--violet-wash); color: var(--violet); }
+.kyber-app .graph-viewport{ position: relative; height: 445px; overflow: hidden; isolation: isolate; background-image: linear-gradient(color-mix(in srgb, var(--line) 36%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--line) 36%, transparent) 1px, transparent 1px), radial-gradient(ellipse at 48% 47%, color-mix(in srgb, var(--violet) 12%, transparent), transparent 38%), radial-gradient(ellipse at 14% 95%, color-mix(in srgb, var(--teal) 6%, transparent), transparent 36%); background-size: 44px 44px, 44px 44px, auto, auto; background-position: 20px 16px, 20px 16px, center, center; }
+.kyber-app .graph-viewport::after{ content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(125deg, transparent 12%, color-mix(in srgb, var(--violet) 3%, transparent) 50%, transparent 88%); }
+.kyber-app .ambient-orb{ position: absolute; border-radius: 50%; filter: blur(24px); pointer-events: none; opacity: .5; }
+.kyber-app .ambient-orb--one{ top: 19%; left: 40%; width: 23%; aspect-ratio: 1; background: color-mix(in srgb, var(--violet) 9%, transparent); }
+.kyber-app .ambient-orb--two{ bottom: -15%; right: 3%; width: 28%; aspect-ratio: 1; background: color-mix(in srgb, var(--teal) 7%, transparent); }
+.kyber-app .graph-edges{ position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.kyber-app .graph-scenery{ position: absolute; inset: 0; transform-origin: 50% 50%; transition: transform 220ms ease; }
+.kyber-app .graph-edge{ fill: none; stroke: var(--graph-edge-muted); stroke-width: .28; stroke-opacity: .58; vector-effect: non-scaling-stroke; }
+.kyber-app .graph-edge.is-selected{ stroke: var(--graph-edge-active); stroke-width: .58; stroke-opacity: .96; filter: url(#edgeGlow); }
+.kyber-app .graph-edge--confirmed{ stroke: color-mix(in srgb, var(--teal) 60%, var(--graph-edge-muted)); }
+.kyber-app .graph-edge--inferred{ stroke-dasharray: 2.8 2.5; }
+.kyber-app .graph-edge--predicted{ stroke: var(--amber); stroke-dasharray: .9 2.7; stroke-linecap: round; }
+.kyber-app .graph-edge--disputed{ stroke: var(--red); stroke-dasharray: 1.4 1.4; opacity: .85; }
+.kyber-app .graph-edge--observed{ stroke: color-mix(in srgb, var(--blue) 54%, var(--graph-edge-muted)); }
+.kyber-app .graph-card--evidence .graph-edge{ stroke-opacity: .95; stroke-width: .4; }
+.kyber-app .graph-card--evidence .graph-edge--disputed{ stroke-width: .75; }
+.kyber-app .graph-card--focus .graph-node:not(.is-selected)::before{ opacity: .32; transform: scale(.82); }
+.kyber-app .graph-card--focus .graph-node:not(.is-selected) .node-label{ opacity: .46; }
+.kyber-app .graph-card--focus .graph-edge:not(.is-selected){ stroke-opacity: .2; }
+.kyber-app .graph-compare-label{ position: absolute; z-index: 2; top: 15px; padding: 4px 7px; border-radius: 4px; font-family: var(--mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; opacity: 0; transition: opacity 160ms ease; }
+.kyber-app .graph-card--compare .graph-compare-label{ opacity: 1; }
+.kyber-app .graph-compare-label--before{ left: 15px; background: var(--surface-3); color: var(--ink-2); }
+.kyber-app .graph-compare-label--after{ right: 15px; background: var(--amber-wash); color: var(--amber); }
+.kyber-app .graph-terrain-label{ position: absolute; color: var(--ink-4); font-family: var(--mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; pointer-events: none; }
+.kyber-app .graph-terrain-label span{ color: var(--ink-3); }
+.kyber-app .graph-terrain-label--top{ top: 52px; left: 11%; }
+.kyber-app .graph-terrain-label--bottom{ right: 11%; bottom: 22px; }
+.kyber-app .graph-node{ position: absolute; z-index: 4; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: transparent; cursor: pointer; transform: translate(-50%, -50%); }
+.kyber-app .graph-node::before{ content: ''; position: absolute; width: var(--node-size); height: var(--node-size); border: 1px solid color-mix(in srgb, var(--node-color) 60%, var(--line)); border-radius: 50%; background: color-mix(in srgb, var(--node-color) 14%, var(--surface-1)); box-shadow: 0 0 22px color-mix(in srgb, var(--node-color) 12%, transparent); transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease; }
+.kyber-app .graph-node:hover::before, .kyber-app .graph-node.is-selected::before{ transform: scale(1.18); border-color: var(--node-color); box-shadow: 0 0 0 5px color-mix(in srgb, var(--node-color) 8%, transparent), 0 0 30px color-mix(in srgb, var(--node-color) 23%, transparent); }
+.kyber-app .graph-node--violet{ --node-color: var(--violet); }
+.kyber-app .graph-node--teal{ --node-color: var(--teal); }
+.kyber-app .graph-node--amber{ --node-color: var(--amber); }
+.kyber-app .graph-node--blue{ --node-color: var(--blue); }
+.kyber-app .graph-node--pink{ --node-color: var(--pink); }
+.kyber-app .graph-node--slate{ --node-color: var(--ink-1); }
+.kyber-app .node-core{ position: relative; z-index: 2; display: inline-flex; align-items: center; justify-content: center; color: var(--node-color); }
+.kyber-app .node-halo{ position: absolute; width: calc(var(--node-size) + 18px); height: calc(var(--node-size) + 18px); border: 1px solid color-mix(in srgb, var(--node-color) 15%, transparent); border-radius: 50%; opacity: .6; }
+.kyber-app .graph-node--agent .node-halo, .kyber-app .graph-node--campaign .node-halo{ border-style: dashed; }
+.kyber-app .graph-node--agent .node-halo{ animation: kyber-semantic-pulse 3.4s ease-in-out infinite; }
+.kyber-app .node-label, .kyber-app .node-signal{ position: absolute; left: 50%; white-space: nowrap; pointer-events: none; transform: translateX(-50%); }
+.kyber-app .node-label{ top: calc(50% + 27px); color: var(--ink-1); font-size: 10px; font-weight: 600; text-shadow: 0 2px 8px var(--canvas); }
+.kyber-app .node-signal{ top: calc(50% + 42px); color: var(--node-color); font-family: var(--mono); font-size: 8px; opacity: .8; }
+.kyber-app .graph-node--system .node-label{ color: var(--ink-2); }
+.kyber-app .graph-focus-note{ position: absolute; right: 17px; top: 51%; display: flex; align-items: center; gap: 7px; color: var(--ink-4); font-family: var(--mono); font-size: 8px; }
+.kyber-app .focus-line{ width: 24px; height: 1px; background: var(--line-strong); }
+.kyber-app .graph-footer{ border-top: 1px solid var(--line); color: var(--ink-3); font-family: var(--mono); font-size: 9px; }
+.kyber-app .graph-footer > span{ display: inline-flex; align-items: center; gap: 7px; }
+.kyber-app .graph-footer svg{ color: var(--ink-3); }
+.kyber-app .graph-zoom{ display: inline-flex; align-items: center; gap: 5px; }
+.kyber-app .graph-zoom > span{ display: inline-flex; align-items: center; gap: 5px; }
+.kyber-app .graph-zoom button{ width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); color: var(--ink-2); cursor: pointer; line-height: 1; }
+.kyber-app .graph-zoom button:hover{ border-color: var(--line-strong); color: var(--ink-0); }
+.kyber-app .graph-legend{ display: flex; align-items: center; flex-wrap: wrap; gap: 14px; min-height: 32px; padding: 8px 4px 0; color: var(--ink-3); font-family: var(--mono); font-size: 9px; }
+.kyber-app .legend-label{ color: var(--ink-2); }
+.kyber-app .legend-item{ display: inline-flex; align-items: center; gap: 6px; }
+.kyber-app .legend-line{ display: inline-block; width: 20px; height: 1px; background: var(--ink-3); }
+.kyber-app .legend-line--confirmed{ background: var(--teal); }
+.kyber-app .legend-line--inferred{ height: 0; border-top: 1px dashed var(--violet); background: transparent; }
+.kyber-app .legend-line--predicted{ height: 0; border-top: 1px dotted var(--amber); background: transparent; }
+.kyber-app .legend-line--disputed{ height: 0; border-top: 1px dashed var(--red); background: transparent; }
+.kyber-app .legend-evidence{ display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--teal); }
+
+.kyber-app .inspector{ min-width: 0; min-height: 510px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.kyber-app .inspector--evidence{ border-color: color-mix(in srgb, var(--teal) 38%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--teal) 5%, transparent), var(--shadow-1); }
+.kyber-app .inspector-topline{ display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.kyber-app .inspector-topline strong{ display: block; margin-top: 3px; font-size: 11px; }
+.kyber-app .inspector-scroll{ height: 466px; overflow-y: auto; padding: 15px 14px 18px; scrollbar-color: var(--line-strong) transparent; }
+.kyber-app .selection-header{ display: flex; align-items: center; gap: 10px; padding-bottom: 13px; }
+.kyber-app .selection-symbol{ width: 37px; height: 37px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border: 1px solid currentColor; border-radius: 10px; }
+.kyber-app .selection-symbol--violet{ color: var(--violet); background: var(--violet-wash); }
+.kyber-app .selection-symbol--teal{ color: var(--teal); background: var(--teal-wash); }
+.kyber-app .selection-symbol--amber{ color: var(--amber); background: var(--amber-wash); }
+.kyber-app .selection-symbol--blue{ color: var(--blue); background: var(--blue-wash); }
+.kyber-app .selection-symbol--pink{ color: var(--pink); background: var(--pink-wash); }
+.kyber-app .selection-symbol--slate{ color: var(--ink-1); background: var(--surface-3); }
+.kyber-app .selection-header > div:nth-child(2){ min-width: 0; flex: 1; }
+.kyber-app .selection-eyebrow{ color: var(--ink-3); font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
+.kyber-app .selection-header h2{ margin: 3px 0 2px; font-size: 17px; letter-spacing: -.03em; }
+.kyber-app .mono-id{ color: var(--ink-4); font-family: var(--mono); font-size: 9px; }
+.kyber-app .interpretation-card{ padding: 12px; border: 1px solid color-mix(in srgb, var(--violet) 22%, var(--line)); border-radius: var(--radius-md); background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--violet) 10%, transparent), transparent 50%), var(--violet-wash); }
+.kyber-app .interpretation-card--learned{ border-color: color-mix(in srgb, var(--teal) 35%, var(--line)); background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--teal) 10%, transparent), transparent 50%), var(--teal-wash); }
+.kyber-app .interpretation-topline{ display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kyber-app .signal-chip{ display: inline-flex; align-items: center; gap: 5px; max-width: 190px; color: var(--violet); font-family: var(--mono); font-size: 8px; line-height: 1.2; text-transform: uppercase; }
+.kyber-app .signal-chip-dot{ width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+.kyber-app .confidence-badge{ display: flex; align-items: baseline; gap: 3px; color: var(--ink-0); font-family: var(--mono); font-size: 11px; }
+.kyber-app .confidence-badge span{ color: var(--ink-3); font-size: 8px; }
+.kyber-app .interpretation-card h3{ margin-top: 13px; color: var(--ink-0); font-size: 13px; line-height: 1.4; letter-spacing: -.02em; }
+.kyber-app .interpretation-card p{ margin-top: 7px; color: var(--ink-2); font-size: 10px; line-height: 1.6; }
+.kyber-app .interpretation-tags{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
+.kyber-app .interpretation-tags span{ padding: 4px 6px; border-radius: 4px; background: color-mix(in srgb, var(--surface-0) 30%, transparent); color: var(--ink-2); font-family: var(--mono); font-size: 8px; }
+.kyber-app .narrative-trace{ margin-top: 11px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.kyber-app .narrative-trace-header{ display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.kyber-app .narrative-context{ display: inline-flex; align-items: center; gap: 4px; color: var(--ink-3); font-family: var(--mono); font-size: 7px; }
+.kyber-app .narrative-trace > strong{ display: block; margin-top: 7px; color: var(--ink-0); font-size: 10px; line-height: 1.4; }
+.kyber-app .narrative-trace > p{ margin-top: 5px; color: var(--ink-3); font-size: 8px; line-height: 1.5; }
+.kyber-app .narrative-steps{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+.kyber-app .narrative-steps > div{ display: grid; gap: 3px; min-width: 0; }
+.kyber-app .narrative-steps span{ color: var(--ink-4); font-family: var(--mono); font-size: 7px; text-transform: uppercase; }
+.kyber-app .narrative-steps strong{ overflow: hidden; color: var(--ink-1); font-family: var(--mono); font-size: 8px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.kyber-app .inspector-section{ padding: 14px 0 0; }
+.kyber-app .section-heading{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: var(--ink-1); font-size: 10px; font-weight: 600; }
+.kyber-app .section-count, .kyber-app .time-stamp{ color: var(--ink-4); font-family: var(--mono); font-size: 8px; font-weight: 400; }
+.kyber-app .time-stamp{ display: inline-flex; align-items: center; gap: 4px; }
+.kyber-app .relationship-list{ display: grid; gap: 5px; }
+.kyber-app .relationship-row{ min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--surface-2) 52%, transparent); }
+.kyber-app .mini-symbol{ width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 7px; }
+.kyber-app .mini-symbol--violet{ color: var(--violet); background: var(--violet-wash); }
+.kyber-app .mini-symbol--teal{ color: var(--teal); background: var(--teal-wash); }
+.kyber-app .mini-symbol--amber{ color: var(--amber); background: var(--amber-wash); }
+.kyber-app .mini-symbol--blue{ color: var(--blue); background: var(--blue-wash); }
+.kyber-app .mini-symbol--pink{ color: var(--pink); background: var(--pink-wash); }
+.kyber-app .mini-symbol--slate{ color: var(--ink-1); background: var(--surface-3); }
+.kyber-app .relationship-copy{ display: grid; min-width: 0; flex: 1; gap: 2px; }
+.kyber-app .relationship-copy strong{ overflow: hidden; color: var(--ink-1); font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.kyber-app .relationship-copy span{ overflow: hidden; color: var(--ink-4); font-family: var(--mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.kyber-app .relationship-confidence{ display: grid; justify-items: end; gap: 3px; }
+.kyber-app .relationship-confidence strong{ color: var(--ink-2); font-family: var(--mono); font-size: 9px; font-weight: 400; }
+.kyber-app .edge-state{ color: var(--ink-3); font-family: var(--mono); font-size: 7px; text-transform: uppercase; }
+.kyber-app .edge-state--confirmed{ color: var(--teal); }
+.kyber-app .edge-state--inferred{ color: var(--violet); }
+.kyber-app .edge-state--predicted{ color: var(--amber); }
+.kyber-app .edge-state--disputed{ color: var(--red); }
+.kyber-app .change-section{ padding-top: 12px; }
+.kyber-app .change-metrics{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.kyber-app .change-metrics > div{ padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); }
+.kyber-app .change-metrics strong, .kyber-app .change-metrics span{ display: block; }
+.kyber-app .change-metrics strong{ color: var(--teal); font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.kyber-app .change-metrics span{ margin-top: 4px; color: var(--ink-4); font-size: 8px; line-height: 1.3; }
+.kyber-app .evidence-callout{ width: 100%; display: flex; align-items: center; gap: 9px; margin-top: 12px; padding: 9px; border: 1px solid color-mix(in srgb, var(--teal) 19%, var(--line)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--teal-wash) 65%, var(--surface-1)); color: var(--ink-2); cursor: pointer; text-align: left; }
+.kyber-app .evidence-callout:hover{ border-color: var(--teal-soft); background: var(--teal-wash); }
+.kyber-app .evidence-callout > div:nth-child(2){ flex: 1; display: grid; gap: 2px; }
+.kyber-app .evidence-callout strong{ color: var(--teal); font-size: 10px; }
+.kyber-app .evidence-callout span{ color: var(--ink-3); font-family: var(--mono); font-size: 8px; }
+.kyber-app .evidence-icon{ width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 7px; background: var(--teal-wash); color: var(--teal); }
+.kyber-app .evidence-callout > svg{ color: var(--teal); }
+.kyber-app .evidence-panel{ margin-top: 12px; padding: 11px; border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--line)); border-radius: var(--radius-md); background: var(--teal-wash); }
+.kyber-app .evidence-panel-header{ display: flex; align-items: flex-start; justify-content: space-between; gap: 7px; }
+.kyber-app .evidence-panel-header strong{ display: block; margin-top: 3px; color: var(--ink-0); font-size: 10px; }
+.kyber-app .evidence-mode-label{ display: inline-flex; align-items: center; gap: 4px; color: var(--teal); font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+.kyber-app .evidence-confidence{ display: flex; align-items: center; gap: 9px; margin: 12px 0 10px; }
+.kyber-app .confidence-track{ height: 4px; flex: 1; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--teal) 18%, var(--surface-0)); }
+.kyber-app .confidence-track span{ display: block; width: 88%; height: 100%; border-radius: inherit; background: var(--teal); }
+.kyber-app .evidence-confidence > div:last-child{ display: grid; gap: 2px; }
+.kyber-app .evidence-confidence strong{ color: var(--teal); font-family: var(--mono); font-size: 11px; }
+.kyber-app .evidence-confidence span{ color: var(--ink-3); font-family: var(--mono); font-size: 7px; }
+.kyber-app .evidence-source{ min-height: 31px; display: flex; align-items: center; gap: 7px; padding: 6px 0; border-top: 1px solid color-mix(in srgb, var(--teal) 13%, transparent); }
+.kyber-app .source-index{ width: 18px; color: var(--teal-soft); font-family: var(--mono); font-size: 8px; }
+.kyber-app .evidence-source > div:nth-child(2){ display: grid; min-width: 0; flex: 1; gap: 2px; }
+.kyber-app .evidence-source strong{ color: var(--ink-1); font-size: 9px; font-weight: 600; }
+.kyber-app .evidence-source span{ color: var(--ink-3); font-family: var(--mono); font-size: 7px; }
+.kyber-app .source-state{ color: var(--red); }
+.kyber-app .source-state--good{ color: var(--teal); }
+.kyber-app .evidence-source--disputed strong{ color: var(--amber); }
+.kyber-app .causal-boundary{ display: flex; align-items: center; gap: 7px; margin-top: 9px; color: var(--amber); font-family: var(--mono); font-size: 7px; line-height: 1.4; }
+.kyber-app .boundary-dash{ width: 16px; border-top: 1px dashed var(--amber); }
+.kyber-app .action-panel{ margin-top: 12px; padding: 11px; border: 1px solid color-mix(in srgb, var(--amber) 28%, var(--line)); border-radius: var(--radius-md); background: var(--amber-wash); }
+.kyber-app .action-panel--executing{ border-color: color-mix(in srgb, var(--violet) 35%, var(--line)); background: var(--violet-wash); }
+.kyber-app .action-panel--verifying{ border-color: color-mix(in srgb, var(--teal) 34%, var(--line)); background: var(--teal-wash); }
+.kyber-app .action-panel--learned{ border-color: color-mix(in srgb, var(--green) 36%, var(--line)); background: var(--green-wash); }
+.kyber-app .action-panel-heading{ display: flex; align-items: center; gap: 8px; }
+.kyber-app .action-panel-heading > div{ min-width: 0; flex: 1; }
+.kyber-app .action-panel-heading strong{ display: block; margin-top: 3px; color: var(--ink-0); font-size: 10px; }
+.kyber-app .action-status-dot{ width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 7px; }
+.kyber-app .action-status-dot--recommendation{ color: var(--amber); background: color-mix(in srgb, var(--amber) 15%, transparent); }
+.kyber-app .action-status-dot--executing{ color: var(--violet); background: color-mix(in srgb, var(--violet) 15%, transparent); }
+.kyber-app .action-status-dot--verifying{ color: var(--teal); background: color-mix(in srgb, var(--teal) 15%, transparent); }
+.kyber-app .action-status-dot--learned{ color: var(--green); background: color-mix(in srgb, var(--green) 15%, transparent); }
+.kyber-app .recommendation-confidence{ color: var(--amber); font-family: var(--mono); font-size: 10px; }
+.kyber-app .action-panel p{ margin-top: 9px; color: var(--ink-2); font-size: 9px; line-height: 1.5; }
+.kyber-app .action-details{ display: flex; flex-wrap: wrap; gap: 9px; margin-top: 9px; color: var(--ink-3); font-family: var(--mono); font-size: 7px; }
+.kyber-app .action-details span{ display: inline-flex; align-items: center; gap: 4px; }
+.kyber-app .primary-action, .kyber-app .secondary-action{ width: 100%; min-height: 31px; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 11px; border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: 600; }
+.kyber-app .primary-action{ border: 1px solid var(--amber); background: var(--amber); color: var(--canvas); }
+.kyber-app .primary-action:hover{ background: color-mix(in srgb, var(--amber) 82%, var(--ink-0)); }
+.kyber-app .secondary-action{ border: 1px solid var(--violet-soft); background: color-mix(in srgb, var(--violet) 12%, transparent); color: var(--violet); }
+.kyber-app .secondary-action:hover{ background: var(--violet-wash); }
+.kyber-app .action-progress{ height: 5px; position: relative; overflow: hidden; margin-top: 12px; border-radius: 99px; background: color-mix(in srgb, var(--violet) 16%, var(--surface-0)); }
+.kyber-app .action-progress span{ display: block; width: 58%; height: 100%; border-radius: inherit; background: var(--violet); }
+.kyber-app .action-progress em{ position: absolute; right: 0; top: 9px; color: var(--ink-4); font-family: var(--mono); font-size: 7px; font-style: normal; }
+.kyber-app .outcome-compare{ display: grid; grid-template-columns: 1fr 20px 1fr; align-items: center; gap: 8px; margin-top: 12px; }
+.kyber-app .outcome-compare > div:not(.compare-arrow){ display: grid; gap: 2px; }
+.kyber-app .outcome-compare span, .kyber-app .outcome-compare em{ color: var(--ink-3); font-family: var(--mono); font-size: 7px; font-style: normal; text-transform: uppercase; }
+.kyber-app .outcome-compare strong{ color: var(--teal); font-family: var(--mono); font-size: 16px; font-weight: 500; }
+.kyber-app .compare-arrow{ color: var(--ink-3); }
+.kyber-app .learning-row{ display: flex; align-items: center; gap: 6px; margin-top: 11px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--green) 18%, transparent); color: var(--ink-3); font-family: var(--mono); font-size: 8px; }
+.kyber-app .learning-row strong{ color: var(--green); font-size: 9px; font-weight: 500; }
+.kyber-app .learning-row svg{ margin-left: auto; color: var(--green); }
+
+.kyber-app .autonomous-panel{ margin-top: 12px; padding: 10px; border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--blue-wash) 62%, var(--surface-1)); }
+.kyber-app .autonomous-panel--working{ border-color: color-mix(in srgb, var(--violet) 37%, var(--line)); background: color-mix(in srgb, var(--violet-wash) 60%, var(--surface-1)); }
+.kyber-app .autonomous-heading{ display: flex; align-items: center; gap: 8px; }
+.kyber-app .autonomous-icon{ width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 7px; background: var(--blue-wash); color: var(--blue); }
+.kyber-app .autonomous-panel--working .autonomous-icon{ background: var(--violet-wash); color: var(--violet); }
+.kyber-app .autonomous-heading > div:nth-child(2){ display: grid; gap: 3px; flex: 1; }
+.kyber-app .autonomous-heading strong{ color: var(--ink-0); font-size: 10px; }
+.kyber-app .worker-state, .kyber-app .process-live{ display: inline-flex; align-items: center; gap: 5px; color: var(--teal); font-family: var(--mono); font-size: 7px; text-transform: uppercase; }
+.kyber-app .worker-state > span, .kyber-app .process-live > span{ width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.kyber-app .autonomous-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid color-mix(in srgb, var(--blue) 14%, transparent); }
+.kyber-app .autonomous-grid > div{ display: grid; gap: 3px; }
+.kyber-app .autonomous-grid span{ color: var(--ink-4); font-family: var(--mono); font-size: 7px; text-transform: uppercase; }
+.kyber-app .autonomous-grid strong{ color: var(--ink-2); font-size: 8px; font-weight: 500; }
+.kyber-app .autonomous-explanation{ display: flex; gap: 6px; margin-top: 10px; color: var(--ink-3); font-size: 8px; line-height: 1.45; }
+.kyber-app .autonomous-explanation svg{ flex: 0 0 auto; color: var(--blue); }
+
+.kyber-app .health-overlay{ position: fixed; z-index: 18; inset: 0; display: flex; justify-content: flex-end; background: color-mix(in srgb, var(--canvas) 64%, transparent); backdrop-filter: blur(6px); }
+.kyber-app .health-drawer{ width: min(438px, calc(100vw - 22px)); height: 100%; overflow-y: auto; padding: 22px 20px 18px; border-left: 1px solid color-mix(in srgb, var(--teal) 32%, var(--line)); background: var(--surface-1); box-shadow: -24px 0 60px color-mix(in srgb, var(--canvas) 72%, transparent); }
+.kyber-app .health-drawer-header{ display: flex; justify-content: space-between; gap: 16px; }
+.kyber-app .health-drawer-header h2{ margin-top: 6px; letter-spacing: -.035em; font-size: 24px; }
+.kyber-app .health-drawer-header p{ margin-top: 5px; color: var(--ink-2); font-size: 10px; }
+.kyber-app .trust-score{ display: flex; align-items: center; gap: 15px; margin-top: 24px; padding: 13px; border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--line)); border-radius: var(--radius-md); background: var(--teal-wash); }
+.kyber-app .trust-score-ring{ width: 67px; height: 67px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 0 0 auto; border: 1px solid var(--teal); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--teal) 13%, transparent), transparent 66%); box-shadow: 0 0 0 6px color-mix(in srgb, var(--teal) 7%, transparent); }
+.kyber-app .trust-score-ring strong{ color: var(--teal); font-family: var(--mono); font-size: 21px; font-weight: 500; }
+.kyber-app .trust-score-ring span{ color: var(--ink-3); font-family: var(--mono); font-size: 7px; text-transform: uppercase; }
+.kyber-app .trust-score > div:last-child{ display: grid; gap: 7px; }
+.kyber-app .status-chip{ display: inline-flex; align-items: center; gap: 5px; width: fit-content; padding: 4px 6px; border-radius: 4px; font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+.kyber-app .status-chip--good{ background: var(--green-wash); color: var(--green); }
+.kyber-app .status-chip span{ width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.kyber-app .trust-score p{ color: var(--ink-2); font-size: 9px; line-height: 1.5; }
+.kyber-app .health-drawer-section{ margin-top: 21px; }
+.kyber-app .health-dimension{ min-height: 49px; display: flex; align-items: center; gap: 9px; padding: 8px 0; border-top: 1px solid var(--line); }
+.kyber-app .dimension-icon{ width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 7px; }
+.kyber-app .dimension-icon--good{ color: var(--green); background: var(--green-wash); }
+.kyber-app .dimension-icon--watch{ color: var(--amber); background: var(--amber-wash); }
+.kyber-app .dimension-copy{ display: grid; min-width: 0; flex: 1; gap: 3px; }
+.kyber-app .dimension-copy strong{ color: var(--ink-1); font-size: 9px; font-weight: 600; }
+.kyber-app .dimension-copy span{ overflow: hidden; color: var(--ink-3); font-family: var(--mono); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.kyber-app .dimension-score{ display: grid; justify-items: end; gap: 3px; }
+.kyber-app .dimension-score strong{ color: var(--ink-1); font-family: var(--mono); font-size: 10px; font-weight: 500; }
+.kyber-app .dimension-state{ font-family: var(--mono); font-size: 7px; text-transform: uppercase; }
+.kyber-app .dimension-state--good{ color: var(--green); }
+.kyber-app .dimension-state--watch{ color: var(--amber); }
+.kyber-app .process-row{ min-height: 48px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); }
+.kyber-app .process-icon{ width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 7px; }
+.kyber-app .process-icon--blue{ color: var(--blue); background: var(--blue-wash); }
+.kyber-app .process-icon--teal{ color: var(--teal); background: var(--teal-wash); }
+.kyber-app .process-icon--amber{ color: var(--amber); background: var(--amber-wash); }
+.kyber-app .process-row > div{ display: grid; min-width: 0; flex: 1; gap: 3px; }
+.kyber-app .process-row strong{ color: var(--ink-1); font-size: 9px; font-weight: 600; }
+.kyber-app .process-row div span{ overflow: hidden; color: var(--ink-3); font-family: var(--mono); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.kyber-app .process-live--idle{ color: var(--ink-3); }
+.kyber-app .health-drawer-footer{ display: flex; gap: 7px; margin-top: 25px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-4); font-family: var(--mono); font-size: 8px; line-height: 1.45; }
+.kyber-app .health-drawer-footer svg{ flex: 0 0 auto; color: var(--ink-3); }
+
+.kyber-app .bottom-workspace{ display: grid; gap: 10px; margin-top: 13px; }
+.kyber-app .investigation-bar{ min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--violet) 22%, var(--line)); border-radius: var(--radius-md); background: radial-gradient(circle at 0 0, color-mix(in srgb, var(--violet) 10%, transparent), transparent 38%), var(--surface-1); }
+.kyber-app .investigation-identity, .kyber-app .investigation-actions{ display: flex; align-items: center; gap: 9px; }
+.kyber-app .investigation-icon{ width: 29px; height: 29px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: var(--violet-wash); color: var(--violet); }
+.kyber-app .investigation-identity > div:nth-child(2){ display: grid; gap: 3px; }
+.kyber-app .investigation-identity strong{ color: var(--ink-0); font-size: 10px; }
+.kyber-app .investigation-status{ display: inline-flex; align-items: center; gap: 5px; margin-left: 5px; padding: 4px 7px; border-radius: 4px; background: var(--surface-3); color: var(--ink-2); font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+.kyber-app .investigation-status > span{ width: 5px; height: 5px; border-radius: 50%; background: var(--violet); }
+.kyber-app .investigation-status--verifying > span{ background: var(--teal); }
+.kyber-app .investigation-status--learned > span{ background: var(--green); }
+.kyber-app .investigation-status--awaiting-approval > span{ background: var(--amber); }
+.kyber-app .memory-restored{ display: inline-flex; align-items: center; gap: 4px; color: var(--teal); font-family: var(--mono); font-size: 8px; }
+.kyber-app .investigation-meta{ display: inline-flex; align-items: center; gap: 5px; color: var(--ink-3); font-family: var(--mono); font-size: 8px; }
+.kyber-app .investigation-note{ min-width: 150px; max-width: 245px; flex: 1; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--line); color: var(--ink-4); }
+.kyber-app .investigation-note:focus-within{ border-color: var(--violet-soft); color: var(--violet); }
+.kyber-app .investigation-note input{ min-width: 0; width: 100%; height: 26px; border: 0; outline: 0; background: transparent; color: var(--ink-1); font-size: 9px; }
+.kyber-app .investigation-note input::placeholder{ color: var(--ink-4); }
+.kyber-app .save-button{ height: 27px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-2); color: var(--ink-1); cursor: pointer; font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+.kyber-app .save-button:hover, .kyber-app .save-button.is-saved{ border-color: var(--violet-soft); background: var(--violet-wash); color: var(--violet); }
+.kyber-app .temporal-navigator{ padding: 11px 13px 10px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); }
+.kyber-app .temporal-header{ display: flex; align-items: center; justify-content: space-between; }
+.kyber-app .temporal-header .section-kicker{ display: flex; align-items: center; gap: 5px; }
+.kyber-app .temporal-header strong{ display: block; margin-top: 3px; color: var(--ink-1); font-size: 10px; }
+.kyber-app .temporal-actions{ display: flex; gap: 5px; }
+.kyber-app .temporal-button{ height: 25px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); color: var(--ink-2); cursor: pointer; font-family: var(--mono); font-size: 8px; }
+.kyber-app .temporal-button:hover{ border-color: var(--line-strong); color: var(--ink-0); }
+.kyber-app .temporal-button.is-active{ border-color: var(--violet-soft); background: var(--violet-wash); color: var(--violet); }
+.kyber-app .timeline-control{ display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.kyber-app .timeline-label{ display: grid; min-width: 53px; gap: 2px; }
+.kyber-app .timeline-label--right{ text-align: right; }
+.kyber-app .timeline-label strong{ color: var(--ink-1); font-family: var(--mono); font-size: 9px; font-weight: 500; }
+.kyber-app .timeline-label span{ color: var(--ink-4); font-family: var(--mono); font-size: 7px; }
+.kyber-app .timeline-track-wrap{ min-width: 0; flex: 1; }
+.kyber-app .timeline-track{ position: relative; height: 20px; }
+.kyber-app .timeline-track::before{ content: ''; position: absolute; top: 8px; right: 0; left: 0; height: 3px; border-radius: 99px; background: var(--surface-3); }
+.kyber-app .timeline-fill{ position: absolute; top: 8px; left: 0; height: 3px; border-radius: 99px; background: linear-gradient(90deg, var(--violet-soft), var(--violet)); pointer-events: none; }
+.kyber-app .timeline-track input{ position: absolute; z-index: 3; inset: 0; width: 100%; height: 20px; margin: 0; opacity: 0; cursor: pointer; }
+.kyber-app .timeline-thumb{ position: absolute; z-index: 2; top: 4px; width: 11px; height: 11px; border: 2px solid var(--ink-0); border-radius: 50%; background: var(--violet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 16%, transparent); transform: translateX(-50%); pointer-events: none; }
+.kyber-app .timeline-marker{ position: absolute; top: 4px; width: 9px; height: 9px; border: 2px solid var(--surface-1); border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 1px var(--teal); transform: translateX(-50%); }
+.kyber-app .timeline-marker--one{ left: 35%; }
+.kyber-app .timeline-marker--two{ left: 62%; background: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+.kyber-app .timeline-marker--three{ left: 78%; background: var(--violet); box-shadow: 0 0 0 1px var(--violet); }
+.kyber-app .timeline-event-label{ position: absolute; top: 20px; color: var(--ink-4); font-family: var(--mono); font-size: 7px; transform: translateX(-50%); white-space: nowrap; }
+.kyber-app .timeline-event-label--one{ left: 35%; }
+.kyber-app .timeline-event-label--two{ left: 62%; }
+.kyber-app .timeline-event-label--three{ left: 78%; color: var(--violet); }
+.kyber-app .timeline-ticks{ display: flex; justify-content: space-between; margin-top: 6px; color: var(--ink-4); font-family: var(--mono); font-size: 7px; }
+.kyber-app .observation-strip{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 17px; padding-top: 9px; border-top: 1px solid var(--line); }
+.kyber-app .observation-item{ display: flex; align-items: center; gap: 7px; min-width: 0; }
+.kyber-app .observation-kind{ width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--ink-2); }
+.kyber-app .observation-item > div{ display: grid; min-width: 0; gap: 2px; }
+.kyber-app .observation-item span{ overflow: hidden; color: var(--ink-3); font-family: var(--mono); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.kyber-app .observation-item strong{ overflow: hidden; color: var(--ink-1); font-size: 8px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+
+.kyber-app .command-overlay{ position: fixed; z-index: 20; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 15vh; background: color-mix(in srgb, var(--canvas) 70%, transparent); backdrop-filter: blur(8px); }
+.kyber-app .command-palette{ width: min(540px, calc(100vw - 32px)); overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); }
+.kyber-app .command-input-row{ height: 55px; display: flex; align-items: center; gap: 11px; padding: 0 15px; border-bottom: 1px solid var(--line); color: var(--violet); }
+.kyber-app .command-input-row input{ min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink-0); font-size: 14px; }
+.kyber-app .command-input-row input::placeholder{ color: var(--ink-4); }
+.kyber-app .command-input-row kbd{ color: var(--ink-3); text-transform: uppercase; }
+.kyber-app .command-section-label{ padding: 12px 15px 7px; color: var(--ink-4); font-family: var(--mono); font-size: 8px; letter-spacing: .1em; text-transform: uppercase; }
+.kyber-app .command-list{ display: grid; gap: 2px; padding: 0 8px 8px; }
+.kyber-app .command-item{ min-height: 47px; display: flex; align-items: center; gap: 10px; padding: 7px; border: 1px solid transparent; border-radius: 7px; background: transparent; cursor: pointer; text-align: left; }
+.kyber-app .command-item:hover{ border-color: var(--line); background: var(--surface-2); }
+.kyber-app .command-item.is-active{ border-color: color-mix(in srgb, var(--violet) 33%, var(--line)); background: var(--violet-wash); }
+.kyber-app .command-item-icon{ width: 29px; height: 29px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }
+.kyber-app .command-item-icon--human{ color: var(--violet); background: var(--violet-wash); }
+.kyber-app .command-item-icon--journey{ color: var(--teal); background: var(--teal-wash); }
+.kyber-app .command-item-icon--system{ color: var(--amber); background: var(--amber-wash); }
+.kyber-app .command-item-icon--agent{ color: var(--blue); background: var(--blue-wash); }
+.kyber-app .command-item > span:nth-child(2){ display: grid; min-width: 0; flex: 1; gap: 2px; }
+.kyber-app .command-item strong{ color: var(--ink-1); font-size: 10px; font-weight: 600; }
+.kyber-app .command-item small{ color: var(--ink-3); font-family: var(--mono); font-size: 8px; }
+.kyber-app .command-shortcut{ color: var(--ink-4); font-family: var(--mono); font-size: 10px; }
+.kyber-app .command-empty{ display: flex; align-items: center; justify-content: center; gap: 8px; padding: 30px 10px; color: var(--ink-3); font-size: 10px; }
+.kyber-app .command-footer{ display: flex; gap: 18px; padding: 9px 15px; border-top: 1px solid var(--line); color: var(--ink-4); font-family: var(--mono); font-size: 8px; }
+.kyber-app .command-footer span{ display: inline-flex; align-items: center; gap: 5px; }
+
+@keyframes kyber-semantic-pulse { 0%, 100% { transform: scale(.88); opacity: .35; } 50% { transform: scale(1.12); opacity: .9; } }
+
+@media (max-width: 1180px) {
+  .kyber-app .top-bar{ gap: 14px; }
+  .kyber-app .brand-lockup{ flex-basis: 178px; }
+  .kyber-app .brand-product{ display: none; }
+  .kyber-app .workspace-grid{ grid-template-columns: minmax(0, 1fr) 330px; }
+  .kyber-app .lifecycle-caption{ margin-right: 8px; }
+  .kyber-app .lifecycle-step{ min-width: 70px; padding-inline: 7px; }
+  .kyber-app .lifecycle-step::after{ width: 14px; }
+}
+
+@media (max-width: 980px) {
+  .kyber-app .top-bar{ padding: 0 14px; }
+  .kyber-app .top-actions .evidence-toggle{ display: none; }
+  .kyber-app .app-frame{ grid-template-columns: 62px minmax(0, 1fr); }
+  .kyber-app .navigation-rail{ align-items: center; }
+  .kyber-app .rail-menu{ margin-left: 0; }
+  .kyber-app .rail-groups{ width: 100%; padding-inline: 8px; }
+  .kyber-app .nav-group-label, .kyber-app .nav-item span:not(.nav-glyph), .kyber-app .rail-health{ display: none; }
+  .kyber-app .nav-item{ justify-content: center; padding: 0; }
+  .kyber-app .nav-glyph{ font-size: 16px; }
+  .kyber-app .rail-bottom{ width: 100%; padding-inline: 8px; }
+  .kyber-app .workspace{ padding-inline: 15px; }
+  .kyber-app .workspace-grid{ grid-template-columns: minmax(0, 1fr); }
+  .kyber-app .health-bar{ align-items: flex-start; flex-wrap: wrap; }
+  .kyber-app .health-summary{ min-width: 190px; }
+  .kyber-app .health-metrics{ flex-basis: calc(100% - 206px); }
+  .kyber-app .health-detail-button{ margin-left: auto; }
+  .kyber-app .domain-lens{ align-items: flex-start; flex-wrap: wrap; }
+  .kyber-app .domain-lens-copy{ min-width: 205px; }
+  .kyber-app .domain-lens-metrics{ flex-basis: calc(100% - 220px); }
+  .kyber-app .lens-action{ margin-left: auto; }
+  .kyber-app .inspector{ min-height: 0; }
+  .kyber-app .inspector-scroll{ height: auto; max-height: none; }
+}
+
+@media (max-width: 720px) {
+  .kyber-app .top-bar{ height: 55px; }
+  .kyber-app .app-frame{ min-height: calc(100vh - 55px); }
+  .kyber-app .brand-lockup{ flex-basis: auto; }
+  .kyber-app .brand-name{ font-size: 18px; }
+  .kyber-app .command-trigger{ min-width: 0; width: 34px; padding: 0; justify-content: center; }
+  .kyber-app .command-trigger > span, .kyber-app .command-trigger kbd{ display: none; }
+  .kyber-app .context-pill{ padding-inline: 7px; }
+  .kyber-app .context-pill{ font-size: 9px; }
+  .kyber-app .authority-prefix{ display: none; }
+  .kyber-app .authority-pill{ padding-inline: 7px; }
+  .kyber-app .avatar-button{ display: none; }
+  .kyber-app .workspace-header{ padding-top: 14px; }
+  .kyber-app .breadcrumb-row{ overflow: auto; white-space: nowrap; }
+  .kyber-app .scope-chip{ display: none; }
+  .kyber-app .workspace-title-row{ display: grid; gap: 13px; }
+  .kyber-app h1{ font-size: 24px; }
+  .kyber-app .header-actions{ justify-content: flex-start; }
+  .kyber-app .quiet-button{ flex: 1; }
+  .kyber-app .lifecycle-rail{ margin-inline: -2px; }
+  .kyber-app .lifecycle-caption{ display: none; }
+  .kyber-app .lifecycle-step{ min-width: 82px; }
+  .kyber-app .health-bar{ gap: 10px; }
+  .kyber-app .health-summary{ width: 100%; }
+  .kyber-app .health-metrics{ width: 100%; flex-basis: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .kyber-app .health-detail-button{ margin-left: 0; }
+  .kyber-app .domain-lens{ gap: 9px; }
+  .kyber-app .domain-lens-copy{ min-width: 0; flex-basis: 100%; }
+  .kyber-app .domain-lens-metrics{ width: 100%; flex-basis: auto; }
+  .kyber-app .lens-action{ margin-left: 0; }
+  .kyber-app .graph-card, .kyber-app .inspector{ border-radius: var(--radius-md); }
+  .kyber-app .graph-viewport{ height: 400px; }
+  .kyber-app .graph-focus-note, .kyber-app .graph-terrain-label{ display: none; }
+  .kyber-app .graph-footer{ font-size: 8px; }
+  .kyber-app .graph-footer > span:last-child{ display: none; }
+  .kyber-app .graph-legend{ gap: 8px; font-size: 8px; }
+  .kyber-app .legend-evidence{ flex-basis: 100%; margin-left: 0; }
+  .kyber-app .investigation-bar{ align-items: flex-start; flex-direction: column; }
+  .kyber-app .investigation-actions{ width: 100%; justify-content: space-between; }
+  .kyber-app .investigation-note{ width: 100%; max-width: none; }
+  .kyber-app .investigation-meta{ display: none; }
+  .kyber-app .observation-strip{ gap: 4px; }
+  .kyber-app .observation-item{ align-items: flex-start; }
+  .kyber-app .observation-item > div{ display: none; }
+  .kyber-app .observation-kind{ margin: auto; }
+  .kyber-app .timeline-control{ gap: 5px; }
+  .kyber-app .timeline-label{ min-width: 38px; }
+  .kyber-app .timeline-label span{ display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kyber-app, .kyber-app *, .kyber-app *::before, .kyber-app *::after{ animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

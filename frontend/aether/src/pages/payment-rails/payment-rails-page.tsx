@@ -118,7 +118,7 @@ function ProviderHealthCard({ provider, health, syncing, syncDisabled, onSync }:
     <Card>
       <CardContent className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="font-medium text-text-primary">{providerLabel(provider)}</span>
+          <ProviderBadge provider={provider} />
           <ProviderHealthBadge status={status} />
         </div>
         {configured ? (
@@ -576,9 +576,7 @@ function ProviderDiagnosticsCard({ entry }: { readonly entry: TenantProviderDiag
     <Card>
       <CardContent className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="font-medium text-text-primary">
-            {providerLabel(entry.provider as PaymentRailProviderType)}
-          </span>
+          <ProviderBadge provider={entry.provider as PaymentRailProviderType} />
           <ProviderHealthBadge status={health.status as ProviderHealthStatus} />
         </div>
         <HealthStat label="Environment" value={adapter.environment ?? '—'} />

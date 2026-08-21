@@ -66,6 +66,33 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return retention_sweep_loop()
 
+    def _semantic_reconciler() -> Coroutine[Any, Any, None]:
+        """Recompute Gold semantic projections from Silver evidence + repair drift.
+
+        Phase-B semantic worker: a periodic safety-net that re-derives each
+        subject's Gold entity/sentiment state from the immutable Silver
+        observations and repairs projections that no longer match. Gated on
+        ``settings.semantic.reconciler_enabled`` (default OFF).
+        """
+        from services.semantic_intelligence.reconciler import (
+            build_semantic_reconciler_coro,
+        )
+
+        return build_semantic_reconciler_coro()
+
+    def _semantic_retention() -> Coroutine[Any, Any, None]:
+        """Age out Silver semantic evidence + Gold projections past their window.
+
+        Phase-B semantic worker: tombstones aged Silver observations and deletes
+        aged (recomputable) Gold rows per ``retention_class`` window. Gated on
+        ``settings.semantic.retention_enabled`` (default OFF).
+        """
+        from services.semantic_intelligence.retention import (
+            build_semantic_retention_coro,
+        )
+
+        return build_semantic_retention_coro()
+
     def _kyber_directory_sync() -> Coroutine[Any, Any, None]:
         """Reconcile Kyber workforce principals against Google Workspace.
 
@@ -275,6 +302,23 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="retention_sweep",
             factory=_retention_sweep,
             required=True,
+        ),
+        # Phase-B semantic workers: both ride the existing ``semantic-worker``
+        # role (they operate the same Silver→Gold plane the classifier feeds)
+        # and are gated on their own kill-switch flags, default OFF. Not
+        # required=True: a stalled reconciler/retention sweep degrades a
+        # maintenance function, it must never abort startup.
+        WorkerSpec(
+            name="semantic_reconciler",
+            factory=_semantic_reconciler,
+            role="semantic-worker",
+            enabled=lambda: bool(settings.semantic.reconciler_enabled),
+        ),
+        WorkerSpec(
+            name="semantic_retention",
+            factory=_semantic_retention,
+            role="semantic-worker",
+            enabled=lambda: bool(settings.semantic.retention_enabled),
         ),
         WorkerSpec(
             name="kyber_directory_sync",

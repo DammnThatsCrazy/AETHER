@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "67271129"
+last_synced_commit: "defcd776"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2850,12 +2850,101 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
 - `GET /v1/comms/admin/coverage?tenant_id=…` — per-provider coverage for one
   tenant, or a fleet aggregate across all observed tenants when unscoped.
 - Existing audited remediation: `POST /v1/comms/admin/state/rebuild`,
-  `/graph/reproject`, `/dsr/erase`.
+  `/graph/reproject`, `/dsr/erase`. The durable `/dsr/erase` remediation
+  propagates across every subject-data plane — measurement/attribution, mobile
+  (continuations, installations, client-sync), and the semantic-intelligence
+  plane (observations, sentiment, Gold aggregate state, review queue) — marking
+  each `dsr_propagation` component with its own erased-row receipt.
 
 Provider readiness is truthful: without a credential a provider reports
 `credential_missing`, is never marked connected, and the certification harness
 reports `credential_turnkey / staging_validation_pending` — never `provider_live`
 — until real infrastructure and credentials are supplied.
+
+---
+
+## Universal Provider Runtime (UPR) APIs (v8.12.0)
+
+The provider-neutral runtime (ADR-009) exposes generic provider-connection
+lifecycle, sync, health, and certification surfaces. A provider is a self-contained
+plugin (manifest + capability adapters + normalizer + fixtures) registered at
+runtime — no core type-union or registry edits. Legacy `BaseConnector` providers
+are exposed through a compatibility plugin (`family.ingestion.connector`) that is
+byte-identical to the catalog-derived manifest; the legacy `/v1/integrations/connectors/*`
+routes are untouched.
+
+**Feature gating (off by default, additive — zero impact until activated):**
+- `AETHER_PROVIDER_RUNTIME_ENABLED=false` gates the tenant + public-webhook routers.
+- `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED=false` additionally gates the admin router.
+- `AETHER_PROVIDER_ENTRY_POINTS_ENABLED=false` gates `importlib.metadata` plugin
+  discovery (the `aether.providers` entry-point group); local plugins always register.
+
+**Identity:** a plugin is `family.product.capability` (e.g. `shopify.admin.orders_read`).
+Legacy connectors register as `{connector_type}.ingestion.connector`.
+
+Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant required):
+
+- `GET /v1/provider-connections/providers` — merged manifest catalog (legacy +
+  registered plugins) with counts.
+- `GET /v1/provider-connections/providers/{identity_key}` — one provider manifest
+  (404 if not installed).
+- `POST /v1/provider-connections` — create a connection for an installed provider
+  (404 for an uninstalled provider).
+- `GET /v1/provider-connections/{connection_id}` — connection record. Cross-tenant
+  ids resolve to 404 (ownership enforced server-side).
+- `PATCH /v1/provider-connections/{connection_id}` — update display name / config;
+  config fields are validated against the provider manifest.
+- `DELETE /v1/provider-connections/{connection_id}` — disable the connection
+  (transition to `disabled`).
+- `POST /v1/provider-connections/{connection_id}/credentials` — store a structured
+  credential. Only a `credential_ref` is ever returned or stored on the connection;
+  secrets are never echoed.
+- `POST /v1/provider-connections/{connection_id}/test` — live connectivity test
+  through the provider's auth adapter.
+- `GET /v1/provider-connections/{connection_id}/accounts` — account discovery.
+- `POST /v1/provider-connections/{connection_id}/accounts/select` — select an
+  account to scope ingestion.
+- `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
+  (optional `since` for backfill). Provider failure marks the run failed with a
+  safe error classification — never a silent empty success.
+- `GET /v1/provider-connections/{connection_id}/sync-runs` — durable sync-run
+  history.
+- `GET /v1/provider-connections/{connection_id}/health` — provider health report
+  (state, readiness, last sync/webhook, rate-limit, error signals).
+- `GET /v1/provider-connections/{connection_id}/raw-records` — replayed raw
+  provider records from the Bronze `provider_records` store (tenant-scoped).
+
+Kyber operator surface (`/v1/admin/kyber/provider-connections/*`, operator scope,
+fail-closed):
+
+- `GET /v1/admin/kyber/provider-connections/overview` — per-provider connection
+  counts by lifecycle state (aggregate only).
+- `GET /v1/admin/kyber/provider-connections/health` — registry summary
+  (providers loaded, legacy vs native plugin counts).
+- `POST /v1/admin/kyber/provider-connections/certify` — run the certification
+  harness against an installed plugin; returns the `CertificationReport` (10
+  checks). Never upgrades readiness beyond evidence.
+- `GET /v1/admin/kyber/provider-connections/tenants/{tenant_id}` — one tenant's
+  connections + health (operator drill-down).
+
+Public provider webhooks (`/v1/provider-webhooks/*`):
+
+- `POST /v1/provider-webhooks/{identity_key}` — inbound provider webhook delivery.
+  **UNAUTHENTICATED by API key** (listed in `PUBLIC_PATH_PREFIXES`); authorization
+  is enforced inside the gateway by cryptographic proof the caller holds the
+  connection's webhook secret — a signature scheme (e.g. `shopify_hmac`) requires
+  a verifying signature, and `endpoint_secret` requires a caller-presented
+  per-connection token that constant-time-matches the stored secret. A delivery
+  that cannot be proven is DENIED with an auditable metadata-only denial record
+  and a closed 403 — there is no "no secret ⇒ trust" path.
+
+  Headers:
+  - `X-Aether-Tenant-ID` — **routing hint only, not an authorization signal**;
+    the connection is located by tenant + identity and verified against its own
+    secret before anything is persisted.
+  - `X-Signature` / `X-Aether-Signature` — provider-native signature (signature schemes).
+  - `X-Aether-Webhook-Endpoint-Token` — caller-presented endpoint token
+    (`endpoint_secret` schemes).
 
 ---
 

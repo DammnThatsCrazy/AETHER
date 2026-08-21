@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "8031a43a"
+last_synced_commit: "b9828011"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -171,13 +171,13 @@ Two things get promoted, on two separate paths that must never be conflated: the
 
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
-| `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. | no |
+| `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. **Not armed without `AWS_DEPLOY_ROLE_ARN`:** when the role is absent the build/deploy jobs skip and a `delivery-not-armed` job reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
 | `infrastructure.yml` | PR / push to `main` / dispatch on `AWS Deployment/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. | no (delegates) |
-| `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; its only action is an ECS scale-to-zero, which can only reduce running compute. | no |
-| `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. | no |
-| `repo-consistency.yml` | PR / push to `main` | `make ci-check`. | no |
+| `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; its only action is an ECS scale-to-zero, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
+| `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
+| `repo-consistency.yml` | PR / push to `main` | `make ci-check`, including documentation consistency, contract checks, and the targeted frontend-brand guardrail. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
 | `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers, applies the full Alembic graph to a **fresh** database (`alembic upgrade head` → single head), and runs real-pool ingestion tests against the real stack: a round-trip smoke test (M1) plus idempotency/concurrency tests (M2) that prove concurrent `ingest_many` of the same key is exactly-once via the real UNIQUE index + `ON CONFLICT`, plus measurement/attribution repo tests (M4) exercising `conversion_repo`/`spend_repo`/`attribution_run_repo` real ON CONFLICT, tenant-scope, FX-provenance round-trip, and the single-active-run invariant — properties the in-memory (`AETHER_ENV=local`) dict fallback gets "right" for free without proving (that path never runs Alembic). **Non-blocking** (not a required check); real-stack tests skip without `DATABASE_URL`. | no |
 
@@ -191,6 +191,14 @@ main-branch run proved the complete remote-plan credential set exists and all
 four profiles produced a credentialed, policy- and cost-validated remote plan.
 Without that job a commit could land on `main` with every remote plan silently
 skipped and still be dispatched for promotion.
+
+**Not armed without the remote-plan credential set.** When the credential set
+is absent (a credential-less repository), `require-production-credentials`
+reports that it is a NO-OP — the commit is explicitly **NOT** promotable — and
+passes green, so a credential-less `main` is not permanently red. The job
+re-arms and fails closed on plan/remote-plan results the moment the full
+credential set is wired. The notice is the opposite of a promotability claim;
+it states that promotion is impossible until credentials exist.
 
 The two evidence layers it publishes are not interchangeable:
 
@@ -249,6 +257,20 @@ local Terraform binary.
 `make test-workflow-controls`
 (`tests/unit/test_release_workflow_controls.py`) is the structural guard on all
 of the above: no automatic apply, no false-green, reviewed-plan integrity.
+
+### Frontend visual-system guardrail
+
+`make frontend-branding` (also exposed as `npm run
+validate:frontend-branding`) runs the lightweight static guard for the
+deliberately migrated identity seams: the Aether shell mark and navigation,
+Kyber navigation/top bar, and central provider-mark renderers. It rejects the
+retired raw navigation glyph paths, feature-local provider SVG or asset maps,
+and non-token motion/elevation additions in those surfaces. The guard is
+intentionally narrow: it protects completed migrations without turning
+unrelated legacy routes into a false CI block. Any temporary exception is an
+exact path-and-rule entry with a human-readable reason and is reported by the
+validator; the current migration has none. The canonical contracts and
+component usage are documented in [`docs/brand-system/`](brand-system/README.md).
 
 ## Quality gates reference
 

@@ -36,6 +36,14 @@
   /* Typography */
   --font-family-sans: 'Geist', system-ui, -apple-system, sans-serif;
   --font-family-mono: 'Geist Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  /* Brand rendering utilities — values mirror @olympus/brand token policy. */
+  --aether-motion-micro: 120ms;
+  --aether-motion-standard: 180ms;
+  --aether-motion-panel: 240ms;
+  --aether-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aether-focus-width: 2px;
+  --aether-focus-offset: 2px;
 }
 
 .dark {
@@ -59,6 +67,13 @@
   --color-warning:         #c9975a;
   --color-danger:          #a87575;
   --color-info:            #5a85a8;
+
+  --aether-motion-micro: 120ms;
+  --aether-motion-standard: 180ms;
+  --aether-motion-panel: 240ms;
+  --aether-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aether-focus-width: 2px;
+  --aether-focus-offset: 2px;
 }
 
 .light {
@@ -82,6 +97,13 @@
   --color-warning:         #a67846;
   --color-danger:          #8a5a5a;
   --color-info:            #3a6896;
+
+  --aether-motion-micro: 120ms;
+  --aether-motion-standard: 180ms;
+  --aether-motion-panel: 240ms;
+  --aether-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aether-focus-width: 2px;
+  --aether-focus-offset: 2px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -106,5 +128,68 @@
     --color-warning:         #a67846;
     --color-danger:          #8a5a5a;
     --color-info:            #3a6896;
+  }
+}
+
+/* Shared rendering utilities. They deliberately consume the existing warm/stone
+ * variables rather than introducing a second visual theme. */
+.aether-focus-visible:focus-visible {
+  outline: var(--aether-focus-width) solid var(--color-border-focus);
+  outline-offset: var(--aether-focus-offset);
+}
+
+.aether-surface {
+  color: var(--color-text-primary);
+}
+
+.aether-product-lockup--responsive {
+  container-type: inline-size;
+  min-width: 20px;
+}
+
+.aether-product-lockup--responsive > .aether-product-lockup__compact,
+.aether-product-lockup--responsive > .aether-product-lockup__mark {
+  display: none;
+}
+
+@container (max-width: 131px) {
+  .aether-product-lockup--responsive > .aether-product-lockup__full {
+    display: none;
+  }
+
+  .aether-product-lockup--responsive > .aether-product-lockup__compact {
+    display: inline-flex;
+  }
+}
+
+@container (max-width: 83px) {
+  .aether-product-lockup--responsive > .aether-product-lockup__compact {
+    display: none;
+  }
+
+  .aether-product-lockup--responsive > .aether-product-lockup__mark {
+    display: inline-flex;
+  }
+}
+
+@container (max-width: 143px) {
+  .aether-product-lockup--responsive[data-brand='olympus'] > .aether-product-lockup__full,
+  .aether-product-lockup--responsive[data-brand='olympus'] > .aether-product-lockup__compact {
+    display: none;
+  }
+
+  .aether-product-lockup--responsive[data-brand='olympus'] > .aether-product-lockup__mark {
+    display: inline-flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aether-surface,
+  .aether-icon,
+  .aether-product-lockup,
+  .aether-provider-mark {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

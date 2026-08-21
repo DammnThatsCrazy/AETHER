@@ -143,6 +143,9 @@ describe('Kyber Traffic Intelligence Operations page', () => {
     expect(screen.getByText(/Resolution rate: —/)).toBeInTheDocument();
   });
 
+  // Multiple userEvent.type + debounced capture steps make this test border
+  // the 5s default timeout under parallel CI workers (~4.5s solo), so it
+  // flaked in ci-check. Give it explicit headroom.
   it('wires tenant/platform/sdk/time filters to the query params', async () => {
     renderPage();
     await waitFor(() => expect(capturedQueries.length).toBeGreaterThan(0));
@@ -162,7 +165,7 @@ describe('Kyber Traffic Intelligence Operations page', () => {
       expect(last.get('platform')).toBe('ios');
       expect(last.get('sdk')).toBe('swift');
     });
-  });
+  }, 15_000);
 
   it('shows the error state when operations cannot be loaded', async () => {
     server.use(http.get(OPS_PATH, () => HttpResponse.json({ detail: 'operator permission required' }, { status: 403 })));

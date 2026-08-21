@@ -196,6 +196,9 @@ class ObservationStatus(str, Enum):
     DELETED = "deleted"
     CONSENT_RESTRICTED = "consent_restricted"
     QUARANTINED = "quarantined"
+    # Retention sweep aged this row out of its retention_class window. Outside
+    # _ACTIVE, so an expired row stops contributing to Gold on the next recompute.
+    EXPIRED = "expired"
 
 
 class SubjectRef(BaseModel):
@@ -336,6 +339,15 @@ class SentimentObservation(BaseModel):
     baseline_ref: str | None = None
     consent_snapshot_id: str | None = None
     privacy_class: str = "behavioral"
+    # Consent state — a consent restriction/erasure marks a subject's (or actor's)
+    # rows so the Gold sentiment reducer drops them, mirroring
+    # SemanticObservation.status. Defaults CLASSIFIED so existing/new rows are
+    # active; only a retraction moves a row out of the active set.
+    status: ObservationStatus = ObservationStatus.CLASSIFIED
+    # Retention window class (mirrors SemanticObservation) so the retention sweep
+    # can age sentiment rows out — without it the retention_class-scoped sweep
+    # never matches a sentiment row and sentiment retention is a silent no-op.
+    retention_class: str = "standard_90d"
     occurred_at: datetime = Field(default_factory=utc_now)
     created_at: datetime = Field(default_factory=utc_now)
 

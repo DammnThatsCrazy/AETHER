@@ -726,6 +726,18 @@ def main(argv: Sequence[str] | None = None) -> None:
             ),
         )
         run(
+            [sys.executable, "scripts/validate_frontend_branding.py"],
+            name="Frontend brand migration guardrail (canonical shell/provider seams)",
+            results=results,
+            stop_on_failure=stop,
+            remediation=(
+                "replace deprecated navigation glyphs, feature-local provider/brand "
+                "artwork, raw motion/shadow values, and unnamed icon-only controls "
+                "on the validator's declared migration targets; use an exact documented "
+                "PATH:RULE:REASON exception only for a temporary migration dependency"
+            ),
+        )
+        run(
             ["python", "scripts/validate_frontend_route_state_matrix.py", "--enforce"],
             name="Frontend route-state coverage (Aether/Kyber)",
             results=results,

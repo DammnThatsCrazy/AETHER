@@ -98,13 +98,43 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+
+      # NOT ARMED WITHOUT THE LIFECYCLE ROLE. When the role is absent the guard
+      # has no credential to read the lease or enforce the TTL, so it is a NO-OP
+      # until the role is wired; staging may still be running and will NOT be
+      # guarded — this is NOT a claim that staging is asleep. The moment the
+      # role is configured, every step below runs exactly as written: fail-closed
+      # in both directions. The secrets context is not available in step `if:`
+      # conditions, so the role is laundered through an env binding and published
+      # as a step output that every credential-gated step below reads.
+      - name: Detect whether the lifecycle role is configured
+        id: check-armed
+        env:
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${AWS_STAGING_LIFECYCLE_ROLE_ARN:-}" ]; then
+            echo 'armed=true' >> "$GITHUB_OUTPUT"
+            echo 'Lifecycle role is configured; the guard is armed.'
+          else
+            echo 'armed=false' >> "$GITHUB_OUTPUT"
+            echo 'Lifecycle role is absent; the guard is a NO-OP until it is wired.'
+          fi
+
+      - name: TTL guard is not armed without the lifecycle role
+        if: steps.check-armed.outputs.armed == 'false'
+        run: |
+          set -euo pipefail
+          echo '::notice title=Staging TTL guard not armed::AWS_STAGING_LIFECYCLE_ROLE_ARN is not configured, so the guard has no credential to read the lease or enforce the TTL; it is a NO-OP until the role is wired. Staging may still be running and will NOT be guarded — this is NOT a claim that staging is asleep.'
       - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check-armed.outputs.armed == 'true'
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Resolve the guard mode and the TTL bounds
         id: config
+        if: steps.check-armed.outputs.armed == 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ inputs.mode }}
@@ -142,6 +172,7 @@ jobs:
 
       - name: Read the awake lease and the live staging state
         id: state
+        if: steps.check-armed.outputs.armed == 'true'
         run: |
           set -euo pipefail
           mkdir -p artifacts/ttl-guard
@@ -304,7 +335,7 @@ jobs:
       # awake time. Anchoring to the original wake is what actually bounds the
       # total, and it is why the extension preserves `awake_since` untouched.
       - name: Grant a time-bounded extension
-        if: steps.config.outputs.mode == 'extend'
+        if: steps.check-armed.outputs.armed == 'true' && steps.config.outputs.mode == 'extend'
         env:
           EXTEND_HOURS: ${{ steps.config.outputs.extend_hours }}
           EXTEND_REASON: ${{ inputs.extend_reason }}
@@ -346,7 +377,8 @@ jobs:
       - name: Return staging to sleep (TTL exceeded)
         id: enforce
         if: >-
-          steps.config.outputs.mode == 'enforce'
+          steps.check-armed.outputs.armed == 'true'
+          && steps.config.outputs.mode == 'enforce'
           && steps.state.outputs.ttl_expired == 'true'
           && steps.state.outputs.awake_tasks != '0'
         env:
@@ -402,7 +434,7 @@ jobs:
 
       - name: Verify staging is back at zero
         id: verify
-        if: always()
+        if: always() && steps.check-armed.outputs.armed == 'true'
         run: |
           set -euo pipefail
           mkdir -p artifacts/ttl-guard
@@ -438,6 +470,7 @@ jobs:
       - name: Blocking alert on an unaccountable staging environment
         if: always()
         env:
+          ARMED: ${{ steps.check-armed.outputs.armed }}
           MODE: ${{ steps.config.outputs.mode }}
           STATE_KNOWN: ${{ steps.state.outputs.state_known }}
           LEASE: ${{ steps.state.outputs.lease }}
@@ -453,6 +486,17 @@ jobs:
           RESIDUAL_TASKS: ${{ steps.verify.outputs.residual_tasks }}
         run: |
           set -euo pipefail
+          # NOT ARMED. check-armed publishes armed=true/false unconditionally,
+          # so the branch is keyed on that output directly — NOT on the
+          # readings being unset. An armed run whose state/config steps failed
+          # must fall through to the blocking error below, never into this
+          # notice. When armed=false there is no credential with which to read
+          # the lease or enforce the TTL, so the guard exits green with a loud
+          # notice — this is NOT a claim that staging is asleep.
+          if [ "${ARMED:-}" = false ]; then
+            echo '::notice title=Staging TTL guard not armed::AWS_STAGING_LIFECYCLE_ROLE_ARN is not configured, so the guard has no credential to read the lease or enforce the TTL; it was a NO-OP. Staging may still be running and will NOT be guarded — this is NOT a claim that staging is asleep.'
+            exit 0
+          fi
           enforced=false
           if [ -n "${SCALED:-}" ] && [ "${SCALED:-0}" -gt 0 ]; then
             enforced=true

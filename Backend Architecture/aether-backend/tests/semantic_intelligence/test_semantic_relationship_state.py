@@ -72,7 +72,7 @@ def _obs(stance: StanceLabel, *, conf: float = 0.9, age_days: float = 0.0) -> Se
 
 
 async def _seed(content: str, *, event_id: str = "e_rel"):
-    obs, sentiments = classify_event(
+    obs, sentiments = await classify_event(
         {
             "source_event_id": event_id,
             "source_type": "feedback",

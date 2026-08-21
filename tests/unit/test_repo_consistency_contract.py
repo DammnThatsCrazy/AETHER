@@ -42,6 +42,7 @@ def test_package_json_exists() -> None:
         ("docs:fix", "make docs-fix"),
         ("validate:frontend-data-truth", "make frontend-data-truth"),
         ("validate:frontend-data-truth:bundles", "make frontend-data-truth-bundles"),
+        ("validate:frontend-branding", "make frontend-branding"),
     ],
 )
 def test_npm_scripts_delegate_to_make(script: str, target: str) -> None:
@@ -73,6 +74,7 @@ def test_test_docs_does_not_bypass_repo_doctor() -> None:
         "release-gate",
         "frontend-data-truth",
         "frontend-data-truth-bundles",
+        "frontend-branding",
     ],
 )
 def test_makefile_defines_canonical_targets(target: str) -> None:
@@ -95,11 +97,13 @@ def test_repo_doctor_enforces_frontend_data_truth_source_and_bundles() -> None:
         '[sys.executable, "scripts/validate_frontend_data_truth.py", "--build-bundles"]'
         in doctor
     )
+    assert '[sys.executable, "scripts/validate_frontend_branding.py"]' in doctor
 
 
 def test_repo_consistency_workflow_names_frontend_data_truth_guardrail() -> None:
     workflow = _read(".github/workflows/repo-consistency.yml")
     assert "npm run validate:frontend-data-truth" in workflow
+    assert "npm run validate:frontend-branding" in workflow
 
 
 # --------------------------------------------------------------------------- #
