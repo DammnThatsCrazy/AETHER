@@ -14,11 +14,12 @@ optionally ``source_event_id`` / ``subject_ref`` / ``campaign_id`` /
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from repositories.repos import _IN_MEMORY_STORES, get_pool
 from shared.logger.logger import get_logger
+from shared.temporal.instant import coerce_utc_lenient
 
 logger = get_logger("aether.semantic.fact_repo")
 
@@ -26,6 +27,10 @@ logger = get_logger("aether.semantic.fact_repo")
 # projections (an identity merge / reducer pass re-derives them).
 _GOLD_MODE = "gold"
 _SILVER_MODE = "silver"
+
+# Status values a row must currently hold to be eligible for a retention age-out
+# (mirrors reducers._ACTIVE) — an already-retracted status is never overwritten.
+_ACTIVE_STATUS_VALUES = frozenset({"classified", "partial"})
 
 
 def _reducer_version_of(data: dict[str, Any]) -> Optional[str]:
@@ -296,6 +301,114 @@ class SemanticFactRepository:
             )
         return _rowcount(result)
 
+    async def tombstone_by_age(
+        self,
+        tenant_id: str,
+        cutoff: datetime,
+        *,
+        retention_class: Optional[str] = None,
+        status: str = "expired",
+    ) -> int:
+        """Retention age-out: mark rows with occurred_at <= cutoff as ``status``.
+
+        ``retention_class`` (when given) scopes the sweep to rows of that class so
+        each class ages on its own window. Silver evidence is tombstoned rather
+        than deleted so the immutable trail and its provenance survive the sweep
+        (mirrors the consent-restriction primitives above).
+        """
+        pool = await self._pool()
+        # Only age rows that are still ACTIVE — never overwrite a consent_restricted
+        # (or deleted/superseded) status, which would erase the retraction signal.
+        if pool is None:
+            count = 0
+            for rid in self._age_victims_inmem(tenant_id, cutoff, retention_class):
+                current = (self._store[rid].get("data") or {}).get("status")
+                if current is not None and current not in _ACTIVE_STATUS_VALUES:
+                    continue
+                self._store[rid].setdefault("data", {})["status"] = status
+                count += 1
+            return count
+        conditions = [
+            "tenant_id = $1",
+            "occurred_at IS NOT NULL",
+            "occurred_at <= $2",
+            "(data->>'status' IS NULL OR data->>'status' IN ('classified', 'partial'))",
+        ]
+        params: list[Any] = [tenant_id, cutoff]
+        if retention_class is not None:
+            params.append(retention_class)
+            conditions.append(f"data->>'retention_class' = ${len(params)}")
+        params.append(status)
+        status_idx = len(params)
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"UPDATE {self.table_name} "
+                f"SET data = jsonb_set(data, '{{status}}', to_jsonb(${status_idx}::text)), "
+                "updated_at = NOW() "
+                f"WHERE {' AND '.join(conditions)}",
+                *params,
+            )
+        return _rowcount(result)
+
+    async def delete_by_age(
+        self,
+        tenant_id: str,
+        cutoff: datetime,
+        *,
+        retention_class: Optional[str] = None,
+    ) -> int:
+        """Retention age-out: hard-delete rows with occurred_at <= cutoff.
+
+        Used for recomputable Gold projections, which the reducer path rebuilds
+        from surviving Silver evidence; ``retention_class`` scopes the sweep when
+        set (Gold rows carry no class, so callers pass ``None``).
+        """
+        pool = await self._pool()
+        if pool is None:
+            victims = self._age_victims_inmem(tenant_id, cutoff, retention_class)
+            for rid in victims:
+                del self._store[rid]
+            return len(victims)
+        conditions = ["tenant_id = $1", "occurred_at IS NOT NULL", "occurred_at <= $2"]
+        params: list[Any] = [tenant_id, cutoff]
+        if retention_class is not None:
+            params.append(retention_class)
+            conditions.append(f"data->>'retention_class' = ${len(params)}")
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"DELETE FROM {self.table_name} WHERE {' AND '.join(conditions)}",
+                *params,
+            )
+        return _rowcount(result)
+
+    async def distinct_tenants(self) -> list[str]:
+        """Distinct tenant_ids present in this table (for tenant-fan-out sweeps)."""
+        pool = await self._pool()
+        if pool is None:
+            return sorted(
+                {str(r.get("tenant_id")) for r in self._store.values() if r.get("tenant_id")}
+            )
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(f"SELECT DISTINCT tenant_id FROM {self.table_name}")
+        return [r["tenant_id"] for r in rows if r["tenant_id"]]
+
+    def _age_victims_inmem(
+        self, tenant_id: Any, cutoff: datetime, retention_class: Optional[str]
+    ) -> list[str]:
+        victims: list[str] = []
+        for rid, row in self._store.items():
+            if row.get("tenant_id") != tenant_id:
+                continue
+            data = row.get("data") or {}
+            if retention_class is not None and data.get("retention_class") != retention_class:
+                continue
+            occurred = _parse_ts(row.get("occurred_at") or data.get("occurred_at"))
+            if occurred is None:
+                continue
+            if _as_utc(occurred) <= _as_utc(cutoff):
+                victims.append(rid)
+        return victims
+
     async def _set_status_by_subject(self, tenant_id: str, subject_ref: str, status: str) -> int:
         pool = await self._pool()
         if pool is None:
@@ -319,6 +432,33 @@ class SemanticFactRepository:
         return _rowcount(result)
 
     # ── reads ─────────────────────────────────────────────────────────────────
+
+    async def subjects_touched_by(self, tenant_id: str, ref: str) -> set[str]:
+        """Distinct subject_refs of rows ``ref`` participates in — as subject OR actor.
+
+        Used by the DSR flow to find every Gold aggregate a retracted/erased ref
+        fed: its own subject rows plus the OTHER subjects it acted on. Mirrors the
+        subject/actor predicates of ``delete_by_subject`` / ``delete_by_actor``.
+        """
+        pool = await self._pool()
+        if pool is None:
+            subjects: set[str] = set()
+            for row in self._store.values():
+                if row.get("tenant_id") != tenant_id:
+                    continue
+                if _row_subject(row) == ref or _row_actor(row) == ref:
+                    subject = _row_subject(row)
+                    if subject is not None:
+                        subjects.add(str(subject))
+            return subjects
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT DISTINCT subject_ref FROM {self.table_name} "
+                "WHERE tenant_id = $1 AND (subject_ref = $2 OR data->>'actor_ref' = $2)",
+                tenant_id,
+                ref,
+            )
+        return {r["subject_ref"] for r in rows if r["subject_ref"] is not None}
 
     async def list_by_tenant(
         self, tenant_id: str, subject: Optional[str] = None, *, limit: int = 500
@@ -439,6 +579,16 @@ def _row_subject(row: dict[str, Any]) -> Optional[str]:
 def _row_actor(row: dict[str, Any]) -> Optional[str]:
     data = row.get("data") or {}
     return data.get("actor_ref")
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Treat a naive datetime as UTC so age comparisons never raise on tz mix.
+
+    Delegates to the temporal kernel's lenient coercion — the sanctioned single
+    home for the assume-UTC-on-naive policy (temporal-integrity gate). The input
+    is always a real datetime here, so the coercion never returns ``None``.
+    """
+    return coerce_utc_lenient(value) or value
 
 
 def _parse_ts(value: Any) -> Optional[datetime]:

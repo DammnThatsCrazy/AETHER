@@ -55,7 +55,7 @@ async def test_semantic_dimension_empty_is_shaped_not_404():
 
 
 async def test_semantic_dimension_returns_weighted_state():
-    obs, _ = classify_event(
+    obs, _ = await classify_event(
         {
             "source_event_id": "e1",
             "source_type": "feedback",
@@ -76,7 +76,7 @@ async def test_semantic_dimension_returns_weighted_state():
 
 
 async def test_semantic_dimension_is_tenant_scoped():
-    obs, _ = classify_event(
+    obs, _ = await classify_event(
         {"source_event_id": "e1", "source_type": "feedback", "actor_ref": "u1",
          "primary_subject_ref": ENTITY, "content": "great, recommend"},
         TENANT,

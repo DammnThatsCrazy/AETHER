@@ -86,7 +86,7 @@ async def test_idempotent_replay_no_duplicates():
 
 async def test_supersession_transitions_status():
     store = get_store()
-    obs, _ = classify_event(_PAYLOAD, TENANT)
+    obs, _ = await classify_event(_PAYLOAD, TENANT)
     await store.put_semantic(obs)
 
     changed = await store.supersede(TENANT, obs.idempotency_key, "sem_new")
@@ -99,7 +99,7 @@ async def test_supersession_transitions_status():
 
 async def test_route_and_worker_paths_are_identical():
     """The service (worker path) and the pure classifier agree byte-for-byte."""
-    pure_obs, _ = classify_event(_PAYLOAD, TENANT)
+    pure_obs, _ = await classify_event(_PAYLOAD, TENANT)
     svc = SemanticIntelligenceService()
     persisted_obs, _ = await svc.classify_and_persist(_PAYLOAD, TENANT)
     assert persisted_obs.idempotency_key == pure_obs.idempotency_key

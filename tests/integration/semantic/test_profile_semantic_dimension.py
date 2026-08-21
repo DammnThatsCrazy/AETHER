@@ -30,7 +30,7 @@ async def test_profile_semantic_dimension_empty_and_populated():
     assert empty["data"]["semantic"]["semantic_summary"] == "insufficient_data"
 
     # Populated → weighted Gold state with reducer provenance.
-    obs, _ = classify_event(
+    obs, _ = await classify_event(
         {
             "source_event_id": "e1",
             "source_type": "feedback",

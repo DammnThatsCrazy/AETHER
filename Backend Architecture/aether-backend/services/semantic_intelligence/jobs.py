@@ -30,7 +30,17 @@ SEMANTIC_REPLAY_JOB_TYPE = "semantic.replay"
 
 
 def register_semantic_replay_handler() -> None:
-    """Register the internal-only replay job handler exactly once at startup."""
+    """Register the internal-only replay job handler exactly once at startup.
+
+    Gated on ``settings.semantic.replay_enabled`` — the kill-switch. Flag off
+    (the default) means the handler is never registered, so an enqueued
+    ``semantic.replay`` job fails as an unknown type instead of running; the
+    ``/reprocess`` route refuses to enqueue one in the first place (routes.py).
+    """
+    from config.settings import settings
+
+    if not settings.semantic.replay_enabled:
+        return
     if SEMANTIC_REPLAY_JOB_TYPE in HANDLER_REGISTRY:
         return
 

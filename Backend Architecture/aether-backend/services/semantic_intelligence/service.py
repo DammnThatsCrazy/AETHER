@@ -247,7 +247,7 @@ class SemanticIntelligenceService:
         #    model output) propagates from classify_event BEFORE any persistence
         #    below — a rejected response is never partially ingested.
         started = time.perf_counter()
-        obs, sentiments = classify_event(payload, tenant_id, provider=provider)
+        obs, sentiments = await classify_event(payload, tenant_id, provider=provider)
         metrics.timing(
             "aether_semantic_classify_latency_ms", (time.perf_counter() - started) * 1000.0
         )
@@ -291,7 +291,7 @@ class SemanticIntelligenceService:
             return
         try:
             if shadow.available():
-                candidate_obs, candidate_sentiments = classify_event(
+                candidate_obs, candidate_sentiments = await classify_event(
                     payload, tenant_id, provider=shadow
                 )
                 candidate = {

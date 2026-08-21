@@ -45,10 +45,10 @@ class StubCandidateProvider(SemanticClassifierProvider):
     def available(self) -> bool:
         return True
 
-    def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
+    async def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
         # Deterministic labels re-stamped with the stub's own identity — the
         # divergence itself is injected per-test where needed.
-        base = DeterministicClassifierProvider().classify(request)
+        base = await DeterministicClassifierProvider().classify(request)
         model_id, model_version = provider_identity(self.name)
         return dataclasses.replace(
             base, provider=self.name, model_id=model_id, model_version=model_version
@@ -118,8 +118,8 @@ async def test_stub_candidate_divergence_recorded_and_primary_untouched(monkeypa
     # deterministic engine exists, so flip the stub candidate's labels in-test.
     real_classify = classify_event
 
-    def _divergent_classify(payload, tenant_id, provider=None):
-        obs, sentiments = real_classify(payload, tenant_id, provider=provider)
+    async def _divergent_classify(payload, tenant_id, provider=None):
+        obs, sentiments = await real_classify(payload, tenant_id, provider=provider)
         if isinstance(provider, StubCandidateProvider):
             obs = obs.model_copy(
                 update={"stance": StanceLabel.OPPOSED, "intent": IntentLabel.CANCEL}
@@ -183,10 +183,10 @@ async def test_shadow_failure_never_breaks_the_write_path(monkeypatch):
 
     real_classify = classify_event
 
-    def _exploding_classify(payload, tenant_id, provider=None):
+    async def _exploding_classify(payload, tenant_id, provider=None):
         if isinstance(provider, StubCandidateProvider):
             raise RuntimeError("candidate exploded")
-        return real_classify(payload, tenant_id, provider=provider)
+        return await real_classify(payload, tenant_id, provider=provider)
 
     monkeypatch.setattr(service_mod, "classify_event", _exploding_classify)
 

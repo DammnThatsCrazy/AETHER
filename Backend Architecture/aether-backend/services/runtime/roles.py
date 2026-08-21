@@ -139,9 +139,9 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # consumer-attached only.
     "graph-writer": frozenset({"kyber_graph_projector"}),
     "measurement-worker": frozenset(),
-    # Stream consumer is owned by consumer_specs.py; Phase B adds replay/reconciler
-    # supervised loop specs here.
-    "semantic-worker": frozenset(),
+    # Stream consumer is owned by consumer_specs.py; the reconciler + retention
+    # supervised loop specs (each gated on its settings flag) are owned here.
+    "semantic-worker": frozenset({"semantic_reconciler", "semantic_retention"}),
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
          "bronze_object_compaction"}

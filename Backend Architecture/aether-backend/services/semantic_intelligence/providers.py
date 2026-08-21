@@ -135,11 +135,15 @@ class SemanticClassifierProvider(ABC):
         """True when this provider can classify text right now."""
 
     @abstractmethod
-    def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
+    async def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
         """Classify eligible text, or return a first-class abstention.
 
-        Raises :class:`ProviderResponseError` when the backend's response
-        violates the contract — the caller must persist nothing derived from it.
+        Async so a network-backed provider awaits its inference round-trip
+        instead of blocking the event loop the classification pipeline runs on.
+        Pure providers (deterministic, disabled) are still coroutines and return
+        immediately. Raises :class:`ProviderResponseError` when the backend's
+        response violates the contract — the caller must persist nothing derived
+        from it.
         """
 
     def abstention_reason(self) -> str | None:
@@ -158,7 +162,7 @@ class DeterministicClassifierProvider(SemanticClassifierProvider):
     def available(self) -> bool:
         return True
 
-    def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
+    async def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
         # Function-level import: the engine imports this module at load time,
         # so the keyword derivation lives in one place without an import cycle.
         from .engine import keyword_labels
@@ -195,7 +199,7 @@ class DisabledProvider(SemanticClassifierProvider):
     def available(self) -> bool:
         return False
 
-    def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
+    async def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
         return SemanticClassificationResult.abstain(self.name, self._reason)
 
     def abstention_reason(self) -> str | None:
@@ -246,7 +250,7 @@ class ProductionModelProvider(SemanticClassifierProvider):
         self._timeout_seconds = float(os.getenv("SEMANTIC_MODEL_TIMEOUT_SECONDS", "10"))
         self._max_retries = int(os.getenv("SEMANTIC_MODEL_MAX_RETRIES", "2"))
         self._max_output_tokens = int(os.getenv("SEMANTIC_MODEL_MAX_OUTPUT_TOKENS", "512"))
-        self._client: anthropic.Anthropic | None = None
+        self._client: anthropic.AsyncAnthropic | None = None
         self.name = (
             "multilingual-semantic-model@1.0.0"
             if multilingual
@@ -256,13 +260,13 @@ class ProductionModelProvider(SemanticClassifierProvider):
     def available(self) -> bool:
         return bool(self._endpoint and self._api_key)
 
-    def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
+    async def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
         if not self.available():
             # Missing credentials are configuration state, not an error: abstain
             # and record that the provider is waiting on credentials.
             return SemanticClassificationResult.abstain(self.name, CREDENTIAL_WAITING)
         try:
-            raw, served_model = self._request_completion(request)
+            raw, served_model = await self._request_completion(request)
         except _ProviderRefusal:
             return SemanticClassificationResult.abstain(self.name, "provider_refused")
         except (anthropic.APIConnectionError, anthropic.APIStatusError) as exc:
@@ -275,9 +279,9 @@ class ProductionModelProvider(SemanticClassifierProvider):
 
     # ── network + validation ────────────────────────────────────────────────
 
-    def _get_client(self) -> anthropic.Anthropic:
+    def _get_client(self) -> anthropic.AsyncAnthropic:
         if self._client is None:
-            self._client = anthropic.Anthropic(
+            self._client = anthropic.AsyncAnthropic(
                 api_key=self._api_key,
                 base_url=self._endpoint,
                 timeout=self._timeout_seconds,
@@ -285,9 +289,9 @@ class ProductionModelProvider(SemanticClassifierProvider):
             )
         return self._client
 
-    def _request_completion(self, request: SemanticClassificationRequest) -> tuple[str, str]:
+    async def _request_completion(self, request: SemanticClassificationRequest) -> tuple[str, str]:
         """One inference round-trip → (raw JSON text, actual serving model id)."""
-        response = self._get_client().messages.create(
+        response = await self._get_client().messages.create(
             model=self._model_id,
             max_tokens=self._max_output_tokens,
             system=_SYSTEM_PROMPT,
