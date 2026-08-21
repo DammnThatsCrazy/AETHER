@@ -14,11 +14,12 @@ optionally ``source_event_id`` / ``subject_ref`` / ``campaign_id`` /
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from repositories.repos import _IN_MEMORY_STORES, get_pool
 from shared.logger.logger import get_logger
+from shared.temporal.instant import coerce_utc_lenient
 
 logger = get_logger("aether.semantic.fact_repo")
 
@@ -581,8 +582,13 @@ def _row_actor(row: dict[str, Any]) -> Optional[str]:
 
 
 def _as_utc(value: datetime) -> datetime:
-    """Treat a naive datetime as UTC so age comparisons never raise on tz mix."""
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    """Treat a naive datetime as UTC so age comparisons never raise on tz mix.
+
+    Delegates to the temporal kernel's lenient coercion — the sanctioned single
+    home for the assume-UTC-on-naive policy (temporal-integrity gate). The input
+    is always a real datetime here, so the coercion never returns ``None``.
+    """
+    return coerce_utc_lenient(value) or value
 
 
 def _parse_ts(value: Any) -> Optional[datetime]:
