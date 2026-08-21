@@ -39,6 +39,16 @@ Set `ENABLE_EXTRACTION_MESH=true` in environment. The mesh requires Redis for di
 | High block rate (>30%) | Verify thresholds aren't too aggressive. Check for false positives. |
 | Canary hit | Investigate the API key. Check lineage records for extraction patterns. |
 | Cluster escalation | Review linked identities in `/v1/intelligence/extraction/clusters`. |
+| `ledger_chain_integrity` (P1) | A tenant's Bronze/outbox hash chain failed `verify_chain` — a chained row was deleted, edited, or reordered. Inspect `GET /v1/security/ledger/chain-verification?tenant_id=<id>` for `break_location`/`broken_record_ids`, then investigate that tenant's ingestion path. |
+
+### Ledger chain verifier
+
+The `ledger_chain_verifier` supervised worker re-walks each tenant's append-only
+Bronze/outbox hash chain and pages a P1 `ledger_chain_integrity` alert on any
+break. It is **off by default**; enable with `LEDGER_CHAIN_VERIFIER_ENABLED=1`
+(cadence `LEDGER_CHAIN_VERIFIER_INTERVAL_SECONDS`, default 6h). The read
+surface `GET /v1/security/ledger/chain-verification` (operator-gated) exposes
+per-tenant status and the verified / verification-failure dashboard aggregate.
 
 ### Tuning
 

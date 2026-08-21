@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/risk_overlay/
   - Backend Architecture/aether-backend/repositories/repos.py
   - packages/shared/graph-contract.ts
-last_synced_commit: "559be979"
+last_synced_commit: "b6e0b751"
 ---
 
 # Fraud Network Architecture
@@ -112,6 +112,33 @@ POST /v1/flow-trace/trace
   │
   └─ publish(Topic.FLOW_TRACE_COMPLETED)
 ```
+
+---
+
+## Data Flow — Network Takedown (cross-service re-attribution)
+
+```
+POST /v1/fraud/networks/{network_id}/takedown   (fraud:evaluate)
+  │
+  ├─ Resolve member identities (NetworkMembers.list_by_network → entity_ids,
+  │     fallback to anchor_entity_ids)
+  │
+  ├─ reattribute_affected(tenant, reason="fraud_takedown",           ← measurement
+  │     identity_selectors=members, voided_touchpoint_selectors=members)
+  │     └─ services/measurement/reattribution.py (Program 3 M3):
+  │        for each affected conversion whose ACTIVE run credits a voided
+  │        touchpoint → create fresh zero-credit run → deactivate prior runs
+  │        (never raises; partial_failure / truncated surfaced)
+  │
+  ├─ networks.update_status(network_id, "closed", reason)
+  ├─ publish(FRAUD_NETWORK_UPDATED, update="takedown", reattribution counts)
+  └─ return network + reattribution.to_dict()
+```
+
+The fraud router imports `reattribute_affected` lazily (matching this file's
+deferred-import convention) so the `fraud_networks` package stays decoupled from
+`measurement` at module load. Unlike a DSR erasure, takedown **retains** the
+touchpoints/conversions as fraud evidence — it only voids the attribution.
 
 ---
 

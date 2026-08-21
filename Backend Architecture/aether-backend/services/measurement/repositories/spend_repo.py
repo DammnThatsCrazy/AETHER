@@ -36,6 +36,43 @@ class SpendRepository:
         row.setdefault("exchange_rate", "1.0")
         row.setdefault("schema_version", 1)
 
+        # ── M2 (Program 5, multi-currency): real FX conversion ───────────────
+        # When the billing currency differs from the normalized target, resolve
+        # a REAL, source-backed rate through services.value.price_sources — the
+        # shared USD price registry the M1 FX snapshot provider registers into —
+        # instead of the hardcoded "1.0" default set above, and record its
+        # provenance. Same-currency rows keep the real 1.0 parity (correct, not
+        # fabricated) and are left untouched. A genuinely unavailable rate is
+        # recorded as unpriced / None-sourced — never a fabricated foreign 1.0
+        # (M1 "unpriced, never silent parity" invariant). Excluding unpriced
+        # rows from rollups is M3, deliberately not done here.
+        src_currency = str(row.get("billing_currency", "USD")).upper()
+        norm_currency = str(row.get("normalized_currency", "USD")).upper()
+        if src_currency != norm_currency:
+            fx = _resolve_conversion_rate(src_currency, norm_currency)
+            if not fx["unpriced"]:
+                row["exchange_rate"] = fx["exchange_rate"]
+            provenance = dict(row.get("provenance") or {})
+            provenance["fx_conversion"] = {
+                "exchange_rate": row.get("exchange_rate"),
+                "conversion_source": fx["conversion_source"],
+                "method": fx["method"],
+                "base_currency": norm_currency,
+                "quote_currency": src_currency,
+                "priced": not fx["unpriced"],
+                "as_of": fx["priced_at"],
+            }
+            row["provenance"] = provenance
+        else:
+            # Same-currency rows are real 1.0 parity by definition. A caller may
+            # supply an explicit exchange_rate, which ``setdefault`` above
+            # preserves and this branch (skipping FX normalization) would
+            # otherwise leave in place — a USD->USD row could then persist a
+            # rate like 2.0 with no fx_conversion provenance, silently distorting
+            # normalized spend. Force exact 1.0 parity: never a fabricated
+            # same-currency rate.
+            row["exchange_rate"] = "1.0"
+
         key = row.get("idempotency_key")
         if not key:
             raise ValueError("idempotency_key is required for spend records")
@@ -86,6 +123,13 @@ class SpendRepository:
                     other_cost = EXCLUDED.other_cost,
                     total_cost = EXCLUDED.total_cost,
                     exchange_rate = EXCLUDED.exchange_rate,
+                    -- Persist provenance with the rate on an idempotent replay:
+                    -- otherwise the row can carry the newly resolved
+                    -- exchange_rate alongside a stale/absent fx_conversion
+                    -- source, pricing flag, and timestamp, defeating the
+                    -- provenance guarantee. Same last-write-wins semantics as
+                    -- the rate it accompanies.
+                    provenance = EXCLUDED.provenance,
                     external_campaign_id = COALESCE(EXCLUDED.external_campaign_id, spend_records.external_campaign_id),
                     external_account_id = COALESCE(EXCLUDED.external_account_id, spend_records.external_account_id),
                     campaign_resolution_status = COALESCE(EXCLUDED.campaign_resolution_status, spend_records.campaign_resolution_status),
@@ -275,6 +319,71 @@ class SpendRepository:
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _resolve_conversion_rate(
+    source_currency: str, normalized_currency: str
+) -> dict[str, Any]:
+    """Resolve a REAL source→normalized FX rate via services.value.price_sources.
+
+    Program 5 (multi-currency) M2. ``exchange_rate`` follows the platform
+    convention ``normalized_value = native_value * exchange_rate`` — i.e. the
+    value of ONE source-currency unit expressed in ``normalized_currency``.
+    Because price_sources is a USD price registry, the rate is derived from the
+    two USD legs (``source_usd / normalized_usd``); for the common
+    USD-normalized case ``normalized_usd == 1`` so the source USD rate is used
+    directly.
+
+    Returns ``{exchange_rate, conversion_source, method, priced_at, unpriced}``
+    (``exchange_rate`` is a text-decimal for the NUMERIC column, or None when
+    unpriced). ``unpriced`` is True when a real rate is genuinely unavailable —
+    the caller must then NOT fabricate a foreign 1.0 (M1 invariant) and records
+    the row as unpriced / None-sourced. Same-currency callers never reach here.
+    Values are Decimal end-to-end; no float ever touches a money/rate value.
+    """
+    # Lazy import keeps module import cheap and avoids any import-time cycle;
+    # fx_provider.register() idempotently wires the M1 snapshot FX provider into
+    # the shared registry so a real rate is resolvable on this write path even
+    # when no separate startup hook has imported it yet.
+    from services.value import fx_provider, price_sources
+
+    fx_provider.register()
+
+    _unpriced = {
+        "exchange_rate": None,
+        "conversion_source": None,
+        "method": "unpriced",
+        "priced_at": None,
+        "unpriced": True,
+    }
+
+    source_leg = price_sources.price(Decimal(1), source_currency)
+    normalized_leg = price_sources.price(Decimal(1), normalized_currency)
+    if (
+        source_leg is None
+        or normalized_leg is None
+        or source_leg.get("conversion_rate") is None
+        or normalized_leg.get("conversion_rate") is None
+    ):
+        return _unpriced
+
+    source_usd = Decimal(source_leg["conversion_rate"])
+    normalized_usd = Decimal(normalized_leg["conversion_rate"])
+    if normalized_usd == 0:
+        return _unpriced
+
+    rate = source_usd / normalized_usd
+    source = source_leg.get("conversion_source")
+    if normalized_currency != "USD":
+        # Cross rate: provenance names both legs it was derived from.
+        source = f"{source}/{normalized_leg.get('conversion_source')}"
+    return {
+        "exchange_rate": format(rate, "f"),
+        "conversion_source": source,
+        "method": source_leg.get("valuation_method") or "fx_rate",
+        "priced_at": source_leg.get("priced_at"),
+        "unpriced": False,
+    }
+
 
 def _to_decimal(value: Any) -> Optional[Decimal]:
     if value is None:

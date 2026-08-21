@@ -16,7 +16,8 @@
 //   await aether.flush();
 
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { randomUUID, createHash } from 'node:crypto';
 
 import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@aether/shared';
 // Registry-generated purpose sets — hand-written copies here drifted to 9 of
@@ -24,11 +25,20 @@ import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@aether/shared';
 import { CONSENT_PURPOSES as ALL_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } from '@aether/shared/consent';
 import type { EventType } from '@aether/shared';
 import { EventQueue } from './queue';
+import { DurableEventQueue } from './durable-queue';
+import type { EventQueueLike, SpoolFullInfo } from './durable-queue';
 import { sendBatch } from './transport';
 import { scrubSensitiveFields } from './scrubber';
 import { SdkHealthTracker } from './health';
 import { makeServerClient } from './client';
-import type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose, BatchHealth } from './types';
+import type {
+  AetherServerConfig,
+  ServerEvent,
+  ServerConsentState,
+  ConsentPurpose,
+  BatchHealth,
+  SpoolDropInfo,
+} from './types';
 
 /**
  * A server event's `type` must be a canonical registry event type
@@ -42,16 +52,22 @@ function isCanonicalEventType(type: string): type is EventType {
 
 export { scrubSensitiveFields } from './scrubber';
 export { makeServerClient } from './client';
-// Opt-in disk-backed queue (Reliability Phase 2 program §2, milestone M4).
-// Not wired into AetherServerSDK's internal track()/flush() here — that
-// wiring (opt-in, then default, in the SDK client) is milestone M5. This
-// export only makes the standalone class reachable by package consumers,
-// since @aether/server's package.json "exports" map has no deep-import
-// subpath — without this line the class would be unbuildable-to-unreachable
-// for anyone outside this package.
+// Disk-backed durable queue (Reliability Phase 2 program §2). The standalone
+// class is milestone M4; M5 wires it into AetherServerSDK below as an opt-in
+// queue with startup replay and a documented disk-space bound. Re-exported so
+// package consumers can also use it directly — @aether/server's package.json
+// "exports" map has no deep-import subpath, so without these lines the class
+// and its option types would be unreachable outside this package.
 export { DurableEventQueue } from './durable-queue';
-export type { DurableQueueOptions } from './durable-queue';
-export type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose, BatchHealth } from './types';
+export type { DurableQueueOptions, SpoolFullInfo, EventQueueLike } from './durable-queue';
+export type {
+  AetherServerConfig,
+  ServerEvent,
+  ServerConsentState,
+  ConsentPurpose,
+  BatchHealth,
+  SpoolDropInfo,
+} from './types';
 export type { SdkHealthSnapshot } from './health';
 export {
   buildAgentEvent,
@@ -66,11 +82,25 @@ const DEFAULT_ENDPOINT = 'https://ingest.aether.so/v1/batch';
 
 export class AetherServerSDK {
   // application stays optional-valued: Required<> would strip its undefined,
-  // but an unconfigured host has no product identity to fabricate.
-  private readonly config: Required<Omit<AetherServerConfig, 'application'>> &
+  // but an unconfigured host has no product identity to fabricate. The
+  // durable-queue options are excluded from the Required<> mapping: they are
+  // genuinely optional (no universal default for spoolPath/onSpoolDrop) and
+  // are handled directly off the raw config in the constructor.
+  private readonly config: Required<
+    Omit<AetherServerConfig, 'application' | 'durable' | 'spoolPath' | 'maxSpoolBytes' | 'onSpoolDrop'>
+  > &
     Pick<AetherServerConfig, 'application'>;
   private consent: ServerConsentState;
-  private readonly queue: EventQueue;
+  /** The active queue — either the in-memory EventQueue or a DurableEventQueue,
+   *  behind their shared interface. `durableQueue` holds the same instance,
+   *  typed, when durability is on (null otherwise) so the durability-only
+   *  capabilities (ack, spool health) can be reached type-safely. */
+  private readonly queue: EventQueueLike;
+  private readonly durableQueue: DurableEventQueue | null;
+  private readonly onSpoolDrop?: (info: SpoolDropInfo) => void;
+  /** Events rejected because the durable spool hit its maxSpoolBytes bound. */
+  private spoolDrops = 0;
+  private spoolDropWarned = false;
   private readonly health: SdkHealthTracker;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushing = false;
@@ -100,10 +130,41 @@ export class AetherServerSDK {
       onBatchResult: config.onBatchResult ?? (() => { /* no-op */ }),
     };
     this.consent = this.buildConsentState(config.consent ?? {});
-    this.queue = new EventQueue({ maxSize: this.config.maxQueueSize });
+
+    // --- Durable queue selection (Reliability Phase 2 §2, M5) -------------
+    // Durability is opt-in: on when `durable: true` OR a `spoolPath` is given
+    // (a spoolPath implies durable). Off by default -> in-memory EventQueue,
+    // identical to pre-M5 behavior, so existing consumers see no change.
+    this.onSpoolDrop = config.onSpoolDrop;
+    const durableEnabled = config.durable === true || typeof config.spoolPath === 'string';
+    if (durableEnabled) {
+      const spoolPath = config.spoolPath ?? this.defaultSpoolPath();
+      const durable = new DurableEventQueue({
+        spoolPath,
+        maxSize: this.config.maxQueueSize,
+        // undefined -> DurableEventQueue's own 5 MiB default.
+        maxSpoolBytes: config.maxSpoolBytes,
+        onSpoolFull: (info) => this.handleSpoolFull(info),
+      });
+      this.durableQueue = durable;
+      this.queue = durable;
+    } else {
+      this.durableQueue = null;
+      this.queue = new EventQueue({ maxSize: this.config.maxQueueSize });
+    }
+
     this.health = new SdkHealthTracker();
     this.observe = makeServerClient((event) => this.track(event));
     this.scheduleFlush();
+
+    // Startup replay: a DurableEventQueue rehydrates any spooled-but-unsent
+    // events in its own constructor (survivors of a prior crash/restart).
+    // Kick off a flush now so they are delivered promptly rather than waiting
+    // for the first periodic tick. Fire-and-forget — flush() catches its own
+    // errors, and if the spool is empty this is a no-op.
+    if (this.durableQueue && this.queue.size > 0) {
+      void this.flush();
+    }
   }
 
   /** Grant consent for specified purposes. */
@@ -215,6 +276,9 @@ export class AetherServerSDK {
           // fabricated "the whole batch landed".
           const counters = result.counters;
           this.health.recordDelivered(item.events.length);
+          // Durable queue: prune the delivered entry from the spool so it does
+          // not replay on the next startup. No-op for the in-memory queue.
+          this.durableQueue?.ack(item);
           const health: BatchHealth = {
             accepted: counters.accepted,
             duplicate: counters.duplicate,
@@ -235,6 +299,12 @@ export class AetherServerSDK {
           this.queue.requeue(item);
           this.health.recordFailed(item.events.length);
         } else {
+          // Terminal, non-retryable rejection (a 4xx other than 429). The
+          // in-memory queue simply drops it (it was already removed by
+          // dequeueReady and is never requeued); mirror that on disk by
+          // acking, so a permanently-rejected "poison" event does not replay
+          // forever from the spool.
+          this.durableQueue?.ack(item);
           this.health.recordFailed(item.events.length);
         }
         item = this.queue.dequeueReady();
@@ -259,13 +329,85 @@ export class AetherServerSDK {
     return this.lastBatchHealth;
   }
 
-  /** Flush remaining events and stop the flush timer. */
+  /** Whether this client is backed by the durable (disk-spooled) queue. */
+  isDurable(): boolean {
+    return this.durableQueue !== null;
+  }
+
+  /** Number of events currently queued in memory awaiting a flush. */
+  queueDepth(): number {
+    return this.queue.size;
+  }
+
+  /**
+   * Durable-spool health: `true` when the disk spool is writable, `false`
+   * when it degraded to in-memory-only (e.g. a read-only filesystem), and
+   * `null` when durability is not enabled for this client.
+   */
+  spoolHealthy(): boolean | null {
+    return this.durableQueue ? this.durableQueue.spoolHealthy : null;
+  }
+
+  /**
+   * Count of events dropped because the durable spool hit its `maxSpoolBytes`
+   * bound. Always 0 when durability is off. Pairs with `onSpoolDrop` for
+   * hosts that prefer polling over a callback.
+   */
+  droppedBySpoolBound(): number {
+    return this.spoolDrops;
+  }
+
+  /** Flush remaining events, stop the flush timer, and release the durable
+   *  spool's in-process ownership (N9) so a later SDK instance (a re-init, or a
+   *  process that outlives this one) may reclaim the same spool file. The spool
+   *  is NOT deleted — durable state survives for the next owner to replay. */
   async shutdown(): Promise<void> {
     if (this.flushTimer !== null) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
     await this.flush();
+    this.durableQueue?.close();
+  }
+
+  /**
+   * Bridge the durable queue's disk-space-bound rejection to the SDK's public
+   * surface: bump the drop counter, then either invoke the host's
+   * `onSpoolDrop` or warn once. Never silent — an event dropped for disk
+   * budget always produces a signal.
+   */
+  private handleSpoolFull(info: SpoolFullInfo): void {
+    this.spoolDrops += 1;
+    const dropInfo: SpoolDropInfo = { ...info, droppedTotal: this.spoolDrops };
+    if (this.onSpoolDrop) {
+      try {
+        this.onSpoolDrop(dropInfo);
+      } catch {
+        /* isolate the host callback — it must not break track()/enqueue */
+      }
+      return;
+    }
+    if (this.spoolDropWarned) return;
+    this.spoolDropWarned = true;
+    if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      console.warn(
+        `[aether] durable spool full (${info.maxSpoolBytes} bytes) at '${info.spoolPath}' — ` +
+          'dropping new events until it drains. Provide onSpoolDrop to handle this explicitly.',
+      );
+    }
+  }
+
+  /**
+   * Default spool file used when `durable: true` is set without a `spoolPath`.
+   * It must be STABLE across restarts (durability replays the same file) and
+   * must not collide across write keys, but the write key is a secret — so
+   * only a short, non-reversible digest of it appears in the filename. The OS
+   * temp dir is a pragmatic default; hosts wanting stronger durability set an
+   * explicit `spoolPath` on a persistent volume.
+   */
+  private defaultSpoolPath(): string {
+    const digest = createHash('sha256').update(this.config.writeKey).digest('hex').slice(0, 16);
+    return path.join(os.tmpdir(), 'aether-server-spool', `${digest}.jsonl`);
   }
 
   private buildConsentState(partial: Partial<ServerConsentState>): ServerConsentState {

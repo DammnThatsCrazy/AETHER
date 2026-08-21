@@ -8,18 +8,20 @@ enforced by scripts/mobile_build_check.py. Values are validated by
 services/mobile/config.py (DistributionProfile vocabulary).
 
 Revision ID: 20260830_app_version_registration
-Revises: 20260823_touchpoint_conversion_fields
+Revises: 20260825_outbox_hash_chain
 Create Date: 2026-08-07
 
-NOTE on chaining: down_revision is the CURRENT alembic head after rebasing
-onto origin/main — the touchpoint-conversion migration
-(20260823_touchpoint_conversion_fields, from the reliability-audit PR #513)
-landed upstream after this migration was authored and itself chains onto the
-comms-platform merge point (20260823_merge_comms_substrate), so this
-migration re-chains to that touchpoint head to preserve the single-head
-invariant (scripts/validate_temporal_integrity.py). This migration only
-touches mobile_installations and is independent of the computation, comms,
-and touchpoint domains.
+NOTE on chaining: down_revision is the CURRENT alembic head. When origin/main
+merged into the reliability-audit branch there were two heads — the outbox
+hash-chain migration (20260825_outbox_hash_chain, which itself chains
+20260823_touchpoint_conversion_fields → 20260824_bronze_hash_chain →
+20260825_outbox_hash_chain) and this app-version migration, both forking off
+20260823_touchpoint_conversion_fields. This migration re-chains onto the
+outbox hash-chain head to restore the single-head invariant
+(scripts/validate_temporal_integrity.py). It only touches
+mobile_installations and is independent of the ledger/hash-chain, computation,
+comms, and touchpoint domains, so the ordering relative to the hash-chain
+migrations carries no data dependency.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260830_app_version_registration"
-down_revision = "20260823_touchpoint_conversion_fields"
+down_revision = "20260825_outbox_hash_chain"
 branch_labels = None
 depends_on = None
 

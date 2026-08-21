@@ -1,7 +1,8 @@
-name: Production-Equivalent CI (M1)
+name: Production-Equivalent CI (M1 + M2 + M4)
 
 # Phase-2 Program 4 — "A production-equivalent CI lane"
-# docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md, section 4, milestone M1.
+# docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md, section 4, milestones
+# M1 + M2 + M4.
 #
 # WHAT THIS IS: every OTHER backend workflow in .github/workflows/ runs with
 # AETHER_ENV=local, which makes repositories.repos.get_pool() return None, so
@@ -12,15 +13,31 @@ name: Production-Equivalent CI (M1)
 # versions/env) and sets DATABASE_URL so the backend takes the REAL pool
 # path, then runs one ingestion smoke test against it.
 #
-# WHAT THIS IS NOT (M1 scope, not the full program):
+# WHAT THIS IS NOT (M1 + M2 scope, not the full program):
 #   - Not required: this workflow is intentionally absent from branch
 #     protection. A failure here blocks nothing.
 #   - Does not change `make ci-check`, repo-health.yml, or any other existing
 #     workflow — this file is purely additive.
-#   - Does not migrate the ingestion test suite to the real stack (M2), does
-#     not add kafka/outbox-relay (M3), does not touch measurement/attribution
-#     suites (M4), and is not a required check yet (M5). Those are later,
-#     separately-scoped milestones — see the program doc.
+#   - M2 (this increment) adds real-stack ingestion IDEMPOTENCY/CONCURRENCY
+#     tests (tests/prod_equivalent/test_real_stack_ingestion_concurrency.py):
+#     concurrent ingest_many of the same idempotency key(s) must yield
+#     exactly-once rows against real Postgres, exercising the real
+#     ux_bronze_sdk_events_key / ux_event_outbox_key UNIQUE indexes + ON CONFLICT
+#     DO NOTHING — the property the AETHER_ENV=local in-memory dict fallback gets
+#     "right" for free (its check-then-set never yields) without ever proving it.
+#     M2 does NOT migrate the ENTIRE ingestion suite: the in-memory unit tests in
+#     tests/unit/test_ingestion_v2.py still run in-memory under make ci-check and
+#     stay green as-is (they cover the sequential accept/duplicate/rollback
+#     semantics; the concurrency property they cannot prove is what moved here).
+#     M2 does not add kafka/outbox-relay (M3) and is not a required check yet
+#     (M5). Those are later, separately-scoped milestones — see the program doc.
+#   - M4 (this increment) extends the lane to the measurement/attribution
+#     repositories (conversion_repo / spend_repo / attribution_run_repo) via
+#     tests/prod_equivalent/test_real_stack_measurement_repos.py — the real
+#     ON CONFLICT / partial-unique / tenant-scope / FX-provenance properties the
+#     in-memory dict fallback cannot model. It does NOT migrate the full
+#     measurement/attribution unit-test suites (those stay in-memory under
+#     make ci-check); kafka/outbox-relay (M3) and required-check (M5) remain.
 #   - Adds no database migration and changes no runtime behavior; it only
 #     runs already-existing migrations against a fresh, ephemeral database.
 #
@@ -147,6 +164,31 @@ jobs:
 
       - name: Run real-stack ingestion smoke test
         run: python -m pytest tests/prod_equivalent/test_real_stack_smoke.py -v -n0
+
+      - name: Run real-stack ingestion idempotency/concurrency tests (M2)
+        # M2: genuinely-concurrent ingest_many of the same idempotency key(s)
+        # must yield exactly-once rows against real Postgres — exercising the
+        # real UNIQUE indexes + ON CONFLICT DO NOTHING that the AETHER_ENV=local
+        # in-memory dict fallback bypasses (its check-then-set never yields, so
+        # it serializes writers for free and never proves the DB does). Runs
+        # ALONGSIDE (not instead of) the M1 smoke step above. -n0 disables xdist
+        # so the shared asyncpg pool singleton stays on one process/event loop;
+        # DATABASE_URL / REDIS_URL come from the job-level env.
+        run: python -m pytest tests/prod_equivalent/test_real_stack_ingestion_concurrency.py -v -n0
+
+      - name: Run real-stack measurement/attribution repo tests (M4)
+        # M4: extends the lane beyond ingestion to the measurement/attribution
+        # repositories — conversion_repo / spend_repo / attribution_run_repo —
+        # which share bronze_bulk.py's exact get_pool()/in-memory-dict fallback.
+        # Forces their REAL Postgres branch and asserts what the dict cannot:
+        # the authority-ranked ON CONFLICT conversion merge + tenant isolation of
+        # a shared deduplication_key; idempotent spend replay yielding one row
+        # with a stable spend_record_id PK; the CURRENCY FX provenance round-trip
+        # through provenance JSONB + exchange_rate NUMERIC(18,8); and the
+        # "exactly one active run per (tenant_id, conversion_id)" invariant.
+        # Self-skips without DATABASE_URL, so make ci-check stays green. -n0 for
+        # the same shared-pool reason as the M2 step.
+        run: python -m pytest tests/prod_equivalent/test_real_stack_measurement_repos.py -v -n0
 
       - name: Diagnostics on failure
         if: failure()

@@ -9,6 +9,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DurableEventQueue } from './durable-queue';
+import type { SpoolFullInfo } from './durable-queue';
 
 let tmpDir: string;
 
@@ -92,6 +93,10 @@ describe('DurableEventQueue — durability', () => {
     // Simulate a crash: q1 is simply abandoned without ever confirming
     // (no ack, no successful send) — nothing drains it cleanly.
     expect(q1.size).toBe(2);
+    // A crash means the owning process is gone: release q1's in-process spool
+    // claim (N9) so the "restarted" q2 can own the same file. close() does not
+    // flush or delete — the on-disk spool survives, exactly like a real crash.
+    q1.close();
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(2);
@@ -106,6 +111,7 @@ describe('DurableEventQueue — durability', () => {
     const inFlight = q1.dequeueReady();
     expect(inFlight).toBeDefined();
     // q1 "crashes" here — mid-send, before ack() or requeue() is called.
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(1);
@@ -125,6 +131,7 @@ describe('DurableEventQueue — durability', () => {
     expect([first.events[0], second.events[0]]).toEqual([{ id: 'keep' }, { id: 'sent' }]);
     q1.ack(second);
     // `first` remains un-acked (still in-flight / not yet confirmed).
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(1);
@@ -152,6 +159,7 @@ describe('DurableEventQueue — durability', () => {
     const item = q1.dequeueReady()!;
     q1.requeue(item); // attempt(0) >= maxRetries(0) -> permanently dropped
     expect(q1.size).toBe(0);
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(0);
@@ -162,6 +170,7 @@ describe('DurableEventQueue — durability', () => {
     const q1 = new DurableEventQueue({ spoolPath: p });
     q1.enqueue({ writeKey: 'wk', events: [{ id: 'e1' }] });
     q1.drain();
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p });
     expect(q2.size).toBe(0);
@@ -191,6 +200,7 @@ describe('DurableEventQueue — durability', () => {
 
     // "Crash": q1 is abandoned with 4 live (unacked) spool entries — e1/e2
     // in-flight, e3/e4 ready — against a maxSize of 2.
+    q1.close(); // crash = owner gone; release the spool claim (N9), spool survives
 
     const q2 = new DurableEventQueue({ spoolPath: p, maxSize: 2 });
     // The bound must hold even right after replay: never more than maxSize
@@ -214,8 +224,135 @@ describe('DurableEventQueue — durability', () => {
     expect(delivered.sort()).toEqual(['e1', 'e2', 'e3', 'e4']);
 
     // Once everything has been acked, a fresh instance replays nothing.
+    q2.close(); // release q2's claim before the next owner (N9)
     const q3 = new DurableEventQueue({ spoolPath: p, maxSize: 2 });
     expect(q3.size).toBe(0);
+  });
+});
+
+describe('DurableEventQueue — single-owner spool guard (N9)', () => {
+  it('refuses a second live queue on the same spool file in one process', () => {
+    const p = spoolPath();
+    const q1 = new DurableEventQueue({ spoolPath: p });
+    // Two live queues on one spool each allocate journal ids from 1 and silently
+    // clobber each other (replay keys by id; compaction rewrites the whole file).
+    // The write-key-derived default path makes this reachable from two SDK
+    // instances sharing a write key, so the second must fail fast.
+    expect(() => new DurableEventQueue({ spoolPath: p })).toThrow(/already owned/);
+    q1.close();
+  });
+
+  it('recognizes the same spool through a non-normalized path', () => {
+    const p = spoolPath('own.jsonl');
+    const q1 = new DurableEventQueue({ spoolPath: p });
+    const equivalent = path.join(path.dirname(p), '.', 'own.jsonl');
+    expect(() => new DurableEventQueue({ spoolPath: equivalent })).toThrow(/already owned/);
+    q1.close();
+  });
+
+  it('after close(), a fresh queue may reclaim the same spool and replays it', () => {
+    const p = spoolPath();
+    const q1 = new DurableEventQueue({ spoolPath: p });
+    q1.enqueue({ writeKey: 'wk', events: [{ id: 'e1' }] });
+    q1.close(); // owner released; on-disk spool intact
+
+    const q2 = new DurableEventQueue({ spoolPath: p }); // no throw
+    expect(q2.size).toBe(1);
+    q2.close();
+  });
+});
+
+describe('DurableEventQueue — disk-space bound (maxSpoolBytes)', () => {
+  it('rejects new events once the live spool would exceed maxSpoolBytes, surfacing every drop', () => {
+    const p = spoolPath();
+    const drops: SpoolFullInfo[] = [];
+    // ~150 bytes/entry; a 400-byte budget fits a couple, then rejects.
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 400, onSpoolFull: (i) => drops.push(i) });
+
+    let accepted = 0;
+    let rejected = 0;
+    for (let n = 0; n < 50; n++) {
+      const ok = q.enqueue({ writeKey: 'wk', events: [{ id: `e${n}`, blob: 'x'.repeat(50) }] });
+      if (ok) accepted++;
+      else rejected++;
+    }
+
+    expect(accepted).toBeGreaterThan(0);
+    expect(rejected).toBeGreaterThan(0);
+    expect(accepted + rejected).toBe(50);
+    // Every rejection is surfaced — none silent.
+    expect(drops.length).toBe(rejected);
+    expect(drops[0].maxSpoolBytes).toBe(400);
+    expect(drops[0].spoolPath).toBe(p);
+    expect(drops[0].attemptedBytes).toBeGreaterThan(0);
+    expect(drops[0].liveBytes).toBeLessThanOrEqual(400);
+    // The queue only holds what it accepted.
+    expect(q.size).toBe(accepted);
+  });
+
+  it('rejects (and surfaces) a single event that is larger than the whole budget', () => {
+    const p = spoolPath();
+    const drops: SpoolFullInfo[] = [];
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 40, onSpoolFull: (i) => drops.push(i) });
+
+    const ok = q.enqueue({ writeKey: 'wk', events: [{ id: 'too-big', blob: 'y'.repeat(200) }] });
+    expect(ok).toBe(false);
+    expect(q.size).toBe(0);
+    expect(drops).toHaveLength(1);
+    expect(drops[0].attemptedBytes).toBeGreaterThan(drops[0].maxSpoolBytes);
+  });
+
+  it('frees room again once entries are delivered (acked) below the bound', () => {
+    const p = spoolPath();
+    const drops: SpoolFullInfo[] = [];
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 400, onSpoolFull: (i) => drops.push(i) });
+
+    // Fill until the bound rejects.
+    while (q.enqueue({ writeKey: 'wk', events: [{ id: 'x', blob: 'y'.repeat(50) }] })) { /* fill */ }
+    expect(drops.length).toBeGreaterThan(0);
+    const dropsWhenFull = drops.length;
+
+    // Deliver+ack one entry -> its bytes are reclaimed.
+    const item = q.dequeueReady()!;
+    q.ack(item);
+
+    // A fresh event now fits again, without a new drop.
+    expect(q.enqueue({ writeKey: 'wk', events: [{ id: 'after-ack', blob: 'y'.repeat(50) }] })).toBe(true);
+    expect(drops.length).toBe(dropsWhenFull);
+  });
+
+  it('does NOT enforce the byte bound when the spool is degraded (in-memory-only)', () => {
+    // Unwritable spool path -> degraded; the byte bound is a disk concept and
+    // must not start rejecting an in-memory-only queue.
+    const blocker = path.join(tmpDir, 'not-a-directory');
+    fs.writeFileSync(blocker, 'x');
+    const p = path.join(blocker, 'nested', 'spool.jsonl');
+    const drops: SpoolFullInfo[] = [];
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 10, onSpoolFull: (i) => drops.push(i) });
+
+    expect(q.spoolHealthy).toBe(false);
+    for (let n = 0; n < 5; n++) {
+      expect(q.enqueue({ writeKey: 'wk', events: [{ id: `e${n}`, blob: 'z'.repeat(50) }] })).toBe(true);
+    }
+    expect(q.size).toBe(5);
+    expect(drops).toHaveLength(0);
+  });
+
+  it('keeps the physical spool file within a small constant factor of the bound under churn', () => {
+    const p = spoolPath();
+    const q = new DurableEventQueue({ spoolPath: p, maxSpoolBytes: 2000, compactionIntervalOps: 100 });
+
+    // Steady add -> deliver -> ack churn: the live set stays tiny, but add/ack
+    // lines accumulate. Compaction (byte- and ops-triggered) must reclaim them.
+    for (let n = 0; n < 500; n++) {
+      if (q.enqueue({ writeKey: 'wk', events: [{ id: `e${n}`, blob: 'q'.repeat(30) }] })) {
+        const item = q.dequeueReady();
+        if (item) q.ack(item);
+      }
+    }
+
+    const fileBytes = fs.statSync(p).size;
+    expect(fileBytes).toBeLessThanOrEqual(2000 * 3);
   });
 });
 

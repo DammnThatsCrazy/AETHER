@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "defcd776"
+last_synced_commit: "b6e0b751"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -431,6 +431,30 @@ Returns SDK initialization configuration. Called once on `init()`.
   }
 }
 ```
+
+---
+
+## Ledger Chain Verification (integrity)
+
+Operator-gated read surface over the append-only hash chains that Bronze
+(`bronze_sdk_events`) and the transactional outbox (`event_outbox`) carry
+(`prev_hash`/`integrity_hash`, per tenant). A scheduled `ledger_chain_verifier`
+worker (supervised, **gated off by default** via
+`LEDGER_CHAIN_VERIFIER_ENABLED`) re-walks each tenant's chain with
+`shared/integrity/hash_chain.verify_chain` and records a P1
+`ledger_chain_integrity` operator alert on any break.
+
+### GET /v1/security/ledger/chain-verification
+
+**Permission**: operator (mounted under the sensitive `/v1/security` prefix);
+`tenant_id` must match the authenticated tenant.
+
+- No query params → dashboard aggregate: counts of tenants **verified** vs.
+  with **verification_failures**, plus failing-tenant detail.
+- `?tenant_id=<id>` → a live verification of that tenant's chain (does not page;
+  the scheduled worker is the alerting authority).
+
+**Response 200**: `{ "verified": <int>, "verification_failures": <int>, "failing_tenants": [...] }` (aggregate) or a single-tenant `ChainVerifierResult` (`verified`, `rows_scanned`, `chains_verified`, `broken_record_ids`, `break_location`).
 
 ---
 
@@ -2703,6 +2727,7 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | POST | `/v1/fraud/networks/{network_id}/annotate` | `fraud:write` | Add annotation |
 | POST | `/v1/fraud/networks/{network_id}/suppress` | `fraud:write` | Suppress network |
 | POST | `/v1/fraud/networks/{network_id}/escalate` | `fraud:write` | Escalate network |
+| POST | `/v1/fraud/networks/{network_id}/takedown` | `fraud:evaluate` | Close network + invalidate the attribution it produced (re-attribution, retains evidence); returns a `reattribution` summary |
 
 ### Flow Trace (`/v1/flow-trace/*`)
 
