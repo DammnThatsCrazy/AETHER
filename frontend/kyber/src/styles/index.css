@@ -11,7 +11,7 @@
   }
 
   body {
-    @apply bg-surface-base text-text-primary font-mono antialiased;
+    @apply bg-surface-base text-text-primary font-sans antialiased;
   }
 
   /* Reduced motion support */

@@ -13,21 +13,21 @@ AWS_ROOT = ROOT / 'AWS Deployment' / 'aether-aws'
 @contextmanager
 def aws_module_path():
     original = list(sys.path)
-    for name in ['main', 'shared', 'config']:
-        sys.modules.pop(name, None)
-    for name in list(sys.modules):
-        if name.startswith('shared.') or name.startswith('config.'):
-            sys.modules.pop(name, None)
+    for prefix in ('main', 'shared', 'config', 'scripts'):
+        sys.modules.pop(prefix, None)
+        for name in list(sys.modules):
+            if name.startswith(f'{prefix}.'):
+                sys.modules.pop(name, None)
     sys.path.insert(0, str(AWS_ROOT))
     try:
         yield
     finally:
         sys.path[:] = original
-        for name in ['main', 'shared', 'config']:
-            sys.modules.pop(name, None)
-        for name in list(sys.modules):
-            if name.startswith('shared.') or name.startswith('config.'):
-                sys.modules.pop(name, None)
+        for prefix in ('main', 'shared', 'config', 'scripts'):
+            sys.modules.pop(prefix, None)
+            for name in list(sys.modules):
+                if name.startswith(f'{prefix}.'):
+                    sys.modules.pop(name, None)
 
 
 def test_aws_client_factory_uses_runtime_env(monkeypatch):
@@ -60,3 +60,16 @@ def test_demo_runner_requires_explicit_stub_or_live_selection(monkeypatch):
         args = demo_main.parse_args(['--live-aws'])
         assert demo_main.configure_stub_mode(args) is False
         assert os.environ['AETHER_STUB_AWS'] == '0'
+
+
+def test_aws_module_path_does_not_leak_aws_scripts_package():
+    """The AWS demo ``main`` imports ``scripts.capacity.*`` etc., caching the
+    AWS ``scripts`` package in ``sys.modules``. The context must evict it on
+    exit, or a later test doing ``from scripts import <root_validator>`` in the
+    same worker resolves to the AWS package and ImportErrors — a race observed
+    under pytest-xdist ``-n auto`` (PR #519 follow-up)."""
+    with aws_module_path():
+        importlib.import_module('main')  # pulls in AWS scripts.capacity.*
+    assert 'scripts' not in sys.modules, 'AWS scripts package leaked into sys.modules'
+    from scripts import validate_signal_use_matrix as root_validator
+    assert hasattr(root_validator, 'main')

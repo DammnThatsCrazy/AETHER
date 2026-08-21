@@ -322,7 +322,10 @@ from a pinned price book against a plan inventory.
 `.github/workflows/infrastructure.yml` **plans and validates only; it never
 applies.** The `apply-production-lean` job that once auto-applied on every push
 to `main` has been deleted. On a push to `main` its
-`require-production-credentials` job gates *promotability*, not an apply.
+`require-production-credentials` job gates *promotability*, not an apply. When
+the remote-plan credential set is absent, that job reports it is a NO-OP and
+passes green — the commit is explicitly **not** promotable — and re-arms,
+fail-closed, the moment the credentials are wired.
 
 `.github/workflows/terraform-promote.yml` is the **sole apply path**:
 `workflow_dispatch`-only, per-profile GitHub environment

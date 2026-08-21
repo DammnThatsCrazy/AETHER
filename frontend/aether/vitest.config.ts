@@ -5,13 +5,34 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      '@aether-app': path.resolve(__dirname, 'src'),
+    alias: [
+      {
+        find: '@aether-app',
+        replacement: path.resolve(__dirname, 'src'),
+      },
+      // Resolve package subpaths from source in clean frontend test checkouts.
+      // The workspace package exports dist/*, but CI intentionally does not
+      // publish its generated dist tree before running the Aether suite.
+      {
+        find: /^@aether\/shared\/(.+)$/,
+        replacement: `${path.resolve(__dirname, '../../packages/shared')}/$1`,
+      },
       // Resolve the workspace web SDK from source in tests: its dist/ entry is
       // gitignored and not built in the frontend CI job, so package-entry
       // resolution fails there (same aliasing the SDK's own vitest config uses).
-      '@aether/web': path.resolve(__dirname, '../../packages/web/src/index.ts'),
-    },
+      {
+        find: '@aether/web',
+        replacement: path.resolve(__dirname, '../../packages/web/src/index.ts'),
+      },
+      // Payment and capability components import the shared contract barrel.
+      // Its published entry targets dist/, which is intentionally absent in a
+      // clean frontend test checkout, so resolve this workspace dependency from
+      // source just as we do for the web SDK above.
+      {
+        find: '@aether/shared',
+        replacement: path.resolve(__dirname, '../../packages/shared/index.ts'),
+      },
+    ],
   },
   test: {
     globals: true,

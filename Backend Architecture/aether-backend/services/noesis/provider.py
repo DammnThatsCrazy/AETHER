@@ -31,6 +31,9 @@ from .models import (
 from .prompts import PROMPT_VERSION, build_system_prompt, build_user_message
 from .token_budget import NoesisTokenBudget
 
+from services.model_runtime.adapters import AnthropicModelProvider, OpenAIModelProvider
+from services.model_runtime.models import ModelRequest
+
 logger = get_logger("aether.service.noesis.provider")
 
 _UNSAFE_PATTERNS = frozenset({"sql", "graphql", "gremlin", "cypher", "mutation", "drop", "truncate"})
@@ -246,21 +249,27 @@ class AnthropicNoesisPlanProvider:
         return None
 
     async def _call_api(self, user_message: str) -> dict:
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=self.api_key)
-        response = await client.messages.create(
+        request = ModelRequest(
             model=self.model,
-            max_tokens=self.max_tokens,
-            system=self._system_prompt,
             messages=[{"role": "user", "content": user_message}],
+            system_prompt=self._system_prompt,
+            max_tokens=self.max_tokens,
+            metadata={"task": "noesis_query_planning", "surface": "noesis"},
         )
-        text = response.content[0].text if response.content else ""
-        tokens_used = (response.usage.input_tokens + response.usage.output_tokens) if response.usage else _ESTIMATED_REQUEST_TOKENS
+        provider = AnthropicModelProvider(
+            api_key=self.api_key,
+            model=self.model,
+            timeout_s=self.timeout_s,
+            max_tokens=self.max_tokens,
+            max_retries=self.max_retries,
+        )
+        resp = await provider.complete(request)
+        tokens_used = resp.usage.input_tokens + resp.usage.output_tokens
         return {
-            "text": text,
+            "text": resp.content,
             "tokens_used": tokens_used,
-            "input_tokens": response.usage.input_tokens if response.usage else None,
-            "output_tokens": response.usage.output_tokens if response.usage else None,
+            "input_tokens": resp.usage.input_tokens,
+            "output_tokens": resp.usage.output_tokens,
         }
 
 
@@ -369,32 +378,29 @@ class OpenAINoesisPlanProvider:
         return None
 
     async def _call_api(self, user_message: str) -> dict:
-        import httpx
-        payload = {
-            "model": self.model,
-            "max_tokens": self.max_tokens,
-            "messages": [
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            "response_format": {"type": "json_object"},
-        }
-        async with httpx.AsyncClient(timeout=self.timeout_s) as client:
-            resp = await client.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-            )
-            resp.raise_for_status()
-            body = resp.json()
-        text = body["choices"][0]["message"]["content"]
-        usage = body.get("usage", {})
-        tokens_used = usage.get("total_tokens", _ESTIMATED_REQUEST_TOKENS)
+        request = ModelRequest(
+            model=self.model,
+            messages=[{"role": "user", "content": user_message}],
+            system_prompt=self._system_prompt,
+            max_tokens=self.max_tokens,
+            response_format="json_object",
+            metadata={"task": "noesis_query_planning", "surface": "noesis"},
+        )
+        provider = OpenAIModelProvider(
+            api_key=self.api_key,
+            model=self.model,
+            base_url=self.base_url,
+            timeout_s=self.timeout_s,
+            max_tokens=self.max_tokens,
+            max_retries=self.max_retries,
+        )
+        resp = await provider.complete(request)
+        tokens_used = resp.usage.input_tokens + resp.usage.output_tokens
         return {
-            "text": text,
+            "text": resp.content,
             "tokens_used": tokens_used,
-            "input_tokens": usage.get("prompt_tokens"),
-            "output_tokens": usage.get("completion_tokens"),
+            "input_tokens": resp.usage.input_tokens,
+            "output_tokens": resp.usage.output_tokens,
         }
 
 

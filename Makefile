@@ -21,7 +21,7 @@
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
-        frontend-data-truth frontend-data-truth-bundles frontend-route-state \
+        frontend-data-truth frontend-data-truth-bundles frontend-route-state frontend-branding \
         frontend-data-truth-report \
         demo-seed demo-reset demo-status demo-verify dev-demo \
         clean-install-smoke demo-seed-smoke demo-reset-smoke \
@@ -328,6 +328,9 @@ frontend-data-truth-bundles: ## Build and scan Aether/Kyber production bundles f
 
 frontend-route-state: ## Enforce exhaustive frontend route empty/error coverage
 	python scripts/validate_frontend_route_state_matrix.py --enforce
+
+frontend-branding: ## Enforce canonical brand migration seams without freezing legacy frontend debt
+	$(PYTHON) scripts/validate_frontend_branding.py
 
 frontend-data-truth-report: ## Run release certification and write machine-readable evidence
 	python scripts/generate_frontend_data_truth_report.py

@@ -2,6 +2,7 @@ import { formatTime } from '../time/format';
 import { useTimeContext } from '../time/time-provider';
 import { useNow } from '../time/use-now';
 import { cn } from '../utils/cn';
+import { Icon } from './icon';
 
 interface FreshnessIndicatorProps {
   computedAt: string | null | undefined;
@@ -27,20 +28,23 @@ export function FreshnessIndicator({ computedAt, onRefresh, className }: Freshne
 
   const dotClass = state === 'live' ? 'bg-success' : state === 'recent' ? 'bg-warning' : 'bg-danger';
   const textClass = state === 'live' ? 'text-success' : state === 'recent' ? 'text-warning' : 'text-danger';
+  const iconName = state === 'live' ? 'clock-check' : state === 'recent' ? 'clock-4' : 'clock-alert';
 
   const formattedTime = formatTime(computedAt, context);
 
   return (
     <div className={cn('flex items-center gap-1.5 font-mono text-xs', className)}>
-      <span className={cn('w-1.5 h-1.5 rounded-full inline-block flex-shrink-0', dotClass)} />
+      <span className={cn('w-1.5 h-1.5 rounded-full inline-block flex-shrink-0', dotClass)} aria-hidden="true" />
+      <Icon name={iconName} size="xs" decorative />
       <span className={textClass}>{state}</span>
       <span className="text-text-muted">as of {formattedTime}</span>
       {state === 'stale' && onRefresh && (
         <button
           onClick={onRefresh}
-          className="text-accent underline hover:no-underline ml-1"
+          className="ml-1 inline-flex items-center gap-1 text-accent underline hover:no-underline"
         >
-          [↻] Refresh
+          <Icon name="refresh-cw" size="xs" decorative />
+          Refresh
         </button>
       )}
     </div>

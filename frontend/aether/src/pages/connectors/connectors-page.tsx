@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, formatDateTime, resolveCapabilityState, useTimeContext, type CapabilityState } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, ProviderMark, formatDateTime, resolveCapabilityState, useTimeContext, type CapabilityState } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 import { ConnectorConfigModal } from './connector-config-modal';
 
@@ -85,9 +85,12 @@ export function ConnectorsPage() {
               <div className="grid gap-2 md:grid-cols-2">
                 {conns.map((c) => (
                   <div key={c.connector_type} className="flex items-center justify-between rounded border border-border-default px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium">{c.label} {c.premium ? <Badge variant="warning">premium</Badge> : null}</div>
-                      <div className="text-xs text-text-muted truncate">{c.description}</div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <ProviderMark provider={String(c.connector_type)} decorative size={20} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium">{c.label} {c.premium ? <Badge variant="warning">premium</Badge> : null}</div>
+                        <div className="text-xs text-text-muted truncate">{c.description}</div>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 ml-2 shrink-0">
                       <div className="text-right">

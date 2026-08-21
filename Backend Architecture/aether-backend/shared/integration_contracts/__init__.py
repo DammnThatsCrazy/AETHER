@@ -68,6 +68,50 @@ from shared.integration_contracts.results import (
     from_provider_result,
     from_sync_result,
 )
+from shared.integration_contracts.acquisition import (
+    AcquisitionContext,
+    ProviderAccount,
+)
+from shared.integration_contracts.capabilities import (
+    CAPABILITY_ADAPTER_METHODS,
+    AccountAdapter,
+    AuthAdapter,
+    PullAdapter,
+    ReconciliationAdapter,
+    ReportAdapter,
+    StreamAdapter,
+    WebhookAdapter,
+)
+from shared.integration_contracts.certification import (
+    CertificationCheck,
+    CertificationReport,
+    ProviderReadinessLevel,
+)
+from shared.integration_contracts.events import (
+    AetherEvent,
+    RawProviderRecord,
+    ReadBatch,
+    compute_checksum,
+    make_aether_event,
+    make_raw_record,
+    verify_checksum,
+)
+from shared.integration_contracts.health import ProviderHealthReport
+from shared.integration_contracts.normalization import (
+    EventNormalizer,
+    NormalizationResult,
+)
+from shared.integration_contracts.plugin import (
+    CapabilitySet,
+    PluginValidationError,
+    ProviderPlugin,
+    capability_set,
+    plugin_identity_key,
+)
+from shared.integration_contracts.reconciliation import (
+    ProviderReconciliationReport,
+    ReconciliationCheck,
+)
 
 __all__ = [
     # identity
@@ -117,4 +161,42 @@ __all__ = [
     "DeploymentContract",
     "DeploymentContractError",
     "load_capability",
+    # acquisition
+    "AcquisitionContext",
+    "ProviderAccount",
+    # capabilities
+    "CAPABILITY_ADAPTER_METHODS",
+    "AccountAdapter",
+    "AuthAdapter",
+    "PullAdapter",
+    "ReconciliationAdapter",
+    "ReportAdapter",
+    "StreamAdapter",
+    "WebhookAdapter",
+    # certification
+    "CertificationCheck",
+    "CertificationReport",
+    "ProviderReadinessLevel",
+    # events
+    "AetherEvent",
+    "RawProviderRecord",
+    "ReadBatch",
+    "compute_checksum",
+    "make_aether_event",
+    "make_raw_record",
+    "verify_checksum",
+    # health
+    "ProviderHealthReport",
+    # normalization
+    "EventNormalizer",
+    "NormalizationResult",
+    # plugin
+    "CapabilitySet",
+    "PluginValidationError",
+    "ProviderPlugin",
+    "capability_set",
+    "plugin_identity_key",
+    # reconciliation
+    "ProviderReconciliationReport",
+    "ReconciliationCheck",
 ]
