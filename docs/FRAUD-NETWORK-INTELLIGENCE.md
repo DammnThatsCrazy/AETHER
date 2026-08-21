@@ -9,7 +9,7 @@ since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: "ef4ceba"
+last_synced_commit: "b6e0b751"
 ---
 
 # Fraud Network Intelligence
