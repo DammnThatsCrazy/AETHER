@@ -157,6 +157,84 @@ def v1_manifest(namespace: str = DEFAULT_NAMESPACE) -> SeedManifest:
             "reuse_count": 0,
             "_time_offsets": {"expires_at": 86400},
         }),
+        ("notification", "notifications", "demo-notification", -300, {
+            "category": "alert",
+            "severity": "P2",
+            "title": "Synthetic demonstration notification",
+            "body": "A design-partner demo inbox notification — review the demonstration surfaces.",
+            "link": "/mission",
+            "read": False,
+            "archived": False,
+            "count": 1,
+        }),
+        ("continuation", "continuations", "demo-continuation", -250, {
+            "app_kind": "aether",
+            "source_client": "web",
+            "surface": "exploration",
+            "sensitivity": "standard",
+            "freshness": "live",
+            "summary": {
+                "title": "Synthetic demonstration session",
+                "subtitle": None,
+                "last_meaningful_action": None,
+            },
+            "canonical_context": {},
+            "resource_references": [],
+        }),
+        ("exception", "exceptions", "demo-exception", -225, {
+            "title": "Synthetic demonstration exception",
+            "severity": "medium",
+            "bucket": "watch",
+            "status": "open",
+            "confidence": 0.9,
+            "affected_features": ["exploration"],
+            "affected_services": ["demo-seed"],
+            "customer_visible": False,
+            "security_exposure": False,
+            "financial_exposure": False,
+            "data_integrity_exposure": False,
+            "reversible": True,
+            "sla_impact": False,
+            "priority_score": 0.4,
+            "priority_inputs": {"seed": True},
+            "probable_cause": "Synthetic demonstration data",
+            "recommended_action": "Review the synthetic demonstration exception.",
+            "signal_count": 1,
+            "_time_offsets": {"first_seen_at": -225, "last_seen_at": -225},
+        }),
+        ("incident", "incidents", "demo-incident", -200, {
+            "title": "Synthetic demonstration incident",
+            "status": "detected",
+            "severity": "medium",
+            "priority_score": 0.3,
+            "affected_features": ["exploration"],
+            "affected_services": ["demo-seed"],
+            "customer_visible": False,
+            "revenue_exposure": False,
+            "security_exposure": False,
+            "data_integrity_exposure": False,
+            "signal_count": 1,
+            "operator_notes": [],
+            "last_action": "Synthetic detection",
+            "_time_offsets": {"opened_at": -200},
+        }),
+        ("run", "runs", "demo-run", -150, {
+            "objective_id": "synthetic-objective",
+            "controller": "governance",
+            "queue": "default",
+            "status": "completed",
+            "attempt": 1,
+            "error": None,
+            "output": {"summary": "Synthetic demonstration run output."},
+            "_time_offsets": {"started_at": -150, "completed_at": -120},
+        }),
+        ("review", "reviews", "demo-review", -100, {
+            "objective_id": "synthetic-objective",
+            "status": "pending",
+            "mutation_ids": ["mut_synthetic000000000000000000000001"],
+            "reviewed_by": None,
+            "review_notes": None,
+        }),
     )
     records: list[SeedRecord] = []
     ids: dict[str, str] = {}
@@ -184,4 +262,10 @@ def v1_manifest(namespace: str = DEFAULT_NAMESPACE) -> SeedManifest:
         elif record.logical_name == "report-entitlement":
             record.payload["resource_id"] = ids["protected-report"]
             record.payload["settlement_id"] = ids["report-settlement"]
+        elif record.logical_name == "demo-continuation":
+            record.payload["principal_id"] = ids["demo-operator"]
+        elif record.logical_name == "demo-exception":
+            record.payload["affected_tenants"] = [ids["demo-tenant"]]
+        elif record.logical_name == "demo-incident":
+            record.payload["affected_tenants"] = [ids["demo-tenant"]]
     return build_manifest(records, namespace=namespace)

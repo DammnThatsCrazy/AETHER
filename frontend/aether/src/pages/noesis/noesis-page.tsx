@@ -7,6 +7,7 @@ import {
   NoesisContextActions,
   useNoesisQuery,
 } from '@aether-app/features/noesis';
+import { ContinueOnPhone } from '@aether-app/features/continuation';
 import { restClient } from '@aether-app/lib/api/rest/client';
 
 const capabilitiesSchema = z.object({
@@ -163,6 +164,7 @@ export function NoesisPage() {
       )}
       <div className="flex-1 min-w-0">
         <NoesisContextActions />
+        <ContinueOnPhone />
         {(historyError || capabilitiesError) && (
           <div role="alert" className="mb-3 rounded border border-danger/40 bg-danger/10 p-3 text-xs text-danger">
             Noesis metadata unavailable. Conversation queries remain available; history or suggested prompts could not be loaded.

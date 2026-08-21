@@ -25,6 +25,10 @@ from services.notification_intelligence.models import (  # noqa: E402
     NotificationSeverity,
     OperatorActionType,
 )
+from services.notification_intelligence.projection import (  # noqa: E402
+    PROJECTION_FIELDS,
+    MobileNotificationProjection,
+)
 
 TS_PATH = REPO_ROOT / "packages" / "shared" / "notification.ts"
 
@@ -68,6 +72,24 @@ def test_event_field_parity():
     ts = _interface_fields("IntelligenceNotificationEvent")
     py = set(IntelligenceNotificationEvent.model_fields.keys())
     assert ts == py, f"IntelligenceNotificationEvent drift: TS-only={ts - py}, PY-only={py - ts}"
+
+
+def test_projection_shape_parity():
+    """MobileNotificationProjection (projection.py) ↔ notification.ts twin."""
+    ts = _interface_fields("MobileNotificationProjection")
+    py = set(MobileNotificationProjection.model_fields.keys())
+    assert ts == py, (
+        f"MobileNotificationProjection drift: TS-only={ts - py}, PY-only={py - ts}"
+    )
+
+
+def test_projection_fields_on_event_parity():
+    """The redacted push-projection fields must be carried by the canonical
+    notification event on BOTH sides (so a push never needs a second record)."""
+    event_ts = _interface_fields("IntelligenceNotificationEvent")
+    event_py = set(IntelligenceNotificationEvent.model_fields.keys())
+    assert set(PROJECTION_FIELDS) <= event_ts, f"TS missing {set(PROJECTION_FIELDS) - event_ts}"
+    assert set(PROJECTION_FIELDS) <= event_py, f"PY missing {set(PROJECTION_FIELDS) - event_py}"
 
 
 def test_barrel_exports_notification():

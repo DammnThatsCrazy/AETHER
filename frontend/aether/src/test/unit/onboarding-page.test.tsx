@@ -36,7 +36,9 @@ describe('Aether Onboarding Center', () => {
     expect(screen.getByText('SDK installed')).toBeInTheDocument();
     expect(screen.getByText('No blockers')).toBeInTheDocument();
     expect(await screen.findByTestId('comms-connect-onboarding-step')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Connect Klaviyo' })).toBeInTheDocument();
+    // The Connect <button> renders only after the connectors catalog resolves;
+    // findByRole waits so the assertion is deterministic under CI load.
+    expect(await screen.findByRole('button', { name: 'Connect Klaviyo' })).toBeInTheDocument();
   });
 
   it('lists every registered communications provider in the comms onboarding step', async () => {

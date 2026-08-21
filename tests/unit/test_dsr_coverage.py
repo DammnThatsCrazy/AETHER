@@ -28,6 +28,32 @@ def test_all_mobile_components_are_registered():
     assert {"continuation_records", "mobile_installations", "client_sync_records"} <= components
 
 
+def test_kyber_device_components_are_registered_and_hook_named():
+    """The operator-keyed kyber device stores are gated with the right hook
+    name (M8-E1): each entry must expose delete_by_operator on its repo file."""
+    components = gate._dsr_components(ROOT)
+    kyber = {
+        "kyber_trusted_devices",
+        "kyber_webauthn_credentials",
+        "kyber_device_proof_keys",
+    }
+    assert kyber <= components
+    for component in kyber:
+        spec = gate.MOBILE_DSR_COVERAGE[component]
+        assert spec["hook"] == "delete_by_operator", component
+        assert gate._repo_defines_hook(ROOT, str(spec["repo"]), "delete_by_operator")
+
+
+def test_missing_kyber_component_fails(monkeypatch):
+    # Drop a kyber device component from DSR_COMPONENTS → the gate must fail
+    # (the device store would silently skip erasure).
+    original = gate._dsr_components
+    monkeypatch.setattr(
+        gate, "_dsr_components", lambda root: original(root) - {"kyber_trusted_devices"}
+    )
+    assert gate.run(ROOT) != 0
+
+
 def test_missing_component_fails(monkeypatch):
     # Drop one mobile component from the parsed DSR_COMPONENTS → the gate must fail.
     original = gate._dsr_components

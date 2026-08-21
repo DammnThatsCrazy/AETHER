@@ -1,8 +1,19 @@
 # =============================================================================
-# Aether Platform — Staging Docker Compose
+# Aether Platform — LEGACY local stack (QUARANTINED)
 #
-# This is the staging-equivalent stack. Run on a machine with Docker:
-#   cd deploy/staging
+# SUPERSEDED. This is NOT the canonical staging profile. The canonical staging
+# profile (config/deployment_profiles.yaml) forbids MSK (Kafka), ElastiCache
+# (Redis), and self-managed Prometheus/Grafana; this compose provisions all
+# three and predates that cost policy. It is retained ONLY as a local dev
+# harness for Redis/Kafka/Prometheus, is validated by no CI gate, and must not
+# be presented as a staging deployment. The canonical staging path is the
+# Terraform root (AWS Deployment/aether-aws/terraform/profiles/staging.tfvars)
+# exercised by .github/workflows/staging-lifecycle.yml.
+#
+# scripts/release/check_delivery_compose_parity.py enforces that this LEGACY
+# marker stays on this file and that no compose file outside deploy/legacy-staging/
+# may claim the staging profile. Run on a machine with Docker:
+#   cd deploy/legacy-staging
 #   ./bootstrap.sh
 #
 # Or manually:

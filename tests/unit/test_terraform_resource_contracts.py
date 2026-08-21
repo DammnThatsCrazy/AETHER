@@ -36,6 +36,12 @@ PROFILES = yaml.safe_load(PROFILES_PATH.read_text())
 CLOUD_PROFILES = ("staging", "production-lean", "production-scale",
                   "enterprise-isolated")
 
+# Cloud ∪ ephemeral-class, the parity restatement: expected_by_profile
+# expectations may name any Terraform-selectable profile. demo/preview appear
+# in nat_gateway_unless_explicit at zero (cost-capped), which is exactly the
+# kind of entry this constant exists to admit.
+SELECTABLE_PROFILES = CLOUD_PROFILES + ("demo", "preview")
+
 CARDINALITY = re.compile(r"^(zero|at_least_one|exactly:\d+)$")
 TF_TYPE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
 
@@ -389,5 +395,6 @@ def test_a_per_profile_expectation_names_the_type_it_counts():
             f"{kind}.{key}: expected_by_profile_resource_type {counted!r} is not "
             f"one of the rule's own resource_types")
         for profile, spec in expectation.items():
-            assert profile in CLOUD_PROFILES, f"{key}: unknown profile {profile}"
+            assert profile in SELECTABLE_PROFILES, (
+                f"{key}: unknown profile {profile}")
             assert CARDINALITY.match(str(spec)), f"{key}.{profile}: {spec!r}"

@@ -34,7 +34,7 @@ promotion changes what exists.
   and targets staging only. Production promotion is manual and requires the
   staged workflow-run ID plus the approved release-manifest checksum.
 - Local/staging stack: `docker-compose.yml` (+ profiles) and
-  `deploy/staging/{bootstrap.sh,docker-compose.staging.yml,kafka_topics.sh}`.
+  `deploy/legacy-staging/{bootstrap.sh,docker-compose.staging.yml,kafka_topics.sh}`.
 
 ## Pre-deploy checklist
 

@@ -195,6 +195,28 @@ required_resources:
     evidence: aws_secretsmanager_secret.this
     terraform_gate: null
 
+  credential_kms:
+    description: >-
+      The dedicated customer-managed CMK for envelope-encrypted provider
+      credentials (modules/kms_credentials). Deliberately separate from the
+      Secrets Manager CMK under `secrets_kms`: that key encrypts static secret
+      stubs, this one is the root of trust for every per-tenant provider
+      credential the AwsKmsEnvelopeCredentialCipher writes, and the two carry
+      different rotation, access and blast-radius profiles. Provisioned in every
+      cloud profile (a non-local deployment stores real provider credentials, so
+      the cipher is CREDENTIAL_CIPHER=aws_kms and needs the key). The key id
+      reaches the ECS task definition as CREDENTIAL_KMS_KEY_ID and the task
+      role's least-privilege crypto grant is attached from the module's
+      iam_policy_json output.
+    module_address: module.kms_credentials
+    resource_types:
+      - aws_kms_key
+      - aws_kms_alias
+    cardinality: exactly:2
+    evidence: aws_kms_key.this
+    terraform_gate: local.enable_credential_kms
+    also_applies_to: [staging, production-scale, enterprise-isolated]
+
   cloudwatch_alarms:
     description: >-
       CloudWatch alarms and the dashboard, delivered to the SNS alert topic.
@@ -456,6 +478,8 @@ forbidden_resources:
     expected_by_profile_resource_type: aws_nat_gateway
     expected_by_profile:
       staging: zero
+      demo: zero
+      preview: zero
       production-lean: zero
       production-scale: exactly:1
       enterprise-isolated: exactly:3

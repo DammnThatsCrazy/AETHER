@@ -32,6 +32,7 @@ import { UsagePlanPage } from '@aether-app/pages/usage-plan';
 import { UserProfilePage } from '@aether-app/pages/user-profile';
 import { UsersPage } from '@aether-app/pages/users';
 import { ValueReviewPage } from '@aether-app/pages/value-review';
+import { NotificationCenterPage } from '@aether-app/pages/notifications/notification-center-page';
 
 const providerState = vi.hoisted(() => ({
   account: 'empty' as 'empty' | 'error',
@@ -45,6 +46,7 @@ const providerState = vi.hoisted(() => ({
   settings: 'empty' as 'empty' | 'error',
   userProfile: 'empty' as 'empty' | 'error',
   rewards: 'empty' as 'empty' | 'error',
+  notification: 'empty' as 'empty' | 'error',
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -72,6 +74,8 @@ const mocks = vi.hoisted(() => ({
   securityDataRetention: vi.fn(),
   securityMyPermissions: vi.fn(),
   securityPolicies: vi.fn(),
+  notificationChannelsGetConfig: vi.fn(),
+  notificationChannelsUpdateConfig: vi.fn(),
 }));
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
@@ -110,6 +114,10 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
       policies: mocks.securityPolicies,
     },
     valueReview: { overview: mocks.valueReview },
+    notificationChannels: {
+      getConfig: mocks.notificationChannelsGetConfig,
+      updateConfig: mocks.notificationChannelsUpdateConfig,
+    },
   },
 }));
 
@@ -415,6 +423,23 @@ vi.mock('@aether-app/features/rewards/use-rewards', () => {
 
 vi.mock('@aether-app/components/graph/graph-canvas', () => ({
   GraphCanvas: () => <div data-testid="empty-graph-canvas" />,
+}));
+
+vi.mock('@aether-app/features/notifications/use-inbox', () => ({
+  useInbox: () => ({
+    data: providerState.notification === 'empty' ? [] : undefined,
+    isLoading: false,
+    error: providerState.notification === 'error' ? new Error('notifications offline') : null,
+    refetch: vi.fn(),
+  }),
+  useInboxUnreadCount: () => ({
+    data: providerState.notification === 'empty' ? { unread: 0 } : undefined,
+    isLoading: false,
+    error: null,
+  }),
+  useMarkInboxRead: () => ({ mutate: vi.fn(), isLoading: false, error: null }),
+  useMarkAllInboxRead: () => ({ mutate: vi.fn(), isLoading: false, error: null }),
+  useArchiveInbox: () => ({ mutate: vi.fn(), isLoading: false, error: null }),
 }));
 
 function renderRoute(Page: ComponentType, route = '/', routePattern = route) {
@@ -772,6 +797,14 @@ const cases: RouteStateCase[] = [
     emptyText: 'No lifecycle transitions recorded',
     errorText: 'domain backend offline',
   },
+  {
+    route: '/notifications',
+    Page: NotificationCenterPage,
+    empty: () => { providerState.notification = 'empty'; },
+    fail: () => { providerState.notification = 'error'; },
+    emptyText: 'No notifications',
+    errorText: 'Failed to load notifications',
+  },
 ];
 
 describe('Aether page route-state family', () => {
@@ -788,6 +821,9 @@ describe('Aether page route-state family', () => {
     providerState.rewards = 'empty';
     providerState.settings = 'empty';
     providerState.userProfile = 'empty';
+    providerState.notification = 'empty';
+    mocks.notificationChannelsGetConfig.mockResolvedValue({ tenant_id: 'tenant-local' });
+    mocks.notificationChannelsUpdateConfig.mockResolvedValue({});
   });
 
   it.each(cases)('$route renders successful empty from a successful backend response', async ({

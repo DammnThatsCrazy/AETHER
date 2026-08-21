@@ -99,6 +99,8 @@ jobs:
           - production-lean
           - production-scale
           - enterprise-isolated
+          - demo
+          - preview
     defaults:
       run:
         working-directory: AWS Deployment/aether-aws/terraform
@@ -108,7 +110,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~1.9'
+          terraform_version: '~1.15'
 
       - name: Prepare checked-in profile and CI-only variables
         env:
@@ -172,6 +174,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # demo/preview are ephemeral-class and deliberately excluded from
+        # remote-plan.
         profile:
           - staging
           - production-lean
@@ -203,7 +207,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~1.9'
+          terraform_version: '~1.15'
 
       - uses: actions/setup-python@v5
         with:

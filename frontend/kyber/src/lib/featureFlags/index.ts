@@ -16,6 +16,7 @@ interface FeatureFlags {
   readonly enableAiEfficiency: boolean;
   readonly enableTargetingIntelligence: boolean;
   readonly enableAgentCommandCenter: boolean;
+  readonly enableKyberContinuations: boolean;
   readonly kyberStablecoinOps: boolean;
   readonly kyberDerivativesOps: boolean;
   readonly kyberInteropOps: boolean;
@@ -37,6 +38,9 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableAiEfficiency: false,
   enableTargetingIntelligence: false,
   enableAgentCommandCenter: false,
+  // Continuation routing lands in M5 — the hooks are inert stubs, default OFF
+  // (D8) so no runtime behavior changes until the operator continuation router ships.
+  enableKyberContinuations: false,
   // Economic & interoperability ops surfaces default OFF with their domains
   kyberStablecoinOps: false,
   kyberDerivativesOps: false,

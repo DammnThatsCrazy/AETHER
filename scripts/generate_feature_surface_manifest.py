@@ -51,6 +51,11 @@ NON_SURFACE: dict[str, str] = {
     "/me": "the caller's own account; an operator's own account is /v1/kyber/me",
     "/settings": "tenant self-configuration; operators must not mutate it from a mirror",
     "/settings/notifications": "tenant self-configuration",
+    "/notifications": (
+        "tenant's own notification inbox is self-scoped attention data not "
+        "projected into the tenant graph; operator signals have their own ops "
+        "exception queue (services/kyber/ops/exceptions)"
+    ),
     "/billing": "tenant billing portal; operator view is /v1/kyber/revops",
     "/usage-plan": "tenant plan self-service; operator view is /v1/kyber/revops",
     "/security": "tenant's own security settings; operator plane is /security/*",

@@ -153,6 +153,7 @@ async def route_notification(alert: dict[str, Any]) -> dict[str, Any]:
 
     outcome: dict[str, Any]
     try:
+        from repositories.repos import UserNotificationChannelRepository
         from services.notification_intelligence.delivery_router import DeliveryRouter
 
         notification = SimpleNamespace(
@@ -164,13 +165,21 @@ async def route_notification(alert: dict[str, Any]) -> dict[str, Any]:
             summary=alert.get("message", ""),
             alert_id=alert.get("alert_id"),
         )
-        results = await DeliveryRouter().route(notification)
+        # Route through the tenant's ACTUALLY configured channels (same repo the
+        # notification consumer uses) — never a bare, unconfigured router.
+        results = await DeliveryRouter(
+            channel_repo=UserNotificationChannelRepository()
+        ).route(notification)
+        channels = [
+            {"channel_type": r.channel_type, "success": r.success}
+            for r in results
+        ]
+        # No zero-channel false success: an alert with no configured channels is
+        # NOT "routed". The alert record itself remains the durable signal.
         outcome = {
-            "routed": True,
-            "channels": [
-                {"channel_type": r.channel_type, "success": r.success}
-                for r in results
-            ],
+            "routed": bool(channels),
+            "reason": None if channels else "no_channels_configured",
+            "channels": channels,
         }
     except Exception as exc:
         # Fail-open: the alert record itself is the durable signal; channel

@@ -5,12 +5,13 @@ Where check_cost_policy.py validates the canonical policy DATA
 (config/deployment_profiles.yaml), this validator asserts the Terraform in
 `AWS Deployment/aether-aws/terraform/` actually encodes it:
 
-  1. The `deployment_profile` variable exists with the four valid profiles.
+  1. The `deployment_profile` variable exists with the six valid profiles
+     (four cloud-class + demo/preview ephemeral-class).
   2. The profile `locals` derive an `enable_*` toggle for every forbidden
      production-lean resource, and each is FALSE-by-derivation when the profile
      is production-lean (i.e. `local.scale || local.enterprise`, or literal
      `false`). `enable_legacy_rds` must be literally `false`.
-  3. The four `profiles/*.tfvars` files exist and set a valid deployment_profile
+  3. The six `profiles/*.tfvars` files exist and set a valid deployment_profile
      matching their filename.
 
 Static analysis only (regex + a tiny boolean evaluator over the trusted, static
@@ -32,7 +33,7 @@ TF_DIR = "AWS Deployment/aether-aws/terraform"
 PROFILES_TF = f"{TF_DIR}/profiles.tf"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 
-VALID_PROFILES = ["staging", "production-lean", "production-scale", "enterprise-isolated"]
+VALID_PROFILES = ["staging", "production-lean", "production-scale", "enterprise-isolated", "demo", "preview"]
 
 # Maps a production-lean forbidden resource (config/deployment_profiles.yaml) to
 # the Terraform local that gates it. Resources that are not per-resource toggles
@@ -135,7 +136,7 @@ def check() -> int:
               "deployment_profile variable declared",
               "deployment_profile variable missing from variables.tf")
     r.require(all(p in vars_text for p in VALID_PROFILES) and "contains(" in vars_text,
-              "deployment_profile validation lists the four valid profiles",
+              "deployment_profile validation lists the six valid profiles",
               "deployment_profile validation does not list all valid profiles")
 
     # --- profiles.tf locals ---

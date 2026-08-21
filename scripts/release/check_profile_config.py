@@ -46,6 +46,20 @@ def check() -> int:
     r.require(isinstance(profiles, dict) and bool(profiles),
               "profiles block present", "profiles block missing or empty")
 
+    # Canonical-count enforcement is TWO-directional. A profile added to the
+    # matrix must be added here first (missing), and a profile removed from the
+    # matrix must be removed here too (extra) — otherwise the canonical set
+    # drifts one profile at a time with every check passing. This is the guard
+    # that keeps the documented "eight profiles" claim truthful.
+    canonical_set = set(CANONICAL_PROFILES)
+    declared_set = set(profiles)
+    r.require(
+        declared_set == canonical_set,
+        f"profile set exactly matches canonical {len(canonical_set)} profiles",
+        f"profile set mismatch: missing={sorted(canonical_set - declared_set)} "
+        f"extra={sorted(declared_set - canonical_set)}",
+    )
+
     for name in CANONICAL_PROFILES:
         if name not in profiles:
             r.fail(f"missing canonical profile: {name}")

@@ -1,27 +1,51 @@
 /**
- * Aether Mobile root — navigation skeleton.
+ * Aether Mobile root — typed navigator wiring the five M3b feature screens
+ * (Today / Copilot / Explore / Alerts / Account).
  *
- * C4 lands a compiling shell: the SDK is wired (see ./client) and the app renders a
- * placeholder home surface. The full feature screens (Today / Copilot / Explore /
- * Pulse / exceptions) and governed mobile actions are C5–C7, not this session.
+ * Navigation uses `createNavigator<AppRoutes>()` from `@aether/mobile-ui`: the app
+ * holds the active tab, pushes typed routes through the navigator, and renders the
+ * matching screen inside the shared `Screen` shell. All screens are read-only
+ * (M2 "no offline mutation" invariant); M6 adds governed actions.
  */
-import React from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { SafeAreaView, StyleSheet, View } from 'react-native';
+
+import { theme } from '@aether/mobile-ui';
+
+import { TabBar } from './components/TabBar';
+import { navigate } from './navigator';
+import type { AppTab } from './routes';
+import AccountScreen from './screens/AccountScreen';
+import AlertsScreen from './screens/AlertsScreen';
+import CopilotScreen from './screens/CopilotScreen';
+import ExploreScreen from './screens/ExploreScreen';
+import TodayScreen from './screens/TodayScreen';
 
 export default function App(): React.JSX.Element {
+  const [tab, setTab] = useState<AppTab>('Today');
+
+  const selectTab = (next: AppTab): void => {
+    setTab(next);
+    // Keep the typed navigator in sync — root tabs are pushed routes, so deep-link
+    // / goBack semantics stay coherent with the registry in `packages/mobile-ui`.
+    navigate(next);
+  };
+
   return (
     <SafeAreaView style={styles.root}>
-      <View style={styles.center}>
-        <Text style={styles.title}>Aether</Text>
-        <Text style={styles.subtitle}>Intelligence companion</Text>
+      <View style={styles.body}>
+        {tab === 'Today' && <TodayScreen />}
+        {tab === 'Copilot' && <CopilotScreen />}
+        {tab === 'Explore' && <ExploreScreen />}
+        {tab === 'Alerts' && <AlertsScreen />}
+        {tab === 'Account' && <AccountScreen />}
       </View>
+      <TabBar active={tab} onSelect={selectTab} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0b0d12' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#f5f7fa', fontSize: 28, fontWeight: '700' },
-  subtitle: { color: '#8b93a7', fontSize: 15, marginTop: 6 },
+  root: { flex: 1, backgroundColor: theme.colors.background },
+  body: { flex: 1 },
 });

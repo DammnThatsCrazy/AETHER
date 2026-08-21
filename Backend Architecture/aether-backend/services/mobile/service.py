@@ -9,6 +9,7 @@ from shared.temporal.instant import try_parse_instant
 
 from repositories.installation_repo import get_installation_repository
 from services.continuation import service as continuation_service
+from services.mobile.config import build_mobile_config, validate_distribution_profile
 
 APP_KIND = "aether"
 
@@ -34,6 +35,8 @@ async def register(
     device_name: Optional[str],
     push_token: Optional[str],
     push_provider: Optional[str],
+    app_version: Optional[str] = None,
+    distribution_profile: Optional[str] = None,
 ) -> dict:
     repo = get_installation_repository()
     installation = await repo.register(
@@ -45,6 +48,8 @@ async def register(
         bundle_id=bundle_id,
         environment=environment,
         device_name=device_name,
+        app_version=app_version,
+        distribution_profile=validate_distribution_profile(distribution_profile),
     )
     subscription = None
     if push_token and push_provider:
@@ -60,27 +65,74 @@ async def register(
     return {"installation": installation, "subscription": subscription}
 
 
-async def get(scope: str, installation_id: str) -> Optional[dict]:
-    return await get_installation_repository().get(scope, installation_id)
+async def get(scope: str, installation_id: str, principal_id: Optional[str] = None) -> Optional[dict]:
+    """Read an installation within the tenant scope.
+
+    ``principal_id`` (when provided) constrains to installations the caller owns.
+    An unowned installation reads as absent — 404-never-403, no existence leak.
+    """
+    row = await get_installation_repository().get(scope, installation_id)
+    if row is None or (principal_id and row.get("principal_id") != principal_id):
+        return None
+    return row
+
+
+async def get_config(
+    *, scope: str, installation_id: str, principal_id: Optional[str] = None
+) -> Optional[dict]:
+    """Assemble the typed mobile config for an installation.
+
+    Returns None when the installation does not exist in the tenant scope OR is
+    not owned by the caller (the route 404s either way — no existence leak). The
+    config's distribution_profile is the installation's declared profile (looked
+    up by installation id); an install registered before the field existed
+    resolves to the ``dev`` default in the response.
+    """
+    repo = get_installation_repository()
+    installation = await repo.get(scope, installation_id)
+    if installation is None or (principal_id and installation.get("principal_id") != principal_id):
+        return None
+    return build_mobile_config(
+        app_kind=APP_KIND,
+        environment=installation.get("environment") or "production",
+        app_version=installation.get("app_version"),
+        distribution_profile=installation.get("distribution_profile"),
+    )
 
 
 async def list_for_principal(scope: str, principal_id: str) -> list[dict]:
     return await get_installation_repository().list_for_principal(scope, principal_id)
 
 
-async def revoke(scope: str, installation_id: str) -> Optional[dict]:
-    return await get_installation_repository().revoke(scope, installation_id)
+async def revoke(scope: str, installation_id: str, principal_id: Optional[str] = None) -> Optional[dict]:
+    """Revoke an installation, restricted to ones the caller owns.
+
+    An unowned (or absent) installation reads as absent — 404-never-403.
+    """
+    repo = get_installation_repository()
+    installation = await repo.get(scope, installation_id)
+    if installation is None or (principal_id and installation.get("principal_id") != principal_id):
+        return None
+    return await repo.revoke(scope, installation_id)
 
 
 async def add_subscription(
     *, scope: str, installation_id: str, principal_id: str, platform: str,
     provider: str, push_token: str, environment: str,
 ) -> Optional[dict]:
+    """Attach a push subscription, restricted to the installation's owner.
+
+    Only the owner may add a subscription to an installation — a caller can never
+    piggyback a push token onto another principal's device (intra-tenant IDOR).
+    The subscription's principal is the installation's canonical owner.
+    """
     repo = get_installation_repository()
-    if await repo.get(scope, installation_id) is None:
+    installation = await repo.get(scope, installation_id)
+    if installation is None or installation.get("principal_id") != principal_id:
         return None
+    owner = installation.get("principal_id") or principal_id
     return await repo.add_subscription(
-        tenant_scope=scope, installation_id=installation_id, principal_id=principal_id,
+        tenant_scope=scope, installation_id=installation_id, principal_id=owner,
         platform=platform, provider=provider, token_hash=hash_push_token(push_token),
         environment=environment,
     )
@@ -158,8 +210,9 @@ async def resolve_deep_link(
     if installation.get("app_kind") != APP_KIND:
         return dict(_RESOLVED_UNRESOLVABLE)
 
-    # 3) Continuation must resolve within the caller's scope (no cross-scope leak).
-    ctx = await continuation_service.get(scope, continuation_id)
+    # 3) Continuation must resolve within the caller's scope AND ownership
+    #    (no cross-scope / cross-principal leak).
+    ctx = await continuation_service.get(scope, continuation_id, principal_id)
     if ctx is None:
         return dict(_RESOLVED_UNRESOLVABLE)
 

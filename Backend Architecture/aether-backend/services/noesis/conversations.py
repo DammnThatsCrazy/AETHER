@@ -8,6 +8,8 @@ from typing import Any, Optional
 from repositories.repos import BaseRepository
 from shared.common.common import ForbiddenError, NotFoundError, utc_now
 
+from services.client_sync.emitter import enqueue_sync_change
+
 from .models import NoesisQueryRequest, NoesisResponse
 
 
@@ -22,6 +24,7 @@ class NoesisConversationStore:
         request: NoesisQueryRequest,
         response: NoesisResponse,
         effective_tenant_id: str,
+        principal_id: Optional[str] = None,
     ) -> str:
         conversation_id = request.conversation_id or response.conversation_id or str(uuid.uuid4())
         now = utc_now().isoformat()
@@ -57,6 +60,16 @@ class NoesisConversationStore:
                 "messages": [user_message, assistant_message],
             }
             await self._repo.insert(conversation_id, record)
+        await enqueue_sync_change(
+            scope_key=f"t:{effective_tenant_id}",
+            # M8-B4: emit under the ACTUAL user principal when one is known so
+            # the DSR client-sync erasure (delete_by_principal on user_id)
+            # actually clears the row — a tenant-id principal would survive.
+            principal_id=principal_id or effective_tenant_id,
+            change_type="conversation_changed",
+            resource_kind="conversation",
+            resource_id=conversation_id,
+        )
         return conversation_id
 
     async def list_for_scope(
