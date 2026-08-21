@@ -10,7 +10,7 @@ on:
     inputs:
       profile:
         type: choice
-        options: [staging, production-lean, production-scale, enterprise-isolated]
+        options: [staging, production-lean, production-scale, enterprise-isolated, demo, preview]
         default: staging
         required: true
       action:
@@ -30,9 +30,10 @@ on:
         description: >-
           Staging wake/sleep shape for the plan. `asleep` drives every ECS
           desired count and autoscaling floor to zero. Ignored by the three
-          production-class profiles, which have no staging_state block in
-          config/runtime_deployment.yaml. Plan-time only — an apply consumes
-          the stored plan and cannot reshape it.
+          production-class profiles and the demo/preview ephemeral profiles,
+          which have no staging_state block in config/runtime_deployment.yaml.
+          Plan-time only — an apply consumes the stored plan and cannot
+          reshape it.
         type: choice
         options: [awake, asleep]
         default: awake
@@ -280,6 +281,8 @@ jobs:
         || inputs.profile == 'production-lean' && 'production-lean-terraform'
         || inputs.profile == 'production-scale' && 'production-scale-terraform'
         || inputs.profile == 'enterprise-isolated' && 'enterprise-terraform'
+        || inputs.profile == 'demo' && 'demo-terraform'
+        || inputs.profile == 'preview' && 'preview-terraform'
         || 'enterprise-terraform' }}
     permissions: {contents: read, actions: read, id-token: write}
     steps:
@@ -293,7 +296,7 @@ jobs:
           test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id required'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::plan_checksum required'; exit 1; }
           case "$PROFILE" in
-            staging|production-lean|production-scale|enterprise-isolated) ;;
+            staging|production-lean|production-scale|enterprise-isolated|demo|preview) ;;
             *) echo "::error::unknown profile ${PROFILE}"; exit 1 ;;
           esac
       - name: Require the complete apply credential set

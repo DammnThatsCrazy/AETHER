@@ -28,6 +28,11 @@ output "task_role_arn" {
   value       = aws_iam_role.task.arn
 }
 
+output "task_role_name" {
+  description = "Task IAM role NAME — aws_iam_role_policy.role takes the name, not the ARN"
+  value       = aws_iam_role.task.name
+}
+
 output "backend_task_definition_arn" {
   description = "Latest ARN of the backend task definition"
   value       = aws_ecs_task_definition.backend.arn

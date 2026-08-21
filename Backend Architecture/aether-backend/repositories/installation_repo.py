@@ -105,6 +105,8 @@ def _install_row(rec: dict) -> dict:
         "platform": rec["platform"], "bundle_id": rec["bundle_id"],
         "environment": rec["environment"], "trust_state": rec["trust_state"],
         "device_name": (rec.get("data") or {}).get("device_name"),
+        "app_version": rec.get("app_version"),
+        "distribution_profile": rec.get("distribution_profile"),
         "created_at": _iso(rec.get("created_at")), "updated_at": _iso(rec.get("updated_at")),
         "revoked_at": _iso(rec.get("revoked_at")),
     }
@@ -132,6 +134,17 @@ class InstallationRepository:
         if pool is not None and not self._tables_ensured:
             await pool.execute(MOBILE_INSTALLATIONS_DDL)
             await pool.execute(PUSH_SUBSCRIPTIONS_DDL)
+            # app_version / distribution_profile are added by alembic
+            # 20260830_app_version_registration; the idempotent guard keeps the
+            # direct-SQL repo self-healing on a pre-existing table.
+            await pool.execute(
+                "ALTER TABLE mobile_installations "
+                "ADD COLUMN IF NOT EXISTS app_version TEXT"
+            )
+            await pool.execute(
+                "ALTER TABLE mobile_installations "
+                "ADD COLUMN IF NOT EXISTS distribution_profile TEXT"
+            )
             for idx in MOBILE_INSTALLATION_INDEXES:
                 await pool.execute(idx)
             self._tables_ensured = True
@@ -143,6 +156,8 @@ class InstallationRepository:
         self, *, tenant_scope: str, principal_id: str, installation_id: Optional[str],
         app_kind: str, platform: str, bundle_id: str, environment: str,
         device_name: Optional[str] = None,
+        app_version: Optional[str] = None,
+        distribution_profile: Optional[str] = None,
     ) -> dict:
         """Upsert an installation by id (re-registration updates in place)."""
         now = utc_now()
@@ -157,6 +172,8 @@ class InstallationRepository:
                         "app_kind": app_kind, "platform": platform, "bundle_id": bundle_id,
                         "environment": environment, "trust_state": "registered",
                         "data": data, "updated_at": now, "revoked_at": None,
+                        "app_version": app_version,
+                        "distribution_profile": distribution_profile,
                     })
                     return _install_row(existing)
                 rec = {
@@ -164,6 +181,8 @@ class InstallationRepository:
                     "app_kind": app_kind, "platform": platform, "bundle_id": bundle_id,
                     "environment": environment, "trust_state": "registered", "data": data,
                     "created_at": now, "updated_at": now, "revoked_at": None,
+                    "app_version": app_version,
+                    "distribution_profile": distribution_profile,
                 }
                 _MEM_INSTALLATIONS[iid] = rec
                 return _install_row(rec)
@@ -171,18 +190,22 @@ class InstallationRepository:
             """
             INSERT INTO mobile_installations (
                 id, tenant_scope, principal_id, app_kind, platform, bundle_id,
-                environment, trust_state, data, created_at, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,'registered',$8::jsonb,$9,$9)
+                environment, trust_state, data, created_at, updated_at,
+                app_version, distribution_profile
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,'registered',$8::jsonb,$9,$9,$10,$11)
             ON CONFLICT (id) DO UPDATE SET
                 app_kind = EXCLUDED.app_kind, platform = EXCLUDED.platform,
                 bundle_id = EXCLUDED.bundle_id, environment = EXCLUDED.environment,
                 trust_state = 'registered', data = EXCLUDED.data,
-                updated_at = EXCLUDED.updated_at, revoked_at = NULL
+                updated_at = EXCLUDED.updated_at, revoked_at = NULL,
+                app_version = EXCLUDED.app_version,
+                distribution_profile = EXCLUDED.distribution_profile
             WHERE mobile_installations.tenant_scope = EXCLUDED.tenant_scope
             RETURNING *
             """,
             iid, tenant_scope, principal_id, app_kind, platform, bundle_id,
             environment, json.dumps(data, default=str), now,
+            app_version, distribution_profile,
         )
         return _install_row(dict(row))
 

@@ -142,6 +142,7 @@ async def test_handler_resumes_from_payload_cursor_not_row_zero(monkeypatch):
         job_id="job_manual_resume",
         tenant_id=TENANT,
         correlation_id=replay_job["id"],
+        worker_id="test_worker",
         heartbeat=AsyncMock(return_value=True),
         emit_event=AsyncMock(return_value=None),
     )
@@ -182,11 +183,19 @@ async def test_interruption_checkpoint_then_worker_retry_resumes(monkeypatch):
     monkeypatch.setattr(replay_mod.SemanticEventConsumer, "on_validated_event", _crashy)
 
     handler = HANDLER_REGISTRY[SEMANTIC_REPLAY_JOB_TYPE]
-    job = await get_jobs_repository().get_job_any(platform_job_id)
+    jobs_repo = get_jobs_repository()
+    # M8-B3: the checkpoint write is lease-guarded, so simulate the REAL worker
+    # path — claim the job (leased_by=test_worker) before running the handler,
+    # exactly as JobWorker does after claim_next. A direct invocation without a
+    # claim would now (correctly) have its checkpoint writes refused.
+    claimed = await jobs_repo.claim_next(worker_id="test_worker")
+    assert claimed is not None and claimed["id"] == platform_job_id
+    job = await jobs_repo.get_job_any(platform_job_id)
     ctx = JobContext(
         job_id=platform_job_id,
         tenant_id=TENANT,
         correlation_id=result["job_id"],
+        worker_id="test_worker",
         heartbeat=AsyncMock(return_value=True),
         emit_event=AsyncMock(return_value=None),
     )
@@ -201,8 +210,15 @@ async def test_interruption_checkpoint_then_worker_retry_resumes(monkeypatch):
     }
     assert processed == ["evt_000", "evt_001"]
 
-    # Restart: the worker claims the (still queued) job and the handler reads
-    # the persisted cursor back — evt_000/evt_001 are never reprocessed.
+    # Restart: the simulated crash left the job claimed/running with a live
+    # lease. Model real recovery — the lease expires, the sweeper reaps it back
+    # to retrying, then a fresh worker claims it and the handler reads the
+    # persisted cursor back — evt_000/evt_001 are never reprocessed.
+    _EXPIRED = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    from repositories.jobs_repo import _MEM_JOBS  # in-memory backend fixture
+
+    _MEM_JOBS[platform_job_id]["lease_expires_at"] = _EXPIRED
+    await jobs_repo.sweep_expired_leases()
     monkeypatch.setattr(replay_mod.SemanticEventConsumer, "on_validated_event", _tracking_factory(processed, original))
     assert await JobWorker().run_once() is True
 

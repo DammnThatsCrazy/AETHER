@@ -41,17 +41,25 @@ Aether stores audit trail + execution outcome
 
 | Rail | Status | Notes |
 |---|---|---|
-| `recommend_only` | Production | No delivery; eligibility surfaced via API/UI |
-| `manual_approval` | Production | Requires operator approve/reject before action |
-| `manual_export` | Production | CSV/JSON batch export for tenant processing |
-| `tenant_webhook` | Production | Signed HMAC payload delivered to tenant URL |
-| `onchain_claim` | Production (EVM) | EIP-191 proof for tenant-owned EVM contract |
+| `recommend_only` | Release-ready | No delivery; eligibility surfaced via API/UI |
+| `manual_approval` | Release-ready | Requires operator approve/reject before action |
+| `manual_export` | Release-ready | CSV/JSON batch export for tenant processing |
+| `tenant_webhook` | Release-ready | Signed HMAC payload delivered to tenant URL |
+| `onchain_claim` | Release-ready (EVM) | EIP-191 proof for tenant-owned EVM contract |
 | `onchain_claim` (SVM/NEAR/etc.) | Beta | Proof format defined; not production-verified |
 | `stripe_credit` | Beta | Action payload only; tenant executes |
 | `loyalty_points` | Beta | Action payload only; tenant executes |
 | `coupon` | Beta | Action payload only; tenant executes |
 | `internal_credit` | Beta | Action payload only; tenant executes |
 | `x402_credit` | Beta | Action payload only; tenant executes |
+
+> **Readiness vocabulary.** "Release-ready" in the table is the readiness
+> scorecard's 4/5 band (`scripts/production_status.py`, `make production-status`),
+> which marks **smart contracts / proofs / rewards** release-ready with a release
+> blocker: external certification is still required before any mainnet deployment
+> with real funds. It is *not* a claim that rewards are production + scale ready
+> (5/5) or that an external audit has been completed. The scorecard is the
+> canonical readiness authority.
 
 ## Attribution Requirements
 
@@ -145,8 +153,10 @@ Events that can trigger reward eligibility (from `EVENT_REGISTRY.md`):
 
 ## Release Status
 
-**EVM on-chain claim proof**: Production-ready (pending external smart contract audit).
-**Web2 rails**: Production-ready.
+**EVM on-chain claim proof**: Release-ready (readiness scorecard 4/5 for smart
+contracts / proofs / rewards — pending external smart contract audit).
+**Web2 rails**: Release-ready (readiness scorecard 4/5; the scorecard is the
+canonical authority via `make production-status`).
 **Non-EVM proofs**: Beta.
 **Beta rails** (stripe_credit, loyalty_points, coupon, internal_credit, x402_credit): Beta.
 

@@ -54,6 +54,8 @@ export interface MobileInstallation {
   environment: string;
   device_name?: string | null;
   trust_state: InstallationTrustState;
+  app_version?: string | null;
+  distribution_profile?: string | null;
   created_at: string;
   last_seen_at?: string | null;
   revoked_at?: string | null;
@@ -67,6 +69,8 @@ export interface InstallationRegistration {
   device_name?: string | null;
   push_token?: string | null;
   push_provider?: PushProvider | null;
+  app_version?: string | null;
+  distribution_profile?: string | null;
 }
 
 export interface PushSubscription {

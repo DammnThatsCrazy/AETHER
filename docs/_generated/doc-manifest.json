@@ -6613,6 +6613,19 @@
       "status": "alpha"
     },
     {
+      "path": "docs/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md",
+      "title": "Kyber Mobile — Command Security Model",
+      "slug": "kyber/mobile-command-security",
+      "section": "kyber",
+      "audience": [
+        "architect",
+        "security",
+        "mobile",
+        "operator"
+      ],
+      "status": "stable"
+    },
+    {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
     },
     {
@@ -6659,6 +6672,19 @@
         "mobile"
       ],
       "status": "alpha"
+    },
+    {
+      "path": "docs/source-of-truth/MOBILE_DISTRIBUTION.md",
+      "title": "Mobile Distribution — profiles, versions, and honest release posture",
+      "slug": "mobile/distribution",
+      "section": "mobile",
+      "audience": [
+        "architect",
+        "mobile",
+        "release",
+        "security"
+      ],
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/MOBILE_PLATFORM.md",

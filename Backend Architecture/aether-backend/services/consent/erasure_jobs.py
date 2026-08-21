@@ -20,6 +20,12 @@ its own isolated try/except and each marked with its OWN real erased-row count:
 (sync_change_log). A store is never marked with a fabricated count; a per-store
 failure marks that component ``failed`` and keeps the whole job retryable.
 
+The operator (kyber) device plane is erased the same way (M8-E1): three stores —
+``kyber_trusted_devices``, ``kyber_webauthn_credentials``,
+``kyber_device_proof_keys`` — each erased by the DSR subject as an operator id
+and each marked with its own real erased-row count. The append-only
+``kyber_device_approval_events`` audit ledger is NOT erased (preserve/legal hold).
+
 Finally it reaches the semantic-intelligence plane, hard-deleting the subject's
 semantic observations, sentiment, Gold aggregate state and review-queue rows and
 marking the four semantic components (``semantic_observations``,
@@ -31,6 +37,8 @@ marked, so semantic data silently survived an erasure the DSR record reported as
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from shared.logger.logger import get_logger, metrics
 
@@ -57,6 +65,33 @@ MEASUREMENT_COMPONENT = "attribution_records"
 MOBILE_CONTINUATION_COMPONENT = "continuation_records"
 MOBILE_INSTALLATION_COMPONENT = "mobile_installations"
 MOBILE_CLIENT_SYNC_COMPONENT = "client_sync_records"
+
+# The operator (kyber) device-plane components (M8-E1). A data-subject erasure
+# that names an operator physically erases the device personal data: trusted
+# devices, WebAuthn credentials and device proof keys. The append-only
+# ``kyber_device_approval_events`` audit ledger is deliberately NOT covered —
+# storage policy is ``preserve``/legal hold, and a DSR must not destroy the
+# evidence of who approved which machine.
+KYBER_DEVICE_COMPONENT = "kyber_trusted_devices"
+KYBER_WEBAUTHN_COMPONENT = "kyber_webauthn_credentials"
+KYBER_PROOF_KEY_COMPONENT = "kyber_device_proof_keys"
+
+
+def _kyber_device_eraser(repo_cls: type) -> Any:
+    """Build a mobile-eraser-shaped hook for one kyber device store.
+
+    The mobile erasure loop calls ``erase(scope, user_id)``; kyber device stores
+    are operator-keyed and NOT tenant-scoped, so the hook ignores ``scope`` and
+    erases by the DSR subject. A subject who is not an operator (the normal
+    tenant-DSR case) erases 0 rows and is marked ``completed`` with a real zero
+    receipt — the hook is idempotent and never fabricates a count.
+    """
+
+    async def _erase(_scope: str, operator_id: str) -> int:
+        return await repo_cls().delete_by_operator(operator_id)
+
+    return _erase
+
 
 # The semantic-intelligence-plane dsr_propagation components. These four are
 # declared as expected components in dsr_propagation.models.DSR_COMPONENTS, so
@@ -154,15 +189,25 @@ def register_consent_erasure_handler() -> None:
         if propagation_request_id:
             from services.client_sync import service as client_sync_service
             from services.continuation import service as continuation_service
+            from services.kyber.devices.repository import (
+                DeviceProofKeyRepository,
+                TrustedDeviceRepository,
+                WebAuthnCredentialRepository,
+            )
             from services.mobile import service as mobile_service
 
-            # All three mobile stores isolate by ``t:{tenant_id}`` (installations +
-            # push_subscriptions, continuations + selections, sync_change_log).
+            # The three mobile stores isolate by ``t:{tenant_id}`` (installations +
+            # push_subscriptions, continuations + selections, sync_change_log);
+            # the kyber device stores are operator-keyed and ignore the scope,
+            # erasing by the DSR subject as operator id (M8-E1).
             scope = mobile_service.tenant_scope(ctx.tenant_id)
             mobile_erasers = (
                 (MOBILE_CONTINUATION_COMPONENT, continuation_service.erase_principal),
                 (MOBILE_INSTALLATION_COMPONENT, mobile_service.erase_principal),
                 (MOBILE_CLIENT_SYNC_COMPONENT, client_sync_service.erase_principal),
+                (KYBER_DEVICE_COMPONENT, _kyber_device_eraser(TrustedDeviceRepository)),
+                (KYBER_WEBAUTHN_COMPONENT, _kyber_device_eraser(WebAuthnCredentialRepository)),
+                (KYBER_PROOF_KEY_COMPONENT, _kyber_device_eraser(DeviceProofKeyRepository)),
             )
             for component, erase in mobile_erasers:
                 try:

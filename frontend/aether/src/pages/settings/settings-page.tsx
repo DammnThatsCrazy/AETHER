@@ -30,6 +30,7 @@ import { queryCache } from '@aether/ui';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 import { SdkFleetSection } from './sdk-fleet-section';
 import { NotificationsSection } from './notifications-section';
+import { NotificationPreferencesSection } from './notification-preferences-section';
 import { WebhooksSection } from './webhooks-section';
 
 function formatRelative(iso: string | null, ctx: TimeContext): string {
@@ -395,6 +396,12 @@ export function SettingsPage() {
 
       <div className="max-w-3xl">
         <NotificationsSection />
+      </div>
+
+      <TerminalSeparator />
+
+      <div className="max-w-3xl">
+        <NotificationPreferencesSection />
       </div>
 
       <TerminalSeparator />

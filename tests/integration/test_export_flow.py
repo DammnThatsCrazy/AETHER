@@ -44,6 +44,7 @@ def _ctx(job_id="job-1", tenant=TENANT):
         job_id=job_id,
         tenant_id=tenant,
         correlation_id="corr-export-1",
+        worker_id="test_worker",
         heartbeat=heartbeat,
         emit_event=emit_event,
     )

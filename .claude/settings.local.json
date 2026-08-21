@@ -136,7 +136,12 @@
       "Bash(python scripts/docs_drift.py --help)",
       "Bash(python scripts/docs_drift.py --update)",
       "Bash(pip install *)",
-      "mcp__ebba02ce-3bf2-4a39-b2ae-55c716d54dd1__use_figma"
+      "mcp__ebba02ce-3bf2-4a39-b2ae-55c716d54dd1__use_figma",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('reports/mobile-productization/work-packet-ledger.json'\\)\\); print\\('keys:', list\\(d.keys\\(\\)\\)\\); print\\('packet ids:', [p['phase_id'] for p in d.get\\('packets',[]\\)]\\); print\\('total packets:', len\\(d.get\\('packets',[]\\)\\)\\)\")",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('reports/mobile-productization/context-index.json'\\)\\); print\\('keys:', list\\(d.keys\\(\\)\\)\\)\")",
+      "Bash(tail -15 /tmp/m0_baseline_ci.log)",
+      "Read(//private/tmp/claude-501/-Users-osazehunt-AETHER/**)"
     ]
-  }
+  },
+  "prefersReducedMotion": true
 }

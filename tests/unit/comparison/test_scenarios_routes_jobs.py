@@ -209,6 +209,7 @@ class TestJobsPlane:
 
         ctx = JobContext(
             job_id="job-1", tenant_id=TENANT, correlation_id="",
+            worker_id="test_worker",
             heartbeat=heartbeat, emit_event=emit_event,
         )
         outcome = await comparison_jobs.run_comparison_job(
@@ -232,6 +233,7 @@ class TestJobsPlane:
 
         ctx = JobContext(
             job_id="j", tenant_id=TENANT, correlation_id="",
+            worker_id="test_worker",
             heartbeat=hb, emit_event=noop_event,
         )
         outcome = await run_comparison_job({}, ctx)

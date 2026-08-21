@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "241b33da"
+last_synced_commit: "126d2320"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -46,16 +46,19 @@ Nearly every cost- and shape-relevant decision in the root is made by one
 variable:
 
 ```hcl
-deployment_profile = "staging" | "production-lean" | "production-scale" | "enterprise-isolated"
+deployment_profile = "staging" | "production-lean" | "production-scale" | "enterprise-isolated" | "demo" | "preview"
 ```
 
 `profiles.tf` derives `enable_*` locals and backend selectors from it and
 `main.tf` wires those into module `count` and module inputs, so a
 `production-lean` plan structurally cannot contain a forbidden resource.
+The four cloud-class profiles plus the two ephemeral-class profiles
+(demo/preview) are Terraform-selectable from this root; the parity contract
+pins the selectable set to cloud ∪ ephemeral.
 Canonical policy data is `config/deployment_profiles.yaml`;
 `config/terraform_resource_contracts.yaml` maps each policy key to the module
 address and cardinality a conforming plan must show. The per-profile matrix,
-including the six non-cloud profiles, is
+including the four non-cloud profiles, is
 [Deployment Profiles](DEPLOYMENT-PROFILES.md).
 
 | | staging | production-lean | production-scale | enterprise-isolated |
@@ -87,8 +90,8 @@ the release manifest.
 
 **One AWS account and one region per workspace.** `var.aws_region` defaults to
 `us-east-1`, `var.project` to `AETHER`, and `var.environment` to `production`
-(validated to `production | staging | dev`). Resource names are built as
-`${var.project}-${var.environment}`.
+(validated to `production | staging | dev | demo | preview`). Resource names
+are built as `${var.project}-${var.environment}`.
 
 Only `profiles/staging.tfvars` overrides `environment`. **The three
 production-class profiles all inherit `production` and therefore generate
@@ -146,14 +149,15 @@ and no self-managed Prometheus or Grafana servers at any profile.
 The deployable unit is a **service**, not a role, and the service count depends
 on the profile's `execution_mode` in `config/runtime_deployment.yaml`:
 
-**`consolidated` — `staging` and `production-lean`: two always-on tasks.**
+**`consolidated` — `staging`, `production-lean`, `demo` and `preview`: two always-on tasks.**
 
 | Service | Roles hosted | vCPU / MiB (lean) | Desired | Max | Capacity |
 |---|---|---|---|---|---|
 | `api` (ECS service `AETHER-<env>-backend`) | `api` | 1024 / 2048 | 1 | 4 | FARGATE only |
 | `lean-worker` | `outbox-relay`, `stream-worker`, `identity-worker`, `graph-writer`, `measurement-worker`, `semantic-worker`, `materializer`, `maintenance` | 2048 / 8192 | 1 | 4 | FARGATE only |
 
-Staging runs the same shape one size down (`lean-worker` at 1024 / 4096, max 2).
+Staging, `demo` and `preview` run the same shape one size down (`lean-worker`
+at 1024 / 4096, max 2).
 `lean-worker` never uses Spot at any capacity because it hosts `outbox-relay`,
 the at-least-once delivery path.
 
@@ -246,7 +250,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `vpc` | VPC, three subnet tiers, security groups, flow logs, NAT per `nat_mode` | always; NAT and the redis/msk/neptune SGs gated |
 | `ecr` | 4 private ECR repositories with lifecycle policies | always |
 | `secrets` | Secrets Manager stubs (KMS-encrypted), rotation Lambda | always |
-| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context | staging + production |
+| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
 | `aurora` | Aurora Serverless v2 cluster + writer, KMS | always |
 | `dynamodb_cache` | DynamoDB cache table with read/write autoscaling | always |
 | `sqs` | SNS fanout topic, shared + per-role SQS queues, DLQs | always |
@@ -288,9 +292,10 @@ make validate-cost-model              # that inventory priced against the budget
 ```
 
 `terraform validate` passes, and `terraform test -filter=tests/profile_plan.tftest.hcl`
-passes for all four cloud profiles across five provider-mocked run blocks
-(`staging`, `staging_asleep`, `production_lean`, `production_scale`,
-`enterprise_isolated`). Assertions read the **planned module graph** —
+passes for all six selectable profiles across the run blocks
+(`staging`, `demo`, `preview`, `staging_asleep`, `production_lean`,
+`production_scale`, `enterprise_isolated`, plus the applied-state and
+egress-rejection blocks). Assertions read the **planned module graph** —
 `length(module.msk) == 0`, `length(module.vpc.nat_gateway_ids) == 3`,
 `module.vpc.nat_mode == "ha"` — not the locals that produced it, so a local that
 stops being wired into a `count` is caught rather than passed over. They are

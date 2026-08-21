@@ -194,6 +194,7 @@ class JobWorker:
             failed = await self.repo.finish(
                 job_id, JobStatus.FAILED.value,
                 error=f"unknown job_type '{job['job_type']}' — no handler registered",
+                worker_id=self.worker_id,
             )
             await self._record(failed or job, "job.failed", extra={"reason": "unknown_job_type"})
             metrics.increment("jobs_unknown_type", labels={"job_type": job["job_type"]})
@@ -221,6 +222,7 @@ class JobWorker:
             job_id=job_id,
             tenant_id=tenant_id,
             correlation_id=correlation_id,
+            worker_id=self.worker_id,
             heartbeat=heartbeat,
             emit_event=emit_event,
         )
@@ -232,7 +234,8 @@ class JobWorker:
             )
         except JobCancelled:
             cancelled = await self.repo.finish(
-                job_id, JobStatus.CANCELLED.value, error="cancelled by request"
+                job_id, JobStatus.CANCELLED.value, error="cancelled by request",
+                worker_id=self.worker_id,
             )
             await self._record(cancelled or job, "job.cancelled")
             metrics.increment("jobs_cancelled", labels={"job_type": job["job_type"]})
@@ -262,7 +265,8 @@ class JobWorker:
             else JobStatus.PARTIALLY_SUCCEEDED.value
         )
         finished = await self.repo.finish(
-            job_id, status, result=outcome.result or {}, error=outcome.error
+            job_id, status, result=outcome.result or {}, error=outcome.error,
+            worker_id=self.worker_id,
         )
         await self._record(finished or job, f"job.{status}")
         metrics.increment("jobs_completed", labels={"job_type": job["job_type"], "status": status})
@@ -279,6 +283,7 @@ class JobWorker:
             retrying = await self.repo.finish(
                 job["id"], JobStatus.RETRYING.value, error=error,
                 scheduled_for=utc_now() + timedelta(seconds=backoff),
+                worker_id=self.worker_id,
             )
             await self._record(
                 retrying or job, "job.retrying",
@@ -286,7 +291,9 @@ class JobWorker:
             )
             metrics.increment("jobs_retrying", labels={"job_type": job["job_type"]})
             return
-        failed = await self.repo.finish(job["id"], JobStatus.FAILED.value, error=error)
+        failed = await self.repo.finish(
+            job["id"], JobStatus.FAILED.value, error=error, worker_id=self.worker_id
+        )
         await self.dead_letter(failed or {**job, "status": JobStatus.FAILED.value, "error": error})
 
     async def dead_letter(self, job: dict) -> None:

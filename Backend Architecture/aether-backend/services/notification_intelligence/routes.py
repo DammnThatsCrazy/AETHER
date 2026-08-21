@@ -63,6 +63,7 @@ from services.notification_intelligence.inbox import (
     mark_notification_read as _inbox_mark_read,
     unread_notification_count as _inbox_unread_count,
 )
+from services.client_sync.emitter import enqueue_sync_change
 
 logger = get_logger("aether.service.notification_intelligence")
 
@@ -162,6 +163,11 @@ async def _create_delivery_jobs_for_replay(notif: Any) -> int:
             "tenant_id": tenant_id,
             "source": "notification-replay",
         }
+        # M1a (decision-log D11): attach the redacted projection so replay dispatch
+        # uses the explicit-projection path — a push carries ONLY these derived
+        # fields, never raw payload / PII.
+        projection_fields = notif.attach_projection().as_payload()
+        payload.update(projection_fields)
 
         count = 0
         for ch in channels:
@@ -466,14 +472,22 @@ async def replay_notification(notification_id: str, request: Request, tenantId: 
 async def list_inbox(
     request: Request,
     unread: bool = Query(default=False),
+    include_archived: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     """List in-app inbox notifications for the authenticated tenant
-    (newest first; ``unread=true`` filters to unread rows)."""
+    (newest first; ``unread=true`` filters to unread rows,
+    ``include_archived=true`` includes archived rows)."""
     request.state.tenant.require_permission("read")
     tenant_id = request.state.tenant.tenant_id
-    rows = await _inbox_list(tenant_id, unread_only=unread, limit=limit, offset=offset)
+    rows = await _inbox_list(
+        tenant_id,
+        unread_only=unread,
+        include_archived=include_archived,
+        limit=limit,
+        offset=offset,
+    )
     return APIResponse(data=rows).to_dict()
 
 
@@ -492,6 +506,12 @@ async def inbox_read_all(request: Request):
     request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
     count = await _inbox_mark_all_read(tenant_id)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant_id}",
+        principal_id=request.state.tenant.user_id or tenant_id,
+        change_type="notification_changed",
+        resource_kind="notification_inbox",
+    )
     return APIResponse(data={"read": count}).to_dict()
 
 
@@ -501,6 +521,13 @@ async def inbox_mark_read(notification_id: str, request: Request):
     request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
     row = await _inbox_mark_read(tenant_id, notification_id)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant_id}",
+        principal_id=request.state.tenant.user_id or tenant_id,
+        change_type="notification_changed",
+        resource_kind="notification_inbox",
+        resource_id=notification_id,
+    )
     return APIResponse(data=row).to_dict()
 
 
@@ -510,6 +537,13 @@ async def inbox_archive(notification_id: str, request: Request):
     request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
     row = await _inbox_archive(tenant_id, notification_id)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenant_id}",
+        principal_id=request.state.tenant.user_id or tenant_id,
+        change_type="notification_changed",
+        resource_kind="notification_inbox",
+        resource_id=notification_id,
+    )
     return APIResponse(data=row).to_dict()
 
 
@@ -556,6 +590,13 @@ async def update_config(body: UpdateConfigRequest, request: Request, tenantId: s
     config_dict["tenant_id"] = tenantId
     result = await _config_repo.upsert(tenantId, config_dict)
     result.pop("slack_bot_token_ref", None)
+    await enqueue_sync_change(
+        scope_key=f"t:{tenantId}",
+        principal_id=request.state.tenant.user_id or tenantId,
+        change_type="preference_changed",
+        resource_kind="notification_config",
+        resource_id=tenantId,
+    )
     return APIResponse(data=result).to_dict()
 
 

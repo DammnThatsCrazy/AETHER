@@ -8,7 +8,10 @@ variable "deployment_profile" {
   default     = "production-lean"
 
   validation {
-    condition     = contains(["staging", "production-lean", "production-scale", "enterprise-isolated"], var.deployment_profile)
+    condition = contains(
+      ["staging", "production-lean", "production-scale", "enterprise-isolated", "demo", "preview"],
+      var.deployment_profile,
+    )
     error_message = "Invalid Aether deployment profile."
   }
 }
@@ -35,12 +38,15 @@ variable "ml_image_digest" {
 
 variable "environment" {
   type        = string
-  description = "Deployment environment (production, staging, dev)"
+  description = "Deployment environment (production, staging, dev, demo, preview)"
   default     = "production"
 
   validation {
-    condition     = contains(["production", "staging", "dev"], var.environment)
-    error_message = "environment must be one of: production, staging, dev."
+    condition = contains(
+      ["production", "staging", "dev", "demo", "preview"],
+      var.environment,
+    )
+    error_message = "environment must be one of: production, staging, dev, demo, preview."
   }
 }
 
@@ -293,6 +299,29 @@ variable "acm_certificate_arn" {
 variable "domain_name" {
   type        = string
   description = "Primary domain name for the API (e.g. api.aether.io)"
+}
+
+# --------------------------------------------------------------------------
+# Provider-credential CMK (modules/kms_credentials)
+# --------------------------------------------------------------------------
+
+variable "enable_credential_kms" {
+  type        = bool
+  default     = true
+  description = <<-EOT
+    Whether the provider-credential envelope-encryption CMK
+    (modules/kms_credentials) is created. Defaults to true — every non-local
+    deployment stores real provider credentials, so the cipher is
+    CREDENTIAL_CIPHER=aws_kms and needs this key (flat $1/month, required as
+    `credential_kms` by every profile's cost policy). The key carries
+    lifecycle.prevent_destroy because it is the root of trust for stored
+    provider credentials. terraform test apply-runs tear their created
+    resources down afterwards and cannot destroy a prevent_destroy resource,
+    so the throwaway apply run (tests/profile_plan.tftest.hcl
+    staging_awake_applied) passes false and leaves CMK coverage to the six plan
+    runs that assert length(module.kms_credentials) == 1. Production defaults
+    stay true.
+  EOT
 }
 
 # --------------------------------------------------------------------------

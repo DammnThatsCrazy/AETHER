@@ -101,7 +101,7 @@ def test_apns_real_path_builds_request_and_maps_apns_id(monkeypatch):
     adapter = APNsAdapter(transport=transport)
     receipt = _run(
         adapter.dispatch(
-            {"title": "Alert", "body": "sensitive"},
+            {"title": "Alert", "body": "Payout of $1,234.56 to alice@example.com"},
             {"device_token": "devtok", "bundle_id": "com.aether.app", "environment": "sandbox"},
             credential="bearer-jwt",
             idempotency_key="idem-1",
@@ -111,10 +111,15 @@ def test_apns_real_path_builds_request_and_maps_apns_id(monkeypatch):
     assert call["url"] == "https://api.sandbox.push.apple.com/3/device/devtok"
     assert call["headers"]["authorization"] == "bearer bearer-jwt"
     assert call["headers"]["apns-topic"] == "com.aether.app"
-    # Push body is redacted by default — the sensitive body must not appear.
-    assert b"sensitive" not in call["body"]
-    sent = json.loads(call["body"])
+    # M1a (D11): a push carries ONLY the redacted projection — amounts and PII
+    # must not appear in the shipped body; they become [redacted].
+    body = call["body"]
+    assert b"1,234.56" not in body
+    assert b"alice@example.com" not in body
+    assert b"[redacted]" in body
+    sent = json.loads(body)
     assert sent["aps"]["alert"]["title"] == "Alert"
+    assert sent["push_deep_link_class"]  # routing class present, never raw
     assert receipt.external_id == "apns:ABC-123"
 
 
@@ -124,12 +129,17 @@ def test_apns_full_content_opt_in(monkeypatch):
     adapter = APNsAdapter(transport=transport)
     _run(
         adapter.dispatch(
-            {"title": "Alert", "body": "full-body"},
+            {"title": "Alert", "body": "Payout of $9,999.99"},
             {"device_token": "d", "bundle_id": "b", "allow_full_content": True},
             credential="jwt",
         )
     )
-    assert b"full-body" in transport.calls[0]["body"]
+    # M1a (D11): allow_full_content no longer ships a raw body on a push — the
+    # redacted projection is the ONLY content a push carries, so the amount is
+    # redacted even with the legacy opt-in set.
+    body = transport.calls[0]["body"]
+    assert b"9,999.99" not in body
+    assert b"[redacted]" in body
 
 
 def test_apns_missing_apns_id_is_provider_error(monkeypatch):

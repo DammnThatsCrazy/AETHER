@@ -37,7 +37,14 @@ QUARANTINED_APPLY_SITES = {
     "cicd/aether-cicd/.github/workflows/demo-management.yml",
     "cicd/aether-cicd/.github/workflows/infrastructure.yml",
 }
-TF_PROFILES = ("staging", "production-lean", "production-scale", "enterprise-isolated")
+# Every profile the promotion workflow can dispatch, matching the parity
+# restatement (cloud ∪ ephemeral-class). demo/preview are ephemeral-class and
+# dispatchable; the apply environment mapping in the workflow must cover all
+# six.
+TF_PROFILES = (
+    "staging", "production-lean", "production-scale", "enterprise-isolated",
+    "demo", "preview",
+)
 # Triggers that fire without a human choosing to run the workflow.
 AUTOMATIC_TRIGGERS = {
     "push",
@@ -736,6 +743,8 @@ def test_promotion_uses_per_profile_terraform_environments():
         "production-lean": "production-lean-terraform",
         "production-scale": "production-scale-terraform",
         "enterprise-isolated": "enterprise-terraform",
+        "demo": "demo-terraform",
+        "preview": "preview-terraform",
     }
     for profile, env_name in expected.items():
         assert f"inputs.profile == '{profile}' && '{env_name}'" in name, (

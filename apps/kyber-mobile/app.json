@@ -25,7 +25,8 @@
     },
     "plugins": ["expo-secure-store"],
     "extra": {
-      "appKind": "kyber"
+      "appKind": "kyber",
+      "distributionProfiles": { "ios": "dev", "android": "dev" }
     }
   }
 }

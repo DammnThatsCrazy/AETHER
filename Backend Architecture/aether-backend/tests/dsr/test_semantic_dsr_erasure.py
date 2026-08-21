@@ -111,6 +111,7 @@ def _ctx() -> JobContext:
         job_id=JOB_ID,
         tenant_id=TENANT,
         correlation_id="corr",
+        worker_id="test_worker",
         heartbeat=AsyncMock(return_value=True),
         emit_event=AsyncMock(return_value=None),
     )

@@ -707,6 +707,90 @@ def test_cost_capped_production_profiles_declare_a_budget() -> None:
     assert staging["hard_monthly_spend"] > staging["target_monthly_spend"]
     assert staging["maximum_scheduled_awake_hours_per_month"] < staging["pricing_hours_per_month"]
 
+    # demo/preview are cost_capped: true, so the same invariant holds: a capped
+    # profile with no numeric ceiling is unenforceable. resolve_budget accepts
+    # either dialect (fixed or total), so assert the invariant generically —
+    # a hard ceiling strictly above the matching target, in the price-book region.
+    for name in ("demo", "preview"):
+        cfg = PROFILES["profiles"][name]
+        assert cfg["cost_capped"] is True, name
+        budget = cfg["budget"]
+        hard_keys = sorted(k for k in budget if str(k).startswith("hard_"))
+        target_keys = sorted(k for k in budget if str(k).startswith("target_"))
+        assert hard_keys and target_keys, f"{name} budget lacks hard/target ceilings"
+        for hk, tk in zip(hard_keys, target_keys):
+            assert budget[hk] > budget[tk], f"{name}: {hk} must exceed {tk}"
+        assert budget.get("region") == PRICE_BOOK["region"], name
+
+
+def test_profile_doctor_budget_declared_check_is_hard(tmp_path: Path) -> None:
+    """The doctor's budget-declared check fails a cost_capped profile closed.
+
+    The budget-declared check lives in profile_doctor.py (not in
+    check_cost_model.py, which only refuses to SCORE an unbudgeted profile with
+    exit 2). The doctor's contract is stronger: a cost_capped profile with no
+    budget is INVALID, not integration_ready — a ceiling nobody can enforce is
+    no ceiling at all. This is exercised on a synthetic realized demo so it is
+    deterministic before and after the demo/preview budgets land in config/.
+    """
+    import importlib.util as _il
+
+    spec = _il.spec_from_file_location(
+        "profile_doctor", ROOT / "scripts/release/profile_doctor.py")
+    doctor = _il.module_from_spec(spec)
+    spec.loader.exec_module(doctor)
+
+    data = copy.deepcopy(PROFILES)
+    demo = data["profiles"]["demo"]
+    demo["cost_policy"] = {
+        "required_resources": ["cloudfront_s3_frontends", "alb", "dynamodb", "sqs_sns"],
+        "forbidden_resources": ["msk"],
+    }
+    demo["budget"] = {
+        "currency": "USD",
+        "region": "us-east-1",
+        "target_monthly_spend": 10,
+        "hard_monthly_spend": 25,
+    }
+    contracts = yaml.safe_load((ROOT / "config/terraform_resource_contracts.yaml").read_text())
+    readiness = yaml.safe_load((ROOT / "config/deployment_readiness.yaml").read_text())
+    runtime = yaml.safe_load((ROOT / "config/runtime_deployment.yaml").read_text())
+    runtime["profiles"]["demo"] = {
+        "execution_mode": "consolidated",
+        "services": {"api": {"roles": ["api"]}},
+    }
+
+    tf_dir = tmp_path / "AWS Deployment" / "aether-aws" / "terraform"
+    (tf_dir / "profiles").mkdir(parents=True)
+    (tf_dir / "profiles" / "demo.tfvars").write_text('deployment_profile = "demo"\n')
+    (tf_dir / "variables.tf").write_text(
+        'variable "deployment_profile" {\n'
+        "  validation {\n"
+        '    condition = contains(["staging", "production-lean", "demo"], var.deployment_profile)\n'
+        "  }\n"
+        "}\n")
+
+    def report():
+        return doctor.build_profile_report(
+            tmp_path, "demo", data=data, contracts=contracts,
+            runtime=runtime, readiness=readiness, spine_rows=[])
+
+    def budget_row(doc):
+        return next(c for c in doc["checks"] if c["id"] == "budget-declared")
+
+    # Budget present: every static check passes; no guard files yet, so the
+    # profile is integration_ready, never invalid.
+    with_budget = report()
+    assert budget_row(with_budget)["result"] == "passed"
+    assert with_budget["readiness_state"] == "integration_ready"
+
+    # Budget removed: the same profile is INVALID, not integration_ready.
+    del demo["budget"]
+    without_budget = report()
+    assert budget_row(without_budget)["result"] == "failed"
+    assert "no budget" in budget_row(without_budget)["detail"]
+    assert without_budget["readiness_state"] == "invalid"
+
 
 def test_profile_without_a_budget_cannot_be_scored(tmp_path: Path) -> None:
     """Scoring an uncapped profile is a usage error (exit 2), not a silent pass."""

@@ -17,6 +17,9 @@ from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 
+from services.client_sync.emitter import enqueue_sync_change
+from services.continuation.service import operator_scope
+
 from ..access.capabilities import SELF_CAPABILITY
 from ..access.dependencies import (
     KyberAccessContext,
@@ -192,6 +195,12 @@ async def revoke_session(
         reason="self_service" if target.operator_id == context.operator_id else "workforce_admin",
     )
     await step_up_service.revoke_for_session(session_id)
+    await enqueue_sync_change(
+        scope_key=operator_scope(context.operator_id),
+        principal_id=context.operator_id,
+        change_type="session_revoked",
+        resource_id=session_id,
+    )
     return APIResponse(data=_session_body(revoked) if revoked else None).to_dict()
 
 

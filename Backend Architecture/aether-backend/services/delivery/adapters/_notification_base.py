@@ -140,17 +140,68 @@ class NotificationProviderAdapter(ProviderAdapter):
     ) -> Optional[str]:
         return credential or provider_config.get("credential")
 
-    # ── redacted push content ────────────────────────────────────────────
+    # ── redacted push content (M1a — decision-log D11) ───────────────────
+    def _push_projection(
+        self, payload: dict[str, Any], provider_config: dict[str, Any]
+    ):
+        """Redacted push projection for this payload — the ONLY content a push
+        may carry (never raw payload / PII).
+
+        Priority:
+          1. an explicit redacted projection on the payload (``push_*`` fields);
+          2. a redaction derived here at the push boundary from the payload's
+             canonical source fields (allowed by D11: computed at the push
+             boundary);
+          3. fail closed — no projection AND no source content raises
+             ``ConfigurationError``. A push never falls back to dumping raw
+             title/body.
+        """
+        from services.notification_intelligence.projection import (
+            PROJECTION_FIELDS,
+            MobileNotificationProjection,
+            build_projection,
+        )
+
+        explicit = {k: payload.get(k) for k in PROJECTION_FIELDS if payload.get(k)}
+        if explicit:
+            # Direct construction re-validates (a bogus deep-link class degrades to
+            # the default continuation surface; extra keys are rejected).
+            return MobileNotificationProjection(**explicit)
+
+        has_source = any(payload.get(k) for k in ("title", "body", "summary"))
+        if not has_source:
+            raise ConfigurationError(
+                f"{self.adapter_name}: push payload missing a redacted projection "
+                "and no source content — refusing to ship raw payload"
+            )
+        return build_projection(
+            title=payload.get("title"),
+            body=payload.get("body") or payload.get("summary"),
+            summary=payload.get("summary") or payload.get("body"),
+            category=payload.get("category") or payload.get("notification_class"),
+            notification_class=payload.get("notification_class"),
+            severity=payload.get("priority") or payload.get("severity"),
+            deep_link=payload.get("deep_link") or payload.get("link"),
+            link=payload.get("deep_link_id"),
+        )
+
     def _push_alert(
         self, payload: dict[str, Any], provider_config: dict[str, Any]
     ) -> tuple[str, str]:
-        """Title + body for a push alert. Body is redacted unless the caller opted
-        into full content — push payloads are redacted by default."""
-        title = payload.get("title", "Aether")
-        if provider_config.get("allow_full_content"):
-            body = payload.get("body") or payload.get("summary", "")
-        else:
-            body = payload.get("redacted_body") or "You have a new update."
+        """Title + body for a push alert — always the redacted projection.
+
+        The ``allow_full_content`` opt-in no longer ships a raw body on a push:
+        what travels is derived/redacted projection content only. Fails closed
+        when no projection (or source content to project) exists.
+        """
+        from services.notification_intelligence.projection import (
+            DEFAULT_PUSH_BODY,
+            DEFAULT_PUSH_TITLE,
+        )
+
+        proj = self._push_projection(payload, provider_config)
+        title = proj.push_title or DEFAULT_PUSH_TITLE
+        body = proj.push_body or proj.push_summary or DEFAULT_PUSH_BODY
         return title, body
 
     # ── dispatch ─────────────────────────────────────────────────────────

@@ -135,18 +135,17 @@ async def test_worker_executes_erasure_and_marks_step_with_evidence():
     assert step["records_impacted"] == 5
     assert step["audit_event_id"] == job_id
     assert step["requires_recompute"] is False
-    # The three mobile stores and the four semantic stores were also erased
-    # end-to-end and marked with their OWN real erased-row receipts (0 here —
-    # nothing was seeded for this subject).
-    mobile_components = {"continuation_records", "mobile_installations", "client_sync_records"}
-    semantic_components = {
-        "semantic_observations",
-        "sentiment_observations",
-        "semantic_gold_state",
-        "semantic_review_queue",
+    # The three mobile stores, three kyber device stores and four semantic
+    # stores were all erased end-to-end and marked with their OWN real
+    # erased-row receipts (0 here — nothing was seeded for this subject).
+    handler_components = {
+        "continuation_records", "mobile_installations", "client_sync_records",
+        "kyber_trusted_devices", "kyber_webauthn_credentials", "kyber_device_proof_keys",
+        "semantic_observations", "sentiment_observations",
+        "semantic_gold_state", "semantic_review_queue",
     }
     for c in status["components"]:
-        if c["component"] in mobile_components or c["component"] in semantic_components:
+        if c["component"] in handler_components:
             assert c["status"] == "completed"
             assert c["records_impacted"] == 0
             assert c["audit_event_id"] == job_id
@@ -174,6 +173,7 @@ async def test_handler_rerun_is_idempotent():
         job_id=dsr["erasure_job_id"],
         tenant_id=TENANT,
         correlation_id=dsr["dsr_id"],
+        worker_id="test_worker",
         heartbeat=AsyncMock(return_value=True),
         emit_event=AsyncMock(return_value=None),
     )

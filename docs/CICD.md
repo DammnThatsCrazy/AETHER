@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "f72fbf0"
+last_synced_commit: "8031a43a"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -172,10 +172,11 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
 | `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. | no |
-| `infrastructure.yml` | PR / push to `main` / dispatch on `AWS Deployment/**` | Provider-mocked configuration plan for all four profiles; OIDC remote plan per profile when the full credential set exists; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
+| `infrastructure.yml` | PR / push to `main` / dispatch on `AWS Deployment/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. | no (delegates) |
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; its only action is an ECS scale-to-zero, which can only reduce running compute. | no |
+| `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. | no |
 | `repo-consistency.yml` | PR / push to `main` | `make ci-check`. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
 | `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers, applies the full Alembic graph to a **fresh** database (`alembic upgrade head` → single head), and runs one real-pool ingestion smoke test against the real stack — exercises the fresh-DB provisioning and transactional paths the in-memory (`AETHER_ENV=local`) lanes skip entirely (that path never runs Alembic). **Non-blocking** (not a required check); the smoke test skips without `DATABASE_URL`. | no |

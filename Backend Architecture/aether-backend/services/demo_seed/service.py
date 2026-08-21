@@ -5,21 +5,20 @@ import os
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, Optional
 
 from .dataset import v1_manifest
+from .errors import SeedPolicyError, SeedSafetyError
 from .models import Clock, SeedManifest, SeedResult
-from .policy import SeedPolicyError, assert_seed_allowed
+from .policy import assert_seed_allowed
 from .repositories import (
+    ContinuationScopedSeedRepository,
+    DurableStoreSeedRepository,
     SeedOwnershipRepository,
     SeedResetAuditRepository,
     SeedRunRepository,
     domain_repositories,
 )
-
-
-class SeedSafetyError(RuntimeError):
-    pass
 
 
 def _utc_now() -> datetime:
@@ -58,6 +57,41 @@ def _target_ids(manifest: SeedManifest, tenant_id: str) -> dict[str, str]:
     return result
 
 
+def _identity_field(repository: str) -> Optional[str]:
+    """The domain identity key stamped into each seeded row's payload.
+
+    The repository's row carries ``id`` (the table/store primary key, stamped by
+    insert) AND a domain-noun id alias so the API read paths that key on the
+    domain id find the record. ``continuations`` uses ``id`` because the
+    continuation context model's canonical identity field is ``id``.
+    """
+    return {
+        "users": "user_id",
+        "entities": "entity_id",
+        "campaigns": "campaign_id",
+        "economic_resources": "resource_id",
+        "payment_intents": "intent_id",
+        "settlement_events": "settlement_event_id",
+        "alerts": "alert_id",
+        "providers": "provider_id",
+        "metering_evidence": "metered_event_id",
+        "import_sessions": "import_id",
+        "investigations": "investigation_id",
+        "commerce_resources": "resource_id",
+        "commerce_policies": "policy_id",
+        "commerce_facilitators": "facilitator_id",
+        "commerce_approvals": "approval_id",
+        "commerce_settlements": "settlement_id",
+        "commerce_entitlements": "entitlement_id",
+        "notifications": "notification_id",
+        "continuations": "id",
+        "exceptions": "exception_id",
+        "incidents": "incident_id",
+        "runs": "run_id",
+        "reviews": "batch_id",
+    }.get(repository)
+
+
 class DemoSeedService:
     """Explicit seed/reset orchestration over the normal backend repositories."""
 
@@ -80,6 +114,24 @@ class DemoSeedService:
         self.runs = SeedRunRepository()
         self.ownership = SeedOwnershipRepository()
         self.reset_audit = SeedResetAuditRepository()
+
+    def _resolve_repository(self, repository_name: str, tenant_id: str):
+        """Resolve the repository for one seed record, binding tenant context.
+
+        Most domains live in ``self.repositories`` (BaseRepository-shaped). The
+        continuation plane is tenant-scope-scoped and cannot resolve a scope
+        from an id alone, so it is resolved here with the tenant bound to the
+        canonical ``ContinuationRepository`` — seeding reuses its scope +
+        idempotency semantics rather than writing past them.
+        """
+        if repository_name == "continuations":
+            return ContinuationScopedSeedRepository(tenant_scope=f"t:{tenant_id}")
+        try:
+            return self.repositories[repository_name]
+        except KeyError:
+            raise KeyError(
+                f"no repository registered for demo-seed domain {repository_name!r}"
+            ) from None
 
     async def seed(
         self,
@@ -115,7 +167,7 @@ class DemoSeedService:
         try:
             target_ids = _target_ids(manifest, tenant_id)
             for item in manifest.records:
-                repository = self.repositories[item.repository]
+                repository = self._resolve_repository(item.repository, tenant_id)
                 target_id = target_ids[item.record_id]
                 owner_id = _ownership_id(
                     tenant_id, namespace, item.repository, target_id,
@@ -131,6 +183,15 @@ class DemoSeedService:
                     ):
                         raise SeedSafetyError(f"ownership sidecar mismatch for {target_id}")
                     if existing is not None:
+                        result.skipped[item.domain] = result.skipped.get(item.domain, 0) + 1
+                        continue
+                    if isinstance(repository, DurableStoreSeedRepository):
+                        # M8-C1: the ownership ledger is authoritative for durable
+                        # domains. The sidecar exists but the record is absent
+                        # (a fresh process with an empty process-local store, or a
+                        # flushed cache) — this record was already seeded; count it
+                        # skipped rather than writing a parallel copy or tripping
+                        # the process-local guard.
                         result.skipped[item.domain] = result.skipped.get(item.domain, 0) + 1
                         continue
                 elif existing is not None:
@@ -166,25 +227,7 @@ class DemoSeedService:
                     "data_origin": "synthetic_seed",
                     "seed_provenance": provenance,
                 }
-                identity_field = {
-                    "users": "user_id",
-                    "entities": "entity_id",
-                    "campaigns": "campaign_id",
-                    "economic_resources": "resource_id",
-                    "payment_intents": "intent_id",
-                    "settlement_events": "settlement_event_id",
-                    "alerts": "alert_id",
-                    "providers": "provider_id",
-                    "metering_evidence": "metered_event_id",
-                    "import_sessions": "import_id",
-                    "investigations": "investigation_id",
-                    "commerce_resources": "resource_id",
-                    "commerce_policies": "policy_id",
-                    "commerce_facilitators": "facilitator_id",
-                    "commerce_approvals": "approval_id",
-                    "commerce_settlements": "settlement_id",
-                    "commerce_entitlements": "entitlement_id",
-                }.get(item.repository)
+                identity_field = _identity_field(item.repository)
                 if identity_field:
                     payload[identity_field] = target_id
 
@@ -227,10 +270,6 @@ class DemoSeedService:
             filters={"tenant_id": tenant_id, "namespace": namespace},
             limit=100,
         )
-        owners = await self.ownership.find_many(
-            filters={"tenant_id": tenant_id, "seed_namespace": namespace},
-            limit=10_000,
-        )
         tenant = await self.repositories["tenants"].find_by_id(tenant_id)
         latest = runs[0] if runs else None
         latest_run = None
@@ -248,9 +287,40 @@ class DemoSeedService:
                 "updated_counts": latest.get("updated", {}),
                 "skipped_counts": latest.get("skipped", {}),
             }
-        seeded = bool(owners) and tenant is not None
+        # M8-C3: never derive seeded-ness from the ownership sidecars alone.
+        # Count records ACTUALLY present through the same canonical read paths
+        # verify() uses, and count as owned only records that are both
+        # sidecar-owned AND present. A fresh process with an empty process-local
+        # DurableStore therefore reports the durable runs/reviews domains
+        # truthfully as not seeded, even though their sidecars persist.
+        present = 0
+        owned_and_present = 0
+        target_ids = _target_ids(manifest, tenant_id)
+        for item in manifest.records:
+            target_id = target_ids[item.record_id]
+            owner = await self.ownership.find_by_id(
+                _ownership_id(tenant_id, namespace, item.repository, target_id),
+            )
+            record = await self._resolve_repository(
+                item.repository, tenant_id,
+            ).find_by_id(target_id)
+            if record is not None:
+                present += 1
+                if owner is not None:
+                    owned_and_present += 1
+
+        durable_repos = [
+            repo
+            for repo in self.repositories.values()
+            if isinstance(repo, DurableStoreSeedRepository)
+        ]
+        durable_store_shared = (
+            bool(durable_repos)
+            and all(not repo.is_process_local for repo in durable_repos)
+        )
+
         return {
-            "seeded": seeded,
+            "seeded": present == len(manifest.records) and tenant is not None,
             "is_demo_tenant": bool(tenant and tenant.get("is_demo_tenant")),
             "tenant_id": tenant_id,
             "tenant_name": tenant.get("name") if tenant else None,
@@ -259,7 +329,8 @@ class DemoSeedService:
             "dataset_version": manifest.version,
             "checksum": manifest.checksum,
             "run_count": len(runs),
-            "owned_record_count": len(owners),
+            "owned_record_count": owned_and_present,
+            "durable_store_shared": durable_store_shared,
             "latest_run": latest_run,
         }
 
@@ -272,7 +343,7 @@ class DemoSeedService:
             target_id = target_ids[item.record_id]
             owner_id = _ownership_id(tenant_id, namespace, item.repository, target_id)
             owner = await self.ownership.find_by_id(owner_id)
-            record = await self.repositories[item.repository].find_by_id(target_id)
+            record = await self._resolve_repository(item.repository, tenant_id).find_by_id(target_id)
             if owner is None or record is None:
                 failures.append(f"missing {item.repository}:{target_id}")
                 continue
@@ -319,8 +390,9 @@ class DemoSeedService:
         for owner in owners:
             repository_name = str(owner["repository"])
             record_id = str(owner["record_id"])
-            repository = self.repositories.get(repository_name)
-            if repository is None:
+            try:
+                repository = self._resolve_repository(repository_name, tenant_id)
+            except KeyError:
                 refused.append(f"unknown repository {repository_name}:{record_id}")
                 continue
             record = await repository.find_by_id(record_id)

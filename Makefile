@@ -25,14 +25,15 @@
         frontend-data-truth-report \
         demo-seed demo-reset demo-status demo-verify dev-demo \
         clean-install-smoke demo-seed-smoke demo-reset-smoke \
+        design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
-        validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
+        validate-profile-config validate-profile-parity validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults \
         validate-terraform-profile-policy validate-cost-model test-terraform-profiles test-runtime-topology \
-        test-workflow-controls test-cost-model test-staging-lifecycle test-plan-policy \
-        deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget
+        test-workflow-controls test-cost-model test-staging-lifecycle test-ephemeral-lifecycle test-plan-policy \
+        deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget validate-ephemeral-budget
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -41,6 +42,10 @@ AGENT_DIR   := Agent Layer
 DEMO_TENANT_ID ?= aether-demo-v1
 DEMO_SEED_NAMESPACE ?= aether-demo-v1
 DEMO_DATABASE_URL ?= postgresql://aether:aether_dev_password@localhost:5432/aether
+# Durable-store seam for the demo CLI (M8-C1): runs/reviews live in a named
+# DurableStore. When the seed CLI and the backend must share it across
+# processes, point DEMO_REDIS_URL at the same Redis the backend uses.
+DEMO_REDIS_URL ?= redis://localhost:6379/0
 PYTHON ?= python3
 # The live Terraform root. NOT terraform/environments/* — that tree references
 # seven modules that do not exist and `terraform init` fails there.
@@ -328,15 +333,24 @@ frontend-data-truth-report: ## Run release certification and write machine-reada
 	python scripts/generate_frontend_data_truth_report.py
 
 demo-seed: ## Explicitly seed the versioned backend demo dataset
+	# M8-C1: the durable runs/reviews domains live in a named DurableStore. The
+	# CLI shares it with the backend only when REDIS_URL/REDIS_HOST is set;
+	# otherwise it resolves a process-local in-memory store and the seed guard
+	# refuses the write (that path would be a parallel copy the backend never
+	# reads). Seed in-process instead via `make dev-demo` (seed-on-start), or
+	# export REDIS_URL=$(DEMO_REDIS_URL) so the durable store is shared.
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli seed --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-status: ## Show backend demo seed ledger status
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli status --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-verify: ## Verify the demo manifest checksum, records, and provenance
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli verify --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
@@ -344,6 +358,7 @@ demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
 		echo 'Set DEMO_RESET_CONFIRMATION="RESET $(DEMO_TENANT_ID) $(DEMO_SEED_NAMESPACE)"'; exit 1; \
 	fi
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		REDIS_URL="$${REDIS_URL:-}" \
 		$(PYTHON) -m services.demo_seed.cli reset --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)" --confirm "$(DEMO_RESET_CONFIRMATION)"
 
 dev-demo: ## Explicitly start local backend with in-process demo seeding
@@ -361,6 +376,32 @@ demo-seed-smoke: ## Verify seed visibility, provenance, checksum, and idempotenc
 
 demo-reset-smoke: ## Verify reset isolation, control-record preservation, and audit
 	cd "$(BACKEND_DIR)" && $(PYTHON) -m pytest -q -o addopts='' tests/test_demo_seed.py -k "reset or tenant_ids_are_isolated"
+
+# ---------------------------------------------------------------------------
+# Design-partner demo (M7) — local/automated end-to-end demo stack
+# ---------------------------------------------------------------------------
+# Brings up postgres + backend (migrations applied), seeds the versioned demo
+# dataset (notifications/continuations/exceptions/incidents/runs/reviews),
+# and verifies the seeded state is API-visible. Provider fakes run in-process
+# under AETHER_ENV=local and fail closed outside local/dev. JWT_SECRET here is
+# a local-only demo default; staging/prod still require bootstrap.sh.
+design-partner-demo-up: ## Bring up the design-partner demo stack (postgres + redis + backend + migrations)
+	docker compose --profile migrate run --rm migrate
+	JWT_SECRET="$${JWT_SECRET:-local-design-partner-demo-secret}" AETHER_ENV=local REDIS_HOST=redis \
+		docker compose up -d
+	@echo "Design-partner demo stack is up. Run 'make design-partner-demo-seed' then 'make design-partner-demo-check'."
+
+design-partner-demo-seed: ## Seed the design-partner demo dataset (idempotent; safe reset via demo-reset)
+	REDIS_URL="$(DEMO_REDIS_URL)" $(MAKE) demo-seed
+
+design-partner-demo-check: ## Verify the demo dataset is seeded, provenance-clean, and API-visible
+	REDIS_URL="$(DEMO_REDIS_URL)" $(MAKE) demo-verify
+	$(MAKE) demo-seed-smoke
+	$(MAKE) demo-reset-smoke
+
+design-partner-demo-down: ## Stop the design-partner demo stack
+	docker compose down
+	@echo "Design-partner demo stack stopped. Seeded records persist in postgres; reset with 'make demo-reset'."
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi
@@ -393,15 +434,36 @@ generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts
 	python scripts/generate_contracts.py --check
 
 # ---------------------------------------------------------------------------
-# Mobile / continuity / notification productization gates (program C0-C4)
+# Mobile / continuity / notification productization gates (program C0-C8)
 # ---------------------------------------------------------------------------
-.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test
+.PHONY: mobile-contracts-check continuity-check notification-check notification-provider-check mobile-typecheck mobile-test mobile-app-typecheck mobile-app-test mobile-compliance-check
+
+mobile-compliance-check: ## CI gate — mobile compliance umbrella: privacy manifests + DSR coverage + contract parity + distribution-profile + SDK conformance
+	$(MAKE) privacy-manifest-check
+	$(MAKE) dsr-coverage-check
+	$(MAKE) mobile-contracts-check
+	$(MAKE) mobile-build-check
+	$(GATE_PY) scripts/release/sdk_conformance.py --quiet
 
 mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
 	npm run typecheck --workspace=packages/mobile-core --if-present
+	npm run typecheck --workspace=packages/mobile-ui --if-present
 
 mobile-test: ## CI gate — unit tests for the mobile SDK packages
 	npm run test --workspace=packages/mobile-core --if-present
+	npm run test --workspace=packages/mobile-ui --if-present
+
+mobile-app-typecheck: ## CI gate — TypeScript typecheck of the Expo app shells (needs mobile-core dist, gitignored)
+	npm run build --workspace=packages/mobile-core
+	npm run typecheck --workspace=apps/aether-mobile
+	npm run typecheck --workspace=apps/kyber-mobile
+
+mobile-app-test: ## CI gate — app-level unit tests (no-op until C5 screens land tests in M3/M4; kept --if-present)
+	npm run test --workspace=apps/aether-mobile --if-present
+	npm run test --workspace=apps/kyber-mobile --if-present
+
+delivery-safety-check: ## CI gate — D11 delivery-safety validator (unsafe delivery patterns fail the build)
+	$(GATE_PY) scripts/release/validate_delivery_safety.py
 
 mobile-build-check: ## Mobile app scaffold invariants + honest native-build posture (report; exit 0 unless a scaffold is broken)
 	python scripts/mobile_build_check.py
@@ -417,7 +479,8 @@ mobile-contracts-check: ## CI gate — mobile/continuity/notification TS<->Pytho
 	python -m pytest tests/contracts/test_continuation_contract_parity.py \
 		tests/contracts/test_sync_event_contract_parity.py \
 		tests/contracts/test_delivery_receipt_parity.py \
-		tests/contracts/test_notification_contract_parity.py -q
+		tests/contracts/test_notification_contract_parity.py \
+		tests/contracts/test_mobile_projection_contract_parity.py -q
 
 continuity-check: ## CI gate — cross-device continuation plane + client-sync feed
 	python -m pytest \
@@ -594,11 +657,17 @@ security-release-check: ## Fail-closed security gate: secrets + security-control
 validate-profile-config: ## Validate deployment-profile matrix + founding-tenant posture
 	python scripts/release/check_profile_config.py
 
+validate-profile-parity: ## Cross-source profile parity (docs count, cloud subset, terraform, contracts, env templates)
+	python scripts/release/check_profile_parity.py
+
 validate-cost-policy: ## Validate production-lean cost policy (forbidden/required resources)
 	python scripts/release/check_cost_policy.py
 
 validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production-lean cost policy
 	python scripts/release/check_cost_policy_terraform.py
+
+validate-profile-doctor: ## Per-profile readiness doctor (§27) + deployment certificate (§28); no cloud profile may fall below credential_waiting
+	python scripts/release/profile_doctor.py --all --strict
 
 # ---------------------------------------------------------------------------
 # Deployment-profile enforcement (FT-9)
@@ -646,6 +715,25 @@ validate-staging-budget: ## Plan-policy + cost gate for staging, awake and aslee
 		--inventory artifacts/staging-asleep/profile-resource-inventory.json \
 		--out-dir reports/cost/staging-asleep
 
+# demo and preview are the ephemeral-class profiles. They share staging's
+# consolidated footprint (so the fixtures clone staging-awake) but are
+# cost-capped against their OWN FIXED budgets, not staging's awake-hours budget
+# or production-lean's. This target prices both so a budget regression in the
+# ephemeral class surfaces offline, with no AWS credentials.
+validate-ephemeral-budget: ## Plan-policy + cost gate for demo and preview, off their committed fixtures
+	python scripts/release/check_terraform_plan_policy.py --profile demo \
+		--plan-json tests/fixtures/terraform_plans/demo-valid.json \
+		--out-dir artifacts/demo
+	python scripts/release/check_cost_model.py --profile demo \
+		--inventory artifacts/demo/profile-resource-inventory.json \
+		--out-dir reports/cost/demo
+	python scripts/release/check_terraform_plan_policy.py --profile preview \
+		--plan-json tests/fixtures/terraform_plans/preview-valid.json \
+		--out-dir artifacts/preview
+	python scripts/release/check_cost_model.py --profile preview \
+		--inventory artifacts/preview/profile-resource-inventory.json \
+		--out-dir reports/cost/preview
+
 test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile module cardinality
 	cd "$(TF_DIR)" && terraform init -backend=false -input=false >/dev/null && \
 		terraform validate && \
@@ -663,6 +751,9 @@ test-cost-model: ## Cost-model unit tests (ceilings, fail-closed pricing, except
 test-staging-lifecycle: ## Staging wake/sleep + TTL guard structural controls
 	python -m pytest tests/unit/test_staging_lifecycle_controls.py -q
 
+test-ephemeral-lifecycle: ## Ephemeral TTL guard + provision/teardown ops unit tests
+	python -m pytest tests/unit/test_ephemeral_ttl_guard.py -q
+
 test-plan-policy: ## Plan-policy validator against the pass/fail plan fixtures
 	python -m pytest tests/unit/test_terraform_plan_policy.py tests/unit/test_terraform_resource_contracts.py -q
 
@@ -674,6 +765,7 @@ collect-deployment-evidence: ## Materialise the release-evidence bundle with che
 
 deployment-profile-gate: ## Every deployment-profile gate that runs without AWS credentials
 	$(MAKE) validate-profile-config
+	$(MAKE) validate-profile-parity
 	$(MAKE) validate-cost-policy
 	$(MAKE) validate-cost-policy-terraform
 	$(MAKE) validate-delivery-topology
@@ -686,6 +778,7 @@ deployment-profile-gate: ## Every deployment-profile gate that runs without AWS 
 	$(MAKE) test-cost-model
 	$(MAKE) test-staging-lifecycle
 	$(MAKE) deployment-readiness-score
+	$(MAKE) validate-profile-doctor
 
 validate-delivery-topology: ## Validate immutable delivery and profile-to-role topology
 	python scripts/release/check_delivery_topology.py
