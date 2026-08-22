@@ -200,8 +200,18 @@ class CommerceStore:
             self.fulfillments = _RepoCollection(FulfillmentsRepository(), "fulfillment_id", Fulfillment)
             self.treasuries = _RepoCollection(TreasuriesRepository(), "tenant_id", Treasury)
 
-        # budget_policies: TenantCollection in all modes (BudgetPolicy has TYPE_CHECKING import)
-        self.budget_policies = TenantCollection("policy_id")
+        # budget_policies: durable Postgres outside local (a budget cap that
+        # vanishes on restart is a real gap); in-memory only in local dev.
+        if _is_local():
+            self.budget_policies = TenantCollection("policy_id")
+        else:
+            from repositories.commerce_repos import BudgetPoliciesRepository
+
+            from .commerce_models import BudgetPolicy as _BudgetPolicy
+
+            self.budget_policies = _RepoCollection(
+                BudgetPoliciesRepository(), "policy_id", _BudgetPolicy
+            )
 
     # ── Resource registry ────────────────────────────────────────────
 
@@ -279,6 +289,21 @@ class CommerceStore:
     async def list_authorizations(self, tenant_id: str) -> list[PaymentAuthorization]:
         return await self.authorizations.list(tenant_id)
 
+    async def get_authorization_by_payment_identifier(
+        self, tenant_id: str, payment_identifier: str
+    ) -> Optional[PaymentAuthorization]:
+        """Return the tenant's existing authorization for a payment_identifier.
+
+        payment_identifier is the flow's idempotency key and is unique-indexed
+        per tenant, so this backs an idempotent authorize retry: a re-issued
+        authorization request returns the original instead of colliding with
+        the unique constraint.
+        """
+        for a in await self.authorizations.list(tenant_id):
+            if a.payment_identifier == payment_identifier:
+                return a
+        return None
+
     async def put_receipt(self, r: PaymentReceipt) -> PaymentReceipt:
         return await self.receipts.put(r.tenant_id, r)
 
@@ -296,6 +321,34 @@ class CommerceStore:
 
     async def list_settlements(self, tenant_id: str, state: Optional[SettlementState] = None) -> list[Settlement]:
         return await self.settlements.list(tenant_id, state=state)
+
+    async def tenants_with_pending_settlements(self) -> list[str]:
+        """Distinct tenant ids holding at least one PENDING settlement.
+
+        Cross-tenant scan used by the reconciliation worker to know which
+        tenants to re-scope into. Local: iterate the in-memory collection;
+        Postgres: a single JSONB filter query."""
+        rows: list = []
+        coll = self.settlements
+        if hasattr(coll, "all_rows"):
+            rows = await coll.all_rows(filters={"state": SettlementState.PENDING.value})
+        elif hasattr(coll, "_repo"):
+            rows = await coll._repo.find_many(
+                filters={"state": SettlementState.PENDING.value}, limit=10000
+            )
+        elif hasattr(coll, "_data"):
+            for tenant_bucket in coll._data.values():
+                rows.extend(
+                    r for r in tenant_bucket.values()
+                    if (getattr(r, "state", None) == SettlementState.PENDING
+                        or (isinstance(r, dict) and r.get("state") == SettlementState.PENDING.value))
+                )
+        seen: list[str] = []
+        for r in rows:
+            tid = r.get("tenant_id") if isinstance(r, dict) else getattr(r, "tenant_id", None)
+            if tid and tid not in seen:
+                seen.append(tid)
+        return seen
 
     # ── Entitlements / Grants / Fulfillments ─────────────────────────
 

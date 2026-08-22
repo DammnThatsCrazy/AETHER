@@ -916,7 +916,12 @@ async def slack_interactive_callback(request: Request):
     except Exception as _exc:
         logger.debug("slack_callback_inbox_write_failed: %s", _exc)
 
-    if signing_secret and not SlackChannelGateway.verify_signature(
+    if not signing_secret:
+        # Fail closed outside local: an unset SLACK_SIGNING_SECRET must never
+        # mean "skip verification" on a public callback route.
+        if os.getenv("AETHER_ENV", "local").lower() != "local":
+            raise ForbiddenError("Slack signing secret is not configured")
+    elif not SlackChannelGateway.verify_signature(
         body_bytes, timestamp, signature, signing_secret
     ):
         raise ForbiddenError("Invalid Slack signature")

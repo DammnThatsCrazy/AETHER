@@ -32,14 +32,14 @@ API process no longer starts every worker, consumer, and cron in-request.
 | --- | --- |
 | `all` | Everything in one process (local/dev default). Rejected in staging/production. |
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
-| `outbox-relay` | Outbox relay workers: the notification outbox and the ingestion `event_outbox` relay (FT-6). |
+| `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
 | `stream-worker` | Stream loops plus Bronze/Silver projection and notification consumers. |
 | `identity-worker` | Identity-signal emission from validated SDK events. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`) and `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`) loop workers. |
-| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags). |
-| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs). |
+| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
+| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → loop-worker mapping lives in `services/runtime/roles.py`; canonical
@@ -119,6 +119,36 @@ downstream work becomes replayable instead of riding the request.
 Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
 `OUTBOX_RELAY_POLL_INTERVAL_S` (2), `OUTBOX_RELAY_LEASE_SECONDS` (60),
 `OUTBOX_RELAY_MAX_ATTEMPTS` (8) — all on `settings.ingestion_v2`.
+
+## Reward & commerce plane workers
+
+Five supervised loops (`services/runtime/specs.py::build_worker_specs`, builders
+in `services/rewards/workers.py` and `services/rewards/delivery_outbox.py`) close
+the reward/x402/credential planes so activation stays credential-only rather than
+depending on an operator manually draining a queue:
+
+- **`reward_delivery_outbox`** (`outbox-relay`) — drains `reward_delivery_jobs`
+  through the rail-sender registry each tick. It is the reward plane's
+  at-least-once delivery path; before it was supervised a reward left the durable
+  outbox only when an operator hit the drain route.
+- **`x402_settlement_reconciliation`** (`materializer`, gated by
+  `COMMERCE_CONTROL_PLANE_ENABLED`) — re-checks PENDING settlements against the
+  tenant's RPC and advances the on-chain-final ones to SETTLED. Tenant-isolated,
+  idempotent, kill-switch aware (skips SUSPENDED x402 capabilities), durable
+  per-tenant cursor in `x402_reconciliation_cursor`.
+- **`reward_reservation_release`** (`maintenance`) — returns stale,
+  never-committed budget reservations to the tenant's available balance.
+- **`reward_dlq_sweeper`** (`maintenance`) — samples reward-outbox dead-letter
+  depth as a gauge; replay stays an explicit operator action.
+- **`credential_expiry_sweep`** (`maintenance`) — tombstones expired PREVIOUS
+  credential versions across tenants once their rotation-overlap window closes.
+
+Every loop is cancellation-safe and isolates a failing tick (one bad tick logs
+and continues rather than killing the supervised loop). The `/v1/ready`
+component report (`services/gateway/component_status.py`) folds each plane's
+worker roles into the `rewards`, `commerce`, and `provider_credentials`
+component statuses, so an unsupervised or failed loop is observable rather than
+silent.
 
 ## Production fail-closed rules
 

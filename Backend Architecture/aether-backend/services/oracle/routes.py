@@ -47,25 +47,39 @@ def _require_env(name: str, local_default: str = "") -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# SINGLETON
+# LAZY SINGLETON (local/test bootstrap only — no import-time secret reads)
 # ═══════════════════════════════════════════════════════════════════════════
+# The platform oracle endpoints sign with the LOCAL bootstrap key only; tenant
+# proof signing resolves per-tenant credentials via services/rewards/signing.
+# Initialization is deferred so importing this module never reads a signer key
+# and non-local deployments without a legacy key fail closed per request
+# instead of failing the whole app import.
 
-_config = ProofConfig(
-    signer_private_key=_require_env(
-        "ORACLE_SIGNER_KEY",
-        "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-    ),
-    contract_address=_require_env(
-        "REWARD_CONTRACT_ADDRESS",
-        "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    ),
-    chain_id=int(os.environ.get("CHAIN_ID", "1")),
-    proof_expiry_seconds=int(os.environ.get("PROOF_EXPIRY_SECONDS", "3600")),
-)
+_config: ProofConfig | None = None
+_signer: OracleSigner | None = None
 
-_signer = OracleSigner(_config)
 
-_INTERNAL_API_KEY = _require_env("ORACLE_INTERNAL_KEY", "aether-internal-dev-key")
+def _get_signer() -> OracleSigner:
+    global _config, _signer
+    if _signer is None:
+        from services.rewards.signing import local_bootstrap_key
+
+        key = os.environ.get("ORACLE_SIGNER_KEY") or local_bootstrap_key()
+        _config = ProofConfig(
+            signer_private_key=key,
+            contract_address=_require_env(
+                "REWARD_CONTRACT_ADDRESS",
+                "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+            ),
+            chain_id=int(os.environ.get("CHAIN_ID", "1")),
+            proof_expiry_seconds=int(os.environ.get("PROOF_EXPIRY_SECONDS", "3600")),
+        )
+        _signer = OracleSigner(_config)
+    return _signer
+
+
+def _get_internal_api_key() -> str:
+    return _require_env("ORACLE_INTERNAL_KEY", "aether-internal-dev-key")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -140,10 +154,10 @@ async def generate_proof(
     **Internal endpoint** — callers must supply a valid
     ``X-Internal-Key`` header.
     """
-    if x_internal_key != _INTERNAL_API_KEY:
+    if x_internal_key != _get_internal_api_key():
         raise HTTPException(status_code=403, detail="Invalid or missing internal API key")
 
-    proof = await _signer.generate_proof(
+    proof = await _get_signer().generate_proof(
         user=body.user,
         action_type=body.action_type,
         amount_wei=body.amount_wei,
@@ -175,7 +189,7 @@ async def verify_proof(body: VerifyProofRequest):
     )
 
     expired = is_proof_expired(proof)
-    valid = verify_reward_proof(proof, expected_signer=_signer.signer_address)
+    valid = verify_reward_proof(proof, expected_signer=_get_signer().signer_address)
 
     metrics.increment("oracle_route_verify", labels={"valid": str(valid)})
 
@@ -183,7 +197,7 @@ async def verify_proof(body: VerifyProofRequest):
         valid=valid,
         expired=expired,
         signer_match=valid and not expired,
-        expected_signer=_signer.signer_address,
+        expected_signer=_get_signer().signer_address,
     ).model_dump()
 
 
@@ -191,8 +205,9 @@ async def verify_proof(body: VerifyProofRequest):
 @api_response
 async def get_signer_info():
     """Return the oracle signer's public address and target chain."""
+    signer = _get_signer()
     return SignerInfoResponse(
-        address=_signer.signer_address,
+        address=signer.signer_address,
         chain_id=_config.chain_id,
         contract_address=_config.contract_address,
     ).model_dump()
@@ -206,9 +221,10 @@ async def get_oracle_config():
 
     The private key is **never** exposed.
     """
+    signer = _get_signer()
     return OracleConfigResponse(
         chain_id=_config.chain_id,
         contract_address=_config.contract_address,
         proof_expiry_seconds=_config.proof_expiry_seconds,
-        signer_address=_signer.signer_address,
+        signer_address=signer.signer_address,
     ).model_dump()

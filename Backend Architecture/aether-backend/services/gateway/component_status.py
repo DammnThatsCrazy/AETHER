@@ -222,6 +222,49 @@ COMPONENTS: tuple[ComponentSpec, ...] = (
             "billing_subscriptions_canceled",
         ),
     ),
+    ComponentSpec(
+        name="rewards",
+        route_prefixes=("/v1/rewards",),
+        dependencies=("database",),
+        # reward_delivery_outbox (outbox-relay) drains the durable reward
+        # delivery jobs; reward_reservation_release and reward_dlq_sweeper
+        # (maintenance) return stale budget reservations and surface DLQ depth.
+        worker_roles=("outbox-relay", "maintenance"),
+        work_counters=(
+            "rewards_enqueued",
+            "rewards_outbox_enqueued",
+            "rewards_outbox_delivered",
+            "rewards_actions_delivered_total",
+            "rewards_budget_committed",
+        ),
+    ),
+    ComponentSpec(
+        name="commerce",
+        route_prefixes=(
+            "/v1/x402",
+            "/v1/approvals",
+            "/v1/entitlements",
+            "/v1/diagnostics/commerce",
+        ),
+        dependencies=("database",),
+        # x402_settlement_reconciliation (materializer) advances verified
+        # settlements to on-chain finality.
+        worker_roles=("materializer",),
+        work_counters=(
+            "commerce_verifications",
+            "commerce_settlements",
+            "x402_payments_captured",
+            "commerce_entitlements_granted",
+        ),
+    ),
+    ComponentSpec(
+        name="provider_credentials",
+        route_prefixes=("/v1/providers/credentials",),
+        dependencies=("database",),
+        # credential_expiry_sweep (maintenance) tombstones expired rotation
+        # overlaps so a superseded secret does not linger decryptable.
+        worker_roles=("maintenance",),
+    ),
 )
 
 COMPONENT_NAMES: tuple[str, ...] = tuple(spec.name for spec in COMPONENTS)

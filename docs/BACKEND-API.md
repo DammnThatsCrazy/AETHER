@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "b6e0b751"
+last_synced_commit: "e610a8df"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -939,12 +939,24 @@ Configure a reward delivery rail for the authenticated tenant.
 }
 ```
 
-Rails: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim`.
-Beta (config only, no delivery): `stripe_credit` | `loyalty_points` | `coupon` | `internal_credit` | `x402_credit`.
+Rails (see `docs/_generated/reward-rail-matrix.json` for the canonical tiers):
+- Production: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim` | `internal_credit`.
+- Sandbox: `stripe_credit` (Stripe test mode; live key external). Explicit beta: `x402_credit` (sandbox-only).
+- Intentionally unsupported (configuring is refused, HTTP 422): `loyalty_points` | `coupon`.
+`internal_credit` / `stripe_credit` / `x402_credit` deliver through the same durable outbox as `tenant_webhook`.
+
+For `tenant_webhook`, a submitted `signing_secret` is **dual-written into the
+credential authority** (provider `tenant_webhook`, slot `webhook_signing_secret`)
+and replaced by a `secret_ref` before the config is persisted — plaintext never
+reaches the stored row, the durable outbox job, an audit record, or any
+response. The secret is resolved at the narrow send site with active+previous
+rotation overlap. For other rails, secret material under `config` (e.g.
+`api_key`) is **write-only**: responses and audit state return `<redacted>` plus
+a `has_<key>` marker and a short non-reversible fingerprint — never the value.
 
 ### GET /v1/rewards/rails
 
-List configured rails for the authenticated tenant.
+List configured rails for the authenticated tenant (secrets redacted).
 
 ### GET /v1/rewards/rails/{id}
 
@@ -952,7 +964,10 @@ Get a single rail configuration.
 
 ### PATCH /v1/rewards/rails/{id}
 
-Update a rail configuration.
+Update a rail configuration. A rotated `tenant_webhook` `signing_secret`
+submitted here is dual-written into the credential authority and replaced by a
+`secret_ref` before persistence — identical handling to create, so a PATCH can
+never reintroduce plaintext into the stored row.
 
 ### POST /v1/rewards/rails/{id}/verify
 
@@ -968,7 +983,7 @@ Register a smart contract for `onchain_claim` proof generation. A verified regis
 
 Re-registering an existing `(tenant_id, chain_id, contract_address)` updates `oracle_signer_address`, `allowed_campaign_ids`, and `contract_name` and resets `verification_status` to `pending` — a new operator verification is required before proof generation resumes.
 
-`oracle_signer_address` is **required** — set it to the Ethereum address derived from `ORACLE_SIGNER_KEY` (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the live oracle signer.
+`oracle_signer_address` is **required** — set it to the Ethereum address derived from the tenant's `reward_signer` credential (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the tenant's resolved reward signer.
 
 **Request:**
 ```json
@@ -992,7 +1007,7 @@ Get a single registered contract by ID.
 
 ### POST /v1/rewards/contracts/{id}/verify
 
-**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the current Aether oracle signer (derived from `ORACLE_SIGNER_KEY`) — returns 422 if they diverge. After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
+**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the tenant's **resolved reward signer** (`services/rewards/signing.py`, credential-authority backed) — returns 422 if they diverge, 422 if no signer resolves, and 503 if `eth_account` is unavailable (fail-closed; never passes unverified). After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ---
 
@@ -1186,6 +1201,18 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 
 All general diagnostics endpoints require `admin` permission. Commerce diagnostics require `commerce:read`.
 
+**x402 environment & credential-only verification.** Every authorization,
+receipt, and settlement carries a credential `environment` (`sandbox` | `live`)
+resolved server-side from the tenant's x402 capability activation state — never
+from the client. Verification resolves the tenant's own RPC endpoint+key pair
+from the credential authority (atomic `{url, api_key, auth_mode}`); a deployed
+environment with no configured pair yields the `verification_unavailable`
+verdict (fail-closed). `GET /v1/x402/commerce/health` derives its status from
+real facilitator health + settlement backlog (never a hardcoded healthy).
+Provision RPC/facilitator credentials via the credential API (providers
+`rpc_evm_base` / `rpc_svm_mainnet` / … slot `rpc_endpoint_pair`; facilitator
+providers slot `facilitator_api_key`).
+
 **Query Parameters (GET /errors):**
 - `service` (optional) — filter by service name
 - `category` (optional) — filter by error category
@@ -1245,6 +1272,25 @@ discovery — callers can determine available capabilities without trial-and-err
 1. Tenant BYOK key → 2. System default provider → 3. Fallback provider(s) → 4. ServiceUnavailableError
 
 Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until activated.
+
+### Capability Activation Lifecycle
+
+Persisted, machine-enforced per-(tenant, provider, environment, capability)
+lifecycle along the canonical `CredentialReadiness` ladder
+(`packages/shared/contracts/readiness-vocabulary.json`). Every transition
+records actor, reason, evidence references, and the credential version it is
+bound to; promotions are fail-closed (no rung skipping, evidence must resolve,
+credential slot must be ACTIVE, entitlement must approve).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/capabilities/activation` | Current lifecycle state of every capability for the tenant (`read`) |
+| GET | `/v1/capabilities/activation/{provider}/{capability}?environment=` | Current state + full promotion/demotion history (`read`) |
+| POST | `/v1/capabilities/activation/{provider}/{capability}/promote` | Promote toward `target_state` with `evidence_refs` (`admin`; 400 on illegal/unproven moves) |
+| POST | `/v1/capabilities/activation/{provider}/{capability}/suspend` | Reversible suspension (`admin`) |
+| POST | `/v1/capabilities/activation/{provider}/{capability}/resume` | Resume to the interrupted certified level (`admin`) |
+| GET | `/v1/kyber/capabilities/activation` | Cross-tenant current states (Kyber operator) |
+| POST | `/v1/kyber/capabilities/activation/{tenant_id}/{provider}/{capability}/suspend` | Audited operator emergency suspend (kill switch) |
 
 ---
 
@@ -2822,6 +2868,12 @@ Comms webhook endpoint management (tenant-admin; ADR-C11):
   (revoke + re-mint) an endpoint id.
 - `POST /v1/integrations/connectors/{type}/webhook-endpoints/{endpoint_id}/revoke`
   — revoke an endpoint id; revoked ids resolve to a uniform 404.
+- Public delivery targets
+  `POST /v1/integrations/webhooks/comms/{connector}/{endpoint_id}` (signature
+  verification still applies — the endpoint id is routing, not authentication);
+  GET-probing providers (e.g. Mailchimp) validate via
+  `GET /v1/integrations/webhooks/comms/{connector}/{endpoint_id}`. Comms
+  connectors are permanently denied on the legacy header-tenant route (ADR-C11).
 
 Communications tenant surface (`/v1/comms/*`):
 

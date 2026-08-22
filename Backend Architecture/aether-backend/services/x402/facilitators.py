@@ -6,6 +6,7 @@ assets. Day-1 seeds: local facilitator for Aether-native, USDC/Base, USDC/Solana
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from shared.logger.logger import get_logger
@@ -14,6 +15,10 @@ from .commerce_models import Facilitator, FacilitatorMode, StablecoinAsset
 from .commerce_store import get_commerce_store
 
 logger = get_logger("aether.service.x402.facilitators")
+
+
+def _is_local_env() -> bool:
+    return os.getenv("AETHER_ENV", "local").lower() == "local"
 
 
 # ─── Day-1 Seeds ──────────────────────────────────────────────────────
@@ -65,6 +70,14 @@ CIRCLE_V2_FACILITATOR = Facilitator(
     mode=FacilitatorMode.FACILITATOR,
     supported_assets=["USDC"],
     supported_chains=["eip155:8453", "solana:mainnet"],
+    # Circle serves both environments; a live authorization may route here only
+    # because "live" is declared (see select_for's environment filter).
+    supported_environments=["sandbox", "live"],
+    # Requires an API key (credential authority: provider fac_circle_v2, domain
+    # x402, slot facilitator_api_key) — attached as a bearer token by the
+    # verification engine. Verification falls through to on-chain RPC when the
+    # key is not configured.
+    credential_slot="facilitator_api_key",
     health_status="unknown",
     success_rate=None,
     active=True,
@@ -95,22 +108,39 @@ class FacilitatorRegistry:
         tenant_id: str,
         asset_symbol: str,
         chain: str,
+        environment: Optional[str] = None,
     ) -> Optional[Facilitator]:
-        """Select best facilitator for an asset/chain pair. Prefers healthiest.
+        """Select best facilitator for an asset/chain(/environment). Prefers healthiest.
 
         Health is a derived signal — verification outcomes feed update_health;
         there is no standalone prober — so a freshly seeded facilitator is
         "unknown". Selection therefore excludes only facilitators known to be
         down and ranks healthy ahead of unprobed ahead of degraded; requiring
         "healthy" here made a new tenant's payments structurally unroutable.
+
+        Outside the local environment, LOCAL-mode facilitators (the internal
+        Aether verifier seed) are never auto-selected: they have no chain
+        access, and selecting one for a fresh tenant used to confer
+        verification on every payment. Non-local selection is restricted to
+        external facilitators; with none configured, verification falls to the
+        on-chain RPC verifier.
+
+        When ``environment`` is supplied it MUST appear in the facilitator's
+        ``supported_environments``: a live authorization may never route through
+        a sandbox-only facilitator (the default for every facilitator that does
+        not override the field), nor a sandbox authorization through a live-only
+        one. The caller resolves the environment server-side before routing.
         """
         health_rank = {"healthy": 0, "unknown": 1, "degraded": 2}
         facilitators = await self.list(tenant_id)
+        local_env = _is_local_env()
         candidates = [
             f for f in facilitators
             if asset_symbol in f.supported_assets
             and chain in f.supported_chains
             and f.health_status != "down"
+            and (local_env or f.mode != FacilitatorMode.LOCAL)
+            and (environment is None or environment in (f.supported_environments or []))
         ]
         if not candidates:
             return None

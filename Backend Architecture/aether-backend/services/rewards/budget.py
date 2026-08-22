@@ -153,6 +153,94 @@ class BudgetReservationService:
     async def get_ledger(self, tenant_id: str, campaign_id: str) -> Optional[dict]:
         return await self._ledger.find_by_id(_account_id(tenant_id, campaign_id))
 
+    async def release_stale(self, *, max_age_seconds: int = 3600) -> int:
+        """Release reservations left ``reserved`` past ``max_age_seconds``.
+
+        A reservation that never committed (the delivery path crashed between
+        reserve and commit) otherwise leaks budget. Idempotent: releasing an
+        already-released/committed reservation is a no-op. Returns the count
+        released."""
+        from datetime import timedelta
+
+        from shared.temporal.instant import try_parse_instant
+
+        cutoff = utc_now() - timedelta(seconds=max_age_seconds)
+        rows = await self._reservations.find_many(
+            filters={"state": "reserved"}, limit=5000
+        )
+        released = 0
+        for row in rows:
+            created = row.get("created_at") or row.get("reserved_at")
+            # try_parse_instant is the sanctioned parser: it returns an aware UTC
+            # instant or a reason code, and rejects naive strings rather than
+            # silently assuming UTC. A row with an unparseable timestamp is left
+            # alone rather than force-released.
+            ts, _reason = try_parse_instant(str(created))
+            if ts is None:
+                continue
+            if ts >= cutoff:
+                continue
+            # Only release a reservation whose delivery is ABSENT or TERMINAL.
+            # A stale-but-still-live delivery (outbox worker was down for the
+            # window) will recover and commit; releasing now frees budget the
+            # recovered delivery then spends (its commit of the released row is a
+            # no-op), letting spend exceed the cap. See _reservation_release_safe.
+            if not await self._reservation_release_safe(row):
+                metrics.increment(
+                    "rewards_budget_stale_release_skipped",
+                    labels={"tenant_id": row.get("tenant_id", "")},
+                )
+                continue
+            result = await self.release(row["id"], tenant_id=row.get("tenant_id", ""))
+            if result.ok:
+                released += 1
+        return released
+
+    async def _reservation_release_safe(self, row: dict) -> bool:
+        """True only when no live delivery can still commit this reservation.
+
+        A reservation is safe to release when its linked reward action is absent
+        or in a terminal-FAILED state (failed / cancelled / rejected / expired /
+        dead_letter) AND no delivery job for it is still queued/leased/retrying.
+        It is NOT safe while the action is in flight (pending/ready/created) or
+        already delivered (budget spent) — releasing then risks double-spend.
+        """
+        decision_id = row.get("decision_id")
+        tenant_id = row.get("tenant_id", "")
+        if not decision_id:
+            return True  # orphan reservation — nothing will ever commit it
+        try:
+            from services.rewards.repositories import RewardActionRepository
+
+            matches = await RewardActionRepository().find_many(
+                filters={"tenant_id": tenant_id, "decision_id": decision_id}, limit=1
+            )
+        except Exception:  # noqa: BLE001 — cannot confirm → fail safe, keep it
+            return False
+        action = matches[0] if matches else None
+        if action is None:
+            return True  # no action → no delivery will commit
+        status = (action.get("status") or "").lower()
+        if status in ("pending", "ready", "created", "leased", "delivered"):
+            return False  # in flight or already spent
+        action_id = action.get("id")
+        if action_id and await self._has_active_delivery_job(tenant_id, action_id):
+            return False
+        return True  # action terminally failed → budget legitimately freed
+
+    async def _has_active_delivery_job(self, tenant_id: str, action_id: str) -> bool:
+        try:
+            from services.rewards.delivery_outbox import RewardDeliveryJobRepository
+
+            jobs = await RewardDeliveryJobRepository().find_many(
+                filters={"tenant_id": tenant_id, "action_id": action_id}, limit=20
+            )
+        except Exception:  # noqa: BLE001 — cannot confirm → fail safe, treat as active
+            return True
+        # queued / leased / failed(=retrying with a future next_attempt) keep the
+        # delivery alive; dead_letter / delivered / cancelled are terminal.
+        return any((j.get("state") or "").lower() in ("queued", "leased", "failed") for j in jobs)
+
     # ── in-memory backend ─────────────────────────────────────────────────
 
     async def _reserve_in_memory(

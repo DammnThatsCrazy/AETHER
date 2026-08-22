@@ -65,12 +65,36 @@ _STABLECOIN_OBSERVERS: dict[str, tuple[str, str, tuple[str, ...]]] = {
 }
 
 
+# Import failures observed while resolving adapters, keyed by "module:attr".
+# A broken import must be distinguishable from an unimplemented provider: an
+# entry here means the provider's SCAFFOLDED state is a resolution *failure*,
+# not an honest absence. Healthy builds keep this empty; certification gates
+# fail when it is not.
+_IMPORT_ERRORS: dict[str, str] = {}
+
+
+def _record_import_error(key: str, exc: Exception) -> None:
+    _IMPORT_ERRORS[key] = f"{type(exc).__name__}: {exc}"
+
+
+def import_errors() -> dict[str, str]:
+    """Sorted copy of the adapter-resolution failures seen so far."""
+    return dict(sorted(_IMPORT_ERRORS.items()))
+
+
 def _import(module: str, attr: str) -> Optional[Any]:
+    key = f"{module}:{attr}"
     try:
         mod = __import__(module, fromlist=[attr])
-        return getattr(mod, attr, None)
-    except Exception:  # pragma: no cover - import fragility is resolved honestly
+    except Exception as exc:
+        _record_import_error(key, exc)
         return None
+    value = getattr(mod, attr, None)
+    if value is None:
+        _IMPORT_ERRORS[key] = "AttributeError: attribute missing"
+    else:
+        _IMPORT_ERRORS.pop(key, None)
+    return value
 
 
 # ── per-domain resolvers ─────────────────────────────────────────────────────
@@ -83,7 +107,8 @@ def _resolve_interop() -> list[AdapterCertificationDescriptor]:
         from services.interop.providers import INTEROP_PROVIDERS
 
         providers = INTEROP_PROVIDERS
-    except Exception:  # pragma: no cover
+    except Exception as exc:  # pragma: no cover
+        _record_import_error("services.interop.providers:INTEROP_PROVIDERS", exc)
         providers = {}
 
     for token, provider_id in _INTEROP_PROVIDER_IDS.items():
@@ -128,7 +153,8 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
         )
 
         registered = {**DERIVATIVES_ADAPTERS, **VENUE_ADAPTERS}
-    except Exception:  # pragma: no cover
+    except Exception as exc:  # pragma: no cover
+        _record_import_error("services.derivatives.adapters:VENUE_ADAPTERS", exc)
         registered = {}
 
     # Hyperliquid ships as a production-shaped connector (fixture-injected
@@ -280,7 +306,10 @@ def _resolve_communications() -> list[AdapterCertificationDescriptor]:
             if any(output.startswith("comms.") for output in manifest.data_outputs)
         )
         return [comms_certification_descriptor(provider) for provider in providers]
-    except Exception:  # pragma: no cover - comms module present in this repo
+    except Exception as exc:  # pragma: no cover - comms module present in this repo
+        _record_import_error(
+            "services.comms.conformance:comms_certification_descriptor", exc
+        )
         return [
             AdapterCertificationDescriptor(
                 provider=provider,
@@ -365,6 +394,9 @@ def build_capability_matrix() -> dict:
             "first_release": first_release_count,
             "by_state": dict(sorted(by_state.items())),
             "by_domain": dict(sorted(by_domain.items())),
+            # Non-empty means a SCAFFOLDED entry above is an import failure,
+            # not an honest absence — certification gates must fail on it.
+            "import_errors": import_errors(),
         },
     }
 
@@ -372,4 +404,5 @@ def build_capability_matrix() -> dict:
 __all__ = [
     "iter_first_release_descriptors",
     "build_capability_matrix",
+    "import_errors",
 ]

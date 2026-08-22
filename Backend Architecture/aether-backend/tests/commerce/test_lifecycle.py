@@ -180,6 +180,127 @@ async def test_idempotency_on_payment_identifier():
     assert r1["entitlement_id"] == r2["entitlement_id"]
 
 
+def _stub_receipt(authorization, tx_hash: str, *, verdict: str, error: str):
+    """Build a failed PaymentReceipt carrying a given verdict, for stubbing
+    VerificationEngine.verify() without touching real chain/RPC plumbing."""
+    from services.x402.commerce_models import PaymentReceipt
+
+    return PaymentReceipt(
+        tenant_id=authorization.tenant_id,
+        authorization_id=authorization.authorization_id,
+        challenge_id=authorization.challenge_id,
+        tx_hash=tx_hash,
+        chain=authorization.chain,
+        environment=authorization.environment,
+        asset_symbol=authorization.asset_symbol,
+        amount_usd=authorization.amount_usd,
+        payer=authorization.payer,
+        recipient=authorization.recipient,
+        verified=False,
+        verified_by="local",
+        verification_verdict=verdict,
+        verification_error=error,
+    )
+
+
+@pytest.mark.asyncio
+async def test_not_finalized_verdict_is_not_cached_and_retry_can_succeed():
+    """BUG FIX regression: a retryable verdict (``not_finalized``) from
+    verify() must NOT be written to the payment-identifier idempotency
+    store. Caching it would strand a normally-submitted-but-not-yet-final
+    payment behind the cached failure until the entry's TTL expires, and
+    every retry would replay the cached failure instead of re-checking the
+    chain. This drives verify_and_settle through a flaky verify() that
+    returns ``not_finalized`` once and then the real (local, auto-verifying)
+    result, and asserts (a) nothing was cached after the first call and
+    (b) the very next call re-checks and succeeds."""
+    from services.x402 import idempotency as idem
+    from services.x402.control_plane import get_control_plane
+
+    tenant = "t_not_final"
+    resources = await _seed(tenant)
+    plane = get_control_plane()
+
+    challenge = await plane.issue_challenge(tenant, resources[0].resource_id, "agent_1")
+    approval, _ = await plane.request_approval(tenant, challenge.challenge_id)
+    await plane.apply_decision(tenant, approval.approval_id, "approve", "ops", "ok")
+    auth = await plane.authorize_payment(tenant, approval.approval_id, "0xpayer")
+
+    tx_hash = "0x" + "c" * 64
+    real_verify = plane._verify.verify
+    calls = {"n": 0}
+
+    async def _flaky_verify(tenant_id, authorization, tx_hash_, prefer_facilitator=True):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _stub_receipt(
+                authorization, tx_hash_,
+                verdict="not_finalized",
+                error="not_finalized: 1 < 2 confirmations",
+            )
+        return await real_verify(tenant_id, authorization, tx_hash_, prefer_facilitator)
+
+    plane._verify.verify = _flaky_verify
+
+    first = await plane.verify_and_settle(tenant, auth.authorization_id, tx_hash)
+    assert first["verified"] is False
+    assert first["error"].startswith("not_finalized")
+
+    store = idem.get_idempotency_store()
+    assert await store.lookup(tenant, auth.payment_identifier) is None, (
+        "a retryable (not_finalized) verdict must not be cached"
+    )
+
+    second = await plane.verify_and_settle(tenant, auth.authorization_id, tx_hash)
+    assert second["verified"] is True
+    assert second["entitlement_id"]
+    assert calls["n"] == 2, "the retry must re-check the chain, not replay a cached failure"
+
+
+@pytest.mark.asyncio
+async def test_terminal_verdict_is_cached_and_replayed_without_recheck():
+    """Counterpart to the retryable-verdict test: a TERMINAL failure verdict
+    (``reverted``) IS cached — a retry must replay it via the idempotency
+    store rather than re-invoking verify()."""
+    from services.x402 import idempotency as idem
+    from services.x402.control_plane import get_control_plane
+
+    tenant = "t_terminal_fail"
+    resources = await _seed(tenant)
+    plane = get_control_plane()
+
+    challenge = await plane.issue_challenge(tenant, resources[0].resource_id, "agent_1")
+    approval, _ = await plane.request_approval(tenant, challenge.challenge_id)
+    await plane.apply_decision(tenant, approval.approval_id, "approve", "ops", "ok")
+    auth = await plane.authorize_payment(tenant, approval.approval_id, "0xpayer")
+
+    tx_hash = "0x" + "d" * 64
+    calls = {"n": 0}
+
+    async def _always_reverted(tenant_id, authorization, tx_hash_, prefer_facilitator=True):
+        calls["n"] += 1
+        return _stub_receipt(
+            authorization, tx_hash_,
+            verdict="reverted",
+            error="reverted: transaction reverted on-chain",
+        )
+
+    plane._verify.verify = _always_reverted
+
+    first = await plane.verify_and_settle(tenant, auth.authorization_id, tx_hash)
+    assert first["verified"] is False
+    assert first["error"].startswith("reverted")
+
+    store = idem.get_idempotency_store()
+    assert await store.lookup(tenant, auth.payment_identifier) is not None, (
+        "a terminal (reverted) verdict must be cached"
+    )
+
+    second = await plane.verify_and_settle(tenant, auth.authorization_id, tx_hash)
+    assert second == first
+    assert calls["n"] == 1, "a cached terminal verdict must be replayed, not re-verified"
+
+
 @pytest.mark.asyncio
 async def test_cross_tenant_isolation():
     from services.x402.control_plane import get_control_plane
@@ -305,3 +426,41 @@ async def test_policy_denial_on_unsupported_chain():
             tenant, only_base.resource_id, "agent_1", chain="solana:mainnet"
         )
     assert exc.value.code == "UNSUPPORTED_NETWORK"
+
+
+@pytest.mark.asyncio
+async def test_entitlement_deferred_until_settlement_settled(monkeypatch):
+    """N10: outside local, verify_and_settle parks the settlement PENDING and
+    must NOT mint an ACTIVE entitlement before finality. The reconciliation path
+    mints it once the settlement is SETTLED — idempotently."""
+    import services.x402.settlement as stl_mod
+    from services.x402.control_plane import get_control_plane
+    from services.x402.settlement import get_settlement_tracker
+
+    # Force settlement to park PENDING (verification still confers via the local
+    # facilitator; only the settlement finality path is made non-local).
+    monkeypatch.setattr(stl_mod, "_is_local_env", lambda: False)
+
+    tenant = "t_defer"
+    resources = await _seed(tenant)
+    plane = get_control_plane()
+    challenge = await plane.issue_challenge(
+        tenant_id=tenant, resource_id=resources[0].resource_id, requester_id="agent_1",
+        chain="eip155:8453", asset_symbol="USDC",
+    )
+    approval, _ = await plane.request_approval(tenant_id=tenant, challenge_id=challenge.challenge_id, reason="e2e")
+    await plane.apply_decision(tenant_id=tenant, approval_id=approval.approval_id, action="approve", decided_by="ops", reason="ok")
+    auth = await plane.authorize_payment(tenant, approval.approval_id, "0xpayer")
+
+    result = await plane.verify_and_settle(tenant, auth.authorization_id, "0x" + "a" * 64)
+    assert result["verified"] is True
+    assert result["settlement_state"] == "pending"
+    assert result["entitlement_id"] is None  # DEFERRED — no access before finality
+
+    # Reconciliation confirms finality → settle → mint the deferred entitlement.
+    await get_settlement_tracker().mark_settled_reconciled(tenant, result["settlement_id"])
+    ent = await plane.finalize_settlement_entitlement(tenant, result["settlement_id"])
+    assert ent is not None
+    # Idempotent: a second finalize returns the same entitlement (no duplicate).
+    ent2 = await plane.finalize_settlement_entitlement(tenant, result["settlement_id"])
+    assert ent2 is not None and ent2.entitlement_id == ent.entitlement_id

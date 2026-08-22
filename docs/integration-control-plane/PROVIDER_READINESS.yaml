@@ -27,7 +27,11 @@ baseline:
   economic_first_release:        # derivatives x4, interop x7, payments x5, stablecoin-chain x2
     state: credential_waiting
     level: 3
-    note: "18 providers resolve to CREDENTIAL_WAITING; none partner_live, none scaffolded."
+    note: "18 providers resolve to CREDENTIAL_WAITING; none partner_live, none scaffolded. The certification matrix tracks 19 first-release providers total: these 18 plus communications:klaviyo (below)."
+  communications_first_release:  # klaviyo (services/comms conformance-resolved)
+    state: credential_waiting
+    level: 3
+    note: "Klaviyo connector resolves via services/comms/conformance into the certification matrix (communications domain)."
   gateway_streaming_social:      # instagram, linkedin, youtube, spotify, tiktok, telegram
     state: credential_waiting
     level: 2

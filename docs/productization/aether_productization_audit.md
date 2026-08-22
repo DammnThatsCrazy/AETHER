@@ -77,14 +77,14 @@ What this audit pass changed (June 2026):
 What the July 2026 staging-capstone pass changed (PRs 1–6):
 
 - Added a **credentialless provider certification plane** (new scorecard area,
-  4/5): a `CredentialReadiness` truth model (8 ranked states) plus a
+  4/5): a `CredentialReadiness` truth model (7 ranked states) plus a
   `ReadinessDimensions` record whose validators refuse to infer `production_ready`
   from structure. `build_capability_matrix()` resolves every provider's state
   **from source** into `docs/_generated/adapter-certification-matrix.json`, and
   `make credentialless-certification-strict` gates the floor. The plane is wired
   into `production_status.py` as a live consistency check.
-- **All 18 first-release providers now resolve to `CREDENTIAL_WAITING`** —
-  derivatives ×4, interop ×7, payments ×5, stablecoin-chain ×2 — code-complete +
+- **All 19 first-release providers now resolve to `CREDENTIAL_WAITING`** —
+  derivatives ×4, interop ×7, payments ×5, stablecoin-chain ×2, communications ×1 — code-complete +
   infra-defined + credential-gated, none `SCAFFOLDED` and none `PARTNER_LIVE`.
   This is an honest, evidence-backed advance from the earlier mix of
   `CREDENTIAL_GATED`/`SCAFFOLDED`, **not** a production claim. The economic domain
@@ -200,6 +200,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | measurement / attribution | 4 |
 | measurement integrity plane | 4 |
 | tenant import engine | 4 |
+| campaign intelligence | 5 |
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |
@@ -241,7 +242,7 @@ production traffic). Payment rail observability (3) and card-linked payment rail
 areas with minor gaps remain at 4 until they carry production traffic at scale.
 The new **provider certification plane** (4/5) is the only score added this pass:
 it is a real, tested, gate-enforced credentialless framework, but it certifies
-readiness rather than conferring it — all 18 first-release providers it tracks are
+readiness rather than conferring it — all 19 first-release providers it tracks are
 `CREDENTIAL_WAITING`, so the economic domain scores did **not** move. No area was
 promoted to production-ready or live-validated this pass; credential-waiting and
 pilot-ready are deliberately distinguished from production-ready throughout.

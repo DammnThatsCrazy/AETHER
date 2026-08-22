@@ -283,13 +283,87 @@ def test_derive_is_honest():
         == CredentialReadiness.REPLAY_VALIDATED
     )
     assert (
-        ReadinessDimensions.derive(replay_validated=True, sandbox_validated=True).state
+        ReadinessDimensions.derive(
+            replay_validated=True,
+            sandbox_validated=True,
+            credential_supplied=True,
+            connection_validated=True,
+        ).state
         == CredentialReadiness.SANDBOX_VALIDATED
+    )
+    # a credential-free capability may reach sandbox without a connection test
+    assert (
+        ReadinessDimensions.derive(
+            replay_validated=True, sandbox_validated=True, credential_required=False
+        ).state
+        == CredentialReadiness.SANDBOX_VALIDATED
+    )
+    assert (
+        ReadinessDimensions.derive(
+            code_complete=True, infra_defined=True, credential_supplied=True
+        ).state
+        == CredentialReadiness.CREDENTIAL_SUPPLIED
+    )
+    assert (
+        ReadinessDimensions.derive(
+            code_complete=True,
+            infra_defined=True,
+            credential_supplied=True,
+            connection_validated=True,
+        ).state
+        == CredentialReadiness.CONNECTION_VALIDATED
     )
     live = ReadinessDimensions.derive(live_validated=True, credential_supplied=True)
     assert live.state == CredentialReadiness.PARTNER_LIVE
     # derive never turns production_ready on from structure
     assert live.production_ready is False
+
+
+def test_new_lifecycle_invariants_fail_closed():
+    # connection_validated without a supplied credential is dishonest
+    with pytest.raises(ValueError):
+        ReadinessDimensions(connection_validated=True, credential_supplied=False)
+    # credential-gated sandbox validation without a connection test is dishonest
+    with pytest.raises(ValueError):
+        ReadinessDimensions(
+            replay_validated=True,
+            sandbox_validated=True,
+            credential_supplied=True,
+            connection_validated=False,
+        )
+
+
+def test_offramp_states_rank_below_progression():
+    threshold = readiness_rank(CredentialReadiness.CREDENTIAL_WAITING)
+    for off in (
+        CredentialReadiness.DEGRADED,
+        CredentialReadiness.SUSPENDED,
+        CredentialReadiness.REVOKED,
+        CredentialReadiness.DISABLED,
+    ):
+        assert readiness_rank(off) < threshold
+    # severity order among off-ramps: disabled < revoked < suspended < degraded
+    assert (
+        readiness_rank(CredentialReadiness.DISABLED)
+        < readiness_rank(CredentialReadiness.REVOKED)
+        < readiness_rank(CredentialReadiness.SUSPENDED)
+        < readiness_rank(CredentialReadiness.DEGRADED)
+    )
+
+
+def test_full_progression_rank_order():
+    order = [
+        CredentialReadiness.SCAFFOLDED,
+        CredentialReadiness.CREDENTIAL_WAITING,
+        CredentialReadiness.REPLAY_VALIDATED,
+        CredentialReadiness.CREDENTIAL_SUPPLIED,
+        CredentialReadiness.CONNECTION_VALIDATED,
+        CredentialReadiness.SANDBOX_VALIDATED,
+        CredentialReadiness.PARTNER_LIVE,
+    ]
+    ranks = [readiness_rank(s) for s in order]
+    assert ranks == sorted(ranks)
+    assert len(set(ranks)) == len(ranks)
 
 
 def test_derive_enforces_invariants():
@@ -448,3 +522,47 @@ def test_summary_counts_are_consistent():
     assert sum(summary["by_state"].values()) == summary["total"]
     assert sum(summary["by_domain"].values()) == summary["total"]
     assert summary["first_release"] == summary["total"]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Registry — import-failure honesty
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def test_healthy_build_reports_no_import_errors():
+    """In this repo every first-release adapter must resolve; a non-empty map
+    would mean a SCAFFOLDED entry is a silent import failure, not an honest
+    absence."""
+    from shared.certification import registry as reg
+
+    reg.iter_first_release_descriptors()
+    assert reg.import_errors() == {}
+    assert build_capability_matrix()["summary"]["import_errors"] == {}
+
+
+def test_import_failure_is_recorded_not_silent():
+    """A broken module import degrades to None (state resolves SCAFFOLDED) but
+    MUST leave a distinguishable record in import_errors()."""
+    from shared.certification import registry as reg
+
+    assert reg._import("services.no_such_module_xyz", "Missing") is None
+    errors = reg.import_errors()
+    assert "services.no_such_module_xyz:Missing" in errors
+    assert "ModuleNotFoundError" in errors["services.no_such_module_xyz:Missing"]
+    # cleanup so later matrix builds in this process stay honest-empty
+    reg._IMPORT_ERRORS.pop("services.no_such_module_xyz:Missing", None)
+
+
+def test_missing_attribute_is_recorded_and_recovery_clears_it():
+    from shared.certification import registry as reg
+
+    assert reg._import("shared.certification.readiness", "NoSuchAttr") is None
+    assert (
+        reg.import_errors()["shared.certification.readiness:NoSuchAttr"]
+        == "AttributeError: attribute missing"
+    )
+    # a successful resolution never leaves a record behind for its own key
+    assert reg._import("shared.certification.readiness", "CredentialReadiness") is not None
+    assert "shared.certification.readiness:CredentialReadiness" not in reg.import_errors()
+    # cleanup so later matrix builds in this process stay honest-empty
+    reg._IMPORT_ERRORS.pop("shared.certification.readiness:NoSuchAttr", None)

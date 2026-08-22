@@ -69,6 +69,9 @@ backend = [
     "PyJWT>=2.8.0",
     "graphql-core>=3.2.0",
     "eth-account>=0.11.0",
+    # Ed25519 for SVM reward-signer key validation (credential authority
+    # key_derivation_check) and real Solana proof signing (multichain signer).
+    "pynacl>=1.5.0",
     # eth-hash (pulled transitively by eth-account -> eth-utils) needs a keccak
     # backend. Without one the interop providers (services/interop/providers/*)
     # fail to import, which (a) flips the generated adapter-certification-matrix

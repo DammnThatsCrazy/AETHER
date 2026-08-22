@@ -182,9 +182,67 @@ def from_connector_sync_status(s: ConnectorSyncStatus) -> ConnectionState:
         raise ValueError(f"no lifecycle state for sync status {s!r}") from exc
 
 
+# ── Projection onto the canonical capability lifecycle ───────────────────────
+# ConnectionState stays the connectors' fine-grained internal machine; the
+# canonical cross-domain readiness truth is shared.certification.readiness.
+# This TOTAL map (a test asserts coverage of every member) projects each
+# connection state onto its honest CredentialReadiness rung so the persisted
+# capability lifecycle can absorb connector health without a second vocabulary.
+
+
+def _readiness():
+    from shared.certification.readiness import CredentialReadiness
+
+    return CredentialReadiness
+
+
+def connection_state_to_readiness(state: ConnectionState):
+    """Project a :class:`ConnectionState` onto the canonical
+    ``CredentialReadiness`` token (total — raises on an unmapped member)."""
+    R = _readiness()
+    mapping = {
+        # Readiness / pre-setup gates
+        _S.CONTRACT_REQUIRED: R.CREDENTIAL_WAITING,
+        _S.PROVIDER_APPROVAL_REQUIRED: R.CREDENTIAL_WAITING,
+        _S.CREDENTIAL_WAITING: R.CREDENTIAL_WAITING,
+        _S.PRODUCT_DEFERRED: R.DISABLED,
+        _S.CERTIFIED: R.SANDBOX_VALIDATED,
+        _S.UNSUPPORTED: R.DISABLED,
+        _S.DEPRECATED: R.DISABLED,
+        # Setup band
+        _S.AVAILABLE: R.CREDENTIAL_WAITING,
+        _S.AUTHORIZATION_PENDING: R.CREDENTIAL_WAITING,
+        _S.CREDENTIALS_RECEIVED: R.CREDENTIAL_SUPPLIED,
+        _S.VERIFYING: R.CREDENTIAL_SUPPLIED,
+        _S.VERIFIED: R.CONNECTION_VALIDATED,
+        _S.ACCOUNT_SELECTION_REQUIRED: R.CONNECTION_VALIDATED,
+        _S.CONFIGURATION_REQUIRED: R.CONNECTION_VALIDATED,
+        _S.WEBHOOK_REGISTRATION_PENDING: R.CONNECTION_VALIDATED,
+        _S.INITIAL_SYNC_PENDING: R.CONNECTION_VALIDATED,
+        _S.INITIAL_SYNC_RUNNING: R.CONNECTION_VALIDATED,
+        # Operational band
+        _S.CONNECTED: R.PARTNER_LIVE,
+        _S.DEGRADED: R.DEGRADED,
+        _S.RATE_LIMITED: R.DEGRADED,
+        _S.PERMISSION_MISSING: R.DEGRADED,
+        _S.TOKEN_EXPIRING: R.DEGRADED,
+        _S.REAUTHORIZATION_REQUIRED: R.CREDENTIAL_WAITING,
+        _S.WEBHOOK_INVALID: R.DEGRADED,
+        _S.SYNC_FAILED: R.DEGRADED,
+        _S.REVOKED: R.REVOKED,
+        _S.DISABLED: R.DISABLED,
+        _S.FAILED: R.DEGRADED,
+    }
+    try:
+        return mapping[state]
+    except KeyError as exc:
+        raise ValueError(f"no readiness projection for connection state {state!r}") from exc
+
+
 __all__ = [
     "TRANSITIONS",
     "ConnectionState",
     "can_transition",
+    "connection_state_to_readiness",
     "from_connector_sync_status",
 ]

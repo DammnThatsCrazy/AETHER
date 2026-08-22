@@ -5,18 +5,24 @@ the tenant's system for execution. Aether generates the payload; the tenant exec
 
 ## Rail Overview
 
-| Rail | Delivery | Who Executes | Production Status |
+The canonical, machine-readable classification is generated from
+`services/rewards/rail_matrix.py` into
+`docs/_generated/reward-rail-matrix.json` and enforced by
+`scripts/release/check_reward_rail_matrix.py` (bidirectional agreement between
+adapters, the matrix, and the outbox senders). Tiers:
+
+| Rail | Delivery | Who Executes | Tier |
 |---|---|---|---|
 | `recommend_only` | None | Tenant (manual) | Production |
 | `manual_approval` | None until approved | Tenant operator | Production |
 | `manual_export` | CSV/JSON download | Tenant batch process | Production |
-| `tenant_webhook` | HTTPS POST to tenant URL | Tenant webhook handler | Production |
+| `tenant_webhook` | HTTPS POST to tenant URL (durable outbox) | Tenant webhook handler | Production |
 | `onchain_claim` | Proof returned in payload | User or tenant dApp | Production (EVM) |
-| `stripe_credit` | Action payload only | Tenant Stripe integration | Beta |
-| `loyalty_points` | Action payload only | Tenant loyalty platform | Beta |
-| `coupon` | Action payload only | Tenant coupon system | Beta |
-| `internal_credit` | Action payload only | Tenant database | Beta |
-| `x402_credit` | Action payload only | Tenant x402 system | Beta |
+| `internal_credit` | Double-entry internal ledger (durable outbox) | Aether internal ledger (no custody) | Production |
+| `stripe_credit` | Idempotent Stripe customer-balance credit (durable outbox) | Tenant's Stripe key via credential authority | Sandbox (live key = external) |
+| `x402_credit` | x402 credit grant via commerce control plane | No-custody credit ledger | Explicit beta (sandbox) |
+| `loyalty_points` | — | — | Intentionally unsupported (needs provider partner) |
+| `coupon` | — | — | Intentionally unsupported (needs provider partner) |
 
 ## recommend_only
 
@@ -45,7 +51,16 @@ the tenant's system for execution. Aether generates the payload; the tenant exec
 ## tenant_webhook
 
 - Aether delivers a signed JSON payload to the tenant's configured webhook URL.
-- Signing: HMAC-SHA256 of the payload body using the tenant's configured `signing_secret_ref`.
+- Signing: HMAC-SHA256 of the payload body using the tenant's webhook signing
+  secret, resolved from the **durable credential authority** at the narrow send
+  site (`services/rewards/webhook_secret.py`). A submitted `signing_secret` is
+  dual-written into the authority (provider `tenant_webhook`, slot
+  `webhook_signing_secret`, domain `rewards`) and replaced by a `secret_ref`
+  before the rail config is persisted — plaintext never reaches the JSONB row,
+  the durable outbox job, an audit record, or an API response. Rotation keeps a
+  bounded overlap window (active + previous) so in-flight deliveries verify
+  across a rotation. Resolution is fail-closed: no active credential ⇒ the
+  delivery is not signed with an empty key, it fails and is retried/dead-lettered.
 - Headers sent:
   - `X-Aether-Signature: hmac-sha256=<hex>` — signature for verification
   - `X-Aether-Timestamp: <unix_seconds>` — timestamp for replay protection
@@ -102,24 +117,24 @@ the tenant's system for execution. Aether generates the payload; the tenant exec
 - See `REWARD_PROOFS.md` for proof format and lifecycle.
 - Configuration requires `tenant_contract_registry` entry.
 
-## Beta Rails Configuration
+## Native rails and intentionally-unsupported rails
 
-Beta rails (stripe_credit, loyalty_points, coupon, internal_credit, x402_credit) can be
-configured via `POST /v1/rewards/rails` but returning `beta_unavailable` when delivery is
-attempted. They generate action payloads that tenants can process manually or via export.
+`internal_credit` (production), `stripe_credit` (sandbox), and `x402_credit`
+(explicit beta) are **native, deliverable** rails: they dispatch through the
+same durable outbox as `tenant_webhook`, resolving the tenant's credential
+from the credential authority at the narrow send site (fail-closed without it).
 
-Rail config for a beta rail:
-```json
-{
-  "rail": "stripe_credit",
-  "enabled": false,
-  "config": {
-    "api_key_ref": "secret/stripe_key",
-    "credit_object_type": "customer_balance"
-  },
-  "status": "beta_unavailable"
-}
-```
+- `internal_credit` posts a durable, idempotent double-entry credit (no
+  custody; provable end-to-end in-repo).
+- `stripe_credit` performs an idempotent Stripe customer-balance credit through
+  the tenant's own Stripe key (provider `stripe_credit`, slot `server_api_key`);
+  live-mode activation requires a live tenant key (external).
+- `x402_credit` records a no-custody x402 credit grant (sandbox-only at release).
+
+`loyalty_points` and `coupon` are **intentionally unsupported** in this release
+(they need a designated provider partner — a commercial + integration external
+action). `POST /v1/rewards/rails` **refuses** to configure them (HTTP 422), so
+they can never be presented as usable.
 
 ## Rail Configuration
 

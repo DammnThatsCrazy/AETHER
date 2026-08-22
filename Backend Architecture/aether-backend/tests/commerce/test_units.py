@@ -237,3 +237,50 @@ async def test_resource_registry_rejects_negative_price():
     )
     with pytest.raises(ValueError):
         await registry.register(bad)
+
+
+@pytest.mark.asyncio
+async def test_facilitator_selection_filters_by_environment():
+    """r819: a live authorization must not route through a sandbox-only
+    facilitator, nor a sandbox authorization through a live-only one."""
+    from services.x402.facilitators import (
+        get_facilitator_registry,
+        seed_facilitators_and_assets,
+    )
+
+    await seed_facilitators_and_assets("t_env")
+    registry = get_facilitator_registry()
+
+    # Seeded external facilitators default to sandbox-only.
+    fac_sandbox = await registry.select_for("t_env", "USDC", "eip155:8453", "sandbox")
+    fac_live = await registry.select_for("t_env", "USDC", "eip155:8453", "live")
+    # No live-capable facilitator seeded → live selection returns None while
+    # sandbox selection still resolves.
+    if fac_sandbox is not None:
+        assert "sandbox" in (fac_sandbox.supported_environments or [])
+    assert fac_live is None or "live" in (fac_live.supported_environments or [])
+    # Omitting environment keeps the legacy (unfiltered) behavior.
+    assert await registry.select_for("t_env", "USDC", "eip155:8453") is not None
+
+
+@pytest.mark.asyncio
+async def test_store_authorization_idempotent_lookup_by_payment_identifier():
+    """r824: the store resolves an existing authorization by payment_identifier
+    so authorize retries return the original instead of colliding on the unique
+    index."""
+    from services.x402.commerce_store import get_commerce_store
+    from services.x402.commerce_models import PaymentAuthorization
+
+    store = get_commerce_store()
+    auth = PaymentAuthorization(
+        tenant_id="t_idem", challenge_id="chg1", approval_id="ap1",
+        payment_identifier="pay-xyz", amount_usd=1.0, asset_symbol="USDC",
+        chain="eip155:8453", recipient="0xrecipient", payer="0xpayer",
+        facilitator_id="fac_local_aether",
+    )
+    await store.put_authorization(auth)
+    found = await store.get_authorization_by_payment_identifier("t_idem", "pay-xyz")
+    assert found is not None and found.authorization_id == auth.authorization_id
+    # Wrong tenant / unknown identifier → None.
+    assert await store.get_authorization_by_payment_identifier("t_other", "pay-xyz") is None
+    assert await store.get_authorization_by_payment_identifier("t_idem", "nope") is None

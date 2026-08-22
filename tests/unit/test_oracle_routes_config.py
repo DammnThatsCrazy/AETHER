@@ -59,6 +59,13 @@ def test_oracle_routes_require_explicit_secrets_outside_local(monkeypatch):
     monkeypatch.delenv("REWARD_CONTRACT_ADDRESS", raising=False)
 
     with backend_module_path():
-        with pytest.raises(RuntimeError, match="ORACLE_SIGNER_KEY must be set"):
-            module = importlib.import_module("services.oracle.routes")
-            importlib.reload(module)
+        # P3: importing the oracle routes must NOT read a signer key (no
+        # import-time secret reads). Fail-closed moved to the call site: with
+        # no ORACLE_SIGNER_KEY and no tenant credential, resolving the signer
+        # outside local raises SignerUnavailableError.
+        module = importlib.import_module("services.oracle.routes")
+        importlib.reload(module)  # import succeeds, no secret read
+        from services.rewards.signing import SignerUnavailableError
+
+        with pytest.raises((RuntimeError, SignerUnavailableError)):
+            module._get_signer()

@@ -131,7 +131,12 @@ CONSUMER_ROLES: frozenset[str] = frozenset(
 # consumers are independently and canonically owned by ``consumer_specs.py``;
 # identity/graph/measurement therefore need no artificial loop spec here.
 ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
-    "outbox-relay": frozenset({"notification_outbox", "event_outbox_relay"}),
+    # reward_delivery_outbox is the reward plane's at-least-once delivery loop;
+    # it belongs with the other outbox relays by definition (defect fix: it was
+    # a builder no supervisor ever started).
+    "outbox-relay": frozenset(
+        {"notification_outbox", "event_outbox_relay", "reward_delivery_outbox"}
+    ),
     "stream-worker": frozenset({"event_replay", "dune_polling"}),
     "identity-worker": frozenset(),
     # The Kyber Graph projector consumes the graph mutation ledger into platform
@@ -142,9 +147,16 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # Stream consumer is owned by consumer_specs.py; the reconciler + retention
     # supervised loop specs (each gated on its settings flag) are owned here.
     "semantic-worker": frozenset({"semantic_reconciler", "semantic_retention"}),
+    # x402_settlement_reconciliation projects verified on-chain finality into
+    # settlement state — a materialization, like the payment-rail sync/repair
+    # loops that already ride this role. payment_alert_eval is the payment-rails
+    # derived-condition alert evaluator; it rides materializer with the rest of
+    # the payment-rails family (same payment_rails.enabled gate) so the whole
+    # subsystem's background loops stay co-located on one role/process.
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
-         "bronze_object_compaction"}
+         "bronze_object_compaction", "x402_settlement_reconciliation",
+         "payment_alert_eval"}
     ),
     "maintenance": frozenset(
         {
@@ -170,6 +182,23 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # above rather than justifying a runtime role of its own. Not
             # graph-writer: it reads no ledger.
             "kyber_incident_correlation",
+            # Reward-plane and credential sweeps: each is a single low-frequency
+            # periodic loop (stale reservation release, DLQ depth gauge, expired
+            # credential-overlap tombstoning), so they ride maintenance rather
+            # than justifying dedicated runtime roles and the deploy-profile /
+            # compose / Terraform / topology-validator fan-out that comes with
+            # one.
+            "reward_reservation_release",
+            "reward_dlq_sweeper",
+            "credential_expiry_sweep",
+            # Truth-chain ledger verifier (LEDGER M3): a periodic, opt-in Bronze
+            # hash-chain re-verification sweep that alerts on tamper evidence. It
+            # is a scheduled safety-net loop, so it rides maintenance like the
+            # other sweeps rather than justifying a runtime role of its own.
+            # (Arrived via the origin/main merge already registered in
+            # build_worker_specs but unmapped — an orphan spec that would never
+            # run in a dedicated/consolidated deployment.)
+            "ledger_chain_verifier",
         }
     ),
 }

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "41c79d4"
+last_synced_commit: "e610a8df"
 ---
 # Commerce Operator Runbook
 
@@ -36,6 +36,12 @@ last_synced_commit: "41c79d4"
 3. Retry via `SettlementTracker.retry(tenant_id, settlement_id)` or equivalent API.
 4. If facilitator is unhealthy: update health via internal API, select alternate facilitator on retry.
 
+> Expected steady state outside local: newly started settlements park in
+> `PENDING` ("awaiting on-chain finality confirmation") — `SETTLED` is asserted
+> only by the reconciliation path or an explicit operator action, never
+> automatically at start. A growing PENDING backlog with no reconciliation
+> progress is the actionable signal, not PENDING itself.
+
 ## 3. Facilitator outage
 
 **Symptom:** `avg_latency_ms` climbing, `success_rate` dropping on Command Facilitator panel.
@@ -50,6 +56,10 @@ last_synced_commit: "41c79d4"
    selection — freshly seeded facilitators are selectable before their first
    health observation.
 3. If all facilitators down: verification falls back to local verification per chain.
+4. Outside the local environment, LOCAL-mode facilitators (the internal Aether
+   verifier seed) are never auto-selected and never confer verification — a
+   tenant with only the internal seed routes straight to on-chain RPC
+   verification.
 
 ## 4. Duplicate payment detected
 
@@ -60,7 +70,22 @@ last_synced_commit: "41c79d4"
 2. If malicious replay: revoke approval via `POST /v1/approvals/{id}/revoke`.
 3. Revoke entitlement: `POST /v1/entitlements/{id}/revoke`.
 
-## 5. Reconciliation drift (graph vs lake)
+## 5. Settlement reconciliation backlog
+
+**Symptom:** PENDING settlements accumulate; `x402_reconciliation_cursor`
+`last_pending` climbs across runs.
+
+**Steps:**
+1. The `X402ReconciliationWorker` (`services/x402/reconciliation.py`) re-checks
+   each PENDING settlement against the tenant's RPC and advances it to SETTLED
+   only on confirmed finality; a reverted/underpaid/payer-mismatched payment is
+   failed. Persistent PENDING means `verification_unavailable` (RPC not
+   configured/reachable) or `not_finalized` — check the tenant's
+   `rpc_endpoint_pair` credential and RPC health, not the worker.
+2. The worker skips tenants whose x402 capability is SUSPENDED (kill switch) —
+   resume the capability to re-enable reconciliation.
+
+## 6. Reconciliation drift (graph vs lake)
 
 **Symptom:** Nightly job reports drift > 0.
 

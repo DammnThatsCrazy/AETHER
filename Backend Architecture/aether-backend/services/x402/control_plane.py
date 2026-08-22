@@ -22,6 +22,7 @@ from .commerce_models import (
     ApprovalPriority,
     ApprovalRequest,
     ApprovalStatus,
+    Entitlement,
     EntitlementStatus,
     Fulfillment,
     LifecycleTrace,
@@ -29,6 +30,8 @@ from .commerce_models import (
     PaymentRequirement,
     PolicyOutcome,
     PreflightResult,
+    Settlement,
+    SettlementState,
 )
 from .commerce_store import get_commerce_store
 from .economic_mutations import EconomicGraphMutations
@@ -39,7 +42,7 @@ from .policies import get_policy_engine
 from .pricing import PricingEngine
 from .resources import get_resource_registry
 from .settlement import get_settlement_tracker
-from .verification import get_verification_engine
+from .verification import get_verification_engine, is_terminal_verdict
 
 logger = get_logger("aether.service.x402.control_plane")
 
@@ -289,6 +292,26 @@ class X402ControlPlane:
         await self._mutations.write_approval_decision(approval, decision_obj)
         return approval
 
+    async def _resolve_environment(self, tenant_id: str) -> str:
+        """Resolve the x402 credential environment for a tenant, server-side.
+
+        Reads the tenant's persisted x402 capability activation state (the
+        canonical lifecycle). PARTNER_LIVE → ``live``; everything else →
+        ``sandbox``. Never trusts a client-supplied environment. In local/test
+        (no persisted state) defaults to ``sandbox``.
+        """
+        try:
+            from services.capabilities.lifecycle import get_lifecycle_authority
+
+            state = await get_lifecycle_authority().get_state(
+                tenant_id, "x402", "live", "commerce"
+            )
+            if state and state.get("readiness_state") == "partner_live":
+                return "live"
+        except Exception:  # noqa: BLE001 — default to the safe environment
+            pass
+        return "sandbox"
+
     async def authorize_payment(
         self,
         tenant_id: str,
@@ -309,12 +332,33 @@ class X402ControlPlane:
         if not requirement:
             raise ControlPlaneError("Challenge not found", "CHALLENGE_NOT_FOUND", 404)
 
+        # Idempotent authorize: payment_identifier is the flow's idempotency key
+        # and is unique-indexed per tenant. A re-issued authorization request
+        # (e.g. after a client timeout) returns the ORIGINAL authorization
+        # instead of constructing a fresh one that trips the unique constraint
+        # and surfaces a raw database error.
+        existing_auth = await self._store.get_authorization_by_payment_identifier(
+            tenant_id, requirement.payment_identifier
+        )
+        if existing_auth is not None:
+            logger.info(
+                f"idempotent authorize replay: payment_identifier="
+                f"{requirement.payment_identifier}"
+            )
+            return existing_auth
+
+        # Resolve the environment server-side BEFORE routing so a live
+        # authorization can never select a sandbox-only facilitator (or vice
+        # versa) — supported_environments is enforced during selection.
+        environment = await self._resolve_environment(tenant_id)
         facilitator = await self._facilitators.select_for(
-            tenant_id, requirement.asset_symbol, requirement.chain
+            tenant_id, requirement.asset_symbol, requirement.chain, environment
         )
         if not facilitator:
             raise ControlPlaneError(
-                "No facilitator for asset/chain", "FACILITATOR_UNAVAILABLE", 503
+                "No facilitator for asset/chain/environment",
+                "FACILITATOR_UNAVAILABLE",
+                503,
             )
 
         auth = PaymentAuthorization(
@@ -325,6 +369,7 @@ class X402ControlPlane:
             amount_usd=requirement.amount_usd,
             asset_symbol=requirement.asset_symbol,
             chain=requirement.chain,
+            environment=environment,
             recipient=requirement.recipient,
             payer=payer,
             facilitator_id=facilitator.facilitator_id,
@@ -380,13 +425,69 @@ class X402ControlPlane:
                 "receipt_id": receipt.receipt_id,
                 "error": receipt.verification_error,
             }
-            await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+            # A retryable verdict (not_finalized / verification_unavailable)
+            # means the payment was never actually adjudicated — the chain
+            # just hasn't finalized it yet, or the RPC was unreachable. Caching
+            # that here would strand a normally-submitted payment behind a
+            # permanent-looking cached failure until the idempotency entry's
+            # TTL expires, with no settlement for the reconciliation worker to
+            # revisit. Only cache TERMINAL verdicts (verified, or a definitive
+            # failure like reverted/payer_mismatch/amount_below_required) —
+            # a retryable verdict must let the next call re-check the chain.
+            if is_terminal_verdict(receipt.verification_verdict):
+                await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+            else:
+                logger.info(
+                    f"verify_and_settle: retryable verdict "
+                    f"{receipt.verification_verdict!r} for payment_identifier="
+                    f"{auth.payment_identifier} — not cached, next call will "
+                    f"re-check the chain"
+                )
             return result
 
         settlement = await self._settle.start(tenant_id, receipt, auth.facilitator_id)
         await self._mutations.write_receipt_and_settlement(receipt, settlement)
 
-        # Mint entitlement
+        # Mint the entitlement ONLY once the settlement is SETTLED — i.e. on-chain
+        # finality is confirmed. Outside local/test _settle.start parks the
+        # settlement in PENDING pending reconciliation; granting an ACTIVE
+        # entitlement then would confer access before finality, and a later
+        # reconciliation failure would leave that access unrevoked. When the
+        # reconciliation worker advances the settlement to SETTLED it calls
+        # finalize_settlement_entitlement() to mint it.
+        entitlement = None
+        if settlement.state == SettlementState.SETTLED:
+            entitlement = await self._mint_entitlement_for_settlement(
+                tenant_id, auth, settlement
+            )
+
+        result = {
+            "verified": True,
+            "receipt_id": receipt.receipt_id,
+            "settlement_id": settlement.settlement_id,
+            "settlement_state": settlement.state.value,
+            "entitlement_id": entitlement.entitlement_id if entitlement else None,
+            "expires_at": entitlement.expires_at if entitlement else None,
+        }
+        # Cache only a terminal (SETTLED) result. A PENDING settlement is not yet
+        # final — reconciliation will settle it and mint the entitlement — so
+        # caching now would pin a permanent "no entitlement" replay.
+        if settlement.state == SettlementState.SETTLED:
+            await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+        return result
+
+    async def _mint_entitlement_for_settlement(
+        self, tenant_id: str, auth: PaymentAuthorization, settlement: Settlement
+    ) -> Entitlement:
+        """Mint (idempotently) the entitlement for a SETTLED settlement.
+
+        Idempotent by settlement id: if an entitlement already exists for the
+        settlement (e.g. verify_and_settle and reconciliation both reaching a
+        settled state), the existing one is returned rather than minting a
+        duplicate."""
+        for e in await self._store.list_entitlements(tenant_id):
+            if getattr(e, "settlement_id", None) == settlement.settlement_id:
+                return e
         approval = await self._approvals.get(tenant_id, auth.approval_id)
         requirement = await self._store.get_requirement(tenant_id, auth.challenge_id)
         entitlement = await self._entitlements.mint(
@@ -397,17 +498,28 @@ class X402ControlPlane:
             settlement=settlement,
         )
         await self._mutations.write_entitlement(entitlement)
+        return entitlement
 
-        result = {
-            "verified": True,
-            "receipt_id": receipt.receipt_id,
-            "settlement_id": settlement.settlement_id,
-            "settlement_state": settlement.state.value,
-            "entitlement_id": entitlement.entitlement_id,
-            "expires_at": entitlement.expires_at,
-        }
-        await self._idempotency.record(tenant_id, auth.payment_identifier, result)
-        return result
+    async def finalize_settlement_entitlement(
+        self, tenant_id: str, settlement_id: str
+    ) -> Optional[Entitlement]:
+        """Mint the deferred entitlement once a settlement reaches SETTLED.
+
+        Called by the reconciliation worker after it confirms on-chain finality
+        and advances a PENDING settlement to SETTLED. No-op (returns None) if the
+        settlement is not SETTLED or its authorization can't be resolved."""
+        settlement = await self._store.get_settlement(tenant_id, settlement_id)
+        if settlement is None or settlement.state != SettlementState.SETTLED:
+            return None
+        receipt = await self._store.get_receipt(tenant_id, settlement.receipt_id)
+        auth = (
+            await self._store.get_authorization(tenant_id, receipt.authorization_id)
+            if receipt
+            else None
+        )
+        if auth is None:
+            return None
+        return await self._mint_entitlement_for_settlement(tenant_id, auth, settlement)
 
     async def grant_access(
         self,

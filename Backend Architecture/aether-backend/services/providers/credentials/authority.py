@@ -29,7 +29,7 @@ from datetime import timedelta
 from typing import Any, Optional
 
 from shared.common.common import ConflictError, NotFoundError, utc_now
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
 
 from services.providers.credentials.repository import CredentialVersionRepo
@@ -126,7 +126,15 @@ class CredentialAuthority:
                 f"unknown environment {environment!r}; expected one of {CREDENTIAL_ENVIRONMENTS}"
             )
 
-    # ── audit ─────────────────────────────────────────────────────────────
+    # ── audit (durable Postgres history, never Redis/in-memory-only) ──────
+    @property
+    def _audit_repo(self):
+        if getattr(self, "_audit_repo_instance", None) is None:
+            from repositories.repos import BaseRepository
+
+            self._audit_repo_instance = BaseRepository("provider_credential_audit")
+        return self._audit_repo_instance
+
     async def _audit(
         self,
         *,
@@ -153,10 +161,61 @@ class CredentialAuthority:
             "at": utc_now().isoformat(),
         }
         try:
-            await get_store("credential_audit").set(audit_id, record, ttl_seconds=0)
+            await self._audit_repo.insert(audit_id, record)
         except Exception as exc:  # audit must never take down a mutation
             logger.warning("credential audit write failed: %s", type(exc).__name__)
         return audit_id
+
+    async def audit_history(
+        self, tenant_id: str, provider: Optional[str] = None, limit: int = 200
+    ) -> list[dict]:
+        """Durable, secret-free credential audit trail for a tenant."""
+        filters: dict = {"tenant_id": tenant_id}
+        if provider:
+            filters["provider"] = provider
+        return await self._audit_repo.find_many(filters=filters, limit=limit)
+
+    # ── lifecycle propagation ─────────────────────────────────────────────
+    async def _notify_lifecycle(
+        self,
+        event: str,
+        tenant_id: str,
+        provider: str,
+        environment: str,
+        credential_version: Optional[int] = None,
+    ) -> None:
+        """Propagate a credential event into the capability lifecycle authority.
+
+        Rotation demotes certified capabilities to CREDENTIAL_SUPPLIED (bound
+        to the new version); revocation/deletion demotes to REVOKED; activation
+        advances CREDENTIAL_WAITING coordinates. Propagation failures are
+        logged and counted — the readiness revalidation worker re-syncs any
+        divergence — but never abort the credential mutation itself.
+        """
+        try:
+            from services.capabilities.lifecycle import get_lifecycle_authority
+
+            ref = (
+                f"credver://{provider}/{environment}@v{credential_version}"
+                if credential_version is not None
+                else None
+            )
+            await get_lifecycle_authority().on_credential_event(
+                tenant_id=tenant_id,
+                provider=provider,
+                environment=environment,
+                event=event,
+                credential_version_ref=ref,
+            )
+        except Exception as exc:  # noqa: BLE001 — see docstring
+            logger.error(
+                "credential lifecycle propagation failed event=%s provider=%s: %s",
+                event, provider, exc,
+            )
+            metrics.increment(
+                "credential_lifecycle_propagation_failures",
+                labels={"event": event, "provider": provider},
+            )
 
     # ── idempotency ───────────────────────────────────────────────────────
     async def _idempotent_get(self, tenant_id: str, key: Optional[str]) -> Optional[dict]:
@@ -286,7 +345,9 @@ class CredentialAuthority:
                     secret.encode("utf-8"), b"aether-credential-selfcheck", hashlib.sha256
                 ).hexdigest()
                 result = "valid"
-            else:  # live_probe — real read-only provider connection probe
+            elif slot.validation_strategy == "key_derivation_check":
+                result = self._derive_key_identity(slot_name, secret)
+            else:  # live_probe / rpc_chain_probe — real read-only connection probe
                 result = await self._probe_live_secret(provider, environment, secret)
         except Exception:
             result = "decrypt_failed"
@@ -295,7 +356,18 @@ class CredentialAuthority:
         patch = {"last_tested_at": now, "last_test_result": result}
         if result in ("valid", "credential_present"):
             patch["last_successful_test_at"] = now
-        _failing = result in ("decrypt_failed", "unauthorized", "forbidden")
+        # Definitive failures mark a PENDING version TEST_FAILED so it can never
+        # be activated. This includes the key-derivation failures — a signing
+        # key that is malformed (``invalid_key_material``), for an unrecognized
+        # slot (``unsupported_key_slot``), unprovable because the crypto library
+        # is missing (``derivation_unavailable``), or empty — none of which is a
+        # usable signing key. (Transient live-probe outcomes such as timeouts /
+        # rate limits are intentionally NOT in this set, so they stay retryable
+        # rather than permanently failing the version.)
+        _failing = result in (
+            "decrypt_failed", "unauthorized", "forbidden", "empty",
+            "invalid_key_material", "unsupported_key_slot", "derivation_unavailable",
+        )
         if _failing and row.get("state") == CredentialState.PENDING:
             patch["state"] = CredentialState.TEST_FAILED
         await self._repo.update(row["id"], patch)
@@ -312,6 +384,43 @@ class CredentialAuthority:
         )
         merged = {**row, **patch}
         return self._safe_view(merged)
+
+    @staticmethod
+    def _derive_key_identity(slot_name: str, secret: str) -> str:
+        """Validate signing-key material by deriving its public identity.
+
+        EVM (secp256k1 hex key) → derive the checksummed address via
+        eth_account; SVM (ed25519 seed) → derive the verify key via PyNaCl.
+        Proves the material is a usable signing key; the derived identity is
+        compared against the verified contract/program registry at proof time
+        (services/rewards/signing.py), not here. Never returns the key.
+        """
+        try:
+            if slot_name.startswith("evm_"):
+                from eth_account import Account
+
+                key = secret[2:] if secret.startswith("0x") else secret
+                Account.from_key(bytes.fromhex(key))
+                return "valid"
+            if slot_name.startswith("svm_"):
+                import base64
+
+                from nacl.signing import SigningKey
+
+                raw = (
+                    bytes.fromhex(secret)
+                    if all(c in "0123456789abcdefABCDEF" for c in secret) and len(secret) in (64, 128)
+                    else base64.b64decode(secret)
+                )
+                SigningKey(raw[:32])
+                return "valid"
+            return "unsupported_key_slot"
+        except ImportError:
+            # Fail closed: without the crypto library we cannot prove the key
+            # is usable, and an unproven signing key must never test "valid".
+            return "derivation_unavailable"
+        except Exception:  # noqa: BLE001 — malformed key material
+            return "invalid_key_material"
 
     async def _probe_live_secret(
         self, provider: str, environment: str, secret: str
@@ -389,6 +498,30 @@ class CredentialAuthority:
             raise NotFoundError("provider_credential")
         if target.get("state") in (CredentialState.REVOKED, CredentialState.TOMBSTONED):
             raise ConflictError("cannot activate a revoked or deleted credential version")
+        if target.get("state") == CredentialState.TEST_FAILED:
+            raise ConflictError("cannot activate a credential version that failed validation")
+        # Signing keys: prove the material derives a usable key BEFORE it becomes
+        # the active signer — even if test_slot was never called. A malformed /
+        # unprovable private key must never go ACTIVE (proof generation would
+        # later crash and readiness would already have advanced). Valid keys pass
+        # this check transparently.
+        if slot.validation_strategy == "key_derivation_check":
+            try:
+                secret = self._decrypt_row(
+                    tenant_id, provider, environment, slot_name, target
+                )
+                derivation = self._derive_key_identity(slot_name, secret) if secret else "empty"
+            except Exception:  # noqa: BLE001 — treat any failure as unprovable
+                derivation = "invalid_key_material"
+            if derivation != "valid":
+                await self._repo.update(
+                    target["id"],
+                    {"state": CredentialState.TEST_FAILED, "last_test_result": derivation},
+                )
+                raise ConflictError(
+                    "cannot activate a signing key that fails key-derivation "
+                    f"validation ({derivation})"
+                )
 
         current = await self._repo.active_version(tenant_id, provider, environment, slot_name)
         current_version = int(current["credential_version"]) if current else None
@@ -437,6 +570,13 @@ class CredentialAuthority:
             slot_name=slot_name,
             credential_version=int(credential_version),
             actor=actor,
+        )
+        # Rotation (an active version existed) demotes certified capabilities
+        # back to CREDENTIAL_SUPPLIED bound to the new version; first
+        # activation advances CREDENTIAL_WAITING coordinates.
+        await self._notify_lifecycle(
+            "rotated" if current else "activated",
+            tenant_id, provider, environment, int(credential_version),
         )
         return self._safe_view(activated)
 
@@ -507,6 +647,8 @@ class CredentialAuthority:
             actor=actor,
             result=f"revoked={revoked}",
         )
+        if revoked:
+            await self._notify_lifecycle("revoked", tenant_id, provider, environment)
         return {"provider": provider, "slot_name": slot_name, "environment": environment,
                 "revoked_versions": revoked}
 
@@ -551,6 +693,8 @@ class CredentialAuthority:
             actor=actor,
             result=f"tombstoned={len(rows)}",
         )
+        if rows:
+            await self._notify_lifecycle("deleted", tenant_id, provider, environment)
         return {"provider": provider, "slot_name": slot_name, "environment": environment,
                 "tombstoned_versions": len(rows)}
 
@@ -741,9 +885,17 @@ class CredentialAuthority:
             "slots": slot_views,
         }
 
+    @property
+    def _enablement_repo(self):
+        if getattr(self, "_enablement_repo_instance", None) is None:
+            from repositories.repos import BaseRepository
+
+            self._enablement_repo_instance = BaseRepository("provider_enablement")
+        return self._enablement_repo_instance
+
     async def _is_enabled(self, tenant_id: str, provider: str, environment: str) -> bool:
         try:
-            row = await get_store("provider_enablement").get(
+            row = await self._enablement_repo.find_by_id(
                 f"{tenant_id}:{provider}:{environment}"
             )
         except Exception:
@@ -753,11 +905,18 @@ class CredentialAuthority:
     async def _set_enabled(
         self, tenant_id: str, provider: str, environment: str, enabled: bool, actor: str
     ) -> None:
-        await get_store("provider_enablement").set(
-            f"{tenant_id}:{provider}:{environment}",
-            {"enabled": enabled, "updated_by": actor, "updated_at": utc_now().isoformat()},
-            ttl_seconds=0,
-        )
+        row_id = f"{tenant_id}:{provider}:{environment}"
+        record = {
+            "tenant_id": tenant_id,
+            "provider": provider,
+            "environment": environment,
+            "enabled": enabled,
+            "updated_by": actor,
+        }
+        if await self._enablement_repo.find_by_id(row_id) is None:
+            await self._enablement_repo.insert(row_id, record)
+        else:
+            await self._enablement_repo.update(row_id, record)
         await self._audit(
             action="enable" if enabled else "disable",
             tenant_id=tenant_id,
@@ -795,6 +954,35 @@ class CredentialAuthority:
             if int(row.get("credential_version", -1)) == int(credential_version):
                 return row
         return None
+
+    async def sweep_expired_overlaps(self) -> int:
+        """Tombstone every PREVIOUS credential version whose rotation-overlap
+        window has expired (cross-tenant maintenance sweep). Idempotent;
+        returns the count swept. Erases the ciphertext of each swept row."""
+        from shared.temporal.instant import try_parse_instant
+
+        now = utc_now()
+        rows = await self._repo.find_many(
+            filters={"state": CredentialState.PREVIOUS}, limit=10000
+        )
+        swept = 0
+        for row in rows:
+            expires = row.get("rotation_overlap_expires_at")
+            if not expires:
+                continue
+            # Sanctioned parser: an aware UTC instant or a reason code, never a
+            # naive value silently assumed to be UTC. An unparseable overlap
+            # timestamp is left in place rather than force-tombstoned.
+            ts, _reason = try_parse_instant(str(expires))
+            if ts is None or ts > now:
+                continue
+            await self._repo.update(
+                row["id"],
+                {"state": CredentialState.TOMBSTONED, "encrypted_value": "", "encrypted_data_key": ""},
+            )
+            self._invalidate(row)
+            swept += 1
+        return swept
 
     async def _tombstone_previous(self, tenant_id, provider, environment, slot_name) -> None:
         prev = await self._repo.previous_version(tenant_id, provider, environment, slot_name)

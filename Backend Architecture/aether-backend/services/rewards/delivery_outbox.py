@@ -223,11 +223,41 @@ class RewardWebhookSender:
     async def send(self, job: dict) -> SenderResult:
         provider_config = job.get("provider_config") or {}
         webhook_url = provider_config.get("webhook_url")
-        # Shape rail_config exactly as TenantWebhookAdapter.deliver expects.
+        # Resolve the signing secret from the credential authority at the narrow
+        # send site — the job row carries only a secret_ref (plus an optional
+        # local/test inline secret), never durable plaintext.
+        from services.rewards.webhook_secret import (
+            TransientSecretResolutionError,
+            resolve_signing_secret,
+        )
+
+        tenant_id = job.get("tenant_id", "")
+        rail_config_for_resolve = {
+            "config": {
+                "secret_ref": provider_config.get("secret_ref"),
+                "signing_secret": provider_config.get("signing_secret", ""),
+            }
+        }
+        try:
+            signing_secret = await resolve_signing_secret(tenant_id, rail_config_for_resolve)
+        except TransientSecretResolutionError as exc:
+            # Authority / DB / KMS temporarily unreachable — RETRYABLE, so the
+            # outbox schedules a backoff retry instead of dead-lettering the job
+            # (and failing the reward action) on its first attempt.
+            return SenderResult(
+                "retryable",
+                error=f"reward webhook secret resolution unavailable: {exc}",
+            )
+        if not signing_secret:
+            return SenderResult(
+                "fatal",
+                error="reward webhook signing secret could not be resolved "
+                      "(no active credential for secret_ref)",
+            )
         rail_config = {
             "webhook_url": webhook_url,
             "config": {
-                "signing_secret": provider_config.get("signing_secret", ""),
+                "signing_secret": signing_secret,
                 "timeout_ms": provider_config.get("timeout_ms", 10000),
             },
         }
@@ -292,23 +322,45 @@ class RewardDeliveryOutbox:
     # ── enqueue ───────────────────────────────────────────────────────────
 
     async def enqueue(self, action: dict, rail_config: dict, tenant_id: str) -> dict:
-        """Durably enqueue a tenant-webhook reward delivery.
+        """Durably enqueue a reward delivery for any outbox-deliverable rail.
 
-        Validates the destination with the PR-1 hardened SSRF check BEFORE
-        writing the job, so a blocked destination never becomes a durable job.
-        Returns the persisted job row. The caller keeps the reward action in a
-        ``pending`` state until :meth:`drain` records a receipt.
+        The rail is taken from the action (default ``tenant_webhook``). Webhook
+        jobs run the PR-1 hardened SSRF check BEFORE the job is written; other
+        rails (internal_credit / stripe_credit / x402_credit) enqueue their
+        payload for the registered sender. A rail with no registered sender is
+        refused at enqueue (fail-closed) — the outbox never holds an
+        undeliverable job. Returns the persisted job row.
         """
         import os
 
+        from services.rewards.senders import has_sender
+
+        rail = action.get("rail") or "tenant_webhook"
+        if not has_sender(rail):
+            metrics.increment("rewards_outbox_rejected", labels={"tenant_id": tenant_id, "reason": "no_sender"})
+            raise ValueError(f"rail {rail!r} has no registered outbox sender")
+
         payload = action.get("payload") or {}
         config = rail_config.get("config", rail_config) if isinstance(rail_config, dict) else {}
+
+        if rail != "tenant_webhook":
+            return await self._enqueue_generic(rail, action, config, payload, tenant_id)
+
         webhook_url = (
             rail_config.get("webhook_url")
             or config.get("webhook_url")
             or (rail_config.get("config", {}) or {}).get("webhook_url")
         )
-        signing_secret = config.get("signing_secret", "") or rail_config.get("signing_secret", "")
+        # Persist a secret_ref, NEVER the plaintext secret. The secret is
+        # resolved from the credential authority at the narrow signing call
+        # site (RewardWebhookSender.send). A legacy inline secret is tolerated
+        # in local/test only.
+        from services.rewards.webhook_secret import make_secret_ref
+
+        secret_ref = config.get("secret_ref") or rail_config.get("secret_ref") or make_secret_ref()
+        inline_secret = ""
+        if os.getenv("AETHER_ENV", "local").lower() in ("local", "test"):
+            inline_secret = config.get("signing_secret", "") or rail_config.get("signing_secret", "")
         timeout_ms = int(config.get("timeout_ms", rail_config.get("timeout_ms", 10000)))
 
         # PR-1 SSRF / transport validation before persisting a durable job.
@@ -330,7 +382,9 @@ class RewardDeliveryOutbox:
             "payload": payload,
             "provider_config": {
                 "webhook_url": webhook_url,
-                "signing_secret": signing_secret,
+                "secret_ref": secret_ref,
+                # Local/test convenience only; never populated in deployed envs.
+                "signing_secret": inline_secret,
                 "timeout_ms": timeout_ms,
                 "host": urlparse(webhook_url).hostname if isinstance(webhook_url, str) else None,
             },
@@ -341,9 +395,43 @@ class RewardDeliveryOutbox:
             "last_error": None,
         }
         stored = await self._jobs.insert(job_id, job)
-        metrics.increment("rewards_outbox_enqueued", labels={"tenant_id": tenant_id})
+        metrics.increment("rewards_outbox_enqueued", labels={"tenant_id": tenant_id, "rail": rail})
         logger.info("reward webhook enqueued job=%s action=%s host=%s",
                     job_id, action.get("id"), job["provider_config"]["host"])
+        return stored
+
+    async def _enqueue_generic(
+        self, rail: str, action: dict, config: dict, payload: dict, tenant_id: str
+    ) -> dict:
+        """Enqueue a non-webhook rail (internal_credit / stripe_credit /
+        x402_credit) — no SSRF check; the sender resolves its own credentials.
+        No plaintext secret is stored; only a secret_ref (for rails that need
+        one) travels on the job."""
+        job_id = str(uuid.uuid4())
+        idem = payload.get("idempotency_key") or f"{rail}-{job_id}"
+        job = {
+            "tenant_id": tenant_id,
+            "action_id": action.get("id"),
+            "provider_adapter": rail,
+            "rail": rail,
+            "channel": "ledger" if rail in ("internal_credit", "x402_credit") else "api",
+            "state": "queued",
+            "payload": payload,
+            "provider_config": {
+                # secret_ref only — the sender resolves the real credential
+                # from the authority at the narrow send site.
+                "secret_ref": config.get("secret_ref"),
+                "stripe_customer_id": config.get("stripe_customer_id"),
+            },
+            "idempotency_key": idem,
+            "attempt_count": 0,
+            "max_attempts": _DEFAULT_MAX_ATTEMPTS,
+            "next_attempt_at": _now_iso(),
+            "last_error": None,
+        }
+        stored = await self._jobs.insert(job_id, job)
+        metrics.increment("rewards_outbox_enqueued", labels={"tenant_id": tenant_id, "rail": rail})
+        logger.info("reward %s enqueued job=%s action=%s", rail, job_id, action.get("id"))
         return stored
 
     # ── drain (lease + dispatch + receipt) ────────────────────────────────
@@ -365,13 +453,27 @@ class RewardDeliveryOutbox:
             "retried": retried, "dead_lettered": dead_lettered,
         }
 
+    def _sender_for(self, job: dict):
+        """Resolve the sender for a job's rail via the registry, falling back
+        to the default webhook sender for legacy webhook jobs."""
+        rail = job.get("rail") or (
+            "tenant_webhook" if job.get("provider_adapter") == _WEBHOOK_PROVIDER else None
+        )
+        if rail and rail != "tenant_webhook":
+            from services.rewards.senders import get_sender
+
+            sender = get_sender(rail)
+            if sender is not None:
+                return sender
+        return self._sender
+
     async def _process_job(self, job: dict) -> str:
         job_id = job["id"]
         tenant_id = job.get("tenant_id", "")
         attempt = int(job.get("attempt_count", 0)) + 1
         max_attempts = int(job.get("max_attempts", _DEFAULT_MAX_ATTEMPTS))
 
-        result = await self._sender.send(job)
+        result = await self._sender_for(job).send(job)
 
         if result.outcome == "success":
             # DURABLE-BEFORE-ACK: persist the ProviderReceipt FIRST; only then
@@ -437,15 +539,27 @@ class RewardDeliveryOutbox:
         logger.error("reward webhook DEAD-LETTER job=%s attempt=%s err=%s", job["id"], attempt, error[:200])
 
     async def _record_receipt(self, job: dict, result: SenderResult) -> str:
-        """Persist a validated ProviderReceipt (rejects empty/sim external ids)."""
+        """Persist a validated ProviderReceipt (rejects empty/sim external ids).
+
+        The receipt records the job's REAL rail and channel so an
+        internal_credit / stripe_credit / x402_credit delivery is not mislabeled
+        as a tenant_webhook and stays findable through provider-scoped receipt
+        lookups. The webhook constants are the fallback only for legacy webhook
+        jobs (which carry no explicit rail).
+        """
         from services.delivery.models import DeliveryChannel, ProviderReceipt
+        rail = job.get("rail") or job.get("provider_adapter") or _WEBHOOK_PROVIDER
+        try:
+            channel = DeliveryChannel(job.get("channel") or "webhook")
+        except ValueError:
+            channel = DeliveryChannel.WEBHOOK
         receipt = ProviderReceipt(
             job_id=job["id"],
             intent_id=job.get("action_id", ""),      # link back to the reward action
             tenant_id=job.get("tenant_id", ""),
-            provider_adapter=_WEBHOOK_PROVIDER,
+            provider_adapter=rail,
             external_id=result.external_id or "",
-            channel=DeliveryChannel.WEBHOOK,
+            channel=channel,
             raw_response=result.raw,
         )
         await self._receipts().insert(receipt.id, receipt.model_dump())
@@ -474,6 +588,11 @@ class RewardDeliveryOutbox:
 
     async def status(self, tenant_id: str) -> dict:
         return await self._jobs.status_counts(tenant_id)
+
+    async def dead_letter_depth(self) -> int:
+        """Cross-tenant count of dead-lettered jobs (DLQ sweeper metric)."""
+        rows = await self._jobs.find_many(filters={"state": "dead_letter"}, limit=10000)
+        return len(rows)
 
     async def redeliver(self, job_id: str, tenant_id: str) -> dict:
         """Operator replay: requeue a failed/dead-lettered job for another attempt."""

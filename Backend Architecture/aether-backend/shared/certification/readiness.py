@@ -27,18 +27,34 @@ from services.integrations.connectors.base import ImplementationStatus
 
 
 class CredentialReadiness(str, Enum):
-    """Mission-canonical readiness tokens for a provider adapter.
+    """Mission-canonical readiness tokens for a provider adapter / capability.
 
-    ``SCAFFOLDED`` is the forbidden-for-first-release marker: an adapter that is
-    only a descriptor with unimplemented decode/execution paths. ``DEGRADED`` and
-    ``DISABLED`` are off-ramp states — a provider that regressed or was pulled.
+    Progression (low → high):
+    ``SCAFFOLDED`` — descriptor only, unimplemented paths (forbidden for first
+    release). ``CREDENTIAL_WAITING`` — code-complete + infra-defined,
+    credential-gated. ``REPLAY_VALIDATED`` — proven against recorded fixtures
+    (credential-free structural proof). ``CREDENTIAL_SUPPLIED`` — an active
+    credential version exists for the coordinate but has not yet passed a
+    connection test. ``CONNECTION_VALIDATED`` — the supplied credential passed
+    a real connection/identity test. ``SANDBOX_VALIDATED`` — validated against
+    a provider sandbox. ``PARTNER_LIVE`` — validated against live traffic.
+
+    Off-ramps (ranked below the whole progression, most severe last):
+    ``DEGRADED`` — auto-recoverable regression (e.g. repeated probe failure).
+    ``SUSPENDED`` — reversible operator/kill-switch stop.
+    ``REVOKED`` — credentials revoked; requires resubmission.
+    ``DISABLED`` — pulled from release.
     """
 
     REPLAY_VALIDATED = "replay_validated"
     CREDENTIAL_WAITING = "credential_waiting"
+    CREDENTIAL_SUPPLIED = "credential_supplied"
+    CONNECTION_VALIDATED = "connection_validated"
     SANDBOX_VALIDATED = "sandbox_validated"
     PARTNER_LIVE = "partner_live"
     DEGRADED = "degraded"
+    SUSPENDED = "suspended"
+    REVOKED = "revoked"
     DISABLED = "disabled"
     SCAFFOLDED = "scaffolded"
 
@@ -57,16 +73,24 @@ IMPLEMENTATION_STATUS_TO_READINESS: dict[ImplementationStatus, CredentialReadine
 }
 
 
-# Linear progression ranks. DEGRADED/DISABLED are *separate low states* ranked
-# below the progression so that "rank >= CREDENTIAL_WAITING" never admits them.
+# Linear progression ranks, spaced by 10 (mirrors
+# packages/shared/contracts/readiness-vocabulary.json — the cross-language
+# contract; scripts/validate_readiness_vocabulary.py cross-checks the two).
+# Off-ramp states are *separate low states* ranked below the progression so
+# that "rank >= CREDENTIAL_WAITING" never admits them. Only RELATIVE order is
+# contractual — never compare against literal integers.
 _READINESS_RANK: dict[CredentialReadiness, int] = {
-    CredentialReadiness.DISABLED: -2,
-    CredentialReadiness.DEGRADED: -1,
-    CredentialReadiness.SCAFFOLDED: 1,
-    CredentialReadiness.CREDENTIAL_WAITING: 2,
-    CredentialReadiness.REPLAY_VALIDATED: 3,
-    CredentialReadiness.SANDBOX_VALIDATED: 4,
-    CredentialReadiness.PARTNER_LIVE: 5,
+    CredentialReadiness.DISABLED: -40,
+    CredentialReadiness.REVOKED: -30,
+    CredentialReadiness.SUSPENDED: -20,
+    CredentialReadiness.DEGRADED: -10,
+    CredentialReadiness.SCAFFOLDED: 10,
+    CredentialReadiness.CREDENTIAL_WAITING: 20,
+    CredentialReadiness.REPLAY_VALIDATED: 30,
+    CredentialReadiness.CREDENTIAL_SUPPLIED: 40,
+    CredentialReadiness.CONNECTION_VALIDATED: 50,
+    CredentialReadiness.SANDBOX_VALIDATED: 60,
+    CredentialReadiness.PARTNER_LIVE: 70,
 }
 
 
@@ -113,6 +137,7 @@ class ReadinessDimensions(BaseModel):
     infra_defined: bool = False
     credential_required: bool = True
     credential_supplied: bool = False
+    connection_validated: bool = False
     replay_validated: bool = False
     sandbox_validated: bool = False
     live_validated: bool = False
@@ -137,6 +162,13 @@ class ReadinessDimensions(BaseModel):
                 )
         if self.sandbox_validated and not self.replay_validated:
             raise ValueError("sandbox_validated implies replay_validated")
+        if self.connection_validated and not self.credential_supplied:
+            raise ValueError("connection_validated implies credential_supplied")
+        if self.sandbox_validated and self.credential_required and not self.connection_validated:
+            raise ValueError(
+                "sandbox_validated implies connection_validated for a "
+                "credential-gated capability"
+            )
         if self.live_validated and not self.credential_supplied:
             raise ValueError("live_validated implies credential_supplied")
         if self.pilot_ready and not (
@@ -155,6 +187,10 @@ class ReadinessDimensions(BaseModel):
             return CredentialReadiness.PARTNER_LIVE
         if d.sandbox_validated:
             return CredentialReadiness.SANDBOX_VALIDATED
+        if d.connection_validated:
+            return CredentialReadiness.CONNECTION_VALIDATED
+        if d.credential_supplied and d.code_complete and d.infra_defined:
+            return CredentialReadiness.CREDENTIAL_SUPPLIED
         if d.replay_validated:
             return CredentialReadiness.REPLAY_VALIDATED
         if d.code_complete and d.infra_defined:

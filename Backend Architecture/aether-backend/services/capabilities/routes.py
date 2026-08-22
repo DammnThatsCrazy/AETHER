@@ -240,3 +240,194 @@ async def get_operator_capabilities(request: Request):
         evaluated_at=datetime.now(timezone.utc).isoformat(),
     )
     return response.model_dump()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Capability activation lifecycle (persisted, machine-enforced)
+# ═══════════════════════════════════════════════════════════════════════════
+
+from typing import Optional  # noqa: E402
+
+from pydantic import BaseModel, Field  # noqa: E402
+
+from shared.certification.readiness import CredentialReadiness  # noqa: E402
+from services.capabilities.lifecycle import (  # noqa: E402
+    IllegalTransitionError,
+    PromotionPreconditionError,
+    get_lifecycle_authority,
+)
+
+
+def _actor(request: Request) -> tuple[str, str]:
+    tenant = request.state.tenant
+    principal = (
+        getattr(tenant, "principal_id", None)
+        or getattr(tenant, "user_id", None)
+        or tenant.tenant_id
+    )
+    return "user", str(principal)
+
+
+def _parse_state(value: str) -> CredentialReadiness:
+    try:
+        return CredentialReadiness(value)
+    except ValueError:
+        from shared.common.common import BadRequestError
+
+        raise BadRequestError(f"unknown readiness state {value!r}")
+
+
+class ActivationTransitionRequest(BaseModel):
+    environment: str = "sandbox"
+    target_state: Optional[str] = None
+    reason: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    credential_slot: Optional[str] = None
+    domain: str = ""
+
+
+@router.get("/activation")
+@api_response
+async def list_activation_states(request: Request):
+    """Current persisted lifecycle state of every capability for this tenant."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return await get_lifecycle_authority().states_for_tenant(tenant.tenant_id)
+
+
+@router.get("/activation/{provider}/{capability}")
+@api_response
+async def get_activation_state(
+    provider: str, capability: str, request: Request, environment: str = "sandbox"
+):
+    """Current state + full promotion/demotion history for one coordinate."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    authority = get_lifecycle_authority()
+    return {
+        "current": await authority.get_state(
+            tenant.tenant_id, provider, environment, capability
+        ),
+        "history": await authority.history(
+            tenant.tenant_id, provider, environment, capability
+        ),
+    }
+
+
+@router.post("/activation/{provider}/{capability}/promote")
+@api_response
+async def promote_activation(
+    provider: str, capability: str, body: ActivationTransitionRequest, request: Request
+):
+    """Request a fail-closed promotion along the canonical lifecycle."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    if not body.target_state:
+        from shared.common.common import BadRequestError
+
+        raise BadRequestError("target_state is required")
+    actor_type, actor_id = _actor(request)
+    try:
+        return await get_lifecycle_authority().promote(
+            tenant_id=tenant.tenant_id,
+            provider=provider,
+            environment=body.environment,
+            capability=capability,
+            target=_parse_state(body.target_state),
+            actor_type=actor_type,
+            actor_id=actor_id,
+            domain=body.domain,
+            reason=body.reason,
+            evidence_refs=body.evidence_refs,
+            credential_slot=body.credential_slot,
+        )
+    except (IllegalTransitionError, PromotionPreconditionError) as exc:
+        from shared.common.common import BadRequestError
+
+        raise BadRequestError(str(exc))
+
+
+@router.post("/activation/{provider}/{capability}/suspend")
+@api_response
+async def suspend_activation(
+    provider: str, capability: str, body: ActivationTransitionRequest, request: Request
+):
+    """Suspend a capability (reversible; resume restores the certified level)."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    actor_type, actor_id = _actor(request)
+    try:
+        return await get_lifecycle_authority().suspend(
+            tenant_id=tenant.tenant_id,
+            provider=provider,
+            environment=body.environment,
+            capability=capability,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            reason=body.reason or "tenant suspend",
+        )
+    except IllegalTransitionError as exc:
+        from shared.common.common import BadRequestError
+
+        raise BadRequestError(str(exc))
+
+
+@router.post("/activation/{provider}/{capability}/resume")
+@api_response
+async def resume_activation(
+    provider: str, capability: str, body: ActivationTransitionRequest, request: Request
+):
+    """Resume a suspended/degraded capability to the state it interrupted."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    actor_type, actor_id = _actor(request)
+    try:
+        return await get_lifecycle_authority().resume(
+            tenant_id=tenant.tenant_id,
+            provider=provider,
+            environment=body.environment,
+            capability=capability,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            reason=body.reason,
+        )
+    except IllegalTransitionError as exc:
+        from shared.common.common import BadRequestError
+
+        raise BadRequestError(str(exc))
+
+
+@kyber_router.get("/activation")
+@api_response
+async def operator_activation_states(request: Request):
+    """Cross-tenant current lifecycle states (operator readiness view)."""
+    return await get_lifecycle_authority().states_all_tenants()
+
+
+@kyber_router.post("/activation/{tenant_id}/{provider}/{capability}/suspend")
+@api_response
+async def operator_suspend_activation(
+    tenant_id: str,
+    provider: str,
+    capability: str,
+    body: ActivationTransitionRequest,
+    request: Request,
+):
+    """Operator emergency suspend of a tenant capability (audited)."""
+    principal = getattr(request.state, "kyber_principal", None)
+    actor_id = getattr(principal, "principal_id", None) or "kyber-operator"
+    try:
+        return await get_lifecycle_authority().suspend(
+            tenant_id=tenant_id,
+            provider=provider,
+            environment=body.environment,
+            capability=capability,
+            actor_type="operator",
+            actor_id=str(actor_id),
+            reason=body.reason or "operator emergency suspend",
+            kill_switch=True,
+        )
+    except IllegalTransitionError as exc:
+        from shared.common.common import BadRequestError
+
+        raise BadRequestError(str(exc))

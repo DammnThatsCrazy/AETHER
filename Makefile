@@ -282,6 +282,9 @@ validate-frontmatter: ## Validate YAML frontmatter on docs/*.md against scripts/
 extract-docs: ## Regenerate docs/_generated/*.json from canonical sources
 	python scripts/docs_extract/run_all.py
 
+gen-reward-rail-matrix: ## Regenerate docs/_generated/reward-rail-matrix.json from source
+	python scripts/docs_extract/extract_reward_rail_matrix.py
+
 docs-drift: ## Detect drift between doc source_files frontmatter and the repo
 	python scripts/docs_drift.py
 
@@ -968,23 +971,6 @@ campaign-release-check-strict: ## Run Campaign Intelligence release gate with te
 # Derivatives Intelligence
 # ---------------------------------------------------------------------------
 
-derivatives-test: ## Run derivatives ingestion/accounting foundation tests
-	python -m pytest tests/unit/test_derivatives_ingestion.py -v
-
-derivatives-connector-test: derivatives-test ## Validate derivatives connector normalization and credential gates
-
-derivatives-position-test: derivatives-test ## Validate deterministic derivatives position reconstruction
-
-derivatives-reconciliation-test: derivatives-test ## Validate derivatives reconciliation variance detection
-
-derivatives-replay: derivatives-test ## Validate deterministic derivatives replay fixtures
-
-derivatives-ingestion-release-check: derivatives-test ## PR2 derivatives ingestion release gate
-
-# ---------------------------------------------------------------------------
-# Derivatives Intelligence
-# ---------------------------------------------------------------------------
-
 .PHONY: derivatives-test derivatives-connector-test derivatives-position-test derivatives-reconciliation-test derivatives-replay derivatives-ingestion-release-check derivatives-graph-check derivatives-profile-check derivatives-intelligence-release-check
 
 derivatives-test: ## Run derivatives ingestion, accounting, reconciliation, and replay tests
@@ -1028,16 +1014,6 @@ help: ## Show this help message
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
-
-.PHONY: derivatives-graph-check derivatives-profile-check derivatives-intelligence-release-check
-derivatives-graph-check:
-	python -m pytest tests/unit/test_derivatives_intelligence.py -v
-
-derivatives-profile-check:
-	python -m pytest tests/unit/test_derivatives_intelligence.py -v
-
-derivatives-intelligence-release-check: derivatives-graph-check derivatives-profile-check
-	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py -v
 
 .PHONY: derivatives-product-check derivatives-ops-check derivatives-pr4-release-check
 derivatives-product-check:

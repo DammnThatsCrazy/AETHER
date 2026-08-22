@@ -84,38 +84,14 @@ _PROOF_EXPIRY_SECONDS = int(os.environ.get("PROOF_EXPIRY_SECONDS", "3600"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# SIGNER KEY GUARD
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _get_oracle_signer_key() -> str:
-    """Return the oracle signer private key with production safety guard."""
-    key = os.environ.get("ORACLE_SIGNER_KEY", "")
-    env = os.getenv("AETHER_ENV", "local").lower()
-
-    if not key:
-        if env in ("local", "test"):
-            return _HARDHAT_TEST_KEY
-        raise RuntimeError(
-            "ORACLE_SIGNER_KEY must be configured via REWARD_SIGNER_KEY_REF or "
-            "ORACLE_SIGNER_KEY in non-local environments. "
-            "Do not use the default test key in production."
-        )
-
-    if key == _HARDHAT_TEST_KEY and env not in ("local", "test"):
-        raise RuntimeError(
-            "Default Hardhat/Anvil test key detected in non-local environment. "
-            "Set ORACLE_SIGNER_KEY via secret manager. "
-            "Set REWARD_DISABLE_LOCAL_SIGNER_IN_PROD=1 to enforce this check everywhere."
-        )
-
-    return key
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 # LEGACY SINGLETONS (local/test backward compatibility)
 # ═══════════════════════════════════════════════════════════════════════════
-
-_ORACLE_SIGNER_KEY = _get_oracle_signer_key()
+# The legacy in-memory eligibility/queue/proof stack signs with the LOCAL
+# bootstrap key only. It is initialized lazily so importing this module never
+# reads a signer key: in staging/production the durable policy-engine path
+# resolves TENANT signer credentials via services/rewards/signing.py, and the
+# legacy endpoints fail closed with SignerUnavailableError instead of ever
+# touching a deployment-global ORACLE_SIGNER_KEY.
 
 _chain_configs: dict[VMType, ChainConfig] = {
     VMType.EVM: ChainConfig(
@@ -155,18 +131,38 @@ _chain_configs: dict[VMType, ChainConfig] = {
     ),
 }
 
-_multichain_config = MultiChainProofConfig(signer_private_key=_ORACLE_SIGNER_KEY, chain_configs=_chain_configs)
-_oracle_config = ProofConfig(
-    signer_private_key=_ORACLE_SIGNER_KEY,
-    contract_address=_chain_configs[VMType.EVM].contract_address,
-    chain_id=_chain_configs[VMType.EVM].chain_id,
-    proof_expiry_seconds=_PROOF_EXPIRY_SECONDS,
-)
+class _LegacyProofStack:
+    """Lazily-initialized local/test proof stack (bootstrap-key-signed)."""
 
-_multichain_oracle = MultiChainSigner(_multichain_config)
-_legacy_oracle = OracleSigner(_oracle_config)
+    def __init__(self) -> None:
+        self._initialized = False
+        self.multichain_config: Optional[MultiChainProofConfig] = None
+        self.multichain_oracle: Optional[MultiChainSigner] = None
+        self.legacy_oracle: Optional[OracleSigner] = None
+        self.queue: Optional[RewardQueue] = None
+
+    def get(self) -> "_LegacyProofStack":
+        if not self._initialized:
+            from services.rewards.signing import local_bootstrap_key
+
+            key = local_bootstrap_key()  # raises outside local/test — fail closed
+            self.multichain_config = MultiChainProofConfig(
+                signer_private_key=key, chain_configs=_chain_configs
+            )
+            self.multichain_oracle = MultiChainSigner(self.multichain_config)
+            self.legacy_oracle = OracleSigner(ProofConfig(
+                signer_private_key=key,
+                contract_address=_chain_configs[VMType.EVM].contract_address,
+                chain_id=_chain_configs[VMType.EVM].chain_id,
+                proof_expiry_seconds=_PROOF_EXPIRY_SECONDS,
+            ))
+            self.queue = RewardQueue(self.legacy_oracle)
+            self._initialized = True
+        return self
+
+
+_legacy_stack = _LegacyProofStack()
 _engine = EligibilityEngine()
-_queue = RewardQueue(_legacy_oracle)
 _policy_engine = RewardPolicyEngine()
 # Durable, concurrency-safe campaign budget reservations (reserve→commit→release).
 _budget_service = BudgetReservationService()
@@ -474,6 +470,19 @@ def _require_permission(request: Request, permission: str) -> None:
     """Enforce tenant permission via auth middleware; bypass in local mode."""
     if hasattr(request.state, "tenant") and request.state.tenant:
         request.state.tenant.require_permission(permission)
+
+
+def _actor_id(request: Request) -> str:
+    """Best-effort actor identity for audit/credential attribution."""
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        return "system"
+    return str(
+        getattr(tenant, "principal_id", None)
+        or getattr(tenant, "user_id", None)
+        or getattr(tenant, "tenant_id", None)
+        or "system"
+    )
 
 
 async def _get_repos() -> dict:
@@ -963,16 +972,42 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             except Exception:
                 pass
         _campaign = decision.campaign or {}
-        _contract_address = _campaign.get("contract_address") or os.getenv("EVM_CONTRACT_ADDRESS", "")
+        # Campaign-only chain identity outside local/test — mirror the adapter's
+        # rule (OnchainClaimAdapter.build_action_payload) HERE, before the
+        # decision is persisted. Falling back to a deployment-global
+        # EVM_CONTRACT_ADDRESS/EVM_CHAIN_ID let the pre-check pass on a legacy
+        # global address and persist an eligible decision (consuming
+        # cooldown/use caps) that the adapter would then refuse — leaving the
+        # caller an eligible response with no action or proof.
+        _ANVIL_CONTRACT = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+        _contract_address = _campaign.get("contract_address")
         if not _contract_address:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    "onchain_claim rail requires a contract_address. Set it on the campaign "
-                    "or configure EVM_CONTRACT_ADDRESS."
+                    "onchain_claim rail requires an explicit campaign contract_address "
+                    "outside local/test (deployment-global env fallbacks are refused "
+                    "fail-closed)."
                 ),
             )
-        _chain_id = int(_campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
+        if str(_contract_address).lower() == _ANVIL_CONTRACT:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "onchain_claim refuses the Anvil/Hardhat default contract address "
+                    "outside local/test."
+                ),
+            )
+        _raw_chain_id = _campaign.get("chain_id")
+        if not _raw_chain_id:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "onchain_claim rail requires an explicit campaign chain_id outside "
+                    "local/test (deployment-global env fallbacks are refused fail-closed)."
+                ),
+            )
+        _chain_id = int(_raw_chain_id)
         _registry_entry = await repos["contracts"].find_for_proof(
             tenant_id, _chain_id, _contract_address, decision.campaign_id or ""
         )
@@ -1060,13 +1095,28 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 idempotency_key=idempotency_key,
             )
 
+            # build_action_payload returns an ENVELOPE
+            # {rail, execution_mode, status, payload: {...}, [proof, proof_data,
+            # payload_hash]}. Store the INNER delivery payload as
+            # action["payload"] so the outbox senders and the inline adapters
+            # find recipient_id / amount / idempotency_key DIRECTLY — nesting the
+            # whole envelope made every internal_credit / stripe_credit /
+            # x402_credit action deliver amount=0 and fail (and wrapped the
+            # tenant_webhook body one level too deep). Envelope-only artifacts the
+            # delivery payload does not carry (onchain proof, webhook
+            # payload_hash) are preserved at the action level.
+            inner_payload = (
+                payload.get("payload")
+                if isinstance(payload.get("payload"), dict)
+                else payload
+            )
             action_data = {
                 "decision_id": decision_id,
                 "campaign_id": decision.campaign_id,
                 "rule_id": decision.rule_id,
                 "rail": decision.rail,
                 "execution_mode": decision.execution_mode or "recommend_only",
-                "payload": payload,
+                "payload": inner_payload,
                 "status": payload.get("status", "created"),
                 "delivery_attempts": 0,
                 # Carry the budget reservation so reject/cancel release it and
@@ -1075,25 +1125,36 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 "created_at": _utc_now(),
                 "updated_at": _utc_now(),
             }
+            for _artifact in ("proof", "proof_data", "payload_hash"):
+                if _artifact in payload:
+                    action_data[_artifact] = payload[_artifact]
             action_record = await repos["actions"].create(tenant_id, action_data)
             action_id = action_record["id"]
 
             # Delivery routing.
-            if decision.rail == "tenant_webhook":
-                # DURABLE outbox: enqueue and keep the action 'pending'. It is
-                # only marked 'delivered' once the outbox records a
-                # ProviderReceipt — never on the synchronous request path.
+            from services.rewards.senders import has_sender
+
+            if has_sender(decision.rail):
+                # DURABLE outbox: EVERY sender-backed rail (tenant_webhook,
+                # internal_credit, stripe_credit, x402_credit) delivers through
+                # the outbox — enqueue and keep the action 'pending'; it is only
+                # marked 'delivered' once the outbox records a ProviderReceipt,
+                # never on the synchronous request path. The stripe_credit /
+                # x402_credit adapters are outbox-only and RAISE if delivered
+                # inline, so routing them here (not through adapter.deliver) is
+                # required, not optional — otherwise their actions stay inert and
+                # their budget reservations leak until the stale-reservation sweep.
                 try:
                     from services.rewards.delivery_outbox import reward_delivery_outbox
                     await reward_delivery_outbox.enqueue(action_record, rail_config, tenant_id)
                     await repos["actions"].transition(action_id, tenant_id, "pending")
                 except Exception as exc:
-                    logger.error(f"tenant_webhook durable enqueue failed: {exc}", exc_info=True)
+                    logger.error(f"{decision.rail} durable enqueue failed: {exc}", exc_info=True)
                     await repos["actions"].transition(
                         action_id, tenant_id, "failed",
                         extra={"last_delivery_error": str(exc)},
                     )
-                    await _release_reservation(action_record, tenant_id, "webhook_enqueue_failed")
+                    await _release_reservation(action_record, tenant_id, "outbox_enqueue_failed")
             elif decision.rail not in ("manual_approval", "onchain_claim"):
                 # Deliver terminal/no-op rails (recommend_only, manual_export) inline.
                 delivery: DeliveryResult = await adapter.deliver(action_record, rail_config)
@@ -1203,7 +1264,7 @@ async def _legacy_evaluate(
         vm_type = VMType.from_string(campaign.vm_type)
         resp.vm_type = vm_type.value
 
-        multichain_proof = await _multichain_oracle.generate_proof(
+        multichain_proof = await _legacy_stack.get().multichain_oracle.generate_proof(
             user=body.effective_wallet_address,
             action_type=body.event_type,
             amount=result.reward_tier.amount_wei,
@@ -1212,7 +1273,7 @@ async def _legacy_evaluate(
         )
         resp.proof = multichain_proof.to_dict()
 
-        reward_id = await _queue.enqueue(
+        reward_id = await _legacy_stack.get().queue.enqueue(
             user_address=body.effective_wallet_address,
             action_type=body.event_type,
             campaign_id=result.campaign_id,
@@ -1371,6 +1432,21 @@ async def deliver_action(request: Request, action_id: str):
     except Exception:
         pass
 
+    # Sender-backed rails deliver ONLY through the durable outbox (the
+    # stripe_credit / x402_credit adapters raise if delivered inline). Enqueue
+    # and return 'pending'; the outbox drives it to 'delivered' on a receipt.
+    from services.rewards.senders import has_sender
+
+    if has_sender(rail):
+        try:
+            from services.rewards.delivery_outbox import reward_delivery_outbox
+            await reward_delivery_outbox.enqueue(action, rail_config, tenant_id)
+            updated = await repos["actions"].transition(action_id, tenant_id, "pending")
+            metrics.increment("rewards_actions_delivered_total", labels={"rail": rail, "tenant_id": tenant_id})
+            return updated
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Rail {rail} enqueue failed: {exc}")
+
     try:
         delivery: DeliveryResult = await adapter.deliver(action, rail_config)
         updated = await repos["actions"].transition(
@@ -1474,12 +1550,12 @@ async def verify_proof_endpoint(request: Request, body: ProofVerifyRequest):
         message_hash=body.message_hash,
     )
     expired = is_proof_expired(proof)
-    valid = verify_reward_proof(proof, expected_signer=_legacy_oracle.signer_address)
+    valid = verify_reward_proof(proof, expected_signer=_legacy_stack.get().legacy_oracle.signer_address)
     return {
         "valid": valid,
         "expired": expired,
         "signer_match": valid and not expired,
-        "expected_signer": _legacy_oracle.signer_address,
+        "expected_signer": _legacy_stack.get().legacy_oracle.signer_address,
     }
 
 
@@ -1554,6 +1630,35 @@ async def get_receipt(request: Request, receipt_id: str):
 # RAIL CONFIGURATION ROUTES
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Secret-bearing keys inside a rail ``config`` dict. Values under these keys
+# are WRITE-ONLY: they are never returned by any rail API response and never
+# persisted into audit before/after states.
+_RAIL_SECRET_KEYS = frozenset({
+    "signing_secret", "webhook_secret", "api_key", "api_secret",
+    "secret", "token", "private_key", "signer_key",
+})
+
+
+def _redact_rail_config(record: Optional[dict]) -> Optional[dict]:
+    """Return a deep-copied rail record with secret material replaced by
+    presence markers (``has_<key>`` + short non-reversible fingerprint)."""
+    if not isinstance(record, dict):
+        return record
+    import copy as _copy
+    import hashlib as _hashlib
+
+    redacted = _copy.deepcopy(record)
+    cfg = redacted.get("config")
+    if isinstance(cfg, dict):
+        for key in list(cfg.keys()):
+            if key in _RAIL_SECRET_KEYS and isinstance(cfg[key], str) and cfg[key]:
+                fingerprint = _hashlib.sha256(cfg[key].encode("utf-8")).hexdigest()[:12]
+                cfg[key] = "<redacted>"
+                cfg[f"has_{key}"] = True
+                cfg[f"{key}_fingerprint"] = fingerprint
+    return redacted
+
+
 @router.post("/rails", response_model=None)
 @api_response
 async def configure_rail(request: Request, body: RailConfigCreate):
@@ -1561,6 +1666,22 @@ async def configure_rail(request: Request, body: RailConfigCreate):
     _require_permission(request, "rewards:write")
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
+
+    # Intentionally-unsupported rails cannot be configured — fail closed before
+    # touching the adapter, so an out-of-release rail is never activatable.
+    from services.rewards.rail_matrix import classification_for, is_configurable
+
+    classification = classification_for(body.rail)
+    if classification is not None and not is_configurable(body.rail):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "rail": body.rail,
+                "tier": classification.tier,
+                "error": f"rail {body.rail!r} is {classification.tier} and cannot be "
+                         f"configured: {classification.external_action or classification.summary}",
+            },
+        )
 
     # Validate config via adapter
     try:
@@ -1577,10 +1698,28 @@ async def configure_rail(request: Request, body: RailConfigCreate):
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+
+    # Credential-only: a submitted tenant_webhook signing secret is dual-written
+    # into the credential authority and replaced by a secret_ref before the rail
+    # config is ever persisted — plaintext never reaches the JSONB row or audit.
+    if body.rail == "tenant_webhook":
+        inner = config_data.get("config") or {}
+        submitted = inner.get("signing_secret") or config_data.get("signing_secret")
+        if submitted:
+            from services.rewards.webhook_secret import store_secret
+
+            actor = _actor_id(request)
+            secret_ref = await store_secret(tenant_id, submitted, actor=actor)
+            inner.pop("signing_secret", None)
+            config_data.pop("signing_secret", None)
+            inner["secret_ref"] = secret_ref
+            config_data["config"] = inner
+            config_data["secret_ref"] = secret_ref
+
     rail_config = await repos["rail_configs"].create_or_update(tenant_id, body.rail, config_data)
     await _audit(repos, tenant_id, "rail.configured", "rail_config", rail_config.get("id"),
-                 after_state=rail_config)
-    return rail_config
+                 after_state=_redact_rail_config(rail_config))
+    return _redact_rail_config(rail_config)
 
 
 @router.get("/rails", response_model=None)
@@ -1590,7 +1729,7 @@ async def list_rails(request: Request):
     _require_permission(request, "rewards:read")
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
-    return await repos["rail_configs"].list(tenant_id)
+    return [_redact_rail_config(r) for r in await repos["rail_configs"].list(tenant_id)]
 
 
 @router.get("/rails/{rail_id}", response_model=None)
@@ -1600,7 +1739,7 @@ async def get_rail(request: Request, rail_id: str):
     _require_permission(request, "rewards:read")
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
-    return await repos["rail_configs"].get(rail_id, tenant_id)
+    return _redact_rail_config(await repos["rail_configs"].get(rail_id, tenant_id))
 
 
 @router.patch("/rails/{rail_id}", response_model=None)
@@ -1614,10 +1753,33 @@ async def update_rail(request: Request, rail_id: str, body: RailConfigUpdate):
     before = await repos["rail_configs"].get(rail_id, tenant_id)
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     patch["updated_at"] = _utc_now()
+
+    # Credential-only: mirror configure_rail's dual-write exactly. A PATCH can
+    # rotate a tenant_webhook signing secret via config.signing_secret just as
+    # easily as a CREATE can set one — without this, the plaintext-purge
+    # migration only ever runs once and every later PATCH would reintroduce a
+    # plaintext secret into the row. Submitted secret is stored in the
+    # credential authority and replaced by a secret_ref BEFORE persistence.
+    rail = (before or {}).get("rail")
+    if rail == "tenant_webhook":
+        inner = patch.get("config") or {}
+        submitted = inner.get("signing_secret") or patch.get("signing_secret")
+        if submitted:
+            from services.rewards.webhook_secret import store_secret
+
+            actor = _actor_id(request)
+            secret_ref = await store_secret(tenant_id, submitted, actor=actor)
+            inner.pop("signing_secret", None)
+            patch.pop("signing_secret", None)
+            inner["secret_ref"] = secret_ref
+            patch["config"] = inner
+            patch["secret_ref"] = secret_ref
+
     updated = await repos["rail_configs"].update(rail_id, patch)
     await _audit(repos, tenant_id, "rail.updated", "rail_config", rail_id,
-                 before_state=before, after_state=updated)
-    return updated
+                 before_state=_redact_rail_config(before),
+                 after_state=_redact_rail_config(updated))
+    return _redact_rail_config(updated)
 
 
 @router.post("/rails/{rail_id}/verify", response_model=None)
@@ -1652,8 +1814,9 @@ async def disable_rail(request: Request, rail_id: str):
     before = await repos["rail_configs"].get(rail_id, tenant_id)
     updated = await repos["rail_configs"].update(rail_id, {"enabled": False, "updated_at": _utc_now()})
     await _audit(repos, tenant_id, "rail.disabled", "rail_config", rail_id,
-                 before_state=before, after_state=updated)
-    return updated
+                 before_state=_redact_rail_config(before),
+                 after_state=_redact_rail_config(updated))
+    return _redact_rail_config(updated)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1723,23 +1886,45 @@ async def verify_contract(request: Request, registry_id: str):
                    "Re-register with oracle_signer_address set to Aether's oracle address.",
         )
 
-    # Compare against the live oracle signer when eth_account is available.
-    _oracle_key = os.getenv("ORACLE_SIGNER_KEY", "")
-    if _oracle_key:
-        try:
-            from eth_account import Account as _Account  # noqa: PLC0415
-            _expected = _Account.from_key(_oracle_key).address.lower()
-            if registered_signer.lower() != _expected:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"oracle_signer_address {registered_signer!r} does not match "
-                        "Aether's current oracle signer. Update the registry entry and "
-                        "re-verify, or rotate the oracle key and update the tenant contract."
-                    ),
-                )
-        except ImportError:
-            pass  # eth_account not available in this env; skip address comparison
+    # Compare against the TENANT's resolved reward signer — fail closed: a
+    # contract may never verify without proving the registered signer matches
+    # the key that will actually sign this tenant's proofs.
+    from services.rewards.signing import (
+        SignerUnavailableError,
+        resolve_reward_signer,
+        reward_credential_environment,
+    )
+
+    try:
+        signer_key = await resolve_reward_signer(
+            tenant_id, reward_credential_environment(), "evm"
+        )
+    except SignerUnavailableError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"cannot verify contract without a resolvable reward signer: {exc}",
+        )
+    try:
+        from eth_account import Account as _Account  # noqa: PLC0415
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "eth_account is unavailable — signer-address verification cannot "
+                "run, and contract verification never passes unverified."
+            ),
+        )
+    _key = signer_key[2:] if signer_key.startswith("0x") else signer_key
+    _expected = _Account.from_key(bytes.fromhex(_key)).address.lower()
+    if registered_signer.lower() != _expected:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"oracle_signer_address {registered_signer!r} does not match the "
+                "tenant's resolved reward signer. Update the registry entry and "
+                "re-verify, or rotate the signer credential and update the contract."
+            ),
+        )
 
     updated = await repos["contracts"].verify(registry_id, tenant_id)
     await _audit(repos, tenant_id, "contract.verified", "contract_registry", registry_id,
@@ -1883,14 +2068,14 @@ async def redeliver_action(request: Request, action_id: str):
 @api_response
 async def queue_stats():
     """Return current reward queue statistics (legacy local-mode endpoint)."""
-    return _queue.get_stats()
+    return _legacy_stack.get().queue.get_stats()
 
 
 @router.get("/user/{address}", response_model=None)
 @api_response
 async def get_user_rewards(address: str):
     """Return all rewards for a given wallet address (legacy local-mode endpoint)."""
-    rewards = _queue.get_user_rewards(address)
+    rewards = _legacy_stack.get().queue.get_user_rewards(address)
     return [r.to_dict() for r in rewards]
 
 
@@ -1898,7 +2083,7 @@ async def get_user_rewards(address: str):
 @api_response
 async def process_queue():
     """Trigger processing of pending rewards in the queue (legacy local-mode endpoint)."""
-    results = await _queue.process_all()
+    results = await _legacy_stack.get().queue.process_all()
     return {"processed": len(results), "results": [r.to_dict() for r in results]}
 
 
@@ -1906,7 +2091,7 @@ async def process_queue():
 @api_response
 async def get_reward_proof(reward_id: str):
     """Retrieve proof for a queued reward (legacy local-mode endpoint)."""
-    reward = _queue.get_reward(reward_id)
+    reward = _legacy_stack.get().queue.get_reward(reward_id)
     if reward.proof is None:
         raise HTTPException(
             status_code=409,
@@ -1944,7 +2129,7 @@ def _register_legacy_campaign(campaign_id: str, body: CampaignCreate) -> None:
             for r in body.rules
             if isinstance(r, dict) and "event_types" in r and "reward_tier" in r
         ]
-        chain_cfg = _multichain_config.get_chain_config(VMType.from_string(body.vm_type))
+        chain_cfg = _legacy_stack.get().multichain_config.get_chain_config(VMType.from_string(body.vm_type))
         campaign = Campaign(
             id=campaign_id,
             name=body.name,

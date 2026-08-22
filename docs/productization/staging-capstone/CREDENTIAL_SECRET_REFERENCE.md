@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/registry.py
   - docs/SECRETS-MANAGEMENT.md
 canonical_owner: platform@aether
-last_synced_commit: "9d95900c"
+last_synced_commit: "3c7b0bf"
 ---
 
 # Credential & Secret Reference

@@ -6,6 +6,7 @@ Tracks settlement attempts, retries with backoff, emits transition events.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,6 +21,10 @@ logger = get_logger("aether.service.x402.settlement")
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _is_local_env() -> bool:
+    return os.getenv("AETHER_ENV", "local").lower() == "local"
 
 
 class SettlementTracker:
@@ -60,7 +65,32 @@ class SettlementTracker:
         return await self._advance(settlement)
 
     async def _advance(self, settlement: Settlement) -> Settlement:
-        """Advance settlement state — in local mode settles immediately."""
+        """Advance settlement state.
+
+        Local environment: settles immediately (deterministic dev loop).
+        Everywhere else: parks the settlement in PENDING — SETTLED means
+        on-chain finality has been confirmed, which only the reconciliation
+        path (or an explicit operator action) may assert. Unconditional
+        auto-settlement outside local overstated settlement truth.
+        """
+        if not _is_local_env():
+            settlement.state = SettlementState.PENDING
+            settlement.updated_at = _now_iso()
+            await self._store.put_settlement(settlement)
+            await self._emit(
+                Topic.COMMERCE_SETTLEMENT_PENDING,
+                settlement.tenant_id,
+                {
+                    "settlement_id": settlement.settlement_id,
+                    "receipt_id": settlement.receipt_id,
+                    "reason": "awaiting on-chain finality confirmation",
+                },
+            )
+            metrics.increment(
+                "commerce_settlements", labels={"state": "pending", "chain": settlement.chain}
+            )
+            return settlement
+
         settlement.state = SettlementState.SETTLED
         settlement.settled_at = _now_iso()
         settlement.updated_at = _now_iso()
@@ -87,6 +117,33 @@ class SettlementTracker:
             Topic.COMMERCE_SETTLEMENT_PENDING,
             tenant_id,
             {"settlement_id": settlement_id, "reason": reason},
+        )
+        return settlement
+
+    async def mark_settled_reconciled(self, tenant_id: str, settlement_id: str) -> Settlement:
+        """Advance a PENDING settlement to SETTLED after the reconciliation
+        worker confirmed on-chain finality. Idempotent: an already-SETTLED
+        settlement is returned unchanged."""
+        settlement = await self._require(tenant_id, settlement_id)
+        if settlement.state == SettlementState.SETTLED:
+            return settlement
+        settlement.state = SettlementState.SETTLED
+        settlement.settled_at = _now_iso()
+        settlement.updated_at = _now_iso()
+        await self._store.put_settlement(settlement)
+        await self._emit(
+            Topic.COMMERCE_SETTLEMENT_COMPLETED,
+            tenant_id,
+            {
+                "settlement_id": settlement.settlement_id,
+                "receipt_id": settlement.receipt_id,
+                "amount_usd": settlement.amount_usd,
+                "reconciled": True,
+            },
+        )
+        metrics.increment(
+            "commerce_settlements",
+            labels={"state": "settled_reconciled", "chain": settlement.chain},
         )
         return settlement
 

@@ -259,6 +259,43 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_bronze_compaction_coro()
 
+    # ── Reward plane + x402 + credential maintenance loops ────────────────
+    # These close the mission gap where the reward delivery outbox, x402
+    # settlement reconciliation, and credential/reservation sweeps existed as
+    # loop builders but were never supervised — reward deliveries only fired on
+    # a manual drain route, and settlements never advanced past PENDING without
+    # an operator action.
+    def _reward_delivery_outbox() -> Coroutine[Any, Any, None]:
+        from services.rewards.delivery_outbox import (
+            build_reward_delivery_outbox_worker,
+        )
+
+        return build_reward_delivery_outbox_worker()
+
+    def _x402_settlement_reconciliation() -> Coroutine[Any, Any, None]:
+        from services.rewards.workers import (
+            build_x402_settlement_reconciliation_worker,
+        )
+
+        return build_x402_settlement_reconciliation_worker()
+
+    def _reward_reservation_release() -> Coroutine[Any, Any, None]:
+        from services.rewards.workers import (
+            build_reward_reservation_release_worker,
+        )
+
+        return build_reward_reservation_release_worker()
+
+    def _reward_dlq_sweeper() -> Coroutine[Any, Any, None]:
+        from services.rewards.workers import build_reward_dlq_sweeper
+
+        return build_reward_dlq_sweeper()
+
+    def _credential_expiry_sweep() -> Coroutine[Any, Any, None]:
+        from services.rewards.workers import build_credential_expiry_sweep
+
+        return build_credential_expiry_sweep()
+
     # ── Truth-chain ledger verifier (LEDGER M3) ──────────────────────────
     # Periodically re-walks each tenant's bronze_sdk_events hash chain (written
     # by M2 in services/ingestion/bronze_bulk.py) and alerts through the ops/
@@ -451,6 +488,51 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
                 )
                 or settings.storage_plane.reconciler_enabled
             ),
+        ),
+        # Reward webhook/credit delivery: drains reward_delivery_jobs through the
+        # rail-sender registry each tick. This is the at-least-once delivery path
+        # for the reward plane — before it was supervised, a reward only left the
+        # outbox when an operator manually hit the drain route. Rides outbox-relay
+        # alongside notification_outbox/event_outbox_relay. Not required=True: a
+        # stalled relay exhausting its restart budget fails the outbox-relay
+        # readiness fold (see roles.RELEASE_CRITICAL_ROLES) without aborting a
+        # fresh process's startup.
+        WorkerSpec(
+            name="reward_delivery_outbox",
+            factory=_reward_delivery_outbox,
+        ),
+        # x402 settlement reconciliation: re-checks PENDING settlements against
+        # on-chain finality per tenant and advances the final ones to SETTLED
+        # (kill-switch aware, durable cursor, idempotent). Gated on the commerce
+        # control plane so it never runs while x402 is off. Materializer role — it
+        # projects verified finality into settlement state.
+        WorkerSpec(
+            name="x402_settlement_reconciliation",
+            factory=_x402_settlement_reconciliation,
+            enabled=lambda: bool(
+                settings.intelligence_graph.enable_commerce_control_plane
+            ),
+        ),
+        # Reward budget reservation release: returns stale, never-committed budget
+        # reservations to the tenant's available balance so a crashed delivery
+        # cannot permanently strand a tenant's reward budget.
+        WorkerSpec(
+            name="reward_reservation_release",
+            factory=_reward_reservation_release,
+        ),
+        # Reward DLQ visibility: samples dead-letter depth for the reward delivery
+        # outbox so a stuck delivery is observable. Replay stays an explicit
+        # operator action, so this only publishes the gauge.
+        WorkerSpec(
+            name="reward_dlq_sweeper",
+            factory=_reward_dlq_sweeper,
+        ),
+        # Credential rotation-overlap sweep: tombstones expired PREVIOUS-version
+        # credentials across tenants once their rotation-overlap window closes,
+        # so a superseded secret does not linger decryptable indefinitely.
+        WorkerSpec(
+            name="credential_expiry_sweep",
+            factory=_credential_expiry_sweep,
         ),
         # Truth-chain ledger verifier (LEDGER M3): re-verifies each tenant's
         # Bronze hash chain on a cadence and alerts on any break. Not required=True

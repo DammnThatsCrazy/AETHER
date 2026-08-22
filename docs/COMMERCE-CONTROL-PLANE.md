@@ -13,7 +13,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "41c7a80"
+last_synced_commit: "e610a8df"
 ---
 # Aether Agentic Commerce — Control Plane
 
@@ -31,7 +31,11 @@ The Agentic Commerce control plane upgrades Aether's existing x402 capture subsy
 - Runs every spend through **mandatory approval** (Day-1 GA default).
 - Verifies payments through facilitator-aware + local verification.
 - Tracks settlement through a finite state machine.
-- Mints time-bound entitlements and grants access.
+- Mints time-bound entitlements and grants access — but only once the
+  settlement reaches **SETTLED** (on-chain finality). Outside local/test the
+  settlement parks in PENDING pending reconciliation, and `verify_and_settle`
+  defers the entitlement; the reconciliation worker mints it (idempotently) when
+  it confirms finality, so access is never conferred before settlement.
 - Persists the full lifecycle in Neptune via deterministic graph mutations.
 - Exposes Kyber operator actions (approve/reject/escalate/revoke, inspect, replay).
 - Emits 28+ typed events for lake / analytics / audit consumers.
@@ -185,7 +189,7 @@ them.
 | Who approved/rejected? | `approval.decided_by` + audit log |
 | Which facilitator verified? | `authorization.facilitator_id` |
 | What graph state was written? | `trace.graph_writes` |
-| Was this a duplicate payment? | Idempotency store returns cached result by `payment_identifier` |
+| Was this a duplicate payment? | Idempotency store returns cached result by `payment_identifier` (only **terminal** verdicts are cached — a retryable `not_finalized` / `verification_unavailable` is never cached, so the payment re-checks the chain on the next call) |
 
 ## 13. Testing
 
@@ -202,9 +206,29 @@ cd "Backend Architecture/aether-backend" && python -m pytest tests/commerce/ -v 
 cd apps/kyber && npx vitest run
 ```
 
-## 14. What's deferred (out of Day-1)
+## 14. Environment axis, per-tenant RPC, and durable persistence
+
+- Every authorization/receipt/settlement carries a credential **environment**
+  (`sandbox` | `live`), resolved server-side from the tenant's x402 capability
+  activation state (`control_plane._resolve_environment`) — never trusted from
+  the client.
+- On-chain verification resolves the tenant's **own** RPC endpoint+key pair from
+  the credential authority (`services/x402/rpc_resolver.py`, domain `rpc`), an
+  atomic `{url, api_key, auth_mode}` document. Local/test use a platform default;
+  deployed environments with no configured pair return the semantic verdict
+  `verification_unavailable` (fail-closed) — never an auto-pass, never a global
+  key. Verification additionally checks the payer binding and finality
+  (confirmation depth / `finalized` commitment), and refuses unknown asset
+  decimals.
+- All 14 `commerce_*` tables (plus `x402_reconciliation_cursor`) are under
+  version control (`alembic 20260827_commerce_tables`) with uniqueness
+  constraints and storage policies; budget policies are durable in Postgres
+  outside local. The `X402ReconciliationWorker` advances PENDING settlements to
+  SETTLED only on confirmed finality.
+
+## 15. What's deferred (out of Day-1)
 
 - External third-party paid resource providers (architecture-ready, not shipped).
-- On-chain tx verification against real Base/Solana RPCs (stubbed in verification engine; verification succeeds on well-formed tx_hash in local mode).
-- Postgres-backed persistent repositories (in-memory store at Day-1; `repositories/repos.py` pattern is extension point).
+- Live external-facilitator verification and funded live RPC endpoints (tenant
+  credentials + external subscriptions — external actions).
 - Marketplace / discovery features.
