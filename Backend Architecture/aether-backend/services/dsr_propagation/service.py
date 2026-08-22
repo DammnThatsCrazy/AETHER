@@ -14,6 +14,7 @@ or mutate another tenant's DSR (no existence leak).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from typing import Any, Optional
 
 from shared.common.common import BadRequestError, NotFoundError
@@ -29,6 +30,7 @@ from .models import (
     DSR_TYPES,
     STEP_EVIDENCE_FIELDS,
     DSRPropagationStep,
+    ReattributionEvidence,
     now_iso,
     overall_status,
 )
@@ -40,6 +42,31 @@ logger = get_logger("aether.dsr_propagation.service")
 _COMPLETION_EVIDENCE_FIELDS: frozenset[str] = frozenset({
     "records_impacted", "artifacts_impacted", "audit_event_id", "policy_decision_id",
 })
+
+# Program 3 M2 — re-attribution invalidation corrects attribution *records*
+# (attribution_runs), so its evidence is recorded on the ``attribution_records``
+# DSR component: the same component the consent-erasure job already marks with
+# the measurement store's tombstone receipt (services/consent/erasure_jobs.py).
+REATTRIBUTION_COMPONENT = "attribution_records"
+
+# The ReattributionResult summary fields ``record_reattribution`` reads. Kept in
+# sync with services/measurement/reattribution.py's ``ReattributionResult`` (M3)
+# WITHOUT importing it — the DSR layer stays decoupled from the measurement
+# package, and any trigger that produces this shape (privacy erasure OR fraud
+# takedown) records identically.
+_REATTRIBUTION_SUMMARY_FIELDS: tuple[str, ...] = (
+    "reason",
+    "conversions_scanned",
+    "conversions_reattributed",
+    "runs_deactivated",
+    "runs_created",
+    "touchpoints_scanned",
+    "scope_limit",
+    "truncated",
+    "partial_failure",
+    "errors",
+    "errors_count",
+)
 
 
 class DSRPropagationRepository(_ScopedRepo):
@@ -190,6 +217,77 @@ class DSRPropagationService:
         )
         return validated
 
+    # ── re-attribution evidence (Program 3 M2) ───────────────────────────────────
+
+    async def record_reattribution(
+        self,
+        request_id: str,
+        result: Any,
+        tenant_id: Optional[str] = None,
+        component: str = REATTRIBUTION_COMPONENT,
+    ) -> dict:
+        """Attach re-attribution evidence to a component step (Program 3 M2).
+
+        ``result`` is a re-attribution summary — a
+        ``services.measurement.reattribution.ReattributionResult`` (M3), its
+        ``to_dict()`` output, or any mapping/object exposing the same fields
+        (``reason``, ``conversions_reattributed``, ``runs_deactivated``,
+        ``runs_created``, ``truncated`` …). It is coerced into a typed
+        :class:`ReattributionEvidence` and attached to ``component``'s step
+        (default ``attribution_records``) as first-class DSR propagation
+        evidence, so a DSR/compliance audit shows the subject's attribution was
+        corrected as part of the request. The same call serves BOTH triggers —
+        privacy erasure (``reason="privacy_erasure"``) and fraud takedown
+        (``reason="fraud_takedown"``) — since it keys only on the summary shape.
+
+        Purely *additive*: it records the evidence WITHOUT changing the step's
+        status or its own erasure receipt (tombstone counts / audit pointer), so
+        it composes with the erasure job's ``mark_step`` marking regardless of
+        the order the two run in. Tenant-scoped and fail-closed (a cross-tenant
+        write is indistinguishable from a missing record); an unknown
+        ``component`` or a summary with no ``reason`` is rejected. Returns the
+        updated step dict.
+        """
+        if component not in DSR_COMPONENTS:
+            raise BadRequestError(
+                f"Invalid component {component!r}. Allowed: {list(DSR_COMPONENTS)}"
+            )
+        evidence = _coerce_reattribution_evidence(result)
+
+        record = await self._load(request_id, tenant_id)
+        steps: list[dict] = record.get("steps", [])
+        target = next((s for s in steps if s.get("component") == component), None)
+        if target is None:
+            # Record predates this component, or was hand-built — re-seed defensively
+            # (mirrors mark_step).
+            target = DSRPropagationStep(component=component).model_dump()  # type: ignore[arg-type]
+            steps.append(target)
+
+        # Attach ONLY the re-attribution evidence; status/started_at/completed_at
+        # and the store's own receipt are left exactly as the component's handler
+        # set them.
+        target["reattribution"] = evidence.model_dump()
+
+        # Re-validate the mutated step so a bad evidence value is rejected rather
+        # than persisted (same guard mark_step applies).
+        validated = DSRPropagationStep(**target).model_dump()  # type: ignore[arg-type]
+        for i, s in enumerate(steps):
+            if s.get("component") == component:
+                steps[i] = validated
+                break
+
+        record["steps"] = steps
+        await self._repo.update(request_id, record)
+        logger.info(
+            "DSR propagation reattribution recorded request_id=%s component=%s "
+            "reason=%s conversions_reattributed=%d runs_deactivated=%d "
+            "runs_created=%d truncated=%s partial_failure=%s",
+            request_id, component, evidence.reason,
+            evidence.conversions_reattributed, evidence.runs_deactivated,
+            evidence.runs_created, evidence.truncated, evidence.partial_failure,
+        )
+        return validated
+
     # ── status ──────────────────────────────────────────────────────────────────
 
     async def status(
@@ -211,6 +309,72 @@ class DSRPropagationService:
             "components": steps,
             "overall": overall_status(steps),
         }
+
+
+def _coerce_reattribution_evidence(result: Any) -> ReattributionEvidence:
+    """Normalize a re-attribution summary to a typed :class:`ReattributionEvidence`.
+
+    Accepts, WITHOUT importing the measurement package (which would couple the
+    DSR-evidence layer to it):
+
+    * a ``ReattributionResult`` (M3) — anything exposing a callable ``to_dict()``;
+    * that ``to_dict()`` output, or any other mapping carrying the same keys;
+    * any object carrying the summary fields as attributes.
+
+    ``errors`` (a list on ``ReattributionResult``) is summarized to
+    ``errors_count`` — the evidence records *that* the invalidation was partial,
+    never the raw per-conversion error strings (which can name conversion ids).
+    ``partial_failure`` is taken from the summary when present, else derived from
+    a non-zero ``errors_count`` (mirroring ``ReattributionResult.partial_failure``).
+    Fail-closed: a missing summary, or one with no non-empty ``reason``, is
+    rejected.
+    """
+    if result is None:
+        raise BadRequestError("reattribution result is required")
+
+    # ReattributionResult.to_dict() gives the canonical shape; a plain dict has
+    # no ``to_dict`` attribute so it falls through to the Mapping branch.
+    to_dict = getattr(result, "to_dict", None)
+    if callable(to_dict):
+        data = to_dict()
+    elif isinstance(result, Mapping):
+        data = dict(result)
+    else:
+        data = {
+            field: getattr(result, field)
+            for field in _REATTRIBUTION_SUMMARY_FIELDS
+            if hasattr(result, field)
+        }
+
+    if not isinstance(data, Mapping):
+        raise BadRequestError("reattribution result did not resolve to a mapping")
+
+    reason = str(data.get("reason") or "").strip()
+    if not reason:
+        raise BadRequestError("reattribution result requires a non-empty reason")
+
+    errors = data.get("errors")
+    if isinstance(errors, (list, tuple, set)):
+        errors_count = len(errors)
+    else:
+        errors_count = int(data.get("errors_count") or 0)
+
+    partial = data.get("partial_failure")
+    if partial is None:
+        partial = errors_count > 0
+
+    return ReattributionEvidence(
+        reason=reason,
+        conversions_scanned=int(data.get("conversions_scanned") or 0),
+        conversions_reattributed=int(data.get("conversions_reattributed") or 0),
+        runs_deactivated=int(data.get("runs_deactivated") or 0),
+        runs_created=int(data.get("runs_created") or 0),
+        touchpoints_scanned=int(data.get("touchpoints_scanned") or 0),
+        scope_limit=int(data.get("scope_limit") or 0),
+        truncated=bool(data.get("truncated") or False),
+        partial_failure=bool(partial),
+        errors_count=errors_count,
+    )
 
 
 dsr_propagation_service = DSRPropagationService()

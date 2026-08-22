@@ -66,6 +66,33 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return retention_sweep_loop()
 
+    def _semantic_reconciler() -> Coroutine[Any, Any, None]:
+        """Recompute Gold semantic projections from Silver evidence + repair drift.
+
+        Phase-B semantic worker: a periodic safety-net that re-derives each
+        subject's Gold entity/sentiment state from the immutable Silver
+        observations and repairs projections that no longer match. Gated on
+        ``settings.semantic.reconciler_enabled`` (default OFF).
+        """
+        from services.semantic_intelligence.reconciler import (
+            build_semantic_reconciler_coro,
+        )
+
+        return build_semantic_reconciler_coro()
+
+    def _semantic_retention() -> Coroutine[Any, Any, None]:
+        """Age out Silver semantic evidence + Gold projections past their window.
+
+        Phase-B semantic worker: tombstones aged Silver observations and deletes
+        aged (recomputable) Gold rows per ``retention_class`` window. Gated on
+        ``settings.semantic.retention_enabled`` (default OFF).
+        """
+        from services.semantic_intelligence.retention import (
+            build_semantic_retention_coro,
+        )
+
+        return build_semantic_retention_coro()
+
     def _kyber_directory_sync() -> Coroutine[Any, Any, None]:
         """Reconcile Kyber workforce principals against Google Workspace.
 
@@ -269,6 +296,24 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_credential_expiry_sweep()
 
+    # ── Truth-chain ledger verifier (LEDGER M3) ──────────────────────────
+    # Periodically re-walks each tenant's bronze_sdk_events hash chain (written
+    # by M2 in services/ingestion/bronze_bulk.py) and alerts through the ops/
+    # security alert path on any break. Opt-in (default OFF) via
+    # LEDGER_CHAIN_VERIFIER_ENABLED -- a safety-net sweep, not a hot path.
+    def _ledger_chain_verifier() -> Coroutine[Any, Any, None]:
+        from services.integrity.chain_verifier import build_chain_verifier_coro
+
+        return build_chain_verifier_coro()
+
+    def _ledger_chain_verifier_enabled() -> bool:
+        try:
+            from services.integrity.chain_verifier import is_enabled
+
+            return is_enabled()
+        except Exception:  # noqa: BLE001 - a broken import must not abort spec build
+            return False
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -294,6 +339,23 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="retention_sweep",
             factory=_retention_sweep,
             required=True,
+        ),
+        # Phase-B semantic workers: both ride the existing ``semantic-worker``
+        # role (they operate the same Silver→Gold plane the classifier feeds)
+        # and are gated on their own kill-switch flags, default OFF. Not
+        # required=True: a stalled reconciler/retention sweep degrades a
+        # maintenance function, it must never abort startup.
+        WorkerSpec(
+            name="semantic_reconciler",
+            factory=_semantic_reconciler,
+            role="semantic-worker",
+            enabled=lambda: bool(settings.semantic.reconciler_enabled),
+        ),
+        WorkerSpec(
+            name="semantic_retention",
+            factory=_semantic_retention,
+            role="semantic-worker",
+            enabled=lambda: bool(settings.semantic.retention_enabled),
         ),
         WorkerSpec(
             name="kyber_directory_sync",
@@ -471,5 +533,14 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="credential_expiry_sweep",
             factory=_credential_expiry_sweep,
+        ),
+        # Truth-chain ledger verifier (LEDGER M3): re-verifies each tenant's
+        # Bronze hash chain on a cadence and alerts on any break. Not required=True
+        # -- a stalled verifier degrades tamper-evidence monitoring, it must not
+        # abort startup. Opt-in via LEDGER_CHAIN_VERIFIER_ENABLED (default OFF).
+        WorkerSpec(
+            name="ledger_chain_verifier",
+            factory=_ledger_chain_verifier,
+            enabled=_ledger_chain_verifier_enabled,
         ),
     ]

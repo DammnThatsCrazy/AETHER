@@ -5,13 +5,15 @@ import {
   Badge,
   Button,
   DemoTenantBanner,
-  GlyphIcon,
+  Icon,
+  NavigationIcon,
   TimeLensControl,
   useTheme,
   useBuildInfo,
   useCapabilities,
   resolveDestinationAvailability,
   type CapabilityRequirement,
+  type NavigationIconProps,
 } from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth } from '@aether-app/features/auth';
@@ -21,39 +23,40 @@ import { useDemoSeedStatus } from '@aether-app/features/demo-seed/use-demo-seed-
 interface NavItemProps {
   to: string;
   label: string;
-  glyph: string;
+  destination: NavigationIconProps['destination'];
 }
 
 interface NavEntry {
   readonly to: string;
   readonly label: string;
-  readonly glyph: string;
+  readonly destination: NavigationIconProps['destination'];
   /** Backend capability required; excluded domain / off flag hides the link. */
   readonly requirement?: CapabilityRequirement;
 }
 
 const NAV_ITEMS: readonly NavEntry[] = [
-  { to: '/users', label: 'Users', glyph: '[u]' },
-  { to: '/campaigns', label: 'Campaigns', glyph: '[c]' },
-  { to: '/graph', label: 'Graph', glyph: '[g]' },
-  { to: '/noesis', label: 'Noesis', glyph: '[n]' },
-  { to: '/onboarding', label: 'Onboarding', glyph: '[on]' },
-  { to: '/settings', label: 'Settings', glyph: '[:]' },
-  { to: '/billing', label: 'Billing', glyph: '[$]' },
-  { to: '/me', label: 'Profile', glyph: '[~]' },
-  { to: '/audit-exports', label: 'Audit Exports', glyph: '[a]' },
-  { to: '/value-review', label: 'Value Review', glyph: '[v]' },
-  { to: '/security', label: 'Security', glyph: '[s]' },
-  { to: '/system-status', label: 'System Status', glyph: '[s]' },
-  { to: '/data-quality', label: 'Data Quality', glyph: '[q]', requirement: { flag: 'data_quality_enabled' } },
-  { to: '/integrations', label: 'Integrations', glyph: '[i]', requirement: { flag: 'connectors_enabled' } },
-  { to: '/imports', label: 'Imports', glyph: '[im]' },
-  { to: '/deployments', label: 'Deployments', glyph: '[d]' },
-  { to: '/payment-rails', label: 'Payment Rails', glyph: '[p]', requirement: { domain: 'payments' } },
-  { to: '/ai-efficiency', label: 'AI Efficiency', glyph: '[ai]', requirement: { domain: 'economic' } },
+  { to: '/users', label: 'Users', destination: 'aether-users' },
+  { to: '/campaigns', label: 'Campaigns', destination: 'aether-campaigns' },
+  { to: '/graph', label: 'Graph', destination: 'aether-graph' },
+  { to: '/noesis', label: 'Noesis', destination: 'aether-noesis' },
+  { to: '/onboarding', label: 'Onboarding', destination: 'aether-onboarding' },
+  { to: '/notifications', label: 'Notifications', destination: 'aether-notifications' },
+  { to: '/settings', label: 'Settings', destination: 'aether-settings' },
+  { to: '/billing', label: 'Billing', destination: 'aether-billing' },
+  { to: '/me', label: 'Profile', destination: 'aether-profile' },
+  { to: '/audit-exports', label: 'Audit Exports', destination: 'aether-audit-exports' },
+  { to: '/value-review', label: 'Value Review', destination: 'aether-value-review' },
+  { to: '/security', label: 'Security', destination: 'aether-security' },
+  { to: '/system-status', label: 'System Status', destination: 'aether-system-status' },
+  { to: '/data-quality', label: 'Data Quality', destination: 'aether-data-quality', requirement: { flag: 'data_quality_enabled' } },
+  { to: '/integrations', label: 'Integrations', destination: 'aether-integrations', requirement: { flag: 'connectors_enabled' } },
+  { to: '/imports', label: 'Imports', destination: 'aether-imports' },
+  { to: '/deployments', label: 'Deployments', destination: 'aether-deployments' },
+  { to: '/payment-rails', label: 'Payment Rails', destination: 'aether-payment-rails', requirement: { domain: 'payments' } },
+  { to: '/ai-efficiency', label: 'AI Efficiency', destination: 'aether-ai-efficiency', requirement: { domain: 'economic' } },
 ];
 
-function NavItem({ to, label, glyph }: NavItemProps) {
+function NavItem({ to, label, destination }: NavItemProps) {
   return (
     <NavLink
       to={to}
@@ -66,7 +69,7 @@ function NavItem({ to, label, glyph }: NavItemProps) {
         )
       }
     >
-      <GlyphIcon glyph={glyph} className="text-base leading-none" />
+      <NavigationIcon destination={destination} decorative size="md" className="text-current" />
       <span>{label}</span>
     </NavLink>
   );
@@ -110,7 +113,7 @@ export function AppShell({ children }: AppShellProps) {
       {reAuthBanner && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-warning/10 border-b border-warning/30 px-4 py-2 flex items-center justify-between text-xs font-mono">
           <span className="text-warning">
-            <GlyphIcon glyph="[!]" className="mr-1" />
+            <Icon name="triangle-alert" decorative size="sm" className="mr-1" />
             Your session key was cleared. Re-authenticate to continue.
           </span>
           <Button
@@ -147,7 +150,7 @@ export function AppShell({ children }: AppShellProps) {
           {NAV_ITEMS.filter(
             item => resolveDestinationAvailability(capabilities, item.requirement) === 'available',
           ).map(item => (
-            <NavItem key={item.to} to={item.to} label={item.label} glyph={item.glyph} />
+            <NavItem key={item.to} to={item.to} label={item.label} destination={item.destination} />
           ))}
         </nav>
 
@@ -158,14 +161,14 @@ export function AppShell({ children }: AppShellProps) {
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors"
           >
-            <GlyphIcon glyph={theme === 'dark' ? '[sun]' : '[moon]'} className="text-base leading-none" />
+            <Icon name={theme === 'dark' ? 'lightbulb' : 'circle-off'} decorative size="sm" className="text-current" />
             <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
           </button>
           <button
             onClick={() => { void logout(); void navigate('/login'); }}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-text-secondary hover:text-danger hover:bg-danger/10 transition-colors"
           >
-            <GlyphIcon glyph="[<-]" className="text-base leading-none" />
+            <Icon name="arrow-left-right" decorative size="sm" className="text-current" />
             <span>Sign out</span>
           </button>
         </div>

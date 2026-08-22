@@ -1,4 +1,4 @@
-import { cn } from '../utils/cn';
+import { ProviderMark } from './provider-mark';
 
 export type SocialProvider = 'google' | 'apple' | 'slack' | 'microsoft';
 
@@ -7,26 +7,8 @@ interface SocialProviderIconProps {
   className?: string;
 }
 
-const paths: Record<SocialProvider, string> = {
-  google:
-    'M12 5.04c1.56 0 2.96.54 4.06 1.58l3.03-3.03C17.32 1.9 14.86 1 12 1 7.67 1 3.96 3.42 2.18 7l3.53 2.74A7 7 0 0 1 12 5.04z M23 12c0-.74-.07-1.46-.18-2.16H12v4.09h6.18a5.27 5.27 0 0 1-2.29 3.46l3.53 2.74C21.44 18.46 23 15.44 23 12z M5.71 14.26A7 7 0 0 1 5.04 12c0-.79.14-1.56.38-2.26L1.89 6.96A11 11 0 0 0 1 12c0 1.77.42 3.44 1.18 4.9l3.53-2.64z M12 23c2.86 0 5.26-.94 7.01-2.56l-3.42-2.65c-.95.64-2.18 1.01-3.59 1.01a7 7 0 0 1-6.29-4.74l-3.53 2.64C3.96 20.58 7.67 23 12 23z',
-  apple:
-    'M16.46 13.4c-.04-3.3 2.7-4.89 2.82-4.97-1.54-2.25-3.93-2.56-4.78-2.59-2.04-.21-3.98 1.2-5.01 1.2-1.03 0-2.62-1.17-4.32-1.14C2.88 5.94 1.04 7.1.05 8.93c-2 3.46-.52 8.6 1.43 11.41.95 1.38 2.09 2.92 3.58 2.86 1.44-.06 1.99-.93 3.73-.93 1.74 0 2.24.93 3.77.9 1.55-.03 2.52-1.4 3.46-2.78 1.1-1.58 1.55-3.13 1.57-3.21-.03-.02-2.99-1.15-3.13-4.78z M13.55 4.52c.79-.97 1.33-2.3 1.18-3.64-1.14.05-2.56.77-3.38 1.73-.74.86-1.39 2.24-1.21 3.55 1.27.1 2.58-.65 3.41-1.64z',
-  slack:
-    'M5.04 15.33a2.01 2.01 0 1 1-2.01-2.01h2.01v2.01zm1.01 0a2.01 2.01 0 0 1 4.02 0v5.04a2.01 2.01 0 0 1-4.02 0v-5.04zm2.01-10.29a2.01 2.01 0 1 1 2.01-2.01v2.01H8.06zm0 1.01a2.01 2.01 0 0 1 0 4.02H3.02a2.01 2.01 0 0 1 0-4.02h5.04zm10.29 2.01a2.01 2.01 0 1 1 2.01 2.01h-2.01V8.06zm-1.01 0a2.01 2.01 0 0 1-4.02 0V3.02a2.01 2.01 0 0 1 4.02 0v5.04zm-2.01 10.29a2.01 2.01 0 1 1-2.01 2.01v-2.01h2.01zm0-1.01a2.01 2.01 0 0 1 0-4.02h5.04a2.01 2.01 0 0 1 0 4.02h-5.04z',
-  microsoft:
-    'M11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4zm-12.6 12.6H0V12.6h11.4V24zm12.6 0H12.6V12.6H24V24z',
-};
-
 export function SocialProviderIcon({ provider, className }: SocialProviderIconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={cn('w-4 h-4', className)}
-      aria-hidden="true"
-    >
-      <path d={paths[provider]} />
-    </svg>
-  );
+  // Compatibility adapter: the provider registry presently has no reviewed
+  // local logos for these IDs, so ProviderMark intentionally renders initials.
+  return <ProviderMark provider={provider} decorative size={16} className={className} />;
 }

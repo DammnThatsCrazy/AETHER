@@ -13,6 +13,7 @@ Endpoints:
     POST /v1/fraud/networks/{network_id}/annotate  Add annotation
     POST /v1/fraud/networks/{network_id}/suppress  Suppress network
     POST /v1/fraud/networks/{network_id}/escalate  Escalate network
+    POST /v1/fraud/networks/{network_id}/takedown  Take down network + invalidate attribution
 """
 
 from __future__ import annotations
@@ -96,6 +97,35 @@ async def _get_network(network_id: str, tenant_id: str) -> dict:
     if row is None or row.get("tenant_id") != tenant_id:
         raise NotFoundError(f"FraudNetwork {network_id!r} not found")
     return row
+
+
+# ``FraudNetworkMemberRepository.list_by_network`` returns a single 500-row page
+# and silently drops the rest. A takedown that treats that page as the complete
+# network leaves every member beyond it with active fraudulent attribution while
+# still reporting success. Page the full member set here instead, and if even
+# this hard ceiling is exceeded, surface it rather than under-covering silently.
+_MEMBER_PAGE_SIZE = 500
+_MAX_MEMBER_PAGES = 200  # 100k-member ceiling before truncation is surfaced
+
+
+async def _list_all_network_members(network_id: str) -> tuple[list[dict], bool]:
+    """Load every member of a network by paging past the per-call page cap.
+
+    Returns ``(members, complete)``. ``complete`` is False only when the hard
+    safety ceiling (``_MAX_MEMBER_PAGES`` × ``_MEMBER_PAGE_SIZE``) is reached
+    before the member set is exhausted.
+    """
+    members: list[dict] = []
+    for page_index in range(_MAX_MEMBER_PAGES):
+        page = await _members.find_many(
+            filters={"network_id": network_id},
+            limit=_MEMBER_PAGE_SIZE,
+            offset=page_index * _MEMBER_PAGE_SIZE,
+        )
+        members.extend(page)
+        if len(page) < _MEMBER_PAGE_SIZE:
+            return members, True
+    return members, False
 
 
 def _to_response(row: dict) -> FraudNetworkResponse:
@@ -717,3 +747,86 @@ async def escalate_network(
     ))
     metrics.increment("fraud_network_escalated")
     return _to_response(updated).model_dump()
+
+
+@router.post("/{network_id}/takedown", response_model=None)
+async def takedown_network(
+    network_id: str,
+    body: NetworkStatusUpdateRequest,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
+) -> dict:
+    """Take down a fraudulent network and invalidate the attribution it produced.
+
+    A takedown is the enforcement counterpart to a privacy erasure: instead of
+    deleting PII, it VOIDS the fraudulent attribution while RETAINING the
+    underlying touchpoints/conversions as fraud evidence. For every member
+    identity of the network it calls the shared re-attribution invalidation
+    service (Reliability Phase-2 Program 3 M3) with ``reason="fraud_takedown"``,
+    which — for each affected conversion whose active run credits one of the
+    network's (now-voided) touchpoints — supersedes that stale run with a fresh
+    zero-credit run, the exact same honest correction DSR erasure performs (see
+    ``services/measurement/privacy.py``), minus the tombstone.
+
+    The invalidation service never raises: per-conversion failures and any
+    scope-limit truncation are surfaced in the returned ``reattribution``
+    summary (``partial_failure`` / ``truncated``), never silently dropped, so
+    the network is still marked down and the analyst can see what remained.
+    """
+    _require(request, body.tenant_id, "fraud:evaluate")
+    row = await _get_network(network_id, body.tenant_id)
+
+    # The network's member identities are the identities whose attribution this
+    # takedown invalidates; their OWN touchpoints are the fraudulent set being
+    # voided. Fall back to the anchors if members were never materialized.
+    members, members_complete = await _list_all_network_members(network_id)
+    member_entity_ids = [m["entity_id"] for m in members if m.get("entity_id")]
+    if not member_entity_ids:
+        member_entity_ids = list(row.get("anchor_entity_ids", []))
+
+    # Local import keeps the fraud_networks router decoupled from the
+    # measurement package at module load (matches this file's deferred-import
+    # convention in _run_detection_pipeline).
+    from services.measurement.reattribution import reattribute_affected
+
+    reattribution = await reattribute_affected(
+        body.tenant_id,
+        reason="fraud_takedown",
+        identity_selectors=member_entity_ids,
+        voided_touchpoint_selectors=member_entity_ids,
+    )
+
+    if not members_complete:
+        # The full member set could not be loaded (network exceeds the paging
+        # ceiling), so some members' fraudulent attribution may still be active.
+        # Surface it through the same partial_failure channel a per-conversion
+        # failure uses — never report a clean takedown over a truncated network.
+        reattribution.errors.append(
+            f"fraud_takedown_members_truncated: network {network_id} exceeds the "
+            f"{_MAX_MEMBER_PAGES * _MEMBER_PAGE_SIZE}-member load ceiling; some "
+            f"fraudulent attribution may remain active"
+        )
+
+    now = _utc_now()
+    updated = await _networks.update_status(
+        network_id, "closed", reason=body.reason, updated_at=now,
+    )
+
+    await producer.publish(Event(
+        topic=Topic.FRAUD_NETWORK_UPDATED,
+        tenant_id=body.tenant_id,
+        source_service="fraud_networks",
+        payload={
+            "network_id": network_id,
+            "update": "takedown",
+            "reason": body.reason,
+            "conversions_reattributed": reattribution.conversions_reattributed,
+            "runs_deactivated": reattribution.runs_deactivated,
+            "partial_failure": reattribution.partial_failure,
+        },
+    ))
+    metrics.increment("fraud_network_takedown")
+
+    response = _to_response(updated).model_dump()
+    response["reattribution"] = reattribution.to_dict()
+    return response

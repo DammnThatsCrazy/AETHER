@@ -517,6 +517,22 @@
       "canonical_owner": "commerce@aether"
     },
     {
+      "path": "docs/COMMERCE-EVENT-CONTRACT.md",
+      "title": "Commerce Event Contract",
+      "slug": "architecture/commerce-event-contract",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 11,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/COMMERCE-OPERATOR-RUNBOOK.md",
       "title": "Commerce Operator Runbook",
       "slug": "operations/commerce-runbook",
@@ -2520,6 +2536,71 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/PROVIDER-CERTIFICATION.md",
+      "title": "Provider Certification",
+      "slug": "architecture/provider-certification",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PROVIDER-MANIFEST-SPEC.md",
+      "title": "Provider Manifest Spec",
+      "slug": "architecture/provider-manifest-spec",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 13,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PROVIDER-MIGRATION.md",
+      "title": "Provider Migration",
+      "slug": "operations/provider-migration",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PROVIDER-PLUGIN-SPEC.md",
+      "title": "Provider Plugin Spec",
+      "slug": "architecture/provider-plugin-spec",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/QUEUE-WORKER-HEALTH.md",
       "title": "Queue & Worker Health",
       "slug": "reliability/queue-worker-health",
@@ -2793,6 +2874,22 @@
       "status": "beta",
       "since_version": "8.9.0",
       "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/SDK-COMMERCE-BRIDGES.md",
+      "title": "SDK Commerce Bridges",
+      "slug": "sdks/sdk-commerce-bridges",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
     {
@@ -3479,6 +3576,22 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/UNIVERSAL-PROVIDER-RUNTIME.md",
+      "title": "Universal Provider Runtime",
+      "slug": "architecture/universal-provider-runtime",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 14,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/USAGE-METERING.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/usage-metering",
@@ -3883,6 +3996,349 @@
       "since_version": "8.12.0"
     },
     {
+      "path": "docs/brand-system/README.md",
+      "title": "Olympus Labs / Aether / Kyber Brand System",
+      "slug": "architecture/brand-system",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/accessibility.md",
+      "title": "Accessibility",
+      "slug": "architecture/brand-system/accessibility",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/aether-consumer-matrix.md",
+      "title": "Aether context, ownership, and consumer matrix",
+      "slug": "architecture/brand-system/aether-consumers",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/aether.md",
+      "title": "Aether identity",
+      "slug": "architecture/brand-system/aether",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/architecture.md",
+      "title": "Brand-system architecture and accessibility",
+      "slug": "architecture/brand-system/architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/audit.md",
+      "title": "Olympus Labs / Aether / Kyber Visual-System Inventory",
+      "slug": "architecture/brand-system/audit",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/do-dont.md",
+      "title": "Do and don't",
+      "slug": "architecture/brand-system/do-dont",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/documentation.md",
+      "title": "Documentation guidance",
+      "slug": "architecture/brand-system/documentation",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/entities.md",
+      "title": "Entity identity",
+      "slug": "architecture/brand-system/entities",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/final-audit.md",
+      "title": "Brand-system living acceptance report",
+      "slug": "architecture/brand-system/final-audit",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/iconography.md",
+      "title": "Iconography",
+      "slug": "architecture/brand-system/iconography",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/kyber.md",
+      "title": "Kyber identity",
+      "slug": "kyber/brand-system",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/marketing.md",
+      "title": "Marketing guidance",
+      "slug": "enterprise/brand-system-marketing",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/migration.md",
+      "title": "Brand-system migration playbook",
+      "slug": "architecture/brand-system/migration",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/motion.md",
+      "title": "Motion",
+      "slug": "architecture/brand-system/motion",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/olympus.md",
+      "title": "Olympus Labs identity",
+      "slug": "architecture/brand-system/olympus",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "exec",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/principles.md",
+      "title": "Brand-system principles",
+      "slug": "architecture/brand-system/principles",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/provenance-confidence.md",
+      "title": "Provenance, confidence, and freshness",
+      "slug": "architecture/brand-system/provenance-confidence",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/providers.md",
+      "title": "Provider identity and attribution",
+      "slug": "architecture/brand-system/providers",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/responsive.md",
+      "title": "Responsive behavior",
+      "slug": "architecture/brand-system/responsive",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/status-severity.md",
+      "title": "Status and severity",
+      "slug": "architecture/brand-system/status-severity",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/surfaces.md",
+      "title": "Surfaces, borders, and focus",
+      "slug": "architecture/brand-system/surfaces",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/brand-system/typography.md",
+      "title": "Typography and spacing",
+      "slug": "architecture/brand-system/typography",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
+    },
+    {
       "path": "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
       "title": "ADR: Campaign Identity — Canonical UUID Strategy",
       "slug": "campaign/adr-campaign-identity",
@@ -4271,6 +4727,34 @@
       "path": "docs/decisions/ADR-007-observation-only-execution-invariant.md",
       "title": "ADR-007: Observation-Only Execution Invariant",
       "slug": "decisions/adr-007-observation-only-execution-invariant",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/decisions/ADR-008-multi-model-intelligence-harness.md",
+      "title": "ADR-008: Multi-Model Intelligence Harness",
+      "slug": "decisions/adr-008-multi-model-intelligence-harness",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/decisions/ADR-009-universal-provider-runtime.md",
+      "title": "ADR-009: Universal Provider Runtime",
+      "slug": "decisions/adr-009-universal-provider-runtime",
       "section": "reference",
       "visibility": "I",
       "audience": [
@@ -6613,6 +7097,19 @@
       "status": "alpha"
     },
     {
+      "path": "docs/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md",
+      "title": "Kyber Mobile — Command Security Model",
+      "slug": "kyber/mobile-command-security",
+      "section": "kyber",
+      "audience": [
+        "architect",
+        "security",
+        "mobile",
+        "operator"
+      ],
+      "status": "stable"
+    },
+    {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
     },
     {
@@ -6659,6 +7156,19 @@
         "mobile"
       ],
       "status": "alpha"
+    },
+    {
+      "path": "docs/source-of-truth/MOBILE_DISTRIBUTION.md",
+      "title": "Mobile Distribution — profiles, versions, and honest release posture",
+      "slug": "mobile/distribution",
+      "section": "mobile",
+      "audience": [
+        "architect",
+        "mobile",
+        "release",
+        "security"
+      ],
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/MOBILE_PLATFORM.md",

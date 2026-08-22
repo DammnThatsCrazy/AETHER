@@ -16,7 +16,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "559be979"
+last_synced_commit: "936b9859"
 ---
 
 # Backend Execution Model
@@ -37,8 +37,9 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `identity-worker` | Identity-signal emission from validated SDK events. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
+| `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`) and `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`) loop workers. |
 | `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
-| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, and expired credential rotation-overlap tombstoning). |
+| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → loop-worker mapping lives in `services/runtime/roles.py`; canonical

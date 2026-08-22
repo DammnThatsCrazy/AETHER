@@ -128,7 +128,16 @@ def test_generated_vocabulary_matches_registry():
 
 def test_comparison_not_imported_eagerly_by_intelligence():
     """services.intelligence must not pull the comparison package at import time."""
-    for mod in [m for m in list(sys.modules) if m.startswith("services")]:
+    # Evict ONLY the subtree under test so `import services.intelligence` is a
+    # true cold import. Evicting every services.* module here would destroy
+    # class references that OTHER already-imported modules hold: e.g. a venue
+    # adapter imported earlier in the same xdist worker caches
+    # ProviderRequestError at module-import time, and a later lazy import after
+    # this eviction would build a FRESH transport module with a NEW class object
+    # that the adapter's except clause does not catch (the exact venue-test
+    # failure this isolation fix prevents). The assertion below still proves the
+    # comparison package is not pulled eagerly.
+    for mod in [m for m in list(sys.modules) if m.startswith("services.intelligence")]:
         del sys.modules[mod]
     import services.intelligence  # noqa: F401
 

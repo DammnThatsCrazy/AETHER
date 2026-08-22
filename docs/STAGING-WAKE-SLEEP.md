@@ -216,6 +216,13 @@ wake apply and stable services.
 `.github/workflows/staging-ttl-guard.yml` runs **hourly at minute 17 UTC** and
 is the backstop for a rehearsal that never returned to sleep.
 
+**Not armed without the lifecycle role.** When `AWS_STAGING_LIFECYCLE_ROLE_ARN`
+is not configured, the guard has no credential to read the lease or enforce the
+TTL, reports it is a NO-OP and exits green — staging may still be running and
+will **not** be guarded; that is **not** a claim that staging is asleep. The
+moment the role is wired it enforces exactly as below, fail-closed in both
+directions.
+
 Its design constraints are deliberate and worth understanding before relying on
 it:
 
@@ -524,5 +531,5 @@ Specifically externally blocked:
 
 - [Cost Optimization](COST-OPTIMIZATION.md) — the awake-hours budget model
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the topology staging rehearses
-- [Deployment Profiles](DEPLOYMENT-PROFILES.md) — the ten-profile matrix
+- [Deployment Profiles](DEPLOYMENT-PROFILES.md) — the eight-profile matrix
 - [Deployment Runbook](DEPLOYMENT-RUNBOOK.md) — application promotion

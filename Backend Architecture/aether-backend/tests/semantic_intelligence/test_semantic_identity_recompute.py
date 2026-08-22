@@ -35,7 +35,7 @@ def _isolate():
 
 
 async def _seed(subject: str, content: str):
-    obs, _ = classify_event(
+    obs, _ = await classify_event(
         {"source_event_id": f"e_{subject}_{content[:3]}", "source_type": "feedback",
          "actor_ref": "u1", "primary_subject_ref": subject, "content": content},
         TENANT,

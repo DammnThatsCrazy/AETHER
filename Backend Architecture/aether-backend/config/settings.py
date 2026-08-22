@@ -1012,6 +1012,20 @@ class ConnectorsConfig:
 
 
 # ---------------------------------------------------------------------------
+# Universal Provider Runtime (plugin-based providers; additive to connectors)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ProviderRuntimeConfig:
+    """Universal Provider Runtime. Master switch is OFF by default; mounting in
+    main.py is the only gate. Entry points (package plugin discovery) and the
+    Kyber operator health view are separate switches."""
+    enabled: bool = _env_bool("AETHER_PROVIDER_RUNTIME_ENABLED", False)
+    entry_points_enabled: bool = _env_bool("AETHER_PROVIDER_ENTRY_POINTS_ENABLED", False)
+    kyber_health_enabled: bool = _env_bool("KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Provider Corpus & Data Lake (Olympus-owned sources + Dune)
 # ---------------------------------------------------------------------------
 
@@ -1698,6 +1712,9 @@ class Settings:
 
     # Inbound connector ingestion (master switch; per-tenant config gates each)
     connectors: ConnectorsConfig = field(default_factory=ConnectorsConfig)
+
+    # Universal Provider Runtime (plugin-based providers; additive to connectors)
+    provider_runtime: ProviderRuntimeConfig = field(default_factory=ProviderRuntimeConfig)
 
     # Olympus-owned provider corpus, Dune ingestion, data lake provenance, anti-distillation
     provider_corpus: ProviderCorpusConfig = field(default_factory=ProviderCorpusConfig)

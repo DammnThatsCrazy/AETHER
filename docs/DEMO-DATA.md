@@ -62,9 +62,17 @@ allowlist are configured.
 ## Local in-memory limitation
 
 A separate CLI process cannot change repositories held in another backend
-process's memory. In-memory demo startup therefore must invoke the seed engine
-in-process only through the explicit `dev-demo`/seed-on-start path. Normal
-startup remains unseeded. Durable PostgreSQL environments use the shared
-database through the ordinary seed CLI.
+process's memory. The seed engine refuses to write the durable runs/reviews
+domains into a process-local in-memory store from the CLI — that would be a
+parallel copy the backend API never reads. In-memory demo startup therefore
+must invoke the seed engine in-process through the explicit `dev-demo` /
+seed-on-start path, or set `AETHER_ALLOW_INMEMORY_SEED=1` to acknowledge the
+in-memory path for test/dev. Normal startup remains unseeded. Durable
+PostgreSQL/Redis environments use the shared database and durable store through
+the ordinary seed CLI.
+
+Local and test demo operations also refuse a non-loopback `DATABASE_URL` — the
+`AETHER_ENV` string alone must not gate a shared database. Set
+`AETHER_ALLOW_NONLOCAL_DB=1` to explicitly allow a non-local target.
 
 See [Demo App](DEMO-APP.md).

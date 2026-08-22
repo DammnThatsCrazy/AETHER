@@ -126,3 +126,56 @@ def test_delete():
     assert out["deleted"] is True
     with pytest.raises(NotFoundError):
         _run(cont_routes.delete_continuation(_req(), continuation_id="c1"))
+
+
+# ── Intra-tenant ownership isolation (A2 IDOR remediation) ────────────────────
+#
+# A second tenant user must never read / update / handoff / delete another
+# principal's continuation. Absent and foreign rows read identically as 404 —
+# no existence leak, no 403 (which would reveal the row exists).
+
+class _OtherTenant(_Tenant):
+    user_id = "user-2"
+
+
+def _other_req():
+    return SimpleNamespace(state=SimpleNamespace(tenant=_OtherTenant()))
+
+
+def test_foreign_principal_get_is_404():
+    _run(cont_routes.create_continuation(_req(), _input(id="c1"), idempotency_key=None))
+    with pytest.raises(NotFoundError):
+        _run(cont_routes.get_continuation(_other_req(), continuation_id="c1"))
+    # The owner can still read it — the row was never touched by the probe.
+    got = _run(cont_routes.get_continuation(_req(), continuation_id="c1")).data
+    assert got["id"] == "c1"
+
+
+def test_foreign_principal_patch_is_404():
+    _run(cont_routes.create_continuation(_req(), _input(id="c1"), idempotency_key=None))
+    upd = ContinuationUpdate(source_client="mobile_ios", surface="graph",
+                             summary={"title": "hijack"}, expected_state_revision=0)
+    with pytest.raises(NotFoundError):
+        _run(cont_routes.update_continuation(_other_req(), upd, continuation_id="c1"))
+    # Server-forced identity: the stored principal is still user-1 and revision
+    # is untouched — the foreign CAS could not have advanced or overwritten it.
+    got = _run(cont_routes.get_continuation(_req(), continuation_id="c1")).data
+    assert got["principal_id"] == "user-1"
+    assert got["state_revision"] == 0
+    assert got["summary"]["title"] == "Resume graph"
+
+
+def test_foreign_principal_handoff_is_404():
+    _run(cont_routes.create_continuation(_req(), _input(id="c1"), idempotency_key=None))
+    req = HandoffRequest(mode="explicit", resource_ids=["a"])
+    with pytest.raises(NotFoundError):
+        _run(cont_routes.handoff_continuation(_other_req(), req, continuation_id="c1"))
+
+
+def test_foreign_principal_delete_is_404():
+    _run(cont_routes.create_continuation(_req(), _input(id="c1"), idempotency_key=None))
+    with pytest.raises(NotFoundError):
+        _run(cont_routes.delete_continuation(_other_req(), continuation_id="c1"))
+    # Owner's row survives the foreign delete attempt.
+    got = _run(cont_routes.get_continuation(_req(), continuation_id="c1")).data
+    assert got["id"] == "c1"

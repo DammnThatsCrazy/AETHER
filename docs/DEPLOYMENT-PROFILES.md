@@ -5,6 +5,15 @@ section: operations
 visibility: I
 audience: [ops, architect]
 status: stable
+source_files:
+  - config/deployment_profiles.yaml
+  - config/runtime_deployment.yaml
+  - config/terraform_resource_contracts.yaml
+  - AWS Deployment/aether-aws/terraform/profiles.tf
+  - AWS Deployment/aether-aws/terraform/main.tf
+  - AWS Deployment/aether-aws/terraform/variables.tf
+  - scripts/release/check_profile_config.py
+  - scripts/release/check_profile_parity.py
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
@@ -12,33 +21,64 @@ toc_depth: 3
 
 # Deployment Profiles
 
-Aether declares ten deployment profiles, from a zero-backend local mock to a
+Aether declares eight deployment profiles, from a zero-backend local mock to a
 contractually isolated enterprise deployment. `config/deployment_profiles.yaml`
 is the canonical matrix — backend selectors, cost policy and numeric budgets —
 and `scripts/release/check_profile_config.py` validates it.
 
-Four of the ten are **cloud profiles**: `staging`, `production-lean`,
-`production-scale`, `enterprise-isolated`. Only those four are selectable in
-Terraform through `var.deployment_profile`, and only those four have a
-`profiles/*.tfvars` file, a plan test and a policy contract. The other six are
-declared so the architecture stays viable through them; they are described
-honestly below, including where the automation does not exist.
+Four of the eight are **cloud profiles**: `staging`, `production-lean`,
+`production-scale`, `enterprise-isolated`. Six of the eight are
+Terraform-selectable through `var.deployment_profile` — the four cloud
+profiles plus the two ephemeral-class profiles `demo` and `preview` — and all
+six have a `profiles/*.tfvars` file, a plan test and a policy contract (the
+parity checker pins the selectable set to cloud ∪ ephemeral). The remaining two
+(`local`, `local-full`) are local-only and are never selectable in Terraform;
+they are described honestly below, including where the automation does not
+exist.
+
+`scripts/release/check_profile_parity.py` enforces that every profile-count
+statement in the docs stays in lockstep with the canonical matrix, so a ninth
+profile added to `config/deployment_profiles.yaml` fails CI until the docs and
+the Terraform layer are updated in the same change.
 
 `deployment_profile` is not documentation. It drives module `count` and module
 inputs in the Terraform root, so a `production-lean` plan structurally cannot
 contain a forbidden resource. See
 [Terraform enforcement](#terraform-enforcement) for exactly how that is proven.
 
-### Pending module: `kms_credentials`
+### Provider-credential KMS (`kms_credentials`)
 
-The `terraform/modules/kms_credentials` module (a customer-managed KMS CMK +
-alias + least-privilege IAM for provider-credential envelope encryption, surfaced
-as `CREDENTIAL_KMS_KEY_ID`) is **defined but not yet wired into the profile root**.
-Wiring it adds `aws_kms_key`/`aws_kms_alias` to the plan, which the
-provider-mocked `profile_plan.tftest.hcl` asserts against exactly; it is left
-unwired until that plan assertion is updated in the same change (with a terraform
-binary available to validate). The staging/production credential cipher reads the
-key id from `CREDENTIAL_KMS_KEY_ID` once the module is wired and applied.
+Every cloud profile provisions a dedicated customer-managed CMK — `credential_kms`
+in its `cost_policy.required_resources` — for the durable, envelope-encrypted
+provider credential authority (`modules/kms_credentials` in the Terraform root).
+It is deliberately separate from the Secrets Manager CMK (`secrets_kms`): that
+key encrypts static secret stubs, this one is the root of trust for every
+per-tenant provider credential the `AwsKmsEnvelopeCredentialCipher` writes, and
+the two carry different rotation, access and blast-radius profiles.
+
+The wiring is enforced at four layers:
+
+1. **Policy** — `credential_kms` is a required resource in all four cloud
+   profiles' `cost_policy`, and `config/terraform_resource_contracts.yaml`
+   contracts it as `exactly:2` resources (`aws_kms_key` + `aws_kms_alias`)
+   under `module.kms_credentials`.
+2. **Plan** — `profiles.tf` sets `enable_credential_kms = true`, the root
+   instantiates the module behind that count, and the provider-mocked
+   `profile_plan.tftest.hcl` asserts `length(module.kms_credentials) == 1` for
+   every cloud profile.
+3. **Task definition** — the key id is injected into both the api and every
+   runtime-service task as `CREDENTIAL_KMS_KEY_ID`, so the backend's cipher
+   resolves its key at boot (staging/production run `CREDENTIAL_CIPHER=aws_kms`).
+4. **Authorization** — the module's `iam_policy_json` is attached to the ECS
+   task role via `aws_iam_role_policy`, constraining the task to the four
+   envelope-crypto actions under exactly the five-key
+   `{tenant_id, provider, environment, slot_name, credential_version}`
+   encryption context.
+
+The `aws_iam_role_policy` attachment is the binding grant (rather than the
+module's `task_role_arns` input) to avoid a module dependency cycle: the ECS
+task role lives inside `module.ecs`, and `module.ecs` consumes this module's
+key id for `CREDENTIAL_KMS_KEY_ID`.
 
 ## Profile summary
 
@@ -46,8 +86,8 @@ key id from `CREDENTIAL_KMS_KEY_ID` once the module is wired and applied.
 |---|---|---|---|---|---|
 | `local` | local | no | n/a | single process | n/a |
 | `local-full` | local | no | n/a | compose per-role | n/a |
-| `demo` | demo | no | yes | backend-seeded shared non-production | n/a |
-| `preview` | preview | no | yes | not implemented | n/a |
+| `demo` | demo | **yes** | yes (USD 150 / 220) | `consolidated` — 2 tasks | **0** |
+| `preview` | preview | **yes** | yes (USD 150 / 220) | `consolidated` — 2 tasks | **0** |
 | `staging` | staging | **yes** | yes (USD 25 / 50) | `consolidated` — 2 tasks | **0** |
 | `production-lean` | production | **yes** | yes (USD 150 / 200) | `consolidated` — 2 tasks | **0** |
 | `production-scale` | production | **yes** | no | `dedicated` — 9 services | 1 (`single`) |
@@ -94,16 +134,16 @@ key id from `CREDENTIAL_KMS_KEY_ID` once the module is wired and applied.
 | | |
 |---|---|
 | **Purpose** | Temporary live demo against a shared non-production backend. |
-| **Selection** | **Not implemented as automation in this repository.** No Terraform selector, no workflow, no TTL job exists. |
-| **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. |
-| **Runtime topology** | Shared non-production backend; no browser-side data service. |
+| **Selection** | Terraform-selectable via the same root (`AWS Deployment/aether-aws/terraform/profiles/demo.tfvars`); `variables.tf` accepts `demo`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service (`cost_policy` forbids them). |
+| **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling) — the same footprint shape as staging, one step down. |
 | **Data behaviour** | Versioned backend-seeded synthetic tenant only. Never real customer data; normal startup remains empty. |
-| **Network behaviour** | Shared non-production network. |
-| **Cost posture** | `cost_capped: true`; no numeric budget declared. |
-| **TTL / lifecycle** | `ttl_cleanup_required: true` is **declared but not enforced by any shipped job**. |
+| **Network behaviour** | Shared non-production network, `network_egress_mode = public_ip` — no NAT Gateway. |
+| **Cost posture** | `cost_capped: true`; FIXED budget target 150 / hard 220 USD/mo, validated by `validate-ephemeral-budget` against the committed demo-valid fixture (~USD 145.60/mo fixed baseline). |
+| **TTL / lifecycle** | `ttl_cleanup_required: true`. Enforced by the ephemeral TTL guard: an SSM lease at `/aether/demo/demo/lifecycle/expires-at` written by `ephemeral_env.py provision`, checked hourly by `.github/workflows/ephemeral-ttl-guard.yml` (fail-closed — missing/expired lease ends the run red), and torn down by `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN` — it then has no credential to read the lease or trip the TTL, reports it is a NO-OP and passes green, which is **not** a claim that demo is asleep; it re-arms fail-closed the moment the role is wired. |
 | **Security posture** | Would inherit the shared non-production account's posture. Seed/reset additionally require an explicit staging demo policy and tenant allowlist. Unproven. |
-| **Validation** | `make validate-profile-config` only. |
-| **Limitations** | The TTL requirement has no enforcement, which is the exact failure mode that leaves demo environments running. Treat the declaration as a design constraint, not a control. |
+| **Validation** | `make validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-profile-parity validate-ephemeral-budget test-ephemeral-lifecycle` + profile-doctor. |
+| **Limitations** | The TTL guard is the tripwire; enforcement (scale-to-zero) is the operator-run `ephemeral_env.py teardown` — it is not an automatic destroy. |
 | **Promotion path** | None. A demo is never promoted; a release is rehearsed in `staging`. |
 
 ## `preview`
@@ -111,16 +151,16 @@ key id from `CREDENTIAL_KMS_KEY_ID` once the module is wired and applied.
 | | |
 |---|---|
 | **Purpose** | PR-specific live environment, created only when explicitly requested. |
-| **Selection** | **Not implemented as automation in this repository.** |
-| **Resource inventory** | Shared foundation Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, with a temporary tenant schema/prefix route. |
-| **Runtime topology** | Undeclared in `config/runtime_deployment.yaml`. |
+| **Selection** | Terraform-selectable via the same root (`AWS Deployment/aether-aws/terraform/profiles/preview.tfvars`); `variables.tf` accepts `preview`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Resource inventory** | Shared foundation Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, with a temporary tenant schema/prefix route. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service. |
+| **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling). |
 | **Data behaviour** | Temporary tenant on the shared foundation; auto-expiring. |
-| **Network behaviour** | Shared foundation network. Explicitly **forbids** a dedicated VPC, dedicated ALB, dedicated Aurora or dedicated Neptune. |
-| **Cost posture** | `cost_capped: true`; no numeric budget declared. |
-| **TTL / lifecycle** | `ttl_cleanup_required: true` and `auto-expire` are declared; **no shipped job enforces either**. `run-forever` is a declared forbidden behaviour. |
+| **Network behaviour** | Shared foundation network, `network_egress_mode = public_ip` — no NAT Gateway. `cost_policy` and `forbids` keep it off a dedicated VPC, dedicated ALB, dedicated Aurora or dedicated Neptune. |
+| **Cost posture** | `cost_capped: true`; FIXED budget target 150 / hard 220 USD/mo, validated by `validate-ephemeral-budget` against the committed preview-valid fixture (~USD 145.60/mo fixed baseline — same cloned footprint as demo). |
+| **TTL / lifecycle** | `ttl_cleanup_required: true` and `auto-expire` enforced. The ephemeral TTL guard runs hourly over the demo/preview matrix: SSM lease at `/aether/preview/preview/lifecycle/expires-at`, fail-closed (missing/expired lease ends the run red), torn down by `ephemeral_env.py teardown`. `run-forever` is forbidden and the guard makes it unachievable. |
 | **Security posture** | Would share a foundation database with other previews; isolation would rest entirely on the tenant schema prefix. Unproven. |
-| **Validation** | `make validate-profile-config` only. |
-| **Limitations** | As above — declared constraints without enforcement. |
+| **Validation** | `make validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-profile-parity validate-ephemeral-budget test-ephemeral-lifecycle` + profile-doctor. |
+| **Limitations** | The TTL guard is the tripwire; enforcement (scale-to-zero) is the operator-run `ephemeral_env.py teardown`. |
 | **Promotion path** | None. Preview environments are discarded, not promoted. |
 
 ## `staging`
@@ -134,7 +174,7 @@ key id from `CREDENTIAL_KMS_KEY_ID` once the module is wired and applied.
 | **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. Aurora auto-pauses at 0 ACU while asleep. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |
 | **Cost posture** | Target USD 25/month, hard ceiling USD 50/month, against a declared `maximum_scheduled_awake_hours_per_month: 40`. Hourly resources are prorated by awake hours; per-month charges (KMS keys, secrets, alarms) accrue regardless of sleep. See [Cost Optimization](COST-OPTIMIZATION.md). |
-| **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and drops autoscaling floors, then fails the run so the lapse is visible. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
+| **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and drops autoscaling floors, then fails the run so the lapse is visible. Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN` — it then has no credential to read the lease or enforce the TTL, reports it is a NO-OP and passes green, which is **not** a claim that staging is asleep; it re-arms fail-closed the moment the role is wired. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
 | **Security posture** | Same isolation shape as production-lean. The rehearsal itself probes cross-tenant reads, unauthenticated access and empty-state behaviour with two distinct tenants. |
 | **Validation** | `make test-staging-lifecycle`, `make test-terraform-profiles` (run blocks `staging_profile_plan` and `staging_asleep_profile_plan`), `make deployment-profile-gate`. |
 | **Limitations** | No rehearsal has been executed against real AWS. Every lifecycle control is code-complete and externally unverified — see [Readiness](#readiness-and-what-is-externally-blocked). |
@@ -304,11 +344,13 @@ moment it is written. It runs in `release-gate` and
 
 `make test-terraform-profiles` runs `terraform validate` and then
 `terraform test -filter=tests/profile_plan.tftest.hcl`. **`terraform validate`
-passes, and `terraform test` passes for all four cloud profiles.** Five
-provider-mocked run blocks — `staging_profile_plan`,
-`staging_asleep_profile_plan`, `production_lean_profile_plan`,
-`production_scale_profile_plan`, `enterprise_isolated_profile_plan` — assert
-against the **planned module graph**, not against the locals that produced it:
+passes, and `terraform test` passes for all six selectable profiles.** Ten
+provider-mocked run blocks — `staging_profile_plan`, `demo_profile_plan`,
+`preview_profile_plan`, `staging_asleep_profile_plan`,
+`production_lean_profile_plan`, `production_scale_profile_plan`,
+`enterprise_isolated_profile_plan`, plus the applied-state and egress-rejection
+blocks — assert against the **planned module graph**, not against the locals
+that produced it:
 
 ```hcl
 length(module.msk)              == 0    # production-lean
@@ -366,14 +408,19 @@ property enforced by the staging automation, not a plan assertion.
 applies Terraform.** The `apply-production-lean` job that auto-applied on every
 push to `main` has been **deleted**. What remains there:
 
-- a provider-mocked configuration plan for each of the four profiles on every
-  PR, publishing an immutable `terraform-configuration-plan-*` artifact;
-- an OIDC remote plan per profile when the complete credential set is present,
-  publishing `terraform-remote-plan-*` plus the policy and cost reports;
+- a provider-mocked configuration plan for each of the six selectable profiles
+  on every PR, publishing an immutable `terraform-configuration-plan-*` artifact
+  (the two ephemeral-class profiles are included here and deliberately excluded
+  from remote-plan);
+- an OIDC remote plan per cloud profile when the complete credential set is
+  present, publishing `terraform-remote-plan-*` plus the policy and cost reports;
 - `require-production-credentials`, which on a push to `main` gates
   **promotability**, not an apply: a commit is only dispatchable for promotion
   if its main-branch run proved the credential set exists and all four profiles
-  produced a credentialed, policy- and cost-validated remote plan.
+  produced a credentialed, policy- and cost-validated remote plan. When the
+  credential set is absent the job reports it is a NO-OP — the commit is
+  explicitly **not** promotable — and passes green, re-arming fail-closed the
+  moment the credentials are wired.
 
 `.github/workflows/terraform-promote.yml` is the **sole apply path**. It is
 `workflow_dispatch`-only — no push, tag, schedule or path trigger can reach an
@@ -500,15 +547,19 @@ make deployment-profile-gate          # every profile gate that runs without AWS
 make validate-profile-config          # profile matrix + posture schema
 make validate-cost-policy             # forbidden/required resource declarations
 make validate-cost-policy-terraform   # Terraform locals statically encode the policy
+make validate-profile-parity          # cross-source profile-set agreement (selectable = cloud ∪ ephemeral)
 make validate-delivery-topology       # every worker role owned by exactly one service
 make validate-terraform-profile-policy # score a real plan JSON against the contracts
 make validate-cost-model              # price the inventory against the numeric budget
+make validate-staging-budget          # staging awake/asleep budget (plan-policy + cost model)
+make validate-ephemeral-budget        # demo/preview budget off their committed fixtures
 make test-terraform-profiles          # provider-mocked per-profile plan tests
 make test-runtime-topology            # execution-group topology
 make test-plan-policy                 # plan-policy validator against fixtures
 make test-workflow-controls           # no automatic apply, reviewed-plan integrity
 make test-cost-model                  # ceilings, fail-closed pricing, exception expiry
 make test-staging-lifecycle           # wake/sleep + TTL guard structural controls
+make test-ephemeral-lifecycle         # demo/preview TTL guard + provision/teardown ops
 make deployment-readiness-score       # the three-column scorecard
 make collect-deployment-evidence      # materialise release-evidence/ with its checksum
 ```

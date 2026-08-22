@@ -315,7 +315,7 @@ curl http://localhost:8081/health      # kyber operator console
 # frontend/aether runs separately (dev-only): cd frontend/aether && npm run dev  # → http://localhost:5175
 
 # Staging
-cd deploy/staging
+cd deploy/legacy-staging
 ./bootstrap.sh
 ```
 

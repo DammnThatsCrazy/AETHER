@@ -30,7 +30,17 @@ SEMANTIC_REPLAY_JOB_TYPE = "semantic.replay"
 
 
 def register_semantic_replay_handler() -> None:
-    """Register the internal-only replay job handler exactly once at startup."""
+    """Register the internal-only replay job handler exactly once at startup.
+
+    Gated on ``settings.semantic.replay_enabled`` — the kill-switch. Flag off
+    (the default) means the handler is never registered, so an enqueued
+    ``semantic.replay`` job fails as an unknown type instead of running; the
+    ``/reprocess`` route refuses to enqueue one in the first place (routes.py).
+    """
+    from config.settings import settings
+
+    if not settings.semantic.replay_enabled:
+        return
     if SEMANTIC_REPLAY_JOB_TYPE in HANDLER_REGISTRY:
         return
 
@@ -50,8 +60,11 @@ def register_semantic_replay_handler() -> None:
             # Persist the Bronze cursor into the durable job payload so a
             # retry/restart resumes from it, not row 0; the heartbeat keeps
             # the lease alive (and surfaces cancellation) on long backfills.
+            # M8-B3: guard the checkpoint write with the current lease owner so
+            # a stale worker (lease reaped, job re-claimed) cannot overwrite the
+            # new owner's durable cursor.
             await jobs_repo.update_payload(
-                ctx.job_id, {**payload, "cursor": new_cursor}
+                ctx.job_id, {**payload, "cursor": new_cursor}, worker_id=ctx.worker_id
             )
             await ctx.heartbeat()
 

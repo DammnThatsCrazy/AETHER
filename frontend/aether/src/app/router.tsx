@@ -27,6 +27,7 @@ const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page
 const BillingPage = lazy(() => import('@aether-app/pages/billing/billing-page').then(m => ({ default: m.BillingPage })));
 const UsagePlanPage = lazy(() => import('@aether-app/pages/usage-plan').then(m => ({ default: m.UsagePlanPage })));
 const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ default: m.MePage })));
+const NotificationCenterPage = lazy(() => import('@aether-app/pages/notifications/notification-center-page').then(m => ({ default: m.NotificationCenterPage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));
 const ActivationPage = lazy(() => import('@aether-app/pages/activation/activation-page').then(m => ({ default: m.ActivationPage })));
@@ -113,6 +114,7 @@ export function AppRouter() {
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/settings/notifications" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/notifications" element={<PageSuspense><NotificationCenterPage /></PageSuspense>} />
                 <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />
                 <Route path="/usage-plan" element={<PageSuspense><UsagePlanPage /></PageSuspense>} />

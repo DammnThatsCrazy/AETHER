@@ -50,3 +50,4 @@ def test_frontend_data_truth_source_and_bundle_gates_present() -> None:
     source = inspect.getsource(repo_doctor)
     assert 'scripts/validate_frontend_data_truth.py"]' in source
     assert 'scripts/validate_frontend_data_truth.py", "--build-bundles"]' in source
+    assert 'scripts/validate_frontend_branding.py"]' in source

@@ -452,6 +452,24 @@ SEAMS: tuple[Seam, ...] = (
         why="Class 4/5 commands require a live step-up grant; this is the read "
             "that decides whether one exists.",
     ),
+    # ── mobile action adapter → the ops command list ─────────────────────────
+    # The M6 mobile action-adapter digest (services/kyber/ops/mobile_actions.py)
+    # composes the SAME open command list the desktop ops routes serve — a
+    # read-only availability pointer, never a second command plane. If this read
+    # drifted, the digest would surface a different command set than the desktop
+    # plane authorizes, or read a provider that answers nothing; both failures
+    # are silent, so the seam is declared rather than trusted.
+    Seam(
+        caller="services.kyber.ops.mobile_actions.MobileActionDigest._commands",
+        module="services.kyber.ops.commands",
+        singleton="command_service",
+        attribute="list_commands",
+        positional=0,
+        keywords=("status", "limit"),
+        why="The mobile action-availability digest reads the same open command "
+            "list the desktop command plane serves; this is the read that keeps "
+            "the digest honest about what a governed action exists for.",
+    ),
     # ── graph projector → the append-only mutation ledger ─────────────────────
     # The Kyber Graph is a projection with exactly one input. If this read
     # drifted — renamed, or its `limit`/`aggregate_id` keywords changed — the

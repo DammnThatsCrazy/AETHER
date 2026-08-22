@@ -385,6 +385,13 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "ML_SERVING_URL", value = var.ml_serving_url },
           { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
         ],
+        # Provider-credential envelope-encryption CMK. The backend's
+        # AwsKmsEnvelopeCredentialCipher reads this key id to call
+        # kms:GenerateDataKey / kms:Decrypt. Only injected when the profile
+        # provisions the key (every cloud profile does).
+        var.credential_kms_key_id != "" ? [
+          { name = "CREDENTIAL_KMS_KEY_ID", value = var.credential_kms_key_id },
+        ] : [],
         # Graph backend — the Neptune endpoint is only injected when the
         # profile actually selects Neptune; postgres profiles never see it.
         var.graph_backend == "neptune" ? [
@@ -572,6 +579,10 @@ resource "aws_ecs_task_definition" "runtime_service" {
         { name = "ANALYTICS_BACKEND", value = var.analytics_backend },
         { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
       ],
+      # Provider-credential envelope-encryption CMK (mirrors the API task).
+      var.credential_kms_key_id != "" ? [
+        { name = "CREDENTIAL_KMS_KEY_ID", value = var.credential_kms_key_id },
+      ] : [],
       # Neptune endpoint only on the Neptune graph backend (mirrors the API task).
       var.graph_backend == "neptune" ? [
         { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },

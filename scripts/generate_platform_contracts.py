@@ -15,6 +15,8 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/surface-capability-registry.json
   packages/shared/contracts/comparison-registry.json
   packages/shared/contracts/projector-ownership-registry.json
+  packages/shared/contracts/model-registry.json
+  packages/shared/contracts/task-profile-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -40,6 +42,12 @@ Generated outputs:
   docs/_generated/comparison-table.md
   Backend Architecture/aether-backend/services/silver/generated_ownership.py
   docs/_generated/projector-ownership-table.md
+  packages/shared/model-registry.ts
+  Backend Architecture/aether-backend/shared/model_governance/generated_model_registry.py
+  docs/_generated/model-registry-table.md
+  packages/shared/task-profile.ts
+  Backend Architecture/aether-backend/shared/model_governance/generated_task_profiles.py
+  docs/_generated/task-profile-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -1898,6 +1906,410 @@ def _summary_projector_ownership(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: model-registry (model-harness LLM catalog)
+# ---------------------------------------------------------------------------
+
+MODEL_REGISTRY_JSON = CONTRACTS / "model-registry.json"
+MODEL_REGISTRY_TS = ROOT / "packages" / "shared" / "model-registry.ts"
+MODEL_REGISTRY_PY = BACKEND / "shared" / "model_governance" / "generated_model_registry.py"
+MODEL_REGISTRY_MD = ROOT / "docs" / "_generated" / "model-registry-table.md"
+
+_MODEL_REGISTRY_VOCAB_KEYS = (
+    "providers",
+    "capabilities",
+    "thinkingModes",
+    "effortLevels",
+    "modelStatuses",
+)
+
+
+def validate_model_registry(reg: dict, ctx: dict) -> None:
+    for key in _MODEL_REGISTRY_VOCAB_KEYS:
+        _require_idents("model-registry", key, reg[key])
+    providers = set(reg["providers"])
+    capabilities = set(reg["capabilities"])
+    thinking_modes = set(reg["thinkingModes"])
+    effort_levels = set(reg["effortLevels"])
+    model_statuses = set(reg["modelStatuses"])
+
+    if not isinstance(reg["models"], list) or not reg["models"]:
+        _fail("model-registry.models must be a non-empty list")
+    ids_seen: set[str] = set()
+    for model in reg["models"]:
+        mid = model["modelId"]
+        if mid in ids_seen:
+            _fail(f"duplicate modelId {mid!r}")
+        ids_seen.add(mid)
+        if model["provider"] not in providers:
+            _fail(f"model {mid!r} has unknown provider {model['provider']!r}")
+        unknown = set(model["capabilities"]) - capabilities
+        if unknown:
+            _fail(f"model {mid!r} has capabilities {sorted(unknown)} outside capabilities")
+        unknown = set(model["thinkingModes"]) - thinking_modes
+        if unknown:
+            _fail(f"model {mid!r} has thinkingModes {sorted(unknown)} outside thinkingModes")
+        unknown = set(model["effortLevels"]) - effort_levels
+        if unknown:
+            _fail(f"model {mid!r} has effortLevels {sorted(unknown)} outside effortLevels")
+        if model["status"] not in model_statuses:
+            _fail(f"model {mid!r} has unknown status {model['status']!r}")
+
+    aliases = reg["aliases"]
+    if not isinstance(aliases, dict):
+        _fail("model-registry.aliases must be an object")
+    for alias, target in aliases.items():
+        if target not in ids_seen:
+            _fail(f"model alias {alias!r} resolves to unknown modelId {target!r}")
+
+
+def _ts_str(value: str) -> str:
+    """Single-quoted TS string literal (escaped)."""
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def _py_str(value: str) -> str:
+    """Double-quoted Python string literal (escaped)."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _py_tuple_literal(values: list) -> str:
+    """A Python tuple literal of string values, e.g. ('a', 'b') or ('a',)."""
+    if not values:
+        return "()"
+    joined = ", ".join(_py_str(v) for v in values)
+    if len(values) == 1:
+        joined += ","
+    return f"({joined})"
+
+
+def gen_model_registry_ts(reg: dict) -> str:
+    lines = _ts_header(MODEL_REGISTRY_JSON)
+    lines.append(f"export const modelRegistryVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "modelRegistryProviders", "ModelRegistryProvider", reg["providers"],
+        "Providers registered with the harness.",
+    )
+    lines += _ts_const_array(
+        "modelRegistryCapabilities", "ModelRegistryCapability", reg["capabilities"],
+        "Capability flags that drive adapter behavior.",
+    )
+    lines += _ts_const_array(
+        "modelRegistryThinkingModes", "ModelRegistryThinkingMode", reg["thinkingModes"],
+        "Thinking modes a model may support.",
+    )
+    lines += _ts_const_array(
+        "modelRegistryEffortLevels", "ModelRegistryEffortLevel", reg["effortLevels"],
+        "Effort ladder a model may support.",
+    )
+    lines += _ts_const_array(
+        "modelRegistryModelStatuses", "ModelRegistryModelStatus", reg["modelStatuses"],
+        "Lifecycle status of a registered model.",
+    )
+    lines.append("/** Alias → canonical modelId. */")
+    lines.append("export const modelRegistryAliases: Record<string, string> = {")
+    for alias in sorted(reg["aliases"]):
+        lines.append(f"  {_ts_str(alias)}: {_ts_str(reg['aliases'][alias])},")
+    lines.append("};")
+    lines.append("")
+    lines.append("/** Canonical model catalog (JSON file order). */")
+    lines.append("export const modelRegistryModels = [")
+    for model in reg["models"]:
+        lines.append("  {")
+        lines.append(f"    modelId: {_ts_str(model['modelId'])},")
+        lines.append(f"    provider: {_ts_str(model['provider'])},")
+        lines.append(f"    family: {_ts_str(model['family'])},")
+        lines.append(f"    contextWindowTokens: {model['contextWindowTokens']},")
+        lines.append(f"    maxOutputTokens: {model['maxOutputTokens']},")
+        caps = ", ".join(_ts_str(c) for c in model["capabilities"])
+        lines.append(f"    capabilities: [{caps}],")
+        modes = ", ".join(_ts_str(m) for m in model["thinkingModes"])
+        lines.append(f"    thinkingModes: [{modes}],")
+        efforts = ", ".join(_ts_str(e) for e in model["effortLevels"])
+        lines.append(f"    effortLevels: [{efforts}],")
+        lines.append(f"    samplingParamsSupported: {str(model['samplingParamsSupported']).lower()},")
+        lines.append(f"    inputCostPerMTok: {model['inputCostPerMTok']},")
+        lines.append(f"    outputCostPerMTok: {model['outputCostPerMTok']},")
+        lines.append(f"    status: {_ts_str(model['status'])},")
+        lines.append(f"    notes: {_ts_str(model['notes'])},")
+        lines.append("  },")
+    lines.append("] as const;")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_model_registry_py(reg: dict) -> str:
+    lines = _py_header(
+        MODEL_REGISTRY_JSON,
+        "Generated model-harness catalog (providers, capabilities, cost, aliases, models).",
+    )
+    lines.append("from typing import Any")
+    lines.append("")
+    lines.append(f'MODEL_REGISTRY_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("MODEL_REGISTRY_PROVIDERS", reg["providers"],
+                       "Providers registered with the harness.")
+    lines += _py_tuple("MODEL_REGISTRY_CAPABILITIES", reg["capabilities"],
+                       "Capability flags that drive adapter behavior.")
+    lines += _py_tuple("MODEL_REGISTRY_THINKING_MODES", reg["thinkingModes"],
+                       "Thinking modes a model may support.")
+    lines += _py_tuple("MODEL_REGISTRY_EFFORT_LEVELS", reg["effortLevels"],
+                       "Effort ladder a model may support.")
+    lines += _py_tuple("MODEL_REGISTRY_MODEL_STATUSES", reg["modelStatuses"],
+                       "Lifecycle status of a registered model.")
+    lines.append("# Alias -> canonical modelId.")
+    lines.append("MODEL_REGISTRY_ALIASES: dict[str, str] = {")
+    for alias in sorted(reg["aliases"]):
+        lines.append(f'    "{alias}": "{reg["aliases"][alias]}",')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Canonical model catalog (JSON file order).")
+    lines.append("MODEL_REGISTRY_MODELS: tuple[dict[str, Any], ...] = (")
+    for model in reg["models"]:
+        lines.append("    {")
+        lines.append(f'        "modelId": "{model["modelId"]}",')
+        lines.append(f'        "provider": "{model["provider"]}",')
+        lines.append(f'        "family": "{model["family"]}",')
+        lines.append(f'        "contextWindowTokens": {model["contextWindowTokens"]},')
+        lines.append(f'        "maxOutputTokens": {model["maxOutputTokens"]},')
+        lines.append(f'        "capabilities": {_py_tuple_literal(model["capabilities"])},')
+        lines.append(f'        "thinkingModes": {_py_tuple_literal(model["thinkingModes"])},')
+        lines.append(f'        "effortLevels": {_py_tuple_literal(model["effortLevels"])},')
+        lines.append(f'        "samplingParamsSupported": {model["samplingParamsSupported"]},')
+        lines.append(f'        "inputCostPerMTok": {model["inputCostPerMTok"]},')
+        lines.append(f'        "outputCostPerMTok": {model["outputCostPerMTok"]},')
+        lines.append(f'        "status": "{model["status"]}",')
+        lines.append(f'        "notes": {_py_str(model["notes"])},')
+        lines.append("    },")
+    lines.append(")")
+    lines.append("")
+    lines.append("__all__ = [")
+    lines.append('    "MODEL_REGISTRY_VERSION",')
+    lines.append('    "MODEL_REGISTRY_PROVIDERS",')
+    lines.append('    "MODEL_REGISTRY_CAPABILITIES",')
+    lines.append('    "MODEL_REGISTRY_THINKING_MODES",')
+    lines.append('    "MODEL_REGISTRY_EFFORT_LEVELS",')
+    lines.append('    "MODEL_REGISTRY_MODEL_STATUSES",')
+    lines.append('    "MODEL_REGISTRY_ALIASES",')
+    lines.append('    "MODEL_REGISTRY_MODELS",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_model_registry_md(reg: dict) -> str:
+    lines = _md_header(MODEL_REGISTRY_JSON)
+    lines.append("# Model Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append("Canonical catalog of harness LLM models — availability, capability flags, cost, and lifecycle status.")
+    lines.append("")
+    lines.append("| Model | Provider | Context | Max output | Input $/MTok | Output $/MTok | Status | Capabilities |")
+    lines.append("|---|---|---|---|---|---|---|---|")
+    for model in reg["models"]:
+        caps = ", ".join(f"`{c}`" for c in model["capabilities"])
+        lines.append(
+            f"| `{model['modelId']}` | {model['provider']} | {model['contextWindowTokens']} "
+            f"| {model['maxOutputTokens']} | {model['inputCostPerMTok']} | {model['outputCostPerMTok']} "
+            f"| {model['status']} | {caps} |"
+        )
+    lines.append("")
+    lines.append("## Aliases")
+    lines.append("")
+    for alias in sorted(reg["aliases"]):
+        lines.append(f"- `{alias}` → `{reg['aliases'][alias]}`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_model_registry(reg: dict) -> str:
+    return (
+        f"model-registry v{reg['contractVersion']} — "
+        f"{len(reg['models'])} models, {len(reg['providers'])} providers, "
+        f"{len(reg['aliases'])} aliases"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registry: task-profile (harness task execution policy)
+# ---------------------------------------------------------------------------
+
+TASK_PROFILE_JSON = CONTRACTS / "task-profile-registry.json"
+TASK_PROFILE_TS = ROOT / "packages" / "shared" / "task-profile.ts"
+TASK_PROFILE_PY = BACKEND / "shared" / "model_governance" / "generated_task_profiles.py"
+TASK_PROFILE_MD = ROOT / "docs" / "_generated" / "task-profile-table.md"
+
+_TASK_PROFILE_VOCAB_KEYS = ("modelRoles", "routingModes", "guardrailKinds", "outputKinds")
+
+
+def validate_task_profile_registry(reg: dict, ctx: dict) -> None:
+    for key in _TASK_PROFILE_VOCAB_KEYS:
+        _require_idents("task-profile-registry", key, reg[key])
+    model_roles = set(reg["modelRoles"])
+    routing_modes = set(reg["routingModes"])
+    guardrail_kinds = set(reg["guardrailKinds"])
+    output_kinds = set(reg["outputKinds"])
+
+    if not isinstance(reg["profiles"], list) or not reg["profiles"]:
+        _fail("task-profile-registry.profiles must be a non-empty list")
+    ids_seen: set[str] = set()
+    for profile in reg["profiles"]:
+        pid = profile["profileId"]
+        if pid in ids_seen:
+            _fail(f"duplicate profileId {pid!r}")
+        ids_seen.add(pid)
+        if profile["modelRole"] not in model_roles:
+            _fail(f"profile {pid!r} has unknown modelRole {profile['modelRole']!r}")
+        default_mode = profile["defaultRoutingMode"]
+        if default_mode not in routing_modes:
+            _fail(f"profile {pid!r} has unknown defaultRoutingMode {default_mode!r}")
+        allowed = profile["allowedRoutingModes"]
+        if not isinstance(allowed, list) or not allowed:
+            _fail(f"profile {pid!r} allowedRoutingModes must be a non-empty list")
+        unknown = set(allowed) - routing_modes
+        if unknown:
+            _fail(f"profile {pid!r} has routing modes {sorted(unknown)} outside routingModes")
+        if default_mode not in allowed:
+            _fail(f"profile {pid!r} defaultRoutingMode {default_mode!r} must be in allowedRoutingModes")
+        if profile["outputKind"] not in output_kinds:
+            _fail(f"profile {pid!r} has unknown outputKind {profile['outputKind']!r}")
+        guardrails = profile["guardrails"]
+        if not isinstance(guardrails, list) or not guardrails:
+            _fail(f"profile {pid!r} guardrails must be a non-empty list")
+        unknown = set(guardrails) - guardrail_kinds
+        if unknown:
+            _fail(f"profile {pid!r} has guardrails {sorted(unknown)} outside guardrailKinds")
+        if not isinstance(profile["evidenceRequired"], bool):
+            _fail(f"profile {pid!r} evidenceRequired must be a boolean")
+        version = profile["version"]
+        if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            _fail(f"profile {pid!r} version must be an integer >= 1")
+        for key in ("maxTokens", "timeoutMs"):
+            value = profile[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                _fail(f"profile {pid!r} {key} must be a positive integer")
+        max_retries = profile["maxRetries"]
+        if not isinstance(max_retries, int) or isinstance(max_retries, bool) or max_retries < 0:
+            _fail(f"profile {pid!r} maxRetries must be an integer >= 0")
+
+
+def gen_task_profiles_ts(reg: dict) -> str:
+    lines = _ts_header(TASK_PROFILE_JSON)
+    lines.append(f"export const taskProfileRegistryVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array("modelRoles", "ModelRole", reg["modelRoles"],
+                             "Model role a task profile binds.")
+    lines += _ts_const_array("routingModes", "RoutingMode", reg["routingModes"],
+                             "Routing modes available to a task profile.")
+    lines += _ts_const_array("guardrailKinds", "GuardrailKind", reg["guardrailKinds"],
+                             "Guardrail kinds a task profile may require.")
+    lines += _ts_const_array("outputKinds", "OutputKind", reg["outputKinds"],
+                             "Output kinds a task profile may produce.")
+    lines.append("/** Canonical task profiles (JSON file order). */")
+    lines.append("export const taskProfiles = [")
+    for profile in reg["profiles"]:
+        lines.append("  {")
+        lines.append(f"    profileId: {_ts_str(profile['profileId'])},")
+        lines.append(f"    version: {profile['version']},")
+        lines.append(f"    purpose: {_ts_str(profile['purpose'])},")
+        lines.append(f"    modelRole: {_ts_str(profile['modelRole'])},")
+        lines.append(f"    defaultRoutingMode: {_ts_str(profile['defaultRoutingMode'])},")
+        allowed = ", ".join(_ts_str(m) for m in profile["allowedRoutingModes"])
+        lines.append(f"    allowedRoutingModes: [{allowed}],")
+        lines.append(f"    outputKind: {_ts_str(profile['outputKind'])},")
+        guardrails = ", ".join(_ts_str(g) for g in profile["guardrails"])
+        lines.append(f"    guardrails: [{guardrails}],")
+        lines.append(f"    evidenceRequired: {str(profile['evidenceRequired']).lower()},")
+        lines.append(f"    maxTokens: {profile['maxTokens']},")
+        lines.append(f"    timeoutMs: {profile['timeoutMs']},")
+        lines.append(f"    maxRetries: {profile['maxRetries']},")
+        lines.append("  },")
+    lines.append("] as const;")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_task_profiles_py(reg: dict) -> str:
+    lines = _py_header(
+        TASK_PROFILE_JSON,
+        "Generated harness task-profile registry (roles, routing, guardrails, bounds).",
+    )
+    lines.append("from typing import Any")
+    lines.append("")
+    lines.append(f'TASK_PROFILE_REGISTRY_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("MODEL_ROLES", reg["modelRoles"],
+                       "Model role a task profile binds.")
+    lines += _py_tuple("ROUTING_MODES", reg["routingModes"],
+                       "Routing modes available to a task profile.")
+    lines += _py_tuple("GUARDRAIL_KINDS", reg["guardrailKinds"],
+                       "Guardrail kinds a task profile may require.")
+    lines += _py_tuple("OUTPUT_KINDS", reg["outputKinds"],
+                       "Output kinds a task profile may produce.")
+    lines.append("# Canonical task profiles (JSON file order).")
+    lines.append("TASK_PROFILES: tuple[dict[str, Any], ...] = (")
+    for profile in reg["profiles"]:
+        lines.append("    {")
+        lines.append(f'        "profileId": "{profile["profileId"]}",')
+        lines.append(f'        "version": {profile["version"]},')
+        lines.append(f'        "purpose": {_py_str(profile["purpose"])},')
+        lines.append(f'        "modelRole": "{profile["modelRole"]}",')
+        lines.append(f'        "defaultRoutingMode": "{profile["defaultRoutingMode"]}",')
+        lines.append(f'        "allowedRoutingModes": {_py_tuple_literal(profile["allowedRoutingModes"])},')
+        lines.append(f'        "outputKind": "{profile["outputKind"]}",')
+        lines.append(f'        "guardrails": {_py_tuple_literal(profile["guardrails"])},')
+        lines.append(f'        "evidenceRequired": {profile["evidenceRequired"]},')
+        lines.append(f'        "maxTokens": {profile["maxTokens"]},')
+        lines.append(f'        "timeoutMs": {profile["timeoutMs"]},')
+        lines.append(f'        "maxRetries": {profile["maxRetries"]},')
+        lines.append("    },")
+    lines.append(")")
+    lines.append("")
+    lines.append("__all__ = [")
+    lines.append('    "TASK_PROFILE_REGISTRY_VERSION",')
+    lines.append('    "MODEL_ROLES",')
+    lines.append('    "ROUTING_MODES",')
+    lines.append('    "GUARDRAIL_KINDS",')
+    lines.append('    "OUTPUT_KINDS",')
+    lines.append('    "TASK_PROFILES",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_task_profiles_md(reg: dict) -> str:
+    lines = _md_header(TASK_PROFILE_JSON)
+    lines.append("# Task Profile Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append("Canonical task-profile registry binding a model role, routing policy, guardrails, output kind, and latency/cost bounds to named harness tasks.")
+    lines.append("")
+    lines.append("| Profile | Version | Role | Routing | Output kind | Guardrails | Evidence | Max tokens | Timeout (ms) | Retries | Purpose |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    for profile in reg["profiles"]:
+        guardrails = ", ".join(f"`{g}`" for g in profile["guardrails"])
+        evidence = "yes" if profile["evidenceRequired"] else "no"
+        lines.append(
+            f"| `{profile['profileId']}` | {profile['version']} | {profile['modelRole']} "
+            f"| {profile['defaultRoutingMode']} | {profile['outputKind']} | {guardrails} "
+            f"| {evidence} | {profile['maxTokens']} | {profile['timeoutMs']} "
+            f"| {profile['maxRetries']} | {profile['purpose']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_task_profiles(reg: dict) -> str:
+    return (
+        f"task-profile v{reg['contractVersion']} — "
+        f"{len(reg['profiles'])} profiles, {len(reg['modelRoles'])} model roles, "
+        f"{len(reg['routingModes'])} routing modes"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -1973,6 +2385,26 @@ REGISTRIES: tuple = (
             (PROJECTOR_OWNERSHIP_MD, gen_projector_ownership_md),
         ),
         _summary_projector_ownership,
+    ),
+    (
+        MODEL_REGISTRY_JSON,
+        validate_model_registry,
+        (
+            (MODEL_REGISTRY_TS, gen_model_registry_ts),
+            (MODEL_REGISTRY_PY, gen_model_registry_py),
+            (MODEL_REGISTRY_MD, gen_model_registry_md),
+        ),
+        _summary_model_registry,
+    ),
+    (
+        TASK_PROFILE_JSON,
+        validate_task_profile_registry,
+        (
+            (TASK_PROFILE_TS, gen_task_profiles_ts),
+            (TASK_PROFILE_PY, gen_task_profiles_py),
+            (TASK_PROFILE_MD, gen_task_profiles_md),
+        ),
+        _summary_task_profiles,
     ),
 )
 

@@ -50,8 +50,8 @@ class StubModelProvider(SemanticClassifierProvider):
     def available(self) -> bool:
         return True
 
-    def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
-        base = DeterministicClassifierProvider().classify(request)
+    async def classify(self, request: SemanticClassificationRequest) -> SemanticClassificationResult:
+        base = await DeterministicClassifierProvider().classify(request)
         model_id, model_version = provider_identity(self.name)
         return dataclasses.replace(
             base, provider=self.name, model_id=model_id, model_version=model_version
@@ -66,7 +66,7 @@ class WiredProductionProvider(ProductionModelProvider):
         self._raw = raw
         self._served_model = served_model
 
-    def _request_completion(self, request: SemanticClassificationRequest) -> tuple[str, str]:
+    async def _request_completion(self, request: SemanticClassificationRequest) -> tuple[str, str]:
         return self._raw, self._served_model
 
 
@@ -108,17 +108,17 @@ def _payload(event_id: str = "evt_prov_1") -> dict:
     }
 
 
-def test_default_call_keeps_static_defaults():
+async def test_default_call_keeps_static_defaults():
     """No provider argument → existing call sites keep the models.py identity."""
-    obs, sentiments = classify_event(_payload(), TENANT)
+    obs, sentiments = await classify_event(_payload(), TENANT)
     assert obs.model_id == "deterministic-semantic-classifier"
     assert obs.model_version == "1.0.0"
     assert sentiments and sentiments[0].model_id == "deterministic-sentiment-classifier"
     assert sentiments[0].model_version == "1.0.0"
 
 
-def test_deterministic_provider_stamps_its_real_name():
-    obs, sentiments = classify_event(
+async def test_deterministic_provider_stamps_its_real_name():
+    obs, sentiments = await classify_event(
         _payload(), TENANT, provider=DeterministicClassifierProvider()
     )
     assert obs.model_id == "deterministic-semantic-classifier"
@@ -127,16 +127,16 @@ def test_deterministic_provider_stamps_its_real_name():
     assert sentiments[0].model_version == "1.0.0"
 
 
-def test_deterministic_provider_preserves_observation_identity():
+async def test_deterministic_provider_preserves_observation_identity():
     """Explicitly-passed deterministic provider must not shift idempotency —
     model_version stays 1.0.0, so pre-existing observations dedupe as before."""
-    baseline, _ = classify_event(_payload(), TENANT)
-    stamped, _ = classify_event(_payload(), TENANT, provider=DeterministicClassifierProvider())
+    baseline, _ = await classify_event(_payload(), TENANT)
+    stamped, _ = await classify_event(_payload(), TENANT, provider=DeterministicClassifierProvider())
     assert stamped.stable_hash == baseline.stable_hash
     assert stamped.idempotency_key == baseline.idempotency_key
 
 
-def test_provider_version_changes_observation_identity():
+async def test_provider_version_changes_observation_identity():
     """A new provider version is a new observation identity (never deduped away)."""
 
     class StubV1(StubModelProvider):
@@ -145,8 +145,8 @@ def test_provider_version_changes_observation_identity():
     class StubV2(StubModelProvider):
         name = "stub-semantic-model@2.0.0"
 
-    v1, _ = classify_event(_payload(), TENANT, provider=StubV1())
-    v2, _ = classify_event(_payload(), TENANT, provider=StubV2())
+    v1, _ = await classify_event(_payload(), TENANT, provider=StubV1())
+    v2, _ = await classify_event(_payload(), TENANT, provider=StubV2())
     assert v1.model_version == "1.0.0" and v2.model_version == "2.0.0"
     assert v1.stable_hash != v2.stable_hash
     assert v1.idempotency_key != v2.idempotency_key
@@ -217,20 +217,20 @@ async def test_production_mode_without_credentials_abstains_credential_waiting(m
     assert all(r.model_id not in PRODUCTION_ALIASES for r in rows)
 
 
-def test_keyword_output_never_carries_production_model_id():
+async def test_keyword_output_never_carries_production_model_id():
     """Engine path: production-stamped output can only come from provider.classify().
 
     The payload's keywords scream 'supportive'; the model verdict says
     'opposed'. If the keyword classifier were still driving the production
     path, the production-stamped row would read supportive."""
     payload = _payload("evt_prov_keyword_vs_model")
-    det_obs, _ = classify_event(payload, TENANT, provider=DeterministicClassifierProvider())
+    det_obs, _ = await classify_event(payload, TENANT, provider=DeterministicClassifierProvider())
     assert det_obs.stance is StanceLabel.SUPPORTIVE
     assert det_obs.model_id == "deterministic-semantic-classifier"
     assert det_obs.model_id not in PRODUCTION_ALIASES
 
     prod = WiredProductionProvider(_model_verdict())
-    obs, sentiments = classify_event(payload, TENANT, provider=prod)
+    obs, sentiments = await classify_event(payload, TENANT, provider=prod)
     # Labels are the model's own verdict, not the keyword derivation …
     assert obs.stance is StanceLabel.OPPOSED
     assert obs.topics == ["pricing"]
@@ -272,7 +272,7 @@ async def test_transport_failure_abstains_first_class(monkeypatch):
         def __init__(self) -> None:
             super().__init__("https://semantic-model.example.test", "key_test")
 
-        def _request_completion(self, request):
+        async def _request_completion(self, request):
             raise anthropic.APIConnectionError(
                 request=httpx.Request("POST", "https://semantic-model.example.test")
             )

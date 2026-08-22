@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "3c7b0bf"
+last_synced_commit: "936b9859"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -50,14 +50,19 @@ There are two separate frontend applications. **Do not mix them up.**
 - Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints
+- **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
+- **Continue-on-phone** — continuation creation, recent mobile activity, and resume surfaces backed by the `/v1/continuations` and `/v1/client-sync` planes (`features/continuation/`)
 
 **Kyber (internal operator console) contains:**
 - Mission dashboard — real-time system health across all tenants
+- **Intelligence Operating System** (`/intelligence-os`) — graph-centric operator workspace that keeps relationship context, evidence, investigation memory, governed decisions, supervised actions, verification, and learning in one continuous surface
 - Noesis — operator graph view of cross-tenant entity relationships; graph explorer at `/noesis/graph`, fleet graph at `/noesis/fleet`
 - **Fleet Graph** (`/noesis/fleet`) — tenant portfolio comparison table showing per-tenant operational envelope (graph node count, fraud network count, SDK health score, status); privileged operator tenant-entry modal with access reason, purpose enum, and duration; active operator session banner with exit action; all actions immutably audited via `POST /v1/kyber/operator/tenant-entry`
 - Live event stream — raw event firehose for debugging
 - Entity admin — manage any entity across any tenant
 - Command center — controller management; behind `enableAgentCommandCenter`, one-person-ops live panels: worker/runtime health strip (queue depth, workers, stale, active/failed/stuck runs), run history with stuck highlighting, briefings feed with on-demand generation, compressed ops alerts, and a confirm-gated kill switch (`/v1/agent/health`, `/v1/agent/runs`, `/v1/agent/briefings`, `/v1/agent/ops/alerts`)
+- **Operator continuation panel** — operator-side continuation creation and recent mobile activity for governed action handoff (`features/continuation/`)
+- **Command receipts** — durable receipt visibility (`verified | executed_unverified | denied | failed | expired`) for governed mobile actions, surfaced on the commands page (`features/kyber-ops/command-receipts.tsx`)
 - Diagnostics — circuit breakers, error tracking, dependency health
 - Review / approval workflows — human-in-the-loop agent approvals; approval commits staged graph mutations when staged-mutation review is enabled (badge + submitting/error modal states)
 - **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
@@ -79,6 +84,16 @@ There are two separate frontend applications. **Do not mix them up.**
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**
 - Design system components used by both Aether and Kyber
+- **Olympus brand rendering boundary:** `packages/brand` (`@olympus/brand`)
+  owns framework-free identity, provider, entity, status, token, motion, and
+  responsive metadata. `@aether/ui` owns the React renderers (`AetherLockup`,
+  `KyberLockup`, `NavigationIcon`, `ProviderMark`, `EntityAvatar`, semantic
+  indicators, and surfaces). Applications consume those renderers rather than
+  embedding marks, provider assets, raw navigation glyphs, or per-route visual
+  theme forks. Unreviewed provider marks render the named neutral fallback.
+  See the [Aether consumer matrix](brand-system/aether-consumer-matrix.md),
+  [brand-system architecture](brand-system/architecture.md), and
+  [migration guide](brand-system/migration.md).
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
@@ -692,6 +707,24 @@ Operator-facing and end-user notification components in `apps/kyber/src/features
 | `ChannelSeverityFilter` | P0/P1/P2/P3/info multi-select checkbox group |
 | `useIntelligenceNotifications` | Polls `/v1/notifications/intelligence?state=operator_review` (10 s); bridges to `NotificationContext` |
 | `useNotificationChannels` | CRUD for channel management; includes `getSlackConnectUrl()` for OAuth initiation |
+
+---
+
+## Continuation Plane & Command Receipts (v8.12.0)
+
+Cross-device handoff and governed-action visibility added by the mobile-productization program:
+
+- **Aether** (`frontend/aether/src/features/continuation/`): `continue-on-phone.tsx`
+  (create continuation, copy handoff link, resume), `recent-activity.tsx` (recent
+  mobile activity), `use-client-sync.ts` (client-sync consumption),
+  `use-continuations.ts` — wired to `/v1/continuations` + `/v1/client-sync`.
+- **Kyber** (`frontend/kyber/src/features/continuation/`):
+  `operator-continuation-panel.tsx` + `continuation-create-button.tsx` against
+  `/v1/kyber/continuations`; command receipts
+  (`features/kyber-ops/command-receipts.tsx`) read durable
+  `verified | executed_unverified | denied | failed | expired` states from the
+  kyber command plane.
+- **Client-sync consumption** distinguishes fresh/offline/stale; no offline mutation.
 
 ---
 

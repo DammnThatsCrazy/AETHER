@@ -30,6 +30,33 @@ env:
   AWS_REGION: us-east-1
 
 jobs:
+  delivery-armed:
+    name: Delivery armed check
+    # The secrets context is not available in a job `if:` condition, so the
+    # deploy role is laundered through an env binding here and published as a
+    # step output. build / deploy / delivery-not-armed all gate on this one
+    # output: when the role is absent armed=false and delivery is a loud
+    # no-op; the moment the role is wired armed=true and delivery runs exactly
+    # as before. If this job ever fails, its output is empty, every gated job
+    # is skipped, and the run ends red on this job's own failure — the armed
+    # state is never silently assumed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      armed: ${{ steps.check.outputs.armed }}
+    steps:
+      - name: Detect whether the deploy role is configured
+        id: check
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${AWS_DEPLOY_ROLE_ARN:-}" ]; then
+            echo 'armed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'armed=false' >> "$GITHUB_OUTPUT"
+          fi
+
   require-ci-green:
     # Deploy must not run against untested code. This job blocks the staging
     # build (the only path that can reach a live rollout without an explicit,
@@ -92,8 +119,16 @@ jobs:
 
   build:
     name: Build immutable release once
-    needs: [require-ci-green]
-    if: github.event_name == 'push' || inputs.environment == 'staging'
+    needs: [require-ci-green, delivery-armed]
+    # NOT ARMED WITHOUT THE DEPLOY ROLE. The build pushes images to ECR, so
+    # without the role there is nowhere to push and nothing to deploy; the job
+    # is skipped and delivery-not-armed reports it loudly. The moment the role
+    # is wired, the build runs exactly as before. The armed state is read from
+    # delivery-armed's output, because the secrets context is not available in
+    # a job `if:` condition.
+    if: >-
+      (github.event_name == 'push' || inputs.environment == 'staging')
+      && needs.delivery-armed.outputs.armed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -188,6 +223,21 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  delivery-not-armed:
+    name: Delivery not armed — no AWS deploy role configured
+    needs: [delivery-armed]
+    # Loud, explicit signal that the build/deploy jobs were skipped because the
+    # deploy role is absent, so a reader does not mistake a skipped job for a
+    # silently-green delivery. This is NOT a claim that anything was deployed.
+    if: needs.delivery-armed.outputs.armed == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report that delivery is not armed
+        run: |
+          set -euo pipefail
+          echo '::notice title=Delivery not armed::AWS_DEPLOY_ROLE_ARN is not configured, so the build/deploy jobs were skipped. Nothing was built or deployed; this is NOT a claim that a release exists. Configure the deploy role to arm delivery.'
+
   acquire-release:
     name: Acquire approved staged release
     if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
@@ -259,8 +309,14 @@ jobs:
 
   deploy:
     name: Deploy exact release (${{ github.event_name == 'push' && 'staging' || inputs.environment }})
-    needs: [build, acquire-release]
-    if: always() && !cancelled() && ((needs.build.result == 'success' && needs.acquire-release.result == 'skipped') || (needs.acquire-release.result == 'success' && needs.build.result == 'skipped'))
+    needs: [build, acquire-release, delivery-armed]
+    # NOT ARMED WITHOUT THE DEPLOY ROLE: skip the deploy when the role is
+    # absent, and do not let a skipped build (also armed-gated) count as a
+    # success path into a real deployment.
+    if: >-
+      always() && !cancelled() && needs.delivery-armed.outputs.armed == 'true'
+      && ((needs.build.result == 'success' && needs.acquire-release.result == 'skipped')
+          || (needs.acquire-release.result == 'success' && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}

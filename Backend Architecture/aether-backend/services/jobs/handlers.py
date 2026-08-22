@@ -45,6 +45,10 @@ class JobContext:
     job_id: str
     tenant_id: str
     correlation_id: str
+    # The executing worker's lease-owner identity (M8-B3). Handlers pass it to
+    # lease-guarded mutations (jobs_repo.update_payload) so a stale worker whose
+    # lease was reaped cannot overwrite the new owner's checkpoint.
+    worker_id: str
     # Extends the lease; returns False if the lease was lost, raises
     # services.jobs.worker.JobCancelled when cancellation was requested.
     heartbeat: Callable[[], Awaitable[bool]]

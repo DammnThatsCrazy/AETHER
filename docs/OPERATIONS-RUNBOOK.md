@@ -8,11 +8,11 @@ status: stable
 since_version: "8.8.0"
 source_files:
   - Backend Architecture/aether-backend/main.py
-  - deploy/staging/bootstrap.sh
+  - deploy/legacy-staging/bootstrap.sh
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "559be979"
+last_synced_commit: "bf8a5fbd"
 ---
 # Operations Runbook v8.12.0
 
@@ -39,6 +39,16 @@ Set `ENABLE_EXTRACTION_MESH=true` in environment. The mesh requires Redis for di
 | High block rate (>30%) | Verify thresholds aren't too aggressive. Check for false positives. |
 | Canary hit | Investigate the API key. Check lineage records for extraction patterns. |
 | Cluster escalation | Review linked identities in `/v1/intelligence/extraction/clusters`. |
+| `ledger_chain_integrity` (P1) | A tenant's Bronze/outbox hash chain failed `verify_chain` — a chained row was deleted, edited, or reordered. Inspect `GET /v1/security/ledger/chain-verification?tenant_id=<id>` for `break_location`/`broken_record_ids`, then investigate that tenant's ingestion path. |
+
+### Ledger chain verifier
+
+The `ledger_chain_verifier` supervised worker re-walks each tenant's append-only
+Bronze/outbox hash chain and pages a P1 `ledger_chain_integrity` alert on any
+break. It is **off by default**; enable with `LEDGER_CHAIN_VERIFIER_ENABLED=1`
+(cadence `LEDGER_CHAIN_VERIFIER_INTERVAL_SECONDS`, default 6h). The read
+surface `GET /v1/security/ledger/chain-verification` (operator-gated) exposes
+per-tenant status and the verified / verification-failure dashboard aggregate.
 
 ### Tuning
 
@@ -205,9 +215,9 @@ in-memory only and is **not durable** until Redis returns.
 
 ### Kafka Topic Provisioning
 
-All 114 Kafka topics are provisioned by `deploy/staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
+All 114 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
 
-1. Run `deploy/staging/kafka_topics.sh` manually — it uses `--if-not-exists` so re-running is safe
+1. Run `deploy/legacy-staging/kafka_topics.sh` manually — it uses `--if-not-exists` so re-running is safe
 2. Required env var: `KAFKA_BOOTSTRAP` (default: `localhost:9092`)
 3. Partitions: 12 for high-throughput topics, 6 for standard, 3 for audit
 4. Retention: 7 days (standard), 14 days (high-throughput), 90 days (audit)
@@ -471,3 +481,26 @@ via the shared durable store (`agent_deployments` / `agent_deployment_audit`
 tables — run Alembic migrations first in hosted modes). Disable by clearing
 the flags and restarting; registry data is preserved. See
 `docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md` for the full runbook.
+
+---
+
+## Universal Provider Runtime
+
+The provider runtime mounts conditionally in `main.py` (all default OFF):
+
+```
+AETHER_PROVIDER_RUNTIME_ENABLED=true       → mounts provider_runtime router at /v1/provider-connections
+                                              + webhook gateway at /v1/provider-webhooks
+KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED=true → additionally mounts the operator plane at
+                                              /v1/admin/kyber/provider-connections
+AETHER_PROVIDER_ENTRY_POINTS_ENABLED=true  → enable importlib.metadata entry-point plugin discovery
+```
+
+Enable by setting the flags and restarting; provider registries auto-populate
+at startup from local plugins plus (when entry points are enabled) installed
+distribution entry points. Disable by clearing the flags and restarting;
+stored provider connections/raw records are preserved. Webhook delivery is
+fail-closed: a signature scheme without a configured secret denies the
+delivery, and `endpoint_secret` providers require a constant-time-matching
+presented token. See
+`docs/UNIVERSAL-PROVIDER-RUNTIME.md` for the full runtime guide.

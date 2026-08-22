@@ -328,6 +328,7 @@ from services.investigation.routes import router as investigation_router
 from services.governance.routes import router as governance_router
 from services.security.routes import router as security_router
 from services.security.admin_routes import admin_router as security_admin_router
+from services.integrity.routes import router as ledger_integrity_router
 from services.policy.routes import router as policy_router
 from services.dsr_propagation.routes import router as dsr_propagation_router
 from services.tenant_readiness.routes import router as tenant_readiness_router
@@ -359,6 +360,8 @@ from services.kyber.access.routes import emergency_router as kyber_emergency_rou
 from services.kyber.graph.routes import router as kyber_graph_router
 from services.kyber.mirror.routes import router as kyber_mirror_router
 from services.kyber.ops.routes import router as kyber_ops_router
+from services.kyber.ops.mobile_actions import mobile_actions_router
+from services.kyber.devices.mobile_proof_routes import mobile_proof_router
 from services.cluster.routes import router as cluster_router
 
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
@@ -824,6 +827,14 @@ def create_app() -> FastAPI:
     # services/kyber/ops/routes.py: a command's capability and action class come
     # from its own spec, which is not known until the body has been read.
     app.include_router(kyber_ops_router)
+    # M6 — Kyber mobile governed-action surfaces. READ-ONLY action-availability
+    # digest (reuses the ops command plane — never a second plane) and mobile-bound
+    # device proof-key attestation (reuses DeviceProofService/DeviceProofKey). Both
+    # are guarded per-call by require_kyber_access(SELF_CAPABILITY) like the ops and
+    # devices routers above; no new feature flag, since the Kyber workforce plane is
+    # the established product surface and every route here authorizes individually.
+    app.include_router(mobile_actions_router)
+    app.include_router(mobile_proof_router)
 
     # ── Kyber Missions control plane (feature-flagged, OFF by default) ──
     if settings.kyber_missions.missions_enabled:
@@ -892,6 +903,7 @@ def create_app() -> FastAPI:
     app.include_router(governance_router)
     app.include_router(security_router)
     app.include_router(security_admin_router)
+    app.include_router(ledger_integrity_router)    # /v1/security/ledger -- Bronze truth-chain verification status (LEDGER M3)
     app.include_router(policy_router)
     app.include_router(dsr_propagation_router)     # /v1/dsr — DSR propagation records + impact indexes
     app.include_router(tenant_readiness_router)    # /v1/tenant/readiness — launch readiness + trust states
@@ -1049,6 +1061,33 @@ def create_app() -> FastAPI:
         logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify)")
     else:
         logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
+
+    # ── Universal Provider Runtime (feature-flagged, additive to connectors) ──
+    if settings.provider_runtime.enabled:
+        # Aliased names: this function already binds a module-level
+        # ``admin_router`` (Kyber admin) earlier, and ``router`` is used for
+        # other core routers; a bare import here would shadow both.
+        from services.provider_runtime import (
+            admin_router as provider_runtime_admin_router,
+            provider_registry,
+            router as provider_runtime_router,
+            webhook_public_router as provider_webhook_public_router,
+        )
+        provider_registry.load_all()
+        app.include_router(provider_runtime_router)
+        # Public provider webhook route always mounted when the runtime is
+        # enabled; security is enforced by provider signature verification
+        # inside the handler.
+        app.include_router(provider_webhook_public_router)
+        if settings.provider_runtime.kyber_health_enabled:
+            app.include_router(provider_runtime_admin_router)
+        logger.info(
+            "Provider Runtime: routes mounted (/v1/provider-connections + /v1/provider-webhooks)"
+        )
+    else:
+        logger.info(
+            "Provider Runtime: disabled (set AETHER_PROVIDER_RUNTIME_ENABLED=true to enable)"
+        )
 
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router
@@ -1361,15 +1400,21 @@ def create_app() -> FastAPI:
 
     if settings.continuation.enabled:
         from services.continuation.routes import router as continuation_router
+        from services.continuation.operator_routes import operator_router as kyber_continuation_router
         app.include_router(continuation_router, tags=["Continuation Plane"])
-        logger.info("Continuation plane mounted (/v1/continuations)")
+        app.include_router(kyber_continuation_router, tags=["Kyber Continuations"])
+        logger.info(
+            "Continuation plane mounted (/v1/continuations, /v1/kyber/continuations)"
+        )
     else:
         logger.info("Continuation plane disabled (AETHER_CONTINUATION_ENABLED=false)")
 
     if settings.client_sync.enabled:
         from services.client_sync.routes import router as client_sync_router
         app.include_router(client_sync_router, tags=["Client Sync"])
-        logger.info("Client-sync feed mounted (/v1/client-sync)")
+        from services.client_sync.operator_routes import operator_router as kyber_client_sync_router
+        app.include_router(kyber_client_sync_router, tags=["Kyber Client Sync"])
+        logger.info("Client-sync feed mounted (/v1/client-sync, /v1/kyber/client-sync)")
     else:
         logger.info("Client-sync feed disabled (AETHER_CLIENT_SYNC_ENABLED=false)")
 

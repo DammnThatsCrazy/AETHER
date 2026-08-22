@@ -79,6 +79,7 @@ const AiEfficiencyPage = lazy(() => import('@kyber/pages/ai-efficiency').then(m 
 const TargetingIntelligencePage = lazy(() => import('@kyber/pages/targeting').then(m => ({ default: m.TargetingIntelligencePage })));
 const ImportsOpsPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportsOpsPage })));
 const ImportOpsDetailPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportOpsDetailPage })));
+const KyberIntelligenceOSPage = lazy(() => import('@kyber/pages/intelligence-os').then(m => ({ default: m.KyberIntelligenceOSPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -95,6 +96,9 @@ export function AppRouter() {
     <Routes>
       {/* Auth0 callback — outside RequireAuth so it's accessible during the login flow */}
       <Route path="/callback" element={<CallbackPage />} />
+
+      {/* The graph-centric intelligence workspace renders as its own full-viewport operating environment. */}
+      <Route path="/intelligence-os" element={<RequireAuth><PageSuspense><KyberIntelligenceOSPage /></PageSuspense></RequireAuth>} />
 
       {/* All other routes require authentication */}
       <Route

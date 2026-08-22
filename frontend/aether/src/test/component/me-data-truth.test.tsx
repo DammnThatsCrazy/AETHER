@@ -22,6 +22,17 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
   api: { me: { deleteAccount: vi.fn() } },
 }));
 
+vi.mock('@aether-app/features/account/use-me-sessions', () => ({
+  useMeSessions: () => ({
+    data: { sessions: [], count: 0, total: 0, limit: 20, offset: 0 },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useRevokeMeSession: () => ({ mutate: vi.fn(), isLoading: false, error: null }),
+  useRevokeOtherSessions: () => ({ mutate: vi.fn(), isLoading: false, error: null }),
+}));
+
 const profile = {
   tenant_id: 'tenant-real',
   name: 'Backend Tenant',

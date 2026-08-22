@@ -13,6 +13,7 @@ denied classification under production-lean (and only under that profile).
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -108,3 +109,190 @@ def test_excluded_domains_scoped_to_founding_profile():
     # The manifest narrows only its declared profile; others are unaffected.
     assert founding_excluded_domains("production-scale") == frozenset()
     assert founding_excluded_domains("staging") == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# Env-template ↔ canonical-profile parity (staging / production drift)
+# ---------------------------------------------------------------------------
+#
+# Canonical staging and production-lean FORBID msk, elasticache, neptune and
+# clickhouse (config/deployment_profiles.yaml → forbidden_resources). A template
+# for those profiles that suggests Kafka, Redis or Neptune as ACTIVE defaults is
+# the exact "staging environment drift" defect this guards: the old staging
+# template shipped `EVENT_BROKER=kafka` as an active default while the canonical
+# staging event backend is sns_sqs and msk is forbidden.
+#
+# `.env.example` is intentionally excluded: it is the LOCAL development
+# template, and the local profile legitimately runs kafka/redis/neptune as
+# optional local dependencies.
+
+# Env vars that witness a forbidden dependency being suggested as a default.
+_FORBIDDEN_ENV_WITNESSES = (
+    "KAFKA_BROKERS",
+    "KAFKA_BOOTSTRAP_SERVERS",
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "NEPTUNE_ENDPOINT",
+    "CLICKHOUSE_HOST",
+    "CLICKHOUSE_PORT",
+)
+
+# Canonical backend dimension -> env selector var.
+_BACKEND_SELECTOR_VARS = {
+    "database": "DATABASE_BACKEND",
+    "cache": "CACHE_BACKEND",
+    "event": "EVENT_BACKEND",
+    "graph": "GRAPH_BACKEND",
+    "analytics": "ANALYTICS_BACKEND",
+    "object": "OBJECT_BACKEND",
+}
+
+
+def _active_env_keys(path: Path) -> set[str]:
+    """Keys declared as ACTIVE (non-commented) env assignments in a template."""
+    keys = set()
+    for line in path.read_text().splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        keys.add(s.partition("=")[0].strip())
+    return keys
+
+
+def _profile_backends(profile: str) -> dict[str, str]:
+    data = yaml.safe_load((ROOT / "config" / "deployment_profiles.yaml").read_text())
+    backends = (data["profiles"][profile] or {}).get("backends")
+    assert backends, f"profile {profile!r} has no backends block"
+    return backends
+
+
+def _assert_selectors_match_profile(path: Path, profile: str, *, ml: str, extra: dict[str, str]):
+    """The template's *_BACKEND selectors must equal the canonical profile's."""
+    backends = _profile_backends(profile)
+    vals = _env_values(path)
+    for dim, var in _BACKEND_SELECTOR_VARS.items():
+        expected = backends[dim]
+        assert vals.get(var) == expected, (
+            f"{path.name} {var}={vals.get(var)!r} != canonical {profile} "
+            f"{dim}={expected!r}"
+        )
+    assert vals.get("ML_MODE") == ml, (
+        f"{path.name} ML_MODE={vals.get('ML_MODE')!r} != canonical {profile} ml={ml!r}"
+    )
+    for var, expected in extra.items():
+        assert vals.get(var) == expected, (
+            f"{path.name} {var}={vals.get(var)!r} != expected {expected!r}"
+        )
+
+
+def test_staging_template_selectors_match_canonical_profile():
+    # EVENT_BROKER drives actual SQS-vs-Kafka dispatch (shared/events/events.py)
+    # and defaults to kafka when unset; staging forbids msk, so it must be
+    # pinned to sns_sqs alongside EVENT_BACKEND.
+    _assert_selectors_match_profile(
+        STAGING,
+        "staging",
+        ml="inline",
+        extra={"EVENT_BROKER": "sns_sqs", "DEPLOYMENT_PROFILE": "staging"},
+    )
+
+
+def test_staging_template_has_no_forbidden_dependency_defaults():
+    active = _active_env_keys(STAGING)
+    for witness in _FORBIDDEN_ENV_WITNESSES:
+        assert witness not in active, (
+            f"{STAGING.name} must not declare ACTIVE {witness}: canonical staging "
+            "forbids msk/elasticache/neptune/clickhouse"
+        )
+
+
+def test_production_template_selectors_match_canonical_profile():
+    # The production example is the founding production-lean template
+    # (DEPLOYMENT_PROFILE=production-lean is pinned against the manifest above).
+    # Its selectors must equal production-lean's canonical backends: cache is
+    # DynamoDB (elasticache forbidden), event is SNS+SQS (msk forbidden).
+    _assert_selectors_match_profile(
+        PROD,
+        "production-lean",
+        ml="inline",
+        extra={"EVENT_BROKER": "sns_sqs"},
+    )
+
+
+def test_production_template_has_no_forbidden_dependency_defaults():
+    active = _active_env_keys(PROD)
+    for witness in _FORBIDDEN_ENV_WITNESSES:
+        assert witness not in active, (
+            f"{PROD.name} must not declare ACTIVE {witness}: canonical "
+            "production-lean forbids msk/elasticache/neptune/clickhouse"
+        )
+
+
+def _load_script(name: str):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+def _required_vars(mod, monkeypatch, *, env: str, profile: str | None) -> dict[str, bool]:
+    if profile:
+        monkeypatch.setenv("DEPLOYMENT_PROFILE", profile)
+    else:
+        monkeypatch.delenv("DEPLOYMENT_PROFILE", raising=False)
+    monkeypatch.setenv("AETHER_ENV", env)
+    return dict(mod._required_infra_vars())
+
+
+def test_validate_infra_is_profile_aware(monkeypatch):
+    """validate_infra must derive required infra from the profile's backends."""
+    mod = _load_script("validate_infra")
+
+    # staging forbids msk/elasticache/neptune/clickhouse: required infra is the
+    # Postgres DSN + the SQS queue URL — nothing Kafka/Redis/Neptune/ClickHouse.
+    staging = _required_vars(mod, monkeypatch, env="staging", profile="staging")
+    assert staging.get("DATABASE_URL") is True
+    assert staging.get("SQS_QUEUE_URL") is True
+    assert staging.get("SNS_TOPIC_ARN") is False
+    for forbidden in (
+        "REDIS_HOST",
+        "KAFKA_BOOTSTRAP_SERVERS",
+        "NEPTUNE_ENDPOINT",
+        "CLICKHOUSE_HOST",
+    ):
+        assert forbidden not in staging, f"staging must not require {forbidden}"
+
+    # production-lean forbids the same heavy backends.
+    lean = _required_vars(mod, monkeypatch, env="production", profile="production-lean")
+    assert lean.get("DATABASE_URL") is True
+    assert lean.get("SQS_QUEUE_URL") is True
+    for forbidden in (
+        "REDIS_HOST",
+        "KAFKA_BOOTSTRAP_SERVERS",
+        "NEPTUNE_ENDPOINT",
+        "CLICKHOUSE_HOST",
+    ):
+        assert forbidden not in lean, f"production-lean must not require {forbidden}"
+
+    # production-scale MAY enable the heavy backends, so their connection vars
+    # become required when that profile is selected.
+    scale = _required_vars(mod, monkeypatch, env="production", profile="production-scale")
+    for required in (
+        "REDIS_HOST",
+        "KAFKA_BOOTSTRAP_SERVERS",
+        "NEPTUNE_ENDPOINT",
+        "CLICKHOUSE_HOST",
+    ):
+        assert scale.get(required) is True, f"production-scale must require {required}"
+
+    # local needs none of the cloud connection vars.
+    local = _required_vars(mod, monkeypatch, env="local", profile="local")
+    for var in (
+        "REDIS_HOST",
+        "KAFKA_BOOTSTRAP_SERVERS",
+        "NEPTUNE_ENDPOINT",
+        "CLICKHOUSE_HOST",
+        "SQS_QUEUE_URL",
+    ):
+        assert var not in local, f"local must not require {var}"

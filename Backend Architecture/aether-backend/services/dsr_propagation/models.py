@@ -57,6 +57,9 @@ DSRComponent = Literal[
     "continuation_records",
     "mobile_installations",
     "client_sync_records",
+    "kyber_trusted_devices",
+    "kyber_webauthn_credentials",
+    "kyber_device_proof_keys",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -82,6 +85,9 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "continuation_records",
     "mobile_installations",
     "client_sync_records",
+    "kyber_trusted_devices",
+    "kyber_webauthn_credentials",
+    "kyber_device_proof_keys",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────
@@ -122,6 +128,47 @@ DSROverallStatus = Literal[
 ]
 
 
+class ReattributionEvidence(BaseModel):
+    """DSR propagation evidence that a subject's request corrected attribution.
+
+    Reliability Phase-2, Program 3 ("Deletion / replay / re-attribution") **M2**:
+    when re-attribution runs as part of a subject's request — privacy erasure
+    (``reason="privacy_erasure"``) or fraud-network takedown
+    (``reason="fraud_takedown"``) — it voids the now-wrong attribution runs for
+    the subject's conversions (``services/measurement/reattribution.py``'s
+    ``reattribute_affected`` -> ``ReattributionResult``). This records that
+    correction as first-class propagation evidence on the ``attribution_records``
+    component, so a DSR/compliance audit can see that attribution was actually
+    re-run — not merely that touchpoints/conversions were tombstoned — as part of
+    the request.
+
+    Carries the ``ReattributionResult`` summary verbatim (the trigger ``reason``,
+    the run/conversion counts, and the ``truncated``/``partial_failure`` honesty
+    flags) plus a ``recorded_at`` stamp. It is *additive* evidence: it augments
+    the component step's own erasure receipt (tombstone counts / audit pointer),
+    never replaces it — so it composes with the erasure job's ``mark_step``
+    marking regardless of order. The raw per-conversion ``errors`` list a
+    ``ReattributionResult`` carries is summarized to ``errors_count`` here (the
+    evidence records *that* the invalidation was partial, not error strings that
+    can name conversion ids).
+    """
+
+    reason: str = Field(min_length=1)
+    conversions_scanned: int = Field(default=0, ge=0)
+    conversions_reattributed: int = Field(default=0, ge=0)
+    runs_deactivated: int = Field(default=0, ge=0)
+    runs_created: int = Field(default=0, ge=0)
+    touchpoints_scanned: int = Field(default=0, ge=0)
+    scope_limit: int = Field(default=0, ge=0)
+    truncated: bool = False
+    partial_failure: bool = False
+    errors_count: int = Field(default=0, ge=0)
+    # Stamped via the module's UTC helper (shared/common utc_now) — no bare
+    # datetime construction here (temporal gate). ``now_iso`` is defined below,
+    # so this defers to utc_now() directly to avoid a forward reference.
+    recorded_at: str = Field(default_factory=lambda: utc_now().isoformat())
+
+
 class DSRPropagationStep(BaseModel):
     """One component's propagation state within a DSR (prompt §3.11)."""
 
@@ -136,14 +183,25 @@ class DSRPropagationStep(BaseModel):
     artifacts_impacted: int = Field(default=0, ge=0)
     requires_retrain: bool = False
     requires_recompute: bool = False
+    # Program 3 M2 — additive re-attribution evidence (see ReattributionEvidence).
+    # ``None`` until a re-attribution (privacy erasure OR fraud takedown) is
+    # recorded against this component; augments, never replaces, the step's own
+    # erasure receipt.
+    reattribution: Optional[ReattributionEvidence] = None
 
 
 # Evidence keys a caller may attach when marking a step. Anything outside this
 # set is rejected (fail-closed) so typos never silently vanish.
+#
+# ``reattribution`` (Program 3 M2) lets a caller attach the re-attribution
+# summary in the SAME ``mark_step`` call that marks the component (e.g. the
+# erasure job marking ``attribution_records`` completed with both its tombstone
+# receipt and the re-attribution evidence). It is NOT a completion receipt on
+# its own (see ``_COMPLETION_EVIDENCE_FIELDS`` in service.py) — it augments one.
 STEP_EVIDENCE_FIELDS: frozenset[str] = frozenset({
     "started_at", "completed_at", "blocked_reason", "policy_decision_id",
     "audit_event_id", "records_impacted", "artifacts_impacted",
-    "requires_retrain", "requires_recompute",
+    "requires_retrain", "requires_recompute", "reattribution",
 })
 
 

@@ -70,6 +70,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/agent-access` | agent access grants and audit | yes | A | A | A | A | I | `agent-access-page.test.tsx` |
 | `/interoperability` | messages, paths, providers | no | I | A | A | — | I | parameterized route-state family |
 | `/interoperability/messages/:messageId` | lifecycle and delivery attempts | no | I | A | A | — | I | parameterized route-state family |
+| `/notifications` | notification inbox and unread count | yes | I | A | A | — | I | parameterized route-state family |
 
 ## Kyber
 
@@ -153,18 +154,20 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/ai-efficiency` | AI costs and findings | yes | A | A | A | A | A | `ai-efficiency-page.test.tsx` |
 | `/targeting` | targeting and leakage | yes | A | A | A | A | A | `targeting-page.test.tsx` |
 
+| `/intelligence-os` | graph workspace, evidence, investigation memory | no | I | A | n/a | A | I | `kyber-intelligence-os-page.test.tsx` |
+
 ## Coverage totals
 
-The denominator is the 127 data-bearing route patterns above: 50 Aether and
-77 Kyber routes.
+The denominator is the 129 data-bearing route patterns above: 51 Aether and
+78 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 17 / 127 (13.4%) | tracked for every route |
-| Empty-state assertions | 115 / 127 (90.6%) | at least 90% overall |
-| Error/unavailable assertions | 98 / 127 (77.2%) | 100% of critical routes |
-| Populated-state assertions | 31 / 127 (24.4%) | tracked for every route |
-| Critical routes with both empty and error assertions | 61 / 61 (100%) | 61 / 61 (100%) |
+| Explicit loading-state assertions | 17 / 129 (13.2%) | tracked for every route |
+| Empty-state assertions | 117 / 129 (90.7%) | at least 90% overall |
+| Error/unavailable assertions | 99 / 129 (76.7%) | 100% of critical routes |
+| Populated-state assertions | 32 / 129 (24.8%) | tracked for every route |
+| Critical routes with both empty and error assertions | 62 / 62 (100%) | 62 / 62 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Path, Request
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Path, Query, Request
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from config.settings import settings
 from shared.auth.auth import TenantContext
 from shared.common.common import APIResponse, NotFoundError
+from services.client_sync.emitter import enqueue_sync_change
+from services.mobile.config import DISTRIBUTION_PROFILES
 
 from services.mobile import service as mobile_service
 
@@ -47,6 +49,17 @@ class RegistrationRequest(BaseModel):
     device_name: Optional[str] = None
     push_token: Optional[str] = None
     push_provider: Optional[str] = None
+    app_version: Optional[str] = None
+    distribution_profile: Optional[str] = None
+
+    @field_validator("distribution_profile")
+    @classmethod
+    def _distribution_profile(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in DISTRIBUTION_PROFILES:
+            raise ValueError(
+                f"distribution_profile must be one of {', '.join(DISTRIBUTION_PROFILES)}"
+            )
+        return v
 
 
 class SubscriptionRequest(BaseModel):
@@ -80,7 +93,28 @@ async def register_installation(request: Request, payload: RegistrationRequest) 
         device_name=payload.device_name,
         push_token=payload.push_token,
         push_provider=payload.push_provider,
+        app_version=payload.app_version,
+        distribution_profile=payload.distribution_profile,
     )
+    return APIResponse(data=result)
+
+
+@router.get("/config")
+async def get_mobile_config(request: Request, installation_id: str = Query(...)) -> APIResponse:
+    """Return the typed MobileConfig for the requesting installation.
+
+    Scoped to the authenticated tenant. Returns 404 when ``mobile.enabled`` is
+    OFF (via ``_tenant`` → ``_require_enabled``, mirroring the other gateway
+    routes) and 404 when the installation does not exist in the tenant scope.
+    """
+    tenant = _tenant(request, "read")
+    result = await mobile_service.get_config(
+        scope=mobile_service.tenant_scope(tenant.tenant_id),
+        installation_id=installation_id,
+        principal_id=_principal(tenant),
+    )
+    if result is None:
+        raise NotFoundError("installation not found")
     return APIResponse(data=result)
 
 
@@ -97,7 +131,7 @@ async def list_installations(request: Request) -> APIResponse:
 async def get_installation(request: Request, installation_id: str = Path(...)) -> APIResponse:
     tenant = _tenant(request, "read")
     row = await mobile_service.get(
-        mobile_service.tenant_scope(tenant.tenant_id), installation_id
+        mobile_service.tenant_scope(tenant.tenant_id), installation_id, _principal(tenant)
     )
     if row is None:
         raise NotFoundError("installation not found")
@@ -108,10 +142,18 @@ async def get_installation(request: Request, installation_id: str = Path(...)) -
 async def revoke_installation(request: Request, installation_id: str = Path(...)) -> APIResponse:
     tenant = _tenant(request, "write")
     row = await mobile_service.revoke(
-        mobile_service.tenant_scope(tenant.tenant_id), installation_id
+        mobile_service.tenant_scope(tenant.tenant_id), installation_id, _principal(tenant)
     )
     if row is None:
         raise NotFoundError("installation not found")
+    await enqueue_sync_change(
+        scope_key=mobile_service.tenant_scope(tenant.tenant_id),
+        principal_id=_principal(tenant),
+        change_type="installation_revoked",
+        resource_kind="installation",
+        resource_id=installation_id,
+        device_id=(row.get("data") or {}).get("device_id"),
+    )
     return APIResponse(data=row)
 
 
@@ -151,3 +193,89 @@ async def add_subscription(
     if sub is None:
         raise NotFoundError("installation not found")
     return APIResponse(data=sub)
+
+
+# ── Bounded, redacted projections (M3a, decision-log D12) ────────────────────
+#
+# Each surface COMPOSES owning-service truth (profile-360 summary, campaign-360
+# overview, the single canonical inbox, saved-views store, noesis conversations)
+# and returns a bounded, redacted projection — it never re-calculates
+# Profile360/Campaign360/graph truth. Wire fields are snake_case (D6).
+# See services/mobile/projections.py for the projection builders.
+
+from services.mobile.projections import MobileProjectionService
+
+_projection_service = MobileProjectionService()
+
+
+@router.get("/today")
+async def get_today_projection(
+    request: Request, profile_user_id: Optional[str] = Query(default=None)
+) -> APIResponse:
+    """Today digest — alert counts + recent redacted alert titles + a bounded,
+    redacted profile summary peek."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.today_digest(
+        tenant_id=tenant.tenant_id,
+        profile_user_id=profile_user_id,
+    )
+    return APIResponse(data=result)
+
+
+@router.get("/profile")
+async def get_profile_projection(request: Request, user_id: str = Query(...)) -> APIResponse:
+    """Bounded, redacted profile-360 summary composed from the owning profile
+    service — never re-calculated."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.profile_summary(
+        tenant_id=tenant.tenant_id, user_id=user_id
+    )
+    if result is None:
+        raise NotFoundError("profile summary not found")
+    return APIResponse(data=result)
+
+
+@router.get("/campaign")
+async def get_campaign_projection(
+    request: Request, campaign_id: str = Query(...)
+) -> APIResponse:
+    """Bounded, redacted campaign-360 summary composed from the owning campaign
+    service — never re-calculated."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.campaign_summary(
+        tenant_id=tenant.tenant_id, campaign_id=campaign_id
+    )
+    return APIResponse(data=result)
+
+
+@router.get("/alerts")
+async def get_alerts_projection(
+    request: Request,
+    unread: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> APIResponse:
+    """Redacted alerts inbox — composed from the single canonical
+    ``notification_inbox`` (never a second inbox)."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.alerts_inbox(
+        tenant_id=tenant.tenant_id, unread_only=unread, limit=limit, offset=offset
+    )
+    return APIResponse(data=result)
+
+
+@router.get("/briefing")
+async def get_explore_briefing(
+    request: Request,
+    views_limit: int = Query(default=5, ge=1, le=50),
+    conversations_limit: int = Query(default=5, ge=1, le=20),
+) -> APIResponse:
+    """Lightweight explore briefing — saved views (exploration store) + recent
+    Noesis conversations, bounded and redacted."""
+    tenant = _tenant(request, "read")
+    result = await _projection_service.explore_briefing(
+        tenant_id=tenant.tenant_id,
+        views_limit=views_limit,
+        conversations_limit=conversations_limit,
+    )
+    return APIResponse(data=result)

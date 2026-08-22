@@ -78,7 +78,12 @@ jobs:
           path: release-evidence/sdk-js.json
       - name: Secret pattern scan
         run: |
-          if grep -rE '(-----BEGIN (RSA|EC|PRIVATE)|PRIVATE_KEY\s*=\s*["\x27][A-Za-z0-9+/]{20})' packages/; then
+          # Scans committed source under packages/ only. node_modules is
+          # gitignored (installed third-party code) — some Expo tooling
+          # sources ship the literal PEM private-key header in a WebAuthn
+          # DevTools pane (an export-to-PEM helper), which is not a secret;
+          # scanning it is a false positive.
+          if grep -rE --exclude-dir=node_modules '(-----BEGIN (RSA|EC|PRIVATE)|PRIVATE_KEY\s*=\s*["\x27][A-Za-z0-9+/]{20})' packages/; then
             echo "ERROR: Possible secret detected in packages/" && exit 1
           fi
       - name: CHANGELOG entry check

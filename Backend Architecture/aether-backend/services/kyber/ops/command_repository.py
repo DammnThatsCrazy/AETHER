@@ -116,6 +116,7 @@ class CommandRepository(BaseRepository):
         *,
         command_type: Optional[str] = None,
         limit: int = 200,
+        tenant_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Commands filtered by status and/or type.
 
@@ -123,6 +124,12 @@ class CommandRepository(BaseRepository):
         (:data:`OPEN_COMMAND_STATUSES`), not the literal value — an approved
         command that nobody executed and an executed command nobody verified are
         both still open questions.
+
+        ``tenant_id`` narrows to the typed first-tenant column (M8-D3): a
+        tenant-scoped digest must never surface another tenant's commands, and
+        fleet-wide commands (``tenant_id=""``) never leak into a scoped view.
+        ``None`` keeps the unfiltered global list the ops ``/commands`` routes
+        expose under ``kyber.audit.read``.
         """
         statuses: tuple[str, ...]
         if status is None:
@@ -134,13 +141,19 @@ class CommandRepository(BaseRepository):
 
         rows: list[dict[str, Any]] = []
         if not statuses:
-            filters = {"command_type": command_type} if command_type else None
-            rows = await self.find_many(filters, limit=limit)
+            filters: Optional[dict[str, Any]] = {}
+            if command_type:
+                filters["command_type"] = command_type
+            if tenant_id:
+                filters["tenant_id"] = tenant_id
+            rows = await self.find_many(filters or None, limit=limit)
         else:
             for value in statuses:
-                filters = {"status": value}
+                filters: dict[str, Any] = {"status": value}
                 if command_type:
                     filters["command_type"] = command_type
+                if tenant_id:
+                    filters["tenant_id"] = tenant_id
                 rows.extend(await self.find_many(filters, limit=limit))
 
         deduped: dict[str, dict[str, Any]] = {}

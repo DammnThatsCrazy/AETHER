@@ -12,15 +12,45 @@ toc_depth: 4
 
 # Aether Reliability Phase 2 — Architectural Programs
 
-> **This document is design only. Nothing described below is implemented.**
-> It contains no code changes, adds no database migration, and does not
-> alter any running behavior. It is a sequencing and architecture reference
-> for five multi-milestone programs that are out of scope for an immediate
-> reliability cleanup pass because each requires new schema, new services,
-> or a multi-release rollout rather than a same-PR fix. Every claim below
-> about "what exists today" was verified against the current repository
-> state at the time of writing; every claim about a proposed program is
-> explicitly a proposal, not a status report.
+> **This document is the design/sequencing reference for five multi-milestone
+> programs.** It was originally authored as design-only; some milestones have
+> since shipped (see **Landed milestones** below). Every claim about "what
+> exists today" was verified against the repository at authoring time; each
+> milestone marked landed has real code + tests behind it, and every milestone
+> not yet marked landed remains a proposal, not a status report.
+>
+> ### Landed milestones
+> - **M1 — all five programs** (initial reliability remediation PR): shared
+>   `hash_chain` primitive; Node `DurableEventQueue`; re-attribution on privacy
+>   erasure; the production-equivalent CI lane; the FX `PriceProvider`.
+> - **Program 1 (Ledger) M2 + M3 + M4** — M2 chained `bronze_sdk_events`
+>   (`prev_hash`/`integrity_hash`, new rows only, NULL = pre-cutover boundary);
+>   M3 added a scheduled `ledger_chain_verifier` worker (gated off) that
+>   `verify_chain`-walks each tenant's chain, pages a P1 `ledger_chain_integrity`
+>   alert on a break, and exposes `GET /v1/security/ledger/chain-verification`;
+>   M4 extended the same per-tenant chaining to `event_outbox` rows.
+> - **Program 2 (Durable) M5** — `DurableEventQueue` shipped as opt-in
+>   (default-when-a-spool-is-configured) in the Node SDK client, with startup
+>   replay and an enforced, surfaced disk-space bound. (Backend rollout M1–M3
+>   remains production-signal-gated.)
+> - **Program 3 (Re-attribution) M2 + M3** — M3 generalized invalidation into
+>   `services/measurement/reattribution.py` (privacy erasure + fraud-network
+>   `takedown`); M2 records the re-attribution as DSR propagation evidence on the
+>   `attribution_records` component, wired from the erasure job.
+> - **Program 4 (Prod-equivalent CI) M2 + M4** — M2 added real-stack ingestion
+>   idempotency/concurrency tests (exactly-once under genuine racing); M4
+>   extended the lane to `conversion_repo`/`spend_repo`/`attribution_run_repo`
+>   (real ON CONFLICT, tenant-scope, FX-provenance round-trip, single-active-run
+>   invariant). The M2 concurrency test surfaced — and this work fixed — a real
+>   bronze/outbox insert race by making the deterministic PK the ON CONFLICT
+>   arbiter.
+> - **Program 5 (Multi-currency) M2** — real FX rate + provenance recorded in
+>   `conversion_repo`/`spend_repo` upserts (no more hardcoded `1.0`; unpriced is
+>   flagged, never silent parity).
+>
+> Remaining milestones below (Ledger M5/M6, Re-attribution M4/M5, Prod-equivalent
+> M3/M5, Multi-currency M3–M5, and Program 2's production-signal-gated backend
+> rollout M1–M3) are still design-only.
 
 ## Why these five and why they are Phase 2
 

@@ -84,7 +84,11 @@ jobs:
           else
             echo 'configured=false' >> "$GITHUB_OUTPUT"
             printf -v missing_list '%s, ' "${missing[@]}"
-            echo "::notice title=Remote Terraform plans not configured::Missing ${missing_list%, }. Pull requests still run provider-mocked configuration plans; pushes to main fail closed."
+            # The enforcement step below is itself gated on this same
+            # `configured` output, so a credential-less push to main does NOT
+            # fail the run: remote plans are skipped, the promotion gate reports
+            # not-armed, and the commit is NOT promotable until the set is wired.
+            echo "::notice title=Remote Terraform plans not configured::Missing ${missing_list%, }. Pull requests still run provider-mocked configuration plans. Pushes to main skip credentialed remote plans while the set is absent; the promotion gate reports not-armed instead of failing, and enforces fail-closed the moment the set is wired."
           fi
 
   plan:
@@ -99,6 +103,8 @@ jobs:
           - production-lean
           - production-scale
           - enterprise-isolated
+          - demo
+          - preview
     defaults:
       run:
         working-directory: AWS Deployment/aether-aws/terraform
@@ -108,7 +114,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~1.9'
+          terraform_version: '~1.15'
 
       - name: Prepare checked-in profile and CI-only variables
         env:
@@ -172,6 +178,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # demo/preview are ephemeral-class and deliberately excluded from
+        # remote-plan.
         profile:
           - staging
           - production-lean
@@ -203,7 +211,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~1.9'
+          terraform_version: '~1.15'
 
       - uses: actions/setup-python@v5
         with:
@@ -335,7 +343,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # NOT ARMED WITHOUT THE REMOTE-PLAN CREDENTIAL SET. The job exists so a
+      # commit cannot reach promotion with every remote plan silently skipped;
+      # when the credential set is absent there is nothing to be promotable
+      # WITH, so the gate reports its own absence rather than failing the run
+      # for a state it is explicitly designed to tolerate on a credential-less
+      # repository. The notice is NOT a promotability claim: it states the
+      # opposite. The moment the full set is wired, the enforcement step below
+      # runs exactly as before — fail-closed on plan and remote-plan results.
+      - name: Promotion gate is not armed without the remote-plan credential set
+        # The notice fires only when the probe job itself SUCCEEDED and reported
+        # the set absent. A failed/timed-out probe publishes no output, which
+        # would read as `configured != 'true'`; that state is carried by the
+        # probe's own red run, and this job must not misattribute it to missing
+        # credentials (nor skip enforcement on an inconclusive probe).
+        if: >-
+          needs.remote-plan-readiness.result == 'success'
+          && needs.remote-plan-readiness.outputs.configured != 'true'
+        run: |
+          set -euo pipefail
+          echo '::notice title=Remote-plan promotion gate not armed::The complete remote Terraform planning credential set is not configured, so this commit is NOT promotable via .github/workflows/terraform-promote.yml. The gate is a NO-OP until the credentials are wired; it re-arms and enforces the moment they are.'
       - name: Enforce credentialed remote plans
+        if: >-
+          needs.remote-plan-readiness.result == 'success'
+          && needs.remote-plan-readiness.outputs.configured == 'true'
         env:
           CONFIGURED: ${{ needs.remote-plan-readiness.outputs.configured }}
           PLAN_RESULT: ${{ needs.plan.result }}

@@ -231,6 +231,9 @@ describe('Aether Payment Rails page', () => {
     for (const label of ['Privy', 'Stripe', 'Coinbase', 'MoonPay', 'Bridge']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
+    for (const provider of ['privy', 'stripe', 'coinbase', 'moonpay', 'bridge']) {
+      expect(document.querySelector(`[data-provider="${provider}"][data-provider-mark="fallback"]`)).toBeInTheDocument();
+    }
     expect(getBadge('healthy')).toBeInTheDocument();
     expect(getBadge('degraded')).toBeInTheDocument();
     expect(screen.getAllByText('not configured').length).toBeGreaterThan(0);

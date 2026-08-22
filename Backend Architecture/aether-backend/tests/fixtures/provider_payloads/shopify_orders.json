@@ -1,0 +1,185 @@
+{
+  "orders": [
+    {
+      "id": 9000100001,
+      "name": "#SYNTH-ORD-0001",
+      "email": "buyer-0001@synth.example",
+      "created_at": "2026-08-01T10:00:00Z",
+      "updated_at": "2026-08-01T10:00:00Z",
+      "cancelled_at": null,
+      "closed_at": null,
+      "financial_status": "paid",
+      "fulfillment_status": null,
+      "currency": "USD",
+      "subtotal_price": "99.98",
+      "shipping_lines": [
+        {"id": 9100100001, "title": "Synth Standard", "price": "5.00"}
+      ],
+      "total_shipping": "5.00",
+      "total_tax": "8.00",
+      "total_discounts": "10.00",
+      "total_price": "102.98",
+      "tags": "synth,created",
+      "note": "Synthetic order - created variant",
+      "properties": [{"name": "synth_flag", "value": "created"}],
+      "payment_gateway_names": ["synth_gateway"],
+      "billing_address": {
+        "address1": "1 Synthetic Way",
+        "city": "Synthville",
+        "country": "US"
+      },
+      "line_items": [
+        {
+          "id": 9110100001,
+          "product_id": 9200100001,
+          "variant_id": 9210100001,
+          "sku": "SYNTH-WIDGET",
+          "title": "Synth Widget",
+          "quantity": 2,
+          "price": "24.99",
+          "total_discount": "0.00",
+          "extra_line_item_field": "ignored by the parser"
+        },
+        {
+          "id": 9110100002,
+          "product_id": 9200100002,
+          "variant_id": 9210100002,
+          "sku": "SYNTH-GADGET",
+          "title": "Synth Gadget",
+          "quantity": 1,
+          "price": "50.00",
+          "total_discount": "10.00"
+        }
+      ],
+      "customer": {
+        "id": 9300100001,
+        "email": "buyer-0001@synth.example",
+        "phone": "+15550001001",
+        "first_name": "Ada",
+        "last_name": "Synth",
+        "orders_count": 1,
+        "extra_customer_field": "ignored by the parser"
+      }
+    },
+    {
+      "id": 9000100002,
+      "name": "#SYNTH-ORD-0002",
+      "email": "buyer-0002@synth.example",
+      "created_at": "2026-08-02T10:00:00Z",
+      "updated_at": "2026-08-03T11:30:00Z",
+      "cancelled_at": null,
+      "closed_at": null,
+      "financial_status": "paid",
+      "fulfillment_status": "fulfilled",
+      "currency": "EUR",
+      "subtotal_price": "150.00",
+      "shipping_lines": [],
+      "total_shipping": "0.00",
+      "total_tax": "30.00",
+      "total_discounts": "0.00",
+      "total_price": "180.00",
+      "tags": "synth,fulfilled",
+      "note": "Synthetic order - updated variant",
+      "properties": [],
+      "line_items": [
+        {
+          "id": 9110200001,
+          "product_id": 9200200001,
+          "variant_id": 9210200001,
+          "sku": "SYNTH-CORE",
+          "title": "Synth Core",
+          "quantity": 3,
+          "price": "50.00",
+          "total_discount": "0.00"
+        }
+      ],
+      "customer": {
+        "id": 9300100002,
+        "email": "buyer-0002@synth.example",
+        "phone": "+15550001002",
+        "first_name": "Grace",
+        "last_name": "Synth"
+      }
+    },
+    {
+      "id": 9000100003,
+      "name": "#SYNTH-ORD-0003",
+      "email": "buyer-0003@synth.example",
+      "created_at": "2026-08-04T09:00:00Z",
+      "updated_at": "2026-08-05T15:45:00Z",
+      "cancelled_at": "2026-08-05T16:00:00Z",
+      "closed_at": null,
+      "financial_status": "voided",
+      "fulfillment_status": null,
+      "currency": "GBP",
+      "subtotal_price": "40.00",
+      "shipping_lines": [],
+      "total_shipping": "0.00",
+      "total_tax": "0.00",
+      "total_discounts": "0.00",
+      "total_price": "40.00",
+      "tags": "synth,cancelled",
+      "note": "Synthetic order - cancelled variant",
+      "properties": [],
+      "line_items": [
+        {
+          "id": 9110300001,
+          "product_id": 9200300001,
+          "variant_id": 9210300001,
+          "sku": "SYNTH-DELUXE",
+          "title": "Synth Deluxe",
+          "quantity": 1,
+          "price": "40.00",
+          "total_discount": "0.00"
+        }
+      ],
+      "customer": {
+        "id": 9300100003,
+        "email": "buyer-0003@synth.example",
+        "phone": "+15550001003",
+        "first_name": "Lin",
+        "last_name": "Synth"
+      }
+    },
+    {
+      "id": 9000100004,
+      "name": "#SYNTH-ORD-0004",
+      "email": "buyer-0004@synth.example",
+      "created_at": "2026-08-06T08:00:00Z",
+      "updated_at": "2026-08-06T08:05:00Z",
+      "cancelled_at": null,
+      "closed_at": null,
+      "financial_status": "refunded",
+      "fulfillment_status": "fulfilled",
+      "currency": "CAD",
+      "subtotal_price": "25.00",
+      "shipping_lines": [],
+      "total_shipping": "0.00",
+      "total_tax": "2.00",
+      "total_discounts": "0.00",
+      "total_price": "27.00",
+      "tags": "synth,refunded",
+      "note": "Synthetic order - refunded variant",
+      "properties": [],
+      "line_items": [
+        {
+          "id": 9110400001,
+          "product_id": 9200400001,
+          "variant_id": 9210400001,
+          "sku": "SYNTH-MINI",
+          "title": "Synth Mini",
+          "quantity": 1,
+          "price": "25.00",
+          "total_discount": "0.00"
+        }
+      ],
+      "customer": {
+        "id": 9300100004,
+        "email": "buyer-0004@synth.example",
+        "phone": "+15550001004",
+        "first_name": "Noor",
+        "last_name": "Synth"
+      }
+    }
+  ]
+}

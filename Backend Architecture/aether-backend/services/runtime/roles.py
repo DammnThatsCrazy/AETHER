@@ -144,9 +144,9 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # consumer-attached only.
     "graph-writer": frozenset({"kyber_graph_projector"}),
     "measurement-worker": frozenset(),
-    # Stream consumer is owned by consumer_specs.py; Phase B adds replay/reconciler
-    # supervised loop specs here.
-    "semantic-worker": frozenset(),
+    # Stream consumer is owned by consumer_specs.py; the reconciler + retention
+    # supervised loop specs (each gated on its settings flag) are owned here.
+    "semantic-worker": frozenset({"semantic_reconciler", "semantic_retention"}),
     # x402_settlement_reconciliation projects verified on-chain finality into
     # settlement state — a materialization, like the payment-rail sync/repair
     # loops that already ride this role. payment_alert_eval is the payment-rails
@@ -191,6 +191,14 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             "reward_reservation_release",
             "reward_dlq_sweeper",
             "credential_expiry_sweep",
+            # Truth-chain ledger verifier (LEDGER M3): a periodic, opt-in Bronze
+            # hash-chain re-verification sweep that alerts on tamper evidence. It
+            # is a scheduled safety-net loop, so it rides maintenance like the
+            # other sweeps rather than justifying a runtime role of its own.
+            # (Arrived via the origin/main merge already registered in
+            # build_worker_specs but unmapped — an orphan spec that would never
+            # run in a dedicated/consolidated deployment.)
+            "ledger_chain_verifier",
         }
     ),
 }

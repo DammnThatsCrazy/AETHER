@@ -119,6 +119,17 @@
             "tier": "Standard"
           },
           "index": "kyber"
+        },
+        {
+          "address": "aws_iam_role_policy.credential_kms",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "credential_kms",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": {
+            "name": "aether-production-credential-kms"
+          }
         }
       ],
       "child_modules": [
@@ -1024,6 +1035,34 @@
               "schema_version": 0,
               "values": {
                 "retention_in_days": 30
+              }
+            }
+          ]
+        },
+        {
+          "address": "module.kms_credentials",
+          "resources": [
+            {
+              "address": "module.kms_credentials.aws_kms_key.this",
+              "mode": "managed",
+              "type": "aws_kms_key",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "description": "Aether provider-credential envelope encryption",
+                "enable_key_rotation": true
+              }
+            },
+            {
+              "address": "module.kms_credentials.aws_kms_alias.this",
+              "mode": "managed",
+              "type": "aws_kms_alias",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "alias/aether-production-provider-credentials"
               }
             }
           ]
@@ -2946,6 +2985,76 @@
         "after_sensitive": {}
       },
       "module_address": "module.vpc"
+    },
+    {
+      "address": "module.kms_credentials.aws_kms_key.this",
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "description": "Aether provider-credential envelope encryption",
+          "enable_key_rotation": true
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.kms_credentials"
+    },
+    {
+      "address": "module.kms_credentials.aws_kms_alias.this",
+      "mode": "managed",
+      "type": "aws_kms_alias",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "alias/aether-production-provider-credentials"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true,
+          "target_key_id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.kms_credentials"
+    },
+    {
+      "address": "aws_iam_role_policy.credential_kms",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "credential_kms",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-production-credential-kms"
+        },
+        "after_unknown": {
+          "id": true,
+          "policy": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
     }
   ]
 }

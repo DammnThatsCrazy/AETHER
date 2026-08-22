@@ -37,7 +37,14 @@ QUARANTINED_APPLY_SITES = {
     "cicd/aether-cicd/.github/workflows/demo-management.yml",
     "cicd/aether-cicd/.github/workflows/infrastructure.yml",
 }
-TF_PROFILES = ("staging", "production-lean", "production-scale", "enterprise-isolated")
+# Every profile the promotion workflow can dispatch, matching the parity
+# restatement (cloud ∪ ephemeral-class). demo/preview are ephemeral-class and
+# dispatchable; the apply environment mapping in the workflow must cover all
+# six.
+TF_PROFILES = (
+    "staging", "production-lean", "production-scale", "enterprise-isolated",
+    "demo", "preview",
+)
 # Triggers that fire without a human choosing to run the workflow.
 AUTOMATIC_TRIGGERS = {
     "push",
@@ -236,6 +243,153 @@ def test_deploy_never_interpolates_inputs_into_run_scripts():
             stripped = line.strip()
             if stripped.startswith(("test -n '${{", "test \"$(cat")):
                 assert "${{" not in stripped, f"{name}: quoted inline input: {stripped}"
+
+
+# ---------------------------------------------------------------------------
+# Credential gating (deploy.yml / TTL guards / infrastructure.yml) — PR #519
+# pins. The secrets context is unavailable in job/step `if:` conditions, so
+# every credential gate launders the secret through an env binding, publishes a
+# boolean output, and gates on that output. These tests pin BOTH branches:
+# credential-present steps must gate on armed == true, and credential-absent
+# runs must skip every credential-gated step and emit a loud not-armed notice —
+# never fail at configure-aws-credentials and never silently go green.
+# ---------------------------------------------------------------------------
+
+
+def test_deploy_gates_build_and_deploy_on_delivery_armed_output():
+    doc = _workflow_yaml("deploy.yml")
+
+    armed = doc["jobs"]["delivery-armed"]
+    assert armed["outputs"] == {"armed": "${{ steps.check.outputs.armed }}"}
+    check = next(s for s in armed["steps"] if s.get("id") == "check")
+    assert check["env"]["AWS_DEPLOY_ROLE_ARN"] == "${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+    check_run = check["run"]
+    assert "armed=true" in check_run
+    assert "armed=false" in check_run
+    # The secret is laundered through env; it must never be interpolated into
+    # a run script, where an injected value could be evaluated.
+    assert "secrets.AWS_DEPLOY_ROLE_ARN" not in check_run
+
+    build = doc["jobs"]["build"]
+    assert "delivery-armed" in build["needs"]
+    assert build["if"] == (
+        "(github.event_name == 'push' || inputs.environment == 'staging')"
+        " && needs.delivery-armed.outputs.armed == 'true'"
+    )
+
+    not_armed = doc["jobs"]["delivery-not-armed"]
+    assert not_armed["needs"] == ["delivery-armed"]
+    assert not_armed["if"] == "needs.delivery-armed.outputs.armed == 'false'"
+    assert "::notice title=Delivery not armed" in _job_script(doc, "delivery-not-armed")
+    # The notice must be explicit that nothing was deployed — never read a
+    # skipped build as a green delivery.
+    assert "NOT a claim that a release exists" in _job_script(doc, "delivery-not-armed")
+
+    deploy = doc["jobs"]["deploy"]
+    assert "delivery-armed" in deploy["needs"]
+    assert "needs.delivery-armed.outputs.armed == 'true'" in deploy["if"]
+
+
+def test_deploy_armed_check_binds_the_role_before_any_aws_step():
+    """The armed detection must be its own job that runs before build/deploy so
+    a credential-less run never reaches configure-aws-credentials."""
+    doc = _workflow_yaml("deploy.yml")
+    names = list(doc["jobs"])
+    assert names.index("delivery-armed") < names.index("build")
+    assert names.index("delivery-armed") < names.index("deploy")
+    build = doc["jobs"]["build"]
+    assert build["needs"][0] == "require-ci-green"
+    assert build["needs"][1] == "delivery-armed"
+
+
+def test_ttl_guards_are_loud_noops_without_the_lifecycle_role():
+    for name in ("staging-ttl-guard.yml", "ephemeral-ttl-guard.yml"):
+        doc = _workflow_yaml(name)
+        steps = doc["jobs"]["guard"]["steps"]
+
+        secret_name = (
+            "AWS_STAGING_LIFECYCLE_ROLE_ARN"
+            if name == "staging-ttl-guard.yml"
+            else "AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN"
+        )
+        check = next(s for s in steps if s.get("id") == "check-armed")
+        assert check["env"][secret_name] == f"${{{{ secrets.{secret_name} }}}}"
+        check_run = check["run"]
+        assert "armed=true" in check_run
+        assert "armed=false" in check_run
+        assert f"secrets.{secret_name}" not in check_run
+
+        # Every credential-gated step reads the same armed output, and the AWS
+        # credential assumption is among them.
+        gated = [
+            s for s in steps
+            if s.get("if") == "steps.check-armed.outputs.armed == 'true'"
+        ]
+        assert gated, f"{name}: no credential-gated steps found"
+        assert any(
+            str(s.get("uses", "")).startswith("aws-actions/configure-aws-credentials")
+            for s in gated
+        ), f"{name}: credential assumption is not armed-gated"
+
+        not_armed = next(
+            s for s in steps
+            if s.get("if") == "steps.check-armed.outputs.armed == 'false'"
+        )
+        notice = not_armed["run"]
+        assert "::notice title=" in notice
+        assert "NO-OP" in notice
+        # The notice is the OPPOSITE of an "environment is asleep" claim.
+        assert "NOT a claim" in notice
+
+
+def test_staging_ttl_guard_blocking_alert_keys_on_armed_output_not_readings():
+    """The blocking alert runs unconditionally and keys its not-armed branch on
+    the armed output directly — never on the lease readings being unset. An
+    armed run whose state/config steps failed must fall through to the blocking
+    error, not into the not-armed notice."""
+    doc = _workflow_yaml("staging-ttl-guard.yml")
+    alert = next(
+        s for s in doc["jobs"]["guard"]["steps"]
+        if "Blocking alert" in s.get("name", "")
+    )
+    assert alert["if"] == "always()"
+    assert alert["env"]["ARMED"] == "${{ steps.check-armed.outputs.armed }}"
+    assert 'if [ "${ARMED:-}" = false ]' in alert["run"]
+
+
+def test_ephemeral_ttl_guard_blocking_alert_only_when_armed_and_expired():
+    doc = _workflow_yaml("ephemeral-ttl-guard.yml")
+    alert = next(
+        s for s in doc["jobs"]["guard"]["steps"]
+        if "Blocking alert" in s.get("name", "")
+    )
+    assert "steps.check-armed.outputs.armed == 'true'" in alert["if"]
+    assert "steps.decision.outputs.expired == 'true'" in alert["if"]
+
+
+def test_infrastructure_promotion_gate_reports_not_armed_without_credentials():
+    """A credential-less push to main must go green with a loud not-armed
+    notice — never fail the run — and the enforce step must run fail-closed
+    only when the complete credential set is present. A failed probe publishes
+    no output and must not be misattributed to missing credentials, so the
+    notice also requires the probe job to have succeeded."""
+    doc = _workflow_yaml("infrastructure.yml")
+    steps = doc["jobs"]["require-production-credentials"]["steps"]
+
+    not_armed = next(
+        s for s in steps if "not armed" in s.get("name", "").lower()
+    )
+    assert "needs.remote-plan-readiness.result == 'success'" in not_armed["if"]
+    assert "needs.remote-plan-readiness.outputs.configured != 'true'" in not_armed["if"]
+    assert "NOT promotable" in not_armed["run"]
+    assert "NO-OP" in not_armed["run"]
+
+    enforce = next(
+        s for s in steps if s.get("name") == "Enforce credentialed remote plans"
+    )
+    assert "needs.remote-plan-readiness.outputs.configured == 'true'" in enforce["if"]
+    # The enforce step still carries all three fail-closed checks.
+    assert enforce["run"].count("exit 1") == 3
 
 
 # ---------------------------------------------------------------------------
@@ -736,6 +890,8 @@ def test_promotion_uses_per_profile_terraform_environments():
         "production-lean": "production-lean-terraform",
         "production-scale": "production-scale-terraform",
         "enterprise-isolated": "enterprise-terraform",
+        "demo": "demo-terraform",
+        "preview": "preview-terraform",
     }
     for profile, env_name in expected.items():
         assert f"inputs.profile == '{profile}' && '{env_name}'" in name, (

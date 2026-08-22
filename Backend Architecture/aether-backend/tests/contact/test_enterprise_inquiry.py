@@ -89,6 +89,48 @@ async def test_invalid_company_type_rejected():
         await contact_enterprise(_body(company_type="conglomerate"), _req())
 
 
+async def test_email_body_escapes_user_controlled_html(monkeypatch):
+    """Email XSS: tenant-supplied fields are HTML-escaped in the rendered body."""
+    captured = {}
+
+    async def _capture(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(email_service, "send_email", _capture)
+    await contact_enterprise(_body(
+        message="<script>alert(1)</script>",
+        name="<b>Ada</b>",
+        company_name="<img src=x onerror=alert(1)>",
+    ), _req())
+
+    body_html = captured["body_html"]
+    # Raw markup from the user must never survive into the mail client.
+    assert "<script>" not in body_html
+    assert "<b>" not in body_html
+    assert "<img" not in body_html
+    # ... and the escaped forms are present.
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in body_html
+    assert "&lt;b&gt;Ada&lt;/b&gt;" in body_html
+    assert "&lt;img src=x onerror=alert(1)&gt;" in body_html
+
+
+async def test_email_subject_newline_stripped(monkeypatch):
+    """Header-injection defense: newlines in the company name cannot reach the subject."""
+    captured = {}
+
+    async def _capture(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(email_service, "send_email", _capture)
+    await contact_enterprise(_body(company_name="Acme\r\nBcc: evil@example.com"), _req())
+
+    subject = captured["subject"]
+    assert "\r" not in subject
+    assert "\n" not in subject
+
+
 async def test_persistence_failure_is_not_fake_success(monkeypatch):
     async def _boom(self, record_id, data):
         raise RuntimeError("disk full")

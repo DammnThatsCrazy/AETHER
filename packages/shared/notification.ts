@@ -84,4 +84,29 @@ export interface IntelligenceNotificationEvent {
   audit_trail: Array<Record<string, unknown>>;
   detected_at: string;
   expires_at?: string | null;
+  // Redacted mobile push projection (M1a, decision-log D11) — the ONLY content
+  // a push may carry. Derived/redacted at creation or the push boundary; never
+  // raw payload or PII. `push_deep_link_class` reuses the continuation-plane
+  // surface vocabulary so the mobile app routes with classes it already knows.
+  push_title?: string | null;
+  push_body?: string | null;
+  push_summary?: string | null;
+  push_deep_link_class?: string | null;
+  push_category?: string | null;
+}
+
+/** Redacted push surface for a mobile notification (M1a, decision-log D11).
+ *
+ * Twin of `services/notification_intelligence/projection.py`
+ * `MobileNotificationProjection` (parity-tested by
+ * `tests/contracts/test_notification_contract_parity.py`). Every field is
+ * snake_case (decision-log D6). A push built from these fields carries ONLY
+ * projected content — never raw notification payload or PII.
+ */
+export interface MobileNotificationProjection {
+  push_title?: string | null;
+  push_body?: string | null;
+  push_summary?: string | null;
+  push_deep_link_class?: string | null;
+  push_category?: string | null;
 }

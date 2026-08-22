@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, formatInstant, resolveCapabilityState, useTimeContext } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, CapabilityStateBadge, EmptyState, LoadingState, ProviderMark, formatInstant, resolveCapabilityState, useTimeContext } from '@aether/ui';
 import type { CapabilityState, TimeContext } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
@@ -119,7 +119,12 @@ export function ConnectorsPage() {
                     const rowAny = row as unknown as AnyRecord;
                     return (
                       <tr key={row.connector_type} className="border-b border-border-subtle hover:bg-surface-hover">
-                        <td className="py-2 px-2 font-semibold text-text-primary">{row.label}</td>
+                        <td className="py-2 px-2 font-semibold text-text-primary">
+                          <span className="flex items-center gap-2">
+                            <ProviderMark provider={row.connector_type} decorative size={20} />
+                            <span>{row.label}</span>
+                          </span>
+                        </td>
                         <td className="py-2 px-2 text-text-muted">{row.category}</td>
                         <td className="py-2 px-2">
                           {row.supports_pull && <Badge variant="default">pull</Badge>}

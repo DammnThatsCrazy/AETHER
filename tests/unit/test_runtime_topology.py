@@ -34,7 +34,7 @@ import check_delivery_topology as topo  # noqa: E402
 
 CONFIG = ROOT / "config" / "runtime_deployment.yaml"
 WORKER_ROLE_COUNT = 8
-CONSOLIDATED = ("staging", "production-lean")
+CONSOLIDATED = ("staging", "production-lean", "demo", "preview")
 DEDICATED = ("production-scale", "enterprise-isolated")
 
 

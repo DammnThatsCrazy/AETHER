@@ -36,7 +36,7 @@ def _isolate():
 
 async def _seed(actor: str):
     # Shared (subject, topic, stance) across ≥2 actors → one live cascade.
-    obs, _ = classify_event(
+    obs, _ = await classify_event(
         {
             "source_event_id": f"e_{actor}",
             "source_type": "social_post",

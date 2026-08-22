@@ -75,7 +75,7 @@ def top_level_summary(tracked: list[str]) -> list[tuple[str, int, int]]:
     return rows
 
 
-def authored_docs() -> dict[str, list[str]]:
+def authored_docs(tracked: list[str] | None = None) -> dict[str, list[str]]:
     """Group authored docs for REPO-INDEX coverage.
 
     Most authored docs live at ``docs/*.md``. Product-domain slices may also
@@ -83,7 +83,15 @@ def authored_docs() -> dict[str, list[str]]:
     ``docs/semantic-sentiment/`` and its runbooks). Include those nested docs
     explicitly so ``sync_docs.py`` is deterministic in CI without sweeping in
     archive/source-of-truth trees owned by separate documentation validators.
+
+    Only git-tracked docs are indexed. Untracked files (for example docs from
+    another in-flight branch sitting in the working tree) must not appear in
+    the committed index — otherwise the regenerated REPO-INDEX would diverge
+    from the committed one and fail the drift gate.
     """
+    if tracked is None:
+        tracked = _git_tracked_files()
+    tracked_set = set(tracked)
     groups: dict[str, list[str]] = defaultdict(list)
     paths = list(DOCS.glob("*.md"))
     paths.extend((DOCS / "semantic-sentiment").glob("*.md"))
@@ -91,6 +99,8 @@ def authored_docs() -> dict[str, list[str]]:
     for path in sorted(paths):
         rel = path.relative_to(DOCS)
         if path.name in {INDEX_PATH.name, AUTOMATION_PATH.name, "CHANGELOG.md"}:
+            continue
+        if str(path.relative_to(ROOT)) not in tracked_set:
             continue
         doc_ref = rel.as_posix()
         stem = path.stem
@@ -175,7 +185,7 @@ def write_index(tracked: list[str]) -> None:
             "",
         ]
     )
-    for group, docs in authored_docs().items():
+    for group, docs in authored_docs(tracked).items():
         lines.append(f"### {group}")
         for doc in docs:
             lines.append(f"- `{doc}`")

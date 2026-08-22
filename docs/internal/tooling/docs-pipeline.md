@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "3c7b0bf"
+last_synced_commit: "5030d0c2"
 ---
 
 # Documentation Pipeline
@@ -102,9 +102,14 @@ make docs-check           # docs/version/frontmatter/drift only (fast gate)
 make ci-check             # CI-safe full path — fails on any generated diff
 make docs-fix             # regenerate and sync docs only
 
+# Deployment-profile enforcement (profile class, parity, cost policy, doctor)
+make validate-profile-config    # deployment-profile matrix + founding-tenant posture
+make validate-profile-parity    # cross-source profile parity (docs count, cloud subset, terraform, contracts, env templates)
+make validate-profile-doctor    # per-profile readiness doctor (§27) + deployment certificate (§28); no cloud profile below credential_waiting
+
 # Production readiness (scorecard + blockers + live consistency checks)
 make production-status    # advisory readiness report (scripts/production_status.py)
-make release-gate         # ci-check + strict production status
+make release-gate         # repo consistency (CI) + strict production status + ops readiness + founding-tenant control spine
 
 # Graph integrity and release gate
 make graph-test           # run all tests/graph/ suites
@@ -118,6 +123,15 @@ orchestrates all checks in a fixed deterministic order and exits non-zero
 on the first failure (or with `--continue-on-error`, after collecting all
 failures). This is the single command agents, developers, and CI should
 use for full consistency validation.
+
+`make frontend-branding` is the fast focused frontend counterpart. It invokes
+`scripts/validate_frontend_branding.py`, which scans only explicitly migrated
+brand seams rather than attempting a repo-wide style rewrite. It is called by
+`repo_doctor.py` and by the repository-consistency workflow; use it while
+editing Aether/Kyber shells or the shared identity/provider renderers. The
+consumer scope, owner, dependency sequence, and required evidence are
+recorded in `docs/brand-system/aether-consumer-matrix.md`; that matrix is
+context, not a substitute for this gate or for hosted CI.
 
 ## Enforcement points
 
@@ -133,7 +147,9 @@ before pushing.
 - `.github/workflows/repo-consistency.yml` — PR/push gate that runs
   `make ci-check` (the full `repo_doctor.py --ci` suite), covering
   version alignment, generated docs, frontmatter, source-linked drift,
-  contracts, SDK alignment, and tests in a single step.
+  contracts, SDK alignment, the delivery-safety validator
+  (`scripts/release/validate_delivery_safety.py`), and tests in a single
+  step.
 
 ## Routine: changing a documented system
 

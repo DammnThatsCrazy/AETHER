@@ -30,9 +30,14 @@ from .models import (
     DSRPropagationStatus,
     DSRPropagationStep,
     DSRType,
+    ReattributionEvidence,
     overall_status,
 )
-from .service import DSRPropagationRepository, DSRPropagationService
+from .service import (
+    REATTRIBUTION_COMPONENT,
+    DSRPropagationRepository,
+    DSRPropagationService,
+)
 
 __all__ = [
     "ArtifactIndex",
@@ -48,7 +53,9 @@ __all__ = [
     "DSRPropagationStatus",
     "DSRPropagationStep",
     "DSRType",
+    "ReattributionEvidence",
     "overall_status",
+    "REATTRIBUTION_COMPONENT",
     "DSRPropagationRepository",
     "DSRPropagationService",
 ]

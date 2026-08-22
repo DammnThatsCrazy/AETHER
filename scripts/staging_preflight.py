@@ -8,7 +8,7 @@ FAIL does).
 Supported CLI contract::
 
     python scripts/staging_preflight.py
-    python scripts/staging_preflight.py --env-file deploy/staging.env
+    python scripts/staging_preflight.py --env-file deploy/legacy-staging.env
     python scripts/staging_preflight.py --base-url https://api.staging.aether.io
     python scripts/staging_preflight.py --dry-run
     python scripts/staging_preflight.py --json

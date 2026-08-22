@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "3c7b0bf"
+last_synced_commit: "936b9859"
 ---
 # Aether vNext — Architecture Guide
 
@@ -23,11 +23,11 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), event bus with 181 topics (Kafka via aiokafka, or AWS SNS/SQS when `EVENT_BROKER=sns_sqs`), S3, Prometheus. In `AETHER_ENV=local` with no broker reachable, the event bus falls back to an in-memory list and the `main.py` lifespan runs `EventProducer.pump_local` to drain published events into the in-process consumer — so the single-process local stack delivers Bronze→Silver projections without a broker (a broker-connected producer is never double-delivered).
+2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery; mobile push (APNs/FCM) carries only a redacted projection — amounts/PII are `[redacted]`, never raw payload), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Continuity and mobile surfaces complete the plane: the **continuation plane** (`/v1/continuations` — durable, CAS-guarded context-handoff tokens, never a whole graph; the operator twin `/v1/kyber/continuations` exposes the same shapes to Kyber workforce sessions via `require_kyber_access`), the **client-sync feed** (`/v1/client-sync` — gapless per-scope catch-up cursor; operators read the same feed scoped to their own identity through `/v1/kyber/client-sync`), and the **mobile gateway** (`/v1/mobile/*` — installation + push-subscription registration, per-install configuration with distribution profiles, and bounded redacted projections over owning services). Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), event bus with 181 topics (Kafka via aiokafka, or AWS SNS/SQS when `EVENT_BROKER=sns_sqs`), S3, Prometheus. In `AETHER_ENV=local` with no broker reachable, the event bus falls back to an in-memory list and the `main.py` lifespan runs `EventProducer.pump_local` to drain published events into the in-process consumer — so the single-process local stack delivers Bronze→Silver projections without a broker (a broker-connected producer is never double-delivered).
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
-4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API.
+4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API. Two **Expo mobile apps** extend the plane — **Aether Mobile** (`apps/aether-mobile`, customer plane) and **Kyber Mobile** (`apps/kyber-mobile`, operator plane, distinct bundle/audience from Aether Mobile) — built on the shared `@aether/mobile-core` (typed SDK: auth/continuation/sync/push over SecureStore PKCE) and `@aether/mobile-ui` (dark theme + typed navigation) packages. The mobile apps are read-only, consuming the mobile gateway's bounded redacted projections; their wire contracts (distribution profiles, install/app-version registration) live in `packages/shared/mobile-config.ts` and `packages/shared/installation.ts`.
 
 ### Data Flow
 
@@ -303,6 +303,9 @@ Resolution Consumer (real-time)
 | `/v1/providers/usage` | GET | Per-tenant provider usage stats |
 | `/v1/providers/health` | GET | Provider health + circuit breaker states |
 | `/v1/providers/test` | POST | Test a provider call |
+| `/v1/provider-connections/*` | GET/POST/PATCH/DELETE | Provider runtime connection lifecycle (feature-gated `AETHER_PROVIDER_RUNTIME_ENABLED`, default OFF) |
+| `/v1/provider-webhooks/{identity_key}` | POST | Provider webhook delivery gateway (unauthenticated; HMAC/endpoint-secret verified; `X-Aether-Tenant-ID` is a routing hint, not auth) |
+| `/v1/admin/kyber/provider-connections/*` | GET/POST | Provider runtime operator plane (additional `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED`, default OFF) |
 
 ## Event Flow
 
@@ -428,6 +431,147 @@ mesh → legacy defense layer → off); with `REQUIRE_EXTRACTION_DEFENSE=true`
 (production profiles) an unavailable defense fails closed with
 `EXTRACTION_DEFENSE_UNAVAILABLE` instead of silently passing traffic. See
 [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
+
+## Multi-Model Intelligence Harness (8.12.0)
+
+A provider-neutral intelligence runtime lets AI models operate as
+interchangeable planning, reasoning, classification, and synthesis engines
+inside Aether's controlled harness. OpenAI and Anthropic are the first two
+providers; additional providers (Kimi-family, open-weight, OpenAI-compatible
+endpoints, Bedrock, self-hosted) plug in as isolated adapters without touching
+orchestration logic. Every answer is tenant-scoped, evidence-backed,
+policy-governed, observable, auditable, and verifiable.
+
+The harness extends Aether additively — it does not replace the intelligence
+graph, graph mutation gateway, entity/identity model, consent authority, audit
+ledger, or the Noesis read-only intent + repository-dispatch architecture.
+The design decision record is [ADR-008](decisions/ADR-008-multi-model-intelligence-harness.md).
+
+Canonical contract plane (single source of truth, codegen twins via
+`scripts/generate_platform_contracts.py`):
+
+| Registry | JSON source | Generated twins |
+|---|---|---|
+| Model catalog | `packages/shared/contracts/model-registry.json` | `packages/shared/model-registry.ts`; `shared/model_governance/generated_model_registry.py`; `docs/_generated/model-registry-table.md` |
+| Task profiles | `packages/shared/contracts/task-profile-registry.json` | `packages/shared/task-profile.ts`; `shared/model_governance/generated_task_profiles.py`; `docs/_generated/task-profile-table.md` |
+
+### Provider transport adapters
+
+Provider SDKs live only behind the harness's provider-neutral `AsyncModelProvider`
+contract (`services/model_runtime/provider.py`); orchestrators such as Noesis
+never import them. Real transport for the first two providers lives in
+`services/model_runtime/adapters/`:
+
+| Adapter | Transport | Env surface |
+|---|---|---|
+| `AnthropicModelProvider` (`adapters/anthropic.py`) | Anthropic SDK (lazy-imported in `complete()`) | `ANTHROPIC_API_KEY`, `NOESIS_LLM_MODEL` |
+| `OpenAIModelProvider` (`adapters/openai.py`) | `httpx` POST to `{base_url}/chat/completions` (no OpenAI SDK) | `OPENAI_API_KEY`, `NOESIS_LLM_MODEL`, `OPENAI_API_BASE` |
+| `OpenAICompatibleModelProvider` (`adapters/compatible.py`) | inherits the `httpx` POST `{base_url}/chat/completions` transport unchanged | `MODEL_RUNTIME_COMPAT_API_KEY`, `MODEL_RUNTIME_COMPAT_MODEL`, `MODEL_RUNTIME_COMPAT_BASE_URL`, `MODEL_RUNTIME_COMPAT_PROVIDER_NAME` |
+
+All three adapters read credentials/config from the process environment at
+construction (constructor kwargs take precedence), expose `is_configured()`,
+and complete a `ModelRequest` → `ModelResponse` asynchronously via `complete()`.
+Failures surface as `ModelNotConfigured`, `ModelTimeoutError`, or
+`ModelProviderError`; request content and credentials are never logged.
+
+`OpenAICompatibleModelProvider` (`adapters/compatible.py`) is a thin subclass
+of `OpenAIModelProvider` that reuses the inherited httpx chat-completions
+transport unchanged, so it inherits the same error taxonomy
+(`ModelNotConfigured` / `ModelTimeoutError` / `ModelProviderError`) and the
+same "request content and credentials are never logged" guarantee. Its config
+is read from a dedicated `MODEL_RUNTIME_COMPAT_*` env surface, and its
+`provider_name` is an instance attribute (default `"openai_compatible"`,
+overridable per instance via constructor kwarg or
+`MODEL_RUNTIME_COMPAT_PROVIDER_NAME`). Because the runtime registry keys
+providers by `provider_name` (`ModelRuntimeService._providers`), a deployment
+can register several compatible endpoints at once — Kimi-family, self-hosted
+vLLM/TGI, other OpenAI-compatible vendors — alongside the built-in `openai`
+and `anthropic` adapters without collision.
+
+| Compatible-adapter env var | Maps to | Fallback when unset |
+|---|---|---|
+| `MODEL_RUNTIME_COMPAT_API_KEY` | `api_key` | `OPENAI_API_KEY` |
+| `MODEL_RUNTIME_COMPAT_MODEL` | `model` | `NOESIS_LLM_MODEL` |
+| `MODEL_RUNTIME_COMPAT_BASE_URL` | `base_url` | `OPENAI_API_BASE` |
+| `MODEL_RUNTIME_COMPAT_PROVIDER_NAME` | `provider_name` | `"openai_compatible"` |
+
+Config precedence (highest first): explicit constructor kwargs, then the
+`MODEL_RUNTIME_COMPAT_*` vars, then the `OpenAIModelProvider` defaults
+(`OPENAI_API_KEY` / `NOESIS_LLM_MODEL` / `OPENAI_API_BASE`). A deployment that
+sets only the `MODEL_RUNTIME_COMPAT_*` vars can drive a compatible endpoint
+without touching the OpenAI env surface at all.
+
+The Anthropic adapter is capability-driven: it never sends sampling parameters
+(`temperature`/`top_p`/`top_k`) because newer Anthropic models reject them with
+HTTP 400 — it sends only `model`, `max_tokens`, `system`, and `messages`. The
+OpenAI adapter emits `response_format={"type":"json_object"}` when the request
+asks for it.
+
+The Noesis LLM plan providers (`AnthropicNoesisPlanProvider` and
+`OpenAINoesisPlanProvider` in `services/noesis/provider.py`) now build a
+`ModelRequest` and delegate the actual API call to the matching adapter via
+`.complete()`, converting the `ModelResponse` back to the legacy `_call_api`
+dict shape (`text`, `tokens_used`, `input_tokens`, `output_tokens`). Plan
+validation (`_validate_provider_plan` / `_parse_plan_json`), the `plan()`
+retry/budget/metrics loops, the `EnvironmentNoesisPlanProvider` test stub, and
+the `ProductionNoesisPlanProvider` factory / `NOESIS_LLM_PROVIDER` routing are
+unchanged. No direct Anthropic SDK or `httpx` imports remain in `provider.py`;
+the fail-closed behavior on missing credentials or config is preserved.
+
+Binding security invariants: credentials never in source/frontend bundles/logs/
+prompts/persisted content; the model never receives direct database authority;
+the model may propose only allowlisted structured plans; Aether executes all
+retrieval; tenant scope is server-authoritative; staging/production fail closed
+on missing credentials/config; no cross-tenant evidence leakage; the model never
+selects or overrides tenant scope.
+
+## Universal Provider Runtime (8.12.0)
+
+The Universal Provider Runtime (UPR) makes provider integrations pluggable: a
+new provider is a self-contained plugin (manifest + capability adapters +
+normalizer + fixtures + registration) that registers at runtime with **zero
+core-system edits**. The legacy `BaseConnector` system, `/v1/integrations/
+connectors/*` routes, credential service, Bronze ingestion, sync-run ledger,
+and webhook inbox are untouched and remain authoritative; legacy connectors
+are re-exposed through the runtime by a compatibility plugin. The design
+decision record is [ADR-009](decisions/ADR-009-universal-provider-runtime.md).
+
+Provider identity is `family.product.capability` (e.g. `shopify.admin.orders_read`);
+legacy connectors map onto the identity `(connector_type, "ingestion", "connector")`
+with manifests byte-identical to the catalog, so plugin and catalog can never drift.
+
+Contract plane — `shared/integration_contracts/` (provider plugin protocol,
+capability adapters, `RawProviderRecord`/`AetherEvent` envelopes, normalizer,
+acquisition, health, reconciliation, certification) and `shared/commerce_contracts/`
+(canonical `Money`/`CommerceOrder`/`OrderSnapshot` + `commerce.*` event families):
+
+| Layer | Modules |
+|---|---|
+| Contract plane | `shared/integration_contracts/{plugin,capabilities,events,normalization,acquisition,health,reconciliation,certification}.py`; `shared/commerce_contracts/{money,order,events}.py` |
+| Runtime service | `services/provider_runtime/` — registry, validation (capability honesty), legacy compat plugin, credential broker, raw store, normalization engine, event bridge, connection orchestrator, scheduler, webhook gateway, rate-limit/retry coordinators, reconciliation, health, certification, routes |
+| Reference plugin | `services/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe `shop_domain` allowlist, HMAC webhook verify, order normalizer, incremental pull with page-info cursor |
+
+Data flow is **raw-before-canonical**: `RawProviderRecord`s are persisted
+idempotently to `bronze` (`provider_records`, dedup key
+`tenant:provider_identity:provider_record_id:schema_version`) before
+normalization; canonical `AetherEvent`s are written to `bronze_connectors`
+before the event-bus publish (bronze-before-publish, mirroring the comms
+pattern). Publish failure never fails ingestion.
+
+Feature gating: all UPR routes are off by default
+(`AETHER_PROVIDER_RUNTIME_ENABLED=False`); the operator plane additionally
+requires `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED`; `AETHER_PROVIDER_ENTRY_POINTS_ENABLED`
+controls `importlib.metadata` entry-point discovery. Legacy paths are
+unaffected regardless.
+
+Binding security invariants: credentials only via `credential_service` refs
+(never plaintext); the webhook gateway is **fail-closed** — a signature scheme
+without a secret denies, and `endpoint_secret` providers require a
+constant-time-matching presented token; `X-Aether-Tenant-ID` is a routing hint
+only, not auth; connection loads enforce tenant ownership (cross-tenant id →
+404); `shop_domain` is allowlisted to `*.myshopify.com` (SSRF gate); errors
+carry `safe_message` only; manifest capability claims are verified against
+actual adapters at registration and certification.
 
 ## Unified On-Chain Intelligence Graph
 

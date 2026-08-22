@@ -114,6 +114,13 @@ class ReprocessRequest(BaseModel):
 @router.post("/reprocess")
 async def reprocess(request: Request, body: ReprocessRequest | None = None, dry_run: bool = True):
     require_write_access(request)
+    # Kill-switch: with semantic replay disabled the durable job handler is not
+    # registered (jobs.py), so a real (non-dry-run) replay could never execute.
+    # Refuse to enqueue one rather than accept a job that would fail as unknown.
+    from config.settings import settings
+
+    if not dry_run and not settings.semantic.replay_enabled:
+        raise ForbiddenError("Semantic replay is disabled")
     filters: dict[str, Any] = {}
     if body is not None:
         if body.families:

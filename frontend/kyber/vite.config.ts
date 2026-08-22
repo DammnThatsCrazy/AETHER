@@ -4,6 +4,9 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // Kyber inherits the package-owned Aether mark rather than owning a second
+  // product asset directory. This also serves the formal Kyber app icon.
+  publicDir: path.resolve(__dirname, '../../packages/brand/src/identity/marks'),
   // Build identity injected at build time (drift-free: version from the
   // workspace package.json via npm, SHA/profile from CI env). Falls back to the
   // env-schema defaults for local dev / typecheck.

@@ -45,6 +45,9 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, ForbiddenError
 from shared.logger.logger import get_logger, metrics
 
+from services.client_sync.emitter import enqueue_sync_change
+from services.continuation.service import operator_scope
+
 from ..access.capabilities import (
     ACTION_CLASS_ANNOTATE,
     ACTION_CLASS_FLEET_DESTRUCTIVE,
@@ -377,6 +380,14 @@ async def acknowledge_exception(
     exc = await exception_service.acknowledge(
         exception_id, actor_id=getattr(context, "operator_id", "unknown")
     )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=exception_id,
+    )
     return APIResponse(data={"exception": exc.model_dump()}, meta=_meta(context)).to_dict()
 
 
@@ -402,6 +413,14 @@ async def resolve_exception(
     exc = await exception_service.resolve(
         exception_id, actor_id=getattr(context, "operator_id", "unknown"), note=body.note
     )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=exception_id,
+    )
     return APIResponse(data={"exception": exc.model_dump()}, meta=_meta(context)).to_dict()
 
 
@@ -423,6 +442,14 @@ async def suppress_exception(
         exception_id,
         actor_id=getattr(context, "operator_id", "unknown"),
         reason=body.reason,
+    )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=exception_id,
     )
     return APIResponse(data={"exception": exc.model_dump()}, meta=_meta(context)).to_dict()
 
@@ -567,6 +594,14 @@ async def update_incident(
     incident = await incident_correlator.update_incident(
         incident_id, actor_id=getattr(context, "operator_id", "unknown"), **fields
     )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="incident_changed",
+        resource_kind="incident",
+        resource_id=incident_id,
+    )
     return APIResponse(
         data={
             "incident": incident.model_dump(),
@@ -594,6 +629,14 @@ async def resolve_incident(
         incident_id,
         actor_id=getattr(context, "operator_id", "unknown"),
         root_cause=body.root_cause,
+    )
+    _operator_id = getattr(context, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="incident_changed",
+        resource_kind="incident",
+        resource_id=incident_id,
     )
     return APIResponse(data={"incident": incident.model_dump()}, meta=_meta(context)).to_dict()
 
@@ -794,6 +837,14 @@ async def approve_command(
         approver_id=getattr(authorized, "operator_id", "unknown"),
         role_template_ids=list(getattr(authorized, "role_template_ids", ()) or ()),
     )
+    _operator_id = getattr(authorized, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=command_id,
+    )
     return APIResponse(
         data={
             "command": updated.model_dump(),
@@ -829,6 +880,14 @@ async def execute_command(
     )
     result = await command_service.execute(
         command_id, actor_id=getattr(authorized, "operator_id", "unknown")
+    )
+    _operator_id = getattr(authorized, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=command_id,
     )
     return APIResponse(data=result, meta=_meta(authorized)).to_dict()
 
@@ -867,6 +926,14 @@ async def verify_command(
     result = await command_service.verify(
         command_id, actor_id=getattr(authorized, "operator_id", "unknown")
     )
+    _operator_id = getattr(authorized, "operator_id", "unknown")
+    await enqueue_sync_change(
+        scope_key=operator_scope(_operator_id),
+        principal_id=_operator_id,
+        change_type="command_receipt_changed",
+        resource_kind="command_receipt",
+        resource_id=command_id,
+    )
     return APIResponse(data=result, meta=_meta(authorized)).to_dict()
 
 
@@ -894,6 +961,68 @@ async def read_containment(
     return APIResponse(data=data, meta=_meta(context)).to_dict()
 
 
+#: Containment scopes that reach beyond one tenant. Flipping one of these is a
+#: fleet-wide decision, so it is gated by the class-5 ``kill_switch`` capability
+#: — the same authority the safe-mode routes require — not by the class-4 pause
+#: capability this route otherwise asserts.
+_FLEET_CONTAINMENT_SCOPES: frozenset[str] = frozenset(
+    {"global", "environment", "region", "model", "worker", "feature"}
+)
+
+
+def _assert_containment_scope(
+    context: Any, scope: str, target: Optional[str]
+) -> None:
+    """Refuse a containment switch whose reach the caller's scope does not cover.
+
+    The authority compared against is ``context.scope.tenant_id`` — the tenant
+    the durable access scope was granted for — and never ``context.tenant_id``,
+    which is only what the client asserted through a header it controls. This is
+    the same rule :func:`_assert_tenants_within_scope` applies to the command
+    plane: a client-provided tenant id may be compared, it must never grant.
+
+    A ``tenant`` switch must name exactly the scoped tenant; anything else is
+    either a bug or an attempted pivot to another tenant, and is refused rather
+    than silently rescoped.
+
+    A fleet switch (``global`` / ``environment`` / ``region`` / ``model`` /
+    ``worker`` / ``feature``) has no tenant target, so no tenant access scope can
+    contain it. It is refused unless the caller also holds the class-5
+    ``kyber.command.kill_switch`` capability, keeping the fleet-wide switch
+    behind the same gate the safe-mode routes use.
+
+    Raises:
+        shared.common.common.ForbiddenError: With ``denial_reason``
+            ``scope_missing`` or ``scope_tenant_mismatch``.
+    """
+    scope_tenant = str(getattr(getattr(context, "scope", None), "tenant_id", "") or "")
+    if scope == "tenant":
+        if not scope_tenant:
+            raise _refuse_command(
+                "scope_missing",
+                "containment",
+                "a tenant containment switch was requested but no tenant access "
+                "scope was resolved for this session",
+            )
+        if target != scope_tenant:
+            raise _refuse_command(
+                "scope_tenant_mismatch",
+                "containment",
+                "a tenant containment switch was requested for a tenant the "
+                "active access scope was not granted for",
+                extra={"scope_tenant": scope_tenant, "requested_target": target},
+            )
+        return
+    if scope in _FLEET_CONTAINMENT_SCOPES:
+        if not context.has_capability(KILL_SWITCH_CAPABILITY):
+            raise _refuse_command(
+                "scope_missing",
+                "containment",
+                f"a {scope!r} containment switch reaches beyond one tenant and "
+                f"requires the {KILL_SWITCH_CAPABILITY!r} capability",
+            )
+
+
 @router.post("/containment/activate")
 async def activate_containment(
     request: Request,
@@ -903,7 +1032,7 @@ async def activate_containment(
             PAUSE_CAPABILITY,
             disclosure=DisclosureLevel.D4_EVENT_EVIDENCE,
             action_class=ACTION_CLASS_HIGH_IMPACT,
-            tenant_scope="optional",
+            tenant_scope="required",
         )
     ),
 ) -> dict[str, Any]:
@@ -912,6 +1041,7 @@ async def activate_containment(
     Idempotent: an already-active switch for the same ``(scope, target,
     control)`` comes back unchanged rather than duplicated.
     """
+    _assert_containment_scope(context, body.scope, body.target)
     switch = await containment_service.activate(
         scope=body.scope,  # type: ignore[arg-type]
         target=body.target,
@@ -931,11 +1061,12 @@ async def deactivate_containment(
             PAUSE_CAPABILITY,
             disclosure=DisclosureLevel.D4_EVENT_EVIDENCE,
             action_class=ACTION_CLASS_HIGH_IMPACT,
-            tenant_scope="optional",
+            tenant_scope="required",
         )
     ),
 ) -> dict[str, Any]:
     """Release a scoped pause. ``released: false`` means none was active."""
+    _assert_containment_scope(context, body.scope, body.target)
     switch = await containment_service.deactivate(
         scope=body.scope,  # type: ignore[arg-type]
         target=body.target,

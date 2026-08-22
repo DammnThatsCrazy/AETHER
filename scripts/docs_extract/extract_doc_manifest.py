@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -66,6 +67,29 @@ def _read_frontmatter(path: Path) -> dict | None:
     return fm if isinstance(fm, dict) else None
 
 
+def _git_tracked_docs() -> set[str]:
+    """Return the set of git-tracked ``docs/**/*.{md,mdx}`` paths.
+
+    The manifest is a committed artifact consumed by the frontend and the
+    drift gate; it must describe only docs that exist in the committed tree.
+    Untracked files (e.g. docs from another in-flight branch sitting in the
+    working tree) must not be indexed — including them would make the
+    regenerated manifest diverge from the committed one and fail the gate.
+    Mirrors ``scripts/sync_docs.py`` which already counts tracked files only.
+    """
+    proc = subprocess.run(
+        ["git", "ls-files", "docs/"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    return {
+        line
+        for line in proc.stdout.splitlines()
+        if line and line.endswith((".md", ".mdx"))
+    }
+
+
 def main() -> int:
     version_path = ROOT / "package.json"
     try:
@@ -75,11 +99,14 @@ def main() -> int:
         version = "unknown"
 
     docs: list[dict] = []
+    tracked = _git_tracked_docs()
     for path in sorted(DOCS_DIR.rglob("*.md")) + sorted(DOCS_DIR.rglob("*.mdx")):
         # Skip _generated, _templates, archive subtrees
         parts = path.relative_to(DOCS_DIR).parts
         if any(p in SKIP_DIRS for p in parts):
             continue
+        if str(path.relative_to(ROOT)) not in tracked:
+            continue  # untracked docs (other branches / WIP) must not be indexed
         fm = _read_frontmatter(path)
         if not fm:
             continue

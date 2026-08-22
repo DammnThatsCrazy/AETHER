@@ -225,8 +225,10 @@ class DeliveryWorker:
             await self._mark_job_failed(job, f"ProviderReceipt invalid: {exc}", attempt_number)
             return
 
-        # Update job → DELIVERED
-        await self._job_repo.update(job_id, {
+        # Update job → DELIVERED (lease-guarded: a stale worker whose lease
+        # expired and whose batch was re-claimed must not overwrite the new
+        # owner's active job — see DeliveryJobRepository.release_job)
+        await self._job_repo.release_job(job_id, self._worker_id, {
             "state": DeliveryJobState.DELIVERED.value,
             "attempt_count": attempt_number,
             "leased_by": None,
@@ -301,8 +303,8 @@ class DeliveryWorker:
         await self._attempt_repo.insert(attempt.id, attempt.model_dump())
 
         if attempt_number >= max_attempts or not is_retryable:
-            # Dead-letter the job
-            await self._job_repo.update(job_id, {
+            # Dead-letter the job (lease-guarded — see release_job)
+            await self._job_repo.release_job(job_id, self._worker_id, {
                 "state": DeliveryJobState.DEAD_LETTER.value,
                 "attempt_count": attempt_number,
                 "last_error": str(exc)[:500],
@@ -325,7 +327,7 @@ class DeliveryWorker:
                 retry_at = (datetime.now(timezone.utc) + timedelta(seconds=int(retry_after))).isoformat()
             else:
                 retry_at = _compute_next_attempt_at(attempt_number)
-            await self._job_repo.update(job_id, {
+            await self._job_repo.release_job(job_id, self._worker_id, {
                 "state": DeliveryJobState.FAILED.value,
                 "attempt_count": attempt_number,
                 "last_error": str(exc)[:500],
@@ -343,7 +345,7 @@ class DeliveryWorker:
         self, job: dict[str, Any], error: str, attempt_number: int
     ) -> None:
         from services.delivery.models import DeliveryJobState
-        await self._job_repo.update(job["id"], {
+        await self._job_repo.release_job(job["id"], self._worker_id, {
             "state": DeliveryJobState.DEAD_LETTER.value,
             "attempt_count": attempt_number,
             "last_error": error[:500],
