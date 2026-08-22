@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/rewards/delivery_outbox.py
   - Backend Architecture/aether-backend/services/rewards/rails.py
 canonical_owner: platform@aether
-last_synced_commit: "67271129"
+last_synced_commit: "41202233"
 ---
 
 # Reward Delivery Runbook
@@ -19,8 +19,13 @@ Reward delivery runs on the durable delivery outbox
 (`RewardDeliveryOutbox`): enqueue → leased dispatch → provider receipt →
 mark delivered. Aether operates a **no-custody** model — it never holds or moves
 funds; the on-chain rails are oracle-signed claims gated by
-`EVM_REWARD_PROOFS_ENABLED`. Core invariant: a reward action is **never** marked
-`delivered` without a persisted `ProviderReceipt`.
+`EVM_REWARD_PROOFS_ENABLED`. Outside `local`/`test` an on-chain claim
+fails closed unless the campaign carries an explicit chain identity
+(`chain_id` + `contract_address`); the local Anvil chain id and the
+default Anvil contract address are rejected, and the identity is validated
+**before** the signer is resolved, so a misconfigured campaign never
+produces a signed claim against the wrong chain. Core invariant: a reward
+action is **never** marked `delivered` without a persisted `ProviderReceipt`.
 
 ## Deliveries stuck in `failed` (retrying)
 

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "b6e0b751"
+last_synced_commit: "41202233"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -964,7 +964,10 @@ Get a single rail configuration.
 
 ### PATCH /v1/rewards/rails/{id}
 
-Update a rail configuration.
+Update a rail configuration. A rotated `tenant_webhook` `signing_secret`
+submitted here is dual-written into the credential authority and replaced by a
+`secret_ref` before persistence — identical handling to create, so a PATCH can
+never reintroduce plaintext into the stored row.
 
 ### POST /v1/rewards/rails/{id}/verify
 

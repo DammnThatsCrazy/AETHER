@@ -13,7 +13,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "bac7f92"
+last_synced_commit: "41202233"
 ---
 # Aether Agentic Commerce — Control Plane
 
@@ -185,7 +185,7 @@ them.
 | Who approved/rejected? | `approval.decided_by` + audit log |
 | Which facilitator verified? | `authorization.facilitator_id` |
 | What graph state was written? | `trace.graph_writes` |
-| Was this a duplicate payment? | Idempotency store returns cached result by `payment_identifier` |
+| Was this a duplicate payment? | Idempotency store returns cached result by `payment_identifier` (only **terminal** verdicts are cached — a retryable `not_finalized` / `verification_unavailable` is never cached, so the payment re-checks the chain on the next call) |
 
 ## 13. Testing
 
