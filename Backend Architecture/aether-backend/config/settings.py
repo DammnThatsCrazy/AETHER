@@ -797,6 +797,7 @@ class SemanticIntelligenceConfig:
     replay_enabled: bool = _env_bool("SEMANTIC_REPLAY_ENABLED", False)
     reconciler_enabled: bool = _env_bool("SEMANTIC_RECONCILER_ENABLED", False)
     retention_enabled: bool = _env_bool("SEMANTIC_RETENTION_ENABLED", False)
+    graph_projector_enabled: bool = _env_bool("SEMANTIC_GRAPH_PROJECTOR_ENABLED", False)
     classifier_provider: str = _env("SEMANTIC_CLASSIFIER_PROVIDER", "deterministic")
     shadow_provider: str = _env("SEMANTIC_SHADOW_PROVIDER", "")
     canary_tenants: list[str] = field(

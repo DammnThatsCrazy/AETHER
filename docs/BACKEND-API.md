@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "defcd776"
+last_synced_commit: "67c779d5"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2762,7 +2762,7 @@ The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/sem
 
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
 
-Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of mutating graph edges or merging semantic-mediated estimates into ordinary attribution.
+Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of merging semantic-mediated estimates into ordinary attribution. `POST /v1/graph/semantic-overlay` now returns real `edge_overlays` — the directed relationship edges (`source_ref → target_ref` with stance alignment, trust, confidence and validity) read from durable `gold_relationship_semantic_state` — rather than a hardcoded empty list. The governed `semantic_graph_projector` worker projects that same Gold relationship state into the intelligence graph as `SEMANTIC_RELATES_TO` edges **through the mutation gateway** (never a direct graph write; the mutation is ledger-recorded in shadow/enforce mode), gated by `SEMANTIC_GRAPH_PROJECTOR_ENABLED` (default off).
 
 ## Communications Intelligence APIs
 

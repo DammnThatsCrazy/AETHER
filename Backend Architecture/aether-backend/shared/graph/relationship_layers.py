@@ -400,6 +400,10 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.USED_PLACEMENT:                  RelationshipLayer.EXCLUDED,  # Session → Placement
     EdgeType.ORIGINATED_FROM_LINK:            RelationshipLayer.EXCLUDED,  # Journey → SourceLink
     EdgeType.ATTRIBUTED_TO_PLATFORM_EVIDENCE: RelationshipLayer.EXCLUDED,  # Install → PlatformEvidence
+    # Semantic relationship overlay: a derived entity→entity analytics edge
+    # projected from gold_relationship_semantic_state — not a human/agent
+    # interaction, so it sits outside the four operational layers.
+    EdgeType.SEMANTIC_RELATES_TO:             RelationshipLayer.EXCLUDED,  # Entity → Entity (semantic)
     EdgeType.REFERRED_ENTITY:                 RelationshipLayer.A2H,       # Agent/AI → Entity
 
     # ── Phase 2: Journey step edges ──────────────────────────────────────

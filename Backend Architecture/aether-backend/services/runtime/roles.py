@@ -141,7 +141,9 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "measurement-worker": frozenset(),
     # Stream consumer is owned by consumer_specs.py; the reconciler + retention
     # supervised loop specs (each gated on its settings flag) are owned here.
-    "semantic-worker": frozenset({"semantic_reconciler", "semantic_retention"}),
+    "semantic-worker": frozenset(
+        {"semantic_reconciler", "semantic_retention", "semantic_graph_projector"}
+    ),
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
          "bronze_object_compaction"}
