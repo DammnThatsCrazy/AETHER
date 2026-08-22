@@ -456,3 +456,53 @@ async def test_concurrent_transition_is_refused(coord):
     # ...so advancing from the stale `first` row must fail
     with pytest.raises(ConcurrentTransitionError):
         await repo.advance(first, {**first, "state_version": 3})
+
+
+@pytest.mark.asyncio
+async def test_activated_event_requires_all_slots_before_credential_supplied(coord, monkeypatch):
+    """N9: for a provider with several required slots, an `activated` event for
+    the first slot must NOT advance the capability to credential_supplied while
+    other required slots are still empty — the credential-event branch applies
+    the same server-side required-slot check as promote()."""
+    import services.capabilities.lifecycle as lc
+
+    class _Slot:
+        def __init__(self, name):
+            self.slot_name = name
+            self.required = True
+
+    monkeypatch.setattr(lc, "slots_for", lambda provider, environment: [_Slot("a"), _Slot("b")])
+
+    active = {"a": True, "b": False}  # only slot 'a' active initially
+
+    async def _checker(tenant_id, provider, environment, slot):
+        return f"credver://{slot}" if active.get(slot) else None
+
+    authority = CapabilityLifecycleAuthority(
+        ActivationStateRepo(),
+        evidence_resolver=_ok_evidence,
+        credential_checker=_checker,
+        entitlement_checker=_entitled,
+    )
+    # Seed a CREDENTIAL_WAITING row for the coordinate.
+    await authority._repo.advance(None, {
+        **coord, "readiness_state": "credential_waiting", "domain": "rewards",
+        "state_version": 1,
+    })
+
+    # First slot activated, second still empty → NO advance (stays waiting).
+    outcomes = await authority.on_credential_event(
+        tenant_id=coord["tenant_id"], provider=coord["provider"],
+        environment=coord["environment"], event="activated",
+    )
+    assert outcomes == []
+    assert (await authority.get_state(**coord))["readiness_state"] == "credential_waiting"
+
+    # Now both required slots active → advance to credential_supplied.
+    active["b"] = True
+    outcomes = await authority.on_credential_event(
+        tenant_id=coord["tenant_id"], provider=coord["provider"],
+        environment=coord["environment"], event="activated",
+    )
+    assert len(outcomes) == 1
+    assert outcomes[0]["readiness_state"] == "credential_supplied"

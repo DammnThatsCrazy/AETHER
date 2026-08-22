@@ -169,6 +169,20 @@ async def test_send_time_resolution_fail_closed_without_credential(monkeypatch):
 
     monkeypatch.setenv("AETHER_ENV", "staging")
     tenant = f"t-{uuid.uuid4().hex[:8]}"
+
+    # A genuinely MISSING credential: the authority returns no verification
+    # secrets (empty list, no exception). This must fail closed to "" — and be
+    # kept distinct from a transient authority/DB outage, which raises
+    # TransientSecretResolutionError instead (so the delivery retries rather
+    # than dead-lettering as if the credential were absent).
+    async def _missing(tenant_id, provider, environment, slot_name):
+        return []
+
+    monkeypatch.setattr(
+        "services.providers.credentials.authority.credential_authority."
+        "get_verification_secrets",
+        _missing,
+    )
     # a secret_ref with no stored credential, and no inline secret → empty
     resolved = await resolve_signing_secret(
         tenant, {"config": {"secret_ref": "credref://rewards/tenant_webhook/live/webhook_signing_secret"}}
@@ -233,3 +247,35 @@ async def test_rotation_demotes_bound_capability(monkeypatch):
     )
     current = await authority.get_state(**coord)
     assert current["readiness_state"] == R.CREDENTIAL_SUPPLIED.value
+
+
+@pytest.mark.asyncio
+async def test_malformed_signing_key_cannot_be_activated(monkeypatch):
+    """N14: a malformed signing key must never become ACTIVE — activation runs
+    the key-derivation check inline and refuses an unprovable key."""
+    import pytest as _pytest
+
+    from services.providers.credentials.authority import credential_authority
+    from shared.common.common import ConflictError
+
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    # Not valid secp256k1 hex key material.
+    bad_key = "zzzz" * 16
+    pending = await credential_authority.create_pending(
+        tenant, "reward_signer", "sandbox", "evm_reward_signer_key", bad_key, created_by="admin"
+    )
+    with _pytest.raises(ConflictError):
+        await credential_authority.activate(
+            tenant, "reward_signer", "sandbox", "evm_reward_signer_key",
+            credential_version=int(pending["credential_version"]), actor="admin",
+        )
+    # A valid key still activates fine (regression guard).
+    good_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff81"
+    pending2 = await credential_authority.create_pending(
+        tenant, "reward_signer", "sandbox", "evm_reward_signer_key", good_key, created_by="admin"
+    )
+    activated = await credential_authority.activate(
+        tenant, "reward_signer", "sandbox", "evm_reward_signer_key",
+        credential_version=int(pending2["credential_version"]), actor="admin",
+    )
+    assert activated is not None

@@ -356,7 +356,18 @@ class CredentialAuthority:
         patch = {"last_tested_at": now, "last_test_result": result}
         if result in ("valid", "credential_present"):
             patch["last_successful_test_at"] = now
-        _failing = result in ("decrypt_failed", "unauthorized", "forbidden")
+        # Definitive failures mark a PENDING version TEST_FAILED so it can never
+        # be activated. This includes the key-derivation failures — a signing
+        # key that is malformed (``invalid_key_material``), for an unrecognized
+        # slot (``unsupported_key_slot``), unprovable because the crypto library
+        # is missing (``derivation_unavailable``), or empty — none of which is a
+        # usable signing key. (Transient live-probe outcomes such as timeouts /
+        # rate limits are intentionally NOT in this set, so they stay retryable
+        # rather than permanently failing the version.)
+        _failing = result in (
+            "decrypt_failed", "unauthorized", "forbidden", "empty",
+            "invalid_key_material", "unsupported_key_slot", "derivation_unavailable",
+        )
         if _failing and row.get("state") == CredentialState.PENDING:
             patch["state"] = CredentialState.TEST_FAILED
         await self._repo.update(row["id"], patch)
@@ -487,6 +498,30 @@ class CredentialAuthority:
             raise NotFoundError("provider_credential")
         if target.get("state") in (CredentialState.REVOKED, CredentialState.TOMBSTONED):
             raise ConflictError("cannot activate a revoked or deleted credential version")
+        if target.get("state") == CredentialState.TEST_FAILED:
+            raise ConflictError("cannot activate a credential version that failed validation")
+        # Signing keys: prove the material derives a usable key BEFORE it becomes
+        # the active signer — even if test_slot was never called. A malformed /
+        # unprovable private key must never go ACTIVE (proof generation would
+        # later crash and readiness would already have advanced). Valid keys pass
+        # this check transparently.
+        if slot.validation_strategy == "key_derivation_check":
+            try:
+                secret = self._decrypt_row(
+                    tenant_id, provider, environment, slot_name, target
+                )
+                derivation = self._derive_key_identity(slot_name, secret) if secret else "empty"
+            except Exception:  # noqa: BLE001 — treat any failure as unprovable
+                derivation = "invalid_key_material"
+            if derivation != "valid":
+                await self._repo.update(
+                    target["id"],
+                    {"state": CredentialState.TEST_FAILED, "last_test_result": derivation},
+                )
+                raise ConflictError(
+                    "cannot activate a signing key that fails key-derivation "
+                    f"validation ({derivation})"
+                )
 
         current = await self._repo.active_version(tenant_id, provider, environment, slot_name)
         current_version = int(current["credential_version"]) if current else None

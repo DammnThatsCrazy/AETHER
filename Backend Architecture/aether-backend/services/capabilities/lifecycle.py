@@ -422,6 +422,18 @@ class CapabilityLifecycleAuthority:
             state = R(row["readiness_state"])
             try:
                 if event == "activated" and state == R.CREDENTIAL_WAITING:
+                    # Advance to CREDENTIAL_SUPPLIED only when EVERY required
+                    # slot for the provider has an active credential. A provider
+                    # with several required slots (Coinbase / Bridge / MoonPay)
+                    # fires an `activated` event per slot; activating the first
+                    # must not falsely mark the capability credential_supplied
+                    # while other required slots are still empty. Same
+                    # server-side required-slot check promote() applies — this
+                    # separate event branch must not bypass it.
+                    if not await self._all_required_slots_active(
+                        tenant_id, provider, environment
+                    ):
+                        continue
                     outcomes.append(
                         await self._advance(
                             row,
@@ -502,6 +514,27 @@ class CapabilityLifecycleAuthority:
             raise IllegalTransitionError(
                 f"illegal lifecycle transition {current.value} -> {target.value}"
             )
+
+    async def _all_required_slots_active(
+        self, tenant_id: str, provider: str, environment: str
+    ) -> bool:
+        """True only when EVERY required slot for the provider has an active
+        credential. Fail-closed: no registered credential checker → False (we
+        cannot verify, so we do not advance). A provider with no required slots
+        trivially qualifies."""
+        required_slots = [
+            slot.slot_name for slot in slots_for(provider, environment) if slot.required
+        ]
+        if not required_slots:
+            return True
+        if self._credential_checker is None:
+            return False
+        for slot_name in required_slots:
+            if not await self._credential_checker(
+                tenant_id, provider, environment, slot_name
+            ):
+                return False
+        return True
 
     async def _revalidate_resume_preconditions(
         self,

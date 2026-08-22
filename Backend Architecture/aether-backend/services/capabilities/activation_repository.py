@@ -10,10 +10,12 @@ legality and precondition enforcement live in the lifecycle authority.
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Optional
 
 from repositories.repos import BaseRepository
+from shared.common.common import utc_now
 
 ACTIVATION_TABLE = "capability_activation_states"
 
@@ -63,24 +65,72 @@ class ActivationStateRepo(BaseRepository):
         return await self.find_many(filters={"superseded": False}, limit=limit)
 
     async def advance(self, prior: Optional[dict], new_row: dict) -> dict:
-        """Append the next state version, superseding ``prior``.
+        """Append the next state version, superseding ``prior`` — ATOMICALLY.
 
         Compare-and-set: refuses when ``prior`` is no longer the current row
         (a concurrent transition won), so histories stay linear.
+
+        The supersede and the insert happen in ONE database transaction, so a
+        process/connection interruption between them can never leave the
+        coordinate with zero current rows (which would make reads fall back to
+        ``credential_waiting`` and silently drop an effective suspended/live
+        state and its kill-switch projection). The partial-unique index
+        ``uq_capability_activation_states_current`` backstops the CAS: a lost
+        race can't insert a second non-superseded row for the coordinate.
         """
         coordinate = {
             k: new_row[k] for k in ("tenant_id", "provider", "environment", "capability")
         }
-        live = await self.current(**coordinate)
-        if (live or {}).get("id") != (prior or {}).get("id"):
-            raise ConcurrentTransitionError(
-                f"activation state for {coordinate} changed concurrently"
-            )
-        if prior is not None:
-            await self.update(prior["id"], {"superseded": True})
         row_id = f"cas_{uuid.uuid4().hex}"
-        stored = await self.insert(row_id, {**new_row, "superseded": False})
-        return stored
+        pool = await self._ensure_pool()
+
+        if pool is None:
+            # In-memory single-process store: no durability and no crash window
+            # between two dict writes, so the sequential CAS is sufficient.
+            live = await self.current(**coordinate)
+            if (live or {}).get("id") != (prior or {}).get("id"):
+                raise ConcurrentTransitionError(
+                    f"activation state for {coordinate} changed concurrently"
+                )
+            if prior is not None:
+                await self.update(prior["id"], {"superseded": True})
+            return await self.insert(row_id, {**new_row, "superseded": False})
+
+        await self._ensure_table()
+        now = utc_now().isoformat()
+        new_data = {
+            **new_row,
+            "superseded": False,
+            "id": row_id,
+            "created_at": now,
+            "updated_at": now,
+        }
+        tenant_id = new_data.get("tenant_id", "")
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                if prior is not None:
+                    # CAS: only supersede the prior row while it is still the
+                    # current (non-superseded) row. A racing transition that
+                    # already superseded it leaves 0 rows updated → abort.
+                    res = await conn.execute(
+                        f"UPDATE {self.table_name} "
+                        f"SET data = jsonb_set(data, '{{superseded}}', 'true'::jsonb), "
+                        f"    updated_at = NOW() "
+                        f"WHERE id = $1 AND (data->>'superseded') = 'false'",
+                        prior["id"],
+                    )
+                    if str(res).split()[-1] == "0":
+                        raise ConcurrentTransitionError(
+                            f"activation state for {coordinate} changed concurrently"
+                        )
+                # Insert the new current row. The partial-unique index rejects a
+                # second non-superseded row for the coordinate (lost race).
+                await conn.execute(
+                    f"INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at) "
+                    f"VALUES ($1, $2::jsonb, $3, NOW(), NOW())",
+                    row_id, json.dumps(new_data, default=str), tenant_id,
+                )
+        return new_data
 
 
 class ConcurrentTransitionError(RuntimeError):
