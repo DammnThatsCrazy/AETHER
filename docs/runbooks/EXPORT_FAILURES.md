@@ -13,7 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/export/routes.py
   - Backend Architecture/aether-backend/repositories/artifacts.py
   - Backend Architecture/aether-backend/services/security/export_governance.py
-last_synced_commit: "a500f1f"
+last_synced_commit: "75fd868e"
 ---
 
 # Runbook — Export Failures
