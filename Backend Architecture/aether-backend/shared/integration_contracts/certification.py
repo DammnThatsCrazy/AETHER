@@ -25,17 +25,23 @@ from shared.integration_contracts.manifest import ManifestReadiness
 class ProviderReadinessLevel(str, Enum):
     """UPR readiness tokens — values mirror ``CredentialReadiness`` exactly.
 
-    ``SCAFFOLDED`` marks an adapter that is only a descriptor; ``DEGRADED`` and
-    ``DISABLED`` are off-ramp states. The value strings MUST stay equal to
+    ``SCAFFOLDED`` marks an adapter that is only a descriptor; ``DEGRADED``,
+    ``SUSPENDED``, ``REVOKED`` and ``DISABLED`` are off-ramp states. The value
+    strings and member set MUST stay equal to
     ``shared.certification.readiness.CredentialReadiness`` (a test asserts this
-    parity).
+    parity) — including the P2 lifecycle additions ``CREDENTIAL_SUPPLIED`` /
+    ``CONNECTION_VALIDATED`` / ``SUSPENDED`` / ``REVOKED``.
     """
 
     REPLAY_VALIDATED = "replay_validated"
     CREDENTIAL_WAITING = "credential_waiting"
+    CREDENTIAL_SUPPLIED = "credential_supplied"
+    CONNECTION_VALIDATED = "connection_validated"
     SANDBOX_VALIDATED = "sandbox_validated"
     PARTNER_LIVE = "partner_live"
     DEGRADED = "degraded"
+    SUSPENDED = "suspended"
+    REVOKED = "revoked"
     DISABLED = "disabled"
     SCAFFOLDED = "scaffolded"
 
