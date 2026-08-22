@@ -289,6 +289,21 @@ class CommerceStore:
     async def list_authorizations(self, tenant_id: str) -> list[PaymentAuthorization]:
         return await self.authorizations.list(tenant_id)
 
+    async def get_authorization_by_payment_identifier(
+        self, tenant_id: str, payment_identifier: str
+    ) -> Optional[PaymentAuthorization]:
+        """Return the tenant's existing authorization for a payment_identifier.
+
+        payment_identifier is the flow's idempotency key and is unique-indexed
+        per tenant, so this backs an idempotent authorize retry: a re-issued
+        authorization request returns the original instead of colliding with
+        the unique constraint.
+        """
+        for a in await self.authorizations.list(tenant_id):
+            if a.payment_identifier == payment_identifier:
+                return a
+        return None
+
     async def put_receipt(self, r: PaymentReceipt) -> PaymentReceipt:
         return await self.receipts.put(r.tenant_id, r)
 

@@ -83,18 +83,28 @@ def declared_slots() -> dict[str, tuple[dict, ...]]:
     return slots
 
 
-def rpc_provider_for_chain(chain: str, environment: str) -> str | None:
-    """Resolve the RPC provider id for a chain + environment.
+# Reverse map: the exact CAIP-2 chain string an authorization names → the RPC
+# provider that actually talks to THAT network. Derived from RPC_PROVIDERS so
+# the two never drift.
+_CHAIN_TO_PROVIDER: dict[str, str] = {
+    meta["chain"]: provider for provider, meta in RPC_PROVIDERS.items()
+}
 
-    sandbox → testnet providers (base-sepolia / solana-devnet) where they
-    exist; live → mainnet providers.
+
+def rpc_provider_for_chain(chain: str, environment: str | None = None) -> str | None:
+    """Resolve the RPC provider id for the chain an authorization NAMES.
+
+    The provider is chosen from the explicit CAIP-2 chain identifier, NOT the
+    credential environment. Choosing by environment alone (sandbox → testnet)
+    silently pointed a sandbox authorization that still named ``eip155:8453``
+    (Base *mainnet*) at a Base *Sepolia* RPC, so verification looked for a
+    mainnet transaction + mainnet USDC contract on a testnet endpoint and could
+    never confirm. The chain string already identifies the network, so it — and
+    only it — selects the provider. ``environment`` is retained for call-site
+    compatibility and is used elsewhere to select the credential *version*, but
+    it never overrides the chain here. Unknown chain → ``None`` (fail-closed).
     """
-    sandbox = environment == "sandbox"
-    if chain.startswith("eip155:"):
-        return "rpc_evm_base_sepolia" if sandbox else "rpc_evm_base"
-    if chain.startswith("solana:"):
-        return "rpc_svm_devnet" if sandbox else "rpc_svm_mainnet"
-    return None
+    return _CHAIN_TO_PROVIDER.get(chain)
 
 
 __all__ = [

@@ -100,8 +100,9 @@ class FacilitatorRegistry:
         tenant_id: str,
         asset_symbol: str,
         chain: str,
+        environment: Optional[str] = None,
     ) -> Optional[Facilitator]:
-        """Select best facilitator for an asset/chain pair. Prefers healthiest.
+        """Select best facilitator for an asset/chain(/environment). Prefers healthiest.
 
         Health is a derived signal — verification outcomes feed update_health;
         there is no standalone prober — so a freshly seeded facilitator is
@@ -115,6 +116,12 @@ class FacilitatorRegistry:
         verification on every payment. Non-local selection is restricted to
         external facilitators; with none configured, verification falls to the
         on-chain RPC verifier.
+
+        When ``environment`` is supplied it MUST appear in the facilitator's
+        ``supported_environments``: a live authorization may never route through
+        a sandbox-only facilitator (the default for every facilitator that does
+        not override the field), nor a sandbox authorization through a live-only
+        one. The caller resolves the environment server-side before routing.
         """
         health_rank = {"healthy": 0, "unknown": 1, "degraded": 2}
         facilitators = await self.list(tenant_id)
@@ -125,6 +132,7 @@ class FacilitatorRegistry:
             and chain in f.supported_chains
             and f.health_status != "down"
             and (local_env or f.mode != FacilitatorMode.LOCAL)
+            and (environment is None or environment in (f.supported_environments or []))
         ]
         if not candidates:
             return None

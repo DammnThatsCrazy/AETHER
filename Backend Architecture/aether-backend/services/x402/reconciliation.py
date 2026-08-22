@@ -47,30 +47,46 @@ class X402ReconciliationWorker:
             self._cursor_repo_instance = BaseRepository(CURSOR_TABLE)
         return self._cursor_repo_instance
 
-    async def _capability_suspended(self, tenant_id: str) -> bool:
-        """Kill switch: skip a tenant whose x402 capability is SUSPENDED."""
+    async def _capability_suspended(self, tenant_id: str, environment: str) -> bool:
+        """Kill switch, scoped to ONE settlement environment.
+
+        Each settlement carries its own environment, so suspending sandbox must
+        not halt live reconciliation (or vice versa). Only the matching
+        environment's lifecycle state gates a settlement.
+        """
         try:
             from services.capabilities.lifecycle import get_lifecycle_authority
 
-            for env in ("live", "sandbox"):
-                state = await get_lifecycle_authority().get_state(
-                    tenant_id, "x402", env, "commerce"
-                )
-                if state and state.get("readiness_state") in ("suspended", "disabled"):
-                    return True
+            state = await get_lifecycle_authority().get_state(
+                tenant_id, "x402", environment, "commerce"
+            )
+            if state and state.get("readiness_state") in ("suspended", "disabled"):
+                return True
         except Exception:  # noqa: BLE001
             pass
         return False
 
     async def reconcile_tenant(self, tenant_id: str) -> dict:
-        """Reconcile all PENDING settlements for one tenant."""
-        if await self._capability_suspended(tenant_id):
-            metrics.increment("x402_reconciliation_skipped", labels={"reason": "suspended"})
-            return {"tenant_id": tenant_id, "skipped": "suspended"}
+        """Reconcile all PENDING settlements for one tenant.
 
+        The kill switch is evaluated per settlement ENVIRONMENT: a settlement in
+        a suspended environment is skipped, while settlements in a still-active
+        environment continue to reconcile in the same pass.
+        """
         pending = await self._store.list_settlements(tenant_id, state=SettlementState.PENDING)
-        settled = failed = still_pending = 0
+        settled = failed = still_pending = skipped = 0
+        suspended_by_env: dict[str, bool] = {}
         for s in pending:
+            env = getattr(s, "environment", None) or "sandbox"
+            if env not in suspended_by_env:
+                suspended_by_env[env] = await self._capability_suspended(tenant_id, env)
+            if suspended_by_env[env]:
+                skipped += 1
+                metrics.increment(
+                    "x402_reconciliation_skipped",
+                    labels={"reason": "suspended", "environment": env},
+                )
+                continue
             receipt = await self._store.get_receipt(tenant_id, s.receipt_id)
             authorization = await self._store.get_authorization(
                 tenant_id, receipt.authorization_id
@@ -82,18 +98,29 @@ class X402ReconciliationWorker:
             if verified:
                 await self._tracker.mark_settled_reconciled(tenant_id, s.settlement_id)
                 settled += 1
-            elif error and error.startswith(("reverted", "amount_below_required", "payer_mismatch")):
-                await self._tracker.fail(tenant_id, s.settlement_id, error)
-                failed += 1
             else:
-                # verification_unavailable / not_finalized → leave PENDING
-                still_pending += 1
+                # Reserve PENDING for RETRYABLE verdicts only (not_finalized /
+                # verification_unavailable — a later tick can still confirm).
+                # EVERY other verdict is terminal (reverted, payer_mismatch,
+                # amount_below_required, no_matching_transfer, malformed,
+                # unsupported asset/contract, …): the transaction's logs can
+                # never later acquire a matching transfer, so leaving it PENDING
+                # loops forever. Use the verification engine's terminal-verdict
+                # classification rather than a hand-listed prefix set.
+                from .verification import is_terminal_verdict
+
+                verdict_token = (error or "").split(":", 1)[0].split()[0] if error else ""
+                if verdict_token and is_terminal_verdict(verdict_token):
+                    await self._tracker.fail(tenant_id, s.settlement_id, error)
+                    failed += 1
+                else:
+                    still_pending += 1
 
         await self._write_cursor(tenant_id, settled, failed, still_pending)
         metrics.observe("x402_reconciliation_lag", float(still_pending), labels={"tenant_id": tenant_id})
         return {
             "tenant_id": tenant_id, "settled": settled,
-            "failed": failed, "still_pending": still_pending,
+            "failed": failed, "still_pending": still_pending, "skipped": skipped,
         }
 
     async def _write_cursor(self, tenant_id: str, settled: int, failed: int, pending: int) -> None:

@@ -524,3 +524,97 @@ async def test_verify_solana_scans_all_candidate_instructions_for_batched_paymen
     verified, error = await engine._verify_solana(auth, "5" + "1" * 60)
     assert verified is True
     assert error is None
+
+
+def test_rpc_provider_resolved_by_chain_not_environment():
+    """r812: the RPC provider is chosen from the explicit chain identifier, not
+    the credential environment. A sandbox authorization that still names Base
+    *mainnet* must resolve the mainnet provider (so verification hits mainnet
+    USDC on a mainnet RPC), never Base Sepolia."""
+    from services.x402.credential_slots import rpc_provider_for_chain
+
+    # Chain string wins regardless of environment.
+    assert rpc_provider_for_chain("eip155:8453", "sandbox") == "rpc_evm_base"
+    assert rpc_provider_for_chain("eip155:8453", "live") == "rpc_evm_base"
+    assert rpc_provider_for_chain("eip155:84532", "live") == "rpc_evm_base_sepolia"
+    assert rpc_provider_for_chain("eip155:84532", "sandbox") == "rpc_evm_base_sepolia"
+    assert rpc_provider_for_chain("solana:mainnet", "sandbox") == "rpc_svm_mainnet"
+    assert rpc_provider_for_chain("solana:devnet", "live") == "rpc_svm_devnet"
+    # Unknown chain → fail-closed None.
+    assert rpc_provider_for_chain("eip155:999999", "live") is None
+    # environment is optional.
+    assert rpc_provider_for_chain("eip155:8453") == "rpc_evm_base"
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_per_env_skip_and_terminal_verdict_fail(monkeypatch):
+    """r795 + N12: the reconciliation kill switch is per settlement environment
+    (suspending sandbox must not halt live), and a terminal verdict fails the
+    settlement instead of leaving it PENDING forever."""
+    from services.x402.reconciliation import X402ReconciliationWorker
+
+    class _S:  # minimal settlement stub
+        def __init__(self, sid, env, tx):
+            self.settlement_id = sid
+            self.environment = env
+            self.receipt_id = f"rc-{sid}"
+            self.tx_hash = tx
+
+    class _Auth:
+        authorization_id = "a1"
+
+    sandbox_s = _S("s-sandbox", "sandbox", "0x1")
+    live_terminal = _S("s-live-term", "live", "0x2")
+    live_retryable = _S("s-live-retry", "live", "0x3")
+
+    worker = X402ReconciliationWorker()
+
+    class _Store:
+        async def list_settlements(self, tenant_id, state=None):
+            return [sandbox_s, live_terminal, live_retryable]
+
+        async def get_receipt(self, tenant_id, rid):
+            return type("R", (), {"authorization_id": "a1"})()
+
+        async def get_authorization(self, tenant_id, aid):
+            return _Auth()
+
+    verdicts = {
+        "0x2": (False, "no_matching_transfer: no transfer to recipient"),  # terminal
+        "0x3": (False, "not_finalized: 1/2 confirmations"),                # retryable
+    }
+
+    class _Verify:
+        async def _verify_locally(self, auth, tx):
+            return verdicts[tx]
+
+    failed_ids = []
+    settled_ids = []
+
+    class _Tracker:
+        async def fail(self, tenant_id, sid, err):
+            failed_ids.append(sid)
+
+        async def mark_settled_reconciled(self, tenant_id, sid):
+            settled_ids.append(sid)
+
+    worker._store = _Store()
+    worker._verify = _Verify()
+    worker._tracker = _Tracker()
+
+    async def _susp(tenant_id, environment):
+        return environment == "sandbox"  # only sandbox suspended
+
+    monkeypatch.setattr(worker, "_capability_suspended", _susp)
+    monkeypatch.setattr(worker, "_write_cursor", lambda *a, **k: _noop())
+
+    result = await worker.reconcile_tenant("t_recon")
+
+    assert result["skipped"] == 1          # sandbox settlement skipped
+    assert live_terminal.settlement_id in failed_ids  # terminal verdict → failed
+    assert result["failed"] == 1
+    assert result["still_pending"] == 1    # retryable live settlement stays pending
+
+
+async def _noop():
+    return None

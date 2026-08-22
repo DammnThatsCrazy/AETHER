@@ -329,15 +329,35 @@ class X402ControlPlane:
         if not requirement:
             raise ControlPlaneError("Challenge not found", "CHALLENGE_NOT_FOUND", 404)
 
+        # Idempotent authorize: payment_identifier is the flow's idempotency key
+        # and is unique-indexed per tenant. A re-issued authorization request
+        # (e.g. after a client timeout) returns the ORIGINAL authorization
+        # instead of constructing a fresh one that trips the unique constraint
+        # and surfaces a raw database error.
+        existing_auth = await self._store.get_authorization_by_payment_identifier(
+            tenant_id, requirement.payment_identifier
+        )
+        if existing_auth is not None:
+            logger.info(
+                f"idempotent authorize replay: payment_identifier="
+                f"{requirement.payment_identifier}"
+            )
+            return existing_auth
+
+        # Resolve the environment server-side BEFORE routing so a live
+        # authorization can never select a sandbox-only facilitator (or vice
+        # versa) — supported_environments is enforced during selection.
+        environment = await self._resolve_environment(tenant_id)
         facilitator = await self._facilitators.select_for(
-            tenant_id, requirement.asset_symbol, requirement.chain
+            tenant_id, requirement.asset_symbol, requirement.chain, environment
         )
         if not facilitator:
             raise ControlPlaneError(
-                "No facilitator for asset/chain", "FACILITATOR_UNAVAILABLE", 503
+                "No facilitator for asset/chain/environment",
+                "FACILITATOR_UNAVAILABLE",
+                503,
             )
 
-        environment = await self._resolve_environment(tenant_id)
         auth = PaymentAuthorization(
             tenant_id=tenant_id,
             challenge_id=approval.challenge_id,
