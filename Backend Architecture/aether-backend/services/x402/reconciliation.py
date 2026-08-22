@@ -97,6 +97,19 @@ class X402ReconciliationWorker:
             verified, error = await self._verify._verify_locally(authorization, s.tx_hash)
             if verified:
                 await self._tracker.mark_settled_reconciled(tenant_id, s.settlement_id)
+                # Finality is now confirmed → mint the entitlement that
+                # verify_and_settle deferred for this PENDING settlement.
+                try:
+                    from services.x402.control_plane import get_control_plane
+
+                    await get_control_plane().finalize_settlement_entitlement(
+                        tenant_id, s.settlement_id
+                    )
+                except Exception:  # noqa: BLE001 — settlement still advanced; retried next tick
+                    logger.warning(
+                        "entitlement finalize failed for settlement %s",
+                        s.settlement_id, exc_info=True,
+                    )
                 settled += 1
             else:
                 # Reserve PENDING for RETRYABLE verdicts only (not_finalized /

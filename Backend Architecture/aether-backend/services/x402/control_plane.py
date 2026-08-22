@@ -22,6 +22,7 @@ from .commerce_models import (
     ApprovalPriority,
     ApprovalRequest,
     ApprovalStatus,
+    Entitlement,
     EntitlementStatus,
     Fulfillment,
     LifecycleTrace,
@@ -29,6 +30,8 @@ from .commerce_models import (
     PaymentRequirement,
     PolicyOutcome,
     PreflightResult,
+    Settlement,
+    SettlementState,
 )
 from .commerce_store import get_commerce_store
 from .economic_mutations import EconomicGraphMutations
@@ -445,7 +448,46 @@ class X402ControlPlane:
         settlement = await self._settle.start(tenant_id, receipt, auth.facilitator_id)
         await self._mutations.write_receipt_and_settlement(receipt, settlement)
 
-        # Mint entitlement
+        # Mint the entitlement ONLY once the settlement is SETTLED — i.e. on-chain
+        # finality is confirmed. Outside local/test _settle.start parks the
+        # settlement in PENDING pending reconciliation; granting an ACTIVE
+        # entitlement then would confer access before finality, and a later
+        # reconciliation failure would leave that access unrevoked. When the
+        # reconciliation worker advances the settlement to SETTLED it calls
+        # finalize_settlement_entitlement() to mint it.
+        entitlement = None
+        if settlement.state == SettlementState.SETTLED:
+            entitlement = await self._mint_entitlement_for_settlement(
+                tenant_id, auth, settlement
+            )
+
+        result = {
+            "verified": True,
+            "receipt_id": receipt.receipt_id,
+            "settlement_id": settlement.settlement_id,
+            "settlement_state": settlement.state.value,
+            "entitlement_id": entitlement.entitlement_id if entitlement else None,
+            "expires_at": entitlement.expires_at if entitlement else None,
+        }
+        # Cache only a terminal (SETTLED) result. A PENDING settlement is not yet
+        # final — reconciliation will settle it and mint the entitlement — so
+        # caching now would pin a permanent "no entitlement" replay.
+        if settlement.state == SettlementState.SETTLED:
+            await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+        return result
+
+    async def _mint_entitlement_for_settlement(
+        self, tenant_id: str, auth: PaymentAuthorization, settlement: Settlement
+    ) -> Entitlement:
+        """Mint (idempotently) the entitlement for a SETTLED settlement.
+
+        Idempotent by settlement id: if an entitlement already exists for the
+        settlement (e.g. verify_and_settle and reconciliation both reaching a
+        settled state), the existing one is returned rather than minting a
+        duplicate."""
+        for e in await self._store.list_entitlements(tenant_id):
+            if getattr(e, "settlement_id", None) == settlement.settlement_id:
+                return e
         approval = await self._approvals.get(tenant_id, auth.approval_id)
         requirement = await self._store.get_requirement(tenant_id, auth.challenge_id)
         entitlement = await self._entitlements.mint(
@@ -456,17 +498,28 @@ class X402ControlPlane:
             settlement=settlement,
         )
         await self._mutations.write_entitlement(entitlement)
+        return entitlement
 
-        result = {
-            "verified": True,
-            "receipt_id": receipt.receipt_id,
-            "settlement_id": settlement.settlement_id,
-            "settlement_state": settlement.state.value,
-            "entitlement_id": entitlement.entitlement_id,
-            "expires_at": entitlement.expires_at,
-        }
-        await self._idempotency.record(tenant_id, auth.payment_identifier, result)
-        return result
+    async def finalize_settlement_entitlement(
+        self, tenant_id: str, settlement_id: str
+    ) -> Optional[Entitlement]:
+        """Mint the deferred entitlement once a settlement reaches SETTLED.
+
+        Called by the reconciliation worker after it confirms on-chain finality
+        and advances a PENDING settlement to SETTLED. No-op (returns None) if the
+        settlement is not SETTLED or its authorization can't be resolved."""
+        settlement = await self._store.get_settlement(tenant_id, settlement_id)
+        if settlement is None or settlement.state != SettlementState.SETTLED:
+            return None
+        receipt = await self._store.get_receipt(tenant_id, settlement.receipt_id)
+        auth = (
+            await self._store.get_authorization(tenant_id, receipt.authorization_id)
+            if receipt
+            else None
+        )
+        if auth is None:
+            return None
+        return await self._mint_entitlement_for_settlement(tenant_id, auth, settlement)
 
     async def grant_access(
         self,
