@@ -36,7 +36,11 @@ describe('Kyber Intelligence Quality page', () => {
   it('renders overview, tenants, drift, and contamination views', async () => {
     render(<MemoryRouter><IntelligenceQualityPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Intelligence Quality')).toBeInTheDocument());
-    expect(screen.getByText('Overall quality')).toBeInTheDocument();
+    // 'Intelligence Quality' is the page header and renders immediately, above the
+    // loading skeleton — waiting on it alone resolves before the async data query
+    // does, so the data assertions below race the load and flake under parallel
+    // test load. Gate on a data-dependent element instead.
+    await waitFor(() => expect(screen.getByText('Overall quality')).toBeInTheDocument());
     expect(screen.getByText('Open drift events')).toBeInTheDocument();
     expect(screen.getByText('Tenants')).toBeInTheDocument();
     expect(screen.getByText('Drift Events')).toBeInTheDocument();

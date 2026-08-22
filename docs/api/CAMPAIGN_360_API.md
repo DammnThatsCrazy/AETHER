@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
-last_synced_commit: "9682617"
+last_synced_commit: "d7dc6d8"
 ---
 
 # Campaign 360 API Reference
@@ -105,12 +105,14 @@ economics, and data quality indicators.
   "data_quality": {
     "connector_freshness": "ok | warn | error | unknown",
     "attribution_run_freshness": "fresh | stale | error",
-    "projection_lag_hours": null,
-    "reconciliation_status": "ok | warn | error",
-    "completeness_pct": null
+    "projection_lag_hours": "number (hours since newest touchpoint watermark) | null",
+    "reconciliation_status": "unknown | inconsistent",
+    "completeness_pct": "number 0–100 | null"
   }
 }
 ```
+
+> **`data_quality` computed fields.** `projection_lag_hours` is `now − max(touchpoint.occurred_at)` in hours (the pipeline-freshness watermark); `completeness_pct` is `observed distinct entities ÷ connector-reported reach × 100`, capped at 100. Both are `null` — never a fabricated `0` — when their inputs are absent (no touchpoints, or no connector-reported reach), and `reconciliation_status` stays `unknown` until a reconciliation signal exists.
 
 **Errors:**
 - `404` — campaign not found or belongs to another tenant

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from shared.common.common import APIResponse, NotFoundError, BadRequestError
 from shared.logger.logger import get_logger
 from services.security.request_context import require_kyber_operator
-from services.measurement.repositories.connector_repo import ConnectorRepository
+from services.measurement.repositories.measurement_connector_repo import MeasurementConnectorRepository
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
@@ -33,7 +33,7 @@ router = APIRouter(
     dependencies=[Depends(require_kyber_operator)],
 )
 
-_connector_repo = ConnectorRepository()
+_connector_repo = MeasurementConnectorRepository()
 _conversion_repo = ConversionRepository()
 _run_repo = AttributionRunRepository()
 _journey_repo = JourneyRepository()

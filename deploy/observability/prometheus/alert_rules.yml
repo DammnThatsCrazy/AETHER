@@ -760,3 +760,74 @@ groups:
         annotations:
           summary: "Provider poll health degraded for {{ $labels.provider }}"
           description: "Provider {{ $labels.provider }} poll health has been non-ok for >30m."
+
+      # ── Derived / growth conditions (complement the absolute-threshold rules
+      # above). These are the genuinely-missing signals: reconciliation conflict,
+      # canonical-backlog GROWTH (vs the absolute 100 ceiling), and outbox delivery
+      # stalling. NOTE: these fire on the per-transition COUNTER
+      # (payment_rail_sync_transitioned_total{state=...}); the durable conflict/stale
+      # BACKLOG (how many sessions are conflicted right now) has no gauge, so it is
+      # additionally evaluated in-process by
+      # services/integrations/providers/payment_rails/alert_eval.py, which reads the
+      # reconciliation records directly. No secrets appear here — labels carry only
+      # provider/state tokens.
+
+      # A funding session whose SDK-observed truth disagreed with provider truth
+      # crossed into `conflict` during reconciliation. Any conflict is a financial-
+      # integrity discrepancy worth an operator's eyes, so the threshold is >0 over
+      # a 1h window (the sync worker sweeps every ~15m, so 1h catches ≥3 sweeps).
+      - alert: PaymentRailReconciliationConflict
+        expr: increase(payment_rail_sync_transitioned_total{state="conflict"}[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Payment reconciliation conflict detected"
+          description: "{{ $value }} funding session(s) transitioned to `conflict` in the last hour — SDK-observed vs provider truth disagree. Inspect the reconciliation discrepancies."
+
+      # SDK-only funding sessions that no provider ever confirmed within the
+      # staleness window are aging into `stale`. A handful is normal churn; a surge
+      # (>10/h) can mean a provider is silently dropping traffic or a webhook
+      # endpoint is misrouted. Info severity — investigate, not page.
+      - alert: PaymentRailReconciliationStaleSurge
+        expr: increase(payment_rail_sync_transitioned_total{state="stale"}[1h]) > 10
+        for: 15m
+        labels:
+          severity: info
+          plane: payment_rails
+        annotations:
+          summary: "Surge of stale (unconfirmed) payment reconciliations"
+          description: "{{ $value }} session(s) aged into `stale` in the last hour — provider confirmations may be missing."
+
+      # The absolute-ceiling rule (PaymentRailCanonicalBacklog > 100) misses a
+      # backlog that is climbing steadily but still under 100. deriv() over 30m
+      # catches a sustained positive slope early, before the ceiling is hit —
+      # emission/outbox delivery is falling behind faster than it drains.
+      - alert: PaymentRailCanonicalBacklogGrowth
+        expr: deriv(payment_rail_canonical_backlog[30m]) > 0
+        for: 30m
+        labels:
+          severity: warning
+          plane: payment_rails
+        annotations:
+          summary: "Payment canonical-delivery backlog is steadily growing"
+          description: "Incomplete-receipt backlog slope is positive over 30m ({{ $value }}/s) — delivery is falling behind even below the absolute alarm threshold."
+
+      # Payment canonical events flow onto the shared transactional outbox spine
+      # (ingest_many → event_outbox → the outbox relay). If the relay is CLAIMING
+      # rows but PUBLISHING none, delivery is stalled and canonical payment events
+      # never reach the bus. Rows claimed with zero published over 15m is the
+      # unambiguous stall signature (a healthy relay always publishes what it
+      # claims). Critical — payment events are stuck undelivered.
+      - alert: PaymentRailOutboxDeliveryStalling
+        expr: >
+          rate(ingestion_outbox_relay_claimed_total[15m]) > 0
+          and rate(ingestion_outbox_relay_published_total[15m]) == 0
+        for: 15m
+        labels:
+          severity: critical
+          plane: payment_rails
+        annotations:
+          summary: "Payment outbox relay claiming rows but publishing none"
+          description: "The transactional outbox relay has claimed rows without publishing any for 15m — canonical payment event delivery is stalled."

@@ -220,6 +220,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_payment_canonical_repair_coro()
 
+    def _payment_alert_eval() -> Coroutine[Any, Any, None]:
+        from services.integrations.providers.payment_rails.alert_worker import (
+            build_payment_alert_eval_coro,
+        )
+
+        return build_payment_alert_eval_coro()
+
     def _bronze_object_compaction() -> Coroutine[Any, Any, None]:
         from services.storage_lifecycle.worker import build_bronze_compaction_coro
 
@@ -387,6 +394,22 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             enabled=lambda: bool(
                 settings.payment_rails.enabled
                 and settings.payment_rails.canonical_repair_enabled
+            ),
+        ),
+        # Derived-condition alert evaluator: runs alert_eval.py on a timer so the
+        # payment-rail conditions with no single-series PromQL form
+        # (reconciliation-conflict backlog, backlog growth, outbox stalling,
+        # provider silence) actually fire instead of being present-but-inert.
+        # Gated on the payment-rails master flag AND its own eval flag (default
+        # off) so it never runs when the plane is off or the operator has not
+        # opted in. Not required=True: a stalled evaluator degrades alerting, it
+        # must not abort startup.
+        WorkerSpec(
+            name="payment_alert_eval",
+            factory=_payment_alert_eval,
+            enabled=lambda: bool(
+                settings.payment_rails.enabled
+                and settings.payment_rails.alert_eval_enabled
             ),
         ),
         # Object-backed Bronze compaction (FT-8): packs cold Bronze payloads

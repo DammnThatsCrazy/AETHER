@@ -14,7 +14,7 @@ source_files:
   - packages/web/src/core/event-queue.ts
   - packages/web/src/health/sdk-health-agent.ts
   - docs/source-of-truth/PLATFORM_PARITY.md
-last_synced_commit: "3283497"
+last_synced_commit: "d7dc6d8"
 ---
 
 # Aether SDK Production Readiness Audit
@@ -54,7 +54,7 @@ their respective platforms.
 | Performance event type | SHIPPED | PerformanceModule emits `performance` canonical type |
 | Journey lifecycle API | SHIPPED | All 7 journey events + `getCurrentJourney()` |
 | Identity hydration/reset | SHIPPED | `hydrateIdentity()`, `reset()`, anonymous ID |
-| Consent pre-send enforcement | SHIPPED | EventQueue `CONSENT_MAP` + `setConsent()` |
+| Consent pre-send enforcement | SHIPPED | EventQueue registry-derived consent map + `setConsent()` |
 | Health heartbeat (fleet) | SHIPPED | `SDKHealthAgent` with signed payload |
 | Durable offline queue | SHIPPED | localStorage-backed persistence (max 1000) |
 | Agent emitters (19 granular) | SHIPPED | `aether.agent.*` namespace |
@@ -135,7 +135,7 @@ their respective platforms.
 | `EventType` union (all 95 types) | SHIPPED | `events.ts` |
 | `EVENT_FAMILY` record (complete) | SHIPPED | `events.ts` |
 | `EVENT_CONSENT_PURPOSE` record (complete) | SHIPPED | `events.ts` |
-| `CONSENT_PURPOSES` (5 canonical) | SHIPPED | `consent.ts` |
+| `CONSENT_PURPOSES` (6 canonical) | SHIPPED | `consent.ts` |
 | `BaseEvent` / `BatchPayload` interfaces | SHIPPED | `events.ts` |
 
 ---
@@ -245,7 +245,7 @@ Source: `docs/source-of-truth/PLATFORM_PARITY.md` (annotated with this PR's chan
 ### 3.7 Consent Pre-Send Enforcement
 
 **Evidence:**
-- `packages/web/src/core/event-queue.ts`: `CONSENT_MAP` + `setConsent()` + `allowedByConsent()` in flush
+- `packages/web/src/core/event-queue.ts`: registry-derived consent map (from `generated-consent-map`) + `setConsent()` + `allowedByConsent()` in flush
 - `EVENT_CONSENT_PURPOSE` in `packages/shared/events.ts` is the canonical source
 
 **Test:**
@@ -452,7 +452,7 @@ Advisory items (no blocking impact):
 | `packages/shared/consent.ts` | `CONSENT_PURPOSES`, `ConsentState`, `ConsentPurpose` |
 | `packages/shared/sdk-version.ts` | `SDK_VERSION`, `SDK_INGESTION_PATH` |
 | `packages/web/src/index.ts` | Main Web SDK class, all public methods including new `error()` |
-| `packages/web/src/core/event-queue.ts` | `EventQueue`, `CONSENT_MAP`, flush/retry/persistence logic |
+| `packages/web/src/core/event-queue.ts` | `EventQueue`, registry-derived consent map, flush/retry/persistence logic |
 | `packages/web/src/health/sdk-health-agent.ts` | Fleet health heartbeat agent |
 | `docs/source-of-truth/PLATFORM_PARITY.md` | Tier A/B/C parity matrix |
 | `packages/shared/journey-events.test.ts` | Journey event contract tests (pre-existing) |

@@ -194,3 +194,38 @@ where legally permitted. Click tokens carry no raw PII.
 
 **Enforcement.** `tests/unit/comms/test_comms_mailbox.py::TestPrivacy` +
 `tests/unit/comms/test_comms_projector.py::TestNoRawPII`.
+
+---
+
+## ADR-C11 — Modular multi-provider platform
+
+**Decision.** Communications runs as a genuinely modular, multi-provider
+platform. Each comms provider (Klaviyo, SendGrid, Postmark, Customer.io,
+Mailchimp) is a plain `BaseConnector` subclass that declares `comms.*`
+`manifest_data_outputs` and normalizes provider payloads to the canonical
+`NormalizedEvent` contract at the adapter boundary. The connector catalog
+auto-derives the `ProviderManifest` and comms membership from those
+`data_outputs` (`shared/integration_contracts/catalog.py::build_connector_manifests`),
+so new adapters are detected without per-adapter manifest wiring. Ordinary
+downstream paths — Bronze→Silver ingest, identity bridge, suppression,
+metering, cursor, sync-run ledger, campaign/projector/classification — never
+branch on provider name.
+
+Credentials for every comms provider are typed slots resolved through the
+CredentialAuthority (never JSONB config, never logged, decrypted only at
+adapter call sites). Webhook tenant ownership is resolved server-side through
+durable endpoint identifiers, never an `X-Aether-Tenant-ID` header. Readiness
+is reported honestly: code-complete without an externally verified credential
+is `credential_waiting`; no higher state is claimed without external evidence.
+
+HubSpot Marketing Hub, Iterable, and Braze are explicit, sequenced follow-ups
+(see `docs/comms/COMMS_FOLLOW_UP_ROADMAP.md`), not part of the first branded
+cohort.
+
+**Enforcement.** Per-provider adapter conformance tests in
+`tests/unit/comms/` (webhook signature, event map→canonical, pull/cursor,
+suppression mapping); `grep` gates for `provider == "klaviyo"` /
+`or "klaviyo"` / `COMMS_CONNECTOR_TYPE` outside adapter code; the webhook
+route's server-side tenant-resolution test; and the generated
+`docs/_generated/adapter-certification-matrix.json` listing all five comms
+providers with truthful readiness.

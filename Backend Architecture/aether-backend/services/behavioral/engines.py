@@ -51,7 +51,15 @@ def _parse_event_time(event: dict) -> Optional[datetime]:
 
     Returns None when the timestamp is absent or not a valid instant, so callers
     can window by real event-time (comparing datetimes) instead of by list
-    position or lexical string ordering."""
+    position or lexical string ordering.
+
+    Deliberately NOT delegated to ``shared.common.common.parse_event_time``:
+    that helper mirrors ``BaseEvent.validate_timestamp`` and ACCEPTS a naive
+    (timezone-less) ISO string by assuming UTC, whereas ``parse_instant_strict``
+    below REJECTS naive values outright (``timestamp_naive``) per the Temporal
+    Integrity kernel's platform invariant (see ``shared/temporal/instant.py``).
+    Swapping in the shared helper would silently loosen that rejection, so the
+    two parsers are intentionally kept separate."""
     raw = event.get("created_at", "")
     if not raw:
         return None
@@ -215,7 +223,9 @@ async def compute_identity_delta(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Detect identity confidence changes based on evidence."""
-    identity_records = await silver_identity.get_entity(entity_id, "wallet")
+    identity_records = await silver_identity.get_entity(
+        entity_id, "wallet", tenant_id=tenant_id
+    )
     if not identity_records:
         return None
 
@@ -364,7 +374,7 @@ async def compute_source_shadow(
     """Distinguish behavior absence from source/observation silence."""
     domain_recency: dict[str, str] = {}
     for domain_name, repo in [("identity", silver_identity), ("onchain", silver_onchain), ("social", silver_social)]:
-        records = await repo.get_entity(entity_id, "wallet")
+        records = await repo.get_entity(entity_id, "wallet", tenant_id=tenant_id)
         if records:
             latest = max(records, key=lambda r: r.get("updated_at", ""))
             domain_recency[domain_name] = latest.get("updated_at", "")

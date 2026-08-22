@@ -652,6 +652,18 @@ class AlertRepository(BaseRepository):
         super().__init__("alerts")
 
 
+class EnterpriseInquiryRepository(BaseRepository):
+    """Enterprise contact inquiries (pre-sales lead data).
+
+    Deliberately NOT tenant-scoped: a prospect may not yet hold a tenant, and
+    the row is the durable record of an inbound sales inquiry. It is excluded
+    from TENANT_SCOPED_REPOSITORY_REGISTRY (services/account_lifecycle/
+    storage_registry.py) so the account-erasure workflow never deletes it.
+    """
+    def __init__(self) -> None:
+        super().__init__("enterprise_inquiries")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ADMIN REPOSITORY (DynamoDB-backed)
 # ═══════════════════════════════════════════════════════════════════════════

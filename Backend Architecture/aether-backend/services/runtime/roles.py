@@ -149,10 +149,14 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "semantic-worker": frozenset(),
     # x402_settlement_reconciliation projects verified on-chain finality into
     # settlement state — a materialization, like the payment-rail sync/repair
-    # loops that already ride this role.
+    # loops that already ride this role. payment_alert_eval is the payment-rails
+    # derived-condition alert evaluator; it rides materializer with the rest of
+    # the payment-rails family (same payment_rails.enabled gate) so the whole
+    # subsystem's background loops stay co-located on one role/process.
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
-         "bronze_object_compaction", "x402_settlement_reconciliation"}
+         "bronze_object_compaction", "x402_settlement_reconciliation",
+         "payment_alert_eval"}
     ),
     "maintenance": frozenset(
         {

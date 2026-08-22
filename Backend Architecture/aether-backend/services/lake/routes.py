@@ -31,6 +31,41 @@ from repositories.lake import (
 logger = get_logger("aether.service.lake")
 router = APIRouter(prefix="/v1/lake", tags=["Data Lake"])
 
+
+# ── Read-completeness metadata ───────────────────────────────────────────
+# Capped list/metric reads return a bare list, so a truncated result is
+# otherwise indistinguishable from "this is everything" (false certainty).
+# These build a small additive `meta` block for the existing APIResponse
+# envelope so callers can tell. Keep both files' helpers in sync.
+
+def _probe_completeness(limit: int, fetched: int) -> dict:
+    """Exact completeness meta from an over-fetch relative to `limit`.
+
+    Call with `fetched` = the row count returned when the underlying query
+    already retrieved (or was asked to retrieve) more than `limit` rows —
+    typically a `limit + 1` probe. `has_more` is a fact, not a guess: the
+    fetch would only return more than `limit` rows if more than `limit`
+    rows actually exist.
+    """
+    has_more = fetched > limit
+    return {"limit": limit, "returned": min(fetched, limit), "truncated": has_more, "has_more": has_more}
+
+
+def _heuristic_completeness(limit: int, returned: int) -> dict:
+    """Conservative completeness meta when a limit+1 probe isn't feasible
+    (e.g. the underlying repository call enforces a fixed internal cap with
+    no adjustable limit parameter).
+
+    We cannot distinguish "exactly `limit` rows exist" from "more rows
+    exist beyond `limit`", so we conservatively assume truncation whenever
+    the result exactly fills the limit. This can over-report truncation but
+    never under-report it — never imply completeness when truncation is
+    possible.
+    """
+    truncated = limit > 0 and returned == limit
+    return {"limit": limit, "returned": returned, "truncated": truncated, "has_more": truncated}
+
+
 # Domain routing
 _BRONZE_REPOS: dict[str, BronzeRepository] = {
     "market": bronze_market,
@@ -140,13 +175,20 @@ async def audit_source_tag(domain: str, source_tag: str, request: Request):
     if not repo:
         raise BadRequestError(f"Unknown domain: {domain}")
 
+    page_cap = 50
     records = await repo.query_by_source_tag(source_tag)
-    return APIResponse(data={
-        "domain": domain,
-        "source_tag": source_tag,
-        "record_count": len(records),
-        "records": records[:50],  # Cap response size
-    }).to_dict()
+    # query_by_source_tag already fetches up to its own default (100), well
+    # beyond page_cap, so we already have the evidence to say for certain
+    # whether the 50-row page below is complete — no separate probe needed.
+    return APIResponse(
+        data={
+            "domain": domain,
+            "source_tag": source_tag,
+            "record_count": len(records),
+            "records": records[:page_cap],  # Cap response size
+        },
+        meta=_probe_completeness(page_cap, len(records)),
+    ).to_dict()
 
 
 @router.post("/materialize")
@@ -179,8 +221,15 @@ async def query_gold(domain: str, entity_id: str, request: Request):
     if not repo:
         raise BadRequestError(f"Unknown Gold domain: {domain}")
 
-    results = await repo.get_metrics(entity_id)
-    return APIResponse(data={"entity_id": entity_id, "metrics": results}).to_dict()
+    # GoldRepository.get_metrics() enforces a fixed internal cap (200) with
+    # no adjustable limit parameter, so an exact limit+1 probe isn't
+    # feasible from here — heuristic completeness only.
+    gold_metrics_cap = 200
+    results = await repo.get_metrics(entity_id, tenant_id=request.state.tenant.tenant_id)
+    return APIResponse(
+        data={"entity_id": entity_id, "metrics": results},
+        meta=_heuristic_completeness(gold_metrics_cap, len(results)),
+    ).to_dict()
 
 
 @router.get("/quality/{domain}")

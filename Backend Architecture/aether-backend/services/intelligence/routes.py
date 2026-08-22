@@ -136,6 +136,40 @@ def _check_anti_distillation(request: Request, entity_id: str, endpoint: str):
         )
 
 
+# ── Read-completeness metadata ───────────────────────────────────────────
+# Capped list reads return a bare list, so a truncated result is otherwise
+# indistinguishable from "this is everything" (false certainty). These
+# build a small additive `meta` block for the existing APIResponse
+# envelope so callers can tell. Keep in sync with the lake/profile copies.
+
+def _probe_completeness(limit: int, fetched: int) -> dict:
+    """Exact completeness meta from an over-fetch relative to `limit`.
+
+    Call with `fetched` = the row count returned when the underlying query
+    already retrieved (or was asked to retrieve) more than `limit` rows —
+    typically a `limit + 1` probe. `has_more` is a fact, not a guess: the
+    fetch would only return more than `limit` rows if more than `limit`
+    rows actually exist.
+    """
+    has_more = fetched > limit
+    return {"limit": limit, "returned": min(fetched, limit), "truncated": has_more, "has_more": has_more}
+
+
+def _heuristic_completeness(limit: int, returned: int) -> dict:
+    """Conservative completeness meta when a limit+1 probe isn't feasible
+    (e.g. the underlying repository call enforces a fixed internal cap with
+    no adjustable limit parameter).
+
+    We cannot distinguish "exactly `limit` rows exist" from "more rows
+    exist beyond `limit`", so we conservatively assume truncation whenever
+    the result exactly fills the limit. This can over-report truncation but
+    never under-report it — never imply completeness when truncation is
+    possible.
+    """
+    truncated = limit > 0 and returned == limit
+    return {"limit": limit, "returned": returned, "truncated": truncated, "has_more": truncated}
+
+
 @router.get("/wallet/{address}/risk")
 async def wallet_risk_score(address: str, request: Request):
     """
@@ -149,7 +183,10 @@ async def wallet_risk_score(address: str, request: Request):
     scorer = TrustScoreComposite()
 
     # Get features from Gold tier (or materialize if missing)
-    gold_records = await gold_identity.get_metrics(address, entity_type="wallet", metric_name="wallet_features")
+    gold_records = await gold_identity.get_metrics(
+        address, entity_type="wallet", metric_name="wallet_features",
+        tenant_id=request.state.tenant.tenant_id,
+    )
     if gold_records:
         features = gold_records[0].get("value", {})
     else:
@@ -183,7 +220,9 @@ async def protocol_analytics(protocol_id: str, request: Request):
     """
     request.state.tenant.require_permission("read")
 
-    gold_records = await gold_market.get_metrics(protocol_id, entity_type="protocol")
+    gold_records = await gold_market.get_metrics(
+        protocol_id, entity_type="protocol", tenant_id=request.state.tenant.tenant_id
+    )
     if not gold_records:
         return APIResponse(data={
             "protocol_id": protocol_id,
@@ -223,7 +262,9 @@ async def identity_cluster(entity_id: str, request: Request):
         })
 
     # Get Gold identity features
-    gold_records = await gold_identity.get_metrics(entity_id)
+    gold_records = await gold_identity.get_metrics(
+        entity_id, tenant_id=request.state.tenant.tenant_id
+    )
 
     metrics.increment("intelligence_identity_cluster")
     return APIResponse(data={
@@ -242,15 +283,21 @@ async def anomaly_alerts(request: Request, limit: int = 50):
     """
     request.state.tenant.require_permission("read")
 
-    # Read from Gold anomaly tier
-    alerts = await gold_identity.get_highlights("anomaly_alert", limit=limit)
+    # Read from Gold anomaly tier — probe limit+1 for an exact has_more.
+    fetched = await gold_identity.get_highlights(
+        "anomaly_alert", limit=limit + 1, tenant_id=request.state.tenant.tenant_id
+    )
+    alerts = fetched[:limit]
 
     metrics.increment("intelligence_alerts_queried")
-    return APIResponse(data={
-        "alerts": alerts,
-        "count": len(alerts),
-        "queried_at": utc_now().isoformat(),
-    }).to_dict()
+    return APIResponse(
+        data={
+            "alerts": alerts,
+            "count": len(alerts),
+            "queried_at": utc_now().isoformat(),
+        },
+        meta=_probe_completeness(limit, len(fetched)),
+    ).to_dict()
 
 
 @router.get("/wallet/{address}/profile")
@@ -264,7 +311,9 @@ async def wallet_profile(address: str, request: Request):
     registry = get_registry()
 
     # Features
-    gold_records = await gold_identity.get_metrics(address, entity_type="wallet")
+    gold_records = await gold_identity.get_metrics(
+        address, entity_type="wallet", tenant_id=request.state.tenant.tenant_id
+    )
     features = gold_records[0].get("value", {}) if gold_records else {}
 
     # Graph neighbors
@@ -496,11 +545,13 @@ async def generate_entity_recommendation(body: GenerateRecommendationRequest, re
 async def list_intelligence_recommendations(request: Request, limit: int = 50, recommendation_type: str | None = None):
     tenant = request.state.tenant
     tenant.require_permission("read")
+    probe = limit + 1
     if recommendation_type:
-        items = await _recommendations.find_many({"tenant_id": tenant.tenant_id, "recommendation_type": recommendation_type}, limit=limit, sort_by="created_at", sort_order="desc")
+        fetched = await _recommendations.find_many({"tenant_id": tenant.tenant_id, "recommendation_type": recommendation_type}, limit=probe, sort_by="created_at", sort_order="desc")
     else:
-        items = await _recommendations.list_for_tenant(tenant.tenant_id, limit=limit)
-    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+        fetched = await _recommendations.list_for_tenant(tenant.tenant_id, limit=probe)
+    items = fetched[:limit]
+    return APIResponse(data={"items": items, "count": len(items)}, meta=_probe_completeness(limit, len(fetched))).to_dict()
 
 
 @router.get("/recommendations/{recommendation_id}")
@@ -635,8 +686,12 @@ async def list_action_targets(request: Request):
 async def list_action_integrations(request: Request, limit: int = 100):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    items = await _integrations.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
-    return APIResponse(data={"items": [_safe_integration_config(item) for item in items], "count": len(items)}).to_dict()
+    fetched = await _integrations.find_many({"tenant_id": tenant.tenant_id}, limit=limit + 1)
+    items = fetched[:limit]
+    return APIResponse(
+        data={"items": [_safe_integration_config(item) for item in items], "count": len(items)},
+        meta=_probe_completeness(limit, len(fetched)),
+    ).to_dict()
 
 
 @router.post("/action-integrations")
@@ -830,8 +885,9 @@ async def record_delivery_receipt(dispatch_id: str, body: DeliveryReceiptRequest
 async def list_action_dispatches(request: Request, limit: int = 100):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    items = await _dispatches.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
-    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+    fetched = await _dispatches.find_many({"tenant_id": tenant.tenant_id}, limit=limit + 1)
+    items = fetched[:limit]
+    return APIResponse(data={"items": items, "count": len(items)}, meta=_probe_completeness(limit, len(fetched))).to_dict()
 
 
 @router.post("/actions/{action_id}/outcome")
@@ -881,8 +937,9 @@ async def observe_outcome(action_id: str, body: OutcomeRequest, request: Request
 async def list_outcomes(request: Request, limit: int = 50):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    items = await _outcomes.list_for_tenant(tenant.tenant_id, limit=limit)
-    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+    fetched = await _outcomes.list_for_tenant(tenant.tenant_id, limit=limit + 1)
+    items = fetched[:limit]
+    return APIResponse(data={"items": items, "count": len(items)}, meta=_probe_completeness(limit, len(fetched))).to_dict()
 
 
 async def _tenant_ledger(tenant_id: str, limit: int = 500) -> dict:
@@ -932,8 +989,9 @@ async def get_outcome_ledger_by_playbook(request: Request):
 async def list_playbooks(request: Request, limit: int = 50):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    items = await _playbooks.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
-    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+    fetched = await _playbooks.find_many({"tenant_id": tenant.tenant_id}, limit=limit + 1)
+    items = fetched[:limit]
+    return APIResponse(data={"items": items, "count": len(items)}, meta=_probe_completeness(limit, len(fetched))).to_dict()
 
 
 @router.post("/playbooks")
@@ -997,7 +1055,8 @@ async def _playbook_performance(playbook: dict, limit: int = 500) -> dict:
 async def get_playbook_performance_summary(request: Request, limit: int = 500):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    playbooks = await _playbooks.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+    fetched_playbooks = await _playbooks.find_many({"tenant_id": tenant.tenant_id}, limit=limit + 1)
+    playbooks = fetched_playbooks[:limit]
     items = [await _playbook_performance(playbook, limit=limit) for playbook in playbooks]
     totals = {
         "playbooks_total": len(items),
@@ -1010,7 +1069,10 @@ async def get_playbook_performance_summary(request: Request, limit: int = 500):
         "stale_run_count": sum(item["stale_run_count"] for item in items),
         "incomplete_run_count": sum(item["incomplete_run_count"] for item in items),
     }
-    return APIResponse(data={"items": items, "summary": totals}).to_dict()
+    return APIResponse(
+        data={"items": items, "summary": totals},
+        meta=_probe_completeness(limit, len(fetched_playbooks)),
+    ).to_dict()
 
 
 @router.get("/playbooks/{playbook_id}")
@@ -1032,8 +1094,9 @@ async def list_playbook_runs(playbook_id: str, request: Request, limit: int = 50
     if playbook.get("tenant_id") != tenant.tenant_id:
         from shared.common.common import NotFoundError
         raise NotFoundError("playbook")
-    runs = await _playbook_runs.find_many({"tenant_id": tenant.tenant_id, "playbook_id": playbook_id}, limit=limit)
-    return APIResponse(data={"items": runs, "count": len(runs)}).to_dict()
+    fetched = await _playbook_runs.find_many({"tenant_id": tenant.tenant_id, "playbook_id": playbook_id}, limit=limit + 1)
+    runs = fetched[:limit]
+    return APIResponse(data={"items": runs, "count": len(runs)}, meta=_probe_completeness(limit, len(fetched))).to_dict()
 
 
 @router.get("/playbooks/{playbook_id}/performance")

@@ -38,6 +38,7 @@ from services.attribution.models import (
     TimeDecayModel,
     Touchpoint,
 )
+from shared.common.common import parse_event_time
 
 logger = logging.getLogger("aether.attribution.resolver")
 
@@ -199,9 +200,16 @@ class AttributionResolver:
 
         # Step 2 — filter by lookback window
         # Historical recomputation must evaluate lookback relative to the
-        # conversion, not wall-clock time. Callers that omit an event timestamp
-        # retain the legacy "now" behavior.
+        # conversion, not wall-clock time. A conversion event with no valid
+        # timestamp has no anchor, so refuse to attribute rather than silently
+        # anchoring the window to now() (which over-credits).
         reference_time = _event_reference_time(event)
+        if reference_time is None:
+            logger.warning(
+                "Attribution skipped for user=%s: conversion event has no valid timestamp",
+                user_id,
+            )
+            return AttributionResult(credits=[], model_used="none", total_credit=0.0)
         # The canonical measurement engine can replay an immutable model-config
         # snapshot whose click/view horizon is longer than this resolver's
         # process-wide default.  An explicit per-run horizon must therefore win;
@@ -243,19 +251,33 @@ class AttributionResolver:
 
     @staticmethod
     def _parse_touchpoints(raw: list[dict[str, Any]]) -> list[Touchpoint]:
-        """Convert raw dicts to ``Touchpoint`` objects with safe defaults."""
+        """Convert raw dicts to ``Touchpoint`` objects.
+
+        The touchpoint time comes from ``timestamp`` or, if absent, ``occurred_at``
+        (the canonical touchpoint column). A touchpoint with no parseable time is
+        EXCLUDED rather than stamped with now(): fabricating a time would place it
+        inside every lookback window and over-credit it.
+        """
         touchpoints: list[Touchpoint] = []
         for item in raw:
-            ts = item.get("timestamp")
-            if isinstance(ts, str):
-                try:
-                    ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                except (ValueError, AttributeError):
-                    ts = datetime.now(timezone.utc)
-            elif not isinstance(ts, datetime):
-                ts = datetime.now(timezone.utc)
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
+            ts_raw = item.get("timestamp")
+            if ts_raw is None:
+                ts_raw = item.get("occurred_at")
+
+            # Only a string or a datetime is a candidate instant; anything else
+            # (including absent) is "missing" rather than "invalid" — same
+            # bucket the pre-refactor type check used.
+            if not isinstance(ts_raw, (str, datetime)):
+                logger.warning("Excluding touchpoint with missing timestamp")
+                continue
+
+            ts = parse_event_time(ts_raw)
+            if ts is None:
+                logger.warning(
+                    "Excluding touchpoint with invalid timestamp: %r",
+                    item.get("timestamp") or item.get("occurred_at"),
+                )
+                continue
 
             touchpoints.append(
                 Touchpoint(
@@ -270,14 +292,36 @@ class AttributionResolver:
         return touchpoints
 
 
-def _event_reference_time(event: dict[str, Any]) -> datetime:
-    raw = event.get("timestamp") or event.get("occurred_at") or event.get("created_at")
-    if isinstance(raw, datetime):
-        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
-    if isinstance(raw, str):
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-        except ValueError:
-            pass
-    return datetime.now(timezone.utc)
+def _event_reference_time(event: dict[str, Any]) -> Optional[datetime]:
+    """Return the conversion event's reference time.
+
+    Distinguishes two cases the old code collapsed into a silent now():
+      - No time supplied at all → this is a real-time resolve() call, so the
+        conversion is happening now; now() is the correct anchor.
+      - A time WAS supplied but is unparseable/wrong-typed → return None so the
+        caller refuses to attribute rather than scoring the window against a
+        wall-clock time unrelated to the (corrupt) conversion time.
+
+    The durable pipeline (AttributionEngine.run_for_conversion) is stricter
+    still: a stored conversion with no valid occurred_at fails the run.
+    """
+    raw = None
+    for key in ("timestamp", "occurred_at", "created_at"):
+        val = event.get(key)
+        if val is not None:
+            raw = val
+            break
+    if raw is None:
+        # No conversion time field present at all → real-time resolve(); the
+        # conversion is happening now, so now() is the correct anchor. A field
+        # that IS present but empty/invalid falls through to the refuse paths
+        # below (never silently coerced to now).
+        return datetime.now(timezone.utc)
+    if not isinstance(raw, (str, datetime)):
+        return None
+    # A time WAS supplied (present, non-None) — parse_event_time() cannot
+    # itself tell "absent" from "invalid" (both give None), which is exactly
+    # why the presence check above happens BEFORE this call, not inside
+    # parse_event_time. A present-but-unparseable value refuses (returns
+    # None) rather than being coerced to now().
+    return parse_event_time(raw)

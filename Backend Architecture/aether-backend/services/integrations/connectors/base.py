@@ -22,6 +22,10 @@ from pydantic import BaseModel, Field
 ConnectorType = Literal[
     "slack", "webhook", "shopify", "stripe", "hubspot", "salesforce",
     "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom", "dune",
+    # Branded communications providers (comms.* data outputs, ADR-C11 cohort)
+    "sendgrid", "customerio", "mailchimp", "postmark", "iterable",
+    # ADR-C11 follow-up cohort (pull-model-first for Braze)
+    "braze",
     # Olympus-owned provider connectors (Layer 1)
     "dune_api", "dune_datashare", "dune_sim",
     "defi_llama", "coingecko", "coinmarketcap",
@@ -314,8 +318,31 @@ class BaseConnector:
     supports_reconciliation: bool = False
     supports_account_discovery: bool = False
     supports_account_selection: bool = False
+    # Providers that GET-probe the webhook URL on setup (Mailchimp) and expect a
+    # 200. The probe verifies only that the URL is reachable and resolves to a
+    # real endpoint; no signature is involved.
+    supports_get_validation: bool = False
     manifest_data_outputs: tuple[str, ...] = ()
     manifest_product_destinations: tuple[str, ...] = ()
+    # Native webhook signature scheme, if any (see signature_verify.py schemes).
+    # ``None`` means the adapter verifies through Aether's generic timestamped
+    # HMAC. Comms providers declare their provider-native scheme here (the
+    # manifest's ``_NATIVE_WEBHOOK_SCHEMES`` mirrors it for provider-scoped
+    # manifests). ``endpoint_secret`` marks no-signature providers (Mailchimp,
+    # Postmark) whose durable server-controlled endpoint id is the credential.
+    signature_scheme: Optional[str] = None
+    # Credential slot names this adapter needs (read by comms conformance to
+    # state honest required_credentials; comms secrets resolve through the
+    # connector vault, not the payment-rail slot registry).
+    required_credentials: tuple[str, ...] = ()
+    # Pull-API protocol facts read by the comms conformance ``build_request``
+    # hook to construct an honest synthetic probe request. The real pull
+    # requests are built in the adapter (e.g. ``_get``); declaring the auth
+    # header name and base URL here lets conformance mirror them without
+    # branching on provider name (ADR-C11). ``None`` auth header means the
+    # standard ``Authorization: Bearer <key>`` form.
+    pull_auth_header: Optional[str] = None
+    pull_api_base: Optional[str] = None
     requires_contract_grant: bool = False
     requires_user_consent: bool = False
     requires_admin_install: bool = False

@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 from shared.common.common import (
-    APIResponse, BadRequestError, NotFoundError,
+    APIResponse, BadRequestError, NotFoundError, ServiceUnavailableError,
     PaginatedResponse, PaginationMeta,
 )
 from shared.events.events import Event, EventProducer, Topic
@@ -29,11 +29,15 @@ from services.measurement.repositories.conversion_repo import ConversionReposito
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
 from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.repositories.measurement_connector_repo import (
+    MeasurementConnectorRepository,
+)
 
 logger = get_logger("aether.service.campaign")
 router = APIRouter(prefix="/v1/campaigns", tags=["Campaigns"])
 
 _repo = CampaignRepository()
+_connector_repo = MeasurementConnectorRepository()
 _explorer = CampaignPopulationExplorer(
     touchpoint_repo=TouchpointRepository(),
     conversion_repo=ConversionRepository(),
@@ -92,6 +96,7 @@ class TouchpointCreate(BaseModel):
     is_conversion: bool = False
     revenue_usd: float = Field(default=0.0, ge=0.0)
     timestamp: Optional[str] = None
+    properties: dict[str, Any] = Field(default_factory=dict)
 
 
 class CampaignGraphRequest(BaseModel):
@@ -364,10 +369,12 @@ async def record_touchpoint(
         "properties": body.properties,
     }
 
-    # Write to canonical touchpoint store
+    # Write to the canonical touchpoint store. This is the ONLY durable path —
+    # TOUCHPOINT_RECORDED has no subscriber — so a write failure must fail the
+    # request. Previously the failure was swallowed and the event published,
+    # returning 200 for a touchpoint that was never stored anywhere.
+    tp_repo = TouchpointRepository()
     try:
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        tp_repo = TouchpointRepository()
         await tp_repo.upsert_from_campaign_touchpoint(
             tenant_id=tenant.tenant_id,
             campaign_id=campaign_id,
@@ -375,9 +382,12 @@ async def record_touchpoint(
             data=touchpoint,
         )
     except Exception as exc:
-        # Log but do not fail the request — event bus handles the canonical write
-        logger.warning("Canonical touchpoint write deferred: %s", exc)
+        logger.error("Canonical touchpoint write failed: %s", exc)
+        raise ServiceUnavailableError(
+            "Touchpoint could not be durably recorded — please retry"
+        ) from exc
 
+    # Publish only after the durable write has succeeded.
     await producer.publish(Event(
         topic=Topic.TOUCHPOINT_RECORDED,
         tenant_id=tenant.tenant_id,
@@ -541,7 +551,7 @@ async def get_campaign_message_detail(
 
     from services.comms.repository import CampaignMessageRepository, CommsFactsRepository
     facts_repo = CommsFactsRepository()
-    provider = campaign.get("primary_platform") or "klaviyo"
+    provider = campaign.get("primary_platform")
     dim = await CampaignMessageRepository().get_by_external_id(
         tenant.tenant_id, provider, external_message_id,
     )
@@ -1069,13 +1079,7 @@ async def list_campaign_sources(request: Request):
     tenant.require_permission("campaign:read")
     sources_degraded = False
     try:
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        rows = await pool.fetch(
-            "SELECT * FROM measurement_connectors WHERE tenant_id = $1 ORDER BY created_at DESC",
-            tenant.tenant_id,
-        ) if pool else []
-        items = [dict(r) for r in rows]
+        items = await _connector_repo.list_for_tenant(tenant.tenant_id)
     except Exception as exc:
         logger.warning("campaign sources list failed: %s", exc)
         items = []
@@ -1088,29 +1092,32 @@ async def list_campaign_sources(request: Request):
 
 @sources_router.post("")
 async def connect_campaign_source(body: CampaignSourceCreate, request: Request):
-    """Connect a new campaign source (ad platform)."""
+    """Connect a new campaign source (ad platform).
+
+    The connector is persisted through the canonical repository. A write failure
+    surfaces as 503 rather than returning a fabricated ``connector_id`` for a
+    source that was never stored (and that no subsequent ``list`` could see).
+    """
     tenant = request.state.tenant
     tenant.require_permission("campaign:manage")
-    connector_id = str(uuid.uuid4())
     try:
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        if pool:
-            await pool.execute(
-                """
-                INSERT INTO measurement_connectors
-                  (connector_id, tenant_id, connector_type, name, config, status,
-                   cursor_state, health_status, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, 'active', '{}'::jsonb, 'unknown', NOW(), NOW())
-                """,
-                connector_id, tenant.tenant_id, body.platform,
-                body.display_name or body.platform,
-                __import__("json").dumps(body.config) if body.config else "{}",
-            )
+        connector = await _connector_repo.create(
+            tenant_id=tenant.tenant_id,
+            connector_type=body.platform,
+            name=body.display_name,
+            config=body.config,
+        )
     except Exception as exc:
-        logger.warning("source connect failed: %s", exc)
+        logger.error("source connect failed: %s", exc)
+        raise ServiceUnavailableError(
+            "Campaign source could not be connected — please retry"
+        ) from exc
     metrics.increment("campaign_sources_connected", labels={"platform": body.platform})
-    return APIResponse(data={"connector_id": connector_id, "platform": body.platform}).to_dict()
+    return APIResponse(data={
+        "connector_id": connector["connector_id"],
+        "platform": body.platform,
+        "status": connector.get("status", "active"),
+    }).to_dict()
 
 
 @sources_router.get("/{connector_id}/health")
@@ -1119,32 +1126,24 @@ async def get_source_health(connector_id: str, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("campaign:read")
     try:
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        row = await pool.fetchrow(
-            "SELECT connector_id, connector_type, name, status, health_status, health_message, "
-            "last_sync_at, last_success_at, error_count FROM measurement_connectors "
-            "WHERE tenant_id = $1 AND connector_id = $2",
-            tenant.tenant_id, connector_id,
-        ) if pool else None
-        if row is None:
-            raise BadRequestError(f"Campaign source {connector_id} not found")
-        health = {
-            "connector_id": connector_id,
-            "status": row["health_status"],
-            "name": row["name"],
-            "connector_type": row["connector_type"],
-            "last_sync_at": row["last_sync_at"].isoformat() if row["last_sync_at"] else None,
-            "last_success_at": row["last_success_at"].isoformat() if row["last_success_at"] else None,
-            "error_count": row["error_count"],
-            "health_message": row["health_message"],
-        }
-        return APIResponse(data=health).to_dict()
-    except BadRequestError:
-        raise
+        connector = await _connector_repo.get(tenant.tenant_id, connector_id)
     except Exception as exc:
-        logger.warning("health_check unavailable: %s", exc)
-        return APIResponse(data={"connector_id": connector_id, "status": "unknown", "error": str(exc)}).to_dict()
+        logger.error("source health read failed: %s", exc)
+        raise ServiceUnavailableError(
+            "Campaign source health unavailable — please retry"
+        ) from exc
+    if connector is None:
+        raise BadRequestError(f"Campaign source {connector_id} not found")
+    return APIResponse(data={
+        "connector_id": connector_id,
+        "status": connector.get("health_status", "unknown"),
+        "name": connector.get("name"),
+        "connector_type": connector.get("connector_type"),
+        "last_sync_at": connector.get("last_sync_at"),
+        "last_success_at": connector.get("last_success_at"),
+        "error_count": connector.get("error_count", 0),
+        "health_message": connector.get("health_message"),
+    }).to_dict()
 
 
 @sources_router.post("/{connector_id}/sync")
@@ -1153,28 +1152,16 @@ async def trigger_sync(connector_id: str, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("campaign:manage")
     try:
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        row = await pool.fetchrow(
-            "SELECT connector_id FROM measurement_connectors WHERE tenant_id = $1 AND connector_id = $2",
-            tenant.tenant_id, connector_id,
-        ) if pool else None
-        if row is None:
-            raise BadRequestError(f"Campaign source {connector_id} not found")
-        # Record sync request — the scheduler picks this up on its next tick.
-        if pool:
-            await pool.execute(
-                "UPDATE measurement_connectors SET next_sync_at = NOW(), updated_at = NOW() "
-                "WHERE tenant_id = $1 AND connector_id = $2",
-                tenant.tenant_id, connector_id,
-            )
-        metrics.increment("campaign_source_sync_triggered", labels={"connector_id": connector_id})
-        return APIResponse(data={"connector_id": connector_id, "status": "queued"}).to_dict()
-    except BadRequestError:
-        raise
+        queued = await _connector_repo.request_sync(tenant.tenant_id, connector_id)
     except Exception as exc:
-        logger.warning("sync trigger failed: %s", exc)
-        raise BadRequestError(str(exc)) from exc
+        logger.error("sync trigger failed: %s", exc)
+        raise ServiceUnavailableError(
+            "Sync could not be queued — please retry"
+        ) from exc
+    if not queued:
+        raise BadRequestError(f"Campaign source {connector_id} not found")
+    metrics.increment("campaign_source_sync_triggered", labels={"connector_id": connector_id})
+    return APIResponse(data={"connector_id": connector_id, "status": "queued"}).to_dict()
 
 
 # =============================================================================

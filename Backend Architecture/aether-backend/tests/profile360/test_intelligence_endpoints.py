@@ -40,7 +40,10 @@ class _GoldRepo:
     def __init__(self, rows: list[dict] | None = None) -> None:
         self._rows = list(rows or [])
 
-    async def get_metrics(self, entity_id: str, entity_type: str = "", metric_name: str = "") -> list[dict]:
+    async def get_metrics(
+        self, entity_id: str, entity_type: str = "", metric_name: str = "",
+        *, tenant_id=None,
+    ) -> list[dict]:
         return [r for r in self._rows if r.get("entity_id") == entity_id]
 
 

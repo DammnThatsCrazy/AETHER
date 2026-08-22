@@ -126,7 +126,7 @@
         },
         "react-native": {
           "status": "supported",
-          "evidence": "packages/react-native/src/modules/HealthAgent.ts#fetchManifest"
+          "evidence": "packages/react-native/src/modules/RemoteManifest.ts#fetchAndApplyManifest"
         },
         "ios": {
           "status": "supported",

@@ -33,6 +33,13 @@ _PASSIVE_TOUCHPOINT_TYPES = frozenset({
     "email_delivery", "push_presentation",
 })
 
+# Bounded sample size for the touchpoint freshness-watermark scan used by
+# data_quality.projection_lag_hours in get_overview(). TouchpointRepository
+# exposes no MAX(occurred_at) aggregate and list_by_campaign only supports
+# ascending order, so the watermark is computed client-side over a bounded
+# fetch — see the comment at its call site for the honesty tradeoff this implies.
+_FRESHNESS_WATERMARK_SAMPLE_LIMIT = 10000
+
 
 class CampaignPopulationExplorer:
     """Single canonical service for campaign 360 exploration.
@@ -87,6 +94,20 @@ class CampaignPopulationExplorer:
             tenant_id, campaign_id,
             model_type=attribution_model,
         )
+        # Freshness watermark for projection_lag_hours below. Deliberately NOT
+        # scoped to the requested time_range: this reports pipeline currency
+        # ("how stale is touchpoint capture for this campaign right now"), not
+        # report-window recency — scoping it to time_range would manufacture a
+        # false staleness signal whenever a caller views a historical window.
+        # Bounded, best-effort scan (see _FRESHNESS_WATERMARK_SAMPLE_LIMIT): a
+        # campaign with more touchpoints than the sample can under-report
+        # freshness (an inflated lag from missing the true latest row) but
+        # never over-report it, since earlier rows sort first and are the
+        # ones dropped.
+        watermark_rows = await self._tp.list_by_campaign(
+            tenant_id, campaign_id,
+            limit=_FRESHNESS_WATERMARK_SAMPLE_LIMIT,
+        )
 
         observed = pop_summary.get("observed", 0)
         resolved = pop_summary.get("resolved", 0)
@@ -94,10 +115,20 @@ class CampaignPopulationExplorer:
         converted = conv_summary.get("converted_count", 0)
         attributed = conv_summary.get("attributed_count", 0)
 
-        # Enforce reconciliation invariants (clamp, do not raise — data may be eventually consistent)
-        resolved = min(resolved, observed)
-        engaged = min(engaged, resolved)
-        attributed = min(attributed, converted)
+        # Enforce reconciliation invariants (clamp, do not raise — data may be
+        # eventually consistent). Whether the clamp actually changes a value is a
+        # real signal: if the raw counts violated resolved<=observed,
+        # engaged<=resolved, or attributed<=converted, that inconsistency must be
+        # surfaced, not hidden behind a hardcoded reconciliation_status of "ok".
+        clamped_resolved = min(resolved, observed)
+        clamped_engaged = min(engaged, clamped_resolved)
+        clamped_attributed = min(attributed, converted)
+        reconciliation_inconsistent = (
+            clamped_resolved != resolved
+            or clamped_engaged != engaged
+            or clamped_attributed != attributed
+        )
+        resolved, engaged, attributed = clamped_resolved, clamped_engaged, clamped_attributed
 
         gross_rev = conv_summary.get("attributed_gross_revenue", 0.0)
         net_rev = conv_summary.get("attributed_net_revenue", 0.0)
@@ -113,6 +144,40 @@ class CampaignPopulationExplorer:
         resolution_rate = (resolved / observed) if observed > 0 else None
         conversion_count = int(credit_summary.get("credit_count", 0))
         frac_conversions = float(credit_summary.get("total_attributed_conversions") or 0)
+
+        # projection_lag_hours: now(UTC) minus the newest parseable occurred_at
+        # across the campaign's touchpoints (the watermark fetched above).
+        # Zero touchpoints or no parseable occurred_at -> null, never a
+        # fabricated 0 — an absent watermark is not the same as a fresh one.
+        # Clamped to >= 0 to absorb clock skew (a touchpoint whose occurred_at
+        # lands fractionally after this request's "now").
+        newest_occurred = _max_occurred_at(watermark_rows)
+        if newest_occurred is not None:
+            lag_hours = (datetime.now(timezone.utc) - newest_occurred).total_seconds() / 3600.0
+            projection_lag_hours = max(0.0, lag_hours)
+        else:
+            projection_lag_hours = None
+
+        # completeness_pct: observed distinct entities (population_summary,
+        # above) against the campaign's platform-reported reach —
+        # SpendRecord.reach, the connector's own distinct-audience total and
+        # the only tenant-scoped, source-reported "expected entities" figure
+        # this service can read for a campaign. impressions/clicks are raw
+        # event counts, not distinct-entity counts, so pairing either of them
+        # with `observed` would compare unlike units — deliberately avoided
+        # rather than fabricating a mismatched denominator. Both sides here
+        # are distinct-entity counts, so the ratio is a genuine capture-
+        # completeness signal. Clamped at 100 because our identity resolution
+        # can legitimately surface more distinct ids than the platform's own
+        # (differently deduped) reach estimate. No connector reported a
+        # nonzero reach for this campaign/window -> null, never a fabricated
+        # denominator.
+        expected_reach = int(spend_summary.get("total_reach", 0) or 0)
+        completeness_pct = (
+            min(100.0, (observed / expected_reach) * 100.0)
+            if expected_reach > 0
+            else None
+        )
 
         return {
             "campaign_id": campaign_id,
@@ -144,9 +209,12 @@ class CampaignPopulationExplorer:
             "data_quality": {
                 "connector_freshness": "unknown",
                 "attribution_run_freshness": "fresh" if credit_summary.get("credits") else "missing",
-                "projection_lag_hours": None,
-                "reconciliation_status": "ok",
-                "completeness_pct": None,
+                "projection_lag_hours": projection_lag_hours,
+                # Honest state: "inconsistent" when the clamp above detected an
+                # invariant breach, otherwise "unknown" — this overview does not
+                # reconcile against provider truth, so it must never claim "ok".
+                "reconciliation_status": "inconsistent" if reconciliation_inconsistent else "unknown",
+                "completeness_pct": completeness_pct,
             },
         }
 
@@ -495,15 +563,27 @@ class CampaignPopulationExplorer:
             total_spend = sum(float(r.get("media_spend") or 0) for r in records)
             total_impressions = sum(int(r.get("impressions") or 0) for r in records)
             total_clicks = sum(int(r.get("clicks") or 0) for r in records)
+            # Reach is the connector's own distinct-audience estimate for the
+            # campaign (SpendRecord.reach) — used as the completeness_pct
+            # denominator in get_overview(). Summed here alongside the other
+            # spend-record aggregates rather than queried separately.
+            total_reach = sum(int(r.get("reach") or 0) for r in records)
             return {
                 "total_spend_usd": total_spend,
                 "total_impressions": total_impressions,
                 "total_clicks": total_clicks,
+                "total_reach": total_reach,
                 "touchpoint_count": 0,
             }
         except Exception as exc:
             logger.warning("Spend summary unavailable for campaign=%s: %s", campaign_id, exc)
-            return {"total_spend_usd": 0.0, "total_impressions": 0, "total_clicks": 0, "touchpoint_count": 0}
+            return {
+                "total_spend_usd": 0.0,
+                "total_impressions": 0,
+                "total_clicks": 0,
+                "total_reach": 0,
+                "touchpoint_count": 0,
+            }
 
 
 # ── Module-level helpers ──────────────────────────────────────────────────────
@@ -517,6 +597,32 @@ def _parse_ts(value: Any) -> Optional[datetime]:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         return None
+
+
+def _max_occurred_at(rows: list[dict[str, Any]]) -> Optional[datetime]:
+    """Newest parseable ``occurred_at`` across a set of touchpoint rows.
+
+    Used for the data_quality.projection_lag_hours watermark in get_overview().
+    Rows with a missing or unparseable occurred_at are skipped rather than
+    defaulting to "now" — an absent watermark must read as unknown, never as
+    artificially fresh. Naive timestamps are treated as UTC, matching every
+    other "now" reference in this module, so comparisons never raise on
+    mixed aware/naive datetimes.
+    """
+    from shared.temporal.instant import coerce_utc_lenient
+
+    newest: Optional[datetime] = None
+    for row in rows:
+        # coerce_utc_lenient (temporal kernel) parses + assumes UTC on naive —
+        # the exact normalization the watermark needs — without this module
+        # attaching a tzinfo itself (which the temporal-integrity gate forbids
+        # outside shared/temporal/).
+        ts = coerce_utc_lenient(row.get("occurred_at"))
+        if ts is None:
+            continue
+        if newest is None or ts > newest:
+            newest = ts
+    return newest
 
 
 def _infer_entity_type(row: dict[str, Any]) -> str:

@@ -182,6 +182,12 @@ class KlaviyoConnector(BaseConnector):
         "klaviyo.profile", "klaviyo.campaign", "klaviyo.flow",
     )
     docs_slug = "operations/klaviyo-connector"
+    # Pull-API protocol facts for the comms conformance ``build_request`` hook:
+    # Klaviyo's pull API authenticates with the raw key in a provider-specific
+    # header (see ``_headers``). Declared here so conformance builds an honest
+    # synthetic request without branching on provider name (ADR-C11).
+    pull_api_base = _API_BASE
+    pull_auth_header = "Klaviyo-API-Key"
 
     # ── Connection ───────────────────────────────────────────────────────────
 

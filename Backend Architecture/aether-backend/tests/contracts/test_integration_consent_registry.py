@@ -10,7 +10,11 @@ KOTLIN = ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aeth
 
 EXPECTED = {
     "slack", "generic_webhook", "shopify", "stripe", "hubspot", "salesforce",
-    "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk",
+    "klaviyo", "sendgrid", "customerio", "mailchimp", "postmark",
+    # ADR-C11 follow-up cohort: HubSpot marketing (already above as CRM),
+    # Iterable, and pull-first Braze — all carry explicit governance policies.
+    "iterable", "braze",
+    "segment", "posthog", "ga4", "jira", "linear", "zendesk",
     "intercom", "dune", "apple_pay", "google_pay", "outbound_activation",
 }
 REQUIRED_FIELDS = {

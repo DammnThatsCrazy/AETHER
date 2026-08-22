@@ -117,6 +117,35 @@ def try_parse_instant(value: str) -> tuple[Optional[datetime], Optional[str]]:
         return None, exc.reason_code
 
 
+def coerce_utc_lenient(value: object) -> Optional[datetime]:
+    """Lenient event-time coercion: parse an ISO-8601 string (or accept a
+    ``datetime``), ASSUMING UTC for a timezone-naive value, and return ``None``
+    for ``None`` / empty / unparseable input (never raising).
+
+    This is the sanctioned, single home for the "assume UTC on a naive instant"
+    policy that :func:`parse_instant_strict` deliberately refuses to apply
+    implicitly. It lives in the kernel because the kernel is the only module
+    permitted to attach a timezone (temporal-integrity gate). Callers — the
+    attribution event-time helpers (``shared.common.common.parse_event_time``)
+    and the campaign freshness watermark
+    (``services.campaign.exploration._max_occurred_at``) — mirror the lenient
+    acceptance rule that ``BaseEvent.validate_timestamp`` applies at ingestion,
+    so downstream parsing accepts exactly what was accepted upstream instead of
+    silently diverging. Prefer :func:`parse_instant_strict` /
+    :func:`try_parse_instant` for any NEW path that can require an explicit
+    offset; this helper exists only for parity with already-accepted data.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 __all__ = [
     "TemporalReasonCode",
     "TEMPORAL_REASON_CODES",
@@ -125,4 +154,5 @@ __all__ = [
     "ensure_aware_utc",
     "to_iso_utc",
     "try_parse_instant",
+    "coerce_utc_lenient",
 ]

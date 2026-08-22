@@ -12,6 +12,10 @@ enum class IntegrationConnectorType(val connectorType: String) {
     HUBSPOT("hubspot"),
     SALESFORCE("salesforce"),
     KLAVIYO("klaviyo"),
+    SENDGRID("sendgrid"),
+    CUSTOMERIO("customerio"),
+    MAILCHIMP("mailchimp"),
+    POSTMARK("postmark"),
     SEGMENT("segment"),
     POSTHOG("posthog"),
     GA4("ga4"),
@@ -22,7 +26,9 @@ enum class IntegrationConnectorType(val connectorType: String) {
     DUNE("dune"),
     APPLE_PAY("apple_pay"),
     GOOGLE_PAY("google_pay"),
-    OUTBOUND_ACTIVATION("outbound_activation")
+    OUTBOUND_ACTIVATION("outbound_activation"),
+    ITERABLE("iterable"),
+    BRAZE("braze")
 }
 
 data class ProcessingDecision(

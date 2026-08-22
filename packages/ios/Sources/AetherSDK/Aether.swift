@@ -247,6 +247,7 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case email_queued, email_processed, email_sent, email_deferred
     case email_dropped, email_replied, email_spam_complaint, email_suppressed
     case message_replied_observed, unsubscribe_observed
+    case message_received_observed, message_sent_observed
     case support_case_created, support_case_resolved, support_case_escalated, support_sla_breached
     // Credit family (explicit opt-in)
     case credit_signal_observed, credit_account_observed, credit_decision_observed
@@ -516,6 +517,15 @@ public final class Aether: NSObject {
     /// the SDK the same URL twice within the same launch.
     private var processedIncomingURLs: [String: Date] = [:]
     private var healthAgent: AetherHealthAgent?
+    /// Sampling rate in [0,1] derived from the remote manifest's
+    /// `rollout_percentage` (Truth Kernel remote config). 1.0 (no gate) until
+    /// a manifest has been fetched, verified, and applied via
+    /// `onManifestUpdate`. See `enqueueEvent(type:properties:)`.
+    var samplingRate: Double = 1.0
+    /// Manifest-provided feature-flag overrides (`SDKManifest.features`),
+    /// applied on top of `serverConfig["featureFlags"]` in
+    /// `isFeatureEnabled(_:default:)`. Empty until a manifest is applied.
+    var manifestFeatureOverrides: [String: Bool] = [:]
     private let networkMonitor = NWPathMonitor()
     private var currentNetworkType: String = "unknown"
 
@@ -662,6 +672,7 @@ public final class Aether: NSObject {
         .email_dropped: "marketing", .email_replied: "marketing",
         .email_spam_complaint: "marketing", .email_suppressed: "marketing",
         .message_replied_observed: "analytics", .unsubscribe_observed: "marketing",
+        .message_received_observed: "analytics", .message_sent_observed: "analytics",
         .support_case_created: "analytics", .support_case_resolved: "analytics",
         .support_case_escalated: "analytics", .support_sla_breached: "analytics",
         // Credit family (explicit opt-in)
@@ -837,6 +848,15 @@ public final class Aether: NSObject {
             )
         }
         healthAgent = hAgent
+        // Wire the verified remote manifest into the emitter: rollout_percentage
+        // drives the sampling gate in enqueueEvent, features feed
+        // isFeatureEnabled. Previously fetched+verified+cached and discarded.
+        hAgent.onManifestUpdate { [weak self] manifest in
+            guard let self = self else { return }
+            let pct = max(0, min(100, manifest.rollout_percentage))
+            self.samplingRate = Double(pct) / 100.0
+            self.manifestFeatureOverrides = manifest.features
+        }
         // In GDPR mode, defer health agent until analytics consent granted
         if config.privacy.gdprMode {
             if consentState.contains("analytics") { hAgent.start() }
@@ -1883,9 +1903,24 @@ public final class Aether: NSObject {
     // MARK: - Feature Flags (from server config)
 
     public func isFeatureEnabled(_ key: String, default defaultValue: Bool = false) -> Bool {
+        // Manifest overrides win over server config flags — this mirrors the
+        // JS RemoteManifest module (packages/react-native/src/modules/RemoteManifest.ts),
+        // which pushes manifest flags/features into RNFeatureFlags via
+        // setOverride(): an override that supersedes the underlying value.
+        if let manifestValue = manifestFeatureOverrides[key] { return manifestValue }
         guard let flags = serverConfig["featureFlags"] as? [String: Any],
               let value = flags[key] as? Bool else { return defaultValue }
         return value
+    }
+
+    /// Sampling decision for the manifest-driven rollout gate (Truth Kernel
+    /// remote config). Pure/stateless so it can be tested deterministically —
+    /// `roll` is injectable and defaults to the platform RNG in production
+    /// call sites. Mirrors the JS RemoteManifest sampling convention
+    /// (packages/react-native/src/modules/RemoteManifest.ts): keep the event
+    /// when `roll < rate`.
+    static func shouldSample(rate: Double, roll: Double = Double.random(in: 0..<1)) -> Bool {
+        roll < rate
     }
 
     public func getFeatureValue(_ key: String, default defaultValue: Any? = nil) -> Any? {
@@ -1908,6 +1943,16 @@ public final class Aether: NSObject {
             // surfaced as the BatchHealth.droppedByConsent counter (§2.8).
             serialQueue.async { [weak self] in self?.pendingConsentDrops += 1 }
             healthAgent?.recordDroppedEvents(1)
+            return
+        }
+
+        // Manifest-driven rollout sampling gate (Truth Kernel remote config).
+        // Consent gating above is unchanged; this only applies once a
+        // manifest with rollout_percentage < 100 has been fetched, verified,
+        // and applied via onManifestUpdate.
+        let rate = samplingRate
+        if rate < 1.0 && !Aether.shouldSample(rate: rate) {
+            log("Dropping \(type.rawValue) — sampled out by remote rollout gate (rate=\(rate))")
             return
         }
 

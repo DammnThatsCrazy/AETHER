@@ -45,6 +45,7 @@ import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
 import { RNFeedback } from './modules/Feedback';
 import { RNHealthAgent } from './modules/HealthAgent';
+import { fetchAndApplyManifest } from './modules/RemoteManifest';
 import type { ResolvedIdentity } from './bridge';
 
 // =============================================================================
@@ -109,13 +110,11 @@ export function AetherProvider({
     // active/background change in the stitcher, so lifecycle emission is left
     // to native.
 
-    // Fetch server config (non-blocking, fire-and-forget)
-    fetch(`${endpoint}/v1/config/sdk/manifest`, {
-      headers: { Authorization: `Bearer ${config.apiKey}` },
-    })
-      .then(r => r.json())
-      .then(_cfg => { /* store config */ })
-      .catch(() => { /* silent */ });
+    // Fetch the remote SDK manifest once and APPLY it (flags/features →
+    // RNFeatureFlags, sampling/endpoints stored for JS-emitted events). This is
+    // the single owner; it previously fetched here and in HealthAgent and
+    // discarded both. Unconditional: manifest is SDK config, not user data.
+    void fetchAndApplyManifest(endpoint, config.apiKey);
 
     // Cache fingerprint ID
     Aether.getFingerprint().catch(() => {});

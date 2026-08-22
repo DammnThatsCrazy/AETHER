@@ -1,10 +1,15 @@
 """Durable webhook endpoint registry.
 
-A public provider webhook URL is ``/…/payment-rails/{provider}/{endpoint_id}``.
-The ``endpoint_id`` is high-entropy, non-sequential, durable, revocable and bound
-to exactly one (tenant, provider, environment). Resolution happens server-side —
-no tenant id is ever accepted from a request header or body. The id alone is not
+A public provider webhook URL is ``/…/{family}/{connector}/{endpoint_id}`` where
+``family`` is ``payment-rails`` or ``comms``. The ``endpoint_id`` is high-entropy,
+non-sequential, durable, revocable and bound to exactly one
+(tenant, provider, environment, domain). Resolution happens server-side — no
+tenant id is ever accepted from a request header or body. The id alone is not
 authentication; the provider signature is still verified downstream.
+
+One registry and one table back every domain ("extend, do not rebuild"): the
+``domain`` discriminator (stored in the JSONB data, default ``payment``) keeps
+endpoints of different families from resolving through each other's routes.
 """
 
 from __future__ import annotations
@@ -18,8 +23,19 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.payment_rails.webhook_endpoints")
 
+# Historical table name — now backs webhook endpoints for any domain.
 ENDPOINT_TABLE = "payment_webhook_endpoints"
 _ID_PREFIX = "whe_"
+
+# Domain discriminator: each domain maps to its own public webhook URL family.
+DOMAIN_PAYMENT = "payment"
+DOMAIN_COMMS = "comms"
+
+# Public URL family per domain (routes must mirror these prefixes).
+_FAMILY_BY_DOMAIN = {
+    DOMAIN_PAYMENT: "payment-rails",
+    DOMAIN_COMMS: "comms",
+}
 
 
 class EndpointState:
@@ -27,17 +43,25 @@ class EndpointState:
     REVOKED = "revoked"
 
 
-_PATH_TEMPLATE = "/v1/integrations/webhooks/payment-rails/{provider}/{endpoint_id}"
+def _domain_of(row: dict) -> str:
+    """Backward-compatible domain read: pre-domain rows are payment endpoints."""
+    return row.get("domain") or DOMAIN_PAYMENT
 
 
 class _WebhookEndpointRepo(BaseRepository):
-    def __init__(self, table: str = ENDPOINT_TABLE) -> None:
-        super().__init__(table)
+    def __init__(self) -> None:
+        super().__init__(ENDPOINT_TABLE)
+
+
+def _new_endpoint_id() -> str:
+    # 32 random bytes → 64 hex chars; non-sequential, unguessable.
+    return _ID_PREFIX + secrets.token_hex(32)
 
 
 _SAFE_FIELDS = (
     "provider",
     "environment",
+    "domain",
     "state",
     "created_at",
     "created_by",
@@ -49,36 +73,29 @@ _SAFE_FIELDS = (
 class WebhookEndpointRegistry:
     """Create / resolve / rotate / revoke public webhook endpoints.
 
-    Generic over the webhook surface: the payment-rails instance below uses the
-    defaults; other surfaces (e.g. connectors) instantiate with their own
-    ``table`` / ``id_prefix`` / ``path_template``. Semantics are identical
-    everywhere — server-side tenant resolution, uniform-None misses, revocation.
+    ``domain`` discriminates families that share this registry (``payment`` and
+    ``comms``). Endpoint ids are globally unique, so cross-domain resolution is
+    prevented by the domain check rather than by separate id namespaces.
     """
 
-    def __init__(
-        self,
-        repo: Optional[_WebhookEndpointRepo] = None,
-        *,
-        table: str = ENDPOINT_TABLE,
-        id_prefix: str = _ID_PREFIX,
-        path_template: str = _PATH_TEMPLATE,
-    ) -> None:
-        self._repo = repo or _WebhookEndpointRepo(table)
-        self._id_prefix = id_prefix
-        self._path_template = path_template
-
-    def _new_endpoint_id(self) -> str:
-        # 32 random bytes → 64 hex chars; non-sequential, unguessable.
-        return self._id_prefix + secrets.token_hex(32)
+    def __init__(self, repo: Optional[_WebhookEndpointRepo] = None) -> None:
+        self._repo = repo or _WebhookEndpointRepo()
 
     async def create(
-        self, tenant_id: str, provider: str, environment: str, *, created_by: str
+        self,
+        tenant_id: str,
+        provider: str,
+        environment: str,
+        *,
+        created_by: str,
+        domain: str = DOMAIN_PAYMENT,
     ) -> dict:
-        endpoint_id = self._new_endpoint_id()
+        endpoint_id = _new_endpoint_id()
         data = {
             "tenant_id": tenant_id,
             "provider": provider,
             "environment": environment,
+            "domain": domain,
             "state": EndpointState.ACTIVE,
             "created_by": created_by,
             "revoked_at": None,
@@ -86,15 +103,22 @@ class WebhookEndpointRegistry:
         }
         await self._repo.insert(endpoint_id, data)
         logger.info(
-            "webhook endpoint created tenant=%s provider=%s env=%s", tenant_id, provider, environment
+            "webhook endpoint created tenant=%s provider=%s env=%s domain=%s",
+            tenant_id, provider, environment, domain,
         )
         return self._public(endpoint_id, data)
 
-    async def resolve(self, endpoint_id: str, provider: str) -> Optional[dict]:
-        """Return ``{tenant_id, provider, environment}`` for an ACTIVE endpoint
-        whose provider matches the route, else ``None`` (uniform — never leaks
-        whether the id, tenant, or provider exists)."""
-        if not endpoint_id or not endpoint_id.startswith(self._id_prefix):
+    async def resolve(
+        self,
+        endpoint_id: str,
+        provider: str,
+        domain: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Return ``{tenant_id, provider, environment, domain}`` for an ACTIVE
+        endpoint whose provider (and, when given, domain) matches the route, else
+        ``None`` (uniform — never leaks whether the id, tenant, provider, or
+        domain exists)."""
+        if not endpoint_id or not endpoint_id.startswith(_ID_PREFIX):
             return None
         row = await self._repo.find_by_id(endpoint_id)
         if row is None:
@@ -103,10 +127,13 @@ class WebhookEndpointRegistry:
             return None
         if row.get("provider") != provider:
             return None
+        if domain is not None and _domain_of(row) != domain:
+            return None
         return {
             "tenant_id": row["tenant_id"],
             "provider": row["provider"],
             "environment": row["environment"],
+            "domain": _domain_of(row),
             "endpoint_id": endpoint_id,
         }
 
@@ -124,24 +151,49 @@ class WebhookEndpointRegistry:
         return True
 
     async def rotate(
-        self, tenant_id: str, provider: str, environment: str, *, actor: str
+        self,
+        tenant_id: str,
+        provider: str,
+        environment: str,
+        *,
+        actor: str,
+        domain: Optional[str] = None,
     ) -> dict:
         """Revoke any active endpoints for the slot and mint a fresh one."""
-        for row in await self._active_for(tenant_id, provider, environment):
+        for row in await self._active_for(
+            tenant_id, provider, environment, domain=domain
+        ):
             await self.revoke(tenant_id, row["id"], actor=actor)
-        return await self.create(tenant_id, provider, environment, created_by=actor)
+        return await self.create(
+            tenant_id, provider, environment, created_by=actor,
+            domain=domain or DOMAIN_PAYMENT,
+        )
 
-    async def list_for(self, tenant_id: str, provider: Optional[str] = None) -> list[dict]:
+    async def list_for(
+        self,
+        tenant_id: str,
+        provider: Optional[str] = None,
+        domain: Optional[str] = None,
+    ) -> list[dict]:
         filters: dict = {"tenant_id": tenant_id}
         if provider:
             filters["provider"] = provider
         rows = await self._repo.find_many(filters=filters, limit=200)
-        return [self._public(r["id"], r) for r in rows]
+        out = []
+        for r in rows:
+            if domain is not None and _domain_of(r) != domain:
+                continue
+            out.append(self._public(r["id"], r))
+        return out
 
     async def _active_for(
-        self, tenant_id: str, provider: str, environment: str
+        self,
+        tenant_id: str,
+        provider: str,
+        environment: str,
+        domain: Optional[str] = None,
     ) -> list[dict]:
-        return await self._repo.find_many(
+        rows = await self._repo.find_many(
             filters={
                 "tenant_id": tenant_id,
                 "provider": provider,
@@ -150,13 +202,18 @@ class WebhookEndpointRegistry:
             },
             limit=50,
         )
+        if domain is None:
+            return rows
+        return [r for r in rows if _domain_of(r) == domain]
 
-    def _public(self, endpoint_id: str, row: dict) -> dict:
+    @staticmethod
+    def _public(endpoint_id: str, row: dict) -> dict:
         view = {"endpoint_id": endpoint_id}
         view.update({f: row.get(f) for f in _SAFE_FIELDS if f in row})
         # Safe public webhook path suffix (never includes a secret).
-        view["webhook_path"] = self._path_template.format(
-            provider=row.get("provider"), endpoint_id=endpoint_id
+        family = _FAMILY_BY_DOMAIN.get(_domain_of(row), _FAMILY_BY_DOMAIN[DOMAIN_PAYMENT])
+        view["webhook_path"] = (
+            f"/v1/integrations/webhooks/{family}/{row.get('provider')}/{endpoint_id}"
         )
         return view
 
@@ -165,4 +222,11 @@ class WebhookEndpointRegistry:
 webhook_endpoint_registry = WebhookEndpointRegistry()
 
 
-__all__ = ["WebhookEndpointRegistry", "webhook_endpoint_registry", "EndpointState", "ENDPOINT_TABLE"]
+__all__ = [
+    "WebhookEndpointRegistry",
+    "webhook_endpoint_registry",
+    "EndpointState",
+    "ENDPOINT_TABLE",
+    "DOMAIN_PAYMENT",
+    "DOMAIN_COMMS",
+]

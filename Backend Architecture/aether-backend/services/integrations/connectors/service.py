@@ -510,8 +510,21 @@ class ConnectorService:
                 return {"accepted": False, "reason": "invalid signature", "events_ingested": 0}
             verified = True
         import json
+        from urllib.parse import parse_qs
         try:
-            payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+            raw_text = raw_body.decode("utf-8") if raw_body else ""
+            if not raw_text:
+                payload: dict = {}
+            elif "application/x-www-form-urlencoded" in str(
+                (headers or {}).get("content-type") or (headers or {}).get("Content-Type") or ""
+            ).lower():
+                # Mailchimp webhooks POST form-urlencoded (not JSON). Flatten
+                # single-value fields to scalars so the adapter maps
+                # {"type": "unsubscribe", "data[email]": "…"} naturally.
+                parsed = parse_qs(raw_text, keep_blank_values=True)
+                payload = {k: (v[0] if len(v) == 1 else v) for k, v in parsed.items()}
+            else:
+                payload = json.loads(raw_text)
         except (json.JSONDecodeError, UnicodeDecodeError):
             # D9: update health on invalid payload
             config.sync_status = "failed"  # type: ignore[assignment]

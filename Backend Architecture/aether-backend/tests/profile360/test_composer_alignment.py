@@ -86,6 +86,32 @@ def test_profile360_surface_marks_kyber_internal_and_tenant_scoped():
     assert result["alignment_audit"]["end_user_surface_requires_redaction"] is True
 
 
+def test_profile360_surface_absent_scores_are_null_not_zero():
+    """Finding I: the surface fabricated zero trust/risk, empty needs-help, and
+    compute-time timestamps when the underlying data was absent. Absence must be
+    null (distinguishable from a real measured 0), with a typed readiness
+    descriptor carrying the per-dimension state."""
+    graph = GraphClient()
+    _run(graph.add_vertex(Vertex(VertexType.USER, "user-1", {"tenant_id": "tenant-a"})))
+
+    # _IdentityRepo returns a core with no trust/risk/anomaly scores, no
+    # needs_help, and no created/updated timestamps.
+    result = _run(_composer(graph).get_profile360_surface(
+        "human", "user-1", "tenant-a", include=["identity", "analytics"],
+    ))
+    entity = result["entity"]
+    assert entity["trustScore"] is None
+    assert entity["riskScore"] is None
+    assert entity["anomalyScore"] is None
+    assert entity["needsHelp"] is None
+    assert entity["createdAt"] is None
+    assert entity["updatedAt"] is None
+    assert entity["tags"] == []
+    # Typed absence descriptor is present.
+    assert entity["readiness"] is not None
+    assert "state" in entity["readiness"]
+
+
 def test_graph_nodes_include_profile_links():
     """Graph nodes returned by _compose_graph include profile_id and profile_links."""
     graph = GraphClient()

@@ -291,24 +291,34 @@ def _resolve_stablecoin_chain() -> list[AdapterCertificationDescriptor]:
 
 
 def _resolve_communications() -> list[AdapterCertificationDescriptor]:
-    """Communications provider descriptors (read from the comms conformance
-    module, which resolves state from the live Klaviyo connector)."""
+    """Communications provider descriptors — one per registered comms connector
+    (any connector whose manifest declares ``comms.*`` data outputs), resolved
+    from the live connector classes via the comms conformance module. No
+    provider is hardcoded: adding a comms adapter to the registry automatically
+    includes it here."""
     try:
         from services.comms.conformance import comms_certification_descriptor
+        from shared.integration_contracts.catalog import manifest_by_family
 
-        return [comms_certification_descriptor("klaviyo")]
+        providers = sorted(
+            provider
+            for provider, manifest in manifest_by_family.items()
+            if any(output.startswith("comms.") for output in manifest.data_outputs)
+        )
+        return [comms_certification_descriptor(provider) for provider in providers]
     except Exception as exc:  # pragma: no cover - comms module present in this repo
         _record_import_error(
             "services.comms.conformance:comms_certification_descriptor", exc
         )
         return [
             AdapterCertificationDescriptor(
-                provider="klaviyo",
+                provider=provider,
                 domain="communications",
-                adapter="KlaviyoConnector(unresolved)",
+                adapter=f"{provider}(unresolved)",
                 implementation_state=CredentialReadiness.SCAFFOLDED,
                 first_release=True,
             )
+            for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark")
         ]
 
 

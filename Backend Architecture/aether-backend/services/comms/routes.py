@@ -205,6 +205,22 @@ async def comms_health(request: Request) -> dict:
     return APIResponse(data=data).to_dict()
 
 
+@router.get("/coverage")
+async def comms_coverage(request: Request, provider: Optional[str] = None) -> dict:
+    """Per-provider observation coverage for this tenant (honest, evidence-grounded).
+
+    Reports identity-bridge and suppression coverage per registered comms
+    provider alongside each provider's declared capabilities. Zero observations
+    is reported as zero; readiness lives in the certification matrix, not here.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.coverage import comms_coverage_report
+
+    report = await comms_coverage_report(tenant.tenant_id, provider=provider)
+    return APIResponse(data={"providers": report, "count": len(report)}).to_dict()
+
+
 # ── Commercial entitlements + quotas (§20) ───────────────────────────────────
 
 @router.get("/entitlement")
@@ -374,6 +390,61 @@ async def comms_admin_health(request: Request, tenant_id: Optional[str] = None) 
     require_kyber_operator(request)
     data = await _health_snapshot(tenant_id) if tenant_id else await _fleet_snapshot()
     return APIResponse(data=data).to_dict()
+
+
+@admin_router.get("/coverage")
+async def comms_admin_coverage(request: Request, tenant_id: Optional[str] = None) -> dict:
+    """Operator coverage view: per-provider coverage for one tenant or the fleet.
+
+    With ``?tenant_id=`` returns that tenant's per-provider coverage; without it,
+    aggregates coverage across all observed tenants (fleet). Aggregate zeros are
+    honest — providers nobody has wired yet report zero observations.
+    """
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    from services.comms.coverage import comms_coverage_report
+
+    if tenant_id:
+        report = await comms_coverage_report(tenant_id)
+        return APIResponse(
+            data={"tenant_id": tenant_id, "providers": report, "count": len(report)}
+        ).to_dict()
+
+    from repositories.repos import get_pool
+
+    pool = await get_pool()
+    if pool is None:
+        from services.comms.repository import _local_facts
+        tenants = sorted({r.get("tenant_id") for r in _local_facts.values()})
+    else:
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                "SELECT DISTINCT tenant_id FROM silver_comms_facts LIMIT 100"
+            )
+        tenants = [r["tenant_id"] for r in records]
+
+    totals: dict[str, dict[str, Any]] = {}
+    for t in (tn for tn in tenants if tn):
+        for entry in await comms_coverage_report(t):
+            p = entry["provider"]
+            acc = totals.setdefault(p, {
+                "provider": p,
+                "tenants_observed": 0,
+                "identities_observed": 0,
+                "identities_resolved": 0,
+                "identities_provisional": 0,
+                "active_suppressions": 0,
+            })
+            acc["tenants_observed"] += 1
+            for key in ("identities_observed", "identities_resolved",
+                        "identities_provisional", "active_suppressions"):
+                acc[key] += int(entry.get(key, 0))
+    return APIResponse(
+        data={
+            "providers": sorted(totals.values(), key=lambda r: r["provider"]),
+            "count": len(totals),
+        }
+    ).to_dict()
 
 
 # ── Operator actions (Phase 21F) — permission-gated and audited ─────────────

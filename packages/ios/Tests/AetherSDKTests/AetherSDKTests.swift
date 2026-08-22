@@ -369,4 +369,59 @@ final class AetherSDKTests: XCTestCase {
         XCTAssertEqual(h.droppedByConsent, 2)
         XCTAssertEqual(h.queueDepth, 5)
     }
+
+    // MARK: - Remote Manifest Wiring (rollout sampling + feature flags)
+    //
+    // Aether.shared is never `initialize()`d in this test target, so
+    // enqueueEvent()'s `isInitialized` guard would make an end-to-end
+    // track()-then-queueDepth() assertion vacuous regardless of the sampling
+    // gate. Aether.shouldSample(rate:roll:) is the pure decision function the
+    // gate calls, so it is exercised directly with injected rolls for a
+    // deterministic test. isFeatureEnabled() has no such guard and is
+    // exercised through the public singleton.
+
+    func testManifestRolloutPercentageZeroSamplesEventsOut() {
+        // rollout_percentage=0 -> samplingRate=0.0. Every roll in [0,1) must
+        // be sampled OUT, including the roll=0.0 boundary.
+        XCTAssertFalse(Aether.shouldSample(rate: 0.0, roll: 0.0))
+        XCTAssertFalse(Aether.shouldSample(rate: 0.0, roll: 0.5))
+        XCTAssertFalse(Aether.shouldSample(rate: 0.0, roll: 0.999))
+    }
+
+    func testManifestRolloutPercentageFullKeepsEveryEvent() {
+        // rollout_percentage=100 -> samplingRate=1.0. Every roll in [0,1)
+        // must be kept.
+        XCTAssertTrue(Aether.shouldSample(rate: 1.0, roll: 0.0))
+        XCTAssertTrue(Aether.shouldSample(rate: 1.0, roll: 0.999))
+    }
+
+    func testManifestRolloutPartialSamplingIsRollDependent() {
+        // rollout_percentage=50 -> samplingRate=0.5: keep when roll < rate.
+        XCTAssertTrue(Aether.shouldSample(rate: 0.5, roll: 0.0))
+        XCTAssertTrue(Aether.shouldSample(rate: 0.5, roll: 0.499))
+        XCTAssertFalse(Aether.shouldSample(rate: 0.5, roll: 0.5))
+        XCTAssertFalse(Aether.shouldSample(rate: 0.5, roll: 0.999))
+    }
+
+    func testManifestFeatureFlagIsHonoredByIsFeatureEnabled() {
+        let sdk = Aether.shared
+        let previous = sdk.manifestFeatureOverrides
+        defer { sdk.manifestFeatureOverrides = previous }
+
+        sdk.manifestFeatureOverrides = ["remote_beta_ui": true]
+        XCTAssertTrue(sdk.isFeatureEnabled("remote_beta_ui"))
+
+        sdk.manifestFeatureOverrides = ["remote_beta_ui": false]
+        XCTAssertFalse(sdk.isFeatureEnabled("remote_beta_ui", default: true))
+    }
+
+    func testIsFeatureEnabledFallsBackToDefaultWhenNoManifestOverride() {
+        let sdk = Aether.shared
+        let previous = sdk.manifestFeatureOverrides
+        defer { sdk.manifestFeatureOverrides = previous }
+
+        sdk.manifestFeatureOverrides = [:]
+        XCTAssertFalse(sdk.isFeatureEnabled("flag_absent_everywhere"))
+        XCTAssertTrue(sdk.isFeatureEnabled("flag_absent_everywhere", default: true))
+    }
 }

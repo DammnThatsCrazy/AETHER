@@ -453,11 +453,15 @@ credentials-activation-smoke: ## Credential activation posture — no live send;
 validate-schema-parity: ## Check event-registry.json, TS, and Python are in parity
 	python scripts/validate_event_schema_parity.py
 
+validate-mobile-event-parity: ## Check event-registry.json, iOS, and Android event maps are in parity
+	python scripts/validate_mobile_event_parity.py
+
 validate-consent-parity: ## Check consent-registry.json, TS, and Python are in parity
 	python scripts/validate_consent_schema_parity.py
 
 test\:contracts: ## Run contract registry parity tests (TS + Python)
 	python scripts/validate_event_schema_parity.py
+	python scripts/validate_mobile_event_parity.py
 	python scripts/validate_consent_schema_parity.py
 
 test\:privacy: ## Run privacy and consent model tests
