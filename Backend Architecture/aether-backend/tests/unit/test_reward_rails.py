@@ -359,9 +359,45 @@ def test_onchain_claim_blocks_hardhat_key_in_staging():
             reward={"amount": "50", "unit": "TOKEN", "currency": "TOKEN"},
             identity={"wallet_address": "0xdeadbeef"},
         )
-        config = {"chain_id": 1, "contract_address": "0x5FbDB2315678afecb367f032d93F642f64180aa3"}
+        # Explicit, non-Anvil chain identity so the call reaches signer
+        # resolution — this test pins the Hardhat-key block, not the chain-id
+        # fail-closed (covered separately below).
+        campaign = {
+            **_CAMPAIGN,
+            "chain_id": 11155111,
+            "contract_address": "0x1111111111111111111111111111111111111111",
+        }
         with pytest.raises((RuntimeError, ValueError)):
-            _run(adapter.build_action_payload(decision, _RULE, _CAMPAIGN, TENANT, "idem_004"))
+            _run(adapter.build_action_payload(decision, _RULE, campaign, TENANT, "idem_004"))
+    finally:
+        os.environ["AETHER_ENV"] = original_env
+
+
+def test_onchain_claim_fails_closed_on_anvil_and_missing_chain_outside_local():
+    """Outside local/test the rail refuses env-fallback chain identity: a
+    missing campaign chain_id/contract_address, or the Anvil default contract,
+    each raise before any signer work (no live claim silently bound to mainnet
+    or a local-test address)."""
+    original_env = os.environ.get("AETHER_ENV", "local")
+    os.environ["AETHER_ENV"] = "staging"
+    try:
+        adapter = OnchainClaimAdapter()
+        decision = PolicyDecision(
+            eligible=True, decision="eligible", campaign_id="camp-001",
+            rule_id="rule-001", rail="onchain_claim",
+            reward={"amount": "50", "unit": "TOKEN", "currency": "TOKEN"},
+            identity={"wallet_address": "0xdeadbeef"},
+        )
+        # (a) missing chain_id/contract → fail-closed
+        with pytest.raises(ValueError, match="explicit campaign chain_id"):
+            _run(adapter.build_action_payload(decision, _RULE, _CAMPAIGN, TENANT, "idem_a"))
+        # (b) explicit chain_id but Anvil default contract → refused
+        anvil = {
+            **_CAMPAIGN, "chain_id": 11155111,
+            "contract_address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        }
+        with pytest.raises(ValueError, match="Anvil"):
+            _run(adapter.build_action_payload(decision, _RULE, anvil, TENANT, "idem_b"))
     finally:
         os.environ["AETHER_ENV"] = original_env
 

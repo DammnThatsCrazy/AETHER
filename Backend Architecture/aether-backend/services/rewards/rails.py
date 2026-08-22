@@ -514,6 +514,11 @@ class OnchainClaimAdapter(RewardRailAdapter):
     _PRODUCTION_VM_TYPES = {"evm"}
     # Anvil/Hardhat test key
     _TEST_KEY = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    # Anvil/Hardhat first-deploy address. Signing a proof bound to this contract
+    # outside local/test would either sign against an address that does not
+    # exist on the target chain or leak a local-test binding into a live claim,
+    # so it is refused fail-closed below.
+    _ANVIL_CONTRACT = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 
     def validate_config(self, config: dict) -> list[str]:
         errors = []
@@ -537,11 +542,38 @@ class OnchainClaimAdapter(RewardRailAdapter):
         env = os.getenv("AETHER_ENV", "local").lower()
         is_local = env in ("local", "test")
 
-        signer_key = await self._resolve_signer_key(tenant_id, is_local)
-        chain_id = int(campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
-        contract_address = campaign.get("contract_address") or os.getenv(
-            "EVM_CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+        # Chain identity binds the proof to exactly one contract on exactly one
+        # chain (the signer re-derives the digest from these, rejecting any
+        # cross-chain/contract replay). Validate it BEFORE resolving the signer:
+        # outside local/test both MUST come from the campaign — no
+        # EVM_CHAIN_ID/EVM_CONTRACT_ADDRESS env fallback that could silently
+        # default a live claim to mainnet or the Anvil address.
+        raw_chain_id = campaign.get("chain_id") or (
+            os.getenv("EVM_CHAIN_ID", "1") if is_local else None
         )
+        raw_contract = campaign.get("contract_address") or (
+            os.getenv("EVM_CONTRACT_ADDRESS", self._ANVIL_CONTRACT) if is_local else None
+        )
+        if not is_local:
+            if not raw_chain_id:
+                raise ValueError(
+                    "onchain_claim requires an explicit campaign chain_id outside "
+                    "local/test (env fallbacks are refused fail-closed)"
+                )
+            if not raw_contract:
+                raise ValueError(
+                    "onchain_claim requires an explicit campaign contract_address "
+                    "outside local/test (env fallbacks are refused fail-closed)"
+                )
+            if str(raw_contract).lower() == self._ANVIL_CONTRACT:
+                raise ValueError(
+                    "onchain_claim refuses the Anvil/Hardhat default contract "
+                    f"address ({self._ANVIL_CONTRACT}) outside local/test"
+                )
+        chain_id = int(raw_chain_id)
+        contract_address = raw_contract
+
+        signer_key = await self._resolve_signer_key(tenant_id, is_local)
         wallet_address = (decision.identity or {}).get("wallet_address", "")
 
         if not wallet_address:
