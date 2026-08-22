@@ -957,6 +957,10 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
         budget_service=_budget_service,
     )
 
+    # Registry-verified signer address, set by the onchain_claim pre-check below
+    # and re-checked against the actually-signed proof after generation.
+    _verified_signer: Optional[str] = None
+
     # ── Contract registry pre-check (before persisting decision) ─────────
     # Gate onchain_claim before create_once so an unregistered contract does not
     # consume cooldown/per-user/total-use caps by leaving an eligible=True row.
@@ -1019,6 +1023,42 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                     "Register and verify via POST /v1/rewards/contracts before generating proofs."
                 ),
             )
+
+        # ── SIGNER-ROTATION GUARD ────────────────────────────────────────
+        # The registry row records the signer address the contract was verified
+        # to accept. If the tenant has since rotated its reward_signer
+        # credential, proofs signed by the new key would be rejected on chain
+        # while the registry still says "verified". Compare the CURRENT active
+        # signer's address with the verified row and fail closed on a mismatch,
+        # rather than persisting a decision and emitting an unclaimable proof.
+        _verified_signer = (_registry_entry.get("oracle_signer_address") or "").lower()
+        if _verified_signer:
+            try:
+                from services.rewards.signing import (
+                    resolve_reward_signer_address,
+                    reward_credential_environment,
+                )
+
+                _current_signer = (
+                    await resolve_reward_signer_address(
+                        tenant_id, reward_credential_environment()
+                    )
+                ).lower()
+            except Exception as exc:  # noqa: BLE001 — cannot confirm signer → fail closed
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"onchain_claim signer could not be resolved for verification: {exc}",
+                )
+            if _current_signer != _verified_signer:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "reward_signer has been rotated: the active signer "
+                        f"({_current_signer}) does not match the address the contract "
+                        f"registry was verified for ({_verified_signer}). Re-register and "
+                        "re-verify the contract for the new signer before generating proofs."
+                    ),
+                )
 
         # ── EVM MAINNET AUDIT GATE ───────────────────────────────────────
         # Block mainnet on-chain reward activation unless external-audit
@@ -1166,6 +1206,25 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             # Extract proof for onchain_claim rail
             if decision.rail == "onchain_claim":
                 proof_dict = payload.get("proof")
+                # Re-check the ACTUALLY-signed proof's signer against the
+                # registry-verified address. The earlier guard checked the
+                # active signer address, but build_action_payload resolves the
+                # key independently — a rotation between the two would slip a
+                # proof signed by the new, unregistered key through. Fail closed
+                # here (after the real signature) rather than emit an
+                # unclaimable proof.
+                if _verified_signer and isinstance(proof_dict, dict):
+                    _signed_by = (proof_dict.get("signer_address") or "").lower()
+                    if _signed_by and _signed_by != _verified_signer:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "reward_signer rotated during proof generation: the proof "
+                                f"was signed by {_signed_by}, which does not match the "
+                                f"contract registry's verified signer ({_verified_signer}). "
+                                "Re-register and re-verify the contract for the new signer."
+                            ),
+                        )
 
         except RailUnavailableError as exc:
             logger.warning(f"Rail {exc.rail} unavailable: {exc.reason}")
@@ -1683,12 +1742,9 @@ async def configure_rail(request: Request, body: RailConfigCreate):
             },
         )
 
-    # Validate config via adapter
+    # Reject an unknown rail up front (before any secret handling).
     try:
         adapter = get_rail_adapter(body.rail)
-        errors = adapter.validate_config(body.model_dump())
-        if errors:
-            raise HTTPException(status_code=422, detail={"rail": body.rail, "validation_errors": errors})
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Unknown rail: {body.rail}")
 
@@ -1702,6 +1758,10 @@ async def configure_rail(request: Request, body: RailConfigCreate):
     # Credential-only: a submitted tenant_webhook signing secret is dual-written
     # into the credential authority and replaced by a secret_ref before the rail
     # config is ever persisted — plaintext never reaches the JSONB row or audit.
+    # This runs BEFORE validation so a tenant submitting only the documented
+    # nested config.signing_secret has it converted to a secret_ref that
+    # validation then accepts, instead of being rejected 422 before the
+    # dual-write could run.
     if body.rail == "tenant_webhook":
         inner = config_data.get("config") or {}
         submitted = inner.get("signing_secret") or config_data.get("signing_secret")
@@ -1715,6 +1775,12 @@ async def configure_rail(request: Request, body: RailConfigCreate):
             inner["secret_ref"] = secret_ref
             config_data["config"] = inner
             config_data["secret_ref"] = secret_ref
+
+    # Validate config via adapter, against the (already dual-written) config so a
+    # tenant_webhook secret_ref satisfies the HMAC-material requirement.
+    errors = adapter.validate_config(config_data)
+    if errors:
+        raise HTTPException(status_code=422, detail={"rail": body.rail, "validation_errors": errors})
 
     rail_config = await repos["rail_configs"].create_or_update(tenant_id, body.rail, config_data)
     await _audit(repos, tenant_id, "rail.configured", "rail_config", rail_config.get("id"),
@@ -1765,6 +1831,28 @@ async def update_rail(request: Request, rail_id: str, body: RailConfigUpdate):
         inner = patch.get("config") or {}
         submitted = inner.get("signing_secret") or patch.get("signing_secret")
         if submitted:
+            # Validate the MERGED (existing + patch) config BEFORE rotating the
+            # credential. Rotating first and then rejecting the update on an
+            # invalid field (e.g. a malformed webhook_url) would leave the rail
+            # row unchanged but the ACTIVE secret already rotated — subsequent
+            # deliveries would then sign with a secret from a rejected config
+            # and fail receiver verification. Fail closed before store_secret.
+            before_config = (before or {}).get("config") or {}
+            merged_config = {**before_config, **inner}
+            validation_target = {
+                "webhook_url": (
+                    patch.get("webhook_url")
+                    or merged_config.get("webhook_url")
+                    or (before or {}).get("webhook_url")
+                ),
+                "signing_secret": submitted,
+            }
+            errors = get_rail_adapter(rail).validate_config(validation_target)
+            if errors:
+                raise HTTPException(
+                    status_code=422, detail={"rail": rail, "validation_errors": errors}
+                )
+
             from services.rewards.webhook_secret import store_secret
 
             actor = _actor_id(request)

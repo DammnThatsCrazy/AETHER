@@ -500,6 +500,30 @@ class X402ControlPlane:
         await self._mutations.write_entitlement(entitlement)
         return entitlement
 
+    async def mint_entitlement_for_reconciled_settlement(
+        self, tenant_id: str, settlement: Settlement
+    ) -> Entitlement:
+        """Mint the entitlement for a settlement the reconciliation worker has
+        verified but NOT yet marked SETTLED — idempotent, resolving the
+        authorization from the settlement's receipt. Minting here (before the
+        terminal state flip) means a transient failure raises and leaves the
+        settlement PENDING for the next tick, instead of stranding a SETTLED
+        settlement with no entitlement. Raises if the authorization can't be
+        resolved."""
+        receipt = await self._store.get_receipt(tenant_id, settlement.receipt_id)
+        auth = (
+            await self._store.get_authorization(tenant_id, receipt.authorization_id)
+            if receipt
+            else None
+        )
+        if auth is None:
+            raise ControlPlaneError(
+                "cannot mint entitlement: authorization not found for settlement",
+                "AUTH_NOT_FOUND",
+                404,
+            )
+        return await self._mint_entitlement_for_settlement(tenant_id, auth, settlement)
+
     async def finalize_settlement_entitlement(
         self, tenant_id: str, settlement_id: str
     ) -> Optional[Entitlement]:

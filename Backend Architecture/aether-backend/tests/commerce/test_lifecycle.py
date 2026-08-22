@@ -464,3 +464,62 @@ async def test_entitlement_deferred_until_settlement_settled(monkeypatch):
     # Idempotent: a second finalize returns the same entitlement (no duplicate).
     ent2 = await plane.finalize_settlement_entitlement(tenant, result["settlement_id"])
     assert ent2 is not None and ent2.entitlement_id == ent.entitlement_id
+
+
+@pytest.mark.asyncio
+async def test_commerce_health_degrades_only_on_recent_failures():
+    """N18: a historical failed settlement must not pin commerce health to
+    `degraded` forever — only failures within the recent window degrade, while
+    the lifetime count is still reported."""
+    from datetime import timedelta
+
+    from starlette.requests import Request as StarletteRequest
+
+    from shared.common.common import utc_now
+    from services.x402.commerce_models import (
+        Facilitator, FacilitatorMode, Settlement, SettlementState,
+    )
+    from services.x402.commerce_routes import commerce_health
+    from services.x402.commerce_store import get_commerce_store
+    from services.x402.facilitators import get_facilitator_registry
+
+    tenant = "t-health"
+    store = get_commerce_store()
+    await get_facilitator_registry().register(tenant, Facilitator(
+        facilitator_id="fac_local_aether", name="local", mode=FacilitatorMode.LOCAL,
+        supported_assets=["USDC"], supported_chains=["eip155:8453"], health_status="healthy",
+    ))
+
+    def _settlement(rid, updated_at):
+        s = Settlement(
+            tenant_id=tenant, receipt_id=rid, challenge_id="c", tx_hash="0x1",
+            chain="eip155:8453", amount_usd=1.0, facilitator_id="fac_local_aether",
+            state=SettlementState.FAILED,
+        )
+        s.updated_at = updated_at
+        return s
+
+    # Only an OLD failure on record → health stays healthy, lifetime count = 1.
+    await store.put_settlement(_settlement("r-old", (utc_now() - timedelta(hours=2)).isoformat()))
+
+    class _Tenant:
+        tenant_id = tenant
+
+        def has_permission(self, p):
+            return True
+
+    req = StarletteRequest({"type": "http", "method": "GET", "path": "/", "headers": []})
+    req.state.tenant = _Tenant()
+
+    resp = await commerce_health(req)
+    data = resp.data if hasattr(resp, "data") else resp["data"]
+    assert data["status"] == "healthy"
+    assert data["settlements"]["failed"] == 1
+    assert data["settlements"]["recent_failed"] == 0
+
+    # A RECENT failure degrades health.
+    await store.put_settlement(_settlement("r-new", utc_now().isoformat()))
+    resp2 = await commerce_health(req)
+    data2 = resp2.data if hasattr(resp2, "data") else resp2["data"]
+    assert data2["status"] == "degraded"
+    assert data2["settlements"]["recent_failed"] == 1

@@ -120,6 +120,24 @@ async def resolve_reward_signer(
     )
 
 
+async def resolve_reward_signer_address(
+    tenant_id: str, environment: str, chain_family: str = "evm"
+) -> str:
+    """Resolve the tenant's ACTIVE reward signer and return its EVM address.
+
+    Used to detect signer rotation: the contract registry records the signer
+    address a contract was verified to accept, and a proof signed by a rotated
+    key that the registry has not been re-verified for will be rejected on
+    chain. Comparing this against the registry's ``oracle_signer_address``
+    before generating a proof turns that into a fail-closed error instead of a
+    silently-unclaimable proof."""
+    key = await resolve_reward_signer(tenant_id, environment, chain_family)
+    from eth_account import Account
+
+    k = key[2:] if key.startswith("0x") else key
+    return Account.from_key(bytes.fromhex(k)).address
+
+
 def reward_credential_environment() -> str:
     """Default credential environment for the running deployment.
 

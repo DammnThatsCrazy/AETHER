@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "e610a8df"
+last_synced_commit: "dc3eaecf"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -768,7 +768,7 @@ Get a single eligibility decision by ID.
 
 Create a reward campaign. Campaigns define the scope, attribution model, and budget policy for reward eligibility evaluation.
 
-For `onchain_claim` campaigns, supply `contract_address` and `chain_id` explicitly. If `chain_id` is omitted the campaign record stores no chain preference and the registry gate falls back to `EVM_CHAIN_ID` at evaluation time — do not rely on Pydantic's default of 1 for non-mainnet deployments.
+For `onchain_claim` campaigns, supply `contract_address` and `chain_id` explicitly. Outside `local`/`test` both are **required** on the campaign — the registry gate no longer falls back to `EVM_CHAIN_ID` / `EVM_CONTRACT_ADDRESS`, and the Anvil default contract is rejected — so a campaign missing them is refused (HTTP 422) before any decision is persisted (env fallbacks remain only in local/test). The gate also checks the tenant's active `reward_signer` address against the contract registry's verified `oracle_signer_address`: after a signer rotation that the contract has not been re-verified for, proof generation is refused (HTTP 409) with instruction to re-register the contract, rather than emitting a proof the on-chain contract would reject.
 
 **Request:**
 ```json

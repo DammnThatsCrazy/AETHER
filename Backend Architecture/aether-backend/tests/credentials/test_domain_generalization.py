@@ -279,3 +279,25 @@ async def test_malformed_signing_key_cannot_be_activated(monkeypatch):
         credential_version=int(pending2["credential_version"]), actor="admin",
     )
     assert activated is not None
+
+
+@pytest.mark.asyncio
+async def test_resolve_reward_signer_address_matches_eth_account():
+    """N21: the signer-address helper derives the EVM address the contract
+    registry is compared against on rotation."""
+    from eth_account import Account
+
+    from services.providers.credentials.authority import credential_authority
+    from services.rewards.signing import resolve_reward_signer_address
+
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff81"
+    pending = await credential_authority.create_pending(
+        tenant, "reward_signer", "sandbox", "evm_reward_signer_key", key, created_by="admin"
+    )
+    await credential_authority.activate(
+        tenant, "reward_signer", "sandbox", "evm_reward_signer_key",
+        credential_version=int(pending["credential_version"]), actor="admin",
+    )
+    addr = await resolve_reward_signer_address(tenant, "sandbox")
+    assert addr == Account.from_key(bytes.fromhex(key)).address

@@ -207,3 +207,77 @@ async def test_non_webhook_rail_config_still_redacted_defensively():
     data = created["data"] if isinstance(created, dict) and "data" in created else created
     assert data["config"]["api_key"] == "<redacted>"
     assert data["config"]["has_api_key"] is True
+
+
+@pytest.mark.asyncio
+async def test_configure_rail_accepts_nested_signing_secret_without_secret_ref():
+    """N19: a tenant configuring tenant_webhook with ONLY the documented nested
+    config.signing_secret (no pre-known secret_ref) must succeed — the secret is
+    dual-written to a secret_ref BEFORE validation, not rejected 422 because
+    validation ran first."""
+    from starlette.requests import Request as StarletteRequest
+
+    from services.rewards.routes import RailConfigCreate, configure_rail
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = StarletteRequest(
+        {"type": "http", "method": "POST", "path": "/", "headers": []}, receive
+    )
+    body = RailConfigCreate(
+        rail="tenant_webhook",
+        enabled=False,
+        config={"signing_secret": "only-nested-secret"},  # no secret_ref supplied
+        webhook_url="https://tenant.example.com/hook",
+    )
+    created = await configure_rail(request, body)
+    data = created["data"] if isinstance(created, dict) and "data" in created else created
+    assert "signing_secret" not in data["config"]
+    assert data["config"]["secret_ref"].startswith("credref://rewards/tenant_webhook/")
+
+
+@pytest.mark.asyncio
+async def test_update_rail_validates_before_rotating_secret(monkeypatch):
+    """F1: PATCH update_rail must validate the merged config BEFORE rotating the
+    credential — an invalid webhook_url with a new secret returns 422 and does
+    NOT rotate the active secret (which later deliveries would sign with)."""
+    from fastapi import HTTPException
+    from starlette.requests import Request as StarletteRequest
+
+    from services.rewards import routes as rewards_routes
+    from services.rewards.routes import RailConfigUpdate, configure_rail, update_rail, RailConfigCreate
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = StarletteRequest(
+        {"type": "http", "method": "POST", "path": "/", "headers": []}, receive
+    )
+    # First create a valid tenant_webhook rail.
+    created = await configure_rail(request, RailConfigCreate(
+        rail="tenant_webhook", enabled=False,
+        config={"signing_secret": "initial-secret"},
+        webhook_url="https://tenant.example.com/hook",
+    ))
+    rail_id = (created["data"] if isinstance(created, dict) and "data" in created else created)["id"]
+
+    # Track store_secret calls.
+    calls = {"n": 0}
+    real_store = rewards_routes.__dict__.get("store_secret")
+
+    from services.rewards import webhook_secret as ws
+
+    async def _tracked_store(*a, **k):
+        calls["n"] += 1
+        return await ws.store_secret(*a, **k)
+
+    monkeypatch.setattr("services.rewards.webhook_secret.store_secret", _tracked_store)
+
+    # PATCH with a NEW secret but an invalid webhook_url → must 422, no rotation.
+    with pytest.raises(HTTPException) as exc:
+        await update_rail(request, rail_id, RailConfigUpdate(
+            config={"signing_secret": "rotated-secret", "webhook_url": "not-a-url"},
+        ))
+    assert exc.value.status_code == 422
+    assert calls["n"] == 0  # secret was NOT rotated

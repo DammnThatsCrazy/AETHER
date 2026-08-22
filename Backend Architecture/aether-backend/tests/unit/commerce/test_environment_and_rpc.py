@@ -705,3 +705,142 @@ async def test_facilitator_credential_attached_as_bearer(monkeypatch):
     verified, error = await engine._verify_via_facilitator("t_fac2", fac, auth, "0x" + "a" * 64)
     assert verified is True
     assert seen["headers"].get("Authorization") == "Bearer sk_fac_test_123"
+
+
+def test_facilitator_transport_failures_map_to_retryable_verdict():
+    """N22: facilitator 5xx / timeout / unreachable must yield a
+    verification_unavailable (retryable) verdict, not a terminal
+    verification_failed that verify_and_settle caches for 24h."""
+    from services.x402.verification import _verdict_token, is_terminal_verdict
+
+    for msg in (
+        "verification_unavailable: facilitator returned HTTP 503",
+        "verification_unavailable: facilitator fac_x timed out",
+        "verification_unavailable: facilitator unreachable: conn refused",
+    ):
+        assert _verdict_token(msg) == "verification_unavailable"
+        assert is_terminal_verdict(_verdict_token(msg)) is False
+    # A definitive 4xx stays terminal.
+    assert is_terminal_verdict(_verdict_token("facilitator returned HTTP 400")) is True
+
+
+def test_receipt_id_is_deterministic_per_authorization():
+    """N16: the receipt id is derived from (tenant, authorization) so a
+    re-verification upserts the same receipt row instead of colliding on the
+    commerce_receipts (tenant_id, authorization_id) unique index."""
+    from services.x402.verification import _receipt_id_for
+
+    a = _receipt_id_for("t1", "auth-1")
+    assert a == _receipt_id_for("t1", "auth-1")            # stable
+    assert a != _receipt_id_for("t1", "auth-2")            # per-authorization
+    assert a != _receipt_id_for("t2", "auth-1")            # per-tenant
+    assert a.startswith("rcpt_")
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_keeps_settlement_pending_when_mint_fails(monkeypatch):
+    """N17: if the entitlement mint fails after verification, the settlement
+    must stay PENDING (retried next tick), never SETTLED-without-entitlement."""
+    import services.x402.control_plane as cp_mod
+    from services.x402.reconciliation import X402ReconciliationWorker
+
+    class _S:
+        settlement_id = "s-mintfail"
+        environment = "sandbox"
+        receipt_id = "rc"
+        tx_hash = "0x9"
+
+    class _Store:
+        async def list_settlements(self, tenant_id, state=None):
+            return [_S()]
+
+        async def get_receipt(self, tenant_id, rid):
+            return type("R", (), {"authorization_id": "a1"})()
+
+        async def get_authorization(self, tenant_id, aid):
+            return type("A", (), {"authorization_id": "a1"})()
+
+    class _Verify:
+        async def _verify_locally(self, auth, tx):
+            return True, None  # verified
+
+    marked = {"settled": False}
+
+    class _Tracker:
+        async def mark_settled_reconciled(self, tenant_id, sid):
+            marked["settled"] = True
+
+    class _FailingPlane:
+        async def mint_entitlement_for_reconciled_settlement(self, tenant_id, settlement):
+            raise RuntimeError("transient mint outage")
+
+    monkeypatch.setattr(cp_mod, "get_control_plane", lambda: _FailingPlane())
+
+    worker = X402ReconciliationWorker()
+    worker._store = _Store()
+    worker._verify = _Verify()
+    worker._tracker = _Tracker()
+    monkeypatch.setattr(worker, "_capability_suspended", lambda t, e: _false())
+    monkeypatch.setattr(worker, "_write_cursor", lambda *a, **k: _none())
+
+    result = await worker.reconcile_tenant("t-mintfail")
+    assert result["settled"] == 0
+    assert result["still_pending"] == 1
+    assert marked["settled"] is False  # settlement never flipped to SETTLED
+
+
+async def _false():
+    return False
+
+
+async def _none():
+    return None
+
+
+@pytest.mark.asyncio
+async def test_retryable_reverification_does_not_downgrade_verified_receipt(monkeypatch):
+    """F5: once a payment is verified, a later retry that hits a transient
+    facilitator/RPC outage must NOT overwrite the verified receipt (the
+    deterministic id makes put_receipt an upsert) — the existing verified
+    receipt is kept."""
+    from services.x402.verification import get_verification_engine, _receipt_id_for
+    from services.x402.commerce_models import PaymentAuthorization, PaymentReceipt
+    from services.x402.commerce_store import get_commerce_store
+
+    engine = get_verification_engine()
+    # Seed via the engine's OWN store (the one verify() reads) — the singleton
+    # captures its store at init, which a prior test's reset can desync from
+    # get_commerce_store().
+    store = engine._store
+    tenant = "t-f5"
+    auth = PaymentAuthorization(
+        tenant_id=tenant, challenge_id="c", approval_id="a", payment_identifier="p-f5",
+        amount_usd=1.0, asset_symbol="USDC", chain="eip155:8453", recipient="0xr",
+        payer="0xpayer", facilitator_id="fac_local_aether", environment="sandbox",
+    )
+    await store.put_authorization(auth)
+    # Seed an already-VERIFIED receipt at the deterministic id.
+    rid = _receipt_id_for(tenant, auth.authorization_id)
+    await store.put_receipt(PaymentReceipt(
+        receipt_id=rid, tenant_id=tenant, authorization_id=auth.authorization_id,
+        challenge_id="c", tx_hash="0x" + "a" * 64, chain="eip155:8453", environment="sandbox",
+        asset_symbol="USDC", amount_usd=1.0, payer="0xpayer", recipient="0xr",
+        verified=True, verified_by="fac_local_aether", verification_verdict="verified",
+        verified_at="2026-08-22T00:00:00Z",
+    ))
+
+    # A retry now hits a transient outage.
+    async def _outage(authorization, tx_hash):
+        return False, "verification_unavailable: facilitator timed out"
+
+    monkeypatch.setattr(engine, "_verify_locally", _outage)
+    # Force the local-facilitator path to defer to local verification.
+    monkeypatch.setattr(engine._facilitators, "get", lambda *a, **k: _await_none())
+
+    receipt = await engine.verify(tenant, auth, "0x" + "a" * 64, prefer_facilitator=False)
+    assert receipt.verified is True          # kept, not downgraded
+    assert receipt.receipt_id == rid
+
+
+async def _await_none():
+    return None

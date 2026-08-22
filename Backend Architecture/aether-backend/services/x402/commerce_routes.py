@@ -603,11 +603,33 @@ async def commerce_health(request: Request):
     pending_settlements = sum(1 for s in settlements if s.state == SettlementState.PENDING)
     failed_settlements = sum(1 for s in settlements if s.state == SettlementState.FAILED)
 
-    # No usable facilitator, or every facilitator down → unhealthy; a failed
-    # settlement or all-degraded facilitators → degraded; else healthy.
+    # Health degradation is driven by RECENT failures only — a settlement store
+    # retains history, so counting all-time failures would pin the endpoint to
+    # `degraded` forever after a single historical invalid payment, even once
+    # facilitators and every later payment have recovered. The lifetime count is
+    # still reported separately below.
+    from datetime import timedelta
+
+    from shared.common.common import utc_now
+    from shared.temporal.instant import try_parse_instant
+
+    _HEALTH_FAILURE_WINDOW_SECONDS = 3600
+    _cutoff = utc_now() - timedelta(seconds=_HEALTH_FAILURE_WINDOW_SECONDS)
+    recent_failed = 0
+    for s in settlements:
+        if s.state != SettlementState.FAILED:
+            continue
+        _ts, _ = try_parse_instant(
+            str(getattr(s, "updated_at", "") or getattr(s, "settled_at", "") or "")
+        )
+        if _ts is not None and _ts >= _cutoff:
+            recent_failed += 1
+
+    # No usable facilitator, or every facilitator down → unhealthy; a RECENT
+    # failed settlement or all-degraded facilitators → degraded; else healthy.
     if not facilitators or len(fac_down) == len(facilitators):
         status = "unhealthy"
-    elif failed_settlements or (fac_degraded and not any(
+    elif recent_failed or (fac_degraded and not any(
         f.health_status == "healthy" for f in facilitators
     )):
         status = "degraded"
@@ -627,7 +649,8 @@ async def commerce_health(request: Request):
             "settlements": {
                 "total": len(settlements),
                 "pending": pending_settlements,
-                "failed": failed_settlements,
+                "failed": failed_settlements,          # lifetime
+                "recent_failed": recent_failed,        # within the health window
             },
             "facilitators": {
                 "total": len(facilitators),

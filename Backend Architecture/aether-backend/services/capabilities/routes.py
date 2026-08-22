@@ -400,8 +400,31 @@ async def resume_activation(
 @kyber_router.get("/activation")
 @api_response
 async def operator_activation_states(request: Request):
-    """Cross-tenant current lifecycle states (operator readiness view)."""
-    return await get_lifecycle_authority().states_all_tenants()
+    """Cross-tenant current lifecycle states (operator readiness view), paged.
+
+    KEYSET pagination: ``limit`` (default 500, max 1000) and an opaque ``cursor``
+    (the last row's id from the previous page). A keyset cursor — not a numeric
+    offset — keeps the readiness/kill-switch view from duplicating or skipping
+    states while transitions concurrently supersede and insert rows. ``has_more``
+    flags truncation and ``next_cursor`` drives the next page.
+    """
+    try:
+        limit = int(request.query_params.get("limit", "500"))
+    except (TypeError, ValueError):
+        limit = 500
+    limit = max(1, min(limit, 1000))
+    cursor = request.query_params.get("cursor") or None
+    # Fetch one extra row to detect truncation deterministically.
+    rows = await get_lifecycle_authority().states_all_tenants(limit=limit + 1, after_id=cursor)
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    return {
+        "states": page,
+        "limit": limit,
+        "cursor": cursor,
+        "has_more": has_more,
+        "next_cursor": page[-1].get("id") if (has_more and page) else None,
+    }
 
 
 @kyber_router.post("/activation/{tenant_id}/{provider}/{capability}/suspend")
