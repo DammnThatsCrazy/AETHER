@@ -72,7 +72,10 @@ def test_domain_partition_is_consistent():
 
     assert providers_for_domain("payments") == tuple(sorted(ADAPTERS.keys()))
     assert providers_for_domain("signing") == ("reward_signer",)
-    assert providers_for_domain("rewards") == ("tenant_webhook",)
+    # stripe_credit (the stripe_credit reward-rail's own API key) and
+    # tenant_webhook (the tenant_webhook rail's HMAC secret) both live in the
+    # rewards domain, sorted.
+    assert providers_for_domain("rewards") == ("stripe_credit", "tenant_webhook")
     # no provider name appears in two domains
     registry = build_slot_registry()
     for provider, slots in registry.items():

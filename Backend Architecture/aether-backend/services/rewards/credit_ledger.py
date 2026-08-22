@@ -16,7 +16,8 @@ Money is Decimal end-to-end — never float.
 
 from __future__ import annotations
 
-import uuid
+import asyncio
+import hashlib
 from decimal import Decimal
 from typing import Optional
 
@@ -50,6 +51,42 @@ class InternalCreditLedger:
     ) -> None:
         self._ledger = ledger or _LedgerRepo()
         self._balances = balances or _BalancesRepo()
+        # Per-balance-row locks so concurrent postings to the same
+        # (tenant, recipient, currency) balance can't lose an update to a
+        # racing read-modify-write, and so a crash-retry racing a fresh
+        # replay of the *same* idempotency key can't apply the balance
+        # twice. Keyed by the balance row id; created lazily and guarded by
+        # `_locks_guard` so two coroutines never create two different Lock
+        # objects for the same row.
+        self._balance_locks: dict[str, asyncio.Lock] = {}
+        self._locks_guard = asyncio.Lock()
+
+    @staticmethod
+    def _entry_id(tenant_id: str, idempotency_key: str) -> str:
+        """Deterministic ledger row id, scoped per tenant.
+
+        The idempotency key is caller-controlled (it comes from the
+        campaign/outbox payload), so two different tenants can legitimately
+        submit the same key (e.g. both replaying "order-123"). Hashing
+        ``tenant_id`` together with the key — rather than using the key
+        alone — keeps their ledger rows, and therefore their idempotent-
+        replay lookups, fully independent. A NUL-separated digest (instead
+        of naive ``f"{tenant_id}:{idempotency_key}"`` concatenation) also
+        rules out a crafted key containing the delimiter making two distinct
+        (tenant_id, key) pairs hash to the same row.
+        """
+        digest = hashlib.sha256(
+            f"{tenant_id}\x00{idempotency_key}".encode("utf-8")
+        ).hexdigest()
+        return f"rcl_{digest}"
+
+    async def _lock_for(self, row_id: str) -> asyncio.Lock:
+        async with self._locks_guard:
+            lock = self._balance_locks.get(row_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._balance_locks[row_id] = lock
+            return lock
 
     async def credit(
         self,
@@ -62,14 +99,37 @@ class InternalCreditLedger:
         idempotency_key: str,
         action_id: Optional[str] = None,
     ) -> dict:
-        """Post a double-entry reward credit; idempotent by ``idempotency_key``."""
+        """Post a double-entry reward credit; idempotent by ``idempotency_key``.
+
+        Idempotency is scoped per tenant (see ``_entry_id``): two tenants
+        posting the same ``idempotency_key`` get two independent ledger rows
+        and two independent balance credits.
+
+        The ledger insert and the balance increment are not on one atomic
+        transaction (``BaseRepository`` exposes no multi-statement
+        transaction primitive), so a process/db crash could previously land
+        between them: the ledger durably recorded the credit but the
+        balance was never incremented, and a retry that found the existing
+        ledger entry returned early without ever applying it. Every ledger
+        entry now carries a ``balance_applied`` marker that only flips to
+        ``True`` after the balance increment commits. The replay path
+        checks that marker and, if it is still ``False`` (a prior attempt
+        died before applying the balance), re-runs the balance step before
+        returning — so a redelivered outbox job always converges on
+        "ledger entry exists AND balance reflects it", never a durable
+        credit the balance silently omits.
+        """
         if amount <= 0:
             raise ValueError("credit amount must be positive")
 
-        entry_id = f"rcl_{idempotency_key}"
+        entry_id = self._entry_id(tenant_id, idempotency_key)
         existing = await self._ledger.find_by_id(entry_id)
         if existing is not None:
-            return existing  # idempotent replay
+            if existing.get("balance_applied"):
+                return existing  # fully-applied idempotent replay
+            # Prior attempt inserted the ledger row but crashed/failed
+            # before the balance was applied — repair it now.
+            return await self._apply_and_mark(entry_id, tenant_id, recipient_id, currency, amount)
 
         entry = {
             "tenant_id": tenant_id,
@@ -85,14 +145,43 @@ class InternalCreditLedger:
                 {"account": f"recipient:{recipient_id}", "direction": "credit", "amount": str(amount)},
             ],
             "posted_at": utc_now().isoformat(),
+            "balance_applied": False,
         }
-        stored = await self._ledger.insert(entry_id, entry)
-        await self._apply_balance(tenant_id, recipient_id, currency, amount)
-        logger.info(
-            "internal_credit posted tenant=%s recipient=%s amount=%s %s",
-            tenant_id, recipient_id, amount, currency,
-        )
-        return stored
+        await self._ledger.insert(entry_id, entry)
+        return await self._apply_and_mark(entry_id, tenant_id, recipient_id, currency, amount)
+
+    async def _apply_and_mark(
+        self,
+        entry_id: str,
+        tenant_id: str,
+        recipient_id: str,
+        currency: str,
+        amount: Decimal,
+    ) -> dict:
+        """Apply the balance delta for ``entry_id`` exactly once, then mark it.
+
+        Serialized on the destination balance row's lock so (a) two
+        coroutines racing to repair/finish the *same* ledger entry can't
+        both apply it, and (b) unrelated concurrent postings to the *same*
+        (tenant, recipient, currency) balance never lose an update to each
+        other's read-modify-write. The ledger entry is re-read under the
+        lock so the ``balance_applied`` check is against the latest
+        committed state, not a possibly-stale value read before the lock
+        was acquired.
+        """
+        row_id = f"{tenant_id}:{recipient_id}:{currency}"
+        lock = await self._lock_for(row_id)
+        async with lock:
+            current = await self._ledger.find_by_id(entry_id)
+            if current is not None and current.get("balance_applied"):
+                return current  # someone else already finished this entry
+            await self._apply_balance(tenant_id, recipient_id, currency, amount)
+            updated = await self._ledger.update(entry_id, {"balance_applied": True})
+            logger.info(
+                "internal_credit posted tenant=%s recipient=%s amount=%s %s",
+                tenant_id, recipient_id, amount, currency,
+            )
+            return updated
 
     async def _apply_balance(
         self, tenant_id: str, recipient_id: str, currency: str, delta: Decimal

@@ -1686,6 +1686,28 @@ async def update_rail(request: Request, rail_id: str, body: RailConfigUpdate):
     before = await repos["rail_configs"].get(rail_id, tenant_id)
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     patch["updated_at"] = _utc_now()
+
+    # Credential-only: mirror configure_rail's dual-write exactly. A PATCH can
+    # rotate a tenant_webhook signing secret via config.signing_secret just as
+    # easily as a CREATE can set one — without this, the plaintext-purge
+    # migration only ever runs once and every later PATCH would reintroduce a
+    # plaintext secret into the row. Submitted secret is stored in the
+    # credential authority and replaced by a secret_ref BEFORE persistence.
+    rail = (before or {}).get("rail")
+    if rail == "tenant_webhook":
+        inner = patch.get("config") or {}
+        submitted = inner.get("signing_secret") or patch.get("signing_secret")
+        if submitted:
+            from services.rewards.webhook_secret import store_secret
+
+            actor = _actor_id(request)
+            secret_ref = await store_secret(tenant_id, submitted, actor=actor)
+            inner.pop("signing_secret", None)
+            patch.pop("signing_secret", None)
+            inner["secret_ref"] = secret_ref
+            patch["config"] = inner
+            patch["secret_ref"] = secret_ref
+
     updated = await repos["rail_configs"].update(rail_id, patch)
     await _audit(repos, tenant_id, "rail.updated", "rail_config", rail_id,
                  before_state=_redact_rail_config(before),

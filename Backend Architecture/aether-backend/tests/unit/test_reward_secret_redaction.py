@@ -114,6 +114,76 @@ async def test_configure_and_get_rail_routes_return_redacted_config():
 
 
 @pytest.mark.asyncio
+async def test_update_rail_route_dual_writes_secret_and_never_persists_plaintext():
+    """PATCH /v1/rewards/rails/{rail_id} must apply the SAME store_secret /
+    secret_ref dual-write that configure_rail (CREATE) applies, BEFORE the
+    repository update — a rotated config.signing_secret must never land in
+    tenant_reward_rail_configs as plaintext, matching create's behavior."""
+    from starlette.requests import Request as StarletteRequest
+
+    from services.rewards.routes import (
+        RailConfigCreate,
+        RailConfigUpdate,
+        configure_rail,
+        get_rail,
+        update_rail,
+    )
+    from services.rewards.repositories import RewardRailConfigRepository
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = StarletteRequest(
+        {"type": "http", "method": "POST", "path": "/", "headers": []}, receive
+    )
+
+    created = await configure_rail(
+        request,
+        RailConfigCreate(
+            rail="tenant_webhook",
+            enabled=False,
+            config={"signing_secret": "original-webhook-secret"},
+            secret_ref="credref://rewards/tenant_webhook/sandbox/webhook_signing_secret",
+            webhook_url="https://tenant.example.com/hook",
+        ),
+    )
+    created_data = created["data"] if isinstance(created, dict) and "data" in created else created
+    rail_id = created_data["id"]
+    original_secret_ref = created_data["config"]["secret_ref"]
+
+    # Rotate the signing secret via PATCH, exactly as a tenant would.
+    patched = await update_rail(
+        request,
+        rail_id,
+        RailConfigUpdate(config={"signing_secret": "rotated-webhook-secret"}),
+    )
+    patched_data = patched["data"] if isinstance(patched, dict) and "data" in patched else patched
+
+    # API response: no plaintext, only a (rotated) secret_ref.
+    assert "signing_secret" not in patched_data["config"]
+    new_secret_ref = patched_data["config"]["secret_ref"]
+    assert new_secret_ref.startswith("credref://rewards/tenant_webhook/")
+    assert new_secret_ref == original_secret_ref  # rotation reuses the same ref
+
+    # The persisted row itself — not just the redacted API response — must
+    # never contain the plaintext secret. This is the actual bug: P3's
+    # redaction only masked the response, while the row kept plaintext.
+    raw = await RewardRailConfigRepository().get(rail_id, created_data["tenant_id"])
+    assert "signing_secret" not in raw["config"]
+    assert raw["config"]["secret_ref"] == new_secret_ref
+    import json
+
+    assert "rotated-webhook-secret" not in json.dumps(raw)
+    assert "original-webhook-secret" not in json.dumps(raw)
+
+    # get_rail confirms the same through the normal read path too.
+    got = await get_rail(request, rail_id)
+    got_data = got["data"] if isinstance(got, dict) and "data" in got else got
+    assert "signing_secret" not in got_data["config"]
+    assert got_data["config"]["secret_ref"] == new_secret_ref
+
+
+@pytest.mark.asyncio
 async def test_non_webhook_rail_config_still_redacted_defensively():
     """A non-tenant_webhook rail carrying an inline secret is redacted (the
     dual-write path is tenant_webhook-specific; other rails must still never

@@ -78,6 +78,50 @@ class InternalCreditSender:
 
 # ── stripe_credit ──────────────────────────────────────────────────────────
 
+# Stripe minor-unit exponents (ISO 4217, per Stripe's currency documentation:
+# https://docs.stripe.com/currencies#zero-decimal). Most currencies use 2
+# decimal places (amount * 100); a fixed set use 0 (amount unscaled) or 3
+# (amount * 1000). A currency in none of these sets is REJECTED rather than
+# assumed 2-decimal — a wrong guess here is a real-money over/under-credit.
+_ZERO_DECIMAL_CURRENCIES = frozenset(
+    {
+        "bif", "clp", "djf", "gnf", "isk", "jpy", "kmf", "krw", "mga",
+        "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+    }
+)
+_THREE_DECIMAL_CURRENCIES = frozenset({"bhd", "jod", "kwd", "omr", "tnd"})
+_TWO_DECIMAL_CURRENCIES = frozenset(
+    {
+        "usd", "eur", "gbp", "aud", "cad", "chf", "cny", "hkd", "sgd",
+        "nzd", "sek", "nok", "dkk", "mxn", "brl", "inr", "zar", "aed",
+        "pln", "try", "ils", "thb", "myr", "php", "idr", "twd", "czk",
+        "huf", "ron", "sar", "qar", "kes", "ngn", "egp", "cop", "ars",
+        "vef",
+    }
+)
+
+
+def _stripe_minor_unit_exponent(currency: str) -> int:
+    """Return the number of minor-unit decimal places Stripe expects.
+
+    Fail-closed: a currency this table has not classified raises rather than
+    silently defaulting to 2 decimals (which would mis-credit real money for
+    any zero- or three-decimal currency we forgot to list).
+    """
+    code = (currency or "").strip().lower()
+    if code in _ZERO_DECIMAL_CURRENCIES:
+        return 0
+    if code in _THREE_DECIMAL_CURRENCIES:
+        return 3
+    if code in _TWO_DECIMAL_CURRENCIES:
+        return 2
+    raise ValueError(
+        f"stripe_credit: unsupported currency {currency!r} — no known minor-unit "
+        "exponent; refusing to guess (add it to the currency tables in "
+        "services/rewards/senders.py once its Stripe minor-unit convention is "
+        "confirmed)"
+    )
+
 
 class StripeCreditSender:
     delivery_mode = "sync_api"
@@ -130,13 +174,18 @@ class StripeCreditSender:
     ) -> dict:
         """Idempotent Stripe customer-balance credit transaction.
 
-        Amounts are minor units (cents). Uses Stripe's Idempotency-Key so a
+        Amounts are minor units, scaled by the currency's Stripe exponent (2
+        decimals for most currencies, 0 for zero-decimal currencies like JPY,
+        3 for three-decimal currencies like BHD) — never a hardcoded ``* 100``,
+        which would over-credit zero-decimal currencies 100x and under-credit
+        three-decimal currencies 10x. Uses Stripe's Idempotency-Key so a
         redelivered outbox job never double-credits. In local/test (no network)
         returns a deterministic stub so the flow is exercisable offline.
         """
         import os
 
-        minor = int((amount * Decimal(100)).to_integral_value())
+        exponent = _stripe_minor_unit_exponent(currency)
+        minor = int((amount * (Decimal(10) ** exponent)).to_integral_value())
         if os.getenv("AETHER_ENV", "local").lower() in ("local", "test"):
             return {"id": f"cbt_local_{idem[:16]}", "amount": -minor, "currency": currency}
 

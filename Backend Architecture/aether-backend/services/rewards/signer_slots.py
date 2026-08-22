@@ -18,6 +18,11 @@ Providers declared here:
   tenant_webhook reward rail. Overlap rotation, mirroring the payment-rail
   webhook secret policy, so receivers verify against active+previous during a
   rotation window.
+* ``stripe_credit`` (domain ``rewards``) — the tenant's Stripe secret API key
+  used by the stripe_credit reward rail to post customer-balance credit
+  transactions. This is a reward-delivery credential (not the payment-rail
+  observer's ``stripe`` provider, which only ever holds a webhook signing
+  secret), so it is declared here rather than derived from a payment adapter.
 """
 
 from __future__ import annotations
@@ -79,6 +84,26 @@ REWARD_SLOT_DECLARATIONS: dict[str, tuple[dict, ...]] = {
             needs_endpoint=False,
             validation_strategy="signature_selfcheck",
             rotation_policy="overlap",
+            sensitive=True,
+        ),
+    ),
+    "stripe_credit": (
+        dict(
+            slot_name="server_api_key",
+            domain=CredentialDomain.REWARDS,
+            display_name="Stripe reward credit API key",
+            purpose=(
+                "Authenticate Stripe customer-balance credit transactions issued "
+                "by the stripe_credit reward rail (server-side secret key, e.g. "
+                "sk_live_... / sk_test_...)."
+            ),
+            secret_type="bearer_token",
+            required=True,
+            required_for=("reward_delivery",),
+            scope_policy="write_credit_only",
+            needs_endpoint=False,
+            validation_strategy="live_probe",
+            rotation_policy="replace",
             sensitive=True,
         ),
     ),

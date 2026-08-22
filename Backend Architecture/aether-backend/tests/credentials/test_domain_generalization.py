@@ -60,7 +60,10 @@ def test_reward_domain_slots_present_and_partitioned():
     signer_slots = {s.slot_name for s in reg["reward_signer"]}
     assert signer_slots == {"evm_reward_signer_key", "svm_reward_signer_key"}
     assert providers_for_domain("signing") == ("reward_signer",)
-    assert providers_for_domain("rewards") == ("tenant_webhook",)
+    # stripe_credit (the stripe_credit reward-rail's own API key) and
+    # tenant_webhook (the tenant_webhook rail's HMAC secret) both live in the
+    # rewards domain, sorted.
+    assert providers_for_domain("rewards") == ("stripe_credit", "tenant_webhook")
     # no provider is claimed by two static sources (build would raise) and
     # payment providers are unchanged
     assert "stripe" in providers_for_domain("payments")
