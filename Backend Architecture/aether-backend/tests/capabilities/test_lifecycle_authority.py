@@ -506,3 +506,47 @@ async def test_activated_event_requires_all_slots_before_credential_supplied(coo
     )
     assert len(outcomes) == 1
     assert outcomes[0]["readiness_state"] == "credential_supplied"
+
+
+@pytest.mark.asyncio
+async def test_production_singleton_has_working_credential_checker():
+    """N13: the production get_lifecycle_authority() singleton wires a real
+    credential checker, so promotion to credential_supplied verifies an ACTIVE
+    credential server-side (previously it had no checker and every such
+    promotion failed fail-closed)."""
+    from services.capabilities.lifecycle import (
+        get_lifecycle_authority,
+        reset_lifecycle_authority,
+    )
+    from services.providers.credentials.authority import credential_authority
+
+    reset_lifecycle_authority()
+    try:
+        authority = get_lifecycle_authority()
+        tenant = f"t-{uuid.uuid4().hex[:8]}"
+
+        # No credential yet → promotion to credential_supplied is refused.
+        with pytest.raises(PromotionPreconditionError, match="no ACTIVE credential"):
+            await authority.promote(
+                tenant_id=tenant, provider="reward_signer", environment="sandbox",
+                capability="rewards", target=R.CREDENTIAL_SUPPLIED,
+                actor_type="user", actor_id="admin", reason="no cred",
+            )
+
+        # Provision + activate an ACTIVE credential → promotion now succeeds.
+        key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff81"
+        pending = await credential_authority.create_pending(
+            tenant, "reward_signer", "sandbox", "evm_reward_signer_key", key, created_by="admin"
+        )
+        await credential_authority.activate(
+            tenant, "reward_signer", "sandbox", "evm_reward_signer_key",
+            credential_version=int(pending["credential_version"]), actor="admin",
+        )
+        row = await authority.promote(
+            tenant_id=tenant, provider="reward_signer", environment="sandbox",
+            capability="rewards", target=R.CREDENTIAL_SUPPLIED,
+            actor_type="user", actor_id="admin", reason="credential active",
+        )
+        assert row["readiness_state"] == "credential_supplied"
+    finally:
+        reset_lifecycle_authority()

@@ -662,10 +662,42 @@ class CapabilityLifecycleAuthority:
 _authority: Optional[CapabilityLifecycleAuthority] = None
 
 
+async def _authority_credential_checker(
+    tenant_id: str, provider: str, environment: str, slot_name: str
+) -> Optional[str]:
+    """Production credential checker: returns an active-version reference iff an
+    ACTIVE credential exists for the slot in the credential authority, else None.
+
+    Fail-closed: an undeclared slot or any authority/store error is treated as
+    "no active credential" (returns None), so promotion is denied rather than
+    waved through."""
+    try:
+        from services.providers.credentials.authority import credential_authority
+
+        status = await credential_authority.slot_status(
+            tenant_id, provider, environment, slot_name
+        )
+    except Exception:  # noqa: BLE001 — unknown slot / store error → no active credential
+        return None
+    if status and status.get("state") == "active":
+        version = status.get("credential_version")
+        return f"credref://{provider}/{environment}/{slot_name}@v{version}"
+    return None
+
+
 def get_lifecycle_authority() -> CapabilityLifecycleAuthority:
     global _authority
     if _authority is None:
-        _authority = CapabilityLifecycleAuthority()
+        # Wire the real credential checker so promotion to CREDENTIAL_SUPPLIED
+        # verifies an ACTIVE credential exists server-side (previously the
+        # production singleton had NO checker, so every such promotion failed
+        # fail-closed). Evidence and entitlement resolvers are injected by their
+        # owning subsystems via set_evidence_resolver / set_entitlement_checker;
+        # until then promotion to CONNECTION_VALIDATED and above stays
+        # fail-closed (honest: those rungs are not yet activatable in prod).
+        _authority = CapabilityLifecycleAuthority(
+            credential_checker=_authority_credential_checker,
+        )
     return _authority
 
 
