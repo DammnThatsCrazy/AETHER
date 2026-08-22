@@ -1020,6 +1020,42 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 ),
             )
 
+        # ── SIGNER-ROTATION GUARD ────────────────────────────────────────
+        # The registry row records the signer address the contract was verified
+        # to accept. If the tenant has since rotated its reward_signer
+        # credential, proofs signed by the new key would be rejected on chain
+        # while the registry still says "verified". Compare the CURRENT active
+        # signer's address with the verified row and fail closed on a mismatch,
+        # rather than persisting a decision and emitting an unclaimable proof.
+        _verified_signer = (_registry_entry.get("oracle_signer_address") or "").lower()
+        if _verified_signer:
+            try:
+                from services.rewards.signing import (
+                    resolve_reward_signer_address,
+                    reward_credential_environment,
+                )
+
+                _current_signer = (
+                    await resolve_reward_signer_address(
+                        tenant_id, reward_credential_environment()
+                    )
+                ).lower()
+            except Exception as exc:  # noqa: BLE001 — cannot confirm signer → fail closed
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"onchain_claim signer could not be resolved for verification: {exc}",
+                )
+            if _current_signer != _verified_signer:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "reward_signer has been rotated: the active signer "
+                        f"({_current_signer}) does not match the address the contract "
+                        f"registry was verified for ({_verified_signer}). Re-register and "
+                        "re-verify the contract for the new signer before generating proofs."
+                    ),
+                )
+
         # ── EVM MAINNET AUDIT GATE ───────────────────────────────────────
         # Block mainnet on-chain reward activation unless external-audit
         # evidence is recorded for this contract. Local/testnet unaffected.
@@ -1683,12 +1719,9 @@ async def configure_rail(request: Request, body: RailConfigCreate):
             },
         )
 
-    # Validate config via adapter
+    # Reject an unknown rail up front (before any secret handling).
     try:
         adapter = get_rail_adapter(body.rail)
-        errors = adapter.validate_config(body.model_dump())
-        if errors:
-            raise HTTPException(status_code=422, detail={"rail": body.rail, "validation_errors": errors})
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Unknown rail: {body.rail}")
 
@@ -1702,6 +1735,10 @@ async def configure_rail(request: Request, body: RailConfigCreate):
     # Credential-only: a submitted tenant_webhook signing secret is dual-written
     # into the credential authority and replaced by a secret_ref before the rail
     # config is ever persisted — plaintext never reaches the JSONB row or audit.
+    # This runs BEFORE validation so a tenant submitting only the documented
+    # nested config.signing_secret has it converted to a secret_ref that
+    # validation then accepts, instead of being rejected 422 before the
+    # dual-write could run.
     if body.rail == "tenant_webhook":
         inner = config_data.get("config") or {}
         submitted = inner.get("signing_secret") or config_data.get("signing_secret")
@@ -1715,6 +1752,12 @@ async def configure_rail(request: Request, body: RailConfigCreate):
             inner["secret_ref"] = secret_ref
             config_data["config"] = inner
             config_data["secret_ref"] = secret_ref
+
+    # Validate config via adapter, against the (already dual-written) config so a
+    # tenant_webhook secret_ref satisfies the HMAC-material requirement.
+    errors = adapter.validate_config(config_data)
+    if errors:
+        raise HTTPException(status_code=422, detail={"rail": body.rail, "validation_errors": errors})
 
     rail_config = await repos["rail_configs"].create_or_update(tenant_id, body.rail, config_data)
     await _audit(repos, tenant_id, "rail.configured", "rail_config", rail_config.get("id"),

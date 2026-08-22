@@ -207,3 +207,31 @@ async def test_non_webhook_rail_config_still_redacted_defensively():
     data = created["data"] if isinstance(created, dict) and "data" in created else created
     assert data["config"]["api_key"] == "<redacted>"
     assert data["config"]["has_api_key"] is True
+
+
+@pytest.mark.asyncio
+async def test_configure_rail_accepts_nested_signing_secret_without_secret_ref():
+    """N19: a tenant configuring tenant_webhook with ONLY the documented nested
+    config.signing_secret (no pre-known secret_ref) must succeed — the secret is
+    dual-written to a secret_ref BEFORE validation, not rejected 422 because
+    validation ran first."""
+    from starlette.requests import Request as StarletteRequest
+
+    from services.rewards.routes import RailConfigCreate, configure_rail
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = StarletteRequest(
+        {"type": "http", "method": "POST", "path": "/", "headers": []}, receive
+    )
+    body = RailConfigCreate(
+        rail="tenant_webhook",
+        enabled=False,
+        config={"signing_secret": "only-nested-secret"},  # no secret_ref supplied
+        webhook_url="https://tenant.example.com/hook",
+    )
+    created = await configure_rail(request, body)
+    data = created["data"] if isinstance(created, dict) and "data" in created else created
+    assert "signing_secret" not in data["config"]
+    assert data["config"]["secret_ref"].startswith("credref://rewards/tenant_webhook/")
