@@ -337,6 +337,10 @@ class EdgeType:
     MEMBER_OF_CLUSTER = "MEMBER_OF_CLUSTER"
     SIMILAR_TO = "SIMILAR_TO"
     IP_MAPS_TO = "IP_MAPS_TO"
+    # Semantic-intelligence relationship overlay (derived analytics, EXCLUDED
+    # layer): a directed entity->entity edge projected from
+    # gold_relationship_semantic_state by the semantic graph projector.
+    SEMANTIC_RELATES_TO = "SEMANTIC_RELATES_TO"
 
     # Intelligence Graph — Human-to-Agent (H2A)
     LAUNCHED_BY = "LAUNCHED_BY"           # Agent → User who created it

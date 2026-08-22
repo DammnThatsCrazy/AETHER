@@ -94,6 +94,21 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_semantic_retention_coro()
 
+    def _semantic_graph_projector() -> Coroutine[Any, Any, None]:
+        """Project Gold relationship state into the intelligence graph.
+
+        Phase-B semantic worker: per tenant, projects each
+        ``gold_relationship_semantic_state`` row as a governed
+        ``SEMANTIC_RELATES_TO`` edge through the canonical mutation gateway
+        (never a direct graph write). Idempotent. Gated on
+        ``settings.semantic.graph_projector_enabled`` (default OFF).
+        """
+        from services.semantic_intelligence.graph_projector import (
+            build_semantic_graph_projector_coro,
+        )
+
+        return build_semantic_graph_projector_coro()
+
     def _kyber_directory_sync() -> Coroutine[Any, Any, None]:
         """Reconcile Kyber workforce principals against Google Workspace.
 
@@ -434,6 +449,12 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             factory=_semantic_retention,
             role="semantic-worker",
             enabled=lambda: bool(settings.semantic.retention_enabled),
+        ),
+        WorkerSpec(
+            name="semantic_graph_projector",
+            factory=_semantic_graph_projector,
+            role="semantic-worker",
+            enabled=lambda: bool(settings.semantic.graph_projector_enabled),
         ),
         WorkerSpec(
             name="kyber_directory_sync",

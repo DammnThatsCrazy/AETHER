@@ -312,9 +312,14 @@ async def campaign_sentiment(campaign_id: str, request: Request):
 async def graph_semantic_overlay(body: dict[str, Any], request: Request):
     require_read_access(request)
     subject = body.get("subject_ref") or body.get("subject")
-    observations, partial = await get_semantic_service().list_observations(
-        tenant_id(request), subject, limit=200
-    )
+    tid = tenant_id(request)
+    service = get_semantic_service()
+    observations, partial = await service.list_observations(tid, subject, limit=200)
+    # Real relationship edges from durable Gold — no longer a hardcoded []. When
+    # a subject filter is given, restrict the overlay to edges touching it.
+    edges = await service.list_relationship_edges(tid)
+    if subject:
+        edges = [e for e in edges if subject in (e["source_ref"], e["target_ref"])]
     return APIResponse(
         data={
             "overlay_type": "semantic_sentiment",
@@ -329,7 +334,7 @@ async def graph_semantic_overlay(body: dict[str, Any], request: Request):
                 }
                 for row in observations
             ],
-            "edge_overlays": [],
+            "edge_overlays": edges,
             "partial": partial,
             "causal_confidence": "observed_sequence",
         }

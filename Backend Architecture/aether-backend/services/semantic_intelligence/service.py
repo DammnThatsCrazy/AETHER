@@ -550,6 +550,43 @@ class SemanticIntelligenceService:
             "insufficient_data": not sem_rows,
         }
 
+    async def list_relationship_edges(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Every directed relationship edge from a tenant's Gold state.
+
+        Reads ``gold_relationship_semantic_state`` (the durable directed-pair
+        projections the reducers maintain) and shapes each into an overlay edge
+        (``source_ref -> target_ref`` with stance/trust/confidence/validity).
+        This is the honest source for the graph-overlay ``edge_overlays`` —
+        available whether or not the graph projector has run, since it reads
+        Gold directly rather than the projected graph.
+        """
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        rows = await SemanticFactRepository(
+            "gold_relationship_semantic_state"
+        ).list_by_tenant(tenant_id)
+        edges: list[dict[str, Any]] = []
+        for data in rows:
+            source = data.get("source_ref")
+            target = data.get("target_ref")
+            if not source or not target:
+                continue
+            edges.append(
+                {
+                    "source_ref": source,
+                    "target_ref": target,
+                    "relationship_ref": data.get("relationship_ref"),
+                    "relationship_layer": data.get("relationship_layer"),
+                    "stance_alignment": data.get("stance_alignment"),
+                    "trust_signal": data.get("trust_signal"),
+                    "interaction_quality": data.get("interaction_quality"),
+                    "influence_direction": data.get("influence_direction"),
+                    "confidence": data.get("confidence"),
+                    "valid_from": data.get("valid_from"),
+                }
+            )
+        return edges
+
     async def recompute_episodes(self, tenant_id: str, subject_ref: str):
         """Recompute and durably persist a subject's Gold episodes."""
         from .reducers import recompute_episodes
