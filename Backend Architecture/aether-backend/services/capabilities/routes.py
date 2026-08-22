@@ -400,8 +400,34 @@ async def resume_activation(
 @kyber_router.get("/activation")
 @api_response
 async def operator_activation_states(request: Request):
-    """Cross-tenant current lifecycle states (operator readiness view)."""
-    return await get_lifecycle_authority().states_all_tenants()
+    """Cross-tenant current lifecycle states (operator readiness view), paged.
+
+    Query params ``limit`` (default 500, max 1000) and ``offset`` page the
+    result. ``has_more`` flags truncation so the readiness/kill-switch view
+    never silently omits active states, and ``next_offset`` drives the next
+    page.
+    """
+    try:
+        limit = int(request.query_params.get("limit", "500"))
+    except (TypeError, ValueError):
+        limit = 500
+    try:
+        offset = int(request.query_params.get("offset", "0"))
+    except (TypeError, ValueError):
+        offset = 0
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
+    # Fetch one extra row to detect truncation deterministically.
+    rows = await get_lifecycle_authority().states_all_tenants(limit=limit + 1, offset=offset)
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    return {
+        "states": page,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+        "next_offset": (offset + limit) if has_more else None,
+    }
 
 
 @kyber_router.post("/activation/{tenant_id}/{provider}/{capability}/suspend")

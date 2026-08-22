@@ -97,8 +97,8 @@ class CapabilityLifecycleAuthority:
     async def states_for_tenant(self, tenant_id: str) -> list[dict]:
         return await self._repo.current_for_tenant(tenant_id)
 
-    async def states_all_tenants(self) -> list[dict]:
-        return await self._repo.current_all()
+    async def states_all_tenants(self, limit: int = 1000, offset: int = 0) -> list[dict]:
+        return await self._repo.current_all(limit=limit, offset=offset)
 
     # ── Transitions ───────────────────────────────────────────────────────
 

@@ -60,9 +60,16 @@ class ActivationStateRepo(BaseRepository):
             filters={"tenant_id": tenant_id, "superseded": False}, limit=1000
         )
 
-    async def current_all(self, limit: int = 5000) -> list[dict]:
-        """Cross-tenant current states (operator surfaces only)."""
-        return await self.find_many(filters={"superseded": False}, limit=limit)
+    async def current_all(self, limit: int = 1000, offset: int = 0) -> list[dict]:
+        """Cross-tenant current states (operator surfaces only), paged.
+
+        find_many orders by ``created_at`` deterministically, so successive
+        offset pages are stable. Callers detect truncation by requesting
+        ``limit + 1`` and checking for the extra row.
+        """
+        return await self.find_many(
+            filters={"superseded": False}, limit=limit, offset=offset
+        )
 
     async def advance(self, prior: Optional[dict], new_row: dict) -> dict:
         """Append the next state version, superseding ``prior`` — ATOMICALLY.
