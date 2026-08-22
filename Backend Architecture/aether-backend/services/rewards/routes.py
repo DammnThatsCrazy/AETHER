@@ -1069,13 +1069,28 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 idempotency_key=idempotency_key,
             )
 
+            # build_action_payload returns an ENVELOPE
+            # {rail, execution_mode, status, payload: {...}, [proof, proof_data,
+            # payload_hash]}. Store the INNER delivery payload as
+            # action["payload"] so the outbox senders and the inline adapters
+            # find recipient_id / amount / idempotency_key DIRECTLY — nesting the
+            # whole envelope made every internal_credit / stripe_credit /
+            # x402_credit action deliver amount=0 and fail (and wrapped the
+            # tenant_webhook body one level too deep). Envelope-only artifacts the
+            # delivery payload does not carry (onchain proof, webhook
+            # payload_hash) are preserved at the action level.
+            inner_payload = (
+                payload.get("payload")
+                if isinstance(payload.get("payload"), dict)
+                else payload
+            )
             action_data = {
                 "decision_id": decision_id,
                 "campaign_id": decision.campaign_id,
                 "rule_id": decision.rule_id,
                 "rail": decision.rail,
                 "execution_mode": decision.execution_mode or "recommend_only",
-                "payload": payload,
+                "payload": inner_payload,
                 "status": payload.get("status", "created"),
                 "delivery_attempts": 0,
                 # Carry the budget reservation so reject/cancel release it and
@@ -1084,6 +1099,9 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 "created_at": _utc_now(),
                 "updated_at": _utc_now(),
             }
+            for _artifact in ("proof", "proof_data", "payload_hash"):
+                if _artifact in payload:
+                    action_data[_artifact] = payload[_artifact]
             action_record = await repos["actions"].create(tenant_id, action_data)
             action_id = action_record["id"]
 

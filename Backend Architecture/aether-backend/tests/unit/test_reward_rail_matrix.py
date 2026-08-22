@@ -521,3 +521,69 @@ async def test_outbox_dispatches_x402_credit_end_to_end(monkeypatch):
     summary = await outbox.drain()
     # Delivered or a typed retry — never a silent inert no-op.
     assert summary["delivered"] + summary.get("retry", 0) + summary.get("dead_letter", 0) >= 1
+
+
+@pytest.mark.asyncio
+async def test_action_envelope_inner_payload_is_what_delivers():
+    """N8: build_action_payload returns an ENVELOPE
+    {rail, execution_mode, status, payload: {...}}. The route must store/enqueue
+    the INNER payload (recipient_id/amount/idempotency_key), not the envelope —
+    enqueuing the envelope makes amount default to 0 and the delivery fail."""
+    from services.rewards.credit_ledger import get_internal_credit_ledger
+    from services.rewards.delivery_outbox import RewardDeliveryOutbox
+
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    # The exact envelope shape InternalCreditAdapter.build_action_payload returns.
+    envelope = {
+        "rail": "internal_credit",
+        "execution_mode": "internal_ledger",
+        "status": "created",
+        "payload": {
+            "type": "internal_credit", "recipient_id": "rcptN8",
+            "campaign_id": "cN8", "rule_id": "rN8", "amount": "5.00",
+            "currency": "USD", "idempotency_key": f"n8-{uuid.uuid4().hex[:8]}",
+        },
+    }
+    inner = envelope["payload"]  # what the route now stores as action["payload"]
+
+    # Enqueuing the INNER payload delivers and credits the ledger.
+    outbox = RewardDeliveryOutbox()
+    await outbox.enqueue(
+        {"id": f"a-{uuid.uuid4().hex[:6]}", "rail": "internal_credit", "payload": inner},
+        {}, tenant,
+    )
+    assert (await outbox.drain())["delivered"] >= 1
+    assert await get_internal_credit_ledger().get_balance(tenant, "rcptN8", "USD") == Decimal("5.00")
+
+    # Enqueuing the ENVELOPE (the pre-fix bug) never credits: amount reads 0.
+    tenant2 = f"t-{uuid.uuid4().hex[:8]}"
+    await outbox.enqueue(
+        {"id": f"a-{uuid.uuid4().hex[:6]}", "rail": "internal_credit", "payload": dict(envelope)},
+        {}, tenant2,
+    )
+    await outbox.drain()
+    assert await get_internal_credit_ledger().get_balance(tenant2, "rcptN8", "USD") == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_generic_receipt_records_real_rail_not_webhook():
+    """N7: a native-rail delivery's ProviderReceipt records its real rail and
+    channel (internal_credit / ledger), not a hardcoded tenant_webhook/webhook."""
+    from services.rewards.delivery_outbox import RewardDeliveryOutbox, RewardDeliveryJobRepository
+
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    outbox = RewardDeliveryOutbox()
+    action = {
+        "id": f"a-{uuid.uuid4().hex[:6]}", "rail": "internal_credit",
+        "payload": {
+            "recipient_id": "rr", "campaign_id": "cc", "amount": "2.00",
+            "currency": "USD", "idempotency_key": f"rcpt-{uuid.uuid4().hex[:8]}",
+        },
+    }
+    await outbox.enqueue(action, {}, tenant)
+    summary = await outbox.drain()
+    assert summary["delivered"] >= 1
+    # The persisted job carries the real rail/channel that the receipt is built from.
+    jobs = await RewardDeliveryJobRepository().find_many(filters={"tenant_id": tenant}, limit=5)
+    assert jobs and jobs[0].get("provider_adapter") == "internal_credit"
+    assert jobs[0].get("channel") == "ledger"

@@ -45,6 +45,10 @@ class DeliveryChannel(str, Enum):
     AGENT_ASSIST = "agent_assist"
     NOTIFICATION = "notification"
     PUSH = "push"
+    # Reward native-rail delivery channels (internal_credit / x402_credit post
+    # to a ledger; stripe_credit posts through a provider API).
+    LEDGER = "ledger"
+    API = "api"
 
 
 class DeliveryIntentStatus(str, Enum):

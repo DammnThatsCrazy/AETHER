@@ -539,15 +539,27 @@ class RewardDeliveryOutbox:
         logger.error("reward webhook DEAD-LETTER job=%s attempt=%s err=%s", job["id"], attempt, error[:200])
 
     async def _record_receipt(self, job: dict, result: SenderResult) -> str:
-        """Persist a validated ProviderReceipt (rejects empty/sim external ids)."""
+        """Persist a validated ProviderReceipt (rejects empty/sim external ids).
+
+        The receipt records the job's REAL rail and channel so an
+        internal_credit / stripe_credit / x402_credit delivery is not mislabeled
+        as a tenant_webhook and stays findable through provider-scoped receipt
+        lookups. The webhook constants are the fallback only for legacy webhook
+        jobs (which carry no explicit rail).
+        """
         from services.delivery.models import DeliveryChannel, ProviderReceipt
+        rail = job.get("rail") or job.get("provider_adapter") or _WEBHOOK_PROVIDER
+        try:
+            channel = DeliveryChannel(job.get("channel") or "webhook")
+        except ValueError:
+            channel = DeliveryChannel.WEBHOOK
         receipt = ProviderReceipt(
             job_id=job["id"],
             intent_id=job.get("action_id", ""),      # link back to the reward action
             tenant_id=job.get("tenant_id", ""),
-            provider_adapter=_WEBHOOK_PROVIDER,
+            provider_adapter=rail,
             external_id=result.external_id or "",
-            channel=DeliveryChannel.WEBHOOK,
+            channel=channel,
             raw_response=result.raw,
         )
         await self._receipts().insert(receipt.id, receipt.model_dump())
