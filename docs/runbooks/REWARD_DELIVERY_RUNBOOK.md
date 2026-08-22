@@ -10,14 +10,20 @@ source_files:
   - Backend Architecture/aether-backend/services/rewards/delivery_outbox.py
   - Backend Architecture/aether-backend/services/rewards/rails.py
 canonical_owner: platform@aether
-last_synced_commit: "41202233"
+last_synced_commit: "e610a8df"
 ---
 
 # Reward Delivery Runbook
 
 Reward delivery runs on the durable delivery outbox
 (`RewardDeliveryOutbox`): enqueue → leased dispatch → provider receipt →
-mark delivered. Aether operates a **no-custody** model — it never holds or moves
+mark delivered. **Every** sender-backed rail (`tenant_webhook`,
+`internal_credit`, `stripe_credit`, `x402_credit`) delivers through the outbox
+— the action is `pending` until a `ProviderReceipt` is recorded, and the
+receipt carries the rail's real provider/channel (not a hardcoded webhook). A
+transient credential-authority/DB/KMS outage while resolving a signing secret
+is classified **retryable** (backoff), never dead-lettered on the first attempt
+as if the credential were missing. Aether operates a **no-custody** model — it never holds or moves
 funds; the on-chain rails are oracle-signed claims gated by
 `EVM_REWARD_PROOFS_ENABLED`. Outside `local`/`test` an on-chain claim
 fails closed unless the campaign carries an explicit chain identity

@@ -13,7 +13,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "41202233"
+last_synced_commit: "e610a8df"
 ---
 # Aether Agentic Commerce — Control Plane
 
@@ -31,7 +31,11 @@ The Agentic Commerce control plane upgrades Aether's existing x402 capture subsy
 - Runs every spend through **mandatory approval** (Day-1 GA default).
 - Verifies payments through facilitator-aware + local verification.
 - Tracks settlement through a finite state machine.
-- Mints time-bound entitlements and grants access.
+- Mints time-bound entitlements and grants access — but only once the
+  settlement reaches **SETTLED** (on-chain finality). Outside local/test the
+  settlement parks in PENDING pending reconciliation, and `verify_and_settle`
+  defers the entitlement; the reconciliation worker mints it (idempotently) when
+  it confirms finality, so access is never conferred before settlement.
 - Persists the full lifecycle in Neptune via deterministic graph mutations.
 - Exposes Kyber operator actions (approve/reject/escalate/revoke, inspect, replay).
 - Emits 28+ typed events for lake / analytics / audit consumers.

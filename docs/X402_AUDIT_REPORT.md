@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "41202233"
+last_synced_commit: "e610a8df"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -75,7 +75,7 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **Fee elimination tracking** | Implemented | `interceptor.py:30` — 2.9% card fee rate, computed per transaction |
 | **Agent→Tool→Paid Resource** | Implemented | `CONSUMES` edges track API URL + method; `PAYS` edges track amount/token/chain |
 | **Commerce layer (broader)** | Implemented | `services/commerce/` — `PaymentRecord` with method enum including `x402` |
-| **Facilitator / Institution** | Implemented | `services/x402/facilitators.py` — `FacilitatorRegistry` with per-chain facilitator lookup; `services/x402/verification.py` — `VerificationEngine` delegates to external facilitator via HTTP (x402 wire format) with local USDC fallback |
+| **Facilitator / Institution** | Implemented | `services/x402/facilitators.py` — `FacilitatorRegistry` with per-chain facilitator lookup, filtered by the authorization environment (`supported_environments`) so a live authorization never routes through a sandbox-only facilitator; `services/x402/verification.py` — `VerificationEngine` delegates to an external facilitator via HTTP (x402 wire format), attaching the facilitator's tenant/environment-bound API key (credential authority slot `facilitator_api_key`) as a bearer token — falling through to the on-chain RPC verifier when the key is not configured, rather than firing a doomed unauthenticated request |
 | **Payment deduplication (idempotency)** | Implemented | `services/x402/idempotency.py` — async `_InMemoryIdempotencyStore` (local) + `_RedisIdempotencyStore` (staging/production, key: `aether:x402:idempotency:{tenant_id}:{payment_identifier}`); multi-instance safe |
 | **Settlement state machine** | Implemented | `services/x402/settlement.py` — multi-state lifecycle (pending → clearing → settled / failed); `SettlementEngine.start()` transitions `PaymentReceipt` through states |
 | **On-chain verification** | Implemented | `services/x402/verification.py` — facilitator-delegated verification (primary); direct on-chain RPC fallback via `_verify_evm()` (Base: `eth_getTransactionReceipt` + ERC-20 Transfer log) and `_verify_solana()` (Solana: `getTransaction` + SPL token transfer). Active when `AETHER_ENV != "local"`. Fail-closed on RPC error/timeout. |
