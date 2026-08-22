@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "e610a8df"
+last_synced_commit: "5419f1a5"
 ---
 # Commerce Operator Runbook
 
@@ -55,8 +55,13 @@ last_synced_commit: "e610a8df"
    `healthy` ahead of unprobed (`unknown`) ahead of `degraded` on the next
    selection — freshly seeded facilitators are selectable before their first
    health observation.
-3. If all facilitators down: verification falls back to local verification per chain.
-4. Outside the local environment, LOCAL-mode facilitators (the internal Aether
+3. The commerce health endpoint (`GET /v1/diagnostics/commerce/health`)
+   degrades on **recent** failed settlements only (a rolling window), not the
+   lifetime failure count — so a single historical invalid payment no longer
+   pins the endpoint to `degraded` after facilitators recover. The response
+   reports both `failed` (lifetime) and `recent_failed` (in-window).
+4. If all facilitators down: verification falls back to local verification per chain.
+5. Outside the local environment, LOCAL-mode facilitators (the internal Aether
    verifier seed) are never auto-selected and never confer verification — a
    tenant with only the internal seed routes straight to on-chain RPC
    verification.
