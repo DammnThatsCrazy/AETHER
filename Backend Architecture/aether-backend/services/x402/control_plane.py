@@ -39,7 +39,7 @@ from .policies import get_policy_engine
 from .pricing import PricingEngine
 from .resources import get_resource_registry
 from .settlement import get_settlement_tracker
-from .verification import get_verification_engine
+from .verification import get_verification_engine, is_terminal_verdict
 
 logger = get_logger("aether.service.x402.control_plane")
 
@@ -402,7 +402,24 @@ class X402ControlPlane:
                 "receipt_id": receipt.receipt_id,
                 "error": receipt.verification_error,
             }
-            await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+            # A retryable verdict (not_finalized / verification_unavailable)
+            # means the payment was never actually adjudicated — the chain
+            # just hasn't finalized it yet, or the RPC was unreachable. Caching
+            # that here would strand a normally-submitted payment behind a
+            # permanent-looking cached failure until the idempotency entry's
+            # TTL expires, with no settlement for the reconciliation worker to
+            # revisit. Only cache TERMINAL verdicts (verified, or a definitive
+            # failure like reverted/payer_mismatch/amount_below_required) —
+            # a retryable verdict must let the next call re-check the chain.
+            if is_terminal_verdict(receipt.verification_verdict):
+                await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+            else:
+                logger.info(
+                    f"verify_and_settle: retryable verdict "
+                    f"{receipt.verification_verdict!r} for payment_identifier="
+                    f"{auth.payment_identifier} — not cached, next call will "
+                    f"re-check the chain"
+                )
             return result
 
         settlement = await self._settle.start(tenant_id, receipt, auth.facilitator_id)

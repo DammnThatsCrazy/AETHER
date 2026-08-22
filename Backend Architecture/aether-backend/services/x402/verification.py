@@ -53,6 +53,31 @@ def _verdict_token(error: Optional[str]) -> str:
         return "malformed"
     return "verification_failed"
 
+
+# Verdict tokens that are RETRYABLE: the chain hasn't finalized the tx yet, or
+# the RPC/facilitator couldn't be reached — the *payment itself* was never
+# adjudicated, so a later re-check can still succeed. Every other verdict
+# (verified, or a definitive failure like reverted/payer_mismatch/
+# amount_below_required/no_matching_transfer/malformed) is TERMINAL: a retry
+# can never change the outcome, so it is safe to cache/idempotency-lock on.
+#
+# This distinction matters because the idempotency store
+# (services.x402.idempotency) is consulted by control_plane.verify_and_settle
+# before it ever re-verifies a payment_identifier. Caching a retryable
+# verdict would permanently strand a normally-submitted-but-not-yet-final
+# payment behind the cached failure until the cache entry's TTL expires, with
+# no settlement for the reconciliation worker (services.x402.reconciliation)
+# to revisit in the meantime — so retryable verdicts must NEVER be cached.
+_RETRYABLE_VERDICTS = frozenset({"not_finalized", "verification_unavailable"})
+
+
+def is_terminal_verdict(verdict: Optional[str]) -> bool:
+    """True when `verdict` is a definitive outcome safe to cache in the
+    payment-identifier idempotency store. False for a retryable verdict
+    (``not_finalized`` / ``verification_unavailable``), where the caller must
+    let the next attempt re-check the chain instead of caching the failure."""
+    return verdict not in _RETRYABLE_VERDICTS
+
 # x402 network names (chain ID → x402 network identifier)
 _CHAIN_TO_NETWORK: dict[str, str] = {
     "eip155:8453":   "base-mainnet",
@@ -405,24 +430,39 @@ class VerificationEngine:
         recipient_padded = "0x" + authorization.recipient.lower().lstrip("0x").zfill(64)
         payer_padded = "0x" + authorization.payer.lower().lstrip("0x").zfill(64)
 
+        # Scan EVERY candidate Transfer log (contract + recipient match) before
+        # giving up — a batched/multicall tx can contain several transfers to
+        # the same recipient, and only one of them needs to satisfy every
+        # predicate (payer + recipient + amount). Returning on the FIRST
+        # candidate wrongly rejects a valid later transfer. The failure
+        # reason from the first non-matching candidate is preserved for the
+        # all-fail case, so a single-candidate receipt behaves exactly as
+        # before.
+        first_failure: Optional[str] = None
         for log in result.get("logs", []):
             topics = log.get("topics", [])
-            if (
+            if not (
                 log.get("address", "").lower() == contract.lower()
                 and len(topics) >= 3
                 and topics[0].lower() == TRANSFER_TOPIC
                 and topics[2].lower() == recipient_padded
             ):
-                # payer binding: the Transfer's `from` (topics[1]) must be the
-                # authorized payer — a payment from a different wallet is not
-                # this authorization's payment.
-                if topics[1].lower() != payer_padded:
-                    return False, "payer_mismatch: transfer from unauthorized wallet"
-                raw_amount = int(log.get("data", "0x0"), 16)
-                if raw_amount >= expected_min:
-                    return True, None
-                return False, f"amount_below_required: {raw_amount} < {expected_min}"
+                continue
+            # payer binding: the Transfer's `from` (topics[1]) must be the
+            # authorized payer — a payment from a different wallet is not
+            # this authorization's payment.
+            if topics[1].lower() != payer_padded:
+                if first_failure is None:
+                    first_failure = "payer_mismatch: transfer from unauthorized wallet"
+                continue
+            raw_amount = int(log.get("data", "0x0"), 16)
+            if raw_amount >= expected_min:
+                return True, None
+            if first_failure is None:
+                first_failure = f"amount_below_required: {raw_amount} < {expected_min}"
 
+        if first_failure is not None:
+            return False, first_failure
         return False, "no_matching_transfer: no matching USDC Transfer log found"
 
     async def _verify_solana(
@@ -477,6 +517,11 @@ class VerificationEngine:
         for group in result.get("meta", {}).get("innerInstructions", []):
             inner.extend(group.get("instructions", []))
 
+        # Scan EVERY candidate spl-token transfer instruction (mint +
+        # destination match) before giving up — see the matching comment in
+        # _verify_evm. The first non-matching candidate's failure reason is
+        # preserved for the all-fail case.
+        first_failure: Optional[str] = None
         for ix in instructions + inner:
             if ix.get("program") != "spl-token":
                 continue
@@ -492,12 +537,17 @@ class VerificationEngine:
             # payer binding: the transfer authority/source must be the payer.
             authority = info.get("authority") or info.get("source")
             if authority and authority != authorization.payer:
-                return False, "payer_mismatch: transfer authority is not the payer"
+                if first_failure is None:
+                    first_failure = "payer_mismatch: transfer authority is not the payer"
+                continue
             raw = info.get("amount") or info.get("tokenAmount", {}).get("amount", "0")
             if int(raw) >= expected_min:
                 return True, None
-            return False, f"amount_below_required: {raw} < {expected_min}"
+            if first_failure is None:
+                first_failure = f"amount_below_required: {raw} < {expected_min}"
 
+        if first_failure is not None:
+            return False, first_failure
         return False, "no_matching_transfer: no matching SPL token transfer found"
 
     async def _emit(self, topic: Topic, tenant_id: str, payload: dict) -> None:
