@@ -148,6 +148,8 @@ def test_lean_worker_execution_group_hosts_every_mission_worker():
 
 
 async def test_reconciliation_worker_skips_a_suspended_tenant(monkeypatch):
+    """The kill switch is evaluated per settlement ENVIRONMENT: a PENDING
+    settlement whose environment is suspended is skipped (not verified)."""
     from services.x402 import reconciliation as recon_mod
 
     class _SuspendedAuthority:
@@ -162,9 +164,27 @@ async def test_reconciliation_worker_skips_a_suspended_tenant(monkeypatch):
         lifecycle_mod, "get_lifecycle_authority", lambda: _SuspendedAuthority()
     )
 
+    class _Settlement:
+        settlement_id = "s1"
+        environment = "sandbox"
+        receipt_id = "rc1"
+        tx_hash = "0x1"
+
+    class _Store:
+        async def list_settlements(self, tenant_id, state=None):
+            return [_Settlement()]
+
     worker = recon_mod.X402ReconciliationWorker()
+    worker._store = _Store()
+    monkeypatch.setattr(worker, "_write_cursor", lambda *a, **k: _async_none())
+
     result = await worker.reconcile_tenant("tenant-suspended")
-    assert result == {"tenant_id": "tenant-suspended", "skipped": "suspended"}
+    assert result["skipped"] == 1
+    assert result["settled"] == 0 and result["failed"] == 0
+
+
+async def _async_none():
+    return None
 
 
 async def test_worker_loop_isolates_a_failing_tick_and_stays_cancellable():

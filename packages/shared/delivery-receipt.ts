@@ -24,6 +24,8 @@ export const deliveryChannels = [
   'agent_assist',
   'notification',
   'push',
+  'ledger',
+  'api',
 ] as const;
 
 export type DeliveryChannel = typeof deliveryChannels[number];
