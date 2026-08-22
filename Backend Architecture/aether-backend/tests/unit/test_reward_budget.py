@@ -288,3 +288,48 @@ def test_policy_engine_no_budget_policy_unaffected():
     assert d.eligible
     assert d.reservation_id is None
     assert ledger is None  # nothing reserved
+
+
+@pytest.mark.asyncio
+async def test_release_stale_skips_reservations_with_live_delivery():
+    """N11: release_stale must NOT free a reservation whose reward action is
+    still in flight — a recovered outbox would deliver and commit the freed
+    reservation as a no-op, letting spend exceed the cap (double-spend)."""
+    from services.rewards.repositories import RewardActionRepository
+
+    svc = BudgetReservationService()
+    actions = RewardActionRepository()
+    tenant = "t-stale"
+    campaign = "c-stale"
+
+    r = await svc.reserve(
+        tenant_id=tenant, campaign_id=campaign, amount="10", cap="100",
+        reservation_key="k-live", decision_id="dec-live",
+    )
+    assert r.ok
+    # A still-in-flight action links to the reservation's decision.
+    action = await actions.create(tenant, {"decision_id": "dec-live", "status": "pending", "rail": "internal_credit"})
+
+    # Everything is "stale" (cutoff pushed into the future), but the live
+    # delivery must keep its reservation.
+    released = await svc.release_stale(max_age_seconds=-3600)
+    assert released == 0
+
+    # Once the delivery terminally fails, the budget is legitimately freed.
+    await actions.transition(action["id"], tenant, "failed")
+    released2 = await svc.release_stale(max_age_seconds=-3600)
+    assert released2 == 1
+
+
+@pytest.mark.asyncio
+async def test_release_stale_frees_orphan_reservation():
+    """N11: a stale reservation with no linked action (delivery never
+    materialized) is still swept — nothing will ever commit it."""
+    svc = BudgetReservationService()
+    r = await svc.reserve(
+        tenant_id="t-orphan", campaign_id="c-orphan", amount="5", cap="100",
+        reservation_key="k-orphan", decision_id="dec-orphan-none",
+    )
+    assert r.ok
+    released = await svc.release_stale(max_age_seconds=-3600)
+    assert released == 1

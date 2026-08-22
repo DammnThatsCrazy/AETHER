@@ -972,16 +972,42 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             except Exception:
                 pass
         _campaign = decision.campaign or {}
-        _contract_address = _campaign.get("contract_address") or os.getenv("EVM_CONTRACT_ADDRESS", "")
+        # Campaign-only chain identity outside local/test — mirror the adapter's
+        # rule (OnchainClaimAdapter.build_action_payload) HERE, before the
+        # decision is persisted. Falling back to a deployment-global
+        # EVM_CONTRACT_ADDRESS/EVM_CHAIN_ID let the pre-check pass on a legacy
+        # global address and persist an eligible decision (consuming
+        # cooldown/use caps) that the adapter would then refuse — leaving the
+        # caller an eligible response with no action or proof.
+        _ANVIL_CONTRACT = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+        _contract_address = _campaign.get("contract_address")
         if not _contract_address:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    "onchain_claim rail requires a contract_address. Set it on the campaign "
-                    "or configure EVM_CONTRACT_ADDRESS."
+                    "onchain_claim rail requires an explicit campaign contract_address "
+                    "outside local/test (deployment-global env fallbacks are refused "
+                    "fail-closed)."
                 ),
             )
-        _chain_id = int(_campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
+        if str(_contract_address).lower() == _ANVIL_CONTRACT:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "onchain_claim refuses the Anvil/Hardhat default contract address "
+                    "outside local/test."
+                ),
+            )
+        _raw_chain_id = _campaign.get("chain_id")
+        if not _raw_chain_id:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "onchain_claim rail requires an explicit campaign chain_id outside "
+                    "local/test (deployment-global env fallbacks are refused fail-closed)."
+                ),
+            )
+        _chain_id = int(_raw_chain_id)
         _registry_entry = await repos["contracts"].find_for_proof(
             tenant_id, _chain_id, _contract_address, decision.campaign_id or ""
         )
