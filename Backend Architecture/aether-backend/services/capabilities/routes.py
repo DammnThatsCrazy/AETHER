@@ -402,31 +402,28 @@ async def resume_activation(
 async def operator_activation_states(request: Request):
     """Cross-tenant current lifecycle states (operator readiness view), paged.
 
-    Query params ``limit`` (default 500, max 1000) and ``offset`` page the
-    result. ``has_more`` flags truncation so the readiness/kill-switch view
-    never silently omits active states, and ``next_offset`` drives the next
-    page.
+    KEYSET pagination: ``limit`` (default 500, max 1000) and an opaque ``cursor``
+    (the last row's id from the previous page). A keyset cursor — not a numeric
+    offset — keeps the readiness/kill-switch view from duplicating or skipping
+    states while transitions concurrently supersede and insert rows. ``has_more``
+    flags truncation and ``next_cursor`` drives the next page.
     """
     try:
         limit = int(request.query_params.get("limit", "500"))
     except (TypeError, ValueError):
         limit = 500
-    try:
-        offset = int(request.query_params.get("offset", "0"))
-    except (TypeError, ValueError):
-        offset = 0
     limit = max(1, min(limit, 1000))
-    offset = max(0, offset)
+    cursor = request.query_params.get("cursor") or None
     # Fetch one extra row to detect truncation deterministically.
-    rows = await get_lifecycle_authority().states_all_tenants(limit=limit + 1, offset=offset)
+    rows = await get_lifecycle_authority().states_all_tenants(limit=limit + 1, after_id=cursor)
     has_more = len(rows) > limit
     page = rows[:limit]
     return {
         "states": page,
         "limit": limit,
-        "offset": offset,
+        "cursor": cursor,
         "has_more": has_more,
-        "next_offset": (offset + limit) if has_more else None,
+        "next_cursor": page[-1].get("id") if (has_more and page) else None,
     }
 
 

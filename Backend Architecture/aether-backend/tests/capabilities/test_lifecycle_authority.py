@@ -553,9 +553,10 @@ async def test_production_singleton_has_working_credential_checker():
 
 
 @pytest.mark.asyncio
-async def test_cross_tenant_activation_view_is_paged():
-    """N20: states_all_tenants pages deterministically so the operator view can
-    detect truncation (limit+1) instead of silently dropping states past a cap."""
+async def test_cross_tenant_activation_view_is_keyset_paged():
+    """N20 + F3: states_all_tenants pages by a stable KEYSET cursor (row id),
+    so pages neither overlap nor gap even as transitions concurrently supersede
+    and insert rows — and truncation is detectable via a limit+1 probe."""
     from services.capabilities.lifecycle import (
         get_lifecycle_authority,
         reset_lifecycle_authority,
@@ -571,12 +572,28 @@ async def test_cross_tenant_activation_view_is_paged():
                 "capability": "rewards", "readiness_state": "credential_waiting",
                 "domain": "rewards", "state_version": 1,
             })
-        first = await authority.states_all_tenants(limit=2, offset=0)
-        second = await authority.states_all_tenants(limit=2, offset=2)
-        assert len(first) == 2 and len(second) == 2
+        first = await authority.states_all_tenants(limit=2)
+        assert len(first) == 2
+        cursor = first[-1]["id"]
+        second = await authority.states_all_tenants(limit=2, after_id=cursor)
+        assert len(second) == 2
+        # Keyset pages are disjoint and strictly ordered by id.
         assert {r["id"] for r in first}.isdisjoint({r["id"] for r in second})
+        assert all(r["id"] > cursor for r in second)
+        # Superseding+inserting a new current row for an already-paged coordinate
+        # must not resurface it before the cursor (keyset stability).
+        prior = (await authority._repo.current(
+            tenant_id="t0", provider="p", environment="sandbox", capability="rewards"
+        ))
+        await authority._repo.advance(prior, {
+            "tenant_id": "t0", "provider": "p", "environment": "sandbox",
+            "capability": "rewards", "readiness_state": "credential_supplied",
+            "domain": "rewards", "state_version": 2,
+        })
+        after = await authority.states_all_tenants(limit=10, after_id=cursor)
+        assert all(r["id"] > cursor for r in after)
         # limit+1 probe reveals there is more beyond the first page.
-        probe = await authority.states_all_tenants(limit=3, offset=0)
+        probe = await authority.states_all_tenants(limit=3)
         assert len(probe) == 3  # more than 2 → has_more would be True
     finally:
         reset_lifecycle_authority()

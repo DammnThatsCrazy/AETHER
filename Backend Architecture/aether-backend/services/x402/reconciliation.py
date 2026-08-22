@@ -116,7 +116,26 @@ class X402ReconciliationWorker:
                     )
                     still_pending += 1
                     continue
-                await self._tracker.mark_settled_reconciled(tenant_id, s.settlement_id)
+                try:
+                    await self._tracker.mark_settled_reconciled(tenant_id, s.settlement_id)
+                except Exception:  # noqa: BLE001 — settlement flip failed after mint
+                    # The entitlement was minted but the SETTLED transition did
+                    # not persist. The settlement stays PENDING, so the NEXT tick
+                    # re-verifies, re-mints (idempotent — returns the existing
+                    # entitlement, no duplicate) and retries the transition. This
+                    # bounds the "entitlement active while settlement still
+                    # PENDING" window to a single reconciliation interval and
+                    # guarantees prompt repair (vs. a SETTLED settlement whose
+                    # entitlement never materialized). A fully atomic mint+settle
+                    # would need a cross-store transaction the commerce store
+                    # does not expose.
+                    logger.warning(
+                        "settlement %s minted entitlement but SETTLED transition failed "
+                        "— staying PENDING for next-tick repair",
+                        s.settlement_id, exc_info=True,
+                    )
+                    still_pending += 1
+                    continue
                 settled += 1
             else:
                 # Reserve PENDING for RETRYABLE verdicts only (not_finalized /

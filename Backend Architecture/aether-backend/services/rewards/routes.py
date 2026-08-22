@@ -957,6 +957,10 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
         budget_service=_budget_service,
     )
 
+    # Registry-verified signer address, set by the onchain_claim pre-check below
+    # and re-checked against the actually-signed proof after generation.
+    _verified_signer: Optional[str] = None
+
     # ── Contract registry pre-check (before persisting decision) ─────────
     # Gate onchain_claim before create_once so an unregistered contract does not
     # consume cooldown/per-user/total-use caps by leaving an eligible=True row.
@@ -1202,6 +1206,25 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             # Extract proof for onchain_claim rail
             if decision.rail == "onchain_claim":
                 proof_dict = payload.get("proof")
+                # Re-check the ACTUALLY-signed proof's signer against the
+                # registry-verified address. The earlier guard checked the
+                # active signer address, but build_action_payload resolves the
+                # key independently — a rotation between the two would slip a
+                # proof signed by the new, unregistered key through. Fail closed
+                # here (after the real signature) rather than emit an
+                # unclaimable proof.
+                if _verified_signer and isinstance(proof_dict, dict):
+                    _signed_by = (proof_dict.get("signer_address") or "").lower()
+                    if _signed_by and _signed_by != _verified_signer:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "reward_signer rotated during proof generation: the proof "
+                                f"was signed by {_signed_by}, which does not match the "
+                                f"contract registry's verified signer ({_verified_signer}). "
+                                "Re-register and re-verify the contract for the new signer."
+                            ),
+                        )
 
         except RailUnavailableError as exc:
             logger.warning(f"Rail {exc.rail} unavailable: {exc.reason}")
@@ -1808,6 +1831,28 @@ async def update_rail(request: Request, rail_id: str, body: RailConfigUpdate):
         inner = patch.get("config") or {}
         submitted = inner.get("signing_secret") or patch.get("signing_secret")
         if submitted:
+            # Validate the MERGED (existing + patch) config BEFORE rotating the
+            # credential. Rotating first and then rejecting the update on an
+            # invalid field (e.g. a malformed webhook_url) would leave the rail
+            # row unchanged but the ACTIVE secret already rotated — subsequent
+            # deliveries would then sign with a secret from a rejected config
+            # and fail receiver verification. Fail closed before store_secret.
+            before_config = (before or {}).get("config") or {}
+            merged_config = {**before_config, **inner}
+            validation_target = {
+                "webhook_url": (
+                    patch.get("webhook_url")
+                    or merged_config.get("webhook_url")
+                    or (before or {}).get("webhook_url")
+                ),
+                "signing_secret": submitted,
+            }
+            errors = get_rail_adapter(rail).validate_config(validation_target)
+            if errors:
+                raise HTTPException(
+                    status_code=422, detail={"rail": rail, "validation_errors": errors}
+                )
+
             from services.rewards.webhook_secret import store_secret
 
             actor = _actor_id(request)

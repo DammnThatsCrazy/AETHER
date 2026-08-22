@@ -60,16 +60,40 @@ class ActivationStateRepo(BaseRepository):
             filters={"tenant_id": tenant_id, "superseded": False}, limit=1000
         )
 
-    async def current_all(self, limit: int = 1000, offset: int = 0) -> list[dict]:
-        """Cross-tenant current states (operator surfaces only), paged.
+    async def current_page(
+        self, limit: int = 1000, after_id: Optional[str] = None
+    ) -> list[dict]:
+        """Cross-tenant current states (operator surfaces only), KEYSET-paged.
 
-        find_many orders by ``created_at`` deterministically, so successive
-        offset pages are stable. Callers detect truncation by requesting
-        ``limit + 1`` and checking for the extra row.
+        Ordered by the row's unique ``id`` ascending, returning rows with
+        ``id > after_id``. A keyset cursor (not a numeric offset) keeps paging
+        stable while transitions concurrently supersede old rows and insert new
+        ones: an offset would duplicate or skip rows as the current-state set
+        shifts, and ``created_at`` is not unique for ties. The id is unique and
+        immutable, so successive pages neither overlap nor gap.
         """
-        return await self.find_many(
-            filters={"superseded": False}, limit=limit, offset=offset
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [
+                r for r in self._store.values()
+                if not r.get("superseded")
+                and (after_id is None or str(r.get("id", "")) > after_id)
+            ]
+            rows.sort(key=lambda r: str(r.get("id", "")))
+            return rows[:limit]
+
+        await self._ensure_table()
+        params: list = []
+        cond = "(data->>'superseded') = 'false'"
+        if after_id:
+            cond += " AND id > $1"
+            params.append(after_id)
+        query = (
+            f"SELECT data FROM {self.table_name} WHERE {cond} "
+            f"ORDER BY id ASC LIMIT {int(limit)}"
         )
+        fetched = await pool.fetch(query, *params)
+        return [json.loads(r["data"]) for r in fetched]
 
     async def advance(self, prior: Optional[dict], new_row: dict) -> dict:
         """Append the next state version, superseding ``prior`` — ATOMICALLY.

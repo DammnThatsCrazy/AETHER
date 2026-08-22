@@ -244,6 +244,19 @@ class VerificationEngine:
             verified_at=_now_iso() if verified else None,
             verification_error=error if not verified else None,
         )
+        # The deterministic receipt id makes put_receipt an upsert. Never let a
+        # NON-verified re-verification (a retryable facilitator/RPC outage on a
+        # later retry) downgrade an already-VERIFIED receipt that a settlement
+        # still references — keep and return the existing terminal receipt.
+        if not verified:
+            existing = await self._store.get_receipt(tenant_id, receipt.receipt_id)
+            if existing is not None and getattr(existing, "verified", False):
+                logger.info(
+                    "verification: keeping existing verified receipt %s; not "
+                    "downgrading on a %s re-verification",
+                    receipt.receipt_id, verdict,
+                )
+                return existing
         await self._store.put_receipt(receipt)
 
         if verified:

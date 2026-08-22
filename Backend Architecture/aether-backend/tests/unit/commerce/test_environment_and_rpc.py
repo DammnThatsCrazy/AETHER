@@ -795,3 +795,52 @@ async def _false():
 
 async def _none():
     return None
+
+
+@pytest.mark.asyncio
+async def test_retryable_reverification_does_not_downgrade_verified_receipt(monkeypatch):
+    """F5: once a payment is verified, a later retry that hits a transient
+    facilitator/RPC outage must NOT overwrite the verified receipt (the
+    deterministic id makes put_receipt an upsert) — the existing verified
+    receipt is kept."""
+    from services.x402.verification import get_verification_engine, _receipt_id_for
+    from services.x402.commerce_models import PaymentAuthorization, PaymentReceipt
+    from services.x402.commerce_store import get_commerce_store
+
+    engine = get_verification_engine()
+    # Seed via the engine's OWN store (the one verify() reads) — the singleton
+    # captures its store at init, which a prior test's reset can desync from
+    # get_commerce_store().
+    store = engine._store
+    tenant = "t-f5"
+    auth = PaymentAuthorization(
+        tenant_id=tenant, challenge_id="c", approval_id="a", payment_identifier="p-f5",
+        amount_usd=1.0, asset_symbol="USDC", chain="eip155:8453", recipient="0xr",
+        payer="0xpayer", facilitator_id="fac_local_aether", environment="sandbox",
+    )
+    await store.put_authorization(auth)
+    # Seed an already-VERIFIED receipt at the deterministic id.
+    rid = _receipt_id_for(tenant, auth.authorization_id)
+    await store.put_receipt(PaymentReceipt(
+        receipt_id=rid, tenant_id=tenant, authorization_id=auth.authorization_id,
+        challenge_id="c", tx_hash="0x" + "a" * 64, chain="eip155:8453", environment="sandbox",
+        asset_symbol="USDC", amount_usd=1.0, payer="0xpayer", recipient="0xr",
+        verified=True, verified_by="fac_local_aether", verification_verdict="verified",
+        verified_at="2026-08-22T00:00:00Z",
+    ))
+
+    # A retry now hits a transient outage.
+    async def _outage(authorization, tx_hash):
+        return False, "verification_unavailable: facilitator timed out"
+
+    monkeypatch.setattr(engine, "_verify_locally", _outage)
+    # Force the local-facilitator path to defer to local verification.
+    monkeypatch.setattr(engine._facilitators, "get", lambda *a, **k: _await_none())
+
+    receipt = await engine.verify(tenant, auth, "0x" + "a" * 64, prefer_facilitator=False)
+    assert receipt.verified is True          # kept, not downgraded
+    assert receipt.receipt_id == rid
+
+
+async def _await_none():
+    return None
