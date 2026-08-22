@@ -618,3 +618,90 @@ async def test_reconciliation_per_env_skip_and_terminal_verdict_fail(monkeypatch
 
 async def _noop():
     return None
+
+
+@pytest.mark.asyncio
+async def test_facilitator_missing_credential_falls_through_to_rpc():
+    """r791: a facilitator that declares a credential slot but has no configured
+    key must hand off to on-chain RPC verification (return False, None) instead
+    of firing an unauthenticated request that fails terminally."""
+    from services.x402.verification import get_verification_engine
+    from services.x402.commerce_models import (
+        Facilitator, FacilitatorMode, PaymentAuthorization,
+    )
+
+    engine = get_verification_engine()
+    fac = Facilitator(
+        facilitator_id="fac_circle_v2", name="Circle",
+        endpoint_url="https://facilitator.example/v2", mode=FacilitatorMode.FACILITATOR,
+        supported_assets=["USDC"], supported_chains=["eip155:8453"],
+        credential_slot="facilitator_api_key",
+    )
+    auth = PaymentAuthorization(
+        tenant_id="t_fac", challenge_id="c", approval_id="a", payment_identifier="p",
+        amount_usd=1.0, asset_symbol="USDC", chain="eip155:8453", recipient="0xrecipient",
+        payer="0xpayer", facilitator_id="fac_circle_v2", environment="sandbox",
+    )
+    verified, error = await engine._verify_via_facilitator("t_fac", fac, auth, "0x" + "a" * 64)
+    assert verified is False and error is None  # → verify() falls through to RPC
+
+
+@pytest.mark.asyncio
+async def test_facilitator_credential_attached_as_bearer(monkeypatch):
+    """r791: a configured facilitator credential is attached as a bearer token
+    on the verification request."""
+    import httpx
+
+    from services.x402.verification import get_verification_engine
+    from services.x402.commerce_models import (
+        Facilitator, FacilitatorMode, PaymentAuthorization,
+    )
+
+    async def _key(tenant_id, provider, environment, slot):
+        assert provider == "fac_circle_v2" and slot == "facilitator_api_key"
+        return "sk_fac_test_123"
+
+    monkeypatch.setattr(
+        "services.providers.credentials.authority.credential_authority.get_active_secret",
+        _key,
+    )
+
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+
+        def json(self):
+            return {"isValid": True}
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            seen["headers"] = headers or {}
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+
+    engine = get_verification_engine()
+    fac = Facilitator(
+        facilitator_id="fac_circle_v2", name="Circle",
+        endpoint_url="https://facilitator.example/v2", mode=FacilitatorMode.FACILITATOR,
+        supported_assets=["USDC"], supported_chains=["eip155:8453"],
+        credential_slot="facilitator_api_key",
+    )
+    auth = PaymentAuthorization(
+        tenant_id="t_fac2", challenge_id="c", approval_id="a", payment_identifier="p2",
+        amount_usd=1.0, asset_symbol="USDC", chain="eip155:8453", recipient="0xrecipient",
+        payer="0xpayer", facilitator_id="fac_circle_v2", environment="sandbox",
+    )
+    verified, error = await engine._verify_via_facilitator("t_fac2", fac, auth, "0x" + "a" * 64)
+    assert verified is True
+    assert seen["headers"].get("Authorization") == "Bearer sk_fac_test_123"

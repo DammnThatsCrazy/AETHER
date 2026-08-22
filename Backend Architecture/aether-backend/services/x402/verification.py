@@ -313,10 +313,44 @@ class VerificationEngine:
                 "paymentRequirements": payment_requirements,
             }
 
+        # A facilitator that declares a credential slot must authenticate. Resolve
+        # its tenant/environment-bound API key from the credential authority and
+        # attach it as a bearer token. If it requires one but none is configured,
+        # hand off to the on-chain RPC verifier (return False, None → verify()
+        # falls through to _verify_locally) rather than sending an
+        # unauthenticated request the facilitator would reject as a terminal
+        # failure, which would strand an otherwise-valid payment.
+        headers: dict[str, str] = {}
+        if facilitator.credential_slot:
+            from shared.common.common import NotFoundError
+
+            from services.providers.credentials.authority import credential_authority
+
+            try:
+                api_key = await credential_authority.get_active_secret(
+                    tenant_id,
+                    facilitator.facilitator_id,
+                    authorization.environment,
+                    facilitator.credential_slot,
+                )
+            except NotFoundError:
+                api_key = None
+            except Exception:  # noqa: BLE001 — treat any resolution failure as unconfigured
+                api_key = None
+            if not api_key:
+                logger.info(
+                    "facilitator %s requires credential slot %s but none is configured "
+                    "for tenant=%s env=%s — falling through to on-chain RPC verification",
+                    facilitator.facilitator_id, facilitator.credential_slot,
+                    tenant_id, authorization.environment,
+                )
+                return False, None
+            headers["Authorization"] = f"Bearer {api_key}"
+
         endpoint = facilitator.endpoint_url.rstrip("/") + "/verify"
         try:
             async with httpx.AsyncClient(timeout=_FACILITATOR_TIMEOUT_S) as client:
-                resp = await client.post(endpoint, json=body)
+                resp = await client.post(endpoint, json=body, headers=headers)
             if resp.status_code == 200:
                 # A 200 is a real verdict either way — the facilitator is
                 # reachable and functioning even when the payment is invalid.

@@ -70,6 +70,14 @@ CIRCLE_V2_FACILITATOR = Facilitator(
     mode=FacilitatorMode.FACILITATOR,
     supported_assets=["USDC"],
     supported_chains=["eip155:8453", "solana:mainnet"],
+    # Circle serves both environments; a live authorization may route here only
+    # because "live" is declared (see select_for's environment filter).
+    supported_environments=["sandbox", "live"],
+    # Requires an API key (credential authority: provider fac_circle_v2, domain
+    # x402, slot facilitator_api_key) — attached as a bearer token by the
+    # verification engine. Verification falls through to on-chain RPC when the
+    # key is not configured.
+    credential_slot="facilitator_api_key",
     health_status="unknown",
     success_rate=None,
     active=True,
