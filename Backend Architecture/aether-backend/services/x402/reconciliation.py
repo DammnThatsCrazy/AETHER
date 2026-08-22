@@ -96,20 +96,27 @@ class X402ReconciliationWorker:
                 continue
             verified, error = await self._verify._verify_locally(authorization, s.tx_hash)
             if verified:
-                await self._tracker.mark_settled_reconciled(tenant_id, s.settlement_id)
-                # Finality is now confirmed → mint the entitlement that
-                # verify_and_settle deferred for this PENDING settlement.
+                # Mint the deferred entitlement FIRST (idempotent), and only
+                # mark the settlement SETTLED once it succeeds. If minting fails
+                # transiently, the settlement stays PENDING and the next tick
+                # re-verifies and retries the mint — instead of a SETTLED
+                # settlement whose entitlement never materializes (the
+                # PENDING-only scan would never revisit it, leaving a paid
+                # customer with no access).
                 try:
                     from services.x402.control_plane import get_control_plane
 
-                    await get_control_plane().finalize_settlement_entitlement(
-                        tenant_id, s.settlement_id
+                    await get_control_plane().mint_entitlement_for_reconciled_settlement(
+                        tenant_id, s
                     )
-                except Exception:  # noqa: BLE001 — settlement still advanced; retried next tick
+                except Exception:  # noqa: BLE001 — keep PENDING so the next tick retries
                     logger.warning(
-                        "entitlement finalize failed for settlement %s",
+                        "entitlement mint failed for settlement %s — leaving PENDING for retry",
                         s.settlement_id, exc_info=True,
                     )
+                    still_pending += 1
+                    continue
+                await self._tracker.mark_settled_reconciled(tenant_id, s.settlement_id)
                 settled += 1
             else:
                 # Reserve PENDING for RETRYABLE verdicts only (not_finalized /

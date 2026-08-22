@@ -705,3 +705,93 @@ async def test_facilitator_credential_attached_as_bearer(monkeypatch):
     verified, error = await engine._verify_via_facilitator("t_fac2", fac, auth, "0x" + "a" * 64)
     assert verified is True
     assert seen["headers"].get("Authorization") == "Bearer sk_fac_test_123"
+
+
+def test_facilitator_transport_failures_map_to_retryable_verdict():
+    """N22: facilitator 5xx / timeout / unreachable must yield a
+    verification_unavailable (retryable) verdict, not a terminal
+    verification_failed that verify_and_settle caches for 24h."""
+    from services.x402.verification import _verdict_token, is_terminal_verdict
+
+    for msg in (
+        "verification_unavailable: facilitator returned HTTP 503",
+        "verification_unavailable: facilitator fac_x timed out",
+        "verification_unavailable: facilitator unreachable: conn refused",
+    ):
+        assert _verdict_token(msg) == "verification_unavailable"
+        assert is_terminal_verdict(_verdict_token(msg)) is False
+    # A definitive 4xx stays terminal.
+    assert is_terminal_verdict(_verdict_token("facilitator returned HTTP 400")) is True
+
+
+def test_receipt_id_is_deterministic_per_authorization():
+    """N16: the receipt id is derived from (tenant, authorization) so a
+    re-verification upserts the same receipt row instead of colliding on the
+    commerce_receipts (tenant_id, authorization_id) unique index."""
+    from services.x402.verification import _receipt_id_for
+
+    a = _receipt_id_for("t1", "auth-1")
+    assert a == _receipt_id_for("t1", "auth-1")            # stable
+    assert a != _receipt_id_for("t1", "auth-2")            # per-authorization
+    assert a != _receipt_id_for("t2", "auth-1")            # per-tenant
+    assert a.startswith("rcpt_")
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_keeps_settlement_pending_when_mint_fails(monkeypatch):
+    """N17: if the entitlement mint fails after verification, the settlement
+    must stay PENDING (retried next tick), never SETTLED-without-entitlement."""
+    import services.x402.control_plane as cp_mod
+    from services.x402.reconciliation import X402ReconciliationWorker
+
+    class _S:
+        settlement_id = "s-mintfail"
+        environment = "sandbox"
+        receipt_id = "rc"
+        tx_hash = "0x9"
+
+    class _Store:
+        async def list_settlements(self, tenant_id, state=None):
+            return [_S()]
+
+        async def get_receipt(self, tenant_id, rid):
+            return type("R", (), {"authorization_id": "a1"})()
+
+        async def get_authorization(self, tenant_id, aid):
+            return type("A", (), {"authorization_id": "a1"})()
+
+    class _Verify:
+        async def _verify_locally(self, auth, tx):
+            return True, None  # verified
+
+    marked = {"settled": False}
+
+    class _Tracker:
+        async def mark_settled_reconciled(self, tenant_id, sid):
+            marked["settled"] = True
+
+    class _FailingPlane:
+        async def mint_entitlement_for_reconciled_settlement(self, tenant_id, settlement):
+            raise RuntimeError("transient mint outage")
+
+    monkeypatch.setattr(cp_mod, "get_control_plane", lambda: _FailingPlane())
+
+    worker = X402ReconciliationWorker()
+    worker._store = _Store()
+    worker._verify = _Verify()
+    worker._tracker = _Tracker()
+    monkeypatch.setattr(worker, "_capability_suspended", lambda t, e: _false())
+    monkeypatch.setattr(worker, "_write_cursor", lambda *a, **k: _none())
+
+    result = await worker.reconcile_tenant("t-mintfail")
+    assert result["settled"] == 0
+    assert result["still_pending"] == 1
+    assert marked["settled"] is False  # settlement never flipped to SETTLED
+
+
+async def _false():
+    return False
+
+
+async def _none():
+    return None

@@ -9,6 +9,7 @@ Day-1 chains: USDC on Base (eip155:8453), USDC on Solana (solana:mainnet).
 
 from __future__ import annotations
 
+import hashlib
 import re
 from decimal import Decimal, ROUND_CEILING
 from typing import Optional
@@ -41,6 +42,16 @@ _VERDICT_PREFIXES = (
     "no_matching_transfer",
     "malformed",
 )
+
+
+def _receipt_id_for(tenant_id: str, authorization_id: str) -> str:
+    """Deterministic receipt id per (tenant, authorization) — one receipt row per
+    authorization, so re-verification upserts rather than colliding on the
+    commerce_receipts (tenant_id, authorization_id) unique index."""
+    digest = hashlib.sha256(
+        f"{tenant_id}\x00{authorization_id}".encode("utf-8")
+    ).hexdigest()
+    return f"rcpt_{digest[:40]}"
 
 
 def _verdict_token(error: Optional[str]) -> str:
@@ -209,7 +220,14 @@ class VerificationEngine:
             verified_by = "local"
 
         verdict = "verified" if verified else _verdict_token(error)
+        # Deterministic receipt id per (tenant, authorization) so a re-verification
+        # — e.g. retrying a payment that first returned the retryable
+        # not_finalized / verification_unavailable verdict — UPSERTS the same
+        # receipt row (ON CONFLICT (id) DO UPDATE) instead of inserting a second
+        # receipt that violates the commerce_receipts (tenant_id, authorization_id)
+        # unique index and blocks the retry from ever re-checking the chain.
         receipt = PaymentReceipt(
+            receipt_id=_receipt_id_for(tenant_id, authorization.authorization_id),
             tenant_id=tenant_id,
             authorization_id=authorization.authorization_id,
             challenge_id=authorization.challenge_id,
@@ -366,18 +384,24 @@ class VerificationEngine:
             await self._facilitators.update_health(
                 tenant_id, facilitator.facilitator_id, "degraded", success=False
             )
+            # A 5xx / 429 is a transient facilitator OUTAGE, not a payment
+            # verdict — classify it RETRYABLE (verification_unavailable) so
+            # verify_and_settle does not cache it for 24h and strand an
+            # otherwise-valid payment. A definitive 4xx rejection stays terminal.
+            if resp.status_code >= 500 or resp.status_code == 429:
+                return False, f"verification_unavailable: facilitator returned HTTP {resp.status_code}"
             return False, f"facilitator returned HTTP {resp.status_code}"
         except httpx.TimeoutException:
             await self._facilitators.update_health(
                 tenant_id, facilitator.facilitator_id, "down", success=False
             )
-            return False, f"facilitator {facilitator.facilitator_id} timed out"
+            return False, f"verification_unavailable: facilitator {facilitator.facilitator_id} timed out"
         except Exception as exc:
             logger.warning(f"facilitator {facilitator.facilitator_id} call failed: {exc}")
             await self._facilitators.update_health(
                 tenant_id, facilitator.facilitator_id, "down", success=False
             )
-            return False, f"facilitator unreachable: {exc}"
+            return False, f"verification_unavailable: facilitator unreachable: {exc}"
 
     async def _verify_locally(
         self, authorization: PaymentAuthorization, tx_hash: str
