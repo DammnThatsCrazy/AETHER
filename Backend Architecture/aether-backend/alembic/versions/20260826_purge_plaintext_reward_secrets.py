@@ -1,11 +1,19 @@
 """purge plaintext reward webhook secrets from durable rows
 
 Idempotent scrub of any plaintext ``signing_secret`` left in
-``tenant_reward_rail_configs.data.config``, ``reward_delivery_jobs``, and
-reward audit ``after_state`` snapshots. As of the credential-only reward
-webhook migration, submitted secrets are dual-written into the credential
-authority and rows persist only a ``secret_ref``; this migration removes any
-plaintext written by older code paths.
+``tenant_reward_rail_configs.config``, ``reward_delivery_jobs``, and reward
+audit ``before_state`` / ``after_state`` snapshots. As of the credential-only
+reward webhook migration, submitted secrets are dual-written into the
+credential authority and rows persist only a ``secret_ref``; this migration
+removes any plaintext written by older code paths.
+
+Schema note: ``tenant_reward_rail_configs`` and ``reward_audit_log`` are
+explicit-column tables (created by ``20260613_reward_enablement``) — the
+former stores rail settings in a ``config`` JSONB column, the latter stores
+snapshots in ``before_state`` / ``after_state`` JSONB columns — so the scrub
+targets those columns directly, NOT a ``data`` column. ``reward_delivery_jobs``
+is a BaseRepository (``data`` JSONB) table created at runtime, so it is guarded
+and only scrubbed if the table exists.
 
 Runs only when the tables exist (guarded with to_regclass), so it is safe on a
 fresh database that never had them. Reversible as a no-op — plaintext is not
@@ -27,16 +35,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Rail configs: strip config.signing_secret and top-level signing_secret.
+    # Rail configs: strip signing_secret from the explicit `config` JSONB column.
     op.execute(
         """
         DO $$
         BEGIN
           IF to_regclass('public.tenant_reward_rail_configs') IS NOT NULL THEN
             UPDATE tenant_reward_rail_configs
-            SET data = (data #- '{config,signing_secret}') #- '{signing_secret}'
-            WHERE data #> '{config,signing_secret}' IS NOT NULL
-               OR data ? 'signing_secret';
+            SET config = config #- '{signing_secret}'
+            WHERE config ? 'signing_secret';
           END IF;
         END $$;
         """
@@ -54,17 +61,23 @@ def upgrade() -> None:
         END $$;
         """
     )
-    # Reward audit snapshots: strip signing secrets from stored after_state.
+    # Reward audit snapshots: strip signing secrets from the explicit
+    # before_state / after_state JSONB columns (config.signing_secret and any
+    # top-level signing_secret inside a snapshot).
     op.execute(
         """
         DO $$
         BEGIN
           IF to_regclass('public.reward_audit_log') IS NOT NULL THEN
             UPDATE reward_audit_log
-            SET data = (data #- '{after_state,config,signing_secret}')
-                       #- '{after_state,signing_secret}'
-            WHERE data #> '{after_state,config,signing_secret}' IS NOT NULL
-               OR data #> '{after_state,signing_secret}' IS NOT NULL;
+            SET after_state = (after_state #- '{config,signing_secret}')
+                              #- '{signing_secret}',
+                before_state = (before_state #- '{config,signing_secret}')
+                               #- '{signing_secret}'
+            WHERE after_state #> '{config,signing_secret}' IS NOT NULL
+               OR after_state ? 'signing_secret'
+               OR before_state #> '{config,signing_secret}' IS NOT NULL
+               OR before_state ? 'signing_secret';
           END IF;
         END $$;
         """
