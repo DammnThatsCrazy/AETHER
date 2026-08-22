@@ -20,6 +20,17 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.rewards.webhook_secret")
 
+
+class TransientSecretResolutionError(RuntimeError):
+    """The credential authority / DB / KMS was temporarily unreachable while
+    resolving a signing secret.
+
+    Distinct from a *definitively missing* credential (which surfaces as an
+    empty result): a transient outage must be RETRIED with backoff, never
+    dead-lettered on the first attempt as if the credential did not exist.
+    """
+
+
 WEBHOOK_PROVIDER = "tenant_webhook"
 WEBHOOK_SLOT = "webhook_signing_secret"
 _REF_PREFIX = "credref://rewards/tenant_webhook/"
@@ -86,16 +97,31 @@ async def resolve_secrets(tenant_id: str, secret_ref: Optional[str]) -> list[str
     env = parse_secret_ref(secret_ref) or credential_environment()
     from services.providers.credentials.authority import credential_authority
 
+    from shared.common.common import NotFoundError
+
     try:
         return await credential_authority.get_verification_secrets(
             tenant_id, WEBHOOK_PROVIDER, env, WEBHOOK_SLOT
         )
-    except Exception as exc:  # noqa: BLE001
+    except NotFoundError:
+        # Definitively no active credential for this secret_ref — fail-closed,
+        # not retryable (retrying will never conjure a credential that was
+        # never provisioned).
         logger.warning(
-            "reward webhook secret resolution failed tenant=%s: %s",
-            tenant_id, type(exc).__name__,
+            "reward webhook secret not found tenant=%s env=%s", tenant_id, env
         )
         return []
+    except Exception as exc:  # noqa: BLE001
+        # Transient: authority / DB / KMS unreachable. Signal the caller to
+        # RETRY rather than collapsing to an empty result that reads as
+        # "missing" and dead-letters the job on its first attempt.
+        logger.warning(
+            "reward webhook secret resolution transiently failed tenant=%s: %s",
+            tenant_id, type(exc).__name__,
+        )
+        raise TransientSecretResolutionError(
+            f"credential authority unavailable resolving webhook secret for tenant {tenant_id}"
+        ) from exc
 
 
 async def resolve_signing_secret(
@@ -106,10 +132,11 @@ async def resolve_signing_secret(
     Order: (1) a configured ``secret_ref`` resolved through the authority
     (production path); (2) an inline ``signing_secret`` still present on a
     not-yet-migrated rail config, but ONLY in local/test — never in a deployed
-    environment. Returns ``""`` when nothing resolves (fail-closed: the
-    receiver's HMAC will not match and the delivery is retried/dead-lettered
-    rather than silently signed with an empty key... callers should treat an
-    empty result as a hard error)."""
+    environment. Returns ``""`` when the credential is *definitively missing*
+    (fail-closed: the caller must treat an empty result as a hard,
+    non-retryable error). Raises ``TransientSecretResolutionError`` when the
+    authority/DB/KMS is temporarily unreachable — the caller must classify that
+    as RETRYABLE, not dead-letter it as missing."""
     config = rail_config.get("config", rail_config) if isinstance(rail_config, dict) else {}
     secret_ref = config.get("secret_ref") or rail_config.get("secret_ref")
     if secret_ref:
@@ -130,5 +157,6 @@ __all__ = [
     "parse_secret_ref",
     "resolve_secrets",
     "resolve_signing_secret",
+    "TransientSecretResolutionError",
     "store_secret",
 ]

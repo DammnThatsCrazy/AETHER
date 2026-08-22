@@ -226,7 +226,10 @@ class RewardWebhookSender:
         # Resolve the signing secret from the credential authority at the narrow
         # send site — the job row carries only a secret_ref (plus an optional
         # local/test inline secret), never durable plaintext.
-        from services.rewards.webhook_secret import resolve_signing_secret
+        from services.rewards.webhook_secret import (
+            TransientSecretResolutionError,
+            resolve_signing_secret,
+        )
 
         tenant_id = job.get("tenant_id", "")
         rail_config_for_resolve = {
@@ -235,7 +238,16 @@ class RewardWebhookSender:
                 "signing_secret": provider_config.get("signing_secret", ""),
             }
         }
-        signing_secret = await resolve_signing_secret(tenant_id, rail_config_for_resolve)
+        try:
+            signing_secret = await resolve_signing_secret(tenant_id, rail_config_for_resolve)
+        except TransientSecretResolutionError as exc:
+            # Authority / DB / KMS temporarily unreachable — RETRYABLE, so the
+            # outbox schedules a backoff retry instead of dead-lettering the job
+            # (and failing the reward action) on its first attempt.
+            return SenderResult(
+                "retryable",
+                error=f"reward webhook secret resolution unavailable: {exc}",
+            )
         if not signing_secret:
             return SenderResult(
                 "fatal",

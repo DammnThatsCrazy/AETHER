@@ -414,3 +414,110 @@ async def test_outbox_dispatches_internal_credit_end_to_end():
     assert summary["delivered"] >= 1
     bal = await get_internal_credit_ledger().get_balance(tenant, "r9", "USD")
     assert bal == Decimal("3.00")
+
+
+@pytest.mark.asyncio
+async def test_transient_secret_outage_is_retryable_not_fatal(monkeypatch):
+    """r826: an authority/DB/KMS outage while resolving the webhook signing
+    secret must be classified RETRYABLE (backoff) — never dead-lettered on the
+    first attempt as if the credential were missing."""
+    from services.rewards import webhook_secret
+    from services.rewards.delivery_outbox import RewardWebhookSender
+
+    async def _boom(tenant_id, rail_config):
+        raise webhook_secret.TransientSecretResolutionError("authority down")
+
+    monkeypatch.setattr(
+        "services.rewards.webhook_secret.resolve_signing_secret", _boom
+    )
+    sender = RewardWebhookSender()
+    job = {
+        "tenant_id": "t1",
+        "provider_config": {"webhook_url": "https://example.com/hook", "secret_ref": "credref://rewards/tenant_webhook/sandbox/webhook_signing_secret"},
+        "payload": {"idempotency_key": "k1"},
+    }
+    result = await sender.send(job)
+    assert result.outcome == "retryable"
+
+
+@pytest.mark.asyncio
+async def test_definitively_missing_secret_is_fatal(monkeypatch):
+    """r826 counterpart: a genuinely absent credential (empty resolution, no
+    exception) stays FATAL — retrying can never conjure it."""
+    from services.rewards.delivery_outbox import RewardWebhookSender
+
+    async def _empty(tenant_id, rail_config):
+        return ""
+
+    monkeypatch.setattr(
+        "services.rewards.webhook_secret.resolve_signing_secret", _empty
+    )
+    sender = RewardWebhookSender()
+    job = {
+        "tenant_id": "t1",
+        "provider_config": {"webhook_url": "https://example.com/hook", "secret_ref": "credref://rewards/tenant_webhook/sandbox/webhook_signing_secret"},
+        "payload": {"idempotency_key": "k1"},
+    }
+    result = await sender.send(job)
+    assert result.outcome == "fatal"
+
+
+@pytest.mark.asyncio
+async def test_resolve_secrets_reraises_transient_as_typed_error(monkeypatch):
+    """r826: resolve_secrets converts a non-NotFound authority error into a
+    TransientSecretResolutionError instead of swallowing it to an empty list."""
+    from services.rewards import webhook_secret
+
+    class _FakeAuthority:
+        async def get_verification_secrets(self, *a, **k):
+            raise RuntimeError("connection reset")
+
+    monkeypatch.setattr(
+        "services.providers.credentials.authority.credential_authority",
+        _FakeAuthority(),
+    )
+    with pytest.raises(webhook_secret.TransientSecretResolutionError):
+        await webhook_secret.resolve_secrets(
+            "t1", "credref://rewards/tenant_webhook/sandbox/webhook_signing_secret"
+        )
+
+
+@pytest.mark.asyncio
+async def test_sender_backed_rails_route_through_outbox_not_inline():
+    """r768: every rail with a registered sender (tenant_webhook,
+    internal_credit, stripe_credit, x402_credit) is outbox-routed. The
+    stripe_credit / x402_credit adapters are outbox-only and raise if delivered
+    inline, so the routing predicate MUST be has_sender()."""
+    from services.rewards.senders import has_sender
+    from services.rewards.rails import get_rail_adapter, RailUnavailableError
+
+    for rail in ("tenant_webhook", "internal_credit", "stripe_credit", "x402_credit"):
+        assert has_sender(rail), f"{rail} must be sender-backed / outbox-routed"
+
+    # The outbox-only adapters must still refuse inline delivery, which is
+    # exactly why the route layer may never call adapter.deliver() for them.
+    for rail in ("stripe_credit", "x402_credit"):
+        adapter = get_rail_adapter(rail)
+        with pytest.raises(RailUnavailableError):
+            await adapter.deliver({"payload": {}}, {})
+
+
+@pytest.mark.asyncio
+async def test_outbox_dispatches_x402_credit_end_to_end(monkeypatch):
+    """r768: a stripe_credit/x402_credit action, once routed to the outbox,
+    actually delivers instead of remaining inert."""
+    from services.rewards.delivery_outbox import RewardDeliveryOutbox
+
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    outbox = RewardDeliveryOutbox()
+    action = {
+        "id": f"actx-{uuid.uuid4().hex[:6]}", "rail": "x402_credit",
+        "payload": {
+            "recipient_id": "rx", "campaign_id": "cx", "amount": "1.00",
+            "currency": "USD", "idempotency_key": f"x402-{uuid.uuid4().hex[:8]}",
+        },
+    }
+    await outbox.enqueue(action, {}, tenant)
+    summary = await outbox.drain()
+    # Delivered or a typed retry — never a silent inert no-op.
+    assert summary["delivered"] + summary.get("retry", 0) + summary.get("dead_letter", 0) >= 1

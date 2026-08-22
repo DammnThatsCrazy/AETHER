@@ -1088,21 +1088,29 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             action_id = action_record["id"]
 
             # Delivery routing.
-            if decision.rail == "tenant_webhook":
-                # DURABLE outbox: enqueue and keep the action 'pending'. It is
-                # only marked 'delivered' once the outbox records a
-                # ProviderReceipt — never on the synchronous request path.
+            from services.rewards.senders import has_sender
+
+            if has_sender(decision.rail):
+                # DURABLE outbox: EVERY sender-backed rail (tenant_webhook,
+                # internal_credit, stripe_credit, x402_credit) delivers through
+                # the outbox — enqueue and keep the action 'pending'; it is only
+                # marked 'delivered' once the outbox records a ProviderReceipt,
+                # never on the synchronous request path. The stripe_credit /
+                # x402_credit adapters are outbox-only and RAISE if delivered
+                # inline, so routing them here (not through adapter.deliver) is
+                # required, not optional — otherwise their actions stay inert and
+                # their budget reservations leak until the stale-reservation sweep.
                 try:
                     from services.rewards.delivery_outbox import reward_delivery_outbox
                     await reward_delivery_outbox.enqueue(action_record, rail_config, tenant_id)
                     await repos["actions"].transition(action_id, tenant_id, "pending")
                 except Exception as exc:
-                    logger.error(f"tenant_webhook durable enqueue failed: {exc}", exc_info=True)
+                    logger.error(f"{decision.rail} durable enqueue failed: {exc}", exc_info=True)
                     await repos["actions"].transition(
                         action_id, tenant_id, "failed",
                         extra={"last_delivery_error": str(exc)},
                     )
-                    await _release_reservation(action_record, tenant_id, "webhook_enqueue_failed")
+                    await _release_reservation(action_record, tenant_id, "outbox_enqueue_failed")
             elif decision.rail not in ("manual_approval", "onchain_claim"):
                 # Deliver terminal/no-op rails (recommend_only, manual_export) inline.
                 delivery: DeliveryResult = await adapter.deliver(action_record, rail_config)
@@ -1379,6 +1387,21 @@ async def deliver_action(request: Request, action_id: str):
         rail_config = rail_conf_record.get("config", {}) if rail_conf_record else {}
     except Exception:
         pass
+
+    # Sender-backed rails deliver ONLY through the durable outbox (the
+    # stripe_credit / x402_credit adapters raise if delivered inline). Enqueue
+    # and return 'pending'; the outbox drives it to 'delivered' on a receipt.
+    from services.rewards.senders import has_sender
+
+    if has_sender(rail):
+        try:
+            from services.rewards.delivery_outbox import reward_delivery_outbox
+            await reward_delivery_outbox.enqueue(action, rail_config, tenant_id)
+            updated = await repos["actions"].transition(action_id, tenant_id, "pending")
+            metrics.increment("rewards_actions_delivered_total", labels={"rail": rail, "tenant_id": tenant_id})
+            return updated
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Rail {rail} enqueue failed: {exc}")
 
     try:
         delivery: DeliveryResult = await adapter.deliver(action, rail_config)
