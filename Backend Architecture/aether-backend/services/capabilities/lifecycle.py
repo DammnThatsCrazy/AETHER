@@ -36,6 +36,7 @@ from services.capabilities.activation_schema import (
     EVIDENCE_REQUIRED_STATES,
     is_legal_transition,
 )
+from services.providers.credentials.slot_registry import slots_for
 
 logger = get_logger("aether.capabilities.lifecycle")
 
@@ -125,10 +126,17 @@ class CapabilityLifecycleAuthority:
           that RESOLVE through the registered evidence resolver;
         * ``target`` at/above ENTITLEMENT_REQUIRED_FROM ⇒ the registered
           entitlement checker approves (absent checker ⇒ deny);
-        * a ``credential_slot`` was declared ⇒ the registered credential
-          checker returns the ACTIVE credential version for the coordinate
-          (absent checker or no active version ⇒ deny), and the returned
-          version is recorded as ``credential_version_ref``.
+        * ``target`` is CREDENTIAL_SUPPLIED ⇒ EVERY slot the slot registry
+          marks ``required`` for this ``(provider, environment)`` is
+          resolved server-side (never trusted from the caller) and each must
+          have an ACTIVE credential version (absent checker or any missing
+          version ⇒ deny). A caller-supplied ``credential_slot`` is checked
+          in addition to — never instead of — the required set;
+        * a ``credential_slot`` was declared for a non-CREDENTIAL_SUPPLIED
+          target ⇒ the registered credential checker returns the ACTIVE
+          credential version for the coordinate (absent checker or no active
+          version ⇒ deny). The resolved active version is recorded as
+          ``credential_version_ref``.
         """
         current = await self.get_state(tenant_id, provider, environment, capability)
         current_state = R(current["readiness_state"]) if current else R.CREDENTIAL_WAITING
@@ -166,21 +174,47 @@ class CapabilityLifecycleAuthority:
                 )
 
         resolved_credential_ref = credential_version_ref
+        # Slots to verify, in resolution order. A dict (not a set) so we can
+        # look the caller's declared slot back up after checking.
+        slots_to_verify: dict[str, bool] = {}
+        if target == R.CREDENTIAL_SUPPLIED:
+            # BUG FIX: the initial CREDENTIAL_WAITING -> CREDENTIAL_SUPPLIED
+            # promotion is the claim "an active credential exists for this
+            # coordinate" — that claim must be verified server-side from the
+            # slot registry's REQUIRED set, never left to whether the caller
+            # happened to pass the optional `credential_slot` field. An admin
+            # omitting it must NOT be able to persist CREDENTIAL_SUPPLIED for
+            # a provider with no active credential.
+            for slot in slots_for(provider, environment):
+                if slot.required:
+                    slots_to_verify[slot.slot_name] = True
         if credential_slot:
+            # A caller-declared slot is checked IN ADDITION to the required
+            # set above — never relied on solely, and never a substitute for
+            # it.
+            slots_to_verify.setdefault(credential_slot, True)
+
+        if slots_to_verify:
             if self._credential_checker is None:
                 raise PromotionPreconditionError(
-                    "no credential checker registered — promotion with a declared "
-                    "credential slot denied (fail-closed)"
+                    "no credential checker registered — promotion to "
+                    f"{target.value} denied (fail-closed)"
                 )
-            active_version = await self._credential_checker(
-                tenant_id, provider, environment, credential_slot
+            active_versions: dict[str, str] = {}
+            for slot_name in slots_to_verify:
+                active_version = await self._credential_checker(
+                    tenant_id, provider, environment, slot_name
+                )
+                if not active_version:
+                    raise PromotionPreconditionError(
+                        f"no ACTIVE credential for required slot {slot_name!r} at "
+                        f"({tenant_id}, {provider}, {environment})"
+                    )
+                active_versions[slot_name] = active_version
+            resolved_credential_ref = (
+                (active_versions.get(credential_slot) if credential_slot else None)
+                or next(iter(active_versions.values()))
             )
-            if not active_version:
-                raise PromotionPreconditionError(
-                    f"no ACTIVE credential for slot {credential_slot!r} at "
-                    f"({tenant_id}, {provider}, {environment})"
-                )
-            resolved_credential_ref = active_version
 
         return await self._advance(
             current,
@@ -279,7 +313,19 @@ class CapabilityLifecycleAuthority:
         reason: str = "",
     ) -> dict:
         """Resume a SUSPENDED (or recover a DEGRADED) capability to the
-        progression state it interrupted (``prior_state``)."""
+        progression state it interrupted (``prior_state``).
+
+        BUG FIX: the interrupted rung is NOT restored blindly. Whatever went
+        stale while the capability sat off-ramped — a credential revoked or
+        deleted out from under it, evidence that no longer resolves, an
+        entitlement pulled — must be caught here too, not only by
+        ``on_credential_event``, since that handler cannot anticipate every
+        way ``prior_state`` can go stale. Preconditions for ``prior_state``
+        are therefore re-verified fresh (never trusting the persisted row)
+        and, if any fail, this fails closed to CREDENTIAL_WAITING instead of
+        raising — the capability comes back deactivated rather than either
+        stuck suspended or, worse, silently re-certified.
+        """
         current = await self.get_state(tenant_id, provider, environment, capability)
         if current is None:
             raise IllegalTransitionError("nothing to resume — no persisted state")
@@ -293,6 +339,39 @@ class CapabilityLifecycleAuthority:
             raise IllegalTransitionError("no prior state recorded to resume to")
         target = R(prior)
         self._require_legal(current_state, target)
+
+        ok, failure_reason = await self._revalidate_resume_preconditions(
+            tenant_id=tenant_id,
+            provider=provider,
+            environment=environment,
+            capability=capability,
+            target=target,
+        )
+        if not ok:
+            self._require_legal(current_state, R.CREDENTIAL_WAITING)
+            logger.warning(
+                "resume precondition revalidation failed tenant=%s provider=%s "
+                "env=%s capability=%s target=%s reason=%s — failing closed to "
+                "credential_waiting instead of restoring",
+                tenant_id, provider, environment, capability, target.value,
+                failure_reason,
+            )
+            return await self._advance(
+                current,
+                tenant_id=tenant_id,
+                provider=provider,
+                domain=current.get("domain", ""),
+                environment=environment,
+                capability=capability,
+                target=R.CREDENTIAL_WAITING,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                reason=reason or f"resume denied — {failure_reason}",
+                evidence_refs=[],
+                credential_version_ref=None,
+                kill_switch=False,
+            )
+
         return await self._advance(
             current,
             tenant_id=tenant_id,
@@ -324,7 +403,12 @@ class CapabilityLifecycleAuthority:
 
         * ``rotated``   → certified capabilities demote to CREDENTIAL_SUPPLIED
                           bound to the NEW credential version (re-certify);
-        * ``revoked``   → everything above CREDENTIAL_WAITING demotes to REVOKED;
+        * ``revoked``   → everything above CREDENTIAL_WAITING demotes to
+                          REVOKED — INCLUDING a SUSPENDED/DEGRADED row, so a
+                          revoked credential can never be silently restored
+                          by a later resume() (off-ramp states rank BELOW
+                          CREDENTIAL_WAITING, so they need an explicit
+                          membership check, not just the rank comparison);
         * ``activated`` → CREDENTIAL_WAITING coordinates advance to
                           CREDENTIAL_SUPPLIED;
         * ``deleted``   → treated as ``revoked``.
@@ -375,9 +459,18 @@ class CapabilityLifecycleAuthority:
                             kill_switch=False,
                         )
                     )
-                elif event in ("revoked", "deleted") and readiness_rank(
-                    state
-                ) > readiness_rank(R.CREDENTIAL_WAITING):
+                elif event in ("revoked", "deleted") and (
+                    readiness_rank(state) > readiness_rank(R.CREDENTIAL_WAITING)
+                    # BUG FIX: SUSPENDED/DEGRADED are off-ramp states ranked
+                    # BELOW CREDENTIAL_WAITING by design (so "at least
+                    # credential_waiting" checks never admit them) — but that
+                    # means the rank comparison above silently drops a
+                    # revoke/delete event for a suspended row, leaving
+                    # prior_state pointing at a progression rung whose
+                    # credential is now gone. Explicitly include them so the
+                    # revocation still takes effect instead of being ignored.
+                    or state in (R.SUSPENDED, R.DEGRADED)
+                ):
                     outcomes.append(
                         await self._advance(
                             row,
@@ -409,6 +502,66 @@ class CapabilityLifecycleAuthority:
             raise IllegalTransitionError(
                 f"illegal lifecycle transition {current.value} -> {target.value}"
             )
+
+    async def _revalidate_resume_preconditions(
+        self,
+        *,
+        tenant_id: str,
+        provider: str,
+        environment: str,
+        capability: str,
+        target: R,
+    ) -> tuple[bool, str]:
+        """Re-check ``target``'s fail-closed preconditions before resume()
+        restores it, mirroring ``promote()`` — but re-derived fresh from the
+        current credential/evidence/entitlement truth rather than trusted
+        from the interrupted row, since any of them may have changed while
+        the capability sat off-ramped. Returns ``(ok, reason)``."""
+        if readiness_rank(target) >= readiness_rank(R.CREDENTIAL_SUPPLIED):
+            required_slots = [
+                slot.slot_name for slot in slots_for(provider, environment) if slot.required
+            ]
+            if required_slots:
+                if self._credential_checker is None:
+                    return False, "no credential checker registered"
+                for slot_name in required_slots:
+                    active_version = await self._credential_checker(
+                        tenant_id, provider, environment, slot_name
+                    )
+                    if not active_version:
+                        return (
+                            False,
+                            f"no ACTIVE credential for required slot {slot_name!r}",
+                        )
+
+        if target in EVIDENCE_REQUIRED_STATES:
+            refs = await self._last_evidence_refs(
+                tenant_id, provider, environment, capability, target
+            )
+            if not refs:
+                return False, f"no evidence references on record for {target.value}"
+            if self._evidence_resolver is None:
+                return False, "no evidence resolver registered"
+            if not await self._evidence_resolver(refs):
+                return False, "evidence references failed to resolve/verify"
+
+        if readiness_rank(target) >= readiness_rank(ENTITLEMENT_REQUIRED_FROM):
+            if self._entitlement_checker is None:
+                return False, "no entitlement checker registered"
+            if not await self._entitlement_checker(tenant_id, provider, capability):
+                return False, f"tenant {tenant_id} is not entitled to {provider}:{capability}"
+
+        return True, ""
+
+    async def _last_evidence_refs(
+        self, tenant_id: str, provider: str, environment: str, capability: str, target: R,
+    ) -> list[str]:
+        """Most recent evidence refs this coordinate certified ``target``
+        with (newest-first history), for resume()'s revalidation."""
+        for row in await self.history(tenant_id, provider, environment, capability):
+            if row.get("readiness_state") == target.value and row.get("evidence_refs"):
+                return list(row["evidence_refs"])
+        return []
 
     async def _advance(
         self,

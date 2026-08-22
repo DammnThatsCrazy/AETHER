@@ -203,6 +203,42 @@ async def test_declared_credential_slot_without_active_version_is_refused(coord)
         )
 
 
+@pytest.mark.asyncio
+async def test_credential_supplied_promotion_denied_without_active_credential_or_slot():
+    """BUG FIX: an admin omitting the OPTIONAL `credential_slot` field must
+    not be able to persist CREDENTIAL_SUPPLIED for a provider that has no
+    active credential. The REQUIRED slots are resolved server-side from the
+    slot registry — never left to whatever the caller happened to declare."""
+    async def _no_active(tenant_id, provider, environment, slot):
+        return None
+
+    authority = CapabilityLifecycleAuthority(
+        ActivationStateRepo(),
+        evidence_resolver=_ok_evidence,
+        credential_checker=_no_active,
+        entitlement_checker=_entitled,
+    )
+    tenant_id = f"tenant-lc-{uuid.uuid4().hex[:10]}"
+    with pytest.raises(
+        PromotionPreconditionError, match="no ACTIVE credential for required slot"
+    ):
+        await authority.promote(
+            tenant_id=tenant_id,
+            provider="reward_signer",  # registered provider with a REQUIRED slot
+            environment="sandbox",
+            capability="proof_signing",
+            target=R.CREDENTIAL_SUPPLIED,
+            actor_type="operator",
+            actor_id="ops-1",
+            # credential_slot intentionally omitted.
+        )
+    # confirms nothing was persisted — the coordinate never advanced
+    current = await authority.get_state(
+        tenant_id, "reward_signer", "sandbox", "proof_signing"
+    )
+    assert current is None
+
+
 # ── Full walk + history + attribution ─────────────────────────────────────
 
 
@@ -302,6 +338,100 @@ async def test_credential_events_do_not_cross_environments(coord):
     assert outcomes == []
     current = await authority.get_state(**coord)
     assert current["readiness_state"] == "connection_validated"
+
+
+# ── Bug fix: revocation while suspended ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_revoke_while_suspended_moves_to_revoked_and_blocks_resume(coord):
+    """BUG FIX (a): a credential revoked/deleted while the capability is
+    SUSPENDED must still take effect. SUSPENDED/DEGRADED rank BELOW
+    CREDENTIAL_WAITING (off-ramp states), so the naive rank comparison used
+    to silently drop the event, leaving prior_state=partner_live in place.
+    Once the row is REVOKED, resume() can no longer even be attempted, so it
+    can never blindly restore partner_live with a dead credential."""
+    authority = _full_authority()
+    await _walk_to(
+        authority, coord,
+        [R.CREDENTIAL_SUPPLIED, R.CONNECTION_VALIDATED, R.SANDBOX_VALIDATED, R.PARTNER_LIVE],
+    )
+    suspended = await authority.suspend(
+        **coord, actor_type="operator", actor_id="op-1", reason="incident",
+    )
+    assert suspended["readiness_state"] == "suspended"
+    assert suspended["prior_state"] == "partner_live"
+
+    outcomes = await authority.on_credential_event(
+        tenant_id=coord["tenant_id"], provider=coord["provider"], environment="sandbox",
+        event="revoked",
+    )
+    assert len(outcomes) == 1
+    assert outcomes[0]["readiness_state"] == "revoked"
+
+    current = await authority.get_state(**coord)
+    assert current["readiness_state"] == "revoked"
+
+    # resume() does NOT restore partner_live — the row is no longer even a
+    # legal resume target (only SUSPENDED/DEGRADED are).
+    with pytest.raises(IllegalTransitionError):
+        await authority.resume(**coord, actor_type="operator", actor_id="op-1")
+
+
+@pytest.mark.asyncio
+async def test_resume_revalidates_and_fails_closed_when_credential_goes_missing():
+    """BUG FIX (b): resume() re-verifies the interrupted rung's preconditions
+    instead of trusting the persisted row. Here the row STAYS suspended (no
+    on_credential_event fired — e.g. a race, or some other off-ramp path)
+    yet the credential the certified level depended on has gone missing;
+    resume() must fail closed to CREDENTIAL_WAITING rather than restoring
+    partner_live."""
+    tenant_id = f"tenant-lc-{uuid.uuid4().hex[:10]}"
+    provider, environment, capability = "reward_signer", "sandbox", "proof_signing"
+    credential_available = {"evm_reward_signer_key": True}
+
+    async def _flaky_credential(t, p, e, slot):
+        if credential_available.get(slot):
+            return f"credver://{p}/{e}/{slot}@v1"
+        return None
+
+    authority = CapabilityLifecycleAuthority(
+        ActivationStateRepo(),
+        evidence_resolver=_ok_evidence,
+        credential_checker=_flaky_credential,
+        entitlement_checker=_entitled,
+    )
+    common = dict(
+        tenant_id=tenant_id, provider=provider, environment=environment, capability=capability
+    )
+    await authority.promote(
+        **common, target=R.CREDENTIAL_SUPPLIED, actor_type="user", actor_id="alex",
+        credential_slot="evm_reward_signer_key",
+    )
+    await authority.promote(
+        **common, target=R.CONNECTION_VALIDATED, actor_type="user", actor_id="alex",
+        evidence_refs=["ev-1"],
+    )
+    await authority.promote(
+        **common, target=R.SANDBOX_VALIDATED, actor_type="user", actor_id="alex",
+        evidence_refs=["ev-1"],
+    )
+    await authority.promote(
+        **common, target=R.PARTNER_LIVE, actor_type="user", actor_id="alex",
+        evidence_refs=["ev-1"],
+    )
+
+    suspended = await authority.suspend(
+        **common, actor_type="operator", actor_id="op-1", reason="incident",
+    )
+    assert suspended["prior_state"] == "partner_live"
+
+    # credential goes away while suspended, without an on_credential_event.
+    credential_available["evm_reward_signer_key"] = False
+
+    resumed = await authority.resume(**common, actor_type="operator", actor_id="op-1")
+    assert resumed["readiness_state"] == "credential_waiting"
+    assert resumed["readiness_state"] != "partner_live"
 
 
 # ── CAS / concurrency ─────────────────────────────────────────────────────
