@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 11
 toc_depth: 3
-last_synced_commit: "c6aa7606"
+last_synced_commit: "bee65298"
 ---
 
 # Commerce Event Contract
@@ -155,6 +155,13 @@ the `comms` precedent: runtime-domain dotted event types stay out of the SDK
 `EventType` union until a convergence program merges them. The split means SDK
 consumers must be bridged — see
 [SDK-COMMERCE-BRIDGES](SDK-COMMERCE-BRIDGES.md) for the scoped follow-on.
+
+**Convergence status (WS4 — tracker-only, SHIPPED):** the follow-on program
+records this split in the event registry's bookkeeping note
+(`packages/shared/contracts/event-registry.json`) — runtime-domain
+`commerce.*` status is documented mirroring the `comms` precedent, with **no**
+`EventType`-union edits. The merge stays deferred to a dedicated convergence
+program.
 
 ## Related docs
 

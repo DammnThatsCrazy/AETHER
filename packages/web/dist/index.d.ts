@@ -10,6 +10,7 @@ declare class AetherSDK implements AetherSDKInterface {
     private sessionManager;
     private identityManager;
     private autoDiscovery;
+    private commerceDetection;
     private consentModule;
     private web3Module;
     private semanticContext;
@@ -129,6 +130,18 @@ declare class AetherSDK implements AetherSDKInterface {
      * under an honored Do-Not-Track signal.
      */
     private canFingerprint;
+    /**
+     * Bridge a raw SDKCommerceSignal into the canonical event plane.
+     *
+     * The SDK event plane speaks the registry EventType union (product_viewed /
+     * order_completed — WS4-deferred convergence); the dotted `commerce.*`
+     * runtime types live in the runtime domain and are never fabricated here.
+     * The schema-versioned signal (with its sanitized `source_url`) and its
+     * projection confirmation metadata travel inside the payload so the backend
+     * can reconcile it against server-side OrderSnapshots via the
+     * `confirm_interaction` mirror — the SDK observes, it never self-confirms.
+     */
+    private emitCommerceSignal;
     private enqueueEvent;
     /**
      * Snapshot of the active journey for an event's context. Carries only the

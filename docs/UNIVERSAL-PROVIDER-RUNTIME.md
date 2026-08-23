@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
-last_synced_commit: "e610a8df"
+last_synced_commit: "bee65298"
 ---
 
 # Universal Provider Runtime
@@ -230,12 +230,29 @@ The pipeline honors three invariants:
 
 ## Limits & follow-on
 
-- **Not built in this program**: WooCommerce/Etsy/Amazon/eBay/Walmart/TikTok
-  plugins; the web SDK detection engine + commerce bridges
-  ([SDK-COMMERCE-BRIDGES](SDK-COMMERCE-BRIDGES.md)); Kyber manifest-driven UI;
-  SDK event-registry convergence (dotted `commerce.*` stay runtime-domain,
-  mirroring the `comms` precedent); scheduled-worker cron (manual triggers
-  only); config/secret migration projections.
+**Update (follow-on program, shipped):** the UPR follow-on program landed as
+PR-A (shared seams + legacy SSRF hardening) → PR-B (six native provider
+plugins, scheduled-worker cron, config/secret migration projections) → PR-C
+(web SDK detection engine + commerce bridges) → PR-D (Kyber manifest-driven UI
++ convergence tracker + final docs). The SDK event-registry convergence merge
+remains a dedicated program (tracker-only in the follow-on).
+
+**Build status (shipped):** the six native provider plugins (WS1), the
+scheduled-worker cron (WS5), config/secret migration projections (WS6), the
+web SDK detection engine + commerce bridges (WS2), and the Kyber
+manifest-driven UI (WS3) are all shipped in this follow-on program. SDK
+event-registry convergence (WS4) remains tracker-only — its merge stays
+deferred to a dedicated convergence program.
+
+**WS8 hardening scope:** the six host-bearing legacy connectors (Shopify, Salesforce, PostHog, Jira, Zendesk, Dune) and the Braze connector now validate tenant-supplied base URLs against provider allowlists (fail-closed). Intentional consequences: self-hosted PostHog on custom domains, Salesforce instances outside `*.salesforce.com` / `*.force.com`, and explicit `:443` in URLs are now denied; Salesforce `*.lightning.force.com` and `*.my.salesforce.com` remain covered. Empty-label and resolver-IP spellings are rejected by the shared seam.
+
+- **Not built in this program**: SDK event-registry convergence only — the
+  dotted `commerce.*` types stay runtime-domain (mirroring the `comms`
+  precedent) until a dedicated convergence program. Every other follow-on item
+  (six native plugins, scheduled-worker cron, config/secret migration
+  projections, web SDK detection engine + commerce bridges
+  ([SDK-COMMERCE-BRIDGES](SDK-COMMERCE-BRIDGES.md)), Kyber manifest-driven UI)
+  is built.
 - **Migration**: legacy connectors are exposed via `LegacyConnectorPlugin`
   today and migrate per-provider to native plugins tomorrow — never
   core-first (see [PROVIDER-MIGRATION](PROVIDER-MIGRATION.md)).
@@ -247,5 +264,5 @@ The pipeline honors three invariants:
 - [PROVIDER-MANIFEST-SPEC](PROVIDER-MANIFEST-SPEC.md) — the manifest + honesty invariants
 - [PROVIDER-CERTIFICATION](PROVIDER-CERTIFICATION.md) — the certification harness
 - [COMMERCE-EVENT-CONTRACT](COMMERCE-EVENT-CONTRACT.md) — the canonical commerce vocabulary
-- [SDK-COMMERCE-BRIDGES](SDK-COMMERCE-BRIDGES.md) — the follow-on (documentation only)
+- [SDK-COMMERCE-BRIDGES](SDK-COMMERCE-BRIDGES.md) — the web SDK detection engine + commerce bridges (shipped)
 - [PROVIDER-MIGRATION](PROVIDER-MIGRATION.md) — migrating a legacy connector

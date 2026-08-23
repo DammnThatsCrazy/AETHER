@@ -14,7 +14,7 @@ source_files:
   - packages/web/src/core/event-queue.ts
   - packages/web/src/health/sdk-health-agent.ts
   - docs/source-of-truth/PLATFORM_PARITY.md
-last_synced_commit: "d7dc6d8"
+last_synced_commit: "bee65298"
 ---
 
 # Aether SDK Production Readiness Audit
@@ -23,6 +23,12 @@ last_synced_commit: "d7dc6d8"
 **SDK version audited:** 8.11.0
 **Platforms covered:** Web, iOS, Android, React Native, Shared contracts
 **Prepared by:** SDK Productization Pass (automated audit)
+
+**Addendum (2026-08-09, SDK 8.12.0):** the WS2 commerce-detection engine and
+SDK↔runtime commerce bridges shipped after this audit, on top of the audited
+8.11.0 surface (see [SDK-COMMERCE-BRIDGES.md](../SDK-COMMERCE-BRIDGES.md) and
+the Ecommerce entry in §1.1). Version references in the body below document
+the audited version and are intentionally unchanged.
 
 ---
 

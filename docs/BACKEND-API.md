@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "dc3eaecf"
+last_synced_commit: "bee65298"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2961,6 +2961,12 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   safe error classification — never a silent empty success.
 - `GET /v1/provider-connections/{connection_id}/sync-runs` — durable sync-run
   history.
+- `POST /v1/provider-connections/{connection_id}/confirm` — server-side
+  confirmation of a web commerce interaction: reconcile an SDK commerce signal
+  against the corresponding canonical `commerce.*` event via the
+  idempotency-key lineage (`source_record_id`). Replay-safe (a repeated signal
+  is `replay`), and never auto-confirms on a mismatch (`unconfirmed` /
+  `not_found`).
 - `GET /v1/provider-connections/{connection_id}/health` — provider health report
   (state, readiness, last sync/webhook, rate-limit, error signals).
 - `GET /v1/provider-connections/{connection_id}/raw-records` — replayed raw
@@ -2971,6 +2977,9 @@ fail-closed):
 
 - `GET /v1/admin/kyber/provider-connections/overview` — per-provider connection
   counts by lifecycle state (aggregate only).
+- `GET /v1/admin/kyber/provider-connections/providers` — provider list
+  (installed plugins + legacy connectors) at the admin surface, distinct from
+  the tenant-scoped `/v1/provider-connections/providers`.
 - `GET /v1/admin/kyber/provider-connections/health` — registry summary
   (providers loaded, legacy vs native plugin counts).
 - `POST /v1/admin/kyber/provider-connections/certify` — run the certification
@@ -2978,6 +2987,33 @@ fail-closed):
   checks). Never upgrades readiness beyond evidence.
 - `GET /v1/admin/kyber/provider-connections/tenants/{tenant_id}` — one tenant's
   connections + health (operator drill-down).
+- `POST /v1/admin/kyber/provider-connections/decommission/{connector_type}` —
+  operator-gated decommission of a legacy connector type (Shopify only in this
+  build, via `DECOMMISSIONABLE_CONNECTOR_TYPES`), gated additionally on
+  `AETHER_PROVIDER_LEGACY_DECOMMISSION` (route inert when off — a real gate,
+  not a no-op claim). Idempotent: a repeat call is a stable `already_retired`
+  no-op that preserves the original retirement timestamp; an unknown type is a
+  typed 404; a native-only provider (registered but not decommissionable) is a
+  400. The retirement ledger is process-local; persistence across restarts is a
+  documented follow-on.
+
+**Provider migrations:** config/secret migration
+projections (`shared/integration_contracts/migration.py`) are surfaced on the
+**tenant** provider-connections surface (NOT under `/v1/admin/kyber/*`), gated
+by `AETHER_PROVIDER_MIGRATIONS_ENABLED`:
+
+- `GET /v1/provider-connections/migrations` — list projectable legacy
+  connector families (`MigrationProjection`, `ProjectionCandidate`). Built
+  families carry their native identity + confidence;
+  `requires_manual_mapping` flags families needing a human decision; families
+  the tenant has already migrated are excluded.
+- `GET /v1/provider-connections/{connection_id}/migrations` — projection of
+  one legacy connection onto a native identity, derived from the loaded
+  connection (never from request-supplied secrets).
+- `POST /v1/provider-connections/{connection_id}/migrations` — apply a
+  projection: build the native connection + credential refs from the legacy
+  connection's config/secret. Takes a `connection_id` (not a `connector_type`);
+  tenant-host validation fails closed.
 
 Public provider webhooks (`/v1/provider-webhooks/*`):
 

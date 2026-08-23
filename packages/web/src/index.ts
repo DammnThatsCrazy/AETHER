@@ -22,6 +22,7 @@ import { EventQueue } from './core/event-queue';
 import { SessionManager } from './core/session';
 import { IdentityManager } from './core/identity';
 import { AutoDiscoveryModule } from './modules/auto-discovery';
+import { CommerceDetectionModule } from './modules/commerce-detection';
 import { ConsentModule } from './consent';
 import { Web3Module } from './web3';
 import { SemanticContextCollector } from './context/semantic-context';
@@ -44,6 +45,26 @@ import {
   buildCanonicalConsentReceipt,
   type CanonicalConsentReceiptInput,
 } from '@aether/shared/consent-receipt';
+import {
+  SDK_SIGNAL_SCHEMA_VERSION,
+  type CommerceSignalType,
+  type SDKCommerceSignal,
+} from '@aether/shared/commerce-bridge';
+
+/**
+ * BARE SDK signal name → wire event type. The SDK event plane speaks the
+ * registry EventType union (product_viewed / order_completed — WS4-deferred
+ * convergence); the dotted `commerce.*` canonical types live in the runtime
+ * domain and the web SDK cannot re-emit them. `cart_updated` / `checkout_started`
+ * already share their bare names with the registry; `product_view` /
+ * `order_confirmed` map onto the registry's product_viewed / order_completed.
+ */
+const SDK_SIGNAL_TO_WIRE_EVENT: Readonly<Record<CommerceSignalType, string>> = {
+  product_view: 'product_viewed',
+  cart_updated: 'cart_updated',
+  checkout_started: 'checkout_started',
+  order_confirmed: 'order_completed',
+};
 
 const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 // Mirrors CONTRACT_SCHEMA_VERSION in packages/shared/schema-version.ts (web
@@ -57,6 +78,7 @@ class AetherSDK implements AetherSDKInterface {
   private sessionManager: SessionManager | null = null;
   private identityManager: IdentityManager | null = null;
   private autoDiscovery: AutoDiscoveryModule | null = null;
+  private commerceDetection: CommerceDetectionModule | null = null;
   private consentModule: ConsentModule | null = null;
   private web3Module: Web3Module | null = null;
   private semanticContext: SemanticContextCollector | null = null;
@@ -384,6 +406,7 @@ class AetherSDK implements AetherSDKInterface {
     this.remoteFeatures = {};
     this.flush();
     this.autoDiscovery?.destroy();
+    this.commerceDetection?.destroy();
     this.consentModule?.destroy();
     this.web3Module?.destroy();
     this.sessionManager?.destroy();
@@ -399,6 +422,7 @@ class AetherSDK implements AetherSDKInterface {
     this.heatmapModule?.destroy();
     this.funnelModule?.destroy();
     this.autoDiscovery = null;
+    this.commerceDetection = null;
     this.consentModule = null;
     this.web3Module = null;
     this.semanticContext = null;
@@ -948,6 +972,16 @@ class AetherSDK implements AetherSDKInterface {
       this.ecommerceModule = new EcommerceModule({ onObserve: observeFn });
     }
 
+    // Commerce detection — DOM heuristics emitting raw SDKCommerceSignals.
+    // The SDK plane observes; confirmation is server-owned. Raw signals are
+    // bridged to canonical event types through the observe() gate below.
+    if (modules.commerceDetection !== false) {
+      this.commerceDetection = new CommerceDetectionModule({
+        onSignal: (signal) => this.emitCommerceSignal(signal),
+      });
+      this.commerceDetection.start();
+    }
+
     // Form analytics — thin field emitter
     if (modules.formAnalytics !== false) {
       this.formAnalytics = new FormAnalyticsModule({ onTrack: trackFn }, {
@@ -1014,6 +1048,42 @@ class AetherSDK implements AetherSDKInterface {
       return false;
     }
     return this.consentModule?.hasConsent('personalization') === true;
+  }
+
+  /**
+   * Bridge a raw SDKCommerceSignal into the canonical event plane.
+   *
+   * The SDK event plane speaks the registry EventType union (product_viewed /
+   * order_completed — WS4-deferred convergence); the dotted `commerce.*`
+   * runtime types live in the runtime domain and are never fabricated here.
+   * The schema-versioned signal (with its sanitized `source_url`) and its
+   * projection confirmation metadata travel inside the payload so the backend
+   * can reconcile it against server-side OrderSnapshots via the
+   * `confirm_interaction` mirror — the SDK observes, it never self-confirms.
+   */
+  private emitCommerceSignal(signal: SDKCommerceSignal): void {
+    if (!this.sessionManager || !this.identityManager) return;
+    const wireType = SDK_SIGNAL_TO_WIRE_EVENT[signal.signal_type];
+    if (!wireType) return;
+
+    this.observe(wireType, {
+      ...signal.payload,
+      sdk_signal: {
+        schema_version: SDK_SIGNAL_SCHEMA_VERSION,
+        signal_id: signal.signal_id,
+        signal_type: signal.signal_type,
+        occurred_at: signal.occurred_at,
+        source_url: signal.source_url,
+        lineage: signal.lineage,
+      },
+      // Projection only: the SDK plane is never self-confirmed. Confirmation
+      // verdicts come exclusively from the server-side `confirm_interaction`
+      // mirror (canonical is None here → 'not_found').
+      confirmation: {
+        confirmed: false,
+        state: 'not_found',
+      },
+    });
   }
 
   private enqueueEvent(type: string, properties: Record<string, unknown>): void {
@@ -1278,6 +1348,8 @@ class AetherSDK implements AetherSDKInterface {
       this.pageView();
       // SPA route completion — correlate a pending navigation_intent.
       this.autoDiscovery?.recordArrival();
+      // SPA route completion — re-run commerce detection (confirmation pages).
+      this.commerceDetection?.detectOnLoad();
       checkpoint();
     };
     const origPush = history.pushState;

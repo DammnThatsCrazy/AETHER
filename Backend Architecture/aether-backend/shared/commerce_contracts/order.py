@@ -20,7 +20,8 @@ Invariants enforced here:
 * :class:`OrderSnapshot` is the canonical projection used as the payload of a
   commerce :mod:`AetherEvent <shared.integration_contracts.events>`; it is
   intentionally small and self-contained so it never depends on the event
-  envelope.
+  envelope. It is also single-currency: its ``currency`` must equal its
+  ``total.currency`` (mixed-currency snapshots are rejected at construction).
 
 This module is fully self-contained (stdlib + pydantic). It does **not**
 import from ``shared.integration_contracts`` so it stays importable regardless
@@ -175,6 +176,19 @@ class OrderSnapshot(BaseModel):
     created_at: str
     updated_at: Optional[str] = None
     account_id: str
+
+    @model_validator(mode="after")
+    def _check_currency_matches_total(self) -> "OrderSnapshot":
+        # A snapshot carries a single currency end-to-end; the total's currency
+        # must match the snapshot's own currency so a mixed-currency snapshot
+        # (e.g. an USD order whose total was built in EUR) is rejected at
+        # construction rather than propagating to downstream consumers.
+        if self.total.currency != self.currency:
+            raise ValueError(
+                "OrderSnapshot mixes currencies between the order and its "
+                f"total: {self.currency!r} != {self.total.currency!r}"
+            )
+        return self
 
 
 def order_to_snapshot(order: CommerceOrder) -> OrderSnapshot:

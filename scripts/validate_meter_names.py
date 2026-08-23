@@ -145,6 +145,7 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     # Connectors + webhooks
     "connector_pull_success",
     "connector_pull_error",
+    "connector_pull_denied_total",  # SSRF-allowlist pull denial (WS8); safe_message only
     "connector_health_checked",
     "connector_webhook_received_total",
     "connector_webhook_rejected_total",

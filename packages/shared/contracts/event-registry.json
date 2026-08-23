@@ -1,5 +1,8 @@
 {
   "_comment": "Canonical Aether event registry \u2014 DO NOT manually edit. Source of truth for packages/shared/events.ts and generated_registry.py. Edit here, then run: python scripts/generate_contracts.py",
+  "_registryNotes": {
+    "runtime_domain_commerce": "Dotted commerce.* event types (commerce.order.created, commerce.cart.updated, ...) live in the runtime domain, NOT in this registry, mirroring the comms precedent. WS4 of the UPR follow-on program tracks this split (tracker-only); the merge stays deferred to a dedicated convergence program. No EventType-union edits here."
+  },
   "schemaVersion": "2.0.0",
   "contractVersion": "8.12.0",
   "events": [

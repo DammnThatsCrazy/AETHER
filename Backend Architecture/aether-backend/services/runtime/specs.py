@@ -314,6 +314,20 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         except Exception:  # noqa: BLE001 - a broken import must not abort spec build
             return False
 
+    def _provider_sync_scheduler() -> Coroutine[Any, Any, None]:
+        """Scheduled due-connection sweep for the Universal Provider Runtime (WS5).
+
+        Rides the existing ``materializer`` role (exact precedent:
+        ``payment_rail_sync`` and ``bronze_object_compaction``, plus the four
+        Kyber loops that ride existing roles with a written rationale): one
+        periodic loop does not justify the deploy-profile/compose/Terraform
+        fan-out of a new runtime role.
+        """
+        from services.provider_runtime.sync_worker import build_provider_sync_coro
+
+        return build_provider_sync_coro()
+
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -543,4 +557,20 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             factory=_ledger_chain_verifier,
             enabled=_ledger_chain_verifier_enabled,
         ),
+        # Provider Runtime scheduled sync (WS5). The scheduler rides the
+        # existing materializer role — a single periodic loop does not justify
+        # the deploy-profile/compose/Terraform/topology-validator fan-out of a
+        # new runtime role (same rationale as payment_rail_sync,
+        # bronze_object_compaction, and the Kyber loops above). Gated on the
+        # provider-runtime master flag AND the scheduler follow-on flag so it
+        # never runs when the plane is off or the operator has not opted in.
+        WorkerSpec(
+            name="provider_sync_scheduler",
+            factory=_provider_sync_scheduler,
+            enabled=lambda: bool(
+                settings.provider_runtime.enabled
+                and settings.provider_runtime.provider_sync_scheduler_enabled
+            ),
+        ),
+
     ]

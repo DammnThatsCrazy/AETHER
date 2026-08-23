@@ -102,6 +102,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/packages` | solution packages | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
 | `/packages/:packageId` | solution package detail | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
 | `/deployment-readiness` | deployment readiness | no | I | A | A | — | I | `kyber-catalog-route-states.test.tsx` |
+| `/provider-connections` | UPR provider manifest, health, overview, certify | no | A | A | A | A | A | `provider-connections-route-states.test.tsx` |
 | `/kyber-graph` | operator topology | yes | A | A | A | A | I | `kyber-graph-page.test.tsx` |
 | `/tenant-mirror` | tenant mirror | yes | I | A | A | A | A | `tenant-mirror-page.test.tsx` |
 | `/kyber-exceptions` | exception queue | yes | A | A | A | A | A | `kyber-exceptions-page.test.tsx` |
@@ -158,15 +159,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 129 data-bearing route patterns above: 51 Aether and
-78 Kyber routes.
+The denominator is the 130 data-bearing route patterns above: 51 Aether and
+79 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 17 / 129 (13.2%) | tracked for every route |
-| Empty-state assertions | 117 / 129 (90.7%) | at least 90% overall |
-| Error/unavailable assertions | 99 / 129 (76.7%) | 100% of critical routes |
-| Populated-state assertions | 32 / 129 (24.8%) | tracked for every route |
+| Explicit loading-state assertions | 18 / 130 (13.8%) | tracked for every route |
+| Empty-state assertions | 118 / 130 (90.8%) | at least 90% overall |
+| Error/unavailable assertions | 100 / 130 (76.9%) | 100% of critical routes |
+| Populated-state assertions | 33 / 130 (25.4%) | tracked for every route |
 | Critical routes with both empty and error assertions | 62 / 62 (100%) | 62 / 62 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

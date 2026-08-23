@@ -1019,10 +1019,32 @@ class ConnectorsConfig:
 class ProviderRuntimeConfig:
     """Universal Provider Runtime. Master switch is OFF by default; mounting in
     main.py is the only gate. Entry points (package plugin discovery) and the
-    Kyber operator health view are separate switches."""
+    Kyber operator health view are separate switches.
+
+    Follow-on runtime controls (all OFF by default, fail-closed):
+    * sync scheduler — a background pull loop; cadence is interval-driven only
+      this build (``provider_sync_interval_seconds``). ``provider_sync_cron``
+      is RESERVED (unimplemented) — it does NOT override the interval.
+    * migrations — provider runtime data migrations.
+    * legacy decommission — decommissioning legacy connector paths under the
+      runtime.
+    * Kyber operator UI — gates the provider-connections read/monitor + certify
+      surface (aggregate-only; never tenant-scoped create/test/sync).
+    """
     enabled: bool = _env_bool("AETHER_PROVIDER_RUNTIME_ENABLED", False)
     entry_points_enabled: bool = _env_bool("AETHER_PROVIDER_ENTRY_POINTS_ENABLED", False)
     kyber_health_enabled: bool = _env_bool("KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED", False)
+    # Background sync scheduler (pull loop) — OFF by default.
+    provider_sync_scheduler_enabled: bool = _env_bool("AETHER_PROVIDER_SYNC_SCHEDULER_ENABLED", False)
+    # Interval cadence in seconds when the scheduler is interval-driven.
+    provider_sync_interval_seconds: int = _env_int("AETHER_PROVIDER_SYNC_INTERVAL_SECONDS", 3600)
+    # RESERVED (unimplemented this build) — the scheduler is interval-driven
+    # only; a cron expression set here is ignored (no "cron overrides interval").
+    provider_sync_cron: str = _env("AETHER_PROVIDER_SYNC_CRON", "")
+    provider_migrations_enabled: bool = _env_bool("AETHER_PROVIDER_MIGRATIONS_ENABLED", False)
+    provider_legacy_decommission: bool = _env_bool("AETHER_PROVIDER_LEGACY_DECOMMISSION", False)
+    # Gates the Kyber operator provider-connections UI (read/monitor + certify).
+    kyber_runtime_ui_enabled: bool = _env_bool("KYBER_PROVIDER_RUNTIME_UI_ENABLED", False)
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "5722d269"
+last_synced_commit: "bee65298"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -725,6 +725,49 @@ Cross-device handoff and governed-action visibility added by the mobile-producti
   `verified | executed_unverified | denied | failed | expired` states from the
   kyber command plane.
 - **Client-sync consumption** distinguishes fresh/offline/stale; no offline mutation.
+
+---
+
+## Kyber Manifest-Driven Provider UI (shipped, WS3)
+
+A Kyber operator surface for the Universal Provider Runtime, shipped in the
+follow-on program (PR-D), gated by `KYBER_PROVIDER_RUNTIME_UI_ENABLED`
+(default OFF; the admin provider-connections routes are also served when the
+health flag `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED` is on, since the S3
+providers/certify/tenants routes are the UI's data). The UI is
+**manifest-driven**: forms, fields, and validation render from the installed
+plugin's `ProviderManifest` rather than connector-specific code, so a new
+provider plugin gains operator UI without a frontend change.
+
+Shipped scope:
+
+- **Provider catalog** — installed plugins + legacy connectors, consumed from
+  `GET /v1/admin/kyber/provider-connections/providers` via the
+  `{providers, count}` envelope contract
+  (`frontend/kyber/src/features/provider-connections/use-provider-manifest.ts`).
+  Entry validation is per-entry tolerant: a single malformed plugin manifest
+  is skipped and surfaced as a failed-entry status, never taking down the
+  whole catalog.
+- **Connection lifecycle** — create / configure / credential / test / confirm /
+  sync against the runtime tenant surface
+  (`/v1/provider-connections/*`), with config fields validated against the
+  manifest (`frontend/kyber/src/pages/provider-connections/provider-connections-page.tsx`).
+- **Migration views** — projection list/apply against the tenant-scoped
+  migration routes (`GET /v1/provider-connections/migrations`,
+  `GET`/`POST /v1/provider-connections/{connection_id}/migrations` — the
+  apply route takes a `connection_id`, not a `connector_type`), gated by
+  `AETHER_PROVIDER_MIGRATIONS_ENABLED` (see `BACKEND-API.md`).
+- **Routing + nav** — the lazy route `/provider-connections` mounts
+  `ProviderConnectionsPage`
+  (`frontend/kyber/src/app/router.tsx`); the sidebar entry is gated by
+  `enableProviderRuntime`
+  (`frontend/kyber/src/components/layout/sidebar.tsx`). The frontend route is
+  not a grant — the backend still gates `/v1/admin/kyber/provider-connections/*`.
+
+The surface is additive and flag-gated; disabling the flags keeps the route
+present but inert (the backend gates the admin data routes). Unit coverage
+lives in `frontend/kyber/src/test/unit/` (`provider-manifest-hooks.test.ts`,
+`provider-manifest-schemas.test.ts`, `capability-state-surface.test.tsx`).
 
 ---
 

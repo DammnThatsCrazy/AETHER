@@ -9,19 +9,20 @@ since_version: "8.12.0"
 source_files:
   - packages/shared/contracts/event-registry.json
 canonical_owner: platform@aether
-last_synced_commit: "4a16247"
+last_synced_commit: "bee65298"
 ---
 
 # Canonical Event Model
 
-110 events across three families in
+398 events across 24 families in
 `packages/shared/contracts/event-registry.json` (single source of truth;
-`scripts/generate_contracts.py` emits TS/Python/doc artifacts):
+`scripts/generate_contracts.py` emits TS/Python/doc artifacts). The
+economic-interoperability families:
 
 | Family | Events | Purpose | Silver projection |
 |---|---|---|---|
 | `stablecoin` | 30 | `economic_observability` | `stablecoin_facts` |
-| `derivatives` | 41 | `financial_activity` | `derivatives_facts` |
+| `derivatives` | 52 | `financial_activity` | `derivatives_facts` |
 | `interop` | 39 | `cross_chain_observability` | `interop_facts` |
 
 Rules:

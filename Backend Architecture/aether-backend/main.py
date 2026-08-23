@@ -1079,7 +1079,11 @@ def create_app() -> FastAPI:
         # enabled; security is enforced by provider signature verification
         # inside the handler.
         app.include_router(provider_webhook_public_router)
-        if settings.provider_runtime.kyber_health_enabled:
+        # The S3 providers/certify/tenants admin routes are the Kyber provider
+        # console's data surface, so they mount under the UI flag OR the health
+        # flag (DECISION 3): enabling the UI without also enabling the legacy
+        # health view must not 404 the console's data routes.
+        if settings.provider_runtime.kyber_health_enabled or settings.provider_runtime.kyber_runtime_ui_enabled:
             app.include_router(provider_runtime_admin_router)
         logger.info(
             "Provider Runtime: routes mounted (/v1/provider-connections + /v1/provider-webhooks)"

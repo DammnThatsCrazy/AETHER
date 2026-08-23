@@ -112,6 +112,13 @@ export interface ModuleConfig {
    */
   navigationCorrelation?: boolean;
   ecommerce?: boolean;
+  /**
+   * DOM commerce detection (WS2). Emits schema-versioned SDKCommerceSignal
+   * observations for product views / cart updates / checkout starts / order
+   * confirmations, bridged to canonical event types through observe().
+   * Default: on. The SDK observes; confirmation is server-owned.
+   */
+  commerceDetection?: boolean;
   formAnalytics?: boolean;
   featureFlags?: boolean;
   heatmaps?: boolean;

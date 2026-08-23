@@ -153,10 +153,14 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # derived-condition alert evaluator; it rides materializer with the rest of
     # the payment-rails family (same payment_rails.enabled gate) so the whole
     # subsystem's background loops stay co-located on one role/process.
+    # WS5 provider sync scheduler rides materializer too (same rationale as
+    # payment_rail_sync / bronze_object_compaction): a single periodic loop
+    # that re-reads its flag every pass, not a dedicated runtime role.
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
          "bronze_object_compaction", "x402_settlement_reconciliation",
-         "payment_alert_eval"}
+         "payment_alert_eval", "provider_sync_scheduler"}
+
     ),
     "maintenance": frozenset(
         {

@@ -44,9 +44,14 @@ class Money(BaseModel):
     ``amount`` is a :class:`decimal.Decimal`; pydantic v2 coerces ``int`` and
     numeric ``str`` inputs (e.g. ``"12.34"``) to ``Decimal`` on construction.
     Negative amounts are allowed (refunds/credits).
+
+    Closed contract: unknown fields fail loudly (``extra="forbid"``) so a
+    drifted field cannot silently pass through — matching every other
+    ``commerce_contracts`` model. Frozen (hashable) instances are safe as dict
+    keys and set members.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     amount: Decimal
     currency: str

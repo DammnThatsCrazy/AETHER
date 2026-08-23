@@ -8,11 +8,13 @@ status: stable
 since_version: "8.8.0"
 source_files:
   - Backend Architecture/aether-backend/main.py
+  - Backend Architecture/aether-backend/config/settings.py
+  - Backend Architecture/aether-backend/services/provider_runtime/
   - deploy/legacy-staging/bootstrap.sh
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "bf8a5fbd"
+last_synced_commit: "bee65298"
 ---
 # Operations Runbook v8.12.0
 
@@ -504,3 +506,37 @@ fail-closed: a signature scheme without a configured secret denies the
 delivery, and `endpoint_secret` providers require a constant-time-matching
 presented token. See
 `docs/UNIVERSAL-PROVIDER-RUNTIME.md` for the full runtime guide.
+
+### Follow-on program flags
+
+New flags from the UPR follow-on build (shipped state). They default OFF, so
+the runtime stays additive until activated:
+
+```
+AETHER_PROVIDER_SYNC_SCHEDULER_ENABLED=true   → starts the `provider_sync_scheduler`
+                                                 WorkerSpec (WS5): a periodic loop
+                                                 that pulls due provider connections
+                                                 on their schedules and writes sync
+                                                 runs to the same durable ledger as
+                                                 manual syncs
+AETHER_PROVIDER_MIGRATIONS_ENABLED=true       → gates the config/secret migration
+                                                 projection + apply routes (WS6)
+AETHER_PROVIDER_LEGACY_DECOMMISSION=true      → gates the per-provider legacy
+                                                 connector decommission route (WS7)
+KYBER_PROVIDER_RUNTIME_UI_ENABLED=true        → enables the Kyber manifest-driven
+                                                 provider UI (WS3)
+```
+
+Cadence for the scheduler is set by `AETHER_PROVIDER_SYNC_INTERVAL_SECONDS`
+(default 3600s) and is re-read each pass, so a runtime toggle takes effect
+without a restart. `AETHER_PROVIDER_SYNC_CRON` remains reserved (unimplemented)
+— this build is interval-driven only.
+
+**Scheduler role:** the `provider_sync_scheduler` loop rides the existing
+**`materializer`** role (exact precedent: `payment_rail_sync`,
+`bronze_object_compaction`, and the four Kyber loops all ride existing roles).
+A single periodic loop does not justify a new runtime role and its
+deploy-profile/compose/Terraform/topology-validator fan-out; running under
+`materializer` keeps scheduled sync on the same durable ledger without a new
+deploy artifact. Because it runs as the `materializer` principal (not a tenant
+principal), scheduled sync never elevates a tenant principal's rights.

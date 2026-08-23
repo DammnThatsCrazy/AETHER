@@ -80,6 +80,10 @@ const TargetingIntelligencePage = lazy(() => import('@kyber/pages/targeting').th
 const ImportsOpsPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportsOpsPage })));
 const ImportOpsDetailPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportOpsDetailPage })));
 const KyberIntelligenceOSPage = lazy(() => import('@kyber/pages/intelligence-os').then(m => ({ default: m.KyberIntelligenceOSPage })));
+// Provider-connections (Universal Provider Runtime). The page renders an honest
+// disabled state when enableProviderRuntime is off, so mounting the route is not
+// a grant — the backend still gates /v1/admin/kyber/provider-connections/*.
+const ProviderConnectionsPage = lazy(() => import('@kyber/pages/provider-connections').then(m => ({ default: m.ProviderConnectionsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -185,6 +189,7 @@ export function AppRouter() {
                 <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />
                 <Route path="/ai-efficiency" element={<PageSuspense><AiEfficiencyPage /></PageSuspense>} />
                 <Route path="/targeting" element={<PageSuspense><TargetingIntelligencePage /></PageSuspense>} />
+                <Route path="/provider-connections" element={<PageSuspense><ProviderConnectionsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>
