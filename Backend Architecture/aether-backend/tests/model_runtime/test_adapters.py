@@ -623,6 +623,57 @@ async def test_openai_bind_credential_secret_backend_fails_closed(monkeypatch):
     assert "client" not in fake  # never falls back to the process-wide key
 
 
+def _fake_materializer(key: str):
+    """Async just-in-time secret-backend materializer returning ``key``."""
+
+    async def _materialize(tenant_id: str, ref: str) -> str:
+        return key
+
+    return _materialize
+
+
+@pytest.mark.asyncio
+async def test_openai_bind_credential_secret_backend_materializes_with_materializer(monkeypatch):
+    fake = _install_httpx_fake(monkeypatch, response=_HttpxFakeResponse(body=_openai_body()))
+    provider = OpenAIModelProvider(api_key="", model="gpt-test")  # no process-wide key
+    bound = provider.bind_credential(
+        _secret_backend_resolution(
+            "openai", "t1", "aether/credentials/t1/openai", "sk-tenant-aws"
+        ),
+        materializer=_fake_materializer("sk-tenant-aws"),
+    )
+    assert bound.is_configured() is True
+    await bound.complete(_request())
+    headers = fake["client"].post_kwargs["headers"]
+    assert headers["Authorization"] == "Bearer sk-tenant-aws"
+    # The materialized key is bound to the per-request adapter only — the
+    # registered instance and the resolution metadata carry nothing.
+    assert provider.api_key == ""
+    assert bound._bound_resolution.masked_identifier == mask_identifier("sk-tenant-aws")
+
+
+@pytest.mark.asyncio
+async def test_openai_bind_credential_secret_backend_materializer_failure_fails_closed(
+    monkeypatch,
+):
+    async def _empty(tenant_id: str, ref: str) -> None:
+        return None
+
+    fake = _install_httpx_fake(monkeypatch, response=_HttpxFakeResponse(body=_openai_body()))
+    provider = OpenAIModelProvider(api_key="sk-process-wide", model="gpt-test")
+    bound = provider.bind_credential(
+        _secret_backend_resolution(
+            "openai", "t1", "aether/credentials/t1/openai", "sk-tenant-1"
+        ),
+        materializer=_empty,
+    )
+    # A materializer that returns nothing still fails closed — never the
+    # process-wide key.
+    with pytest.raises(ModelNotConfigured):
+        await bound.complete(_request())
+    assert "client" not in fake
+
+
 @pytest.mark.asyncio
 async def test_anthropic_bind_credential_env_source_materializes_tenant_key(monkeypatch):
     monkeypatch.setenv("T1_ANTHROPIC_API_KEY", "sk-tenant-anthropic")
@@ -651,3 +702,21 @@ async def test_anthropic_bind_credential_secret_backend_fails_closed(monkeypatch
     with pytest.raises(ModelNotConfigured):
         await bound.complete(_request())
     assert "client" not in holder  # never falls back to the process-wide key
+
+
+@pytest.mark.asyncio
+async def test_anthropic_bind_credential_secret_backend_materializes_with_materializer(
+    monkeypatch,
+):
+    holder = _install_anthropic_fake(monkeypatch, response=_anthropic_response())
+    provider = AnthropicModelProvider(api_key="", model="claude-test")  # no process-wide key
+    bound = provider.bind_credential(
+        _secret_backend_resolution(
+            "anthropic", "t1", "aether/credentials/t1/anthropic", "sk-tenant-aws"
+        ),
+        materializer=_fake_materializer("sk-tenant-aws"),
+    )
+    assert bound.is_configured() is True
+    await bound.complete(_request())
+    assert holder["client"].client_kwargs["api_key"] == "sk-tenant-aws"
+    assert provider.api_key == ""

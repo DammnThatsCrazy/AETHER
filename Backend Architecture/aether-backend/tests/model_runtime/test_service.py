@@ -8,7 +8,10 @@ provider is used throughout so no provider SDK or network is involved.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -20,11 +23,14 @@ from services.model_runtime import (
     DeterministicModelProvider,
     ModelBudgetExceeded,
     ModelNotConfigured,
+    ModelProviderError,
     ModelRequest,
     ModelRuntimeService,
 )
+from services.model_runtime import service as service_module
 from services.model_runtime.credentials.models import ResolverConfig, mask_identifier
 from services.model_runtime.models import ModelProvider, ModelResponse, TokenUsage
+from services.model_runtime.observability.circuit_breaker import CircuitState
 
 # The service source this security-invariant test asserts against.
 _SERVICE_SOURCE = (
@@ -224,21 +230,31 @@ class _BindableProvider:
     def __init__(self, api_key: str = "sk-process-wide") -> None:
         self.api_key = api_key
         self._bound_resolution = None
+        self._credential_materializer = None
         self.calls = 0
 
     def is_configured(self) -> bool:
         if self._bound_resolution is not None:
             try:
-                return bool(self._effective_api_key())
+                return self._can_materialize()
             except ModelNotConfigured:
                 return False
         return bool(self.api_key)
 
-    def bind_credential(self, resolution):
+    def _can_materialize(self) -> bool:
+        bound = self._bound_resolution
+        if bound.source == "env" and bound.ref:
+            return bool(os.environ.get(bound.ref, ""))
+        if bound.source == "secret_backend":
+            return callable(getattr(self, "_credential_materializer", None))
+        return False
+
+    def bind_credential(self, resolution, *, materializer=None):
         import copy
 
         bound = copy.copy(self)
         bound._bound_resolution = resolution
+        bound._credential_materializer = materializer
         return bound
 
     def _effective_api_key(self) -> str:
@@ -254,10 +270,28 @@ class _BindableProvider:
             "bindable: tenant credential requires backend materialization"
         )
 
+    async def _resolve_api_key(self) -> str:
+        bound = self._bound_resolution
+        if bound is not None and bound.source == "secret_backend":
+            materializer = getattr(self, "_credential_materializer", None)
+            if not callable(materializer):
+                raise ModelNotConfigured(
+                    "bindable: tenant credential requires backend materialization"
+                )
+            result = materializer(bound.tenant_id, bound.ref)
+            if inspect.isawaitable(result):
+                result = await result
+            if isinstance(result, str) and result:
+                return result
+            raise ModelNotConfigured(
+                "bindable: tenant credential requires backend materialization"
+            )
+        return self._effective_api_key()
+
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.calls += 1
         return ModelResponse(
-            content=f"key={self._effective_api_key()}",
+            content=f"key={await self._resolve_api_key()}",
             model=request.model,
             provider=ModelProvider.DETERMINISTIC,
             usage=TokenUsage(),
@@ -417,3 +451,313 @@ async def test_non_bindable_provider_registered_instance_unchanged():
     )
     resp = await svc.complete("t1", _req())
     assert resp.content == "ok"
+
+
+# ---------------------------------------------------------------------------
+# Fix: bind tenant credentials BEFORE the provider-configuration check (AII)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tenant_byok_binds_before_is_configured_check(monkeypatch):
+    # In a tenant-BYOK deployment the registered adapter deliberately carries
+    # NO process-wide API key (is_configured() would be False on the registered
+    # instance). Dispatch must bind the tenant's valid env credential FIRST and
+    # only THEN judge configuration, so the safer no-shared-key setup works.
+    monkeypatch.setenv("T1_BINDABLE_API_KEY", "sk-tenant-byok")
+    resolution = CredentialResolution(
+        provider="bindable",
+        tenant_id="t1",
+        ref="T1_BINDABLE_API_KEY",
+        resolved=True,
+        configured=True,
+        masked_identifier=mask_identifier("sk-tenant-byok"),
+        source="env",
+        reason="tenant-scoped env fallback",
+    )
+    provider = _BindableProvider(api_key="")  # no process-wide key
+    assert provider.is_configured() is False  # registered instance unconfigured
+    svc = ModelRuntimeService(
+        providers={"bindable": provider},
+        credential_service=_credential_service(resolution),
+    )
+    resp = await svc.complete("t1", _req(), provider="bindable")
+    # The tenant credential was bound and materialized despite the provider
+    # having no process-wide key.
+    assert resp.content == "key=sk-tenant-byok"
+
+
+@pytest.mark.asyncio
+async def test_tenant_byok_without_key_still_fails_closed(monkeypatch):
+    # Even with the bind-before-check order, a tenant with NO resolvable
+    # credential must never fall through to a (here absent) shared key.
+    monkeypatch.delenv("T1_BINDABLE_API_KEY", raising=False)
+    resolution = CredentialResolution(
+        provider="bindable",
+        tenant_id="t1",
+        ref="T1_BINDABLE_API_KEY",
+        resolved=True,
+        configured=False,
+        source="none",
+        reason="no credential configured for provider",
+    )
+    provider = _BindableProvider(api_key="")
+    svc = ModelRuntimeService(
+        providers={"bindable": provider},
+        credential_service=_credential_service(resolution),
+    )
+    with pytest.raises(ModelNotConfigured, match="not configured for tenant"):
+        await svc.complete("t1", _req(), provider="bindable")
+    assert provider.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# Fix: secret-backend credentials materialize through a just-in-time hook (AIJ)
+# ---------------------------------------------------------------------------
+
+
+class _SecretBackend:
+    """Credential backend stand-in whose ``get`` returns a structured cred."""
+
+    def __init__(self, key: str) -> None:
+        self._key = key
+        self.ref: tuple[str, str] | None = None
+
+    async def get(self, tenant_id: str, ref: str):
+        from pydantic import SecretStr
+        from shared.credentials.types import ApiKeyCredential
+
+        self.ref = (tenant_id, ref)
+        return ApiKeyCredential(api_key=SecretStr(self._key))
+
+
+class _BackendResolver:
+    """Resolver exposing the ``_backend`` the service turns into a materializer."""
+
+    def __init__(self, resolution: CredentialResolution, backend: object) -> None:
+        self._resolution = resolution
+        self._backend = backend
+
+    async def resolve(self, tenant_id: str, provider: str) -> CredentialResolution:
+        return self._resolution
+
+    async def health(self) -> bool:
+        return True
+
+
+@pytest.mark.asyncio
+async def test_secret_backend_credential_materializes_via_resolver_backend():
+    # A healthy secret-backend credential CAN invoke: the service builds a
+    # just-in-time materializer from the resolver's raw backend and the bound
+    # provider serves the tenant's key (never the process-wide one).
+    backend = _SecretBackend("sk-tenant-aws")
+    resolution = CredentialResolution(
+        provider="bindable",
+        tenant_id="t1",
+        ref="llm/bindable",
+        resolved=True,
+        configured=True,
+        masked_identifier=mask_identifier("sk-tenant-aws"),
+        source="secret_backend",
+        reason="resolved from secret backend",
+    )
+    svc = ModelRuntimeService(
+        providers={"bindable": _BindableProvider(api_key="")},
+        credential_service=CredentialService(
+            resolver=_BackendResolver(resolution, backend),
+            config=ResolverConfig(enabled=True),
+        ),
+    )
+    resp = await svc.complete("t1", _req(), provider="bindable")
+    assert resp.content == "key=sk-tenant-aws"
+    # The materializer was handed the tenant + resolution ref, proving the key
+    # was fetched from the backend at call time (not from metadata).
+    assert backend.ref == ("t1", "llm/bindable")
+
+
+@pytest.mark.asyncio
+async def test_secret_backend_credential_without_raw_surface_fails_closed():
+    # When the resolver exposes no raw backend surface, a secret_backend
+    # resolution fails closed (never reuses the process-wide key).
+    resolution = CredentialResolution(
+        provider="bindable",
+        tenant_id="t1",
+        ref="aether/credentials/t1/bindable",
+        resolved=True,
+        configured=True,
+        masked_identifier=mask_identifier("sk-tenant-1"),
+        source="secret_backend",
+        reason="resolved from secret backend",
+    )
+    provider = _BindableProvider(api_key="sk-process-wide")
+    svc = ModelRuntimeService(
+        providers={"bindable": provider},
+        credential_service=_credential_service(resolution),
+    )
+    with pytest.raises(ModelNotConfigured, match="not configured for tenant"):
+        await svc.complete("t1", _req(), provider="bindable")
+    assert provider.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# Fix: cancellation cleanup releases budget and settles the breaker (AIM)
+# ---------------------------------------------------------------------------
+
+
+class _HangingProvider:
+    """Configured provider that never returns (blocks until cancelled)."""
+
+    provider_name = "hanging"
+
+    def is_configured(self) -> bool:
+        return True
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable")
+
+
+@pytest.mark.asyncio
+async def test_cancelled_dispatch_releases_budget_and_settles_breaker():
+    budget = FakeBudget()
+    svc = ModelRuntimeService(
+        providers={"deterministic": _HangingProvider()},
+        budget=budget,
+        circuit_failure_threshold=1,
+    )
+    breaker = svc.circuit_registry.get("deterministic:m", "t1")
+    # Force the circuit OPEN, then expire the recovery timeout so the next
+    # dispatch consumes a half-open probe — the exact scenario the review
+    # flags: a cancelled probe must not stay in flight forever.
+    breaker.record_failure()
+    breaker._opened_at = time.monotonic() - 1000  # recovery timeout elapsed
+
+    task = asyncio.create_task(svc.complete("t1", _req()))
+    await asyncio.sleep(0.05)  # reservation made + half-open probe consumed
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # The reservation was returned despite the cancellation.
+    assert budget.released == [800]
+    # The half-open probe was settled — not left in flight forever.
+    assert breaker._probe_in_flight is False
+    # Fail-closed: a failed/cancelled probe reopens the circuit.
+    assert breaker.state is CircuitState.OPEN
+
+
+# ---------------------------------------------------------------------------
+# Fix: invocation metrics flow through RuntimeMetricsRecorder (AIW)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingMetrics:
+    """Recording stand-in for RuntimeMetricsRecorder (injected via monkeypatch)."""
+
+    def __init__(self, metrics_backend=None) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
+
+    def _record(self, name: str, *args: object, **kwargs: object) -> None:
+        self.calls.append((name, args, kwargs))
+
+    def record_call(self, provider: str, model: str, *, status: str) -> None:
+        self._record("record_call", provider, model, status=status)
+
+    def record_tokens(self, provider: str, input_tokens: int, output_tokens: int) -> None:
+        self._record("record_tokens", provider, input_tokens, output_tokens)
+
+    def record_latency(self, provider: str, latency_ms: float) -> None:
+        self._record("record_latency", provider, latency_ms)
+
+    def record_cost(self, provider: str, cost_usd: float) -> None:
+        self._record("record_cost", provider, cost_usd)
+
+    def record_provider_error(self, provider: str, error_type: str) -> None:
+        self._record("record_provider_error", provider, error_type)
+
+    def record_verification(self, passed: bool) -> None:
+        self._record("record_verification", passed)
+
+    def record_circuit(self, open: bool) -> None:
+        self._record("record_circuit", open)
+
+    def record_route(self, mode: str, *, entitled: bool, fallback: bool) -> None:
+        self._record("record_route", mode, entitled=entitled, fallback=fallback)
+
+    def record_budget_exceeded(self, provider: str) -> None:
+        self._record("record_budget_exceeded", provider)
+
+    def record_credential_rejection(self, provider: str) -> None:
+        self._record("record_credential_rejection", provider)
+
+
+@pytest.mark.asyncio
+async def test_success_records_runtime_metrics(monkeypatch):
+    recording = _RecordingMetrics()
+    monkeypatch.setattr(
+        service_module, "RuntimeMetricsRecorder", lambda backend=None: recording
+    )
+    provider = DeterministicModelProvider(input_tokens=10, output_tokens=20)
+    svc = ModelRuntimeService(providers={"deterministic": provider})
+    await svc.complete("t1", _req())
+
+    assert ("record_call", ("deterministic", "m"), {"status": "success"}) in recording.calls
+    assert ("record_tokens", ("deterministic", 10, 20), {}) in recording.calls
+    assert any(
+        name == "record_latency" and args[0] == "deterministic"
+        for name, args, _ in recording.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_budget_exceeded_records_runtime_metric(monkeypatch):
+    recording = _RecordingMetrics()
+    monkeypatch.setattr(
+        service_module, "RuntimeMetricsRecorder", lambda backend=None: recording
+    )
+    budget = FakeBudget(reserve_ok=False)
+    svc = ModelRuntimeService(
+        providers={"deterministic": _CountingProvider()}, budget=budget
+    )
+    with pytest.raises(ModelBudgetExceeded):
+        await svc.complete("t1", _req())
+    assert ("record_budget_exceeded", ("deterministic",), {}) in recording.calls
+
+
+@pytest.mark.asyncio
+async def test_provider_error_records_runtime_metric(monkeypatch):
+    recording = _RecordingMetrics()
+    monkeypatch.setattr(
+        service_module, "RuntimeMetricsRecorder", lambda backend=None: recording
+    )
+    provider = DeterministicModelProvider(raise_error=ModelProviderError("boom"))
+    svc = ModelRuntimeService(providers={"deterministic": provider})
+    with pytest.raises(ModelProviderError):
+        await svc.complete("t1", _req())
+    assert ("record_call", ("deterministic", "m"), {"status": "error"}) in recording.calls
+    assert ("record_provider_error", ("deterministic", "provider_error"), {}) in recording.calls
+
+
+@pytest.mark.asyncio
+async def test_credential_rejection_records_runtime_metric(monkeypatch):
+    recording = _RecordingMetrics()
+    monkeypatch.setattr(
+        service_module, "RuntimeMetricsRecorder", lambda backend=None: recording
+    )
+    resolution = CredentialResolution(
+        provider="bindable",
+        tenant_id="t1",
+        ref="llm/bindable",
+        resolved=True,
+        configured=False,
+        source="none",
+        reason="no credential configured for provider",
+    )
+    provider = _BindableProvider(api_key="sk-process-wide")
+    svc = ModelRuntimeService(
+        providers={"bindable": provider},
+        credential_service=_credential_service(resolution),
+    )
+    with pytest.raises(ModelNotConfigured, match="not configured for tenant"):
+        await svc.complete("t1", _req(), provider="bindable")
+    assert ("record_credential_rejection", ("bindable",), {}) in recording.calls

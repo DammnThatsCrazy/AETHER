@@ -20,6 +20,7 @@ raises :class:`ModelCircuitOpen` instead of hammering an unhealthy provider.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import typing
 from collections.abc import Mapping
@@ -30,8 +31,10 @@ from services.model_runtime.models import (
     ModelInvocationError,
     ModelNotConfigured,
     ModelProvider,
+    ModelProviderError,
     ModelRequest,
     ModelResponse,
+    ModelTimeoutError,
 )
 from services.model_runtime.observability.circuit_breaker import CircuitRegistry
 from services.model_runtime.observability.metrics import RuntimeMetricsRecorder
@@ -250,11 +253,13 @@ class ModelRuntimeService:
         impl = self._providers.get(name)
         if impl is None:
             raise ModelNotConfigured(f"unknown provider: {name}")
-        if not impl.is_configured():
-            raise ModelNotConfigured(f"provider not configured: {name}")
 
         # ADR-008 D5: resolve the tenant-scoped provider credential at call
-        # time. Wiring a CredentialService puts the runtime in per-tenant
+        # time BEFORE any provider-configuration check. In a tenant-BYOK
+        # deployment the registered adapter may deliberately carry no
+        # process-wide API key, so gating on ``is_configured()`` first would
+        # reject the call before the tenant's valid env credential could ever
+        # be bound. Wiring a CredentialService puts the runtime in per-tenant
         # credential enforcement (fail closed): a tenant with no resolved
         # credential raises instead of silently serving the process-wide /
         # shared key (which would be a cross-tenant credential leak). When a
@@ -265,15 +270,23 @@ class ModelRuntimeService:
         if self._credential_service is not None:
             resolution = await self._credential_service.resolve(tenant_id, name)
             if not resolution.configured:
+                self._metrics.record_credential_rejection(name)
                 raise ModelNotConfigured(
                     f"provider not configured for tenant: {name} "
                     "(no tenant credential)"
                 )
             impl = self._bind_provider(impl, resolution)
-            if not impl.is_configured():
+
+        # Only NOW gate on provider configuration — after tenant credential
+        # binding, so a tenant-bound provider is judged on its own (materialized)
+        # credential rather than the process-wide key it may never hold.
+        if not impl.is_configured():
+            if self._credential_service is not None:
+                self._metrics.record_credential_rejection(name)
                 raise ModelNotConfigured(
                     f"provider not configured for tenant: {name}"
                 )
+            raise ModelNotConfigured(f"provider not configured: {name}")
 
         if self._budget is not None:
             reserved = await self._budget.check_and_reserve(
@@ -284,6 +297,7 @@ class ModelRuntimeService:
                     "model_runtime_budget_exceeded",
                     labels={"provider": name},
                 )
+                self._metrics.record_budget_exceeded(name)
                 raise ModelBudgetExceeded(tenant_id)
 
         # Gate dispatch through the provider/model circuit breaker. The gate sits
@@ -297,6 +311,7 @@ class ModelRuntimeService:
             if self._budget is not None:
                 await self._budget.release(tenant_id, self._estimated_request_tokens)
             self._metrics.record_circuit(True)
+            self._metrics.record_call(name, request.model, status="circuit_open")
             logger.info(
                 "model_runtime complete",
                 extra={
@@ -312,7 +327,26 @@ class ModelRuntimeService:
         started = time.monotonic()
         try:
             resp = await impl.complete(request)
-        except Exception:
+        except asyncio.CancelledError:
+            # A cancelled dispatch must still settle budget + breaker state.
+            # asyncio.CancelledError derives from BaseException (not
+            # Exception), so the handler below never runs for it. Without this
+            # cleanup a reserved budget is never returned and — if this was the
+            # sole half-open probe — ``_probe_in_flight`` stays set so the
+            # circuit rejects every later call indefinitely. Fail-closed:
+            # record a failure (which settles a half-open probe) and release
+            # the reservation, then re-raise the cancellation. The release is
+            # best-effort so a backend hiccup never masks the cancellation.
+            breaker.record_failure()
+            if self._budget is not None:
+                try:
+                    await self._budget.release(
+                        tenant_id, self._estimated_request_tokens
+                    )
+                except Exception:  # noqa: BLE001 — best-effort cleanup
+                    pass
+            raise
+        except Exception as exc:
             breaker.record_failure()
             # Fail-open for telemetry: release the full reservation, log the
             # error metric, then re-raise so the call stays fail-closed.
@@ -322,6 +356,11 @@ class ModelRuntimeService:
                 "model_runtime_invocation_error",
                 labels={"provider": name},
             )
+            error_type = self._provider_error_type(exc)
+            self._metrics.record_call(name, request.model, status="error")
+            if error_type is not None:
+                self._metrics.record_provider_error(name, error_type)
+            self._metrics.record_latency(name, (time.monotonic() - started) * 1000)
             logger.info(
                 "model_runtime complete",
                 extra={
@@ -348,6 +387,14 @@ class ModelRuntimeService:
                     tenant_id, actual - self._estimated_request_tokens
                 )
 
+        # Emit the canonical runtime invocation metrics (ADR-008 D8) on the
+        # success outcome, alongside the legacy model_runtime_invocation_*
+        # counters.
+        self._metrics.record_call(name, request.model, status="success")
+        self._metrics.record_tokens(
+            name, resp.usage.input_tokens, resp.usage.output_tokens
+        )
+        self._metrics.record_latency(name, latency_ms)
         metrics.increment(
             "model_runtime_invocation_success",
             labels={"provider": name, "model": request.model},
@@ -365,9 +412,8 @@ class ModelRuntimeService:
         )
         return resp
 
-    @staticmethod
     def _bind_provider(
-        impl: AsyncModelProvider, resolution: CredentialResolution
+        self, impl: AsyncModelProvider, resolution: CredentialResolution
     ) -> AsyncModelProvider:
         """Return the provider that serves this tenant's call (ADR-008 D5).
 
@@ -378,6 +424,13 @@ class ModelRuntimeService:
         Providers with no ``bind_credential`` surface (e.g. the deterministic
         test/local fixture) return the registered instance unchanged — they
         hold no key, so there is no shared credential to leak.
+
+        When the wired credential service can materialize a secret-backend
+        credential, the just-in-time materializer is attached to the bound
+        provider so a ``secret_backend`` resolution can actually invoke. The
+        key is fetched at call time and never passes through the (secret-free)
+        resolution metadata, so it can never leak into metrics, logs, or the
+        resolution models.
         """
         binder = getattr(impl, "bind_credential", None)
         if not callable(binder):
@@ -392,7 +445,69 @@ class ModelRuntimeService:
             raise ModelNotConfigured(
                 f"provider credential binding failed for tenant: {impl.provider_name}"
             )
+        if bound is not impl:
+            materializer = self._build_credential_materializer()
+            if materializer is not None:
+                bound._credential_materializer = materializer  # type: ignore[attr-defined]
         return bound
+
+    def _build_credential_materializer(self):
+        """Return a just-in-time secret-backend materializer, or ``None``.
+
+        The materializer is ``(tenant_id, ref) -> str | None`` (sync or async)
+        and is handed to the bound provider at dispatch time. It is built from
+        the wired credential service:
+
+        * Preferred: the resolver exposes an explicit ``reveal`` /
+          ``materialize`` surface (a raw-key fetch that returns the primary
+          secret for a tenant/ref).
+        * Fallback: the resolver wraps a secret backend whose ``get`` returns a
+          structured credential (the ``aws_secrets`` resolver's backend), from
+          which the primary secret is extracted.
+
+        Returns ``None`` when no raw surface exists — the bound adapter then
+        fails closed for ``secret_backend`` resolutions, never reusing the
+        process-wide key.
+        """
+        cs = self._credential_service
+        if cs is None:
+            return None
+        resolver = getattr(cs, "_resolver", None)
+        if resolver is None:
+            return None
+
+        for attr in ("reveal", "materialize"):
+            fn = getattr(resolver, attr, None)
+            if callable(fn):
+                return fn
+
+        backend = getattr(resolver, "_backend", None)
+        getter = getattr(backend, "get", None)
+        if callable(getter):
+
+            async def _materialize(tenant_id: str, ref: str) -> str | None:
+                try:
+                    cred = await getter(tenant_id, ref)
+                except Exception:  # noqa: BLE001 — fail closed on backend errors
+                    return None
+                return _primary_secret(cred)
+
+            return _materialize
+        return None
+
+    @staticmethod
+    def _provider_error_type(exc: BaseException) -> str | None:
+        """A canonical provider-error label for a raised invocation exception.
+
+        Only genuine provider/transport failures are counted as provider errors
+        (``ModelProviderError`` / ``ModelTimeoutError``); anything else is not
+        a provider fault and emits no provider-error metric.
+        """
+        if isinstance(exc, ModelTimeoutError):
+            return "timeout"
+        if isinstance(exc, ModelProviderError):
+            return "provider_error"
+        return None
 
     async def _complete_routed(
         self,
@@ -576,3 +691,25 @@ class ModelRuntimeService:
             return "unset"
         value = getattr(mode, "value", mode)
         return str(value)
+
+
+def _primary_secret(cred: object) -> str | None:
+    """Extract the primary API key from a structured credential, secret-safe.
+
+    Handles ``ApiKeyCredential`` (``api_key`` field) and falls back to the
+    first ``SecretStr`` field for other structured shapes. Never logs or
+    serializes the value — it is returned straight to the bound adapter.
+    """
+    from pydantic import SecretStr
+
+    api_key = getattr(cred, "api_key", None)
+    if isinstance(api_key, SecretStr):
+        return api_key.get_secret_value()
+    if isinstance(cred, dict):
+        values = cred.values()
+    else:
+        values = dict(cred).values()
+    for value in values:
+        if isinstance(value, SecretStr):
+            return value.get_secret_value()
+    return None

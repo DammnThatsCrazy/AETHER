@@ -10,6 +10,7 @@ httpx is absent.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import time
 
@@ -54,6 +55,9 @@ class OpenAIModelProvider(BaseModelProvider):
         self.timeout_s = timeout_s
         self.max_tokens = max_tokens
         self.max_retries = max_retries
+        # Just-in-time secret-backend materializer attached by the service at
+        # dispatch time (never through the secret-free resolution metadata).
+        self._credential_materializer = None
 
     def is_configured(self) -> bool:
         # A tenant-bound provider is configured only when its tenant credential
@@ -61,33 +65,56 @@ class OpenAIModelProvider(BaseModelProvider):
         # process-wide key.
         if getattr(self, "_bound_resolution", None) is not None:
             try:
-                return bool(self._effective_api_key())
+                return self._can_materialize()
             except ModelNotConfigured:
                 return False
         return bool(self.api_key)
 
-    def bind_credential(self, resolution) -> "OpenAIModelProvider":
+    def bind_credential(self, resolution, *, materializer=None) -> "OpenAIModelProvider":
         """Return a per-tenant-bound copy of this provider (ADR-008 D5).
 
         The returned provider serves a single tenant's invocation: at call time
         it materializes the per-tenant API key from the resolved credential and
         fails closed (``ModelNotConfigured`` — never the process-wide key) when
         the tenant credential cannot be materialized.
+
+        ``materializer`` is an optional just-in-time secret-backend hook,
+        ``(tenant_id, ref) -> str | None`` (sync or async). It is used only for
+        a ``secret_backend`` resolution and is supplied by the service at
+        dispatch time; the fetched key is bound to this per-request adapter and
+        never passes through the (secret-free) resolution metadata or any log.
         """
         import copy
 
         bound = copy.copy(self)
         bound._bound_resolution = resolution
+        bound._credential_materializer = materializer
         return bound
+
+    def _can_materialize(self) -> bool:
+        """Synchronous, secret-free capability check for a bound tenant credential.
+
+        env-source: the per-tenant env ref must be set. secret_backend-source:
+        a just-in-time materializer must be attached (the resolver has already
+        validated the credential as configured; the key itself is fetched at
+        call time). Any other source cannot be served by the adapter.
+        """
+        bound = self._bound_resolution
+        if bound.source == "env" and bound.ref:
+            return bool(os.getenv(bound.ref))
+        if bound.source == "secret_backend":
+            return callable(getattr(self, "_credential_materializer", None))
+        return False
 
     def _effective_api_key(self) -> str:
         """The API key for this invocation, honoring a bound tenant credential.
 
-        A bound resolution makes the provider serve a specific tenant: an
-        env-source credential uses its per-tenant env ref; any other source
-        requires backend materialization, which the adapter cannot perform — it
-        fails closed (``ModelNotConfigured``) rather than reuse the process-wide
-        key for the tenant.
+        Synchronous fast path for unbound/env-source credentials. A bound
+        resolution makes the provider serve a specific tenant: an env-source
+        credential uses its per-tenant env ref. A secret-backend credential
+        requires async backend materialization and is handled by
+        :meth:`_resolve_api_key` at call time — this path fails closed
+        (``ModelNotConfigured``) rather than reuse the process-wide key.
         """
         bound = getattr(self, "_bound_resolution", None)
         if bound is None:
@@ -101,6 +128,45 @@ class OpenAIModelProvider(BaseModelProvider):
             "openai: tenant credential requires backend materialization"
         )
 
+    async def _resolve_api_key(self) -> str:
+        """Resolve the API key for an invocation, including just-in-time
+        secret-backend materialization.
+
+        Fails closed (``ModelNotConfigured``) when the tenant credential cannot
+        be materialized — the process-wide key is never reused for a tenant.
+        """
+        bound = getattr(self, "_bound_resolution", None)
+        if bound is not None and bound.source == "secret_backend":
+            return await self._materialize_secret(bound)
+        return self._effective_api_key()
+
+    async def _materialize_secret(self, resolution) -> str:
+        """Fetch the tenant's raw key from the secret backend (just-in-time).
+
+        The value is bound to this per-request adapter copy only; it is never
+        written to the resolution, metadata, metrics, or logs. Fails closed
+        when no materializer is attached or the backend returns nothing.
+        """
+        materializer = getattr(self, "_credential_materializer", None)
+        if not callable(materializer):
+            raise ModelNotConfigured(
+                "openai: tenant secret-backend credential requires backend "
+                "materialization"
+            )
+        try:
+            result = materializer(resolution.tenant_id, resolution.ref)
+            if inspect.isawaitable(result):
+                result = await result
+        except Exception as exc:  # noqa: BLE001 — fail closed on backend errors
+            raise ModelNotConfigured(
+                "openai: tenant secret-backend credential not materializable"
+            ) from exc
+        if isinstance(result, str) and result:
+            return result
+        raise ModelNotConfigured(
+            "openai: tenant secret-backend credential not materializable"
+        )
+
     async def complete(self, request: ModelRequest) -> ModelResponse:
         """Complete one request against the OpenAI chat-completions API.
 
@@ -111,7 +177,7 @@ class OpenAIModelProvider(BaseModelProvider):
         so a routed selection is the model actually invoked. Never logs request
         content, prompts, or credentials.
         """
-        api_key = self._effective_api_key()
+        api_key = await self._resolve_api_key()
         if not api_key:
             raise ModelNotConfigured("openai adapter not configured")
 
