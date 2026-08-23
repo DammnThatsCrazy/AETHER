@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/kyber_routes.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
   - Backend Architecture/aether-backend/shared/graph/graph.py
-last_synced_commit: "74086291"
+last_synced_commit: "1884f7be"
 ---
 
 # Runbook — Tenant Import Failures
@@ -59,6 +59,22 @@ If the job is genuinely running, wait; the commit is idempotent (edge creation i
 existence-checked, Bronze ingest de-dupes on `provider_record_id`). A session that
 has sat in `committing` past its requeue window with no live worker is
 **stranded**: requeue it (below) to **resume** — never restart — the commit.
+
+A session stranded **mid-finalization** (`projecting` / `reconciling` — a
+transient failure *between* finalization transitions, after staging succeeded)
+is resumable the same way: requeueing re-enters `commit_import`, which advances
+only the remaining lifecycle arcs to `completed` — nothing is re-staged and the
+commit row is never re-created, so the resume cannot double-apply
+projections/commits.
+
+### Import stuck in `validating`
+A transient failure during the validation dry-run (file retrieval, parsing,
+schema construction, or `validate_mapping`) returns the session to `uploaded`
+with the reason recorded in `failure_reason` — it is never left pinned in
+`validating`. A retry re-enters `validating` legally and completes the
+dry-run. A session observed in `validating` with no job activity is still
+in-flight; the fallback above means a wedged `validating` session should not
+occur.
 
 ### Import in `failed`
 The commit raised before completing. **Recover:** `POST /v1/kyber/imports/{id}/requeue`

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "74086291"
+last_synced_commit: "1884f7be"
 ---
 # Commerce Operator Runbook
 
@@ -156,6 +156,12 @@ from an unregistered or deactivated payer is rejected with verdict
 `unauthorized_signer` even when on-chain/facilitator verification would
 otherwise succeed. A tenant with **no** signer references (the default) is
 unaffected — the authority never invents an authorized signer.
+
+Revoking the tenant's **last** active signer reference does **not** reopen the
+gate: the registry stays "configured" with zero active references, so every
+payer is rejected fail-closed (`no active signer references`) until an operator
+re-registers or re-activates a signer reference. Deactivating the final signer
+is an intentional lock-out, not a reset to the unconfigured default.
 
 If a previously-valid payment starts failing with
 `verification_verdict="unauthorized_signer"`, re-check the tenant's signer
