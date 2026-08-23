@@ -20,6 +20,8 @@ other.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
@@ -37,19 +39,33 @@ INTEROP_USAGE_DIMENSIONS: frozenset[str] = frozenset({
 
 
 def checkpoint_unit_key(provider_id: str, checkpoint: Optional[dict[str, Any]]) -> str:
-    """Deterministic per-cycle anchor for dedupe: provider + highest cursor.
+    """Deterministic per-cycle anchor for dedupe: provider + full cursor state.
 
-    Replaying the same persisted checkpoint reproduces the same anchor, so the
-    metering service marks the re-run non-billable (fail-closed double-billing
-    protection). A later cycle that advances a cursor produces a fresh anchor
-    and a fresh billable record.
+    Hashes the COMPLETE sorted per-network cursor vector, so any change to ANY
+    network's cursor (or the network set) produces a fresh anchor — a network
+    advancing while another holds the max must still be billable. Replaying the
+    same persisted checkpoint reproduces the same anchor, so the metering
+    service marks the re-run non-billable (fail-closed double-billing
+    protection). Deterministic and stable for identical cursor states; empty
+    cursor state gets its own stable anchor, never the max-of-nothing.
     """
-    cursors = [
-        int(state.get("last_scanned_block") or state.get("last_scanned_height") or 0)
-        for state in ((checkpoint or {}).get("networks") or {}).values()
+    networks = (checkpoint or {}).get("networks") or {}
+    cursor_state = sorted(
+        (
+            str(network_id),
+            int(
+                state.get("last_scanned_block")
+                or state.get("last_scanned_height")
+                or 0
+            ),
+        )
+        for network_id, state in networks.items()
         if isinstance(state, dict)
-    ]
-    return f"{provider_id}:{max(cursors) if cursors else 0}"
+    )
+    digest = hashlib.sha256(
+        json.dumps(cursor_state, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return f"{provider_id}:{digest}"
 
 
 async def record_interop_usage(

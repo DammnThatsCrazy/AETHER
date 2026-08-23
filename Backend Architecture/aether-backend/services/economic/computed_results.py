@@ -91,6 +91,25 @@ def campaign_computation_context(
     )
 
 
+def _payload_identity(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Semantic identity of a computed result — the economic payload.
+
+    Deliberately excludes per-materialization identity (``result_id``,
+    ``run_id``, ``computed_at``): a crash-restart replay of the same scope must
+    compare as identical, while a *restated* value/status must compare as
+    changed so it supersedes the stale active result instead of being discarded.
+    """
+    return (
+        row.get("definition_id"),
+        row.get("definition_version"),
+        row.get("status"),
+        row.get("value_type"),
+        row.get("value"),
+        row.get("unit"),
+        row.get("currency"),
+    )
+
+
 def _result_to_row(result: CanonicalResult, *, run_id: Optional[str]) -> dict[str, Any]:
     """Normalize a CanonicalResult into the ComputedResultsRepository row shape.
 
@@ -127,10 +146,17 @@ async def persist_computed_results(
     shape returned by ``canonical_campaign_metrics``). Each result is written
     through ``ComputedResultsRepository.insert_result``; an active result that
     already exists for the same ``(tenant, definition, version, context_hash)``
-    (a replay of the same scope after a crash/restart) is treated as already
-    recorded — never a duplicate, never a raised conflict.
+    is compared against the newly computed payload:
 
-    Returns ``{"recorded": n, "already_recorded": m, "run_id": run_id}``.
+    * identical payload — a replay of the same scope after a crash/restart, a
+      no-op (``already_recorded``), never a duplicate and never a raised
+      conflict;
+    * changed payload — a *restatement* (attribution/spend inputs restated): the
+      stale active result is superseded via ``ComputedResultsRepository.supersede``
+      (append-only restatement audit, historical truth preserved) so consumers
+      never keep reading an outdated canonical value.
+
+    Returns ``{"recorded": n, "already_recorded": m, "superseded": k, "run_id": run_id}``.
     """
     if not tenant_id:
         raise ValueError("tenant_id is required to persist computed results")
@@ -144,6 +170,7 @@ async def persist_computed_results(
 
     recorded = 0
     already = 0
+    superseded = 0
     failed: list[str] = []
     for result in values:
         if result.tenant_id and result.tenant_id != tenant_id:
@@ -156,24 +183,45 @@ async def persist_computed_results(
             await repo.insert_result(row)
             recorded += 1
         except ComputationConflictError:
-            # Same scope re-materialized after a crash: the active result already
-            # exists and is identical (same deterministic context). No-op.
-            already += 1
+            active = await repo.get_active(
+                tenant_id, row["definition_id"], row["definition_version"], row["context_hash"]
+            )
+            if active is None:
+                # The conflicting active row vanished mid-write (superseded by a
+                # concurrent writer): the key is free again, retry the insert.
+                await repo.insert_result(row)
+                recorded += 1
+                continue
+            if _payload_identity(repo._row(active)) == _payload_identity(repo._row(row)):
+                # Same scope re-materialized after a crash: identical payload,
+                # already on record. No-op.
+                already += 1
+            else:
+                # Restatement: supersede the stale active result, never discard.
+                await repo.supersede(
+                    tenant_id,
+                    active["result_id"],
+                    row,
+                    reason="restated by materialization",
+                )
+                superseded += 1
+                recorded += 1
     metrics.increment(
         "economic_computed_results_recorded",
         value=recorded,
         labels={"tenant_id": tenant_id},
     )
-    if recorded or already:
+    if recorded or already or superseded:
         logger.info(
-            "computed_results write: tenant=%s recorded=%d already_recorded=%d",
-            tenant_id, recorded, already,
+            "computed_results write: tenant=%s recorded=%d already_recorded=%d superseded=%d",
+            tenant_id, recorded, already, superseded,
         )
     return {
         "tenant_id": tenant_id,
         "run_id": run_id,
         "recorded": recorded,
         "already_recorded": already,
+        "superseded": superseded,
         "failed": failed,
     }
 

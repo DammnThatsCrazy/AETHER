@@ -17,12 +17,15 @@ Under test:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from repositories.repos import reset_in_memory_stores
 from services.diagnostics.observability_middleware import (
+    ObservabilityTraceMiddleware,
     record_observability_trace,
     record_request_trace,
     record_service_heartbeat,
@@ -162,3 +165,104 @@ async def test_record_worker_heartbeat_sets_status():
 async def test_record_service_heartbeat_requires_key():
     with pytest.raises(ValueError):
         await record_service_heartbeat("")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ObservabilityTraceMiddleware (auto-record HTTP middleware)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _middleware_app(*, trace_first: bool):
+    """Minimal FastAPI app: a stub auth middleware sets ``request.state.tenant``.
+
+    ``trace_first=True`` places the trace middleware OUTERMOST (runs before
+    auth) — the outcome of registering it "after" the auth middleware in code
+    given Starlette's front-insert. ``trace_first=False`` leaves auth outermost
+    (runs first), which is the ordering main.py actually wires.
+    """
+    from fastapi import FastAPI
+
+    app = FastAPI()
+
+    @app.get("/v1/echo")
+    async def echo():
+        return {"ok": True}
+
+    async def fake_auth(request, call_next):
+        request.state.tenant = SimpleNamespace(tenant_id="t-obs")
+        return await call_next(request)
+
+    # ``add_middleware`` inserts at the FRONT of the chain, so the LAST add is
+    # the OUTERMOST middleware (runs first).
+    if trace_first:
+        app.middleware("http")(fake_auth)          # auth inner…
+        app.add_middleware(ObservabilityTraceMiddleware)  # …trace outermost
+    else:
+        app.add_middleware(ObservabilityTraceMiddleware)  # trace inner…
+        app.middleware("http")(fake_auth)          # …auth outermost (runs first)
+    return app
+
+
+async def test_observability_middleware_auto_records_authenticated_request():
+    """Auth outermost → trace middleware sees request.state.tenant → one record."""
+    from starlette.testclient import TestClient
+
+    store = get_store("observability_traces")
+    app = _middleware_app(trace_first=False)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/echo")
+    assert resp.status_code == 200
+
+    # The record is written by a fire-and-forget task on the portal loop; poll
+    # briefly rather than assuming it has flushed before the response returns.
+    traces: list = []
+    for _ in range(100):
+        traces = await store.get_list("traces:t-obs")
+        if traces:
+            break
+        await asyncio.sleep(0.01)
+    assert traces, "authenticated request should produce an auto-recorded trace"
+    assert traces[0]["endpoint"] == "/v1/echo"
+    assert traces[0]["status"] == "ok"
+    assert traces[0]["tenant_id"] == "t-obs"
+
+
+async def test_observability_middleware_skips_unauthenticated_request():
+    """No tenant on request.state → no record (no per-request spam)."""
+    from fastapi import FastAPI
+    from starlette.testclient import TestClient
+
+    app = FastAPI()
+
+    @app.get("/v1/echo")
+    async def echo():
+        return {"ok": True}
+
+    app.add_middleware(ObservabilityTraceMiddleware)
+
+    store = get_store("observability_traces")
+    with TestClient(app) as client:
+        resp = client.get("/v1/echo")
+    assert resp.status_code == 200
+    traces = await store.get_list("traces:t-obs")
+    assert traces == []
+
+
+async def test_observability_middleware_does_not_record_when_auth_runs_after():
+    """Trace outermost (runs before auth) → tenant not yet set → no record.
+
+    This is the regression guard for the wiring order: registering the trace
+    middleware "after" the auth middleware in code (i.e. after
+    ``register_middleware``) would put it outermost and silently disable
+    auto-recording. main.py registers it BEFORE so auth runs first.
+    """
+    from starlette.testclient import TestClient
+
+    store = get_store("observability_traces")
+    app = _middleware_app(trace_first=True)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/echo")
+    assert resp.status_code == 200
+    traces = await store.get_list("traces:t-obs")
+    assert traces == []

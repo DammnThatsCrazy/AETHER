@@ -36,6 +36,9 @@ from repositories.repos import (
     FraudNetworkRepository,
     InvestigationRepository,
 )
+# Capability-family metering seam (§7): durable meter + evidence for
+# reconciliation at the investigations family choke point.
+from services.metering_evidence.families import meter_family_usage  # noqa: E402
 
 logger = get_logger("aether.service.investigation")
 
@@ -133,6 +136,11 @@ async def create_case(
         tenant_id=case.tenantId,
         payload={"case_id": case.id, "title": case.title, "status": case.status},
     ))
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "investigations", case.tenantId, event_id=case.id,
+        enforce=False, raise_on_metering_error=False,
+    )
     return InvestigationCase(**result)
 
 

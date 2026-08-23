@@ -361,6 +361,15 @@ class CapabilityReadinessAdapter:
         self._repo = repo or ActivationStateRepo()
         self._authority = authority or CapabilityLifecycleAuthority()
 
+    async def all_tenants(self) -> list[str]:
+        """Distinct tenants with persisted readiness state.
+
+        The revalidation worker enumerates its working set from here instead of
+        falling back to an unscoped ``""`` tenant: readiness rows keyed by a
+        real tenant are only ever revalidated when that tenant is in scope.
+        """
+        return await self._repo.distinct_tenant_ids()
+
     async def snapshot(
         self, tenant_id: str, capability: str
     ) -> Optional[dict[str, Any]]:

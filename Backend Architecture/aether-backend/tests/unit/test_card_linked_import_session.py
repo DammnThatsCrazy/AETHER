@@ -389,7 +389,9 @@ async def test_commit_happy_path_completes_with_program_fields():
     assert session["lifecycle_state"] == "COMPLETED"
     assert session["status"] == "committed"
     assert session["projection_state"] == "completed"
-    assert session["reconciliation_state"] == "cleared"
+    # commit_import never runs a real reconciliation path, so the honest marker
+    # is pending_provider_corroboration — "cleared" requires a real verdict.
+    assert session["reconciliation_state"] == "pending_provider_corroboration"
     assert session["accepted_count"] >= 2
     assert session["schema_version"] == 1
     assert session["source_checksum"] is not None

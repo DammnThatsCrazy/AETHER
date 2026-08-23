@@ -3,7 +3,7 @@
 One governed cycle (``ScanWorker.run_cycle``) drives one provider adapter
 through: load checkpoint -> supervised :meth:`scan` -> correlation ingest ->
 dead-letter quarantine -> reconciliation evidence -> graph projection ->
-policy snapshot -> checkpoint persist -> event publish -> metering.
+policy snapshot -> event publish -> checkpoint persist -> metering.
 
 Resume contract: the checkpoint (per-network cursors + ``runtime`` telemetry)
 is persisted under ``interop_provider_checkpoints.evidence`` keyed
@@ -476,7 +476,15 @@ class ScanWorker:
             )
             emitted.extend(snapshot_events)
 
-        # ── persist checkpoint (durable resume) ──────────────────────────────
+        # ── event publish (broker external; fails loud after retries) ────────
+        # Publish BEFORE persisting the checkpoint: a failed publish raises and
+        # the advanced checkpoint is NOT persisted, so the next pass resumes
+        # from the old cursor and re-publishes the same observations
+        # (at-least-once) — events are never skipped past an undelivered batch.
+        if emitted:
+            await self.publisher.publish_batch(emitted, correlation_id=provider_id)
+
+        # ── persist checkpoint (durable resume; only after publish succeeds) ─
         basis = f"{self.tenant_id}|{provider_id}|{SENTINEL_NETWORK}"
         if stored is None:
             await self.checkpoints.insert({
@@ -497,10 +505,6 @@ class ScanWorker:
                  "network_id": SENTINEL_NETWORK},
                 {"evidence": new_checkpoint, "advanced_at": utc_now_iso()},
             )
-
-        # ── event publish (broker external; fails loud after retries) ────────
-        if emitted:
-            await self.publisher.publish_batch(emitted, correlation_id=provider_id)
 
         # ── metering (canonical interop meter names only) ────────────────────
         if observations:

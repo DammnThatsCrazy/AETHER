@@ -65,7 +65,13 @@ created the ``reward_*`` tables with a columnar schema that has NO ``data``
 JSONB column, while the reward repositories (``services/rewards/repositories.py``)
 are ``BaseRepository``-backed and read/write ``row["data"]`` — on a fresh DB
 those reads fail with "column data does not exist". The ALTERs below add the
-column idempotently.
+column idempotently, AND drop NOT NULL from the columnar columns the JSONB
+repositories never write (``reward_campaigns.name``,
+``reward_eligibility_decisions.eligible/decision``,
+``reward_proofs.wallet_address/nonce/expiry/expires_at``, ...): ``BaseRepository``
+inserts supply only ``id``/``data``/``tenant_id``/``created_at``/``updated_at``,
+so those NOT NULL-without-default columns would otherwise abort every reward
+insert on a clean DB even after ``data`` is added.
 
 Everything is additive + idempotent (IF NOT EXISTS everywhere), and the
 downgrade drops exactly what this revision created.
@@ -135,6 +141,31 @@ _REWARD_DATA_ALTER_TABLES = [
     "reward_audit_log",
 ]
 
+#: Columns the ``20260613_reward_enablement`` columnar schema declared
+#: ``NOT NULL`` with NO server default (e.g. ``reward_campaigns.name``,
+#: ``reward_eligibility_decisions.eligible/decision``,
+#: ``reward_proofs.wallet_address/nonce/expiry/expires_at``), while
+#: ``BaseRepository.insert`` supplies only ``id``, ``data``, ``tenant_id``,
+#: ``created_at``, ``updated_at`` (JSONB-shaped — see
+#: ``repositories/repos.py::BaseRepository.insert``). On a clean DB the JSONB
+#: reward repositories therefore STILL fail to insert after ``data`` is added:
+#: every NOT NULL column without a default that the JSONB write never names
+#: aborts the INSERT. The reward repositories read/write exclusively through
+#: the ``data`` JSONB column (they never SELECT or set these columnar columns),
+#: so ``DROP NOT NULL`` leaves them nullable — honestly NULL, never a
+#: fabricated default that would disagree with the JSONB payload — while
+#: keeping the 2026-06-13 schema (indexes, FKs, triggers) intact for any
+#: legacy consumer.
+_REWARD_NULLABLE_COLUMNS: dict[str, list[str]] = {
+    "reward_campaigns": ["name"],
+    "reward_rules": ["campaign_id", "name"],
+    "reward_eligibility_decisions": ["eligible", "decision"],
+    "reward_action_payloads": ["rail", "execution_mode"],
+    "reward_proofs": ["wallet_address", "nonce", "expiry", "expires_at"],
+    "reward_execution_receipts": ["rail", "execution_mode"],
+    "reward_audit_log": ["action"],
+}
+
 
 def _jsonb_table_ddl(table: str) -> str:
     """The exact DDL BaseRepository._ensure_table issues (minus runtime pool)."""
@@ -163,9 +194,25 @@ def upgrade() -> None:
             + " ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb"
         )
 
+    # Same clean-DB bug, second half: the columnar reward schema declared
+    # several columns NOT NULL with no default, so a BaseRepository insert
+    # (which writes only id/data/tenant_id/created_at/updated_at) STILL fails
+    # after ``data`` is added. DROP NOT NULL makes those columns nullable so a
+    # JSONB insert succeeds (see _REWARD_NULLABLE_COLUMNS for the rationale).
+    for table, columns in _REWARD_NULLABLE_COLUMNS.items():
+        for column in columns:
+            op.execute(
+                "ALTER TABLE " + table
+                + " ALTER COLUMN " + column + " DROP NOT NULL"
+            )
+
 
 def downgrade() -> None:
-    # Undo the reward data-column repair (idempotent).
+    # Undo the reward data-column repair (idempotent). The DROP NOT NULL on
+    # _REWARD_NULLABLE_COLUMNS is intentionally NOT reverted: those are
+    # pre-existing 2026-06-13 tables, and restoring NOT NULL would fail once the
+    # JSONB repos have written rows with NULL in the legacy columnar columns
+    # (which is exactly the state this revision makes possible).
     for table in _REWARD_DATA_ALTER_TABLES:
         op.execute("ALTER TABLE " + table + " DROP COLUMN IF EXISTS data")
 

@@ -22,11 +22,12 @@ This module composes the existing typed repositories
     a re-emitted gap event never double-writes; ``recovered_at`` starts NULL and
     is set only when the stream advances past the hole.
   * :class:`DerivativesPullRunner` — the crash-boundary driver: restore →
-    pull → persist new checkpoint → persist emitted gap events. At-least-once by
-    construction: on restart it resumes from the last persisted cursor, and the
-    checkpoint idempotency key dedups replays. Idempotent replay of the same
-    cursor yields zero new events (the adapter's high-water filter) so there is
-    never duplication *or* skip.
+    pull → return the advanced checkpoint for the caller to ACK after
+    downstream processing (:meth:`DerivativesPullRunner.persist_checkpoint`) →
+    persist emitted gap events. At-least-once by construction: on restart it
+    resumes from the last ACKED cursor, and the checkpoint idempotency key
+    dedups replays. Idempotent replay of the same cursor yields zero new events
+    (the adapter's high-water filter) so there is never duplication *or* skip.
 
 Observation-only invariant: ``execution_by_aether`` is always False. This module
 never places, amends, or cancels anything.
@@ -342,12 +343,16 @@ async def persist_stream_gap_events(
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DerivativesPullRunner:
-    """Durable pull driver: restore → pull → persist → persist gap evidence.
+    """Durable pull driver: restore → pull → ack-after-processing.
 
-    Crash contract: a worker killed after ``run_pull`` returns resumes from the
-    persisted cursor on the next invocation (at-least-once). The adapter's
-    high-water filter + the checkpoint idempotency key together guarantee no
-    duplication and no skip on replay.
+    Crash contract: ``run_pull`` returns ``(events, new_checkpoint)`` WITHOUT
+    advancing the durable cursor; the caller persists ``new_checkpoint`` via
+    :meth:`persist_checkpoint` only after the events have been durably
+    processed/acknowledged downstream. A worker killed between ``run_pull`` and
+    that ack resumes from the last ACKED cursor on the next invocation and
+    re-delivers the boundary events (the adapter's high-water filter + the
+    checkpoint idempotency key dedup the replay) — at-least-once, never
+    at-most-once.
     """
 
     def __init__(
@@ -377,12 +382,13 @@ class DerivativesPullRunner:
         )
 
     async def run_pull(self) -> tuple[list[dict], dict]:
-        """One durable pull cycle: restore cursor → pull → persist cursor.
+        """One pull cycle: restore cursor → pull. Does NOT persist.
 
-        ``pull_events`` returns ``(events, new_checkpoint)``; the new checkpoint
-        is persisted BEFORE returning so a crash immediately after still resumes
-        from it (the events' downstream idempotency keys dedup any in-flight
-        re-observation of the boundary). Returns ``(events, new_checkpoint)``.
+        Returns ``(events, new_checkpoint)``. The advanced checkpoint is NOT
+        written here — it is persisted only when the caller calls
+        :meth:`persist_checkpoint` AFTER the events are durably processed
+        downstream. Persisting before that would resume past unhandled events
+        on a crash (at-most-once).
         """
         cursor = await self.restore_cursor()
         checkpoint_arg: Optional[dict] = None
@@ -394,7 +400,16 @@ class DerivativesPullRunner:
                 checkpoint_arg = {"cursors": {cursor: ""}}
         events, new_checkpoint = await self.adapter.pull_events(checkpoint_arg)
         new_checkpoint = new_checkpoint or {}
-        await persist_connector_checkpoint(
+        return events, new_checkpoint
+
+    async def persist_checkpoint(self, new_checkpoint: dict) -> dict:
+        """Acknowledge a pulled checkpoint AFTER downstream processing.
+
+        The caller invokes this only once the events returned by :meth:`run_pull`
+        are durably persisted/acknowledged (silver/bronze write, batch ack).
+        Persisting earlier would skip those events on a crash (at-most-once).
+        """
+        return await persist_connector_checkpoint(
             self.checkpoints,
             tenant_id=self.tenant_id,
             connector_id=self.connector_id,
@@ -402,7 +417,6 @@ class DerivativesPullRunner:
             advanced_at=utc_now_iso(),
             state="ok",
         )
-        return events, new_checkpoint
 
     async def persist_stream_result(self, result: StreamResult) -> dict[str, int]:
         """Persist gap detected/recovered events from a ReconnectingStream run."""

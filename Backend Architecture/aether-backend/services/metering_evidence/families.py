@@ -22,6 +22,7 @@ of main's canonical classes (``EntitlementService``, ``MeteringService``,
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.common.common import AetherError, ErrorCode
@@ -32,6 +33,7 @@ from services.billing.revops import (
     MeteringEventType,
     MeteringService,
     UsageMeteringEvent,
+    UsageMeteringEventRepository,
 )
 from services.metering_evidence.service import (
     EXCLUDED_DUPLICATE,
@@ -67,6 +69,33 @@ ENTITLEMENT_STATE_DENIED = "denied"
 ENTITLEMENT_DENY_NOT_ENTITLED = "not_entitled"
 ENTITLEMENT_DENY_DISABLED = "disabled"
 ENTITLEMENT_DENY_OVERAGE_NOT_ALLOWED = "overage_not_allowed"
+
+
+def _billing_period_window(
+    reset_period: str, now: datetime | None = None
+) -> tuple[str, str]:
+    """Return the ISO ``(start, end)`` window for the current billing period.
+
+    Period-to-date semantics: ``start`` is the current period boundary (first
+    of the month for ``monthly``, first of the quarter for ``quarterly``, first
+    of the year for ``annual``) and ``end`` is ``now``. Unbounded reset periods
+    (``never``) window from the epoch so all consumed usage counts. Used by
+    entitlement enforcement to decide whether new usage fits inside the
+    included allowance (the meter is the period-to-date usage truth).
+    """
+    now = now or datetime.now(timezone.utc)
+    if reset_period == "quarterly":
+        quarter_month = ((now.month - 1) // 3) * 3 + 1
+        start = now.replace(
+            month=quarter_month, day=1, hour=0, minute=0, second=0, microsecond=0,
+        )
+    elif reset_period == "annual":
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif reset_period == "never":
+        start = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    else:  # default monthly (and any unrecognized reset period).
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return start.isoformat(), now.isoformat()
 
 
 class MeteringStoreError(AetherError):
@@ -150,8 +179,41 @@ class CapabilityEntitlementService(EntitlementService):
     Re-home of the branch's ``EntitlementService.enforce_dimension`` seam: the
     branch added the method to ``revops.py``, but main's canonical revops does
     not carry it, so it lives here on top of main's repository surface
-    (``TenantEntitlementRepository.list_for_tenant``).
+    (``TenantEntitlementRepository.list_for_tenant``). Enforcement is
+    **cumulative**: the tenant's period-to-date metered usage is read from the
+    usage meter (``UsageMeteringEventRepository``) before deciding whether the
+    new ``quantity`` fits inside the included allowance, so repeated
+    ``quantity=1`` calls cannot remain ``included`` forever.
     """
+
+    def __init__(
+        self,
+        contracts: Any = None,
+        entitlements: Any = None,
+        events: UsageMeteringEventRepository | None = None,
+    ) -> None:
+        super().__init__(contracts=contracts, entitlements=entitlements)
+        self.events = events or UsageMeteringEventRepository()
+
+    async def _period_usage(
+        self, tenant_id: str, dimension: str, reset_period: str,
+    ) -> float:
+        """Sum the tenant's period-to-date metered usage for ``dimension``."""
+        start, end = _billing_period_window(reset_period)
+        records, truncated = await self.events.list_for_tenant_period(
+            tenant_id, start, end,
+        )
+        if truncated:
+            logger.warning(
+                "enforce_dimension usage read truncated tenant=%s dimension=%s — "
+                "period-to-date usage may be understated",
+                tenant_id, dimension,
+            )
+        return float(sum(
+            float(r.get('quantity') or 0)
+            for r in records
+            if (r.get('event_type') or r.get('usage_dimension')) == dimension
+        ))
 
     async def enforce_dimension(
         self,
@@ -168,11 +230,13 @@ class CapabilityEntitlementService(EntitlementService):
 
         * no entitlement record for ``dimension``            -> denied (not_entitled)
         * entitlement present but ``enabled`` is false       -> denied (disabled)
-        * ``quantity`` within ``included_quantity``          -> included
-        * ``quantity`` beyond ``included_quantity`` when
-          ``overage_allowed`` is true                        -> overage
-        * ``quantity`` beyond ``included_quantity`` when
-          overage is not allowed                             -> denied (overage_not_allowed)
+        * ``consumed + quantity`` within ``included_quantity`` (where
+          ``consumed`` is the tenant's period-to-date metered usage for the
+          dimension)                                          -> included
+        * ``consumed + quantity`` beyond ``included_quantity`` when
+          ``overage_allowed`` is true                         -> overage
+        * ``consumed + quantity`` beyond ``included_quantity`` when
+          overage is not allowed                              -> denied (overage_not_allowed)
         """
         ents = await self.entitlements.list_for_tenant(tenant_id)
         by_feature = {e['feature_key']: e for e in ents}
@@ -188,6 +252,7 @@ class CapabilityEntitlementService(EntitlementService):
             'enabled': bool(ent and ent.get('enabled', True)),
             'included_quantity': included,
             'overage_allowed': overage_allowed,
+            'consumed_usage': 0.0,
             'overage_quantity': 0.0,
             'state': ENTITLEMENT_STATE_INCLUDED,
             'reason': ENTITLEMENT_STATE_INCLUDED,
@@ -200,15 +265,21 @@ class CapabilityEntitlementService(EntitlementService):
             decision['state'] = ENTITLEMENT_STATE_DENIED
             decision['reason'] = ENTITLEMENT_DENY_DISABLED
             return decision
-        if quantity > included and not overage_allowed:
+        # Cumulative period-to-date usage already consumed on this dimension.
+        consumed = await self._period_usage(
+            tenant_id, dimension, ent.get('reset_period') or 'monthly',
+        )
+        decision['consumed_usage'] = consumed
+        effective = consumed + quantity
+        if effective > included and not overage_allowed:
             decision['state'] = ENTITLEMENT_STATE_DENIED
             decision['reason'] = ENTITLEMENT_DENY_OVERAGE_NOT_ALLOWED
-            decision['overage_quantity'] = quantity - included
+            decision['overage_quantity'] = effective - included
             return decision
-        if quantity > included:
+        if effective > included:
             decision['state'] = ENTITLEMENT_STATE_OVERAGE
             decision['reason'] = ENTITLEMENT_STATE_OVERAGE
-            decision['overage_quantity'] = quantity - included
+            decision['overage_quantity'] = effective - included
         return decision
 
 

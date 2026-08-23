@@ -19,6 +19,9 @@ This module provides:
     snapshot set yields the ``duplicate`` state (idempotent replay, never a
     double-counted conflict); genuine multi-provider disagreement yields the
     ``conflict`` state with the offending providers and spread in basis points.
+    The replay signature hashes the observed prices + timestamps (the snapshot
+    payload), so a genuinely new snapshot — a new price, spread, or observation
+    time — is a new signature and a fresh conflict, never a stale duplicate.
 
 Observation-only: nothing here signs, sends, or mutates on-chain state.
 """
@@ -92,14 +95,36 @@ class StablecoinPriceReconciler:
     def _signature(
         tenant_id: str,
         deployment_id: str,
-        providers: tuple[str, ...],
+        snapshots: list[StablecoinPriceObservation],
         state: str,
     ) -> str:
+        """Deterministic fingerprint of one reconciliation verdict.
+
+        Hashes the observed snapshot payloads (per-provider price + observed_at)
+        alongside tenant / deployment / provider / state so a genuinely NEW
+        snapshot — a new price, a new spread, or a new observation time —
+        yields a new signature and a real conflict record, while a true replay
+        of the identical snapshot set still collapses to ``duplicate``.
+        Providers are sorted and each snapshot serialized stably, so the
+        fingerprint is order-independent.
+        """
+        providers = ",".join(sorted(s.provider for s in snapshots))
+        payload = ";".join(
+            "|".join([
+                s.provider,
+                str(s.price_usd) if s.price_usd is not None else "",
+                str(s.observed_at),
+            ])
+            for s in sorted(
+                snapshots, key=lambda s: (s.provider, str(s.observed_at))
+            )
+        )
         raw = "|".join([
             tenant_id or "",
             deployment_id or "",
-            ",".join(sorted(providers)),
+            providers,
             state,
+            payload,
         ])
         return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
@@ -111,8 +136,11 @@ class StablecoinPriceReconciler:
         """Classify a snapshot set and persist the verdict durably.
 
         Returns the persisted (or previously-persisted) reconciliation record.
-        Idempotent: the SAME (tenant, deployment, providers, state) signature
-        reconciled twice resolves to ``duplicate`` — never a second conflict row.
+        Idempotent: the SAME snapshot set (tenant, deployment, providers, the
+        observed prices + timestamps) reconciled twice resolves to
+        ``duplicate`` — never a second conflict row. A genuinely new snapshot
+        (new price / spread / observation time) is a NEW signature and a real
+        conflict, not a stale duplicate.
         """
         if not snapshots:
             raise ValueError("reconcile requires at least one price snapshot")
@@ -124,8 +152,10 @@ class StablecoinPriceReconciler:
         providers = verdict.providers or tuple(s.provider for s in snapshots)
         state = verdict.state
 
-        # Replay guard: an identical prior verdict for this snapshot set.
-        sig = self._signature(tenant_id, deployment_id, providers, state)
+        # Replay guard: the signature hashes the observed prices + timestamps,
+        # so only a TRUE replay of the identical snapshot set dedupes; a new
+        # price / spread / observation time produces a fresh signature.
+        sig = self._signature(tenant_id, deployment_id, snapshots, state)
         existing = await self.repo.find_many(
             filters={"tenant_id": tenant_id, "signature": sig}, limit=1,
         )

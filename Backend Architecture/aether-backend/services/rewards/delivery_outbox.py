@@ -563,6 +563,24 @@ class RewardDeliveryOutbox:
             raw_response=result.raw,
         )
         await self._receipts().insert(receipt.id, receipt.model_dump())
+
+        # Durable receipt evidence: every reward-outbox delivery receipt leaves
+        # an immutable audit trace (RewardReceiptEvidenceService.record).
+        # Best-effort at the edge — a recording failure must not fail a
+        # delivery that already has a durable ProviderReceipt.
+        try:
+            from services.rewards.receipt_evidence import get_receipt_evidence_service
+            await get_receipt_evidence_service().record(
+                "delivery",
+                tenant_id=job.get("tenant_id", ""),
+                receipt_id=receipt.id,
+                rail=rail,
+                external_id=result.external_id or receipt.id,
+                status="delivered",
+                action_id=job.get("action_id"),
+            )
+        except Exception as exc:  # noqa: BLE001 — evidence is best-effort
+            logger.warning(f"reward delivery receipt evidence record failed rid={receipt.id}: {exc}")
         return receipt.id
 
     async def _mark_action_delivered(self, job: dict, receipt_id: str) -> None:

@@ -360,6 +360,32 @@ class BaseRepository(ABC):
         )
         return row["cnt"] if row else 0
 
+    async def distinct_tenant_ids(self, limit: int = 10000) -> list[str]:
+        """Distinct tenant_ids present in this table (cross-tenant enumeration).
+
+        Supervised workers that must reconcile/poll *every* tenant (rather than a
+        single process-wide default) use this to discover their working set from
+        real persisted state. Legacy unscoped rows (``tenant_id`` null/empty) are
+        excluded — they are not tenants. Order is deterministic (ascending
+        tenant_id) for reproducible passes.
+        """
+        pool = await self._ensure_pool()
+        if pool is None:
+            seen: list[str] = []
+            for row in self._store.values():
+                tid = row.get("tenant_id")
+                if tid and tid not in seen:
+                    seen.append(tid)
+            return seen[:limit]
+        await self._ensure_table()
+        rows = await pool.fetch(
+            f"SELECT DISTINCT tenant_id FROM {self.table_name} "
+            "WHERE tenant_id IS NOT NULL AND tenant_id <> '' "
+            "ORDER BY tenant_id LIMIT $1",
+            limit,
+        )
+        return [r["tenant_id"] for r in rows]
+
     async def insert(self, record_id: str, data: dict) -> dict:
         now = utc_now().isoformat()
         data["id"] = record_id

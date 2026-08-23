@@ -495,7 +495,12 @@ async def commit_import(tenant_id: str, import_id: str) -> dict:
         legacy_status=legacy,
         patch={
             "projection_state": "completed",
-            "reconciliation_state": "cleared",
+            # Provider corroboration has NOT run — nothing here invokes a real
+            # reconciliation path or checks evidence. Keep the honest
+            # "not yet corroborated" marker instead of claiming "cleared": a
+            # cleared verdict is recorded only by a real reconciliation path
+            # that corroborates the staged import against provider evidence.
+            "reconciliation_state": "pending_provider_corroboration",
             "accepted_count": int(counts.get("records", 0) or 0),
             "rejected_count": int(counts.get("row_errors", 0) or 0),
             "duplicate_count": max(

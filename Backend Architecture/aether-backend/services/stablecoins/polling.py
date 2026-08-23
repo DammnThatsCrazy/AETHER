@@ -299,32 +299,34 @@ def _default_poll_tenant() -> str:
     return os.getenv("DEFAULT_TENANT_ID", "tenant_local_dev")
 
 
-async def run_stablecoin_poll_iteration(
-    *,
-    tenant_id: str | None = None,
-    scheduler: StablecoinPollingScheduler | None = None,
-    connector_registry: Any = None,
-    provider_cooldown_seconds: int = PROVIDER_COOLDOWN_SECONDS,
-    finality_cooldown_seconds: int = FINALITY_COOLDOWN_SECONDS,
-) -> dict[str, Any]:
-    """Run one supervised provider + finality polling pass for the tenant.
+async def _enabled_poll_tenants(scheduler: StablecoinPollingScheduler) -> list[str]:
+    """Tenants that already hold stablecoin observations or poll checkpoints.
 
-    Returns a deterministic summary dict — counters only, never fabricated
-    success. Every provider/finality poll flows through the scheduler's durable
-    checkpoint, and the scheduler's own cooldown makes a re-pass inside the
-    window a no-op (idempotent). A failing provider/chain is counted and logged —
-    never allowed to abort the pass.
+    ``distinct_tenant_ids`` is best-effort per repository; a repository that
+    raises (e.g. an unprovisioned table in a fresh deployment) is skipped so a
+    single failure cannot abort enumeration. Rows are ordered ascending by
+    tenant_id for a deterministic pass.
     """
-    tid = tenant_id or _default_poll_tenant()
-    scheduler = scheduler or StablecoinPollingScheduler()
-    if connector_registry is None:
-        from .registry import PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+    seen: list[str] = []
+    for repo in (scheduler.observations, scheduler.checkpoints):
+        try:
+            for tid in await repo.distinct_tenant_ids():
+                if tid not in seen:
+                    seen.append(tid)
+        except Exception:  # noqa: BLE001 - best-effort enumeration
+            continue
+    return seen
 
-        connector_registry = PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
 
-    deployment_registry = getattr(connector_registry, "deployments", None)
-    deployment_items = list(getattr(deployment_registry, "deployments", {}).items())
-
+async def _poll_tenant_once(
+    *,
+    tid: str,
+    scheduler: StablecoinPollingScheduler,
+    connector_registry: Any,
+    deployment_items: list[tuple[str, Any]],
+    chains: dict[str, str],
+) -> dict[str, Any]:
+    """One tenant's provider + finality pass. Counters only, never fabricated."""
     providers_polled = 0
     denied = 0
     finality_scanned = 0
@@ -351,16 +353,6 @@ async def run_stablecoin_poll_iteration(
 
     # Finality re-checks are per-chain; the verifier family follows the chain's
     # token standard (SPL -> solana, everything else EVM).
-    chains: dict[str, str] = {}
-    for _, deployment in deployment_items:
-        vm = (
-            "solana"
-            if str(getattr(deployment, "token_standard", "")).lower().startswith("spl")
-            else "evm"
-        )
-        chain_id = getattr(deployment, "chain_id", "")
-        if chain_id:
-            chains.setdefault(str(chain_id), vm)
     for chain_id, verifier in chains.items():
         try:
             fresult = await scheduler.poll_finality(
@@ -378,7 +370,87 @@ async def run_stablecoin_poll_iteration(
             errors.append(f"finality:{chain_id}:{exc}")
 
     return {
-        "tenant_id": tid,
+        "providers_polled": providers_polled,
+        "denied": denied,
+        "finality_scanned": finality_scanned,
+        "errors": errors,
+    }
+
+
+async def run_stablecoin_poll_iteration(
+    *,
+    tenant_id: str | None = None,
+    tenant_ids: list[str] | None = None,
+    scheduler: StablecoinPollingScheduler | None = None,
+    connector_registry: Any = None,
+    provider_cooldown_seconds: int = PROVIDER_COOLDOWN_SECONDS,
+    finality_cooldown_seconds: int = FINALITY_COOLDOWN_SECONDS,
+) -> dict[str, Any]:
+    """Run one supervised provider + finality polling pass.
+
+    The tenant working set resolves in priority order: ``tenant_ids``, then
+    ``tenant_id`` (single tenant), then the tenants that already hold
+    observations/checkpoints — falling back to the default tenant only when
+    nothing is persisted yet (bootstrap; once the default tenant produces
+    observations it is covered by enumeration). A multi-tenant deployment must
+    never poll exclusively for one ``DEFAULT_TENANT_ID`` while other tenants'
+    providers and finality states go unobserved.
+
+    Returns a deterministic summary dict — counters only, never fabricated
+    success. Every provider/finality poll flows through the scheduler's durable
+    checkpoint, and the scheduler's own cooldown makes a re-pass inside the
+    window a no-op (idempotent). A failing provider/chain is counted and logged —
+    never allowed to abort the pass.
+    """
+    scheduler = scheduler or StablecoinPollingScheduler()
+    if connector_registry is None:
+        from .registry import PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+
+        connector_registry = PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+
+    if tenant_ids:
+        tids = list(tenant_ids)
+    elif tenant_id:
+        tids = [tenant_id]
+    else:
+        tids = await _enabled_poll_tenants(scheduler) or [_default_poll_tenant()]
+
+    deployment_registry = getattr(connector_registry, "deployments", None)
+    deployment_items = list(getattr(deployment_registry, "deployments", {}).items())
+
+    # Finality re-checks are per-chain; the verifier family follows the chain's
+    # token standard (SPL -> solana, everything else EVM).
+    chains: dict[str, str] = {}
+    for _, deployment in deployment_items:
+        vm = (
+            "solana"
+            if str(getattr(deployment, "token_standard", "")).lower().startswith("spl")
+            else "evm"
+        )
+        chain_id = getattr(deployment, "chain_id", "")
+        if chain_id:
+            chains.setdefault(str(chain_id), vm)
+
+    providers_polled = 0
+    denied = 0
+    finality_scanned = 0
+    errors: list[str] = []
+    for tid in tids:
+        once = await _poll_tenant_once(
+            tid=tid,
+            scheduler=scheduler,
+            connector_registry=connector_registry,
+            deployment_items=deployment_items,
+            chains=chains,
+        )
+        providers_polled += once["providers_polled"]
+        denied += once["denied"]
+        finality_scanned += once["finality_scanned"]
+        errors.extend(once["errors"])
+
+    return {
+        "tenant_id": tids[0] if len(tids) == 1 else ",".join(tids),
+        "tenant_ids": tids,
         "deployments": len(deployment_items),
         "providers_polled": providers_polled,
         "denied": denied,

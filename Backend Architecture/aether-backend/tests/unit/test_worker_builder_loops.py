@@ -31,6 +31,8 @@ from typing import Optional
 
 import pytest
 
+from repositories.repos import reset_in_memory_stores
+from services.rewards.delivery_outbox import RewardDeliveryJobRepository
 from services.runtime import dead_letter_sweeper as dls
 from services.derivatives import multi_venue as multi_venue
 from services.stablecoins import polling as stable_polling
@@ -290,3 +292,79 @@ def test_dead_letter_sweeper_loop_graceful_shutdown_and_heartbeat(monkeypatch):
 
     asyncio.run(_drive())
     assert any(name == "dead_letter_sweeper_heartbeat" for name, *_ in recorder.gauges)
+
+
+# ── rewards DLQ: explicit replay eligibility ───────────────────────────────
+
+def _dead_letter_job(job_id: str, **extra) -> dict:
+    """A terminal reward delivery job row in the ``dead_letter`` state."""
+    from datetime import datetime, timedelta, timezone
+    job = {
+        "tenant_id": "tenant_dlq",
+        "state": "dead_letter",
+        "provider_adapter": "tenant_webhook",
+        "channel": "webhook",
+        "payload": {"event": "reward.action.ready"},
+        "attempt_count": 6,
+        "max_attempts": 6,
+        "last_error": "terminal failure",
+    }
+    job.update(extra)
+    return job
+
+
+def test_rewards_dlq_requeue_parks_jobs_without_replay_authorization():
+    reset_in_memory_stores()
+    repo = RewardDeliveryJobRepository()
+    asyncio.run(repo.insert("dlq-parked-1", _dead_letter_job("dlq-parked-1")))
+
+    summary = asyncio.run(dls._requeue_rewards_dlq(limit=25))
+    assert summary["scanned"] == 1
+    assert summary["requeued"] == 0
+    assert summary["parked"] == 1
+
+    # The job stays parked in dead_letter — no every-pass auto-requeue.
+    after = asyncio.run(repo.find_by_id("dlq-parked-1"))
+    assert after["state"] == "dead_letter"
+    assert after["attempt_count"] == 6
+    reset_in_memory_stores()
+
+
+def test_rewards_dlq_requeues_replay_requested_job_with_reset_budget():
+    reset_in_memory_stores()
+    repo = RewardDeliveryJobRepository()
+    asyncio.run(repo.insert(
+        "dlq-replay-1", _dead_letter_job("dlq-replay-1", replay_requested=True)
+    ))
+
+    summary = asyncio.run(dls._requeue_rewards_dlq(limit=25))
+    assert summary["requeued"] == 1
+    assert summary["parked"] == 0
+
+    after = asyncio.run(repo.find_by_id("dlq-replay-1"))
+    assert after["state"] == "queued"
+    assert after["attempt_count"] == 0  # fresh bounded retry budget
+    assert after.get("replay_requested") is False  # marker cleared
+    reset_in_memory_stores()
+
+
+def test_rewards_dlq_requeues_replay_at_due_job_and_parks_future():
+    from datetime import datetime, timedelta, timezone
+    reset_in_memory_stores()
+    repo = RewardDeliveryJobRepository()
+    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    asyncio.run(repo.insert("dlq-sched-future", _dead_letter_job("dlq-sched-future", replay_at=future)))
+    asyncio.run(repo.insert("dlq-sched-due", _dead_letter_job("dlq-sched-due", replay_at=past)))
+
+    summary = asyncio.run(dls._requeue_rewards_dlq(limit=25))
+    assert summary["scanned"] == 2
+    assert summary["requeued"] == 1
+    assert summary["parked"] == 1
+
+    assert asyncio.run(repo.find_by_id("dlq-sched-future"))["state"] == "dead_letter"
+    due = asyncio.run(repo.find_by_id("dlq-sched-due"))
+    assert due["state"] == "queued"
+    assert due["attempt_count"] == 0
+    assert due.get("replay_at") is None  # marker cleared
+    reset_in_memory_stores()

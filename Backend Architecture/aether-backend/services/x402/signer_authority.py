@@ -106,6 +106,30 @@ class SignerAuthority:
         """Number of active signer refs for the tenant (for audit/diagnostics)."""
         return len(await self._store.list_signer_refs(tenant_id, active=True))
 
+    async def is_payer_authorized(
+        self, tenant_id: str, address: str
+    ) -> tuple[bool, Optional[str]]:
+        """Fail-closed signer gate for the payment proof-verification boundary.
+
+        Returns ``(authorized, reason)``. A tenant that has NOT registered any
+        signer references (the default for every fresh tenant) is UNAFFECTED:
+        the gate returns ``(True, None)`` — the authority never "invents" an
+        authorized signer, so a tenant with no signer registry keeps the
+        existing verification path untouched. When the tenant HAS registered
+        signer references, an address that is not an active, tenant-authorized
+        signer (unregistered, or a deactivated reference) is rejected
+        fail-closed with a clear reason — even when chain/facilitator
+        verification would otherwise succeed.
+        """
+        if await self.count_active(tenant_id) == 0:
+            return True, None
+        if await self.is_authorized_signer(tenant_id, address):
+            return True, None
+        return (
+            False,
+            f"payer {_norm_address(address)} is not an active tenant-authorized signer",
+        )
+
 
 # ── Module-level singleton ──────────────────────────────────────────────
 

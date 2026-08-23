@@ -103,6 +103,50 @@ async def test_price_disagreement_persists_conflict_then_duplicate():
     assert len(rows) == 1  # conflict persisted exactly once
 
 
+async def test_new_snapshot_with_same_providers_produces_fresh_conflict():
+    """A genuinely new snapshot — new price or new observation time — from the
+    same provider set is a NEW signature and a real conflict, not a stale
+    duplicate of the old record (regression: the replay signature used to omit
+    the snapshot's prices/timestamps, collapsing every later conflict for the
+    same providers into a duplicate of the first)."""
+    reconciler = StablecoinPriceReconciler()
+    a = _snapshot("chainlink_price_feed", Decimal("1.00000000"))
+    b = _snapshot("pyth_price_feed", Decimal("1.00200000"))
+    first = await reconciler.reconcile("t1", [a, b])
+    assert first["state"] == CONFLICT_STATE
+
+    # Re-reconciling the identical snapshot set still dedupes (true replay).
+    replay = await reconciler.reconcile("t1", [a, b])
+    assert replay["state"] == STATE_DUPLICATE
+
+    repo = StablecoinReconciliationRepository()
+
+    # Same providers, drifted price -> fresh conflict, a second row.
+    drifted = _snapshot("pyth_price_feed", Decimal("1.00600000"))
+    fresh = await reconciler.reconcile("t1", [a, drifted])
+    assert fresh["state"] == CONFLICT_STATE
+    rows = await repo.find_many(
+        filters={"tenant_id": "t1", "state": CONFLICT_STATE}, limit=100,
+    )
+    assert len(rows) == 2
+
+    # Same providers + same prices, new observation time -> still a fresh
+    # conflict, a third row (observation time is part of the signature).
+    later_b = StablecoinPriceObservation(
+        deployment_id="d1", chain_id="1", canonical_asset_id="usdc",
+        available=True, price_usd=Decimal("1.00200000"), peg_status="on_peg",
+        peg_deviation_bps=Decimal("0"), confidence="high", stale=False,
+        observed_at="2026-08-08T01:00:00+00:00",
+        source={"provider": "pyth_price_feed", "feed_address": "0xpyth_price_feed"},
+    )
+    timed = await reconciler.reconcile("t1", [a, later_b])
+    assert timed["state"] == CONFLICT_STATE
+    rows = await repo.find_many(
+        filters={"tenant_id": "t1", "state": CONFLICT_STATE}, limit=100,
+    )
+    assert len(rows) == 3
+
+
 async def test_price_consensus_persists_consensus():
     reconciler = StablecoinPriceReconciler()
     a = _snapshot("chainlink_price_feed", Decimal("1.00000000"))

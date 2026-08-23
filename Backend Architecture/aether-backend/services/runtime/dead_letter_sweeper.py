@@ -4,8 +4,11 @@ Drains the platform's durable dead-letter stores so operator attention is the
 only thing a stuck delivery needs, and nothing is silently dropped:
 
 - **Rewards DLQ** (``reward_delivery_jobs`` in ``dead_letter`` state) —
-  requeued to ``queued`` through the delivery-job repository, so the supervised
-  reward outbox worker re-leases them with a fresh (bounded) attempt budget.
+  a dead-lettered reward job is TERMINAL and stays parked until an operator
+  authorizes replay (``replay_requested`` true, or a ``replay_at`` that is
+  due). Only then is it requeued to ``queued`` through the delivery-job
+  repository with a RESET (bounded) attempt budget — the sweeper never
+  auto-requeues the same terminal failure on every pass.
 - **Payment dead-lettered receipts** (``ReceiptStage.DEAD_LETTERED``) — a tenant
   with dead-lettered receipts gets ONE idempotent canonical-repair pass
   (:meth:`PaymentRailsService.run_canonical_repair`), re-driving every
@@ -53,35 +56,71 @@ def _now_iso() -> str:
 
 # ── per-store drain helpers ────────────────────────────────────────────────
 
+#: Fields a dead-lettered reward job carries when an OPERATOR explicitly
+#: authorizes replay. ``replay_requested`` requeues on the next pass;
+#: ``replay_at`` (ISO timestamp) schedules a future replay. A dead-lettered
+#: job with NEITHER marker stays parked in ``dead_letter`` — the sweeper never
+#: auto-requeues a terminal failure on every pass.
+_REPLAY_REQUESTED = "replay_requested"
+_REPLAY_AT = "replay_at"
+
 
 async def _requeue_rewards_dlq(limit: int) -> dict[str, int]:
-    """Requeue dead-lettered reward delivery jobs (bounded, idempotent)."""
+    """Requeue EXPLICITLY replay-eligible dead-lettered reward delivery jobs.
+
+    A dead-lettered reward job is terminal: it is NOT moved back to ``queued``
+    on every pass. Only a job carrying an explicit replay authorization
+    (``replay_requested`` true, or a ``replay_at`` that is now due) is
+    requeued, and only then is its exhausted ``attempt_count`` reset to 0 so
+    the reward outbox worker grants a fresh bounded retry budget. Jobs without
+    the marker stay parked in ``dead_letter`` awaiting operator action. The
+    requeue transition is forward-only and idempotent.
+    """
     from services.rewards.delivery_outbox import RewardDeliveryJobRepository
 
     repo = RewardDeliveryJobRepository()
     dead = await repo.find_many(filters={"state": "dead_letter"}, limit=limit)
     requeued = 0
+    parked = 0
     errors = 0
+    now_str = _now_iso()
     for job in dead:
         job_id = job.get("id")
         if not job_id:
             continue
+        replay_at = job.get(_REPLAY_AT)
+        if replay_at and replay_at > now_str:
+            # Scheduled replay not yet due — stay parked.
+            parked += 1
+            continue
+        if not (job.get(_REPLAY_REQUESTED) is True or replay_at):
+            # No explicit replay authorization — stay parked.
+            parked += 1
+            continue
         try:
-            # Requeue to ``queued`` with an immediate next attempt; the reward
-            # outbox worker's own lease/release cycle re-applies a bounded retry
-            # budget from here. A re-scan of the SAME job after a failed requeue
-            # is safe — the state transition is forward-only and idempotent.
+            # Authorized replay: requeue with an immediate next attempt, reset
+            # the exhausted retry budget, and clear the replay markers so a
+            # second terminal failure parks the job again until an operator
+            # re-authorizes replay.
             await repo.update(job_id, {
                 "state": "queued",
-                "next_attempt_at": _now_iso(),
+                "next_attempt_at": now_str,
+                "attempt_count": 0,
                 "leased_by": None,
                 "lease_expires_at": None,
+                _REPLAY_REQUESTED: False,
+                _REPLAY_AT: None,
             })
             requeued += 1
         except Exception as exc:  # noqa: BLE001 — one job must not abort the drain
             errors += 1
             logger.warning("rewards DLQ requeue failed job=%s: %s", job_id, exc)
-    return {"scanned": len(dead), "requeued": requeued, "errors": errors}
+    return {
+        "scanned": len(dead),
+        "requeued": requeued,
+        "parked": parked,
+        "errors": errors,
+    }
 
 
 async def _replay_payment_dead_letters(limit: int) -> dict[str, int]:
@@ -167,7 +206,7 @@ async def run_dead_letter_sweep_iteration(
 ) -> dict[str, Any]:
     """Run one dead-letter drain pass. Returns a deterministic summary dict."""
     summary: dict[str, Any] = {
-        "rewards_dlq": {"scanned": 0, "requeued": 0, "errors": 0},
+        "rewards_dlq": {"scanned": 0, "requeued": 0, "parked": 0, "errors": 0},
         "payment_dlq": {"tenants": 0, "replayed": 0, "errors": 0},
         "interop_dead_letter_depth": 0,
     }

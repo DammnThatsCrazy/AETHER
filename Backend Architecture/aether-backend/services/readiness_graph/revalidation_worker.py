@@ -180,13 +180,18 @@ async def build_readiness_revalidation_worker(
 
     ``capabilities`` / ``tenants`` scope the revalidated universe (defaults:
     the canonical capability keys; tenant ``""`` = global/unscoped state).
+    When ``tenants`` is omitted the loop discovers the tenants that have
+    persisted readiness rows (``store.all_tenants()``) rather than silently
+    defaulting to unscoped ``""`` — otherwise real tenants' expired/revoked
+    credentials could never auto-demote. Pass ``tenants=[""]`` explicitly to
+    revalidate only global/unscoped state.
     ``heartbeat`` is invoked at the top of each iteration for liveness.
     """
     engine = engine or build_default_engine()
     store = store or capability_readiness_service
     loop = asyncio.get_running_loop()
     universe = capabilities or list(_DEFAULT_CAPABILITIES)
-    tenant_scope = tenants or [""]
+    tenant_scope = list(tenants) if tenants is not None else await store.all_tenants()
     iterations = 0
     consecutive_failures = 0
     stop_event = config.stop_event

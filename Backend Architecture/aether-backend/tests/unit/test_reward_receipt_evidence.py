@@ -255,3 +255,110 @@ def test_singleton_reset_cycle():
     get_receipt_evidence_service()
     reset_receipt_evidence_service()
     assert get_receipt_evidence_service() is not None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# production-path wiring: the durable reward outbox records delivery evidence
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_production_delivery_outbox_records_receipt_evidence():
+    """The durable reward outbox success path (enqueue → drain → receipt) now
+    invokes RewardReceiptEvidenceService.record — the production wiring, not a
+    direct unit call — so a delivered receipt leaves immutable audit evidence."""
+    from repositories.delivery_repos import ProviderReceiptRepository
+    from services.rewards.delivery_outbox import (
+        RewardDeliveryJobRepository,
+        RewardDeliveryOutbox,
+        SenderResult,
+    )
+    from services.rewards.repositories import RewardActionRepository
+
+    class _Sender:
+        async def send(self, job):
+            return SenderResult("success", external_id="ext-prod-1", response_code=200)
+
+    async def run():
+        actions = RewardActionRepository()
+        receipts = ProviderReceiptRepository()
+        outbox = RewardDeliveryOutbox(
+            job_repo=RewardDeliveryJobRepository(), receipt_repo=receipts,
+            action_repo=actions, sender=_Sender(),
+        )
+        action = await actions.create(TENANT, {
+            "rail": "tenant_webhook",
+            "status": "created",
+            "reservation_id": None,
+            "payload": {
+                "event": "reward.action.ready",
+                "idempotency_key": "prod-1",
+                "tenant_id": TENANT,
+            },
+        })
+        job = await outbox.enqueue(
+            action, {"webhook_url": "http://127.0.0.1:9/reward-hook", "signing_secret": "s"}, TENANT
+        )
+        summary = await outbox.drain()
+        return summary, job
+
+    summary, _ = _run(run())
+    assert summary["delivered"] == 1
+    # The delivery receipt left an immutable audit-evidence entry keyed by its
+    # deterministic evidence id (external_id from the provider receipt).
+    entries = _audit_entries(evidence_id("delivery", TENANT, "ext-prod-1"))
+    assert len(entries) == 1
+    assert entries[0]["action"] == "receipt.delivery.recorded"
+    assert entries[0]["after_state"]["receipt_id"]
+
+
+def test_settlement_route_recording_is_fail_open(monkeypatch):
+    """A recording failure at the receipt-acceptance edge must NOT abort receipt
+    acceptance — the record() call is wrapped so evidence is best-effort."""
+    from repositories.delivery_repos import ProviderReceiptRepository
+    from services.rewards.delivery_outbox import (
+        RewardDeliveryJobRepository,
+        RewardDeliveryOutbox,
+        SenderResult,
+    )
+    from services.rewards.repositories import RewardActionRepository
+
+    class _BoomEvidence:
+        async def record(self, *args, **kwargs):
+            raise RuntimeError("evidence db down")
+
+    # The delivery path resolves the service through the receipt-evidence
+    # module's get_receipt_evidence_service(); a failing recorder at the edge
+    # must not fail the delivery.
+    monkeypatch.setattr(
+        "services.rewards.receipt_evidence.get_receipt_evidence_service",
+        lambda: _BoomEvidence(),
+    )
+
+    class _Sender:
+        async def send(self, job):
+            return SenderResult("success", external_id="ext-fail-open", response_code=200)
+
+    async def run():
+        actions = RewardActionRepository()
+        receipts = ProviderReceiptRepository()
+        outbox = RewardDeliveryOutbox(
+            job_repo=RewardDeliveryJobRepository(), receipt_repo=receipts,
+            action_repo=actions, sender=_Sender(),
+        )
+        action = await actions.create(TENANT, {
+            "rail": "tenant_webhook",
+            "status": "created",
+            "reservation_id": None,
+            "payload": {
+                "event": "reward.action.ready",
+                "idempotency_key": "fail-open-1",
+                "tenant_id": TENANT,
+            },
+        })
+        await outbox.enqueue(
+            action, {"webhook_url": "http://127.0.0.1:9/reward-hook", "signing_secret": "s"}, TENANT
+        )
+        return await outbox.drain()
+
+    summary = _run(run())
+    # Even though evidence recording raised, the delivery completed.
+    assert summary["delivered"] == 1

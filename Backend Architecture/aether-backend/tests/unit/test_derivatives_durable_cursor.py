@@ -225,7 +225,12 @@ async def test_crash_restart_resumes_from_persisted_cursor_no_duplication():
     events1, cp1 = await first.run_pull()
     assert len(events1) == 5
     assert cp1["cursors"]["seq"] == "5"
-    # Checkpoint was persisted durably.
+    # run_pull returns the advanced checkpoint WITHOUT persisting it — the
+    # caller ack-persists only after the events are durably processed.
+    assert await restore_connector_checkpoint(
+        first.checkpoints, tenant_id="t1", connector_id="hyperliquid",
+    ) is None
+    await first.persist_checkpoint(cp1)  # downstream acknowledged -> advance
     assert await restore_connector_checkpoint(
         first.checkpoints, tenant_id="t1", connector_id="hyperliquid",
     ) is not None
@@ -234,7 +239,7 @@ async def test_crash_restart_resumes_from_persisted_cursor_no_duplication():
     adapter2 = _FakeAdapter(_records(5))
     second = DerivativesPullRunner(adapter2, tenant_id="t1", connector_id="hyperliquid")
     events2, cp2 = await second.run_pull()
-    # Resume from the persisted cursor -> only records beyond seq 5 are new.
+    # Resume from the ACKED cursor -> only records beyond seq 5 are new.
     assert events2 == []
     assert cp2["cursors"]["seq"] == "5"
     assert adapter2.last_checkpoint_arg is not None
@@ -247,14 +252,41 @@ async def test_crash_restart_resumes_from_persisted_cursor_no_duplication():
 async def test_restart_after_crash_resumes_and_advances():
     adapter = _FakeAdapter(_records(3))
     first = DerivativesPullRunner(adapter, tenant_id="t1", connector_id="hyperliquid")
-    await first.run_pull()  # pulls 1..3, persists cursor "3"
+    events1, cp1 = await first.run_pull()  # pulls 1..3; cursor NOT yet durable
+    assert [e["seq"] for e in events1] == [1, 2, 3]
+    await first.persist_checkpoint(cp1)  # downstream ack advances the cursor
 
-    # Provider advances to 6; a crashed runner restarts from the persisted cursor.
+    # Provider advances to 6; a crashed runner restarts from the ACKED cursor.
     adapter2 = _FakeAdapter(_records(6))
     second = DerivativesPullRunner(adapter2, tenant_id="t1", connector_id="hyperliquid")
     events2, cp2 = await second.run_pull()
     assert [e["seq"] for e in events2] == [4, 5, 6]  # no skip, no duplication
     assert cp2["cursors"]["seq"] == "6"
+
+
+async def test_run_pull_does_not_advance_until_ack():
+    # At-least-once: a crash after run_pull but BEFORE the caller's ack must
+    # resume from the OLD cursor and re-deliver the pulled events (never skip).
+    adapter = _FakeAdapter(_records(3))
+    runner = DerivativesPullRunner(adapter, tenant_id="t1", connector_id="hyperliquid")
+    events, cp = await runner.run_pull()
+    assert [e["seq"] for e in events] == [1, 2, 3]
+    assert cp["cursors"]["seq"] == "3"
+    # Nothing durable yet — a crash now resumes from scratch (fresh start).
+    assert await restore_connector_checkpoint(
+        runner.checkpoints, tenant_id="t1", connector_id="hyperliquid",
+    ) is None
+
+    # ── CRASH before ack: a fresh runner re-pulls the SAME records (no skip).
+    adapter2 = _FakeAdapter(_records(3))
+    fresh = DerivativesPullRunner(adapter2, tenant_id="t1", connector_id="hyperliquid")
+    events2, cp2 = await fresh.run_pull()
+    assert [e["seq"] for e in events2] == [1, 2, 3]
+    # After downstream processing the caller acks and the cursor advances.
+    await fresh.persist_checkpoint(cp2)
+    assert await restore_connector_checkpoint(
+        fresh.checkpoints, tenant_id="t1", connector_id="hyperliquid",
+    ) is not None
 
 
 async def test_fresh_start_restores_none():

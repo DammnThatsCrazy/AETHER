@@ -7,7 +7,8 @@ Proves the interop metering hook wired into ScanWorker.run_cycle:
   * a restart replay of the SAME persisted checkpoint reproduces the same
     dedupe keys and is recorded NON-billable (excluded_reason="duplicate")
     — checkpoint re-runs can never double-bill.
-  * checkpoint_unit_key is deterministic over the highest persisted cursor.
+  * checkpoint_unit_key is deterministic over the complete persisted cursor
+    state (a fresh anchor whenever ANY network cursor changes, not just the max).
 """
 from __future__ import annotations
 
@@ -120,9 +121,29 @@ def test_dimensions_and_checkpoint_unit_key_are_deterministic():
         ETH: {"last_scanned_block": 88},
         ARB: {"last_scanned_block": 91},
     }}
-    assert checkpoint_unit_key("debridge", cp) == "debridge:91"
-    assert checkpoint_unit_key("debridge", {"networks": {}}) == "debridge:0"
-    assert checkpoint_unit_key("debridge", None) == "debridge:0"
+    # Deterministic: identical cursor states always yield the same anchor.
+    assert checkpoint_unit_key("debridge", cp) == checkpoint_unit_key("debridge", cp)
+    empty = checkpoint_unit_key("debridge", {"networks": {}})
+    assert empty == checkpoint_unit_key("debridge", {"networks": {}})
+    assert checkpoint_unit_key("debridge", None) == empty
+
+    # The key hashes the COMPLETE sorted cursor vector, so advancing a
+    # secondary network (not the max) produces a fresh anchor — max() masked it.
+    advanced = {"networks": {
+        ETH: {"last_scanned_block": 88},
+        ARB: {"last_scanned_block": 92},
+    }}
+    assert checkpoint_unit_key("debridge", cp) != checkpoint_unit_key("debridge", advanced)
+
+    # Cursor insertion order does not matter (sorted before hashing).
+    reversed_order = {"networks": {
+        ARB: {"last_scanned_block": 91},
+        ETH: {"last_scanned_block": 88},
+    }}
+    assert checkpoint_unit_key("debridge", reversed_order) == checkpoint_unit_key("debridge", cp)
+
+    # A non-empty cursor state never collides with the empty state.
+    assert checkpoint_unit_key("debridge", cp) != empty
 
 
 def test_unknown_dimension_is_ignored_not_raised():

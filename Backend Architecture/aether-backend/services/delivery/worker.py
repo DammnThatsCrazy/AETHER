@@ -219,6 +219,26 @@ class DeliveryWorker:
                 raw_response=receipt_raw.raw_response,
             )
             await self._receipt_repo.insert(receipt.id, receipt.model_dump())
+
+            # Durable receipt evidence: every persisted delivery receipt leaves
+            # an immutable audit trace (RewardReceiptEvidenceService.record).
+            # Best-effort at the edge — a recording failure must not abort a
+            # delivery that already has a durable ProviderReceipt.
+            try:
+                from services.rewards.receipt_evidence import get_receipt_evidence_service
+                await get_receipt_evidence_service().record(
+                    "delivery",
+                    tenant_id=tenant_id,
+                    receipt_id=receipt.id,
+                    rail=provider,
+                    external_id=receipt.external_id,
+                    status="delivered",
+                )
+            except Exception as ev_exc:  # noqa: BLE001 — evidence is best-effort
+                logger.warning(
+                    f"delivery receipt evidence record failed job={job_id!r} "
+                    f"rid={receipt.id}: {ev_exc}"
+                )
         except Exception as exc:
             logger.error(f"ProviderReceipt validation failed for job={job_id!r}: {exc}")
             # This should never happen if adapters follow contract; treat as failure

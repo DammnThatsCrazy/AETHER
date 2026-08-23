@@ -9,7 +9,9 @@ Entry points:
     rebuild_from_silver(tenant_id, from_time=None)
         Pull the tenant's Silver x402 flow facts and rebuild a normalized
         commerce-state snapshot (which challenges were observed, which paid,
-        which settled).
+        which settled). A failed Silver read returns
+        ``status == "silver_unavailable"`` so the snapshot is never mistaken
+        for a successful zero-count rebuild.
     verify_graph_consistency(tenant_id)
         Check the commerce store's lifecycle objects for cross-reference
         integrity (settlement↔receipt, entitlement↔settlement, grant↔entitlement,
@@ -40,6 +42,13 @@ logger = get_logger("aether.service.commerce.reconciliation")
 
 _SILVER_TABLE = "silver_x402_flow_facts"
 
+# Rebuild status values. ``available`` means the Silver read succeeded (even
+# when it returned zero rows); ``silver_unavailable`` means the read failed and
+# the resulting snapshot is NOT authoritative. An outage must surface as an
+# unavailable state, never as a fabricated empty/zero-count success.
+SILVER_STATUS_AVAILABLE = "available"
+SILVER_STATUS_UNAVAILABLE = "silver_unavailable"
+
 # Meter-type ↔ silver flow-type mapping for drift detection.
 _SILVER_PAID_FLOW_TYPES = frozenset({
     "x402_payment_verified_observed",
@@ -60,9 +69,18 @@ class CommerceSilverFactsReader:
     Local/test: reads the silver writer's in-memory table store. Staging/prod:
     queries the columnar Silver table directly. Never raises on a missing
     table — returns an empty snapshot instead (the pipeline owns Silver).
+
+    A **query failure** returns ``None`` (an explicit *unavailable* sentinel)
+    rather than an empty list, so callers can never mistake "Silver is down"
+    for "Silver has no facts". Treating a failed read as ``[]`` would make
+    ``reconciliation_drift`` report every verified receipt as
+    ``paid_but_no_silver_fact`` and ``rebuild_from_silver`` report a
+    fabricated successful zero-count rebuild — false drift from an outage.
     """
 
-    async def read(self, tenant_id: str, from_time: Optional[str] = None) -> list[dict]:
+    async def read(
+        self, tenant_id: str, from_time: Optional[str] = None
+    ) -> Optional[list[dict]]:
         pool = await get_pool()
         if pool is None:
             return self._read_local(tenant_id, from_time)
@@ -81,7 +99,7 @@ class CommerceSilverFactsReader:
             return [self._row_to_dict(r) for r in rows]
         except Exception as exc:  # pragma: no cover - depends on Silver pipeline
             logger.warning("silver facts read failed for tenant=%s: %s", tenant_id, exc)
-            return []
+            return None
 
     @staticmethod
     def _row_to_dict(row: Any) -> dict:
@@ -141,11 +159,30 @@ class CommerceReconciler:
     async def rebuild_from_silver(
         self, tenant_id: str, from_time: Optional[str] = None
     ) -> dict:
-        """Rebuild a normalized commerce-state snapshot from Silver facts."""
+        """Rebuild a normalized commerce-state snapshot from Silver facts.
+
+        When the Silver read fails, returns ``status == "silver_unavailable"``
+        with an empty fact set — explicitly NOT a successful zero-count
+        rebuild. Callers must not treat that snapshot as authoritative.
+        """
         rows = await self._silver.read(tenant_id, from_time)
+        if rows is None:
+            return {
+                "tenant_id": tenant_id,
+                "status": SILVER_STATUS_UNAVAILABLE,
+                "facts": [],
+                "count": 0,
+                "paid_count": 0,
+                "rebuilt_at": _now_iso(),
+                "detail": (
+                    "Silver flow facts are unavailable; this snapshot is not "
+                    "authoritative and must not be treated as a zero-count rebuild"
+                ),
+            }
         facts = [_silver_fact_row_to_snapshot(r) for r in rows]
         return {
             "tenant_id": tenant_id,
+            "status": SILVER_STATUS_AVAILABLE,
             "facts": facts,
             "count": len(facts),
             "paid_count": sum(1 for f in facts if f["settled"]),
@@ -255,8 +292,21 @@ class CommerceReconciler:
         drift: list[dict] = []
         store = self._store
 
-        # 1) Silver says paid, store has no settlement with that tx hash.
+        # 0) Silver unavailable: surface the outage, never fabricate drift from
+        #    a failed read as if Silver had zero facts.
         silver = await self.rebuild_from_silver(tenant_id)
+        if silver.get("status") == SILVER_STATUS_UNAVAILABLE:
+            return [{
+                "kind": "silver_unavailable",
+                "severity": "critical",
+                "tenant_id": tenant_id,
+                "detail": (
+                    "Silver flow facts are unavailable; drift cannot be "
+                    "computed and must not be inferred from an empty fact set"
+                ),
+            }]
+
+        # 1) Silver says paid, store has no settlement with that tx hash.
         settlements = await store.list_settlements(tenant_id)
         settled_tx_hashes = {
             (s.tx_hash or "").lower()
@@ -345,6 +395,8 @@ def reset_commerce_reconciler() -> None:
 
 
 __all__ = [
+    "SILVER_STATUS_AVAILABLE",
+    "SILVER_STATUS_UNAVAILABLE",
     "CommerceReconciler",
     "CommerceSilverFactsReader",
     "get_commerce_reconciler",

@@ -351,6 +351,45 @@ async def test_enforce_dimension_disabled_entitlement_is_denied():
     assert decision["reason"] == "disabled"
 
 
+@pytest.mark.asyncio
+async def test_enforce_dimension_counts_period_to_date_usage():
+    # A single call fits inside included_quantity=100...
+    await _seed_entitlement("t1", "event_ingested", included_quantity=100)
+    await meter_capability_usage(
+        "t1", dimension="event_ingested", event_id="evt-1",
+        dedupe_key="dk-1", source_path="/v1/ingest/events",
+    )
+    # ...but enforcement must read that consumed usage: 1 consumed + 100 new
+    # exceeds the included allowance, so the dimension is denied.
+    decision = await EntitlementService().enforce_dimension(
+        "t1", "event_ingested", 100,
+    )
+    assert decision["state"] == ENTITLEMENT_STATE_DENIED
+    assert decision["reason"] == "overage_not_allowed"
+    assert decision["consumed_usage"] == 1
+    assert decision["overage_quantity"] == 1
+
+
+@pytest.mark.asyncio
+async def test_enforce_dimension_repeated_single_units_cannot_remain_included():
+    # Codex scenario: repeated quantity=1 calls must not stay `included`
+    # forever — once the cumulative period-to-date usage reaches the included
+    # allowance, the next unit is denied (overage not allowed).
+    await _seed_entitlement("t1", "event_ingested", included_quantity=3)
+    svc = EntitlementService()
+    for i in range(3):
+        decision = await svc.enforce_dimension("t1", "event_ingested", 1)
+        assert decision["state"] == ENTITLEMENT_STATE_INCLUDED
+        await meter_capability_usage(
+            "t1", dimension="event_ingested", event_id=f"evt-{i}",
+            dedupe_key=f"dk-{i}", source_path="/v1/ingest/events",
+        )
+    decision = await svc.enforce_dimension("t1", "event_ingested", 1)
+    assert decision["state"] == ENTITLEMENT_STATE_DENIED
+    assert decision["reason"] == "overage_not_allowed"
+    assert decision["consumed_usage"] == 3
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # capabilities.enforcement seam
 # ═══════════════════════════════════════════════════════════════════════════
@@ -508,6 +547,28 @@ async def test_hook_unknown_dimension_fails_closed_before_write():
     assert await MeteringEvidenceRepository().find_many(filters={"tenant_id": "t1"}) == []
 
 
+@pytest.mark.asyncio
+async def test_hook_denies_second_in_period_call_exceeding_included():
+    # First call consumes 1 of the 100-unit included allowance.
+    await _seed_entitlement("t1", "event_ingested", included_quantity=100)
+    first = await meter_capability_usage(
+        "t1", dimension="event_ingested", event_id="evt-1",
+        dedupe_key="dk-1", source_path="/v1/ingest/events",
+    )
+    assert first.state == METERED
+    # Second call would push cumulative usage past the allowance -> denied.
+    with pytest.raises(EntitlementDeniedError) as exc_info:
+        await meter_capability_usage(
+            "t1", dimension="event_ingested", event_id="evt-2",
+            dedupe_key="dk-2", source_path="/v1/ingest/events",
+            quantity=100,
+        )
+    assert exc_info.value.details["reason"] == "overage_not_allowed"
+    # The denied call wrote nothing durable.
+    events = await UsageMeteringEventRepository().find_many(filters={"tenant_id": "t1"})
+    assert len(events) == 1
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Capability-family registry
 # ═══════════════════════════════════════════════════════════════════════════
@@ -541,6 +602,27 @@ async def test_meter_family_usage_writes_family_dimension():
 async def test_meter_family_usage_unknown_family_raises():
     with pytest.raises(KeyError):
         await meter_family_usage("bogus-family", "t1", event_id="x")
+
+
+@pytest.mark.asyncio
+async def test_meter_family_usage_advisory_writes_both_durable_truths():
+    # Execution-path wiring (§7) uses enforce=False (advisory) so a tenant
+    # WITHOUT an entitlement still gets durable metering + evidence for
+    # reconciliation — the "reconciliation sees no commercial usage" gap.
+    outcome = await meter_family_usage(
+        "ingestion", "t1", event_id="batch-1", quantity=3,
+        enforce=False, raise_on_metering_error=False,
+    )
+    assert outcome.state == METERED
+    assert outcome.dimension == "event_ingested"
+    events = await UsageMeteringEventRepository().find_many(filters={"tenant_id": "t1"})
+    assert len(events) == 1
+    assert events[0]["event_type"] == "event_ingested"
+    assert events[0]["quantity"] == 3
+    evidence = await MeteringEvidenceRepository().find_many(filters={"tenant_id": "t1"})
+    assert len(evidence) == 1
+    assert evidence[0]["usage_dimension"] == "event_ingested"
+    assert evidence[0]["quantity"] == 3
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -1640,6 +1640,32 @@ async def create_receipt(request: Request, body: ReceiptCreate):
 
     receipt = await repos["receipts"].create(tenant_id, receipt_data)
 
+    # Durable receipt evidence: every accepted settlement receipt leaves an
+    # immutable audit trace (RewardReceiptEvidenceService.record). The tenant's
+    # external execution id is the deterministic evidence key so a retried POST
+    # is idempotent; the receipt's own id is the fallback when no external id
+    # was submitted. Best-effort at the edge — a recording failure must never
+    # abort receipt acceptance.
+    try:
+        from services.rewards.receipt_evidence import get_receipt_evidence_service
+        await get_receipt_evidence_service().record(
+            "settlement",
+            tenant_id=tenant_id,
+            receipt_id=receipt.get("id"),
+            rail=body.rail,
+            external_id=body.external_execution_id or receipt.get("id", ""),
+            status=body.status,
+            action_id=body.action_payload_id,
+            decision_id=body.decision_id,
+            proof_id=body.proof_id,
+            tx_hash=body.tx_hash,
+            chain_id=body.chain_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — evidence is best-effort at the edge
+        logger.warning(
+            f"settlement receipt evidence record failed rid={receipt.get('id')}: {exc}"
+        )
+
     # A confirmed execution receipt finalizes the spend → commit the budget
     # reservation tied to the action/decision (reserve→commit lifecycle).
     if body.status in ("success", "delivered", "confirmed", "executed"):

@@ -29,6 +29,14 @@ NORMALIZATION_VERSION = "derivatives-multivenue-normalization-v1"
 SUPPORTED_VENUES = ("hyperliquid", "dydx", "gmx", "drift", "centralized_futures")
 CANONICAL_CONCEPTS = ("markets", "orders", "fills", "positions", "funding", "fees", "margin", "liquidations", "account_state")
 
+# Provider side tokens normalize onto OrderSide. Buy tokens are the set the
+# original normalization accepted; sell tokens are the symmetric set. Anything
+# else (a typo, a newly introduced value, an empty string) is rejected rather
+# than silently recorded as a sell — a schema drift must surface as a rejected
+# observation, never a corrupted fill direction.
+_BUY_SIDE_TOKENS = frozenset({"buy", "b", "long"})
+_SELL_SIDE_TOKENS = frozenset({"sell", "s", "short"})
+
 
 @dataclass(frozen=True)
 class VenueCapabilityProfile:
@@ -76,7 +84,16 @@ class VenueNormalizationAdapter:
     def normalize_fill(self, observation: BronzeObservation) -> NormalizedFillFact:
         payload = observation.raw_payload
         side_value = str(payload[self.field_map["side"]]).lower()
-        side = OrderSide.BUY if side_value in {"buy", "b", "long"} else OrderSide.SELL
+        if side_value in _BUY_SIDE_TOKENS:
+            side = OrderSide.BUY
+        elif side_value in _SELL_SIDE_TOKENS:
+            side = OrderSide.SELL
+        else:
+            raise ValueError(
+                f"Unrecognized provider side {payload[self.field_map['side']]!r} for "
+                f"{self.venue_id} fill {observation.source_record_id!r}; refusing to "
+                "normalize to a sell"
+            )
         role_value = str(payload.get(self.field_map.get("liquidity", "liquidity"), "unknown")).lower()
         role = LiquidityRole.MAKER if role_value == "maker" else LiquidityRole.TAKER if role_value == "taker" else LiquidityRole.UNKNOWN
         account = str(payload[self.field_map["account"]])

@@ -61,6 +61,9 @@ from services.ingestion.validation import (
     get_event_family as _validated_event_family,
     validate_event,
 )
+# Capability-family metering seam (§7): durable evidence + meter for
+# reconciliation at the canonical ingestion choke point.
+from services.metering_evidence.families import meter_family_usage  # noqa: E402
 
 logger = get_logger("aether.service.ingestion.batch")
 router = APIRouter(prefix="/v1", tags=["Ingestion"])
@@ -480,6 +483,14 @@ async def ingest_batch(
         batch_id, n_accepted, n_duplicates, n_rejected, tenant.tenant_id,
     )
 
+    # Family seam: durable meter + evidence for accepted ingestion only
+    # (advisory — no entitlement gate; metering never breaks the request).
+    if n_accepted > 0:
+        await meter_family_usage(
+            "ingestion", tenant.tenant_id, event_id=batch_id,
+            quantity=n_accepted, enforce=False, raise_on_metering_error=False,
+        )
+
     return BatchResponse(
         accepted=n_accepted,
         duplicates=n_duplicates,
@@ -629,6 +640,14 @@ async def _ingest_batch_v2(
         "Batch %s processed (v2): accepted=%d duplicates=%d rejected=%d tenant=%s",
         batch_id, n_accepted, n_duplicates, n_rejected, tenant.tenant_id,
     )
+
+    # Family seam: durable meter + evidence for accepted ingestion only
+    # (advisory — no entitlement gate; metering never breaks the request).
+    if n_accepted > 0:
+        await meter_family_usage(
+            "ingestion", tenant.tenant_id, event_id=batch_id,
+            quantity=n_accepted, enforce=False, raise_on_metering_error=False,
+        )
 
     return BatchResponse(
         accepted=n_accepted,

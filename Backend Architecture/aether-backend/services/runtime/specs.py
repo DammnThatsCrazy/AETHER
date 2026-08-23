@@ -340,10 +340,16 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         return build_dead_letter_sweeper_coro()
 
     def _reward_claim_reconciliation() -> Coroutine[Any, Any, None]:
-        from services.rewards.reconcile import get_reward_claim_reconciler
+        from services.rewards.reconcile import (
+            ALL_TENANTS,
+            get_reward_claim_reconciler,
+        )
 
+        # ALL_TENANTS: the worker enumerates the tenants that own delivery
+        # receipts on every pass. Binding to DEFAULT_TENANT_ID here would leave
+        # every other tenant's confirmed claims permanently unreconciled.
         return get_reward_claim_reconciler().build_reconcile_loop(
-            tenant_id=os.getenv("DEFAULT_TENANT_ID", "tenant_local_dev"),
+            tenant_id=ALL_TENANTS,
             interval_s=300,
         )()
 

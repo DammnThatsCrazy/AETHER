@@ -39,6 +39,10 @@ logger = get_logger("aether.service.rewards.reconcile")
 # Receipt statuses that confirm an on-chain claim actually executed.
 _CONFIRMED_STATUSES = frozenset({"success", "delivered", "confirmed", "executed"})
 
+#: Sentinel tenant scope for ``build_reconcile_loop``: enumerate the tenants
+#: that own delivery receipts on every pass instead of binding to one tenant.
+ALL_TENANTS = "__all__"
+
 
 class NonceReplayError(ValueError):
     """Raised when a proof nonce is already in use (replay attempt)."""
@@ -109,28 +113,43 @@ class RewardClaimReconciler:
                 marked = True
         elif action_id:
             # No separate proof row: the proof is embedded in the action payload.
+            # ``marked`` is set ONLY when a new proof has been persisted AND
+            # marked used — replay protection is the point of this path. An
+            # action with no embedded nonce, an already-used nonce, or a proof
+            # whose mark_used() failed is an explicit non-change, never a
+            # delivered action.
             try:
                 action = await self._actions.get(action_id, tenant_id)
             except Exception:
                 action = None
-            if action:
-                payload = action.get("payload") or {}
-                embedded = (payload.get("proof") or {}).get("nonce") if payload.get("proof") else None
-                if embedded and not await self._proofs.is_nonce_used(embedded):
-                    # Note: RewardProofRepository.create pins status to "created",
-                    # so mark the persisted row used explicitly.
-                    created = await self._proofs.create(tenant_id, {
-                        "decision_id": action.get("decision_id"),
-                        "action_payload_id": action_id,
-                        "tenant_id": tenant_id,
-                        "nonce": embedded,
-                        "user": (payload.get("proof") or {}).get("user"),
-                    })
-                    try:
-                        await self._proofs.mark_used(created["id"], tenant_id)
-                    except Exception as exc:  # pragma: no cover - best-effort
-                        logger.warning("mark proof used failed pid=%s: %s", created.get("id"), exc)
-                marked = True
+            if not action:
+                return {"changed": False, "reason": "action_missing", "action_payload_id": action_id}
+            payload = action.get("payload") or {}
+            embedded = (payload.get("proof") or {}).get("nonce") if payload.get("proof") else None
+            if not embedded:
+                return {"changed": False, "reason": "no_embedded_nonce", "action_payload_id": action_id}
+            if await self._proofs.is_nonce_used(embedded):
+                return {"changed": False, "reason": "embedded_nonce_already_used", "action_payload_id": action_id, "nonce": embedded}
+            # Note: RewardProofRepository.create pins status to "created",
+            # so mark the persisted row used explicitly.
+            created = await self._proofs.create(tenant_id, {
+                "decision_id": action.get("decision_id"),
+                "action_payload_id": action_id,
+                "tenant_id": tenant_id,
+                "nonce": embedded,
+                "user": (payload.get("proof") or {}).get("user"),
+            })
+            try:
+                await self._proofs.mark_used(created["id"], tenant_id)
+            except Exception as exc:  # noqa: BLE001 - surface as an explicit non-change
+                logger.warning("mark proof used failed pid=%s: %s", created.get("id"), exc)
+                return {
+                    "changed": False,
+                    "reason": "mark_used_failed",
+                    "action_payload_id": action_id,
+                    "proof_id": created.get("id"),
+                }
+            marked = True
 
         if marked and action_id:
             try:
@@ -203,20 +222,35 @@ class RewardClaimReconciler:
     # ── Supervised worker loop ───────────────────────────────────────
 
     def build_reconcile_loop(
-        self, tenant_id: str, interval_s: float = 300.0
+        self,
+        tenant_id: str,
+        interval_s: float = 300.0,
     ) -> Callable[[], Awaitable[None]]:
-        """Return an async loop that reconciles the tenant's claims periodically."""
+        """Return an async loop that reconciles claims periodically.
+
+        When ``tenant_id == ALL_TENANTS`` the loop discovers the tenants that
+        own delivery receipts on every pass and reconciles each — a multi-tenant
+        deployment must never bind the worker to one ``DEFAULT_TENANT_ID`` while
+        every other tenant's confirmed claims sit unreconciled.
+        """
 
         async def _loop() -> None:
-            logger.info("reward_claim_reconcile_loop started interval=%ss tenant=%s", interval_s, tenant_id)
+            scope = tenant_id
+            logger.info("reward_claim_reconcile_loop started interval=%ss tenant=%s", interval_s, scope)
             while True:
                 try:
-                    summary = await self.reconcile_tenant(tenant_id)
-                    if summary["reconciled"]:
-                        logger.info(
-                            "reward claim reconcile tenant=%s reconciled=%s scanned=%s",
-                            tenant_id, summary["reconciled"], summary["receipts_scanned"],
-                        )
+                    tids = (
+                        await self._receipts.distinct_tenant_ids()
+                        if scope == ALL_TENANTS
+                        else [scope]
+                    )
+                    for tid in tids:
+                        summary = await self.reconcile_tenant(tid)
+                        if summary["reconciled"]:
+                            logger.info(
+                                "reward claim reconcile tenant=%s reconciled=%s scanned=%s",
+                                tid, summary["reconciled"], summary["receipts_scanned"],
+                            )
                 except Exception as exc:  # noqa: BLE001 - loop survives
                     logger.error("reward claim reconcile iteration failed: %s", exc)
                 await asyncio.sleep(interval_s)
