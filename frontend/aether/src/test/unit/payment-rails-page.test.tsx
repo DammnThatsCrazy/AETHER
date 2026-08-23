@@ -383,11 +383,11 @@ describe('Aether Payment Rails page', () => {
       },
     });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText('Credential & delivery readiness')).toBeInTheDocument(),
-    );
+    // Wait on the diagnostics body, not the always-present section title: the
+    // title renders even while the body shows the loading skeleton, so waiting
+    // on it alone races the diagnostics mock resolution and flakes under load.
+    await waitFor(() => expect(screen.getByText(/webhook_signing_secret/)).toBeInTheDocument());
     // Credential slots surface by name + lifecycle state, never a secret value.
-    expect(screen.getByText(/webhook_signing_secret/)).toBeInTheDocument();
     expect(screen.getByText(/onramp_api_key/)).toBeInTheDocument();
     // Endpoint registration + backlogs render; a null outbox backlog shows "—".
     expect(screen.getByText('registered')).toBeInTheDocument();
