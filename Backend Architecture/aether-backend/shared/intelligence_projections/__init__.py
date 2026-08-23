@@ -45,6 +45,12 @@ from shared.intelligence_projections.generated_registry import (
     PROJECTION_SECTION_STATES,
     PROJECTION_SURFACE_MAP,
 )
+from shared.intelligence_projections.provider import IntelligenceProjectionProvider
+from shared.intelligence_projections.registry import (
+    ProviderRegistry,
+    projection_registry,
+    registry,
+)
 
 __all__ = [
     # generated registry
@@ -60,6 +66,12 @@ __all__ = [
     "PROJECTION_KINDS",
     "PROJECTION_SECTION_STATES",
     "PROJECTION_SURFACE_MAP",
+    # provider protocol
+    "IntelligenceProjectionProvider",
+    # runtime provider registry
+    "ProviderRegistry",
+    "projection_registry",
+    "registry",
     # errors
     "ContractVersionIncompatible",
     "DependencyUnavailable",
