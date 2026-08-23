@@ -20,6 +20,7 @@ from services.model_runtime import (
     AllowlistEntitlementResolver,
     DeterministicModelProvider,
     ModelBudgetExceeded,
+    ModelNotConfigured,
     ModelRequest,
     ModelRouter,
     ModelRuntimeService,
@@ -28,7 +29,7 @@ from services.model_runtime import (
     StaticFallbackChain,
 )
 from services.model_runtime import service as service_module
-from services.model_runtime.models import ModelProvider
+from services.model_runtime.models import ModelProvider, ModelResponse
 from shared.logger.logger import metrics
 
 # A small, deterministic registry the router can resolve. "restricted" exists
@@ -183,3 +184,157 @@ async def test_routed_path_still_applies_budget():
     svc = _routed_service(budget=_DenyBudget())
     with pytest.raises(ModelBudgetExceeded):
         await svc.complete("t1", _req())
+
+
+# ------------------------------------------------------------------ dispatch fallback
+# Fix-5: a dispatch-time rejection (unconfigured provider, denied budget, or
+# OPEN circuit) feeds back through the router's bounded fallback chain instead
+# of surfacing immediately — up to ``max_dispatch_fallback_depth`` distinct
+# models, never re-selecting a rejected model, and never for ``policy_required``.
+
+
+class _UnconfiguredProvider:
+    """Registered provider that is not configured (dispatch-time rejection)."""
+
+    provider_name = "unconfigured"
+
+    def is_configured(self) -> bool:
+        return False
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        raise AssertionError("unconfigured provider must never be invoked")
+
+
+def _router_with(registry, chain, entitlements=_ENTITLEMENTS) -> ModelRouter:
+    return ModelRouter(
+        entitlements=AllowlistEntitlementResolver(entitlements=entitlements),
+        registry_models=registry,
+        fallback=chain,
+    )
+
+
+def _dispatch_fallback_service(
+    registry, chain, providers, *, entitlements=None, **service_kwargs
+) -> ModelRuntimeService:
+    ent = entitlements if entitlements is not None else _ENTITLEMENTS
+    return ModelRuntimeService(
+        providers=providers,
+        router=_router_with(registry, chain, ent),
+        default_routing_mode=RoutingMode.AUTO,
+        entitled_model_ids=ent,
+        **service_kwargs,
+    )
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_primary_dispatch_falls_back():
+    # alpha routes to an unconfigured provider -> dispatch rejects -> bounded
+    # fallback picks the configured gamma.
+    registry = [
+        {"modelId": "alpha", "provider": "unconfigured", "status": "recommended"},
+        {"modelId": "gamma", "provider": "deterministic", "status": "stable"},
+    ]
+    ent = {"t1": {"alpha", "gamma"}}
+    svc = _dispatch_fallback_service(
+        registry,
+        StaticFallbackChain(["gamma"]),
+        {"unconfigured": _UnconfiguredProvider(), "deterministic": DeterministicModelProvider()},
+        entitlements=ent,
+    )
+    resp = await svc.complete("t1", _req())
+    assert resp.model == "gamma"
+    assert resp.provider == ModelProvider.DETERMINISTIC
+
+
+@pytest.mark.asyncio
+async def test_open_circuit_primary_dispatch_falls_back():
+    svc = _routed_service(circuit_failure_threshold=1)
+    breaker = svc.circuit_registry.get("deterministic:alpha", "t1")
+    breaker.record_failure()  # 1 failure at threshold=1 -> OPEN
+    resp = await svc.complete("t1", _req())
+    # alpha's circuit is OPEN -> dispatch rejects -> bounded fallback to gamma.
+    assert resp.model == "gamma"
+    assert resp.provider == ModelProvider.DETERMINISTIC
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_never_reuses_rejected_model():
+    # A chain that points back at alpha cannot create a cycle: the rejected
+    # model is excluded, so the fallback lands on gamma.
+    registry = [
+        {"modelId": "alpha", "provider": "unconfigured", "status": "recommended"},
+        {"modelId": "gamma", "provider": "deterministic", "status": "stable"},
+    ]
+    ent = {"t1": {"alpha", "gamma"}}
+    svc = _dispatch_fallback_service(
+        registry,
+        StaticFallbackChain(["alpha", "gamma"]),
+        {"unconfigured": _UnconfiguredProvider(), "deterministic": DeterministicModelProvider()},
+        entitlements=ent,
+    )
+    resp = await svc.complete("t1", _req())
+    assert resp.model == "gamma"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_bounded_exhaust_raises_original():
+    # Every model rejects; after max_dispatch_fallback_depth distinct attempts
+    # the original dispatch error propagates (no unbounded loop).
+    registry = [
+        {"modelId": "alpha", "provider": "unconfigured", "status": "recommended"},
+        {"modelId": "beta", "provider": "unconfigured", "status": "stable"},
+        {"modelId": "gamma", "provider": "unconfigured", "status": "stable"},
+    ]
+    ent = {"t1": {"alpha", "beta", "gamma"}}
+    svc = _dispatch_fallback_service(
+        registry,
+        StaticFallbackChain(["beta", "gamma"]),
+        {"unconfigured": _UnconfiguredProvider()},
+        entitlements=ent,
+    )
+    with pytest.raises(ModelNotConfigured):
+        await svc.complete("t1", _req())
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_disabled_at_zero_depth():
+    # max_dispatch_fallback_depth=0 disables runtime fallback: the first
+    # dispatch rejection propagates immediately.
+    registry = [
+        {"modelId": "alpha", "provider": "unconfigured", "status": "recommended"},
+        {"modelId": "gamma", "provider": "deterministic", "status": "stable"},
+    ]
+    ent = {"t1": {"alpha", "gamma"}}
+    svc = _dispatch_fallback_service(
+        registry,
+        StaticFallbackChain(["gamma"]),
+        {"unconfigured": _UnconfiguredProvider(), "deterministic": DeterministicModelProvider()},
+        entitlements=ent,
+        max_dispatch_fallback_depth=0,
+    )
+    with pytest.raises(ModelNotConfigured):
+        await svc.complete("t1", _req())
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_policy_required_stays_strict():
+    # policy_required never dispatch-falls back: an unconfigured mandated model
+    # surfaces as ModelNotConfigured (fail closed), not a silent downgrade.
+    registry = [
+        {"modelId": "alpha", "provider": "unconfigured", "status": "recommended"},
+        {"modelId": "gamma", "provider": "deterministic", "status": "stable"},
+    ]
+    ent = {"t1": {"alpha", "gamma"}}
+    svc = _dispatch_fallback_service(
+        registry,
+        StaticFallbackChain(["gamma"]),
+        {"unconfigured": _UnconfiguredProvider(), "deterministic": DeterministicModelProvider()},
+        entitlements=ent,
+    )
+    with pytest.raises(ModelNotConfigured):
+        await svc.complete(
+            "t1",
+            _req(),
+            routing_mode=RoutingMode.POLICY_REQUIRED,
+            requested_model="alpha",
+        )

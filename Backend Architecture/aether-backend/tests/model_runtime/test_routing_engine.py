@@ -531,3 +531,161 @@ async def test_describe_selection_includes_fallback_reason():
     # The reason text is safe (no tenant identifier, no credentials).
     assert "tenant-acme" not in desc
     assert "secret" not in desc and "api" not in desc and "sk-" not in desc
+
+
+# ------------------------------------------ fallback respects request allowlist
+# Fix-1: a fallback must never broaden the request's policy scope. When the
+# request carries an ``entitled_model_ids`` allowlist, fallback candidates are
+# gated by it too — resolver-entitled models outside the allowlist are skipped
+# exactly like an entitlement denial.
+
+
+@pytest.mark.asyncio
+async def test_fallback_respects_allowlist_never_broadens():
+    # The resolver entitles gpt-4o-mini AND claude-haiku, but the request
+    # allowlist admits only claude-haiku. The first chain candidate
+    # (gpt-4o-mini) is resolver-entitled yet outside the allowlist, so the
+    # fallback must skip it and land inside the allowlist.
+    router = ModelRouter(
+        AllowlistEntitlementResolver(
+            entitlements={
+                "tenant-acme": {
+                    "gpt-4o-mini",
+                    "claude-haiku-4-5-20251001",
+                    "gpt-4o",
+                }
+            }
+        ),
+        fallback=StaticFallbackChain(["gpt-4o-mini", "claude-haiku-4-5-20251001"]),
+    )
+    sel = await router.route(
+        _request(
+            mode=RoutingMode.EXPLICIT,
+            requested_model="gpt-4o",
+            entitled_model_ids={"claude-haiku-4-5-20251001"},
+        )
+    )
+    assert sel.model_id == "claude-haiku-4-5-20251001"
+    assert sel.fallback is True
+    assert sel.registry_provider == "anthropic"
+
+
+@pytest.mark.asyncio
+async def test_fallback_allowlist_narrows_to_none_raises():
+    # The only chain candidate is resolver-entitled but outside the request
+    # allowlist -> the fallback cannot engage without broadening scope, so the
+    # route fails closed with a strict policy violation.
+    router = ModelRouter(
+        AllowlistEntitlementResolver(
+            entitlements={
+                "tenant-acme": {"gpt-4o-mini", "claude-haiku-4-5-20251001"}
+            }
+        ),
+        fallback=StaticFallbackChain(["gpt-4o-mini"]),
+    )
+    with pytest.raises(RoutingPolicyViolation):
+        await router.route(
+            _request(
+                mode=RoutingMode.EXPLICIT,
+                requested_model="gpt-4o",
+                entitled_model_ids={"claude-haiku-4-5-20251001"},
+            )
+        )
+
+
+# ------------------------------------- registry_provider carried (Fix-2)
+# Selections carry the registry-declared provider key so the runtime can reach
+# the *registered* provider (kimi/deepseek/qwen) rather than the collapsed
+# "openai" classification.
+
+
+@pytest.mark.asyncio
+async def test_registry_provider_key_carried_for_compatible():
+    router = _make_router(tenant_models={"kimi-k2"})
+    sel = await router.route(
+        _request(mode=RoutingMode.EXPLICIT, requested_model="kimi-k2")
+    )
+    assert sel.model_id == "kimi-k2"
+    assert sel.provider == ModelProvider.OPENAI
+    assert sel.registry_provider == "kimi"
+
+
+@pytest.mark.asyncio
+async def test_registry_provider_key_carried_for_native():
+    router = _make_router(tenant_models=_ALL)
+    sel = await router.route(_request(mode=RoutingMode.AUTO))
+    assert sel.model_id == "claude-opus-5"
+    assert sel.provider == ModelProvider.ANTHROPIC
+    assert sel.registry_provider == "anthropic"
+
+
+@pytest.mark.asyncio
+async def test_registry_provider_key_carried_on_fallback_selection():
+    router = _make_router(tenant_models={"claude-haiku-4-5-20251001"})
+    sel = await router.route(
+        _request(mode=RoutingMode.EXPLICIT, requested_model="gpt-4o")
+    )
+    assert sel.fallback is True
+    assert sel.model_id == "claude-haiku-4-5-20251001"
+    assert sel.registry_provider == "anthropic"
+
+
+# --------------------------------------------- bounded dispatch fallback (Fix-5)
+# ``ModelRouter.dispatch_fallback`` re-engages the entitlement/allowlist-gated
+# chain for a dispatch-time rejection: it never re-selects an already-attempted
+# model, returns ``None`` (fail closed) when no eligible fallback exists, and
+# stays strict for ``policy_required``.
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_excludes_failed_model():
+    router = _make_router(tenant_models=_ALL)
+    sel = await router.dispatch_fallback(
+        _request(mode=RoutingMode.EXPLICIT, requested_model="gpt-4o"),
+        exclude=["claude-haiku-4-5-20251001"],
+        reason="dispatch rejected",
+    )
+    assert sel is not None
+    assert sel.model_id == "gpt-4o-mini"
+    assert sel.model_id != "claude-haiku-4-5-20251001"
+    assert sel.fallback is True
+    assert sel.entitled is True
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_none_when_all_candidates_excluded():
+    router = _make_router(tenant_models=_ALL)
+    sel = await router.dispatch_fallback(
+        _request(mode=RoutingMode.EXPLICIT, requested_model="gpt-4o"),
+        exclude=["claude-haiku-4-5-20251001", "gpt-4o-mini"],
+        reason="dispatch rejected",
+    )
+    assert sel is None
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_policy_required_returns_none():
+    router = _make_router(tenant_models=_ALL)
+    sel = await router.dispatch_fallback(
+        _request(mode=RoutingMode.POLICY_REQUIRED, requested_model="gpt-4o"),
+        exclude=[],
+        reason="dispatch rejected",
+    )
+    assert sel is None
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fallback_returns_entitled_allowlisted_model():
+    router = _make_router(tenant_models=_ALL)
+    sel = await router.dispatch_fallback(
+        _request(
+            mode=RoutingMode.EXPLICIT,
+            requested_model="gpt-4o",
+            entitled_model_ids={"gpt-4o-mini"},
+        ),
+        exclude=["claude-haiku-4-5-20251001"],
+        reason="dispatch rejected",
+    )
+    assert sel is not None
+    assert sel.model_id == "gpt-4o-mini"
+    assert sel.registry_provider == "openai"

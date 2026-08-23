@@ -60,6 +60,8 @@ except ImportError:  # pragma: no cover - routing subpackage not landed yet
     RoutingUnavailable = None  # type: ignore[assignment, misc]
 
 if typing.TYPE_CHECKING:  # engine owned by the routing team; type-only here
+    from services.model_runtime.credentials.models import CredentialResolution
+    from services.model_runtime.credentials.service import CredentialService
     from services.model_runtime.routing.engine import ModelRouter
 
 logger = get_logger("aether.service.model_runtime")
@@ -73,6 +75,14 @@ class ModelCircuitOpen(ModelInvocationError):
     provider. Callers catch :class:`ModelInvocationError` (or this subtype) and
     fail closed; the recovery path is timeout-driven inside the breaker.
     """
+
+
+# Dispatch-time rejections that a routed call may recover from through a
+# bounded runtime fallback: the chosen provider is unconfigured, the token
+# budget denied the call, or the provider/model circuit is OPEN. Actual
+# provider/transport errors (ModelProviderError / ModelTimeoutError) are NOT
+# recoverable here — they are real invocation failures and propagate.
+_DISPATCH_REJECTIONS = (ModelNotConfigured, ModelBudgetExceeded, ModelCircuitOpen)
 
 
 class TokenBudget(typing.Protocol):
@@ -104,6 +114,8 @@ class ModelRuntimeService:
         entitled_model_ids: Mapping[str, set[str]] | None = None,
         circuit_failure_threshold: int | None = None,
         circuit_recovery_timeout_s: float | None = None,
+        credential_service: CredentialService | None = None,
+        max_dispatch_fallback_depth: int = 2,
     ) -> None:
         """Build the runtime; default_provider must exist in providers.
 
@@ -122,6 +134,21 @@ class ModelRuntimeService:
         and ``circuit_recovery_timeout_s`` (config is the single source of
         truth). Explicit values override the settings singleton. The breaker is
         keyed per provider + model (+ tenant scope) inside ``circuit_registry``.
+
+        Per-tenant credentials (ADR-008 D5): ``credential_service`` is an
+        optional :class:`CredentialService`; when present the dispatch path
+        resolves the tenant/provider credential at call time and dispatches
+        through a per-tenant-bound provider (never the process-wide/shared
+        key). FAIL-CLOSED: a tenant with no resolved credential raises
+        :class:`ModelNotConfigured` instead of silently serving the shared key,
+        and a provider credential binding failure raises the same. With
+        ``None`` (the default) the registered provider instance serves the call
+        exactly as before.
+
+        ``max_dispatch_fallback_depth`` bounds how many distinct models a routed
+        dispatch rejection (unconfigured provider, denied budget, open circuit)
+        may fall back through before the original error propagates (default 2;
+        ``0`` disables runtime fallback entirely).
         """
         self._providers: dict[str, AsyncModelProvider] = dict(providers or {})
         self._default = default_provider
@@ -133,6 +160,8 @@ class ModelRuntimeService:
         self._entitled_model_ids = {
             tenant: set(models) for tenant, models in (entitled_model_ids or {}).items()
         }
+        self._credential_service = credential_service
+        self._max_dispatch_fallback_depth = max(0, int(max_dispatch_fallback_depth))
 
         settings = get_settings()
         self._circuit_registry = CircuitRegistry(
@@ -224,6 +253,28 @@ class ModelRuntimeService:
         if not impl.is_configured():
             raise ModelNotConfigured(f"provider not configured: {name}")
 
+        # ADR-008 D5: resolve the tenant-scoped provider credential at call
+        # time. Wiring a CredentialService puts the runtime in per-tenant
+        # credential enforcement (fail closed): a tenant with no resolved
+        # credential raises instead of silently serving the process-wide /
+        # shared key (which would be a cross-tenant credential leak). When a
+        # tenant credential resolves, dispatch through a per-tenant-bound
+        # provider; a provider with no credential surface (e.g. the local
+        # deterministic fixture) serves its registered instance unchanged —
+        # it holds no key, so there is nothing to leak.
+        if self._credential_service is not None:
+            resolution = await self._credential_service.resolve(tenant_id, name)
+            if not resolution.configured:
+                raise ModelNotConfigured(
+                    f"provider not configured for tenant: {name} "
+                    "(no tenant credential)"
+                )
+            impl = self._bind_provider(impl, resolution)
+            if not impl.is_configured():
+                raise ModelNotConfigured(
+                    f"provider not configured for tenant: {name}"
+                )
+
         if self._budget is not None:
             reserved = await self._budget.check_and_reserve(
                 tenant_id, self._estimated_request_tokens
@@ -314,6 +365,35 @@ class ModelRuntimeService:
         )
         return resp
 
+    @staticmethod
+    def _bind_provider(
+        impl: AsyncModelProvider, resolution: CredentialResolution
+    ) -> AsyncModelProvider:
+        """Return the provider that serves this tenant's call (ADR-008 D5).
+
+        Providers that implement ``bind_credential`` return a client bound to
+        the resolved tenant credential; a binding that raises (or returns
+        ``None``) FAILS CLOSED with :class:`ModelNotConfigured` so the tenant
+        never silently falls back to the process-wide / shared provider.
+        Providers with no ``bind_credential`` surface (e.g. the deterministic
+        test/local fixture) return the registered instance unchanged — they
+        hold no key, so there is no shared credential to leak.
+        """
+        binder = getattr(impl, "bind_credential", None)
+        if not callable(binder):
+            return impl
+        try:
+            bound = binder(resolution)
+        except Exception as exc:  # noqa: BLE001 — binding failures fail closed
+            raise ModelNotConfigured(
+                f"provider credential binding failed for tenant: {impl.provider_name}"
+            ) from exc
+        if bound is None:
+            raise ModelNotConfigured(
+                f"provider credential binding failed for tenant: {impl.provider_name}"
+            )
+        return bound
+
     async def _complete_routed(
         self,
         tenant_id: str,
@@ -371,13 +451,12 @@ class ModelRuntimeService:
             raise
         decision_ms = (time.monotonic() - decision_started) * 1000
 
-        # Resolve the route selection to a registered provider name; a
-        # selection the runtime does not own is a configuration failure.
-        provider_val = (
-            sel.provider.value
-            if isinstance(sel.provider, ModelProvider)
-            else str(sel.provider)
-        )
+        # Resolve the route selection to a registered provider name. For
+        # OpenAI-compatible registry providers (kimi/deepseek/qwen) the
+        # selection carries the registry-declared provider key, so the
+        # compatible provider registered under that name is reached rather than
+        # the collapsed "openai" endpoint.
+        provider_key = self._selection_provider_key(sel)
         invoke_request = request.model_copy(update={"model": sel.model_id})
 
         # Record the route for audit + metrics before invoking.
@@ -385,7 +464,58 @@ class ModelRuntimeService:
             tenant_id, profile_id, requested_model, sel, decision_ms
         )
 
-        return await self._invoke_with_budget(tenant_id, invoke_request, provider_val)
+        # Dispatch through a BOUNDED runtime fallback: a dispatch-time
+        # rejection (unconfigured provider, denied budget, or an open circuit)
+        # is fed back through the router's fallback chain (which preserves the
+        # request allowlist and never re-selects a rejected model) up to
+        # ``max_dispatch_fallback_depth`` distinct models before the original
+        # error propagates. Strict policy routes never fall back here.
+        excluded: list[str] = [sel.model_id]
+        attempt = 0
+        while True:
+            try:
+                return await self._invoke_with_budget(
+                    tenant_id, invoke_request, provider_key
+                )
+            except _DISPATCH_REJECTIONS:
+                if self._max_dispatch_fallback_depth <= 0:
+                    raise
+                if attempt >= self._max_dispatch_fallback_depth:
+                    raise
+                if sel.mode is RoutingMode.POLICY_REQUIRED:
+                    raise
+                fallback_req = rreq.model_copy(update={"mode": sel.mode})
+                fallback_sel = await self._router.dispatch_fallback(
+                    fallback_req,
+                    exclude=excluded,
+                    reason=f"dispatch rejected for model {sel.model_id}",
+                )
+                if fallback_sel is None or fallback_sel.model_id in excluded:
+                    raise
+                excluded.append(fallback_sel.model_id)
+                sel = fallback_sel
+                provider_key = self._selection_provider_key(sel)
+                invoke_request = request.model_copy(update={"model": sel.model_id})
+                self._emit_route_audit(
+                    tenant_id, profile_id, requested_model, sel, decision_ms
+                )
+                attempt += 1
+
+    @staticmethod
+    def _selection_provider_key(sel: RouteSelection) -> str:
+        """The registered-provider name for a route selection.
+
+        Prefers the registry-declared provider key carried on the selection
+        (``registry_provider`` — e.g. ``"kimi"`` for an OpenAI-compatible
+        model) so compatible-provider models reach their declared endpoint;
+        falls back to the classification provider value for selections that do
+        not carry a registry key.
+        """
+        registry_provider = getattr(sel, "registry_provider", None)
+        if isinstance(registry_provider, str) and registry_provider:
+            return registry_provider
+        provider = getattr(sel, "provider", None)
+        return provider.value if isinstance(provider, ModelProvider) else str(provider)
 
     @staticmethod
     def _circuit_key(name: str, model: str) -> str:

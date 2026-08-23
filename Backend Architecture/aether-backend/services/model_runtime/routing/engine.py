@@ -26,7 +26,10 @@ Registry providers that are OpenAI-compatible but not members of the
 ``ModelProvider`` enum (``kimi`` / ``deepseek`` / ``qwen``) are preserved:
 routing resolves them to the compatible-adapter classification
 (``ModelProvider.OPENAI``) instead of silently substituting the router's
-default provider.
+default provider, and carries the registry-declared provider key
+(``registry_provider``) on the returned ``RouteSelection`` so the runtime can
+look up the *registered* provider (``kimi`` / ``deepseek`` / ``qwen``) rather
+than the collapsed ``openai`` name.
 
 Security: this module never logs, returns, or exposes tenant PII or
 credentials — it carries only model ids. The server is authoritative for
@@ -36,6 +39,7 @@ The engine is deterministic — no randomness, no wall-clock-dependent choice.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import TYPE_CHECKING, Mapping, Sequence
 
 from services.model_runtime.models import ModelProvider
@@ -74,6 +78,23 @@ _DEFAULT_PROFILE_REGISTRY: dict[str, Mapping[str, object]] = {
 # Key a policy profile may use to mandate a specific model when the policy
 # (not the request) selects the model for policy_required routing.
 _POLICY_MANDATED_MODEL_KEY = "mandatedModel"
+
+
+class RoutedSelection(RouteSelection):
+    """A route selection that also carries the registry-declared provider key.
+
+    ``provider`` (inherited) is the adapter classification as a
+    :class:`ModelProvider` member — e.g. ``ModelProvider.OPENAI`` for the
+    OpenAI-compatible (kimi/deepseek/qwen) models. ``registry_provider`` is
+    the provider name as declared in the model registry (``"kimi"``,
+    ``"deepseek"``, ``"qwen"``, ``"anthropic"``, ...) so the runtime can look
+    up the *registered* provider instance by that key. OpenAI-compatible
+    providers are registered under their own names (not ``"openai"``), so
+    collapsing to the adapter classification at selection time would route
+    them to the wrong (or an unconfigured) provider at invocation time.
+    """
+
+    registry_provider: str | None = None
 
 
 class ModelRouter:
@@ -285,9 +306,22 @@ class ModelRouter:
     # ------------------------------------------------------------- fallback
 
     async def _fallback_selection(
-        self, request: RoutingRequest, mode: RoutingMode, reason: str
+        self,
+        request: RoutingRequest,
+        mode: RoutingMode,
+        reason: str,
+        *,
+        exclude: Collection[str] = (),
     ) -> RouteSelection:
-        """Engage the fallback chain; raise RoutingPolicyViolation if unusable."""
+        """Engage the fallback chain; raise RoutingPolicyViolation if unusable.
+
+        ``exclude`` lists model ids already attempted (e.g. at dispatch time)
+        that must never be re-selected. Combined with the request allowlist
+        below, a fallback can never broaden the request's policy scope: when
+        ``request.entitled_model_ids`` is present it gates every candidate, so
+        a resolver-entitled model outside the request allowlist is never
+        returned as a fallback.
+        """
         # Lazy import so the module loads even before the sibling fallback
         # module lands; select_fallback is the Agent C contract helper.
         from services.model_runtime.routing.fallback import (
@@ -301,13 +335,24 @@ class ModelRouter:
 
         entitled: set[str] = set()
         for candidate in chain.candidates():
+            if candidate in exclude:
+                continue
             if candidate in self._model_index and await self._is_entitled(
                 request.tenant_id, candidate
             ):
                 entitled.add(candidate)
 
         def _must_entitle(model_id: str) -> bool:
-            return model_id in entitled
+            if model_id not in entitled:
+                return False
+            # A fallback must never broaden the request's policy scope: an
+            # allowlisted request may only fall back inside its own allowlist.
+            if (
+                request.entitled_model_ids is not None
+                and model_id not in request.entitled_model_ids
+            ):
+                return False
+            return True
 
         try:
             selected = select_fallback(
@@ -318,14 +363,43 @@ class ModelRouter:
         if not selected:
             raise RoutingPolicyViolation(f"no entitled fallback route: {reason}")
 
-        return RouteSelection(
+        return RoutedSelection(
             model_id=selected,
             provider=self._provider_for(selected),
+            registry_provider=self._registry_provider_name(selected),
             mode=mode,
             entitled=True,
             fallback=True,
             fallback_reason=reason,
         )
+
+    async def dispatch_fallback(
+        self,
+        request: RoutingRequest,
+        *,
+        exclude: Collection[str],
+        reason: str,
+    ) -> RouteSelection | None:
+        """Bounded runtime fallback after a dispatch-time rejection.
+
+        Engages the same entitlement/allowlist-gated fallback chain as routing
+        but skips model ids already attempted (``exclude``), so a cycle can
+        never re-select a rejected model. Returns ``None`` when no eligible
+        fallback exists so the runtime fails closed with the original dispatch
+        error. Strict ``policy_required`` routes never dispatch-fallback (they
+        are already strict at routing time).
+        """
+        if request.mode is RoutingMode.POLICY_REQUIRED:
+            return None
+        try:
+            return await self._fallback_selection(
+                request,
+                request.mode or RoutingMode.AUTO,
+                reason,
+                exclude=exclude,
+            )
+        except RoutingPolicyViolation:
+            return None
 
     # ------------------------------------------------------------------ helpers
 
@@ -343,14 +417,25 @@ class ModelRouter:
         return bool(decision.entitled)
 
     def _selection(self, model_id: str, mode: RoutingMode, *, fallback: bool) -> RouteSelection:
-        return RouteSelection(
+        return RoutedSelection(
             model_id=model_id,
             provider=self._provider_for(model_id),
+            registry_provider=self._registry_provider_name(model_id),
             mode=mode,
             entitled=True,
             fallback=fallback,
             fallback_reason=None,
         )
+
+    def _registry_provider_name(self, model_id: str) -> str | None:
+        """The provider name declared for ``model_id`` in the registry.
+
+        Returns ``None`` when the registry entry carries no string provider
+        (the runtime then falls back to the classification provider).
+        """
+        entry = self._model_index.get(model_id)
+        provider_name = entry.get("provider") if entry is not None else None
+        return provider_name if isinstance(provider_name, str) else None
 
     def _provider_for(self, model_id: str) -> ModelProvider:
         entry = self._model_index.get(model_id)

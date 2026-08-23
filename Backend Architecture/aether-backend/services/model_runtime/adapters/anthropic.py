@@ -33,6 +33,11 @@ class AnthropicModelProvider(BaseModelProvider):
     complete() so this module imports with zero side effects. Capability-driven:
     never sends temperature/top_p/top_k (newer Anthropic models reject them
     with 400) — only model, max_tokens, system, messages.
+
+    The adapter honors the routed request model: ``complete()`` sends
+    ``request.model`` when it is set and falls back to the configured
+    ``self.model`` only when the request model is absent/unset, so an explicit
+    or policy-required selection is the model actually invoked.
     """
 
     provider_name = "anthropic"
@@ -54,17 +59,64 @@ class AnthropicModelProvider(BaseModelProvider):
         self.max_retries = max_retries
 
     def is_configured(self) -> bool:
+        # A tenant-bound provider is configured only when its tenant credential
+        # can be materialized — never when it would silently reuse the
+        # process-wide key.
+        if getattr(self, "_bound_resolution", None) is not None:
+            try:
+                return bool(self._effective_api_key())
+            except ModelNotConfigured:
+                return False
         return bool(self.api_key)
+
+    def bind_credential(self, resolution) -> "AnthropicModelProvider":
+        """Return a per-tenant-bound copy of this provider (ADR-008 D5).
+
+        The returned provider serves a single tenant's invocation: at call time
+        it materializes the per-tenant API key from the resolved credential and
+        fails closed (``ModelNotConfigured`` — never the process-wide key) when
+        the tenant credential cannot be materialized.
+        """
+        import copy
+
+        bound = copy.copy(self)
+        bound._bound_resolution = resolution
+        return bound
+
+    def _effective_api_key(self) -> str:
+        """The API key for this invocation, honoring a bound tenant credential.
+
+        A bound resolution makes the provider serve a specific tenant: an
+        env-source credential uses its per-tenant env ref; any other source
+        requires backend materialization, which the adapter cannot perform — it
+        fails closed (``ModelNotConfigured``) rather than reuse the process-wide
+        key for the tenant.
+        """
+        bound = getattr(self, "_bound_resolution", None)
+        if bound is None:
+            return self.api_key
+        if bound.source == "env" and bound.ref:
+            key = os.getenv(bound.ref)
+            if key:
+                return key
+            raise ModelNotConfigured(
+                "anthropic: tenant credential env ref not set"
+            )
+        raise ModelNotConfigured(
+            "anthropic: tenant credential requires backend materialization"
+        )
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         """Complete a single request against the Anthropic Messages API."""
-        if not self.api_key:
+        api_key = self._effective_api_key()
+        if not api_key:
             raise ModelNotConfigured("anthropic adapter not configured")
+        model = request.model if request.model else self.model
         import anthropic  # lazy: module imports cleanly when the SDK is absent
 
-        client = anthropic.AsyncAnthropic(api_key=self.api_key, max_retries=self.max_retries)
+        client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=self.max_retries)
         kwargs: dict[str, object] = {
-            "model": self.model,
+            "model": model,
             "max_tokens": self.max_tokens,
             "messages": request.messages,
         }
@@ -86,7 +138,7 @@ class AnthropicModelProvider(BaseModelProvider):
         output_tokens = (response.usage.output_tokens or 0) if response.usage else 0
         return ModelResponse(
             content=text,
-            model=self.model,
+            model=model,
             provider=ModelProvider.ANTHROPIC,
             usage=TokenUsage(
                 input_tokens=input_tokens,
