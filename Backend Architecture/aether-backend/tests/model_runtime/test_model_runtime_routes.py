@@ -148,6 +148,72 @@ def _enable_gate(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Kyber workforce identity — the primary operator authentication path.
+# ---------------------------------------------------------------------------
+
+
+class _FakeWorkforceContext:
+    """Minimal Kyber workforce session stand-in, shaped like what the access
+    dependency stashes on ``request.state.kyber_access_context``.
+
+    A workforce actor is intentionally tenantless: ``request.state.tenant`` is
+    NEVER bound for it. Any tenant scope is carried on the access context
+    (``tenant_id``, or a ``scope`` object) for the purpose of the request.
+    """
+
+    def __init__(
+        self,
+        tenant_id: str | None = None,
+        *,
+        scope_tenant: str | None = None,
+    ) -> None:
+        self.operator_id = "ops-ops-1"
+        self.authenticated = True
+        self.active = True
+        self.session_active = True
+        self.tenant_id = tenant_id
+        self.scope = _FakeWorkforceScope(scope_tenant) if scope_tenant else None
+
+
+class _FakeWorkforceScope:
+    """Purpose-bound tenant scope carried on the access context."""
+
+    def __init__(self, tenant_id: str) -> None:
+        self.tenant_id = tenant_id
+
+
+def _workforce_app(context: object) -> FastAPI:
+    """An app mounting only the model-runtime router behind a middleware that
+    binds a workforce access context (and nothing else — never
+    ``request.state.tenant``), exactly like the real workforce auth path."""
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def _bind_workforce(request: Request, call_next: Callable) -> Response:
+        request.state.kyber_access_context = context
+        return await call_next(request)
+
+    app.include_router(routes.router)
+    return app
+
+
+def _enable_workforce_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Turn workforce identity ON and the legacy operator identity OFF so only
+    a Kyber workforce session can pass the operator gate (the deployment the
+    primary workforce path runs under)."""
+    from config.settings import KyberWorkforceConfig, settings
+
+    monkeypatch.setattr(
+        settings,
+        "kyber_workforce",
+        KyberWorkforceConfig(
+            workforce_identity_enabled=True,
+            legacy_operator_identity_allowed=False,
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Route table + contract registration.
 # ---------------------------------------------------------------------------
 
@@ -401,6 +467,113 @@ def test_kyber_admin_surfaces_require_operator(
     assert resp.status_code == 200
 
 
+def test_workforce_operator_reaches_global_kyber_surfaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tenantless Kyber workforce operator reaches the global admin surfaces.
+
+    Registry, health and usage carry no per-tenant data, so they must serve a
+    workforce operator with NO ``request.state.tenant`` (the primary workforce
+    authentication path). Regression: these surfaces used to reject the
+    workforce session with HTTP 400 ``tenant_required`` AFTER operator
+    authorization had already succeeded. The tenant-scoped surfaces (which
+    need a scope to serve rows from) fail closed with 403 ``tenant_scope_required``
+    — never the bogus ``tenant_required``.
+    """
+    _enable_gate(monkeypatch)
+    _enable_workforce_identity(monkeypatch)
+    client = TestClient(_workforce_app(_FakeWorkforceContext()))
+
+    for path in (
+        "/v1/model-runtime/registry",
+        "/v1/model-runtime/health",
+        "/v1/model-runtime/usage",
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 200, f"GET {path} → {resp.status_code}"
+        assert "tenant_required" not in resp.text
+
+    for path in (
+        "/v1/model-runtime/entitlements",
+        "/v1/model-runtime/traces",
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 403, f"GET {path} → {resp.status_code}"
+        assert resp.json()["detail"]["code"] == "tenant_scope_required"
+
+
+def test_workforce_operator_with_tenant_scope_reaches_all_kyber_surfaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A workforce operator holding a tenant scope reaches all five Kyber
+    surfaces.
+
+    The scope is derived from the access context (``tenant_id`` on the context
+    and, separately, on its ``scope`` object), never from ``request.state.tenant``
+    which is never bound for workforce actors. Regression: a scoped workforce
+    operator used to be rejected with 400 ``tenant_required`` on every Kyber
+    page.
+    """
+    _enable_gate(monkeypatch)
+    _enable_workforce_identity(monkeypatch)
+
+    # Context carries the scope directly on `tenant_id`...
+    client = TestClient(
+        _workforce_app(_FakeWorkforceContext(tenant_id="tenant-demo"))
+    )
+    for path in (
+        "/v1/model-runtime/registry",
+        "/v1/model-runtime/health",
+        "/v1/model-runtime/entitlements",
+        "/v1/model-runtime/usage",
+        "/v1/model-runtime/traces",
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 200, f"GET {path} → {resp.status_code}"
+
+    rows = client.get("/v1/model-runtime/entitlements").json()["entitlements"]
+    assert rows and all(row["tenantId"] == "tenant-demo" for row in rows)
+    traces = client.get("/v1/model-runtime/traces").json()["traces"]
+    assert traces and all(trace["tenantId"] == "tenant-demo" for trace in traces)
+
+    # ...and via the purpose-bound `scope` object fallback.
+    scoped_client = TestClient(
+        _workforce_app(_FakeWorkforceContext(scope_tenant="tenant-scoped-2"))
+    )
+    for path in (
+        "/v1/model-runtime/entitlements",
+        "/v1/model-runtime/traces",
+    ):
+        resp = scoped_client.get(path)
+        assert resp.status_code == 200, f"GET {path} → {resp.status_code}"
+    rows = scoped_client.get("/v1/model-runtime/entitlements").json()["entitlements"]
+    assert rows and all(
+        row["tenantId"] == "tenant-scoped-2" for row in rows
+    )
+
+
+def test_workforce_tenant_panel_surfaces_still_require_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Aether tenant-panel surfaces (models, tenant-default) stay
+    tenant-scoped under workforce identity: a tenantless workforce operator is
+    still rejected with 400 ``tenant_required`` there — only the Kyber admin
+    surfaces were meant to be reachable by a tenantless operator."""
+    _enable_gate(monkeypatch)
+    _enable_workforce_identity(monkeypatch)
+    client = TestClient(_workforce_app(_FakeWorkforceContext()))
+
+    resp = client.get("/v1/model-runtime/models")
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "tenant_required"
+
+    resp = client.put(
+        "/v1/model-runtime/tenant-default", json={"modelId": "gpt-4o-mini"}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "tenant_required"
+
+
 # ---------------------------------------------------------------------------
 # No-credentials invariant — health reasons are sanitized.
 # ---------------------------------------------------------------------------
@@ -436,9 +609,7 @@ def test_health_never_renders_secrets(
         ),
         checks={"anthropic": True, "openai": True, "kimi": False},
     )
-    monkeypatch.setattr(
-        routes, "_build_runtime_health", lambda tenant_id: secret_health
-    )
+    monkeypatch.setattr(routes, "_build_runtime_health", lambda: secret_health)
 
     resp = client.get("/v1/model-runtime/health", headers=TENANT_HEADERS)
     assert resp.status_code == 200

@@ -18,12 +18,19 @@ Security contract (D9):
 * Server-authoritative tenant scope: the tenant is derived from the
   authenticated request state (``request.state.tenant``, bound by the auth
   middleware from the verified session — ADR-008). A model/client can never
-  select tenant scope from headers, body, or query. Fail-closed: no
-  authenticated tenant is HTTP 400.
+  select tenant scope from headers, body, or query. The Aether tenant-panel
+  surfaces (``/models``, ``/tenant-default``) require an authenticated tenant
+  (fail-closed HTTP 400 ``tenant_required``).
 * The five Kyber admin surfaces (registry, health, entitlements, usage, traces)
-  are additionally operator-authorized via :func:`require_operator`, which
-  mirrors the repo's ``require_kyber_operator`` gate. Aether tenant-panel
-  surfaces (``/models``, ``/tenant-default``) stay tenant-scoped only.
+  are operator-authorized via :func:`require_operator`, which mirrors the
+  repo's ``require_kyber_operator`` gate. Registry, health and usage are global
+  surfaces with no per-tenant data — they need no tenant scope. Entitlements
+  and traces carry per-tenant rows, so their scope is derived from the Kyber
+  workforce access context when a workforce session is present (a workforce
+  actor is intentionally tenantless — ``request.state.tenant`` is never bound
+  for it, so the ``tenant_required`` path must not reject it), falling back to
+  the legacy tenant binding; a workforce session with no tenant scope fails
+  closed (HTTP 403 ``tenant_scope_required``).
 * Credential-free: responses are masked/aggregated. Health and entitlement
   reason strings pass through :func:`_sanitize_reason`, which blanks any
   secret-shaped material (``sk-``, ``pk_``, ``rk_live_``, ``whsec_``, ``AKIA``,
@@ -273,6 +280,68 @@ def require_operator(request: Request) -> None:
         )
 
 
+def require_operator_tenant_scope(request: Request) -> str:
+    """Combined Kyber-operator + tenant-scope gate for the tenant-scoped admin
+    surfaces (``/entitlements``, ``/traces``).
+
+    Runs :func:`require_operator` first, then resolves the server-authoritative
+    tenant scope without ever rejecting a valid workforce session for lacking
+    ``request.state.tenant``:
+
+    * a Kyber **workforce session** is authoritative when one is present — the
+      tenant scope is read from the resolved access context (a workforce actor
+      is intentionally tenantless, so ``request.state.tenant`` is never bound
+      for it). A workforce session whose access context carries no tenant scope
+      fails closed (HTTP 403): a per-tenant surface cannot serve without one;
+    * otherwise the **legacy** operator path reads ``request.state.tenant``
+      exactly as before (HTTP 400 ``tenant_required`` when absent).
+    """
+    from services.security.request_context import kyber_access_context
+
+    require_operator(request)
+
+    # A workforce session is authoritative for the tenant scope when its access
+    # context carries one. A stale/empty context is NOT treated as a denial —
+    # the legacy tenant binding below still wins so a legacy operator is never
+    # rejected by an unrelated workforce context.
+    ctx = kyber_access_context(request)
+    if ctx is not None:
+        tenant_id = getattr(ctx, "tenant_id", None)
+        if tenant_id:
+            return str(tenant_id)
+        scope = getattr(ctx, "scope", None)
+        scope_tenant = getattr(scope, "tenant_id", None)
+        if scope_tenant:
+            return str(scope_tenant)
+
+    # Legacy operator path — the tenant binding is authoritative.
+    tenant = getattr(request.state, "tenant", None)
+    tenant_id = getattr(tenant, "tenant_id", None)
+    if tenant_id:
+        return tenant_id
+
+    # A workforce session with no tenant scope (and no legacy binding) cannot
+    # serve a per-tenant surface — fail closed with a scope error, never the
+    # bogus tenant_required that used to reject tenantless workforce operators.
+    if ctx is not None:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "status": "error",
+                "code": "tenant_scope_required",
+                "message": "no active Kyber tenant access scope for this surface",
+            },
+        )
+    raise HTTPException(
+        status_code=400,
+        detail={
+            "status": "error",
+            "code": "tenant_required",
+            "message": "authenticated tenant context is required",
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Secret sanitization — mirrors EntitlementBadge / sanitizeHealthReason.
 # ---------------------------------------------------------------------------
@@ -363,12 +432,13 @@ def _seed_providers() -> dict[str, object]:
     return providers
 
 
-def _build_runtime_health(tenant_id: str) -> RuntimeHealth:
-    """Probe provider health for ``tenant_id`` (deterministic seed data).
+def _build_runtime_health() -> RuntimeHealth:
+    """Probe provider health (deterministic seed data).
 
     Uses the landed :class:`RuntimeHealthProbe`/:class:`ProviderHealthCheck`
     over ``_seed_providers``. This is seed data — the probe slot is where a
-    real ModelRuntimeService provider set plugs in.
+    real ModelRuntimeService provider set plugs in. Health is a global Kyber
+    admin surface: it carries no per-tenant data, so it needs no tenant scope.
     """
     probe = RuntimeHealthProbe(ProviderHealthCheck(_seed_providers()))
     return probe.status()
@@ -411,14 +481,15 @@ async def _build_entitlement_rows(tenant_id: str) -> list[EntitlementRowOut]:
 _SEED_USAGE_PERIOD = "deterministic-seed-period"
 
 
-def _build_usage(tenant_id: str) -> UsageResponseOut:
+def _build_usage() -> UsageResponseOut:
     """Usage summary — deterministic seed data (all-zero, fail-closed).
 
     No metering store is wired into this surface yet, so every registry model
     reports zero calls/tokens/cost. The shape matches the Kyber
     ``UsageResponse`` exactly; rows are the full registry so the contract is
-    visible. ``tenant_id`` is reserved for the future tenant-scoped metering
-    lookup.
+    visible. Usage is a global Kyber admin surface — a real metering lookup
+    later derives its scope from the operator's access context, not a legacy
+    tenant binding.
     """
     rows = [
         UsageByModelOut(
@@ -550,13 +621,13 @@ async def set_tenant_default(
 )
 async def get_registry(
     operator: None = Depends(require_operator),
-    tenant_id: str = Depends(require_tenant_id),
 ) -> RegistryResponseOut:
     """GET /v1/model-runtime/registry — the full model catalog.
 
     Consumed by the Kyber ``ModelRegistryPage`` (C14). Operator-authorized
-    (Kyber admin surface). Serves the generated registry projected to the
-    frontend shape; no per-tenant data, no credentials.
+    (Kyber admin surface). Global surface: serves the generated registry
+    projected to the frontend shape; no per-tenant data, so no tenant scope is
+    required — a workforce operator with no ``request.state.tenant`` is served.
     """
     return RegistryResponseOut(models=_registry_models_out())
 
@@ -568,16 +639,16 @@ async def get_registry(
 )
 async def get_health(
     operator: None = Depends(require_operator),
-    tenant_id: str = Depends(require_tenant_id),
 ) -> HealthResponseOut:
     """GET /v1/model-runtime/health — provider health summary.
 
     Consumed by the Kyber ``ModelRuntimeHealthPage`` (C14). Operator-authorized
-    (Kyber admin surface). Reasons pass through :func:`_sanitize_reason` so
+    (Kyber admin surface). Global surface: carries no per-tenant data, so no
+    tenant scope is required. Reasons pass through :func:`_sanitize_reason` so
     secret-shaped material is blanked before it can reach the client. Backed by
     ``RuntimeHealthProbe`` over the deterministic seed provider set.
     """
-    health = _build_runtime_health(tenant_id)
+    health = _build_runtime_health()
     return HealthResponseOut(
         status=health.status,
         providers=[
@@ -599,15 +670,17 @@ async def get_health(
     summary="Per-model entitlements",
 )
 async def get_entitlements(
-    operator: None = Depends(require_operator),
-    tenant_id: str = Depends(require_tenant_id),
+    tenant_id: str = Depends(require_operator_tenant_scope),
 ) -> EntitlementsResponseOut:
     """GET /v1/model-runtime/entitlements — per-model entitlement rows.
 
     Consumed by the Kyber ``EntitlementsPage`` (C14). Operator-authorized
     (Kyber admin surface). Server-authoritative: rows are resolved by the
-    ``AllowlistEntitlementResolver`` for the requesting tenant only; a model can
-    never select tenant scope.
+    ``AllowlistEntitlementResolver`` for the tenant scope derived by
+    :func:`require_operator_tenant_scope` — the workforce access context when a
+    workforce session is present (tenantless actors never hit
+    ``tenant_required``), else the legacy tenant binding; a model can never
+    select tenant scope.
     """
     return EntitlementsResponseOut(
         entitlements=await _build_entitlement_rows(tenant_id)
@@ -621,15 +694,15 @@ async def get_entitlements(
 )
 async def get_usage(
     operator: None = Depends(require_operator),
-    tenant_id: str = Depends(require_tenant_id),
 ) -> UsageResponseOut:
     """GET /v1/model-runtime/usage — aggregate + per-model usage.
 
     Consumed by the Kyber ``UsagePage`` (C14). Operator-authorized (Kyber admin
-    surface). Deterministic seed data (all-zero, fail-closed) until a metering
-    store is wired; the shape matches the Kyber ``UsageResponse`` exactly.
+    surface). Global surface: aggregate seed data (all-zero, fail-closed) until
+    a metering store is wired; no per-tenant data today, so no tenant scope is
+    required. The shape matches the Kyber ``UsageResponse`` exactly.
     """
-    return _build_usage(tenant_id)
+    return _build_usage()
 
 
 @router.get(
@@ -638,15 +711,15 @@ async def get_usage(
     summary="Routing trace summaries",
 )
 async def get_traces(
-    operator: None = Depends(require_operator),
-    tenant_id: str = Depends(require_tenant_id),
+    tenant_id: str = Depends(require_operator_tenant_scope),
 ) -> TracesResponseOut:
     """GET /v1/model-runtime/traces — routing trace summaries.
 
     Consumed by the Kyber ``TracesPage`` (C14). Operator-authorized (Kyber admin
-    surface). Deterministic seed data, tenant-scoped, and content-free: only
-    routing-decision summary fields are ever returned — never request/response
-    bodies.
+    surface). Deterministic seed data, scoped to the tenant derived by
+    :func:`require_operator_tenant_scope` (workforce access context or legacy
+    binding), and content-free: only routing-decision summary fields are ever
+    returned — never request/response bodies.
     """
     return TracesResponseOut(traces=_build_traces(tenant_id))
 
@@ -659,6 +732,7 @@ __all__ = [
     "TracesResponseOut",
     "UsageResponseOut",
     "require_operator",
+    "require_operator_tenant_scope",
     "require_tenant_id",
     "router",
 ]
