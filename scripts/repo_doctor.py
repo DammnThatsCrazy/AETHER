@@ -413,6 +413,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "packages/shared/comparison-contract.ts",
                 "Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py",
                 "Backend Architecture/aether-backend/services/silver/generated_ownership.py",
+                "packages/shared/intelligence-projections.generated.ts",
+                "Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py",
             ],
             name="Unified-platform generated contracts — no uncommitted diff",
             results=results,
@@ -589,6 +591,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="align packages/shared/contracts/projector-ownership-registry.json with services/silver/dispatcher.py, then regenerate via make repo-doctor-fix",
+    )
+    run(
+        [sys.executable, "scripts/validate_intelligence_projections.py"],
+        name="Intelligence projection architecture (registry, DAG, cross-registry, inventory, order-resilience)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align packages/shared/contracts/intelligence-projection-registry.json with the shared contracts, generated artifacts, and real routes/surfaces/services; declare unresolved cross-registry refs in pendingAuthority/pendingReference",
     )
     run(
         [sys.executable, "scripts/validate_financial_value_semantics.py"],
