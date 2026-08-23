@@ -48,6 +48,11 @@ from services.commerce.reconciliation import (
     reset_commerce_reconciler,
 )
 from services.x402.commerce_store import reset_commerce_store
+from services.x402.control_plane import reset_control_plane
+from services.x402.facilitators import (
+    reset_asset_registry,
+    reset_facilitator_registry,
+)
 from services.x402.signer_authority import (
     SignerAuthority,
     reset_signer_authority,
@@ -74,6 +79,13 @@ def _reset():
     reset_commerce_reconciler()
     reset_metering_service()
     reset_signer_authority()
+    # The control plane and facilitator/asset registries capture the commerce
+    # store at construction; reset_commerce_store() replaces the store
+    # singleton, so these stale singletons must be dropped too or routing
+    # helpers read an old cleared store ("No facilitator for asset/chain").
+    reset_control_plane()
+    reset_facilitator_registry()
+    reset_asset_registry()
     reset_local_tables()
     yield
     reset_in_memory_stores()
@@ -81,6 +93,9 @@ def _reset():
     reset_commerce_reconciler()
     reset_metering_service()
     reset_signer_authority()
+    reset_control_plane()
+    reset_facilitator_registry()
+    reset_asset_registry()
     reset_local_tables()
 
 
