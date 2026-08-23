@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { expectTypeOf } from 'vitest';
 import * as modelSelection from '@aether-app/features/model-selection';
 import { defaultModelSelectionApi } from '@aether-app/features/model-selection/types';
+import { getAccessToken } from '@aether-app/features/auth';
 import type {
   EvidenceRef,
   ModelListResponse,
@@ -12,9 +13,20 @@ import type {
 // C13-F owns the model-selection typed contract + public barrel. These are
 // type-level + runtime checks that the contract is server-shaped, never leaks
 // credentials, and that the typed fetch client fails cleanly on non-2xx.
+//
+// The default client attaches the same transport authentication the shared
+// REST client does (cookie + bearer access token) so a cross-origin
+// `VITE_AETHER_ENDPOINT` still reaches the backend authenticated. The auth
+// module is mocked so `getAccessToken()` is controllable per-test.
+
+vi.mock('@aether-app/features/auth', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@aether-app/features/auth')>();
+  return { ...original, getAccessToken: vi.fn(() => null) };
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.mocked(getAccessToken).mockReset();
 });
 
 const MODELS: ModelRegistryModel[] = [
@@ -94,7 +106,60 @@ describe('defaultModelSelectionApi (typed fetch client)', () => {
 
     expect(result).toEqual(payload);
     expect(result.models[0]?.modelId).toBe('anthropic/claude-sonnet-4');
-    expect(fetch).toHaveBeenCalledWith('http://localhost:8000/v1/model-runtime/models');
+    // With no access token the call still sends the session cookie so a
+    // cross-origin `VITE_AETHER_ENDPOINT` reaches the backend authenticated.
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/v1/model-runtime/models',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  }, 15_000);
+
+  it('carries the access token (Authorization bearer) plus session cookie the backend needs for tenant scope', async () => {
+    const token = 'test-access-token-123';
+    vi.mocked(getAccessToken).mockReturnValue(token);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ models: [], tenantDefaultModel: null }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await defaultModelSelectionApi.getModels();
+    await defaultModelSelectionApi.setTenantDefault('openai/gpt-4o');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/v1/model-runtime/models',
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'include',
+        headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:8000/v1/model-runtime/tenant-default',
+      expect.objectContaining({
+        method: 'PUT',
+        credentials: 'include',
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        }),
+      }),
+    );
+  }, 15_000);
+
+  it('omits the Authorization header when no access token is present', async () => {
+    vi.mocked(getAccessToken).mockReturnValue(null);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ models: [], tenantDefaultModel: null }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await defaultModelSelectionApi.getModels();
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.credentials).toBe('include');
+    expect(init.headers).not.toHaveProperty('Authorization');
   }, 15_000);
 
   it('rejects with { status: 403 } when the endpoint denies the tenant', async () => {

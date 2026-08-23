@@ -88,4 +88,24 @@ describe('model-runtime admin types (ADR-008 D8/D9)', () => {
       status: 403,
     });
   });
+
+  it('carries the HttpOnly session cookie (credentials: include) on all five admin calls', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    await defaultModelRuntimeAdminApi.fetchRegistry();
+    await defaultModelRuntimeAdminApi.fetchHealth();
+    await defaultModelRuntimeAdminApi.fetchEntitlements();
+    await defaultModelRuntimeAdminApi.fetchUsage();
+    await defaultModelRuntimeAdminApi.fetchTraces();
+
+    const calls = vi.mocked(fetch).mock.calls;
+    expect(calls).toHaveLength(5);
+    for (const [url, init] of calls) {
+      expect(String(url)).toMatch(/\/v1\/model-runtime\/(registry|health|entitlements|usage|traces)$/);
+      expect(init).toEqual(expect.objectContaining({ credentials: 'include' }));
+    }
+  });
 });

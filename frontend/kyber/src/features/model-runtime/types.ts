@@ -1,3 +1,5 @@
+import { requestJson } from '@kyber/lib/auth';
+
 /**
  * Typed contract for the Kyber model-runtime admin surfaces.
  *
@@ -106,19 +108,20 @@ function resolveModelRuntimeBase(): string {
   return fallback || 'http://localhost:8000';
 }
 
-async function modelRuntimeRequest<T>(
-  resource: string,
-): Promise<T> {
+/**
+ * Typed GET over the shared Kyber credentialed transport.
+ *
+ * Routes through `requestJson` (lib/auth/session-transport.ts — "the only
+ * sanctioned way to talk to the Kyber control plane from the browser") so every
+ * admin call carries the HttpOnly `__Host-kyber_session` cookie via
+ * `credentials: 'include'`, exactly like the established REST client. Without
+ * it, cross-origin/local deployments reach `require_operator` unauthenticated
+ * and fail even for a signed-in operator. Non-2xx raises a `KyberAuthError`
+ * (carries `.status`, never credential material).
+ */
+async function modelRuntimeRequest<T>(resource: string): Promise<T> {
   const base = resolveModelRuntimeBase();
-  const response = await fetch(`${base}/v1/model-runtime/${resource}`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!response.ok) {
-    // Fail cleanly with a status-shaped error; no credential material.
-    throw { status: response.status, message: response.statusText || `model-runtime ${resource} failed` };
-  }
-  return (await response.json()) as T;
+  return requestJson<T>(`${base}/v1/model-runtime/${resource}`, (raw) => raw as T);
 }
 
 /**
