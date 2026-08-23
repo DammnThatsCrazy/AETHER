@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
+    "pydantic-settings>=2.4.0",  # services/model_runtime/config.py BaseSettings (import-time)
     "croniter>=2",   # jobs platform cron schedules (services/jobs/scheduler.py)
     "tzdata",        # IANA tz database for zoneinfo on slim images
 ]

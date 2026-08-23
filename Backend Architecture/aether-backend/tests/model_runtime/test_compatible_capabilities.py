@@ -202,7 +202,9 @@ async def test_compatible_payload_shape(monkeypatch):
     await provider.complete(_request())
 
     payload = fake["client"].post_kwargs["json"]
-    assert payload["model"] == "compat-model"
+    # Fix-4: the adapter sends the request's model when set, not its own
+    # configured default.
+    assert payload["model"] == "compat-test"
     assert payload["max_tokens"] == provider.max_tokens
     assert payload["messages"] == [{"role": "user", "content": "q"}]
 

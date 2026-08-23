@@ -28,6 +28,13 @@ import {
   SessionsPage,
   WorkforcePage,
 } from '@kyber/pages/security';
+import {
+  EntitlementsPage,
+  ModelRegistryPage,
+  ModelRuntimeHealthPage,
+  TracesPage,
+  UsagePage,
+} from '@kyber/features/model-runtime';
 
 const state = vi.hoisted(() => ({
   connectors: 'empty' as 'empty' | 'error',
@@ -37,6 +44,11 @@ const state = vi.hoisted(() => ({
   intelligence: 'empty' as 'empty' | 'error',
   live: 'empty' as 'empty' | 'error',
   mission: 'empty' as 'empty' | 'error',
+  modelEntitlements: 'empty' as 'empty' | 'error',
+  modelHealth: 'empty' as 'empty' | 'error',
+  modelRegistry: 'empty' as 'empty' | 'error',
+  modelTraces: 'empty' as 'empty' | 'error',
+  modelUsage: 'empty' as 'empty' | 'error',
   profile: 'empty' as 'empty' | 'error',
   query: 'empty' as 'empty' | 'error',
   reliability: 'empty' as 'empty' | 'error',
@@ -104,6 +116,37 @@ vi.mock('@kyber/lib/api', () => ({
   } } },
 }));
 
+// The five model-runtime admin pages default to `defaultModelRuntimeAdminApi`
+// (the real-endpoint typed client); drive its responses from `state` so each
+// page's successful-empty and unavailable route states are both covered.
+vi.mock('@kyber/features/model-runtime/types', () => {
+  const ok = <T,>(value: T) => Promise.resolve(value);
+  const fail = (message: string) => Promise.reject(new Error(message));
+  return {
+    defaultModelRuntimeAdminApi: {
+      fetchRegistry: () =>
+        state.modelRegistry === 'error'
+          ? fail('registry backend offline')
+          : ok({ models: [] }),
+      fetchHealth: () =>
+        state.modelHealth === 'error'
+          ? fail('health backend offline')
+          : ok({ status: 'ok', providers: [], checks: {} }),
+      fetchEntitlements: () =>
+        state.modelEntitlements === 'error'
+          ? fail('entitlements backend offline')
+          : ok({ entitlements: [] }),
+      fetchUsage: () =>
+        state.modelUsage === 'error'
+          ? fail('usage backend offline')
+          : ok({ period: '2026-08', totals: { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 }, byModel: [] }),
+      fetchTraces: () =>
+        state.modelTraces === 'error'
+          ? fail('traces backend offline')
+          : ok({ traces: [] }),
+    },
+  };
+});
 
 vi.mock('@kyber/features/mission', () => ({
   useMissionData: () => ({
@@ -568,6 +611,46 @@ const cases: RouteStateCase[] = [
     emptyText,
     errorText: 'security backend offline',
   })),
+  {
+    route: '/model-runtime/registry',
+    Page: ModelRegistryPage,
+    empty: () => { state.modelRegistry = 'empty'; },
+    fail: () => { state.modelRegistry = 'error'; },
+    emptyText: 'No models registered',
+    errorText: 'Unable to load registry',
+  },
+  {
+    route: '/model-runtime/health',
+    Page: ModelRuntimeHealthPage,
+    empty: () => { state.modelHealth = 'empty'; },
+    fail: () => { state.modelHealth = 'error'; },
+    emptyText: 'No providers reported.',
+    errorText: 'Unable to load health',
+  },
+  {
+    route: '/model-runtime/entitlements',
+    Page: EntitlementsPage,
+    empty: () => { state.modelEntitlements = 'empty'; },
+    fail: () => { state.modelEntitlements = 'error'; },
+    emptyText: 'No entitlements recorded',
+    errorText: 'Unable to load entitlements',
+  },
+  {
+    route: '/model-runtime/usage',
+    Page: UsagePage,
+    empty: () => { state.modelUsage = 'empty'; },
+    fail: () => { state.modelUsage = 'error'; },
+    emptyText: 'No model usage recorded',
+    errorText: 'Unable to load usage',
+  },
+  {
+    route: '/model-runtime/traces',
+    Page: TracesPage,
+    empty: () => { state.modelTraces = 'empty'; },
+    fail: () => { state.modelTraces = 'error'; },
+    emptyText: 'No routing traces',
+    errorText: 'Unable to load traces',
+  },
 ];
 
 describe('Kyber page route-state family', () => {
@@ -580,6 +663,11 @@ describe('Kyber page route-state family', () => {
     state.intelligence = 'empty';
     state.live = 'empty';
     state.mission = 'empty';
+    state.modelEntitlements = 'empty';
+    state.modelHealth = 'empty';
+    state.modelRegistry = 'empty';
+    state.modelTraces = 'empty';
+    state.modelUsage = 'empty';
     state.profile = 'empty';
     state.query = 'empty';
     state.reliability = 'empty';

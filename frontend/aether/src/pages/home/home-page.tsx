@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@aether/ui';
 import { useAuth } from '@aether-app/features/auth';
+import { isFeatureEnabled } from '@aether-app/lib/featureFlags';
+import { ModelSelectionPanel } from '@aether-app/features/model-selection';
 import { DecisionIntelligencePanel } from '@aether-app/components/decision-intelligence-panel';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 
@@ -55,6 +57,12 @@ export function HomePage() {
 
         <OutcomeLedgerPanel />
         <DecisionIntelligencePanel />
+
+        {/* ADR-008 D9: tenant model-routing preference. Feature-flag gated (D8)
+            — the surface appears only when the operator enables the harness. */}
+        {isFeatureEnabled('enableModelHarness') && (
+          <ModelSelectionPanel {...(user?.id ? { tenantId: user.id } : {})} />
+        )}
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { RequireAuth } from '@kyber/features/auth';
 import { AppShell } from '@kyber/components/layout';
+import { isFeatureEnabled } from '@kyber/lib/featureFlags';
 import { LoadingState } from '@aether/ui';
 import { CallbackPage } from '@kyber/pages/callback';
 import { ErrorBoundary } from './error-boundary';
@@ -84,6 +85,15 @@ const KyberIntelligenceOSPage = lazy(() => import('@kyber/pages/intelligence-os'
 // disabled state when enableProviderRuntime is off, so mounting the route is not
 // a grant — the backend still gates /v1/admin/kyber/provider-connections/*.
 const ProviderConnectionsPage = lazy(() => import('@kyber/pages/provider-connections').then(m => ({ default: m.ProviderConnectionsPage })));
+// Model-runtime control-plane admin surfaces (ADR-008 D8/D9). The routes below
+// mount only when the enableModelHarness frontend flag is on (default OFF,
+// matching the Aether tenant-facing harness surface); the backend
+// /v1/model-runtime/* endpoints gate every request, so routing is not a grant.
+const ModelRegistryPage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.ModelRegistryPage })));
+const ModelRuntimeHealthPage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.ModelRuntimeHealthPage })));
+const EntitlementsPage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.EntitlementsPage })));
+const UsagePage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.UsagePage })));
+const TracesPage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.TracesPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -190,6 +200,16 @@ export function AppRouter() {
                 <Route path="/ai-efficiency" element={<PageSuspense><AiEfficiencyPage /></PageSuspense>} />
                 <Route path="/targeting" element={<PageSuspense><TargetingIntelligencePage /></PageSuspense>} />
                 <Route path="/provider-connections" element={<PageSuspense><ProviderConnectionsPage /></PageSuspense>} />
+                {/* Model-runtime control-plane admin surfaces — flag-gated (default OFF). */}
+                {isFeatureEnabled('enableModelHarness') && (
+                  <>
+                    <Route path="/model-runtime/registry" element={<PageSuspense><ModelRegistryPage /></PageSuspense>} />
+                    <Route path="/model-runtime/health" element={<PageSuspense><ModelRuntimeHealthPage /></PageSuspense>} />
+                    <Route path="/model-runtime/entitlements" element={<PageSuspense><EntitlementsPage /></PageSuspense>} />
+                    <Route path="/model-runtime/usage" element={<PageSuspense><UsagePage /></PageSuspense>} />
+                    <Route path="/model-runtime/traces" element={<PageSuspense><TracesPage /></PageSuspense>} />
+                  </>
+                )}
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

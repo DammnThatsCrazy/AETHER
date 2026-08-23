@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "1884f7be"
+last_synced_commit: "01ee3877"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -2844,7 +2844,9 @@ The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/sem
 
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
 
-Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of mutating graph edges or merging semantic-mediated estimates into ordinary attribution.
+Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of merging semantic-mediated estimates into ordinary attribution. `POST /v1/graph/semantic-overlay` returns real `edge_overlays` read from durable Gold (`gold_relationship_semantic_state`): each overlay edge is a directed relationship projection (`source_ref` → `target_ref`) carrying relationship, stance, trust, and confidence metadata, restricted to edges touching the requested subject when a `subject_ref`/`subject` filter is given.
+
+Graph reachability is governed, never implied by the routes: the semantic graph projector (`services/semantic_intelligence/graph_projector.py`, WorkerSpec `semantic_graph_projector` under the `semantic-worker` role) is flag-gated (`SEMANTIC_GRAPH_PROJECTOR_ENABLED`, default OFF) and, per tenant, projects each Gold relationship row as a directed `SEMANTIC_RELATES_TO` edge **through the canonical `GraphMutationGateway`** — never a direct graph write — so the mutation is ledger-recorded in shadow/enforce mode. The pass is idempotent (an edge already present for `(tenant, source, target)` is skipped) and tenant-scoped. `SEMANTIC_RELATES_TO` maps to `RelationshipLayer.EXCLUDED` (a derived analytics overlay, not a human/agent interaction, so enforce-mode validation needs no consent purpose). The overlay route itself never mutates edges.
 
 ## Communications Intelligence APIs
 
@@ -3300,3 +3302,73 @@ proof system. Every route is gated by `require_kyber_access(SELF_CAPABILITY)`.
 The `label` field is accepted on the wire for contract stability but is not
 persisted on the `DeviceProofKey` row; it is carried in the re-key audit event
 instead.
+
+---
+
+## Model Runtime — Multi-Model Intelligence Harness (v8.12.0)
+
+Operator + tenant surfaces for the provider-neutral multi-model harness
+(ADR-008) under `/v1/model-runtime`
+(`Backend Architecture/aether-backend/services/model_runtime/`). Serves the
+generated model registry, per-provider health, tenant entitlements, usage, and
+routing traces, plus the tenant model-selection preference.
+
+**Feature-gated (ADR-008 D9).** The entire surface is inert while
+`MODEL_RUNTIME_ENABLED=false` (the default): every route returns HTTP 503
+`{"status":"disabled","code":"model_runtime_disabled"}` — no data is ever
+served and the response shapes leak nothing. The gate is read from
+`services/model_runtime/config.py` (`ModelRuntimeSettings`), not the app
+settings module, and any configuration error resolves to OFF; in a non-local
+environment, enabling the gate additionally requires a production-safe
+credential backend and a real (non-test-only) default provider. The router is
+mounted in `main.py` only when the gate is on (lazy import, ImportError-guarded
+— the surface costs nothing while disabled).
+
+**Tenant scope is server-authoritative.** The tenant is derived from the
+authenticated request state (bound by the auth middleware from the verified
+session), and a client can never select tenant scope via headers, body, or
+query. The Aether tenant surfaces (`models`, `tenant-default`) require an
+authenticated tenant (fail-closed HTTP 400
+`{"status":"error","code":"tenant_required"}`). The Kyber operator surfaces
+(`registry`, `health`, `usage`) are global — they carry no per-tenant data, so
+only `require_operator` is applied (mirroring the repo's
+`require_kyber_operator` gate; non-operators receive HTTP 401/403
+`operator_required`). The tenant-scoped Kyber surfaces (`entitlements`,
+`traces`) are operator-authorized and then resolve their tenant scope from the
+Kyber workforce access context when a workforce session is present — a
+workforce actor is intentionally tenantless, so `request.state.tenant` is never
+bound for it and it must not be rejected for lacking one; a workforce session
+whose access context carries no tenant scope fails closed (HTTP 403
+`{"status":"error","code":"tenant_scope_required"}`), while a non-workforce
+request with no authenticated tenant is rejected as before (HTTP 400
+`tenant_required`).
+
+**Credential-free responses.** Health and entitlement reasons pass through a
+sanitizer that blanks secret-shaped material (`sk-`, `pk_`, `rk_live_`,
+`whsec_`, `AKIA`, `Bearer `, `Authorization:`, `X-Api-Key:`, `password=`,
+`secret=`, `key=`, `eyJ`). No route returns credentials or raw
+request/response content; trace summaries carry routing-decision fields only.
+
+**Backing stores.** The registry is the generated model catalog
+(`shared/model_governance/generated_model_registry.py`). Health is probed by
+`RuntimeHealthProbe` over a deterministic seed provider set — all
+network-backed registry providers report unconfigured (fail-closed). Usage and
+traces are deterministic, clearly-marked seed data (all-zero usage); a real
+metering/trace store plugs in later. The tenant default model is a
+non-durable in-memory seed.
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/model-runtime/models` | Tenant model registry + default | Aether `ModelSelectionPanel`. `tenantDefaultModel` comes from a non-durable in-memory seed (`null` for unknown tenants). |
+| PUT | `/v1/model-runtime/tenant-default` | Set the tenant default model | Body `{ "modelId" }`; unknown model id → HTTP 400 `unknown_model`; a model the tenant is not entitled to → HTTP 403 `model_not_entitled`; persists to the in-memory seed only; returns 204. |
+| GET | `/v1/model-runtime/registry` | Full model catalog | Kyber `ModelRegistryPage`. Global surface — operator-authorized, no per-tenant data, no tenant scope required (workforce operators served). |
+| GET | `/v1/model-runtime/health` | Provider health summary | Kyber `ModelRuntimeHealthPage`. Global surface — operator-authorized, no tenant scope required. `status` ∈ `ok` / `degraded` / `unhealthy`; reasons sanitized. |
+| GET | `/v1/model-runtime/entitlements` | Per-model entitlement rows | Kyber `EntitlementsPage`. Operator-authorized; tenant scope resolved from the workforce access context when present, else the legacy tenant binding (403 `tenant_scope_required` for a tenantless workforce session). |
+| GET | `/v1/model-runtime/usage` | Aggregate + per-model usage | Kyber `UsagePage`. Global surface — operator-authorized, no tenant scope required. Deterministic all-zero seed data (fail-closed) until metering is wired. |
+| GET | `/v1/model-runtime/traces` | Routing trace summaries | Kyber `TracesPage`. Operator-authorized; content-free decision summaries only; tenant scope resolved from the workforce access context when present, else the legacy tenant binding. |
+
+All routes share the `tags=["model-runtime"]` group and carry the D9 gate
+dependency; the Aether (`models`, `tenant-default`) and Kyber (`registry`,
+`health`, `entitlements`, `usage`, `traces`) clients are typed to these exact
+paths in `frontend/aether/src/features/model-selection/types.ts` and
+`frontend/kyber/src/features/model-runtime/types.ts` respectively.

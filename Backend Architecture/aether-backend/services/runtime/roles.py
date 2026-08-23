@@ -151,7 +151,9 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "measurement-worker": frozenset(),
     # Stream consumer is owned by consumer_specs.py; the reconciler + retention
     # supervised loop specs (each gated on its settings flag) are owned here.
-    "semantic-worker": frozenset({"semantic_reconciler", "semantic_retention"}),
+    "semantic-worker": frozenset(
+        {"semantic_reconciler", "semantic_retention", "semantic_graph_projector"}
+    ),
     # x402_settlement_reconciliation projects verified on-chain finality into
     # settlement state — a materialization, like the payment-rail sync/repair
     # loops that already ride this role. payment_alert_eval is the payment-rails

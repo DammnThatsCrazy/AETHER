@@ -75,6 +75,9 @@ SYNTHETIC_FIXTURE_VALUES: frozenset[str] = frozenset({
     "token: 'mock_access_token_refreshed'",
     'xoxb-new-token-here',
     "-----BEGIN RSA PRIVATE KEY-----",
+    # model_runtime harness fixtures: the PEM header literal used to assert the
+    # redaction/leak-detection gates reject PEM-format material (no key body).
+    "-----BEGIN PRIVATE KEY-----",
     'SECRET="test-sdk-config-secret-for-tests"',
 })
 

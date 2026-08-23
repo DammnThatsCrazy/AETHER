@@ -660,14 +660,16 @@ FROM jsonb_to_recordset($1::jsonb) AS r(
     payload jsonb, payload_bytes integer, payload_hash text, source text,
     source_tag text, prev_hash text, integrity_hash text
 )
--- Arbiter is the PRIMARY KEY id (a deterministic sha256 of
--- tenant_id|event_id|schema_version, so it is 1:1 with the composite unique
--- key). Under concurrent inserts of the same event, ON CONFLICT DO NOTHING
--- only suppresses a conflict detected on its arbiter index; with the composite
--- as the arbiter, a racing insert could still raise on the SEPARATE id PK
--- (bronze_sdk_events_pkey) before the composite arbiter resolved. Making the
--- PK the arbiter serializes the race on that one index — exactly-once holds.
-ON CONFLICT (id) DO NOTHING
+-- No conflict target: ON CONFLICT DO NOTHING without a target suppresses a
+-- violation on ANY unique index. This table has two overlapping unique
+-- indexes — the PK bronze_sdk_events_pkey (deterministic sha256 id, 1:1 with
+-- the composite key) and the composite ux_bronze_sdk_events_key — and
+-- arbitrating only one of them leaves the other able to raise a raw
+-- unique_violation under a concurrent same-key race (the losing racer's
+-- insert probes the non-arbiter index before the winner commits, so ON
+-- CONFLICT never engages). No target => the losers skip on whichever index
+-- they hit first; exactly-once holds across both indexes.
+ON CONFLICT DO NOTHING
 RETURNING tenant_id, event_id, schema_version
 """
 
@@ -708,11 +710,11 @@ FROM jsonb_to_recordset($1::jsonb) AS r(
     partition_key text, payload jsonb, status text, available_at timestamptz,
     prev_hash text, integrity_hash text
 )
--- Arbiter is the PK id (deterministic sha256 of tenant_id|event_id|topic, 1:1
--- with the composite unique key) for the same concurrency reason as the Bronze
--- insert above: it serializes a racing duplicate on the one PK index rather
--- than risking a raise on the separate event_outbox PK.
-ON CONFLICT (id) DO NOTHING
+-- No conflict target, for the same reason as the Bronze insert above: the
+-- outbox carries overlapping PK + composite unique indexes, and a targeted
+-- arbiter can still let the non-arbiter index raise a unique_violation under
+-- a concurrent same-key race. No target => any unique violation is skipped.
+ON CONFLICT DO NOTHING
 """
 
 # Which of this batch's (tenant_id, event_id, topic) keys already exist? Only

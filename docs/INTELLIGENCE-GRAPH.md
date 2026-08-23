@@ -68,6 +68,14 @@ Intelligence API
 
 Graph can be rebuilt from lake state or incrementally updated.
 
+A second, governed mutation path closes the "Gold is computed but never reaches
+the graph" gap for semantic intelligence: the **semantic graph projector**
+(`services/semantic_intelligence/graph_projector.py`) reads each tenant's
+durable `gold_relationship_semantic_state` projections and writes one directed
+`SEMANTIC_RELATES_TO` edge per relationship (`source_ref -> target_ref`) into
+the graph **through the canonical `GraphMutationGateway`** — never a direct
+graph write. See [Semantic relationship overlay](#semantic-relationship-overlay).
+
 ## Architecture Layers
 
 | Layer | Name | Description | Key Components |
@@ -587,6 +595,37 @@ Every graph vertex and edge carries typed sub-objects:
 ### Overlays
 
 `POST /v1/graph/query` with `include_overlays: ["risk", "economic", "campaign", "geography", "consent", "confidence", "fraud", "agent"]` appends overlay data per node in the result.
+
+### Semantic relationship overlay
+
+The semantic-intelligence relationship Gold is projected into the graph as
+governed `SEMANTIC_RELATES_TO` edges (directed `source_ref -> target_ref`) by
+the **semantic graph projector**:
+
+- **Scheduled worker** — WorkerSpec `semantic_graph_projector` (role
+  `semantic-worker`), gated on `SEMANTIC_GRAPH_PROJECTOR_ENABLED` (default
+  `false`, matching the graph layers' default-off posture); pass interval
+  `SEMANTIC_GRAPH_PROJECTOR_INTERVAL_S` (default 6h).
+- **Source** — durable `gold_relationship_semantic_state` rows read per tenant
+  (`SemanticFactRepository`); on the in-memory local store there are no rows, so
+  a pass is a no-op.
+- **Governed write path** — every edge flows through the canonical
+  `GraphMutationGateway` with an `edge_intent` (`operation=edge_created`,
+  `actor_kind=system`, `causality_class=observed_sequence`), never a direct
+  graph write. The gateway's mode (`off` / `shadow` / `enforce`, from
+  `settings.temporal_observatory.mutation_gateway_mode`) decides whether the
+  mutation is also recorded in the append-only ledger.
+- **Relationship layer** — `SEMANTIC_RELATES_TO` is mapped to the `EXCLUDED`
+  layer (a derived analytics overlay, not a human/agent interaction), so
+  enforce-mode validation does not require a consent purpose.
+- **Idempotent and tenant-scoped** — an edge already present for `(tenant,
+  source, target)` is skipped, so repeated sweeps never duplicate; every edge
+  carries the tenant on both `tenantId` and `tenant_id` properties, so one
+  tenant's projection never matches another's edge.
+- **Read-back** — `POST /v1/graph/semantic-overlay` returns the overlay's
+  `edge_overlays` from durable Gold directly (`list_relationship_edges`), so the
+  overlay is honest whether or not the projector has run; a subject filter
+  restricts the edges to those touching the subject.
 
 ### Cluster360
 

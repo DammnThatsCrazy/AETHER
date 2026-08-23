@@ -1,0 +1,742 @@
+"""HTTP route tests for the model-runtime control plane (Commit 16, Agent B).
+
+Pins the D9 feature gate (off-by-default 503 fail-closed surface), the exact
+response shapes the landed frontend clients expect (Aether model-selection +
+Kyber model-runtime), server-authoritative tenant scope via ``X-Tenant-ID``,
+and the no-secrets invariant on the health surface.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+import pytest
+from fastapi import FastAPI, Request, Response
+from fastapi.testclient import TestClient
+
+import services.model_runtime.routes as routes
+from services.model_runtime.observability.health import (
+    ProviderHealth as ProbeProviderHealth,
+    RuntimeHealth,
+)
+
+# ---------------------------------------------------------------------------
+# Fixtures + contract constants.
+# ---------------------------------------------------------------------------
+
+# X-Tenant-ID is the repo's canonical tenant header. Tenant scope is
+# server-authoritative: the auth middleware derives it from the verified
+# session (request.state.tenant), and this suite mirrors that binding with a
+# lightweight middleware that maps the test header onto request.state.tenant.
+TENANT_HEADERS = {"X-Tenant-ID": "tenant-demo"}
+
+
+class _FakeTenant:
+    """Minimal authenticated-tenant stand-in matching the auth-middleware
+    contract (``request.state.tenant``).
+
+    By default every test tenant carries the Kyber operator permission so the
+    operator-authorized admin surfaces pass ``require_operator`` (mirroring a
+    Kyber operator calling the admin plane). Pass ``operator=False`` to model a
+    plain Aether tenant, which the operator gate must deny.
+    """
+
+    def __init__(self, tenant_id: str, *, operator: bool = True) -> None:
+        self.tenant_id = tenant_id
+        # operator_actor() reads user_id (falling back to tenant_id).
+        self.user_id = None
+        self.permissions = ["kyber:operator"] if operator else []
+
+    def has_permission(self, permission: str) -> bool:
+        return permission in self.permissions
+
+GET_PATHS = (
+    "/v1/model-runtime/models",
+    "/v1/model-runtime/registry",
+    "/v1/model-runtime/health",
+    "/v1/model-runtime/entitlements",
+    "/v1/model-runtime/usage",
+    "/v1/model-runtime/traces",
+)
+PUT_PATH = "/v1/model-runtime/tenant-default"
+
+ALL_ROUTES = tuple(("GET", path) for path in GET_PATHS) + (("PUT", PUT_PATH),)
+
+# Field sets taken verbatim from the landed frontend types.
+MODEL_FIELDS = {
+    "capabilities",
+    "inputCostPerMTok",
+    "modelId",
+    "outputCostPerMTok",
+    "provider",
+    "status",
+}
+HEALTH_PROVIDER_FIELDS = {"configured", "healthy", "provider", "reason"}
+USAGE_TOTALS_FIELDS = {"calls", "costUsd", "inputTokens", "outputTokens"}
+USAGE_BY_MODEL_FIELDS = USAGE_TOTALS_FIELDS | {"modelId"}
+TRACE_FIELDS = {
+    "correlationId",
+    "createdAt",
+    "entitled",
+    "fallback",
+    "latencyMs",
+    "mode",
+    "profileId",
+    "requestedModel",
+    "selectedModel",
+    "status",
+    "tenantId",
+    "traceId",
+}
+ENTITLEMENT_ROW_FIELDS = {"entitled", "modelId", "reason", "tenantId"}
+
+_SECRET_MARKERS = ("sk-", "AKIA", "Bearer ", "Authorization:", "eyJ")
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    """A FastAPI app with only the model-runtime router mounted.
+
+    A lightweight middleware maps the ``X-Tenant-ID`` test header onto
+    ``request.state.tenant`` — exactly how the real auth middleware binds the
+    server-authoritative tenant from the verified session (ADR-008). No header
+    means no authenticated tenant, which the routes fail closed on.
+    """
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def _bind_tenant(request: Request, call_next: Callable) -> Response:
+        tenant_id = request.headers.get("X-Tenant-ID", "").strip()
+        if tenant_id:
+            request.state.tenant = _FakeTenant(tenant_id)
+        return await call_next(request)
+
+    app.include_router(routes.router)
+    return TestClient(app)
+
+
+@pytest.fixture()
+def non_operator_client() -> TestClient:
+    """Like :func:`client`, but the tenant is a plain Aether tenant (no Kyber
+    operator permission) so the operator-authorized admin surfaces must fail
+    closed with HTTP 403 while the tenant-panel surfaces stay reachable."""
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def _bind_tenant(request: Request, call_next: Callable) -> Response:
+        tenant_id = request.headers.get("X-Tenant-ID", "").strip()
+        if tenant_id:
+            request.state.tenant = _FakeTenant(tenant_id, operator=False)
+        return await call_next(request)
+
+    app.include_router(routes.router)
+    return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _restore_seed_store() -> None:
+    """Restore the in-memory tenant-default seed between tests."""
+    saved = dict(routes._TENANT_DEFAULT_MODELS)
+    routes._TENANT_DEFAULT_MODELS.clear()
+    routes._TENANT_DEFAULT_MODELS.update(saved)
+    yield
+
+
+def _enable_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force the D9 gate ON for the duration of a test."""
+    monkeypatch.setattr(routes, "_model_runtime_enabled", lambda: True)
+
+
+# ---------------------------------------------------------------------------
+# Kyber workforce identity — the primary operator authentication path.
+# ---------------------------------------------------------------------------
+
+
+class _FakeWorkforceContext:
+    """Minimal Kyber workforce session stand-in, shaped like what the access
+    dependency stashes on ``request.state.kyber_access_context``.
+
+    A workforce actor is intentionally tenantless: ``request.state.tenant`` is
+    NEVER bound for it. Any tenant scope is carried on the access context
+    (``tenant_id``, or a ``scope`` object) for the purpose of the request.
+    """
+
+    def __init__(
+        self,
+        tenant_id: str | None = None,
+        *,
+        scope_tenant: str | None = None,
+    ) -> None:
+        self.operator_id = "ops-ops-1"
+        self.authenticated = True
+        self.active = True
+        self.session_active = True
+        self.tenant_id = tenant_id
+        self.scope = _FakeWorkforceScope(scope_tenant) if scope_tenant else None
+
+
+class _FakeWorkforceScope:
+    """Purpose-bound tenant scope carried on the access context."""
+
+    def __init__(self, tenant_id: str) -> None:
+        self.tenant_id = tenant_id
+
+
+def _workforce_app(context: object) -> FastAPI:
+    """An app mounting only the model-runtime router behind a middleware that
+    binds a workforce access context (and nothing else — never
+    ``request.state.tenant``), exactly like the real workforce auth path."""
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def _bind_workforce(request: Request, call_next: Callable) -> Response:
+        request.state.kyber_access_context = context
+        return await call_next(request)
+
+    app.include_router(routes.router)
+    return app
+
+
+def _enable_workforce_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Turn workforce identity ON and the legacy operator identity OFF so only
+    a Kyber workforce session can pass the operator gate (the deployment the
+    primary workforce path runs under)."""
+    from config.settings import KyberWorkforceConfig, settings
+
+    monkeypatch.setattr(
+        settings,
+        "kyber_workforce",
+        KyberWorkforceConfig(
+            workforce_identity_enabled=True,
+            legacy_operator_identity_allowed=False,
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route table + contract registration.
+# ---------------------------------------------------------------------------
+
+
+def test_registers_exact_frontend_contract_paths() -> None:
+    """Every frontend path is registered with the expected method."""
+    registered = set()
+    for route in routes.router.routes:
+        raw = getattr(route, "path", None) or ""
+        path = raw if raw.startswith("/v1") else f"{routes.router.prefix}{raw}"
+        for method in (getattr(route, "methods", None) or ()):
+            registered.add((method, path))
+    assert set(ALL_ROUTES) == registered
+
+
+# ---------------------------------------------------------------------------
+# D9 feature gate — disabled surface is fail-closed (503) everywhere.
+# ---------------------------------------------------------------------------
+
+
+def test_disabled_gate_returns_503_on_every_path(client: TestClient) -> None:
+    """Gate OFF (D9 default) → HTTP 503 on every route, never real data."""
+    for method, path in ALL_ROUTES:
+        kwargs = {"headers": TENANT_HEADERS}
+        if path == PUT_PATH:
+            kwargs["json"] = {"modelId": "claude-haiku-4-5-20251001"}
+        resp = client.request(method, path, **kwargs)
+        assert resp.status_code == 503, f"{method} {path} → {resp.status_code}"
+        assert resp.json()["detail"]["code"] == "model_runtime_disabled"
+        assert "models" not in resp.text
+        assert "entitlements" not in resp.text
+
+
+def test_disabled_gate_serves_nothing_without_tenant_header(
+    client: TestClient,
+) -> None:
+    """A disabled surface 503s even before tenant validation (no leak)."""
+    resp = client.get("/v1/model-runtime/health")
+    assert resp.status_code == 503
+    assert resp.json()["detail"]["code"] == "model_runtime_disabled"
+
+
+def test_disabled_gate_can_be_flipped_by_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gate reads MODEL_RUNTIME_ENABLED through ModelRuntimeSettings."""
+    monkeypatch.setenv("MODEL_RUNTIME_ENABLED", "false")
+    assert routes._model_runtime_enabled() is False
+    monkeypatch.setenv("MODEL_RUNTIME_ENABLED", "true")
+    monkeypatch.setenv("AETHER_ENV", "local")
+    assert routes._model_runtime_enabled() is True
+
+
+# ---------------------------------------------------------------------------
+# Enabled gate — each route serves the EXACT frontend contract shapes.
+# ---------------------------------------------------------------------------
+
+
+def test_enabled_models_response_shape(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /models → Aether ModelListResponse { models, tenantDefaultModel }."""
+    _enable_gate(monkeypatch)
+    resp = client.get("/v1/model-runtime/models", headers=TENANT_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"models", "tenantDefaultModel"}
+    assert body["tenantDefaultModel"] == "claude-haiku-4-5-20251001"
+    assert body["models"]
+    for model in body["models"]:
+        assert set(model) == MODEL_FIELDS
+
+
+def test_enabled_registry_response_shape(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /registry → Kyber RegistryResponse { models }."""
+    _enable_gate(monkeypatch)
+    resp = client.get("/v1/model-runtime/registry", headers=TENANT_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"models"}
+    assert body["models"]
+    for model in body["models"]:
+        assert set(model) == MODEL_FIELDS
+
+
+def test_enabled_health_response_shape(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /health → Kyber HealthResponse { status, providers, checks }."""
+    _enable_gate(monkeypatch)
+    resp = client.get("/v1/model-runtime/health", headers=TENANT_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"status", "providers", "checks"}
+    assert body["status"] in {"ok", "degraded", "unhealthy"}
+    assert body["providers"]
+    for provider in body["providers"]:
+        assert set(provider) == HEALTH_PROVIDER_FIELDS
+    assert isinstance(body["checks"], dict)
+    assert all(isinstance(value, bool) for value in body["checks"].values())
+
+
+def test_enabled_entitlements_response_shape(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /entitlements → Kyber EntitlementsResponse { entitlements }."""
+    _enable_gate(monkeypatch)
+    resp = client.get("/v1/model-runtime/entitlements", headers=TENANT_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"entitlements"}
+    assert body["entitlements"]
+    for row in body["entitlements"]:
+        assert set(row) == ENTITLEMENT_ROW_FIELDS
+
+
+def test_enabled_usage_response_shape(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /usage → Kyber UsageResponse { period, totals, byModel }."""
+    _enable_gate(monkeypatch)
+    resp = client.get("/v1/model-runtime/usage", headers=TENANT_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"period", "totals", "byModel"}
+    assert body["period"]
+    assert set(body["totals"]) == USAGE_TOTALS_FIELDS
+    assert body["byModel"]
+    for row in body["byModel"]:
+        assert set(row) == USAGE_BY_MODEL_FIELDS
+
+
+def test_enabled_traces_response_shape(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /traces → Kyber TracesResponse { traces } (no raw content)."""
+    _enable_gate(monkeypatch)
+    resp = client.get("/v1/model-runtime/traces", headers=TENANT_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"traces"}
+    assert body["traces"]
+    for trace in body["traces"]:
+        assert set(trace) == TRACE_FIELDS
+
+
+# ---------------------------------------------------------------------------
+# Tenant scope — X-Tenant-ID is required and server-authoritative.
+# ---------------------------------------------------------------------------
+
+
+def test_tenant_header_required_on_every_route(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Enabled + no authenticated tenant → fail closed on every route.
+
+    Tenant-panel surfaces (models, tenant-default) require an authenticated
+    tenant (HTTP 400). The Kyber operator surfaces additionally require an
+    operator, so their operator gate fails closed first (HTTP 401).
+    """
+    _enable_gate(monkeypatch)
+    tenant_surfaces = {"/v1/model-runtime/models", "/v1/model-runtime/tenant-default"}
+    for method, path in ALL_ROUTES:
+        kwargs = {}
+        if path == PUT_PATH:
+            kwargs["json"] = {"modelId": "claude-haiku-4-5-20251001"}
+        resp = client.request(method, path, **kwargs)
+        if path in tenant_surfaces:
+            assert resp.status_code == 400, f"{method} {path} → {resp.status_code}"
+            assert resp.json()["detail"]["code"] == "tenant_required"
+        else:
+            assert resp.status_code == 401, f"{method} {path} → {resp.status_code}"
+            assert resp.json()["detail"]["code"] == "operator_required"
+
+
+def test_unknown_tenant_has_no_default_model(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unknown tenant gets tenantDefaultModel null (no cross-tenant leak)."""
+    _enable_gate(monkeypatch)
+    resp = client.get(
+        "/v1/model-runtime/models", headers={"X-Tenant-ID": "tenant-unknown"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["tenantDefaultModel"] is None
+
+
+def test_entitlements_are_tenant_scoped(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Entitlement rows always carry the requesting tenant's id."""
+    _enable_gate(monkeypatch)
+    tenant = "tenant-xyz"
+    resp = client.get("/v1/model-runtime/entitlements", headers={"X-Tenant-ID": tenant})
+    assert resp.status_code == 200
+    rows = resp.json()["entitlements"]
+    assert rows
+    assert all(row["tenantId"] == tenant for row in rows)
+
+
+def test_traces_are_tenant_scoped(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Trace summaries always carry the requesting tenant's id."""
+    _enable_gate(monkeypatch)
+    tenant = "tenant-xyz"
+    resp = client.get("/v1/model-runtime/traces", headers={"X-Tenant-ID": tenant})
+    assert resp.status_code == 200
+    traces = resp.json()["traces"]
+    assert traces
+    assert all(trace["tenantId"] == tenant for trace in traces)
+
+
+# ---------------------------------------------------------------------------
+# Operator authorization — the Kyber admin surfaces are operator-gated (F7).
+# ---------------------------------------------------------------------------
+
+
+def test_kyber_admin_surfaces_require_operator(
+    non_operator_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plain Aether tenant (non-operator) is denied on the Kyber admin
+    surfaces with 403; the Aether tenant-panel surfaces stay tenant-scoped."""
+    _enable_gate(monkeypatch)
+    for path in (
+        "/v1/model-runtime/registry",
+        "/v1/model-runtime/health",
+        "/v1/model-runtime/entitlements",
+        "/v1/model-runtime/usage",
+        "/v1/model-runtime/traces",
+    ):
+        resp = non_operator_client.get(path, headers=TENANT_HEADERS)
+        assert resp.status_code == 403, f"GET {path} → {resp.status_code}"
+        assert resp.json()["detail"]["code"] == "operator_required"
+
+    # The Aether tenant-panel surfaces are NOT operator-gated.
+    resp = non_operator_client.get(
+        "/v1/model-runtime/models", headers=TENANT_HEADERS
+    )
+    assert resp.status_code == 200
+
+
+def test_workforce_operator_reaches_global_kyber_surfaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tenantless Kyber workforce operator reaches the global admin surfaces.
+
+    Registry, health and usage carry no per-tenant data, so they must serve a
+    workforce operator with NO ``request.state.tenant`` (the primary workforce
+    authentication path). Regression: these surfaces used to reject the
+    workforce session with HTTP 400 ``tenant_required`` AFTER operator
+    authorization had already succeeded. The tenant-scoped surfaces (which
+    need a scope to serve rows from) fail closed with 403 ``tenant_scope_required``
+    — never the bogus ``tenant_required``.
+    """
+    _enable_gate(monkeypatch)
+    _enable_workforce_identity(monkeypatch)
+    client = TestClient(_workforce_app(_FakeWorkforceContext()))
+
+    for path in (
+        "/v1/model-runtime/registry",
+        "/v1/model-runtime/health",
+        "/v1/model-runtime/usage",
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 200, f"GET {path} → {resp.status_code}"
+        assert "tenant_required" not in resp.text
+
+    for path in (
+        "/v1/model-runtime/entitlements",
+        "/v1/model-runtime/traces",
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 403, f"GET {path} → {resp.status_code}"
+        assert resp.json()["detail"]["code"] == "tenant_scope_required"
+
+
+def test_workforce_operator_with_tenant_scope_reaches_all_kyber_surfaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A workforce operator holding a tenant scope reaches all five Kyber
+    surfaces.
+
+    The scope is derived from the access context (``tenant_id`` on the context
+    and, separately, on its ``scope`` object), never from ``request.state.tenant``
+    which is never bound for workforce actors. Regression: a scoped workforce
+    operator used to be rejected with 400 ``tenant_required`` on every Kyber
+    page.
+    """
+    _enable_gate(monkeypatch)
+    _enable_workforce_identity(monkeypatch)
+
+    # Context carries the scope directly on `tenant_id`...
+    client = TestClient(
+        _workforce_app(_FakeWorkforceContext(tenant_id="tenant-demo"))
+    )
+    for path in (
+        "/v1/model-runtime/registry",
+        "/v1/model-runtime/health",
+        "/v1/model-runtime/entitlements",
+        "/v1/model-runtime/usage",
+        "/v1/model-runtime/traces",
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 200, f"GET {path} → {resp.status_code}"
+
+    rows = client.get("/v1/model-runtime/entitlements").json()["entitlements"]
+    assert rows and all(row["tenantId"] == "tenant-demo" for row in rows)
+    traces = client.get("/v1/model-runtime/traces").json()["traces"]
+    assert traces and all(trace["tenantId"] == "tenant-demo" for trace in traces)
+
+    # ...and via the purpose-bound `scope` object fallback.
+    scoped_client = TestClient(
+        _workforce_app(_FakeWorkforceContext(scope_tenant="tenant-scoped-2"))
+    )
+    for path in (
+        "/v1/model-runtime/entitlements",
+        "/v1/model-runtime/traces",
+    ):
+        resp = scoped_client.get(path)
+        assert resp.status_code == 200, f"GET {path} → {resp.status_code}"
+    rows = scoped_client.get("/v1/model-runtime/entitlements").json()["entitlements"]
+    assert rows and all(
+        row["tenantId"] == "tenant-scoped-2" for row in rows
+    )
+
+
+def test_workforce_tenant_panel_surfaces_still_require_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Aether tenant-panel surfaces (models, tenant-default) stay
+    tenant-scoped under workforce identity: a tenantless workforce operator is
+    still rejected with 400 ``tenant_required`` there — only the Kyber admin
+    surfaces were meant to be reachable by a tenantless operator."""
+    _enable_gate(monkeypatch)
+    _enable_workforce_identity(monkeypatch)
+    client = TestClient(_workforce_app(_FakeWorkforceContext()))
+
+    resp = client.get("/v1/model-runtime/models")
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "tenant_required"
+
+    resp = client.put(
+        "/v1/model-runtime/tenant-default", json={"modelId": "gpt-4o-mini"}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "tenant_required"
+
+
+# ---------------------------------------------------------------------------
+# No-credentials invariant — health reasons are sanitized.
+# ---------------------------------------------------------------------------
+
+
+def test_health_never_renders_secrets(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Health responses blank sk-/AKIA/Bearer/JWT-shaped reason material."""
+    _enable_gate(monkeypatch)
+    secret_health = RuntimeHealth(
+        status="degraded",
+        providers=(
+            ProbeProviderHealth(
+                provider="anthropic",
+                configured=True,
+                healthy=True,
+                reason="ok sk-ant-api03-leak-value",
+            ),
+            ProbeProviderHealth(
+                provider="openai",
+                configured=True,
+                healthy=True,
+                reason="configured AKIAIOSFODNN7EXAMPLE",
+            ),
+            ProbeProviderHealth(
+                provider="kimi",
+                configured=False,
+                healthy=False,
+                reason="missing Authorization: Bearer eyJ-leak-payload",
+            ),
+        ),
+        checks={"anthropic": True, "openai": True, "kimi": False},
+    )
+    monkeypatch.setattr(routes, "_build_runtime_health", lambda: secret_health)
+
+    resp = client.get("/v1/model-runtime/health", headers=TENANT_HEADERS)
+    assert resp.status_code == 200
+
+    text = resp.text
+    for marker in _SECRET_MARKERS:
+        assert marker not in text, f"health response leaked marker {marker!r}"
+
+    providers = resp.json()["providers"]
+    assert all(
+        provider["reason"] == routes._GENERIC_REASON for provider in providers
+    )
+
+
+def test_sanitize_reason_blanks_secret_shapes() -> None:
+    """The sanitizer mirrors the frontend marker set (defense-in-depth)."""
+    assert routes._sanitize_reason("sk-ant-api03-secret") == routes._GENERIC_REASON
+    assert routes._sanitize_reason("AKIAIOSFODNN7EXAMPLE") == routes._GENERIC_REASON
+    assert routes._sanitize_reason("key= super-secret") == routes._GENERIC_REASON
+    assert routes._sanitize_reason("  ") == routes._GENERIC_REASON
+    assert routes._sanitize_reason(None) == routes._GENERIC_REASON
+    assert routes._sanitize_reason("provider not configured") == "provider not configured"
+
+
+# ---------------------------------------------------------------------------
+# PUT /tenant-default behavior.
+# ---------------------------------------------------------------------------
+
+
+def test_tenant_default_put_roundtrip(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A successful PUT persists the default for an entitled tenant+model."""
+    _enable_gate(monkeypatch)
+    tenant = "tenant-demo"
+    resp = client.put(
+        "/v1/model-runtime/tenant-default",
+        headers={"X-Tenant-ID": tenant},
+        json={"modelId": "gpt-4o-mini"},
+    )
+    assert resp.status_code == 204
+    assert resp.content == b""
+
+    resp = client.get(
+        "/v1/model-runtime/models", headers={"X-Tenant-ID": tenant}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["tenantDefaultModel"] == "gpt-4o-mini"
+
+
+def test_tenant_default_put_not_entitled_returns_403(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A model outside the tenant's entitlements is rejected with HTTP 403."""
+    _enable_gate(monkeypatch)
+    resp = client.put(
+        "/v1/model-runtime/tenant-default",
+        headers={"X-Tenant-ID": "tenant-demo"},
+        json={"modelId": "claude-opus-5"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "model_not_entitled"
+
+
+def test_tenant_default_put_unknown_model_rejected(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unknown model id fails closed with HTTP 400."""
+    _enable_gate(monkeypatch)
+    resp = client.put(
+        "/v1/model-runtime/tenant-default",
+        headers=TENANT_HEADERS,
+        json={"modelId": "not-a-real-model"},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "unknown_model"
+
+
+def test_tenant_default_request_forbids_extra_fields(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PUT body rejects unknown fields (house style: extra='forbid')."""
+    _enable_gate(monkeypatch)
+    resp = client.put(
+        "/v1/model-runtime/tenant-default",
+        headers=TENANT_HEADERS,
+        json={"modelId": "gpt-4o", "provider": "openai"},
+    )
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Response models are frozen; request model forbids extras.
+# ---------------------------------------------------------------------------
+
+
+def _config_value(model_cls: type, key: str) -> object:
+    """Read a pydantic model_config value (v1/v2 tolerant)."""
+    config = getattr(model_cls, "model_config", None)
+    if isinstance(config, dict):
+        return config.get(key)
+    return getattr(config, key, None)
+
+
+def test_response_models_are_frozen() -> None:
+    """Every response model is frozen (house style for read-only contracts)."""
+    for model_cls in (
+        routes.RegistryModelOut,
+        routes.ModelListResponseOut,
+        routes.RegistryResponseOut,
+        routes.ProviderHealthOut,
+        routes.HealthResponseOut,
+        routes.EntitlementRowOut,
+        routes.EntitlementsResponseOut,
+        routes.UsageTotalsOut,
+        routes.UsageByModelOut,
+        routes.UsageResponseOut,
+        routes.RoutingTraceOut,
+        routes.TracesResponseOut,
+    ):
+        assert _config_value(model_cls, "frozen") is True, model_cls.__name__
+
+
+def test_request_model_forbids_extra_fields() -> None:
+    """The tenant-default request model rejects unknown fields."""
+    assert _config_value(routes.TenantDefaultRequest, "extra") == "forbid"

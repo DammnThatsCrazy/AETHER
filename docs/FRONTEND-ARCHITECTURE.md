@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "1c1b7416"
+last_synced_commit: "71ebc958"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -725,6 +725,57 @@ Cross-device handoff and governed-action visibility added by the mobile-producti
   `verified | executed_unverified | denied | failed | expired` states from the
   kyber command plane.
 - **Client-sync consumption** distinguishes fresh/offline/stale; no offline mutation.
+
+---
+
+## Model Runtime Components (v8.12.0)
+
+Provider-neutral harness operator + tenant surfaces (ADR-008 D8/D9). All of it
+is feature-gated: the Aether panel behind `enableModelHarness` (default OFF),
+the Kyber pages behind the backend `MODEL_RUNTIME_ENABLED` gate (the routes
+return 503 while OFF). Typed contracts carry no credential material.
+
+- **Aether** (`frontend/aether/src/features/model-selection/`):
+  `ModelSelectionPanel` (tenant model-routing preference; `getModels` +
+  `setTenantDefault` against `/v1/model-runtime/models` +
+  `/v1/model-runtime/tenant-default`), `ModelRegistryView`, `EntitlementBadge`,
+  `EvidenceReferences`, and the `useModelSelection` hook. `types.ts` is the
+  server-shaped, credential-free contract (`ModelListResponse`,
+  `TenantModelSelectionApi`).
+- **Kyber** (`frontend/kyber/src/features/model-runtime/`): `ModelRegistryPage`
+  (`GET /v1/model-runtime/registry`), `ModelRuntimeHealthPage` (`/health`),
+  `EntitlementsPage` (`/entitlements`), `UsagePage` (`/usage`), `TracesPage`
+  (`/traces`) — read-only operator pages, each with an injectable typed client
+  (`defaultModelRuntimeAdminApi`) so tests stub exactly the one method they
+  drive.
+- **Credential-free by contract**: entitlement rows, health reasons, and trace
+  summaries are server-sanitized (secret-shaped markers blanked); the pages
+  never render keys or tokens.
+- **Authenticated transport**: the Aether model-selection client attaches the
+  same cookie + `Authorization: Bearer` token as the shared `restClient` (so
+  the backend can populate `request.state.tenant`); the Kyber model-runtime
+  admin client routes every call through a credentialed fetch
+  (`credentials: 'include'`) so the HttpOnly `__Host-kyber_session` cookie
+  crosses origins and `require_operator` passes for signed-in operators.
+
+Both apps register their model-runtime surfaces on the signed-in route tree —
+all of it behind `enableModelHarness` (default OFF):
+
+- **Kyber** (`frontend/kyber/src/app/router.tsx`): the five operator pages are
+  routed at `/model-runtime/registry`, `/model-runtime/health`,
+  `/model-runtime/entitlements`, `/model-runtime/usage`,
+  `/model-runtime/traces`, with discoverable sidebar entries
+  (`frontend/kyber/src/components/layout/sidebar.tsx`). While the feature flag
+  is OFF the routes stay registered but inert — every page renders the
+  backend's `model_runtime_disabled` 503 surface.
+- **Aether** (`frontend/aether/src/pages/home/home-page.tsx`): the
+  `ModelSelectionPanel` is mounted on the authenticated tenant home page. While
+  `enableModelHarness` is OFF the panel is absent (feature-flag gated); when ON
+  it drives `getModels` + `setTenantDefault` against the tenant model-runtime
+  surfaces.
+
+The typed fetch clients stay self-contained in their feature modules, not
+wired into `lib/api/endpoints.ts`.
 
 ---
 
