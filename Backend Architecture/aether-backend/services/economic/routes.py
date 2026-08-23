@@ -28,6 +28,7 @@ import logging
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal as _Decimal
 from typing import Any, Optional
 
 from fastapi import APIRouter, Query, Request
@@ -217,7 +218,7 @@ def _aggregate_spend(spend_by_currency: dict[str, Any]) -> tuple[
     return spend, per_currency, warnings
 
 
-def _spend_rows_to_usd_total(rows: list[dict[str, Any]]) -> Decimal:
+def _spend_rows_to_usd_total(rows: list[dict[str, Any]]) -> _Decimal:
     """Convert a list of spend rows to a single USD total via each row's
     recorded ``exchange_rate`` (program sec19).
 
