@@ -3996,6 +3996,23 @@
       "since_version": "8.12.0"
     },
     {
+      "path": "docs/billing-attachment-runbook.md",
+      "title": "Billing Attachment Runbook",
+      "slug": "operations/billing-attachment-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 12,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/brand-system/README.md",
       "title": "Olympus Labs / Aether / Kyber Brand System",
       "slug": "architecture/brand-system",
@@ -7381,6 +7398,22 @@
       "status": "stable",
       "since_version": "8.10.0",
       "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/staging-activation-runbook.md",
+      "title": "Staging Activation Runbook",
+      "slug": "operations/staging-activation-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 15,
+      "canonical_owner": "platform@aether"
     }
   ]
 }

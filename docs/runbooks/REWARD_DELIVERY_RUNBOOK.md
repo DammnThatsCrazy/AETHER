@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/rewards/delivery_outbox.py
   - Backend Architecture/aether-backend/services/rewards/rails.py
 canonical_owner: platform@aether
-last_synced_commit: "e610a8df"
+last_synced_commit: "74086291"
 ---
 
 # Reward Delivery Runbook
@@ -50,6 +50,12 @@ action is **never** marked `delivered` without a persisted `ProviderReceipt`.
    bug.
 2. Operator replay (`redeliver`) requeues a dead-lettered job (`state = queued`)
    once the downstream is fixed. Redeliver is idempotent at the receipt layer.
+3. A dead-lettered reward job is **terminal and stays parked** — the sweeper
+   never auto-requeues the same terminal failure on every pass. Only an
+   operator-authorised replay (`replay_requested`, or a due `replay_at`)
+   requeues it, and that requeue resets the exhausted attempt budget. A job in
+   `dead_letter` with no replay marker is awaiting operator action, not a stuck
+   worker.
 
 ## Webhook destination rejected before enqueue
 

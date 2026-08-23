@@ -7,9 +7,12 @@ runtime sample records and performs no provider I/O.
 """
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from shared.logger.logger import get_logger, metrics
 
 from services.derivatives.models import (
     BronzeObservation,
@@ -20,9 +23,19 @@ from services.derivatives.models import (
     decimal_from_provider,
 )
 
+logger = get_logger("aether.derivatives.multi_venue")
+
 NORMALIZATION_VERSION = "derivatives-multivenue-normalization-v1"
 SUPPORTED_VENUES = ("hyperliquid", "dydx", "gmx", "drift", "centralized_futures")
 CANONICAL_CONCEPTS = ("markets", "orders", "fills", "positions", "funding", "fees", "margin", "liquidations", "account_state")
+
+# Provider side tokens normalize onto OrderSide. Buy tokens are the set the
+# original normalization accepted; sell tokens are the symmetric set. Anything
+# else (a typo, a newly introduced value, an empty string) is rejected rather
+# than silently recorded as a sell — a schema drift must surface as a rejected
+# observation, never a corrupted fill direction.
+_BUY_SIDE_TOKENS = frozenset({"buy", "b", "long"})
+_SELL_SIDE_TOKENS = frozenset({"sell", "s", "short"})
 
 
 @dataclass(frozen=True)
@@ -71,7 +84,16 @@ class VenueNormalizationAdapter:
     def normalize_fill(self, observation: BronzeObservation) -> NormalizedFillFact:
         payload = observation.raw_payload
         side_value = str(payload[self.field_map["side"]]).lower()
-        side = OrderSide.BUY if side_value in {"buy", "b", "long"} else OrderSide.SELL
+        if side_value in _BUY_SIDE_TOKENS:
+            side = OrderSide.BUY
+        elif side_value in _SELL_SIDE_TOKENS:
+            side = OrderSide.SELL
+        else:
+            raise ValueError(
+                f"Unrecognized provider side {payload[self.field_map['side']]!r} for "
+                f"{self.venue_id} fill {observation.source_record_id!r}; refusing to "
+                "normalize to a sell"
+            )
         role_value = str(payload.get(self.field_map.get("liquidity", "liquidity"), "unknown")).lower()
         role = LiquidityRole.MAKER if role_value == "maker" else LiquidityRole.TAKER if role_value == "taker" else LiquidityRole.UNKNOWN
         account = str(payload[self.field_map["account"]])
@@ -140,3 +162,162 @@ def cross_venue_parity_report(adapters: Mapping[str, VenueNormalizationAdapter])
         "availability": "scaffolded",
         "operational_observations": None,
     }
+
+
+# ── Supervised venue reconciliation sweep loop ───────────────────────────────
+#
+# Drives :class:`SupervisedStreamWorker` (services/derivatives/sequence.py) per
+# registered venue on an interval for the runtime WorkerSpec: heartbeat,
+# per-pass exception isolation, graceful shutdown. Each venue cycle restores the
+# durable cursor -> streams -> persists the advanced cursor (at-least-once).
+
+DEFAULT_SWEEP_TENANT = "tenant_local_dev"
+DEFAULT_SWEEP_INTERVAL_SECONDS = 300.0
+
+#: Sentinel tenant scope for ``venue_sweep_loop``: enumerate the tenants that
+#: hold durable connector checkpoints on every pass instead of binding the sweep
+#: to the development tenant. A multi-tenant deployment must never sweep only
+#: ``DEFAULT_SWEEP_TENANT`` while every other tenant's venue cursors and gap
+#: evidence go unstirred.
+ALL_TENANTS = "__all__"
+
+
+def _supported_venue_ids() -> tuple[str, ...]:
+    """Venues currently registered in the derivatives adapters registry."""
+    try:
+        from services.derivatives.adapters import ADAPTER_REGISTRY
+
+        return tuple(sorted(ADAPTER_REGISTRY))
+    except Exception:  # noqa: BLE001 - registry absence must not crash the sweep
+        return SUPPORTED_VENUES
+
+
+async def run_venue_sweep_iteration(
+    *,
+    tenant_id: str = DEFAULT_SWEEP_TENANT,
+    venue_ids: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """One supervised venue sweep pass: restore cursor -> stream -> persist.
+
+    Returns a deterministic summary dict — counters only, never fabricated
+    success. Each venue is swept through :class:`SupervisedStreamWorker`, which
+    restarts from the last persisted cursor (at-least-once) and persists the
+    advanced cursor before returning. A venue whose adapter is unavailable, or
+    whose cycle raises, is counted and logged — never allowed to abort the pass.
+    """
+    from services.derivatives.sequence import SupervisedStreamWorker
+
+    targets = venue_ids if venue_ids is not None else _supported_venue_ids()
+    summary: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "venues_targeted": len(targets),
+        "venues_scanned": 0,
+        "completed": 0,
+        "skipped": 0,
+        "errors": [],
+    }
+
+    for venue_id in targets:
+        try:
+            from services.derivatives.adapters import get_adapter
+
+            adapter = get_adapter(venue_id)
+            if adapter is None:
+                summary["skipped"] += 1
+                continue
+            worker = SupervisedStreamWorker(
+                adapter, tenant_id=tenant_id, connector_id=venue_id
+            )
+            result = await worker.run_once()
+            summary["venues_scanned"] += 1
+            if bool(getattr(result, "completed", False)):
+                summary["completed"] += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — one venue must not abort the sweep
+            summary["errors"].append(f"{venue_id}:{exc}")
+
+    return summary
+
+
+async def _sweep_tenants() -> list[str]:
+    """Tenants that already hold durable derivatives connector checkpoints.
+
+    ``distinct_tenant_ids`` is best-effort: a repository that raises (e.g. an
+    unprovisioned table in a fresh deployment) is skipped so a single failure
+    cannot abort enumeration. Rows are ordered ascending by tenant_id for a
+    deterministic pass.
+    """
+    from repositories.derivatives_repos import ConnectorCheckpointRepo
+
+    try:
+        return await ConnectorCheckpointRepo().distinct_tenant_ids()
+    except Exception:  # noqa: BLE001 - best-effort enumeration
+        return []
+
+
+async def venue_sweep_loop(
+    interval_s: float = DEFAULT_SWEEP_INTERVAL_SECONDS,
+    *,
+    tenant_id: str = ALL_TENANTS,
+) -> None:
+    """Supervised derivatives venue reconciliation sweep (heartbeat, isolated).
+
+    When ``tenant_id == ALL_TENANTS`` (the default) the loop discovers the
+    tenants that hold durable connector checkpoints on every pass and sweeps
+    each — a multi-tenant deployment must never bind the sweep to
+    ``DEFAULT_SWEEP_TENANT`` while every other tenant's venue cursors sit
+    unstirred. An empty tenant set (fresh deployment, no checkpoints yet)
+    idles the pass rather than fabricating state for the local-dev tenant.
+    Pass an explicit ``tenant_id`` to preserve single-tenant sweeping. The
+    heartbeat is stamped once per pass regardless of how many tenants were
+    swept.
+    """
+    logger.info(
+        "derivatives_venue_sweep_loop started interval=%ss tenant=%s",
+        interval_s,
+        tenant_id,
+    )
+    while True:
+        try:
+            tids = await _sweep_tenants() if tenant_id == ALL_TENANTS else [tenant_id]
+            if tenant_id == ALL_TENANTS and not tids:
+                # Bootstrap: no durable connector checkpoints persisted yet.
+                # Skip rather than fabricate state for the local-dev tenant —
+                # real tenants are swept once their first checkpoint exists.
+                logger.debug("venue sweep pass: no checkpointed tenants to sweep")
+            for tid in tids:
+                summary = await run_venue_sweep_iteration(tenant_id=tid)
+                if summary["errors"]:
+                    logger.warning(
+                        "venue sweep tenant=%s errors=%d scanned=%d skipped=%d",
+                        tid,
+                        len(summary["errors"]),
+                        summary["venues_scanned"],
+                        summary["skipped"],
+                    )
+                elif summary["venues_scanned"]:
+                    logger.debug(
+                        "venue sweep tenant=%s scanned=%d completed=%d",
+                        tid,
+                        summary["venues_scanned"],
+                        summary["completed"],
+                    )
+            metrics.gauge("derivatives_venue_sweep_heartbeat", 1.0)
+        except asyncio.CancelledError:
+            logger.info("derivatives_venue_sweep_loop stopped")
+            raise
+        except Exception as exc:  # noqa: BLE001 — loop survives a bad pass
+            metrics.increment("derivatives_venue_sweep_error_total")
+            logger.error("venue sweep iteration failed: %s", exc)
+        await asyncio.sleep(interval_s)
+
+
+def build_venue_sweep_coro() -> Any:
+    """Zero-arg coroutine factory for the runtime WorkerSpec (INT-C wires it).
+
+    Defaults to ``ALL_TENANTS`` scope: the loop discovers every tenant that
+    holds a durable connector checkpoint instead of sweeping only
+    ``DEFAULT_SWEEP_TENANT`` (the local-dev development tenant).
+    """
+    return venue_sweep_loop()

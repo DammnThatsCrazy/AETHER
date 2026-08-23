@@ -70,6 +70,9 @@ from services.operational_intelligence.models import (
     TraversalSnapshot,
     UniversalGraphQueryRequest,
 )
+# Capability-family metering seam (§7): durable meter + evidence for
+# reconciliation at the graph family's representative choke point.
+from services.metering_evidence.families import meter_family_usage  # noqa: E402
 
 router = APIRouter(prefix="/v1/graph", tags=["Operational Intelligence / Graph"])
 
@@ -752,6 +755,12 @@ async def traverse_graph(
     edge_count = len(result.edges)
 
     overlays = await _compute_overlay_scores(result.nodes, result.edges, body.overlays, tenant_id=body.tenantId)
+
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "graph", body.tenantId, event_id=str(uuid.uuid4()),
+        enforce=False, raise_on_metering_error=False,
+    )
 
     return GraphResult(
         nodes=[start_node] + extra_nodes,

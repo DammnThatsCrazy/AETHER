@@ -33,6 +33,9 @@ from pydantic import BaseModel, Field
 
 from repositories.repos import ConsentRepository
 from services.security.export_governance import audit_export_governance
+# Capability-family metering seam (§7): durable meter + evidence for
+# reconciliation at the audit-exports family choke point.
+from services.metering_evidence.families import meter_family_usage  # noqa: E402
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
@@ -277,6 +280,11 @@ async def request_export(body: ExportRequest, request: Request):
     metrics.increment(
         "audit_exports",
         labels={"format": body.format, "report_type": body.report_type},
+    )
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "audit_exports", tenant.tenant_id, event_id=export_id,
+        enforce=False, raise_on_metering_error=False,
     )
     return APIResponse(data={**record, "rows": rows}).to_dict()
 

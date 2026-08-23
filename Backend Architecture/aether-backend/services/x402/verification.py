@@ -166,6 +166,49 @@ class VerificationEngine:
         prefer_facilitator: bool = True,
     ) -> PaymentReceipt:
         """Verify a submitted tx_hash. Returns a PaymentReceipt."""
+        # Fail-closed tenant signer gate (proof-verification boundary): a tenant
+        # that HAS registered signer references only accepts payment proofs from
+        # an active, tenant-authorized signer address. A tenant with NO signer
+        # registry (the default) is unaffected — the authority never "invents"
+        # an authorized signer, so legacy/fresh tenants keep the existing path.
+        from services.x402.signer_authority import get_signer_authority
+        payer_ok, payer_reason = await get_signer_authority().is_payer_authorized(
+            tenant_id, authorization.payer
+        )
+        if not payer_ok:
+            receipt = PaymentReceipt(
+                tenant_id=tenant_id,
+                authorization_id=authorization.authorization_id,
+                challenge_id=authorization.challenge_id,
+                tx_hash=tx_hash,
+                chain=authorization.chain,
+                environment=authorization.environment,
+                asset_symbol=authorization.asset_symbol,
+                amount_usd=authorization.amount_usd,
+                payer=authorization.payer,
+                recipient=authorization.recipient,
+                verified=False,
+                verified_by="signer_authority",
+                verification_verdict="unauthorized_signer",
+                verification_error=payer_reason,
+            )
+            await self._store.put_receipt(receipt)
+            await self._emit(
+                Topic.COMMERCE_VERIFICATION_FAILED,
+                tenant_id,
+                {"receipt_id": receipt.receipt_id, "error": receipt.verification_error},
+            )
+            metrics.increment(
+                "commerce_verifications",
+                labels={"result": "fail", "reason": "unauthorized_signer"},
+            )
+            logger.info(
+                "verification rejected by signer authority: tenant=%s "
+                "payer=%s authorization=%s",
+                tenant_id, authorization.payer, authorization.authorization_id,
+            )
+            return receipt
+
         await self._emit(
             Topic.COMMERCE_VERIFICATION_STARTED,
             tenant_id,

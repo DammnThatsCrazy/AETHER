@@ -35,6 +35,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -61,6 +62,9 @@ from services.profile.aggregator import Profile360Aggregator
 from services.profile.composer import ProfileComposer
 from services.profile.intelligence import IntelligenceAggregator
 from services.profile.resolver import ProfileResolver
+# Capability-family metering seam (§7): durable meter + evidence for
+# reconciliation at the profile-family choke point.
+from services.metering_evidence.families import meter_family_usage  # noqa: E402
 
 logger = get_logger("aether.service.profile")
 router = APIRouter(prefix="/v1/profile", tags=["Profile 360"])
@@ -299,6 +303,12 @@ async def resolve_identifier(
 
     if not resolved:
         raise NotFoundError("No profile found for the given identifier")
+
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "profile360", tenant.tenant_id, event_id=str(uuid.uuid4()),
+        enforce=False, raise_on_metering_error=False,
+    )
 
     return APIResponse(data={"resolved_user_id": resolved}).to_dict()
 

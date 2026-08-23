@@ -199,6 +199,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config.settings import settings
 from dependencies.providers import get_registry
 from middleware.middleware import register_middleware
+from services.diagnostics.observability_middleware import register_observability_middleware
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.main")
@@ -231,6 +232,7 @@ from services.fraud.routes import router as fraud_router
 from services.attribution.routes import router as attribution_router
 from services.attribution.apple_postbacks import router as apple_postbacks_router
 from services.rewards.routes import router as rewards_router
+from services.rewards.operator_routes import router as rewards_operator_router
 from services.oracle.routes import router as oracle_router
 from services.analytics_automation.routes import router as automation_router
 from services.diagnostics.routes import router as diagnostics_router, commerce_diagnostics_router
@@ -332,6 +334,10 @@ from services.integrity.routes import router as ledger_integrity_router
 from services.policy.routes import router as policy_router
 from services.dsr_propagation.routes import router as dsr_propagation_router
 from services.tenant_readiness.routes import router as tenant_readiness_router
+from services.readiness_graph.routes import (
+    router as readiness_graph_router,
+    kyber_router as readiness_graph_kyber_router,
+)
 from services.metering_evidence.routes import router as metering_evidence_router
 from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
@@ -363,6 +369,12 @@ from services.kyber.ops.routes import router as kyber_ops_router
 from services.kyber.ops.mobile_actions import mobile_actions_router
 from services.kyber.devices.mobile_proof_routes import mobile_proof_router
 from services.cluster.routes import router as cluster_router
+
+# Card-linked payment rails — Kyber graph-projection outbox operator plane.
+# Mounted unconditionally; every route fail-closes via _require_kyber_enabled()
+# when the rails are disabled, so the surface is registered even under default
+# config while remaining unreachable.
+from services.card_linked_payments.projection_routes import router as card_linked_projection_router
 
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
 from services.measurement.routes.conversions import router as measurement_conversions_router
@@ -749,6 +761,14 @@ def create_app() -> FastAPI:
     )
 
     # ── Auth / Logging / Rate Limit / Error Handling Middleware ────
+    # ObservabilityTraceMiddleware must dispatch AFTER the auth middleware (it
+    # needs request.state.tenant). Starlette's add_middleware inserts at the
+    # FRONT of the chain (last-added = outermost = runs first), so the trace
+    # middleware is registered BEFORE register_middleware() here: that leaves
+    # request_lifecycle (auth) outermost, which sets request.state.tenant before
+    # the trace middleware's dispatch reads it. Fail-open: it only observes and
+    # never mutates request/response behaviour.
+    register_observability_middleware(app)
     register_middleware(app)
 
     # ── Mount all 17 core service routers ──────────────────────────
@@ -779,6 +799,10 @@ def create_app() -> FastAPI:
     app.include_router(deferred_attribution_router)  # /v1/attribution/deferred — deterministic iOS handoffs
     app.include_router(apple_postbacks_router)       # /v1/attribution/apple-postbacks — campaign-level platform evidence
     app.include_router(rewards_router)
+    # Kyber operator reward surfaces (/v1/admin/kyber/rewards/health +
+    # /v1/admin/kyber/tenants/{tenant_id}/{campaigns,decisions,actions,audit}).
+    # Read-only, fail-closed operator pages consumed by the Kyber UI.
+    app.include_router(rewards_operator_router)
     app.include_router(oracle_router)
     app.include_router(automation_router)
     app.include_router(diagnostics_router)
@@ -907,6 +931,11 @@ def create_app() -> FastAPI:
     app.include_router(policy_router)
     app.include_router(dsr_propagation_router)     # /v1/dsr — DSR propagation records + impact indexes
     app.include_router(tenant_readiness_router)    # /v1/tenant/readiness — launch readiness + trust states
+    # Capability readiness graph — read-only dependency graph for one capability.
+    # Tenant surface /v1/tenant/readiness-graph/{capability}; operator surface
+    # /v1/kyber/readiness-graph/{capability} (Kyber-gated, tenant_id optional).
+    app.include_router(readiness_graph_router)
+    app.include_router(readiness_graph_kyber_router)
     app.include_router(metering_evidence_router)   # /v1/metering/evidence — usage metering evidence
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
@@ -1249,6 +1278,15 @@ def create_app() -> FastAPI:
             "Card-Linked Payment Rails: disabled "
             "(AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED=false)"
         )
+    # Card-linked graph-projection OUTBOX operator plane (drain/reconcile/repair).
+    # Mounted unconditionally — each route fail-closes via _require_kyber_enabled()
+    # when the rails are disabled, so the surface registers under default config
+    # while remaining unreachable.
+    app.include_router(card_linked_projection_router)
+    logger.info(
+        "Card-Linked Payment Rails: graph-projection operator plane mounted "
+        "(/v1/kyber/card-linked/graph-projection)"
+    )
 
     # ── AI Outcome Efficiency / AI Economics (observe + recommend; never executes changes) ──
     ai_econ_flags = settings.ai_economics

@@ -498,18 +498,26 @@ class TenantWebhookAdapter(RewardRailAdapter):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ON-CHAIN CLAIM (EVM production; other VMs beta)
+# ON-CHAIN CLAIM (EVM production-warrantied; SVM sandbox-wired)
 # ═══════════════════════════════════════════════════════════════════════════
 
 class OnchainClaimAdapter(RewardRailAdapter):
     """
-    Generates a cryptographic claim proof for tenant-owned EVM contracts.
+    Generates a cryptographic claim proof for tenant-owned on-chain programs.
     Aether signs the proof; the tenant's dApp or the user submits the claim.
     Aether never holds tokens or submits transactions.
+
+    Supported VM types: ``evm`` (production-warrantied) and ``svm`` (wired and
+    exercised through the multi-chain signer at sandbox tier —
+    ``onchain_claim.svm`` is SUPPORTED_SANDBOX in services/rewards/rail_matrix.py).
     """
 
     rail_name = "onchain_claim"
 
+    # VM types wired into the onchain_claim adapter. ``evm`` is the
+    # production-warrantied path; ``svm`` (Solana) uses the multi-chain signer
+    # (SHA-256 + base58, Anchor-program proof) at sandbox tier.
+    _SUPPORTED_VM_TYPES = {"evm", "svm"}
     # VM types that are production-verified
     _PRODUCTION_VM_TYPES = {"evm"}
     # Anvil/Hardhat test key
@@ -523,10 +531,14 @@ class OnchainClaimAdapter(RewardRailAdapter):
     def validate_config(self, config: dict) -> list[str]:
         errors = []
         vm_type = (config.get("vm_type") or "evm").lower()
-        if vm_type not in self._PRODUCTION_VM_TYPES:
-            errors.append(f"vm_type={vm_type!r} is in beta; only 'evm' is production-supported")
+        if vm_type not in self._SUPPORTED_VM_TYPES:
+            errors.append(
+                f"vm_type={vm_type!r} is not wired; only {sorted(self._SUPPORTED_VM_TYPES)} are supported"
+            )
         if not config.get("chain_id"):
             errors.append("chain_id is required")
+        if vm_type == "svm" and not config.get("program_id") and not config.get("contract_address"):
+            errors.append("program_id (or contract_address) is required for svm")
         if not config.get("signer_key_ref") and not config.get("oracle_signer_key"):
             errors.append("signer_key_ref or oracle_signer_key is required")
         return errors
@@ -541,6 +553,22 @@ class OnchainClaimAdapter(RewardRailAdapter):
     ) -> dict:
         env = os.getenv("AETHER_ENV", "local").lower()
         is_local = env in ("local", "test")
+
+        vm_type = (campaign.get("vm_type") or os.getenv("REWARD_VM_TYPE", "evm")).lower()
+        if vm_type not in self._SUPPORTED_VM_TYPES:
+            raise ValueError(
+                f"vm_type={vm_type!r} is not wired for onchain_claim; "
+                f"supported: {sorted(self._SUPPORTED_VM_TYPES)}"
+            )
+
+        if vm_type == "svm":
+            return await self._build_svm_payload(
+                decision=decision,
+                rule=rule,
+                campaign=campaign,
+                tenant_id=tenant_id,
+                is_local=is_local,
+            )
 
         # Chain identity binds the proof to exactly one contract on exactly one
         # chain (the signer re-derives the digest from these, rejecting any
@@ -654,7 +682,151 @@ class OnchainClaimAdapter(RewardRailAdapter):
             },
         }
 
-    async def _resolve_signer_key(self, tenant_id: str, is_local: bool) -> str:
+    async def _build_svm_payload(
+        self, *, decision, rule, campaign, tenant_id, is_local,
+    ) -> dict:
+        """SVM (Solana) onchain_claim proof payload.
+
+        Re-homed from the credential-turnkey branch: the multi-chain signer
+        (services/oracle/multichain_signer.py) builds an Anchor-program proof —
+        SHA-256 message hash, base58 program id, base58 signer address — and
+        services/rewards/rail_matrix.py classifies ``onchain_claim.svm``
+        SUPPORTED_SANDBOX.
+
+        Chain identity binds the proof to exactly one program on exactly one
+        chain (the signer re-derives the digest from these). Outside local/test
+        BOTH must come from the campaign — no SVM_PROGRAM_ID / EVM_CHAIN_ID env
+        fallback that could leak a dev-program binding into a live claim.
+        """
+        raw_chain_id = campaign.get("chain_id") or (
+            os.getenv("EVM_CHAIN_ID", "1") if is_local else None
+        )
+        program_id = campaign.get("program_id") or (
+            os.getenv("SVM_PROGRAM_ID", "") if is_local else None
+        )
+        if not is_local:
+            if not raw_chain_id:
+                raise ValueError(
+                    "onchain_claim (svm) requires an explicit campaign chain_id "
+                    "outside local/test (env fallbacks are refused fail-closed)"
+                )
+            if not program_id:
+                raise ValueError(
+                    "onchain_claim (svm) requires an explicit campaign program_id "
+                    "outside local/test (env fallbacks are refused fail-closed)"
+                )
+        chain_id = int(raw_chain_id)
+
+        signer_key = await self._resolve_signer_key(tenant_id, is_local, chain_family="svm")
+        wallet_address = (decision.identity or {}).get("wallet_address", "")
+
+        if not wallet_address:
+            raise ValueError("wallet_address required for onchain_claim rail")
+
+        # Exact reward → atomic-unit conversion with EXPLICIT decimals (never 18).
+        raw_amount = rule.get("reward_amount")
+        if raw_amount is None:
+            amount_atomic = 0
+        else:
+            decimals = _resolve_asset_decimals(rule, decision.reward or {}, campaign)
+            if decimals is None:
+                raise ValueError(
+                    "asset decimals must be explicitly specified for onchain_claim "
+                    "reward conversion (set 'asset_decimals' or 'decimals' on the rule, "
+                    "reward, or campaign); refusing to assume 18"
+                )
+            amount_atomic = _reward_amount_to_atomic(raw_amount, decimals)
+
+        proof_expiry = int(os.getenv("REWARD_PROOF_EXPIRY_SECONDS", "3600"))
+
+        return await self._build_svm_proof_payload(
+            decision=decision,
+            rule=rule,
+            campaign=campaign,
+            tenant_id=tenant_id,
+            signer_key=signer_key,
+            chain_id=chain_id,
+            program_id=program_id,
+            wallet_address=wallet_address,
+            amount_atomic=amount_atomic,
+            proof_expiry=proof_expiry,
+        )
+
+    async def _build_svm_proof_payload(
+        self, *, decision, rule, campaign, tenant_id, signer_key, chain_id,
+        program_id, wallet_address, amount_atomic, proof_expiry,
+    ) -> dict:
+        from services.oracle.multichain_signer import (
+            ChainConfig,
+            MultiChainProofConfig,
+            MultiChainSigner,
+            VMType,
+        )
+        signer = MultiChainSigner(MultiChainProofConfig(
+            signer_private_key=signer_key,
+            chain_configs={
+                VMType.SVM: ChainConfig(
+                    chain_id=chain_id,
+                    contract_address=program_id,
+                    proof_expiry_seconds=proof_expiry,
+                ),
+            },
+        ))
+        proof = await signer.generate_proof(
+            user=wallet_address,
+            action_type=rule.get("name", "reward"),
+            amount=amount_atomic,
+            vm_type=VMType.SVM,
+            chain_id=chain_id,
+        )
+        proof_data = {
+            "proof_format": "svm",
+            "wallet_address": wallet_address,
+            "action_type": rule.get("name", "reward"),
+            "amount": str(amount_atomic),
+            "nonce": proof.nonce,
+            "expiry": proof.expiry,
+            "chain_id": proof.chain_id,
+            "program_id": proof.program_id,
+            "message_hash": proof.message_hash,
+            "signature": proof.signature,
+            "signer_address": signer.get_signer_address(VMType.SVM),
+            "vm_type": "svm",
+        }
+        return {
+            "rail": self.rail_name,
+            "execution_mode": "onchain_claim",
+            "vm_type": "svm",
+            "status": "ready",
+            "proof_data": proof_data,
+            "proof": {
+                "user": wallet_address,
+                "action_type": rule.get("name", "reward"),
+                "amount_wei": str(amount_atomic),
+                "nonce": proof.nonce,
+                "expiry": proof.expiry,
+                "chain_id": proof.chain_id,
+                "program_id": proof.program_id,
+                "contract_address": proof.program_id,
+                "message_hash": proof.message_hash,
+                "signature": proof.signature,
+                "signer_address": signer.get_signer_address(VMType.SVM),
+                "proof_format": "svm",
+                "vm_type": "svm",
+            },
+            "payload": {
+                "type": "onchain_claim_proof",
+                "campaign_id": decision.campaign_id,
+                "rule_id": decision.rule_id,
+                "tenant_id": tenant_id,
+                "vm_type": "svm",
+                "chain_id": chain_id,
+                "program_id": program_id,
+                "instruction": "Tenant dApp or user invokes the Anchor reward program using this proof. Aether does not submit the transaction.",
+            },
+        }
+
+    async def _resolve_signer_key(self, tenant_id: str, is_local: bool, chain_family: str = "evm") -> str:
         """Tenant-scoped signer resolution through the credential authority.
 
         Local/test keeps the env-var/Hardhat bootstrap; everywhere else the
@@ -670,7 +842,7 @@ class OnchainClaimAdapter(RewardRailAdapter):
         )
 
         key = await resolve_reward_signer(
-            tenant_id, reward_credential_environment(), "evm"
+            tenant_id, reward_credential_environment(), chain_family
         )
         if key == self._TEST_KEY and not is_local:
             raise SignerUnavailableError(

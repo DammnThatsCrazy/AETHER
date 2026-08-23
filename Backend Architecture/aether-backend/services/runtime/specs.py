@@ -19,6 +19,7 @@ one-line ``specs.append(WorkerSpec(...))`` in this function.
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Coroutine
 
 from services.runtime.supervisor import WorkerSpec
@@ -179,9 +180,9 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             ExternalResourceLinkRepository,
         )
         from repositories.repos import (
-            SuggestionsRepository,
             NotificationIntelligenceRepository,
         )
+        from services.suggestions.repository import SuggestionRepository
         from services.delivery.outcome_processor import (
             OutcomeRouter,
             WebhookInboxProcessor,
@@ -194,7 +195,7 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             router=OutcomeRouter(
                 outcome_repo=ExternalOutcomeEventRepository(),
                 link_repo=ExternalResourceLinkRepository(),
-                suggestion_repo=SuggestionsRepository(),
+                suggestion_repo=SuggestionRepository(),
                 notification_repo=NotificationIntelligenceRepository(),
             ),
         )
@@ -295,6 +296,69 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         from services.rewards.workers import build_credential_expiry_sweep
 
         return build_credential_expiry_sweep()
+
+    # ── Ported credential-turnkey workers (re-cut onto main) ──────────────
+    # Supervised loops ported from the credential-turnkey program (commit
+    # 4ce7e0fc) and registered here so the no-orphan topology invariant holds on
+    # main. Each is gate-OFF by default (its plane or a runtime kill-switch must
+    # be enabled) so a real deployment cannot crash-loop a slot before the
+    # feature is live.
+    def _card_linked_graph_outbox() -> Coroutine[Any, Any, None]:
+        from services.card_linked_payments.graph_outbox import (
+            CardLinkedGraphOutboxWorker,
+        )
+
+        return CardLinkedGraphOutboxWorker().build_coro()
+
+    def _stablecoin_provider_polling() -> Coroutine[Any, Any, None]:
+        from services.stablecoins.polling import build_stablecoin_polling_loop
+
+        return build_stablecoin_polling_loop()
+
+    def _interop_scan() -> Coroutine[Any, Any, None]:
+        from services.interop.scan_worker import build_interop_scan_coro
+
+        return build_interop_scan_coro()
+
+    def _derivatives_venue_sweep() -> Coroutine[Any, Any, None]:
+        from services.derivatives.multi_venue import build_venue_sweep_coro
+
+        return build_venue_sweep_coro()
+
+    def _readiness_revalidation() -> Coroutine[Any, Any, None]:
+        from services.readiness_graph.revalidation_worker import (
+            build_readiness_revalidation_worker,
+        )
+
+        return build_readiness_revalidation_worker()
+
+    def _dead_letter_sweeper() -> Coroutine[Any, Any, None]:
+        from services.runtime.dead_letter_sweeper import (
+            build_dead_letter_sweeper_coro,
+        )
+
+        return build_dead_letter_sweeper_coro()
+
+    def _reward_claim_reconciliation() -> Coroutine[Any, Any, None]:
+        from services.rewards.reconcile import (
+            ALL_TENANTS,
+            get_reward_claim_reconciler,
+        )
+
+        # ALL_TENANTS: the worker enumerates the tenants that own delivery
+        # receipts on every pass. Binding to DEFAULT_TENANT_ID here would leave
+        # every other tenant's confirmed claims permanently unreconciled.
+        return get_reward_claim_reconciler().build_reconcile_loop(
+            tenant_id=ALL_TENANTS,
+            interval_s=300,
+        )()
+
+    def _reward_receipt_evidence() -> Coroutine[Any, Any, None]:
+        from services.rewards.receipt_evidence import (
+            get_receipt_evidence_service,
+        )
+
+        return get_receipt_evidence_service().build_evidence_loop()()
 
     # ── Truth-chain ledger verifier (LEDGER M3) ──────────────────────────
     # Periodically re-walks each tenant's bronze_sdk_events hash chain (written
@@ -572,5 +636,89 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
                 and settings.provider_runtime.provider_sync_scheduler_enabled
             ),
         ),
-
+        # ── Ported credential-turnkey workers (re-cut onto main) ──────────
+        # Card-linked graph projection outbox: drains the card-linked graph
+        # projection outbox so card-linked Graph topology stays materialized.
+        # Gated on the card-linked payment-rails plane; nothing to project when
+        # it is off.
+        WorkerSpec(
+            name="card_linked_graph_outbox",
+            factory=_card_linked_graph_outbox,
+            enabled=lambda: bool(settings.card_linked_payment_rails.enabled),
+        ),
+        # Stablecoin provider/finality polling: polls stablecoin providers and
+        # confirms finality on a cooldown cadence. Gated on the stablecoin
+        # intelligence plane.
+        WorkerSpec(
+            name="stablecoin_provider_polling",
+            factory=_stablecoin_provider_polling,
+            enabled=lambda: bool(settings.stablecoin_intelligence.enabled),
+        ),
+        # Cross-chain adapter scan: runs every registered interop adapter's scan
+        # cycle on a poll cadence. Gated on the interop adapter framework flag so
+        # it stays inert while the interop plane is off.
+        WorkerSpec(
+            name="interop_scan",
+            factory=_interop_scan,
+            enabled=lambda: bool(settings.interop.adapters_enabled),
+        ),
+        # Derivatives venue reconciliation sweep. Gated on the derivatives
+        # reconciliation flag.
+        WorkerSpec(
+            name="derivatives_venue_sweep",
+            factory=_derivatives_venue_sweep,
+            enabled=lambda: bool(settings.derivatives.reconciliation_enabled),
+        ),
+        # Capability-readiness revalidation: re-walks the readiness graph and
+        # re-checks capability credentials on a cadence. Gated off by default
+        # via the RuntimeConfig flag so it stays inert until the flag is live.
+        WorkerSpec(
+            name="readiness_revalidation",
+            factory=_readiness_revalidation,
+            enabled=lambda: bool(
+                getattr(
+                    settings.runtime,
+                    "capability_readiness_revalidation_enabled",
+                    False,
+                )
+            ),
+        ),
+        # Dead-letter requeue sweeper: drains the platform's durable dead-letter
+        # stores (rewards DLQ requeue + payment dead-letter tenant repair pass).
+        # Gated off by default via the RuntimeConfig flag.
+        WorkerSpec(
+            name="dead_letter_sweeper",
+            factory=_dead_letter_sweeper,
+            enabled=lambda: bool(
+                getattr(settings.runtime, "dead_letter_sweeper_enabled", False)
+            ),
+        ),
+        # Reward claim-state reconciliation: reconciles reward claims against
+        # receipts/transfers on a cadence. Gated on the proposed rewards-config
+        # flag; idle until the flag is live.
+        WorkerSpec(
+            name="reward_claim_reconciliation",
+            factory=_reward_claim_reconciliation,
+            enabled=lambda: bool(
+                getattr(
+                    getattr(settings, "rewards", None),
+                    "claim_reconciliation_enabled",
+                    False,
+                )
+            ),
+        ),
+        # Reward receipt-evidence recording: retries reward receipt-evidence
+        # appends to the audit ledger. Gated on the same proposed rewards-config
+        # block; idle until the flag is live.
+        WorkerSpec(
+            name="reward_receipt_evidence",
+            factory=_reward_receipt_evidence,
+            enabled=lambda: bool(
+                getattr(
+                    getattr(settings, "rewards", None),
+                    "receipt_evidence_enabled",
+                    False,
+                )
+            ),
+        ),
     ]

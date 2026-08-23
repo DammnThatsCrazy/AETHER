@@ -12,7 +12,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
-last_synced_commit: "dc3eaecf"
+last_synced_commit: "1884f7be"
 
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
@@ -119,7 +119,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `models.py` — ADD: `PaymentChallenge`, `PaymentAuthorization`, `SettlementRecord`, `Entitlement`, `AccessGrant`, `ApprovalRequest`, `ApprovalDecision`, `PolicyDecision`, `PricePolicy`, `BudgetPolicy`, `AcceptedAsset`, `AcceptedNetwork`, `FacilitatorRecord`, `ProtectedResource`, `ServicePlan`, `FulfillmentRecord`, `PaymentRoute`.
 - `control_plane.py` — NEW. Stateful orchestrator. `X402ControlPlane.handle_request()`, `.issue_challenge()`, `.request_approval()`, `.apply_decision()`, `.verify_payment()`, `.settle()`, `.mint_entitlement()`, `.grant_access()`, `.record_fulfillment()`.
 - `challenge_middleware.py` — NEW. `ChallengeMiddleware` FastAPI middleware. Consults `resources.py` registry, returns 402 with PAYMENT-REQUIRED header, honors `X-Payment-Identifier` for idempotency, honors SIWX for entitlement reuse.
-- `verification.py` — NEW. `VerificationEngine` with `FacilitatorVerifier` and `LocalVerifier` strategies. Per-chain verifiers (`BaseUSDCVerifier`, `SolanaUSDCVerifier`). Validates tx_hash, amount, recipient, chain.
+- `verification.py` — NEW. `VerificationEngine` with `FacilitatorVerifier` and `LocalVerifier` strategies. Per-chain verifiers (`BaseUSDCVerifier`, `SolanaUSDCVerifier`). Validates tx_hash, amount, recipient, chain. Payment-proof verification also enforces a fail-closed tenant signer gate (`signer_authority.py` consulted at the proof boundary): a tenant that has registered signer references only accepts proofs from an active, tenant-authorized signer, while tenants with no signer registry are unaffected.
 - `settlement.py` — NEW. `SettlementTracker` FSM: `pending → verifying → settled | failed | disputed`. Retries with backoff. Reconciliation hooks.
 - `entitlements.py` — NEW. `EntitlementService.mint()`, `.lookup()`, `.reuse()`, `.revoke()`, `.expire()`. SIWX binding via `SIWXBinding` model.
 - `policies.py` — NEW. `PolicyEngine.evaluate()` returns `PolicyDecision` (allow/deny/require_approval/reduce_scope). Combines price/budget/treasury/asset/network policies.

@@ -52,6 +52,12 @@ class CommerceService:
         if not payment.payment_id:
             payment.payment_id = str(uuid.uuid4())
 
+        # Persist the tenant on the record so tenant-scoped reads
+        # (get_fee_elimination_report / get_agent_spend) can never observe
+        # another tenant's payments. An empty caller tenant stays empty (the
+        # record is then visible to unscoped/operator reads only).
+        payment.tenant_id = tenant_id or None
+
         # Calculate fee elimination if using crypto/x402 instead of card
         if payment.method in ("x402", "usdc", "eth", "sol", "sponge"):
             payment.fee_eliminated_usd = round(payment.amount * CARD_FEE_RATE, 4)

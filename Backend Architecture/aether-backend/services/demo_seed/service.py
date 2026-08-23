@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import uuid
 from collections import Counter
@@ -9,6 +10,8 @@ from typing import Callable, Optional
 
 from .dataset import v1_manifest
 from .errors import SeedPolicyError, SeedSafetyError
+
+logger = logging.getLogger("aether.demo_seed")
 from .models import Clock, SeedManifest, SeedResult
 from .policy import assert_seed_allowed
 from .repositories import (
@@ -301,9 +304,18 @@ class DemoSeedService:
             owner = await self.ownership.find_by_id(
                 _ownership_id(tenant_id, namespace, item.repository, target_id),
             )
-            record = await self._resolve_repository(
-                item.repository, tenant_id,
-            ).find_by_id(target_id)
+            try:
+                record = await self._resolve_repository(
+                    item.repository, tenant_id,
+                ).find_by_id(target_id)
+            except Exception as exc:
+                # A repository that cannot be read for a status check must not
+                # fail the whole status surface — count it as not seeded.
+                logger.warning(
+                    "demo_seed status read failed repository=%s target=%s: %s",
+                    item.repository, target_id, exc,
+                )
+                record = None
             if record is not None:
                 present += 1
                 if owner is not None:

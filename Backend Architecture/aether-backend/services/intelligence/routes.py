@@ -99,6 +99,10 @@ from services.intelligence.solution_packages import (
     to_csv_payload,
 )
 
+# Capability-family metering seam (§7): durable evidence + meter for
+# reconciliation. Wired at each intelligence family's execution choke point.
+from services.metering_evidence.families import meter_family_usage  # noqa: E402
+
 logger = get_logger("aether.service.intelligence")
 router = APIRouter(prefix="/v1/intelligence", tags=["Intelligence"])
 kyber_admin_router = APIRouter(
@@ -538,6 +542,11 @@ async def generate_entity_recommendation(body: GenerateRecommendationRequest, re
     except Exception as exc:  # pragma: no cover
         logger.warning(f"recommendation graph mutation skipped: {exc}")
     await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "recommendations", tenant.tenant_id, event_id=rec["recommendation_id"],
+        enforce=False, raise_on_metering_error=False,
+    )
     return APIResponse(data=saved).to_dict()
 
 
@@ -637,6 +646,11 @@ async def record_decision(recommendation_id: str, body: DecisionRequest, request
     except Exception as exc:  # pragma: no cover
         logger.warning(f"decision graph mutation skipped: {exc}")
     await _publish(Topic.DECISION_RECORDED, tenant.tenant_id, saved)
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "decisions", tenant.tenant_id, event_id=decision["decision_id"],
+        enforce=False, raise_on_metering_error=False,
+    )
     return APIResponse(data=saved).to_dict()
 
 
@@ -671,6 +685,11 @@ async def log_action(body: ActionLogRequest, request: Request):
     except Exception as exc:  # pragma: no cover
         logger.warning(f"action graph mutation skipped: {exc}")
     await _publish(Topic.ACTION_EXECUTED, tenant.tenant_id, saved)
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "actions", tenant.tenant_id, event_id=action["action_id"],
+        enforce=False, raise_on_metering_error=False,
+    )
     return APIResponse(data=saved).to_dict()
 
 
@@ -930,6 +949,11 @@ async def observe_outcome(action_id: str, body: OutcomeRequest, request: Request
     except Exception as exc:  # pragma: no cover
         logger.warning(f"outcome graph mutation skipped: {exc}")
     await _publish(Topic.OUTCOME_OBSERVED, tenant.tenant_id, saved)
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "outcomes", tenant.tenant_id, event_id=saved["outcome_id"],
+        enforce=False, raise_on_metering_error=False,
+    )
     return APIResponse(data=saved).to_dict()
 
 
@@ -1194,7 +1218,13 @@ async def run_playbook(playbook_id: str, request: Request):
         from shared.common.common import NotFoundError
         raise NotFoundError("playbook")
     run = PlaybookRun(run_id=str(uuid.uuid4()), playbook_id=playbook_id, tenant_id=tenant.tenant_id, status="queued", started_at=utc_now().isoformat()).model_dump()
-    return APIResponse(data=await _playbook_runs.insert(run["run_id"], run)).to_dict()
+    saved = await _playbook_runs.insert(run["run_id"], run)
+    # Family seam: durable meter + evidence (advisory — no entitlement gate).
+    await meter_family_usage(
+        "playbooks", tenant.tenant_id, event_id=run["run_id"],
+        enforce=False, raise_on_metering_error=False,
+    )
+    return APIResponse(data=saved).to_dict()
 
 
 async def _all_tenant_ledgers(limit: int = 1000) -> dict[str, dict]:

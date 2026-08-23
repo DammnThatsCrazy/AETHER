@@ -235,3 +235,21 @@ def get_asset_registry() -> AssetRegistry:
     if _asset_registry is None:
         _asset_registry = AssetRegistry()
     return _asset_registry
+
+
+def reset_facilitator_registry() -> None:
+    """Reset the registry — for tests only.
+
+    The registry captures the commerce store at construction (``self._store =
+    get_commerce_store()``), so a test that replaces the store singleton must
+    also clear this one — otherwise a stale registry keeps reading the old
+    store and routing helpers see no facilitators.
+    """
+    global _facilitator_registry
+    _facilitator_registry = None
+
+
+def reset_asset_registry() -> None:
+    """Reset the registry — for tests only (same store-capture rationale)."""
+    global _asset_registry
+    _asset_registry = None

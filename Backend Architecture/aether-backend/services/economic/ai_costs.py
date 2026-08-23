@@ -14,11 +14,18 @@ Currency safety: a calculated cost is denominated in the price card's
 currency. If the event currency differs from the card currency the two are
 never mixed — selection falls back to estimated/unknown and the mismatch is
 flagged so the projector can mark the fact ``suspect``.
+
+DECIMAL PRESERVED TO THE WIRE: ``CostSelection.selected_cost`` keeps the money
+value as ``Decimal`` (program sec19) — the exact provider-reported/estimated
+values flow unrounded into ``AIExecutionFact`` and Decimal aggregation. The
+float wire/JSON shape is produced only by the Pydantic ``@field_serializer`` on
+``ai_models`` at the external serialization boundary, never here.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Optional
 
 from services.economic.ai_models import AIInvocationObserved, AIPriceCard, CostBasis
@@ -43,7 +50,7 @@ USAGE_RATE_MAP: tuple[tuple[str, str, float], ...] = (
 class CostSelection:
     """Outcome of the cost selection hierarchy for one invocation."""
 
-    selected_cost: Optional[float]
+    selected_cost: Optional[Decimal]
     cost_basis: CostBasis
     pricing_version: Optional[str]
     currency: str
@@ -77,6 +84,8 @@ async def select_cost(
     """Apply the cost selection hierarchy to one observed invocation."""
     if observed.billed_cost is not None:
         return CostSelection(
+            # Money stays Decimal here — the float wire shape is produced only by
+            # the AIExecutionFact @field_serializer at the serialization boundary.
             selected_cost=observed.billed_cost,
             cost_basis="billed",
             pricing_version=observed.pricing_version,
@@ -112,7 +121,10 @@ async def select_cost(
             calculated = calculate_card_cost(observed, card)
             if calculated is not None:
                 return CostSelection(
-                    selected_cost=calculated,
+                    # Card rates are float-typed; capture the computed result as
+                    # Decimal at the selection boundary so every subsequent money
+                    # consumer (fact build, aggregation) sees exact Decimal.
+                    selected_cost=Decimal(str(calculated)),
                     cost_basis="calculated",
                     pricing_version=card.pricing_version,
                     currency=card.currency,
