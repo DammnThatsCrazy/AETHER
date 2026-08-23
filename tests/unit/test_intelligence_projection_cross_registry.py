@@ -27,6 +27,7 @@ from lib.intelligence_projection_validation import (  # noqa: E402
     Violation,
     load_context,
     validate_cross_registry,
+    validate_dependency_dag,
 )
 
 
@@ -60,6 +61,7 @@ def _entry(
     policy: str = "read_only",
     pending_auth: list[dict] | None = None,
     pending_ref: list[dict] | None = None,
+    deps: list[str] | None = None,
 ) -> dict:
     return {
         "id": pid,
@@ -71,6 +73,8 @@ def _entry(
         "graphMutationPolicy": policy,
         "pendingAuthority": pending_auth or [],
         "pendingReference": pending_ref or [],
+        "projectionDependencies": deps or [],
+        "optionalProjectionDependencies": [],
     }
 
 
@@ -248,3 +252,73 @@ def test_well_formed_in_flight_entries_pass_cleanly() -> None:
         ]
     )
     assert validate_cross_registry(reg, load_context()) == []
+
+
+# --- capabilityKeys: the `manage` verb is a live member of the verb set -----
+
+
+def test_manage_verb_capability_key_accepted() -> None:
+    # PROJECTION_CAPABILITY_VERBS == {read, explore, manage}. A key with the
+    # `manage` verb must be accepted — the check must not be a dead
+    # read/explore-only special case.
+    reg = _mk_reg(
+        [
+            _entry(
+                "cluster360",
+                surfaces=["cluster360", "graph"],
+                capability_keys=["cluster360.read", "cluster360.manage"],
+            )
+        ]
+    )
+    assert validate_cross_registry(reg, load_context()) == []
+
+
+# --- kind-namespacing (a pending declaration's kind gates its id space) -----
+
+
+def test_surface_pending_wrong_kind_not_accepted() -> None:
+    # A pending declaration with kind="metric" does NOT namespace the surface id
+    # space — the surfaceId is undeclared and must fail closed.
+    wrong = _pending("queued_surface", "metric")
+    reg = _mk_reg([_entry("a", surfaces=["queued_surface"], pending_ref=[wrong])])
+    violations = validate_cross_registry(reg, load_context())
+    assert any(
+        v.rule == "cross_registry"
+        and "neither a registered surface nor declared pending" in v.message
+        for v in violations
+    )
+
+
+def test_metric_pending_wrong_kind_not_accepted() -> None:
+    # A pending declaration with kind="surface" does NOT namespace the metric id
+    # space — the metricRef is undeclared and must fail closed.
+    wrong = _pending("queued_metric", "surface")
+    reg = _mk_reg([_entry("a", metrics=["queued_metric"], pending_ref=[wrong])])
+    violations = validate_cross_registry(reg, load_context())
+    assert any(
+        v.rule == "cross_registry"
+        and "neither in metric-registry.json nor declared pending" in v.message
+        for v in violations
+    )
+
+
+def test_projection_dependency_pending_wrong_kind_not_accepted() -> None:
+    # A pending declaration with kind="spine" does NOT namespace the projection
+    # id space — a projection dependency carrying the same id is still
+    # undeclared and errors (dependency_dag rule group).
+    wrong = _pending("earlier", "spine")
+    reg = _mk_reg([_entry("a", deps=["earlier"], pending_ref=[wrong])])
+    violations = validate_dependency_dag(reg)
+    assert any(
+        v.severity == "error"
+        and "neither a registry id nor declared pending" in v.message
+        for v in violations
+    )
+
+
+def test_projection_dependency_pending_kind_projection_accepted() -> None:
+    # Same skip-ahead, declared with kind="projection" → legal (the dep is
+    # namespaced into the projection id space).
+    right = _pending("earlier", "projection")
+    reg = _mk_reg([_entry("a", deps=["earlier"], pending_ref=[right])])
+    assert validate_dependency_dag(reg) == []

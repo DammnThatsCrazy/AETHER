@@ -23,8 +23,13 @@ Usage:
 
 Options:
   --check         CI gate — exit 0 on zero errors, 1 otherwise (same exit
-                  contract as the default mode; wired into repo-doctor and the
-                  Makefile target).
+                  contract as the default mode). This CLI is a standalone /
+                  CI-artifact tool: ``make repo-doctor`` and ``make ci-check``
+                  currently enforce the projection registry through the
+                  generator's ``validate_intelligence_projection_registry()``
+                  (scripts/generate_platform_contracts.py REGISTRIES loop), not
+                  through this script. Wired-in repo-doctor/Makefile
+                  enforcement lands with the CI workstream, not here.
   --json PATH     Write machine-readable evidence to PATH (non-gating CI
                   artifact): {"ok", "violations", "projections",
                   "implemented", "resolvedRefs", "pending", "inventory"}.
@@ -118,7 +123,8 @@ def _parse_args(argv: Optional[list[str]]) -> argparse.Namespace:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="CI gate — exit 0 on zero errors, 1 otherwise (same as default mode)",
+        help="CI gate — exit 0 on zero errors, 1 otherwise (standalone tool; "
+        "repo-doctor/Makefile wiring lands with CI enforcement)",
     )
     parser.add_argument(
         "--json",
