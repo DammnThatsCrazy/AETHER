@@ -22,6 +22,8 @@ interface FeatureFlags {
   readonly kyberInteropOps: boolean;
   /** Kyber provider-connections UI (read/monitor + operator-certify). Default OFF. */
   readonly enableProviderRuntime: boolean;
+  /** Model-runtime control-plane operator admin surfaces (ADR-008 D8/D9). Default OFF. */
+  readonly enableModelHarness: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -50,6 +52,10 @@ const DEFAULT_FLAGS: FeatureFlags = {
   // Provider Runtime UI is aggregate-only (read/monitor + certify); default OFF
   // (fail-closed) until the backend runtime flag is enabled in an environment.
   enableProviderRuntime: false,
+  // Model-runtime admin surfaces default OFF (D8/D9, fail-closed) until an
+  // environment flips the flag on together with the model-runtime control-plane
+  // backend; routing is never a grant — the /v1/model-runtime/* endpoints gate.
+  enableModelHarness: false,
 };
 
 function loadFlags(): FeatureFlags {

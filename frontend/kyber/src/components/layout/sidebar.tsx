@@ -68,6 +68,16 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   // provider-connections routes it reads mount when EITHER that flag OR
   // KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED is set.
   { path: '/provider-connections', label: 'Provider Runtime', destination: 'kyber-connectors', envFlag: 'enableProviderRuntime' },
+  // Model-runtime control-plane admin surfaces (ADR-008 D8/D9). Frontend-only
+  // flag mirrors the Aether harness surface (enableModelHarness, default OFF);
+  // the backend /v1/model-runtime/* endpoints are the real grant gate. Icon
+  // taxonomy reuses existing kyber destinations — adding brand destinations
+  // would touch packages/brand (out of scope), same as Provider Runtime.
+  { path: '/model-runtime/registry', label: 'Model Registry', destination: 'kyber-packages', envFlag: 'enableModelHarness' },
+  { path: '/model-runtime/health', label: 'Model Health', destination: 'kyber-reliability', envFlag: 'enableModelHarness' },
+  { path: '/model-runtime/entitlements', label: 'Model Entitlements', destination: 'kyber-tenants', envFlag: 'enableModelHarness' },
+  { path: '/model-runtime/usage', label: 'Model Usage', destination: 'kyber-ai-efficiency', envFlag: 'enableModelHarness' },
+  { path: '/model-runtime/traces', label: 'Model Traces', destination: 'kyber-flow-trace', envFlag: 'enableModelHarness' },
   { path: '/dune-feeder', label: 'Dune Feeder', destination: 'kyber-dune-feeder' },
   { path: '/revops',          label: 'RevOps',          destination: 'kyber-revops' },
   { path: '/sales-readiness', label: 'Sales Ready',     destination: 'kyber-sales-readiness' },
