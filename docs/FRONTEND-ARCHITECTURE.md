@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "1c1b7416"
+last_synced_commit: "3791c6d0"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -725,6 +725,36 @@ Cross-device handoff and governed-action visibility added by the mobile-producti
   `verified | executed_unverified | denied | failed | expired` states from the
   kyber command plane.
 - **Client-sync consumption** distinguishes fresh/offline/stale; no offline mutation.
+
+---
+
+## Model Runtime Components (v8.12.0)
+
+Provider-neutral harness operator + tenant surfaces (ADR-008 D8/D9). All of it
+is feature-gated: the Aether panel behind `enableModelHarness` (default OFF),
+the Kyber pages behind the backend `MODEL_RUNTIME_ENABLED` gate (the routes
+return 503 while OFF). Typed contracts carry no credential material.
+
+- **Aether** (`frontend/aether/src/features/model-selection/`):
+  `ModelSelectionPanel` (tenant model-routing preference; `getModels` +
+  `setTenantDefault` against `/v1/model-runtime/models` +
+  `/v1/model-runtime/tenant-default`), `ModelRegistryView`, `EntitlementBadge`,
+  `EvidenceReferences`, and the `useModelSelection` hook. `types.ts` is the
+  server-shaped, credential-free contract (`ModelListResponse`,
+  `TenantModelSelectionApi`).
+- **Kyber** (`frontend/kyber/src/features/model-runtime/`): `ModelRegistryPage`
+  (`GET /v1/model-runtime/registry`), `ModelRuntimeHealthPage` (`/health`),
+  `EntitlementsPage` (`/entitlements`), `UsagePage` (`/usage`), `TracesPage`
+  (`/traces`) — read-only operator pages, each with an injectable typed client
+  (`defaultModelRuntimeAdminApi`) so tests stub exactly the one method they
+  drive.
+- **Credential-free by contract**: entitlement rows, health reasons, and trace
+  summaries are server-sanitized (secret-shaped markers blanked); the pages
+  never render keys or tokens.
+
+Neither app adds a route or nav entry for these surfaces — no `router.tsx` or
+sidebar changes — and the typed fetch clients are self-contained in their
+feature modules, not wired into `lib/api/endpoints.ts`.
 
 ---
 

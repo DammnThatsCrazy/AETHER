@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "74086291"
+last_synced_commit: "3791c6d0"
 ---
 # Operations Runbook v8.12.0
 
@@ -203,6 +203,49 @@ in-memory only and is **not durable** until Redis returns.
 | Backend | `GET /v1/health` | `{"status": "healthy"}` |
 | ML Serving | `GET /health` | `{"status": "healthy", "models_loaded": [...]}` |
 | Defense | `GET /v1/defense/status` | `{"enabled": true/false}` |
+
+---
+
+## Model Runtime Operations (v8.12.0)
+
+The multi-model intelligence harness (`services/model_runtime/`) is
+feature-gated OFF by default (`MODEL_RUNTIME_ENABLED=false`, ADR-008 D9).
+While OFF the `/v1/model-runtime/*` routes are inert — every request returns
+HTTP 503 `model_runtime_disabled` and no data is served.
+
+**Enabling in staging/production.** Set `MODEL_RUNTIME_ENABLED=true` and —
+because the runtime fails closed in non-local environments — a
+production-safe credential backend (`MODEL_RUNTIME_CREDENTIAL_BACKEND=env` or
+`aws_secrets`, never `in_memory`/`disabled`) and a real default provider
+(never `deterministic`, which is test-only). A violation raises `ConfigError`
+at startup and the process refuses to serve rather than falling back to an
+insecure default. With `credential_backend=aws_secrets`,
+`MODEL_RUNTIME_CREDENTIAL_AWS_REGION` is also required. All `MODEL_RUNTIME_*`
+variables are declared in `.env.example` and
+`deploy/model-runtime/.env.example`; `services/model_runtime/config.py` is the
+single source for defaults and the fail-closed rules.
+
+**Tenant scoping.** Tenant scope is server-authoritative: every route derives
+it from the authenticated request state (bound by the auth middleware) — a
+client can never select tenant scope from headers, body, or query. An enabled
+surface with no authenticated tenant rejects with HTTP 400 (fail-closed).
+
+**Credential hygiene.** Responses are credential-free; health/entitlement
+reasons are sanitized. Never place API keys or secrets in the env templates —
+placeholders only.
+
+**Health.** `GET /v1/model-runtime/health` reports per-provider
+configured/healthy state over the deterministic seed set until real adapters
+are wired; `status` ∈ `ok` / `degraded` / `unhealthy`. Probes are
+liveness-light and never invoke a provider `complete` call.
+
+**Circuit breakers.** Provider dispatch is gated by a circuit registry keyed
+per provider + model (+ tenant scope). After
+`MODEL_RUNTIME_CIRCUIT_FAILURE_THRESHOLD` (default 5) consecutive failures a
+circuit opens and calls are blocked fail-closed until
+`MODEL_RUNTIME_CIRCUIT_RECOVERY_TIMEOUT_S` (default 60s) elapses, then a
+single half-open probe is allowed. Misconfigured thresholds (threshold < 1 or
+recovery < 0) fail closed at startup.
 
 ---
 

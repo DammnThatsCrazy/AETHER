@@ -16,7 +16,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "74086291"
+last_synced_commit: "3791c6d0"
 ---
 
 # Backend Execution Model
@@ -37,7 +37,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `identity-worker` | Identity-signal emission from validated SDK events. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
-| `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`) and `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`) loop workers. |
+| `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
 | `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
 | `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). |
 
@@ -168,3 +168,43 @@ covered by ownership tests. Broker-backed staging evidence for assignment,
 processing lag, restart counts, and bounded deployment drain remains required;
 the ledger therefore remains `implementation_in_progress` rather than claiming
 production validation.
+
+## Model runtime execution flow
+
+The provider-neutral multi-model harness
+(`Backend Architecture/aether-backend/services/model_runtime/`, ADR-008) runs
+**in-process via a feature-flagged router mount — not a runtime role.** `main.py`
+includes the `services/model_runtime/routes.py` router only when
+`ModelRuntimeSettings().enabled` is true; the gate lives in
+`services/model_runtime/config.py` (`MODEL_RUNTIME_ENABLED`, default OFF per
+ADR-008 D9) rather than `config/settings.py`, and the import is lazy and
+`ImportError`-guarded so `main` stays importable. There is no model-runtime
+entry in `config/settings.py::RUNTIME_ROLES` — the harness has no supervised
+loop or consumer; it executes on the request path, and the mounted surface is
+the control plane under `/v1/model-runtime` (registry, health, entitlements,
+usage, traces, model list, tenant default).
+
+Inside the package it executes as a cross-plane pipeline behind a single facade
+— `HarnessPipeline.run()`: routing → context → grounded synthesis →
+verification, with evaluation as the regression gate and observability
+throughout. Every stage is tenant-scoped (server-authoritative — the tenant
+comes from the authenticated request state, never from client-supplied
+headers) and evidence-backed; see `docs/ARCHITECTURE.md` → "Intelligence
+planes".
+
+Fail-closed settings (`services/model_runtime/config.py`, `MODEL_RUNTIME_*`):
+
+- `MODEL_RUNTIME_ENABLED=false` by default (ADR-008 D9) — fail-closed while
+  OFF: `main.py` does not mount the router, and every route also carries a 503
+  dependency, so the surface never serves data and never leaks response shape.
+- A non-local environment (`staging`/`production`/`test`) with
+  `MODEL_RUNTIME_ENABLED=true` must use a production-safe credential backend
+  (`env` or `aws_secrets`, never `in_memory`/`disabled`) and a real default
+  provider (never `deterministic`); a violation raises `ConfigError` at startup
+  — the process refuses to serve.
+- `credential_backend=aws_secrets` requires a non-empty
+  `MODEL_RUNTIME_CREDENTIAL_AWS_REGION` in every environment.
+
+The pipeline normalizes every stage failure into a content-free
+`HarnessPipelineError` (stage name + exception class only), so evidence content
+and credentials never appear in errors or logs.
