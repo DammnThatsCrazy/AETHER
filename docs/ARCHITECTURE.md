@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "b5d4ce33"
+last_synced_commit: "43fac2ce"
 ---
 # Aether vNext — Architecture Guide
 
@@ -454,6 +454,24 @@ Canonical contract plane (single source of truth, codegen twins via
 |---|---|---|
 | Model catalog | `packages/shared/contracts/model-registry.json` | `packages/shared/model-registry.ts`; `shared/model_governance/generated_model_registry.py`; `docs/_generated/model-registry-table.md` |
 | Task profiles | `packages/shared/contracts/task-profile-registry.json` | `packages/shared/task-profile.ts`; `shared/model_governance/generated_task_profiles.py`; `docs/_generated/task-profile-table.md` |
+| Intelligence projections | `packages/shared/contracts/intelligence-projection-registry.json` | `packages/shared/intelligence-projections.generated.ts`; `shared/intelligence_projections/generated_registry.py`; `docs/_generated/intelligence-projection-registry-table.md`; `docs/_generated/intelligence-projection-dependency-graph.md` |
+
+### Intelligence projection plane
+
+A **360** is an intelligence projection over canonical Aether truth — it is
+never a competing system of record. The intelligence projection plane owns the
+single canonical registry (18 projections) and the shared request/context/result
+contracts (TS + Python) that every future 360 provider implements against.
+`implementationState` is repo metadata describing how far a projection has been
+converged onto the plane (`in_flight` = an existing implementation that is not
+yet a native provider) — it is NOT a readiness signal and is never surfaced as
+`production_ready`. The runtime is a fail-isolated provider protocol
+(`shared/intelligence_projections/provider.py` + `registry.py`): one broken
+projection degrades its own result, never the plane. P0 mounts no projection
+route — the plane is a library; app wiring lands with the first real provider.
+The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
+the source-of-truth is
+[INTELLIGENCE_PROJECTION_ARCHITECTURE.md](source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md).
 
 ### Provider transport adapters
 
