@@ -158,6 +158,43 @@ def test_register_same_major_version_accepted() -> None:
     assert reg2.register(_FakeProvider("campaign360", contract_version="1.0.0-beta")) == "campaign360"
 
 
+@pytest.mark.parametrize(
+    "contract_version",
+    [
+        None,
+        123,  # non-string
+        "",
+        "1.",
+        "1.0.0.0.0",
+        "garbage",
+        "v1.0.0",
+        "11.0.0",
+        "0.1.0",
+    ],
+)
+def test_register_rejects_malformed_or_incompatible_versions(contract_version: object) -> None:
+    # Fail-closed (MINOR-2): every empty / non-string / loose / wrong-major
+    # version raises ContractVersionIncompatible — never an unhandled exception.
+    reg = ProviderRegistry()
+    with pytest.raises(ContractVersionIncompatible) as excinfo:
+        reg.register(_FakeProvider("profile360", contract_version=contract_version))
+    assert excinfo.value.projection_id == "profile360"
+    assert excinfo.value.version == contract_version
+    # Nothing was registered.
+    assert reg.list() == []
+
+
+@pytest.mark.parametrize(
+    "contract_version",
+    ["1.0.0", "1.5.0", "1.0.0-beta.2+build", "1.99.0-pre.1"],
+)
+def test_register_accepts_strict_same_major_versions(contract_version: str) -> None:
+    # The base must be exactly three numeric dotted segments; a -pre/+build
+    # suffix is allowed; the major must equal the registry contract's major.
+    reg = ProviderRegistry()
+    assert reg.register(_FakeProvider("profile360", contract_version=contract_version)) == "profile360"
+
+
 def test_supported_contracts_reports_provider_versions() -> None:
     reg = ProviderRegistry()
     reg.register(_FakeProvider("profile360", contract_version="1.0.0"))

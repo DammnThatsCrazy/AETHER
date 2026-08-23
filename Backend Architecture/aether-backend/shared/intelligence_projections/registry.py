@@ -25,6 +25,7 @@ secret hygiene, mirroring the model-runtime harness pattern).
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -49,22 +50,32 @@ from shared.intelligence_projections.provider import IntelligenceProjectionProvi
 logger = logging.getLogger(__name__)
 
 
-def _same_major(version: Optional[str], registry_version: str) -> bool:
-    """True when ``version`` and ``registry_version`` share a semver major.
+# Strict semver shape (stdlib regex — no external semver dependency): exactly
+# three numeric dotted segments, optionally followed by a ``-pre`` / ``+build``
+# suffix. Loose or malformed versions ("1.", "1.0.0.0.0", "v1.0.0", "garbage")
+# fail closed rather than being silently treated as major-compatible.
+_SEMVER_RE = re.compile(
+    r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
+    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
+)
 
-    Tiny local split-"-"-major compare (no external semver dependency): the
-    pre-release/prerelease suffix and minor/patch components are stripped before
-    comparing the first dotted segment. A non-string ``version`` is never
-    compatible.
+
+def _same_major(version: Optional[str], registry_version: str) -> bool:
+    """True when ``version`` is a strict semver sharing the registry's major.
+
+    The base version must be exactly three numeric dotted segments (optionally
+    with a ``-pre`` / ``+build`` suffix) and its major must equal the registry
+    contract's major. Fail-closed: empty / ``None`` / non-string / ``"1."`` /
+    ``"1.0.0.0.0"`` / ``"garbage"`` / ``"v1.0.0"`` / different-major versions are
+    never compatible. Never raises.
     """
     if not isinstance(version, str) or not isinstance(registry_version, str):
         return False
-    try:
-        major = version.split("-", 1)[0].split(".", 1)[0]
-        registry_major = registry_version.split("-", 1)[0].split(".", 1)[0]
-    except ValueError:  # pragma: no cover - split on literal separators cannot fail
+    version_match = _SEMVER_RE.match(version)
+    registry_match = _SEMVER_RE.match(registry_version)
+    if version_match is None or registry_match is None:
         return False
-    return major == registry_major and major != ""
+    return version_match.group("major") == registry_match.group("major")
 
 
 class ProviderRegistry:
@@ -263,15 +274,18 @@ class ProviderRegistry:
 
         version = getattr(provider, "contract_version", None)
         if not _same_major(version, INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION):
+            # Content-free by design (fail-closed secret hygiene): a
+            # provider-controlled version string is NEVER echoed into context /
+            # result fields. The offending version stays available on the raised
+            # ContractVersionIncompatible exception — the caller-facing channel.
             warnings.append(
-                f"dependency {dep!r} provider contract {version!r} is "
-                f"incompatible with registry contract "
-                f"{INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION!r}"
+                f"dependency {dep!r} is contract-incompatible with registry "
+                f"contract {INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION!r}"
             )
             return ProjectionDependencyState(
                 projectionId=dep,
                 state="degraded",
-                reason=f"provider contract version {version!r} incompatible",
+                reason="provider contract version incompatible",
             )
 
         return ProjectionDependencyState(projectionId=dep, state="available")

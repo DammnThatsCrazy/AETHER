@@ -27,6 +27,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from shared.intelligence_projections import (  # noqa: E402
+    ContractVersionIncompatible,
     DependencyUnavailable,
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
     ProjectionContext,
@@ -35,6 +36,10 @@ from shared.intelligence_projections import (  # noqa: E402
     ProjectionSection,
     ProjectionSubject,
     ProviderRegistry,
+)
+from shared.intelligence_projections.generated_registry import (  # noqa: E402
+    INTELLIGENCE_PROJECTION_DEFINITIONS,
+    INTELLIGENCE_PROJECTION_IDS,
 )
 
 
@@ -301,8 +306,78 @@ async def test_optional_dep_present_compatible_is_available() -> None:
     assert risk.state == "available"
 
 
+class _HealthyProfileProvider:
+    """profile360 provider — always returns an available summary section."""
+
+    projection_id = "profile360"
+    contract_version = "1.0.0"
+
+    async def project(self, request: ProjectionRequest, context: object) -> ProjectionResult:
+        return _result(
+            "profile360",
+            request,
+            context,
+            sections=[ProjectionSection(id="summary", state="available")],
+        )
+
+
+@pytest.mark.asyncio
+async def test_optional_dep_incompatible_is_degraded_with_warning() -> None:
+    registry = ProviderRegistry()
+    registry.register(_HealthyProfileProvider())
+
+    class _RiskProvider:
+        projection_id = "risk360"
+        contract_version = "1.0.0"
+
+        async def project(self, request: ProjectionRequest, context: object) -> ProjectionResult:
+            return _result("risk360", request, context)
+
+    risk = _RiskProvider()
+    registry.register(risk)
+    # Drift the optional dependency's contract out of compatibility.
+    risk.contract_version = "2.0.0"
+
+    context = await registry.build_context("profile360", _request("profile360"))
+    dep = next(d for d in context.dependencyState if d.projectionId == "risk360")
+    assert dep.state == "degraded"
+    assert any("risk360" in warning for warning in context.warnings)
+    # Warnings are diagnostic-only — never surfaced in a result's degradedReasons.
+    result = await registry.project("profile360", _request("profile360"))
+    assert result.degradedReasons == []
+
+
 # ---------------------------------------------------------------------------
-# build_context NEVER raises across all dependency shapes
+# build_context NEVER raises across ALL 18 registry ids (zero providers)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_zero_provider_context_for_every_registry_id() -> None:
+    registry = ProviderRegistry()
+    for projection_id in INTELLIGENCE_PROJECTION_IDS:
+        ctx = await registry.build_context(projection_id, _request(projection_id))
+
+        assert isinstance(ctx, ProjectionContext)
+        # registryState is exactly the generated definition's implementationState.
+        definition = INTELLIGENCE_PROJECTION_DEFINITIONS[projection_id]
+        assert ctx.registryState == definition["implementationState"]
+        assert ctx.warnings == []
+
+        by_id = {dep.projectionId: dep for dep in ctx.dependencyState}
+        # Every hard dependency -> missing; every optional dependency ->
+        # not_applicable; no provider is registered for any id.
+        for hard in definition.get("projectionDependencies", ()):
+            assert by_id[hard].state == "missing"
+        for optional in definition.get("optionalProjectionDependencies", ()):
+            assert by_id[optional].state == "not_applicable"
+        # The context only declares the dependencies the definition declares.
+        expected_ids = set(definition.get("projectionDependencies", ()))
+        expected_ids |= set(definition.get("optionalProjectionDependencies", ()))
+        assert set(by_id) == expected_ids
+
+
+# ---------------------------------------------------------------------------
+# build_context NEVER raises across the tricky dependency shapes
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -314,22 +389,61 @@ async def test_build_context_never_raises_for_any_dependency_shape() -> None:
 
     # 1) missing hard dep (no population360 yet -> remove it first).
     registry.unregister("population360")
-    await registry.build_context("cluster360", _request("cluster360"))
+    ctx = await registry.build_context("cluster360", _request("cluster360"))
+    population_dep = next(d for d in ctx.dependencyState if d.projectionId == "population360")
+    assert population_dep.state == "missing"
 
     # 2) incompatible hard dep.
     registry.register(population)
     population.contract_version = "9.0.0"
-    await registry.build_context("cluster360", _request("cluster360"))
+    ctx = await registry.build_context("cluster360", _request("cluster360"))
+    population_dep = next(d for d in ctx.dependencyState if d.projectionId == "population360")
+    assert population_dep.state == "degraded"
+    assert any("population360" in warning for warning in ctx.warnings)
 
     # 3) optional dep absent + optional dep present (profile360/risk360).
-    await registry.build_context("profile360", _request("profile360"))
+    ctx = await registry.build_context("profile360", _request("profile360"))
+    risk = next(d for d in ctx.dependencyState if d.projectionId == "risk360")
+    assert risk.state == "not_applicable"
 
     # 4) a projection with no declared deps at all (source360).
-    await registry.build_context("source360", _request("source360"))
+    ctx = await registry.build_context("source360", _request("source360"))
+    assert ctx.dependencyState == []
+    assert ctx.warnings == []
 
-    # 5) every registry id builds a context without raising.
-    for projection_id in ("agent360", "campaign360", "relationship360", "execution360"):
-        ctx = await registry.build_context(projection_id, _request(projection_id))
-        assert isinstance(ctx, ProjectionContext)
-        assert ctx.dependencyState is not None
-        assert ctx.warnings is not None
+
+# ---------------------------------------------------------------------------
+# MINOR-1 repro: a provider-drifted version never leaks into result/context
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_degraded_dependency_never_echoes_provider_controlled_version() -> None:
+    registry = ProviderRegistry()
+    registry.register(_ClusterProvider())
+    population = _population_provider()
+    registry.register(population)
+    # Adversarial drift: the provider stuffs a fake secret into its own
+    # contract_version. The registry must NOT echo it anywhere serialized.
+    population.contract_version = "2.0.0 SUPER-SECRET-TOKEN-abc123"
+
+    context = await registry.build_context("cluster360", _request("cluster360"))
+    result = await registry.project("cluster360", _request("cluster360"))
+
+    # The secret appears nowhere in the serialized result nor in the context's
+    # warning/dependencyState fields.
+    serialized = str(result.model_dump())
+    assert "SUPER-SECRET-TOKEN-abc123" not in serialized
+    assert "secret" not in serialized.lower()
+    assert "SUPER-SECRET-TOKEN-abc123" not in str(context.model_dump())
+    assert "secret" not in str(context.model_dump()).lower()
+
+    # The dependency is still correctly classified as degraded with a static,
+    # content-free reason.
+    population_dep = next(d for d in context.dependencyState if d.projectionId == "population360")
+    assert population_dep.state == "degraded"
+    assert population_dep.reason == "provider contract version incompatible"
+    # The offending version stays on the RAISED exception only (caller channel).
+    with pytest.raises(ContractVersionIncompatible) as excinfo:
+        registry.register(_population_provider(version="2.0.0 SUPER-SECRET-TOKEN-abc123"))
+    assert excinfo.value.version == "2.0.0 SUPER-SECRET-TOKEN-abc123"
+    assert excinfo.value.projection_id == "population360"
