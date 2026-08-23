@@ -16,8 +16,14 @@ from pydantic import SecretStr
 from services.model_runtime.credentials.aws_secrets import (
     AwsSecretsCredentialResolver,
 )
+from services.model_runtime.credentials.aws_source import AwsCredentialSource
 from services.model_runtime.credentials.interface import CredentialCache
-from services.model_runtime.credentials.models import assert_no_raw_secrets
+from services.model_runtime.credentials.models import (
+    CredentialBackendUnavailable,
+    assert_no_raw_secrets,
+)
+from services.model_runtime.credentials.rotation import ExpiryBasedRotationPolicy
+from services.model_runtime.credentials.service import CredentialService
 from shared.certification.readiness import CredentialReadiness
 from shared.credentials.interface import (
     STATUS_ACTIVE,
@@ -109,6 +115,67 @@ class RaisingBackend(FakeBackend):
 
     async def metadata(self, tenant_id: str, ref: str):
         raise RuntimeError("simulated AWS failure")
+
+
+class RaisingListBackend(FakeBackend):
+    """A backend whose ``list`` surface raises (AWS unavailable at list time)."""
+
+    async def list(self, tenant_id: str):
+        raise RuntimeError("simulated AWS list failure")
+
+
+class LifecycleFakeBackend(FakeBackend):
+    """FakeBackend whose rotate/revoke apply + record lifecycle writes.
+
+    The base ``FakeBackend`` deliberately raises on rotate/revoke because the
+    *resolver* must never perform lifecycle writes. The service/adapter tests
+    legitimately call through to the backend, so this subclass makes those
+    writes functional and observable (mirroring the real
+    ``AwsSecretsManagerCredentialBackend`` version-bump / revoke semantics).
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.rotate_calls: list[tuple[str, str, object]] = []
+        self.revoke_calls: list[tuple[str, str]] = []
+
+    async def rotate(self, tenant_id: str, ref: str, credential):
+        self.rotate_calls.append((tenant_id, ref, credential))
+        now = datetime.now(timezone.utc)
+        rotated = make_metadata(
+            tenant_id=tenant_id,
+            ref=ref,
+            credential_type="api_key",
+            version=2,
+            lifecycle_status=STATUS_ACTIVE,
+            masked_identifier="****r0t0",
+            created_at=now,
+            updated_at=now,
+            rotated_at=now,
+        )
+        self._metadata_overrides[ref] = rotated
+        return rotated
+
+    async def revoke(self, tenant_id: str, ref: str) -> bool:
+        self.revoke_calls.append((tenant_id, ref))
+        if ref not in self._stored and ref not in self._metadata_overrides:
+            return False
+        now = datetime.now(timezone.utc)
+        entry = self._stored.get(ref)
+        masked = entry[0] if entry is not None else "****abcd"
+        revoked = make_metadata(
+            tenant_id=tenant_id,
+            ref=ref,
+            credential_type="api_key",
+            version=1,
+            lifecycle_status=STATUS_REVOKED,
+            masked_identifier=masked,
+            created_at=now,
+            updated_at=now,
+            revoked_at=now,
+        )
+        self._metadata_overrides[ref] = revoked
+        return True
 
 
 async def test_happy_path_resolves_from_secret_backend():
@@ -439,3 +506,126 @@ async def test_cached_expired_metadata_is_not_serviceable():
     assert resolution.resolved is True
     assert resolution.reason == "aws secret expired"
     assert fake.metadata_calls == []  # cache short-circuited, but rejected
+
+
+# ------------------------------------------------------- service lifecycle
+#
+# Regression: ``CredentialService._source()`` returned ``None`` for the AWS
+# resolver (whose backend is stored as ``_backend``), so ``list_metadata`` was
+# always empty, ``revoke`` always ``False``, and rotation built an orchestrator
+# with a ``None`` source and failed. The ``AwsCredentialSource`` adapter fixes
+# all three. These tests exercise the facade end-to-end over ``LifecycleFakeBackend``.
+
+
+async def test_service_list_metadata_returns_real_aws_metadata():
+    fake = LifecycleFakeBackend(
+        stored={
+            "llm/anthropic": ("****a1b2", "sk-ant-raw-00000000"),
+            "llm/openai": ("****1111", "sk-openai-raw-11111111"),
+        }
+    )
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+    service = CredentialService(resolver)
+
+    items = await service.list_metadata("t1")
+
+    assert len(items) == 2
+    assert {item.ref for item in items} == {"llm/anthropic", "llm/openai"}
+    for item in items:
+        assert item.tenant_id == "t1"
+        assert item.masked_identifier.startswith("****")
+        # Masked-only: no raw secret material crosses the facade.
+        assert_no_raw_secrets(item.model_dump_json())
+        assert "sk-ant-raw" not in item.model_dump_json()
+        assert "sk-openai-raw" not in item.model_dump_json()
+
+
+async def test_service_list_metadata_empty_backend_returns_empty():
+    fake = LifecycleFakeBackend()
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+    service = CredentialService(resolver)
+
+    assert await service.list_metadata("t1") == []
+
+
+async def test_service_list_metadata_backend_error_fails_closed():
+    resolver = AwsSecretsCredentialResolver(RaisingListBackend(), aws_region="us-east-1")
+    service = CredentialService(resolver)
+
+    # Fail closed to an empty (secret-free) list rather than raising into the
+    # facade or leaking backend noise.
+    assert await service.list_metadata("t1") == []
+
+
+async def test_service_revoke_delegates_to_aws_resolver_and_returns_true():
+    fake = LifecycleFakeBackend(stored={"llm/anthropic": ("****a1b2", "sk-ant-raw-00000000")})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+    service = CredentialService(resolver)
+
+    result = await service.revoke("t1", "llm/anthropic")
+
+    assert result is True
+    assert fake.revoke_calls == [("t1", "llm/anthropic")]
+
+
+async def test_service_revoke_unknown_ref_returns_false():
+    fake = LifecycleFakeBackend()
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+    service = CredentialService(resolver)
+
+    assert await service.revoke("t1", "llm/missing") is False
+    assert fake.revoke_calls == [("t1", "llm/missing")]
+
+
+async def test_service_aws_source_is_not_none():
+    # Rotation builds an orchestrator over ``_source()``; for an AWS resolver
+    # that must be a real CredentialSource adapter, never None.
+    fake = LifecycleFakeBackend(stored={"llm/anthropic": ("****a1b2", "sk-ant-raw-00000000")})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+    service = CredentialService(resolver)
+
+    source = service._source()
+
+    assert isinstance(source, AwsCredentialSource)
+
+
+async def test_service_rotate_aws_with_replacement_factory_returns_rotated_metadata():
+    fake = LifecycleFakeBackend(stored={"llm/anthropic": ("****a1b2", "sk-ant-raw-00000000")})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+
+    async def _replacement(tenant_id: str, ref: str):
+        assert tenant_id == "t1"
+        assert ref == "llm/anthropic"
+        return "sk-ant-rotated-new-key-00000000"
+
+    service = CredentialService(
+        resolver,
+        rotation_policy=ExpiryBasedRotationPolicy(),
+        aws_rotate_replacement=_replacement,
+    )
+
+    result = await service.rotate("t1", "llm/anthropic")
+
+    assert result is not None
+    assert result.ref == "llm/anthropic"
+    assert result.version == 2
+    assert result.rotated_at is not None
+    assert result.revoked_at is None
+    # A valid replacement flowed through the documented backend rotate path —
+    # the adapter never manufactures or drops the replacement.
+    assert fake.rotate_calls == [("t1", "llm/anthropic", "sk-ant-rotated-new-key-00000000")]
+
+
+async def test_service_rotate_aws_without_replacement_factory_fails_closed():
+    fake = LifecycleFakeBackend(stored={"llm/anthropic": ("****a1b2", "sk-ant-raw-00000000")})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+    service = CredentialService(resolver, rotation_policy=ExpiryBasedRotationPolicy())
+
+    raised = False
+    try:
+        await service.rotate("t1", "llm/anthropic")
+    except CredentialBackendUnavailable:
+        raised = True
+    assert raised is True
+    # Fail closed: nothing was written to the backend without a replacement.
+    assert fake.rotate_calls == []

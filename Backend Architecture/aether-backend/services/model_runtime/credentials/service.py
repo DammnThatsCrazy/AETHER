@@ -17,12 +17,16 @@ Security contract (binding, ADR-008 D5):
   touching any backend.
 * Rotation is delegated to the ``RotationOrchestrator`` (which fails closed);
   revocation fails closed to ``False`` rather than surfacing backend errors.
+* AWS-backed resolvers (``AwsSecretsCredentialResolver``, which stores its
+  backend as ``_backend``) are adapted to the :class:`CredentialSource` seam by
+  :class:`~services.model_runtime.credentials.aws_source.AwsCredentialSource`,
+  so listing, revocation, and rotation operate against the real AWS store.
 """
 
 from __future__ import annotations
 
 import inspect
-from typing import Any
+from typing import Any, Callable
 
 from services.model_runtime.credentials.interface import ProviderCredentialResolver
 from services.model_runtime.credentials.models import (
@@ -53,17 +57,51 @@ class CredentialService:
         *,
         rotation_policy: RotationPolicy | None = None,
         config: ResolverConfig | None = None,
+        aws_rotate_replacement: Callable[[str, str], Any] | None = None,
     ) -> None:
         self._resolver = resolver
         self._rotation_policy = rotation_policy
         # D9 feature gate defaults OFF (ResolverConfig.enabled=False).
         self._config = config if config is not None else ResolverConfig()
+        # Cached lifecycle adapter for backend-backed (AWS) resolvers.
+        self._aws_source: Any = None
+        # Replacement-credential provider for AWS rotation (see aws_source.py);
+        # ``None`` makes AWS rotation fail closed rather than write a synthetic
+        # secret. Never logged or surfaced.
+        self._aws_rotate_replacement = aws_rotate_replacement
 
     # -- resolver internals -------------------------------------------------
 
     def _source(self) -> Any:
-        """The underlying credential source the resolver wraps, if any."""
-        return _attr_any(self._resolver, "source", "_source")
+        """The underlying credential source the resolver wraps, if any.
+
+        Resolvers exposing ``source``/``_source`` return it directly.
+        :class:`~services.model_runtime.credentials.aws_secrets.AwsSecretsCredentialResolver`
+        stores its ``CredentialBackendLike`` as ``_backend`` instead, so this
+        facade adapts it to the :class:`CredentialSource` seam — otherwise
+        ``list_metadata``/``revoke``/``rotate`` would silently degrade (empty
+        list, ``False``, and an orchestrator with a ``None`` source).
+        """
+        source = _attr_any(self._resolver, "source", "_source")
+        if source is not None:
+            return source
+        if self._aws_source is None:
+            self._aws_source = self._build_aws_source()
+        return self._aws_source
+
+    def _build_aws_source(self) -> Any:
+        """Build the AWS lifecycle adapter for an AWS-backed resolver, if any."""
+        from services.model_runtime.credentials.aws_secrets import (
+            AwsSecretsCredentialResolver,
+        )
+        from services.model_runtime.credentials.aws_source import AwsCredentialSource
+
+        if not isinstance(self._resolver, AwsSecretsCredentialResolver):
+            return None
+        return AwsCredentialSource(
+            self._resolver,
+            rotate_replacement_factory=self._aws_rotate_replacement,
+        )
 
     def _cache(self) -> Any:
         """The resolver's credential cache, if any."""

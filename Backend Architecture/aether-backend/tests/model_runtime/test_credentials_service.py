@@ -15,6 +15,7 @@ import pytest
 
 from shared.certification.readiness import CredentialReadiness
 from shared.credentials.interface import STATUS_ACTIVE, CredentialMetadata, make_metadata
+from services.model_runtime.credentials.aws_source import AwsCredentialSource
 from services.model_runtime.credentials import (
     AwsSecretsCredentialResolver,
     ByokCredentialResolver,
@@ -68,6 +69,69 @@ def _resolver(source: CredentialSource | None = None) -> ByokCredentialResolver:
         CredentialCache(),
         env_credential_ref=_ENV_REF,
     )
+
+
+class _MinimalAwsBackend:
+    """Minimal ``CredentialBackendLike`` stub for the AWS resolver (no AWS).
+
+    Exposes just enough for the service facade seam: metadata/list/revoke plus
+    the sync readiness signal the resolver's ``is_configured`` uses. Rotate is
+    not exercised by the seam test below.
+    """
+
+    def __init__(self, stored: dict[str, str] | None = None) -> None:
+        self._stored = dict(stored or {})
+        self.revoke_calls: list[tuple[str, str]] = []
+
+    def is_ready(self) -> bool:
+        return True
+
+    async def get(self, tenant_id: str, ref: str):
+        return None
+
+    async def metadata(self, tenant_id: str, ref: str):
+        masked = self._stored.get(ref)
+        if masked is None:
+            return None
+        now = datetime.now(timezone.utc)
+        return make_metadata(
+            tenant_id=tenant_id,
+            ref=ref,
+            credential_type="api_key",
+            version=1,
+            lifecycle_status=STATUS_ACTIVE,
+            masked_identifier=masked,
+            created_at=now,
+            updated_at=now,
+        )
+
+    async def list(self, tenant_id: str):
+        now = datetime.now(timezone.utc)
+        return [
+            make_metadata(
+                tenant_id=tenant_id,
+                ref=ref,
+                credential_type="api_key",
+                version=1,
+                lifecycle_status=STATUS_ACTIVE,
+                masked_identifier=masked,
+                created_at=now,
+                updated_at=now,
+            )
+            for ref, masked in self._stored.items()
+        ]
+
+    async def revoke(self, tenant_id: str, ref: str) -> bool:
+        self.revoke_calls.append((tenant_id, ref))
+        return ref in self._stored
+
+    async def rotate(self, tenant_id: str, ref: str, credential):
+        raise AssertionError("not exercised by the service-seam test")
+
+    async def health_check(self):
+        from shared.credentials.interface import CredentialBackendHealth
+
+        return CredentialBackendHealth(backend="minimal", durable=True, healthy=True)
 
 
 # ---------------------------------------------------------------------------
@@ -306,3 +370,31 @@ def test_package_imports_cleanly():
         set(REDACT_PATTERNS)
     )
     assert CredentialService is credentials_pkg.CredentialService
+
+
+# ---------------------------------------------------------------------------
+# AWS resolver: lifecycle source seam (regression for the _source() None bug)
+# ---------------------------------------------------------------------------
+
+
+async def test_aws_resolver_service_source_seam_is_not_none():
+    # Regression: AwsSecretsCredentialResolver stores its backend as ``_backend``,
+    # so the source seam used to return None — making list_metadata always empty,
+    # revoke always False, and rotation build an orchestrator with a None source.
+    backend = _MinimalAwsBackend(stored={"llm/anthropic": "****a1b2"})
+    resolver = AwsSecretsCredentialResolver(backend, aws_region="us-east-1")
+    service = CredentialService(resolver)
+
+    # The seam that feeds list/revoke/rotation adapts the AWS resolver to a real
+    # CredentialSource — never None.
+    source = service._source()
+    assert isinstance(source, AwsCredentialSource)
+
+    # The facade's AWS-backed controls operate: non-empty real metadata list and
+    # a revoke that actually calls through to the backend.
+    items = await service.list_metadata("t1")
+    assert len(items) == 1
+    assert items[0].ref == "llm/anthropic"
+    assert items[0].masked_identifier == "****a1b2"
+    assert await service.revoke("t1", "llm/anthropic") is True
+    assert backend.revoke_calls == [("t1", "llm/anthropic")]
