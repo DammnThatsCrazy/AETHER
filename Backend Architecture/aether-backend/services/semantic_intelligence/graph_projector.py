@@ -194,7 +194,13 @@ def edge_from_relationship(tenant_id: str, data: dict[str, Any]) -> Optional[Edg
         "trust_signal": data.get("trust_signal"),
         "interaction_quality": data.get("interaction_quality"),
         "influence_direction": data.get("influence_direction"),
-        "confidence": data.get("confidence"),
+        # ``confidence`` is deliberately NOT re-added here. ``props`` already
+        # carries the canonical property from ``build_edge_properties``, built
+        # from the bounded ``_bounded_confidence(...)`` result; re-adding the RAW
+        # Gold value here would overwrite that clamp during the ``props.update``
+        # below and let malformed / out-of-range Gold confidence escape the
+        # defensive path (enforce mode would reject the edge under the
+        # validator's [0.0, 1.0] rule; off mode would persist invalid data).
         "reducer_version": data.get("reducer_version"),
         "valid_from": data.get("valid_from"),
     }
@@ -255,7 +261,19 @@ async def _list_projected_edges_for_tenant(graph_client: Any, tenant_id: str) ->
             and _tenant_of(e.properties or {}) == tenant_id
             and not (e.properties or {}).get("revoked")
         ]
-    seen: dict[tuple[str, str, str], Any] = {}
+    # Retain EVERY distinct returned edge. A ``seen`` dict keyed by
+    # ``(edge_type, from_vertex_id, to_vertex_id)`` collapsed two live
+    # replica-raced edges with the same tuple BEFORE ``_reconcile_projections``
+    # grouped and counted them: reconciliation then saw one canonical edge and
+    # took its ``len(edges) == 1`` keep path, leaving the duplicate live
+    # forever. Distinct edges (even byte-identical ones — a replica race writes
+    # the same ``idempotency_key``) must all reach reconciliation so the
+    # duplicate is revoked and the sweep re-projects exactly one. Deduplicate
+    # only by object identity: the same backend Edge object could otherwise be
+    # observed twice, but that is not a real duplicate and must not be counted
+    # as one.
+    projected: list[Any] = []
+    seen_ids: set[int] = set()
     for vertex in await graph_client.get_vertices_for_tenant(
         tenant_id, limit=_GOLD_RELATIONSHIP_READ_LIMIT
     ):
@@ -269,8 +287,11 @@ async def _list_projected_edges_for_tenant(graph_client: Any, tenant_id: str) ->
                 continue
             if (edge.properties or {}).get("revoked"):
                 continue
-            seen[(edge.edge_type, edge.from_vertex_id, edge.to_vertex_id)] = edge
-    return list(seen.values())
+            if id(edge) in seen_ids:
+                continue
+            seen_ids.add(id(edge))
+            projected.append(edge)
+    return projected
 
 
 async def _revoke_projection(

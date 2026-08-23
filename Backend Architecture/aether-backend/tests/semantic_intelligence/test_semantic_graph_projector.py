@@ -10,6 +10,8 @@ real relationship edges instead of a hardcoded ``[]``.
 from __future__ import annotations
 
 import asyncio
+import copy
+from typing import Any
 
 import pytest
 
@@ -28,7 +30,7 @@ from services.semantic_intelligence.repositories.base_fact_repo import (
 from services.semantic_intelligence.service import SemanticIntelligenceService
 from services.semantic_intelligence.store import DurableSemanticSentimentStore
 from shared.graph.edge_properties import make_edge_idempotency_key
-from shared.graph.graph import Edge, EdgeType, GraphClient
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex
 from shared.graph.write_validator import GraphWriteValidator
 
 TENANT = "tenant_projector"
@@ -195,6 +197,41 @@ async def test_projected_edge_is_canonical_and_passes_strict_validation():
     assert result.passed, result.violations
 
 
+@pytest.mark.parametrize(
+    ("bad_confidence", "target"),
+    [
+        (1.5, "prod_conf_oob"),     # out-of-range non-null confidence
+        ("high", "prod_conf_bad"),  # malformed non-null confidence
+    ],
+)
+async def test_malformed_confidence_is_clamped_not_persisted_raw(
+    bad_confidence: Any, target: str
+):
+    # Codex P2 (graph_projector.py edge_from_relationship): build_edge_properties
+    # received the safe ``_bounded_confidence(...)`` result, but the semantic
+    # dict's RAW ``confidence`` (from the Gold row) overwrote that canonical
+    # property during ``props.update``. Enforce mode then rejected the edge under
+    # the validator's [0.0, 1.0] rule; off mode persisted invalid confidence
+    # data. The projected edge must carry the bounded (clamped) value — 1.0 for
+    # both an out-of-range number and an unparseable string — and satisfy the
+    # strict production validator so enforce mode accepts it.
+    await _upsert_raw_relationship(TENANT, SOURCE, target, bad_confidence)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.projected == 1
+    assert report.failed == 0
+    edges = await _semantic_edges(client, SOURCE)
+    assert len(edges) == 1
+    # The clamped confidence is what lands on the edge, never the raw value.
+    assert float(edges[0].properties["confidence"]) == 1.0
+    # The canonical property set satisfies the strict production validator (the
+    # enforce-mode [0.0, 1.0] rule), so enforce mode accepts the edge.
+    result = GraphWriteValidator().validate(edges[0], env="production")
+    assert result.passed, result.violations
+
+
 async def test_projects_full_gold_set_beyond_default_limit():
     # Codex P1 (line 146): list_by_tenant defaults to a 500-row limit; a tenant
     # with more relationships must not be truncated at the first page forever.
@@ -266,6 +303,56 @@ async def test_sweep_collapses_duplicate_projections():
     assert report.revoked == 2
     assert report.projected == 1
     assert len(await _semantic_edges(client, SOURCE)) == 1
+
+
+async def test_nonmemory_scan_retains_replica_raced_duplicate_edges():
+    # Codex P1 (graph_projector.py _list_projected_edges_for_tenant): the
+    # Neptune/non-memory scan collapsed two live replica-raced edges with the
+    # same (type, source, target) into a single entry in the ``seen`` dict
+    # BEFORE ``_reconcile_projections`` grouped and counted them. Reconciliation
+    # then saw one canonical edge and took its ``len(edges) == 1`` keep path,
+    # leaving the duplicate live forever. Every returned edge must be retained
+    # so reconciliation sees BOTH (count 2) and collapses the duplicate.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    client = await _graph()
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    rows = await repo.list_by_tenant(TENANT)
+    assert len(rows) == 1
+    edge = edge_from_relationship(TENANT, rows[0])
+    assert edge is not None
+
+    # Two DISTINCT live edges with the same (type, source, target) AND the same
+    # idempotency key — the replica-race shape. Simulate the Neptune path by
+    # swapping in a non-in-memory backend so the flat-store fast path is skipped
+    # and the per-vertex scan (the former ``seen``-dict collapse) is exercised.
+    client._backend = _NeptuneLikeBackend(
+        vertices=[
+            Vertex(
+                vertex_type="Profile",
+                vertex_id=SOURCE,
+                properties={"tenantId": TENANT},
+            )
+        ],
+        edges=[edge, copy.deepcopy(edge)],
+    )
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    # Reconciliation saw BOTH edges for the pair and revoked both duplicates...
+    assert report.revoked == 2
+    # ...then the sweep re-projected exactly one canonical edge.
+    assert report.projected == 1
+    live = [
+        e
+        for e in await client.get_edges(
+            SOURCE,
+            edge_type=SEMANTIC_EDGE_TYPE,
+            direction="out",
+        )
+        if not (e.properties or {}).get("revoked")
+    ]
+    assert len(live) == 1
+    assert live[0].to_vertex_id == TARGET
 
 
 async def test_revokes_projection_when_gold_relationship_removed():
@@ -386,3 +473,113 @@ async def _seed_raw_relationship(tenant: str, source: str, target: str, index: i
             },
         }
     )
+
+
+async def _upsert_raw_relationship(
+    tenant: str, source: str, target: str, confidence: Any
+) -> None:
+    """Seed one gold relationship row directly with an arbitrary confidence."""
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    rel = f"rel:{source}->{target}"
+    await repo.upsert(
+        {
+            "id": f"raw_{tenant}_{source}_{target}",
+            "tenant_id": tenant,
+            "subject_ref": rel,
+            "occurred_at": "2026-01-01T00:00:00+00:00",
+            "idempotency_key": f"gold_relationship:{tenant}:{rel}:test",
+            "data": {
+                "source_ref": source,
+                "target_ref": target,
+                "relationship_ref": rel,
+                "relationship_layer": "EXCLUDED",
+                "stance_alignment": 0.5,
+                "trust_signal": 0.5,
+                "interaction_quality": "coherent",
+                "influence_direction": "outbound",
+                "confidence": confidence,
+                "valid_from": "2026-01-01T00:00:00+00:00",
+            },
+        }
+    )
+
+
+class _NeptuneLikeBackend:
+    """Minimal non-in-memory backend stand-in for the projector's Neptune path.
+
+    Deliberately NOT ``_InMemoryGraphBackend`` so the projector's flat-store
+    fast path is skipped and the per-vertex scan runs — the path that used to
+    collapse duplicate edges into a ``seen`` dict keyed by (type, source,
+    target) before reconciliation could group and count them.
+    """
+
+    def __init__(self, *, vertices: list[Vertex], edges: list[Edge]) -> None:
+        self._vertices = list(vertices)
+        self._edges = list(edges)
+
+    async def add_edge(self, edge: Edge) -> None:
+        self._edges.append(edge)
+
+    async def revoke_edge(
+        self,
+        from_vertex_id: str,
+        to_vertex_id: str,
+        edge_type: str,
+        reason: str,
+        tenant_id: str | None = None,
+    ) -> int:
+        count = 0
+        revoked_at = "2026-01-01T00:00:00+00:00"
+        for edge in self._edges:
+            if not (
+                edge.from_vertex_id == from_vertex_id
+                and edge.to_vertex_id == to_vertex_id
+                and edge.edge_type == edge_type
+            ):
+                continue
+            if tenant_id is not None and str(
+                edge.properties.get("tenant_id")
+            ) != str(tenant_id):
+                continue
+            if not edge.properties.get("revoked"):
+                edge.properties["revoked"] = True
+                edge.properties["revoked_at"] = revoked_at
+                edge.properties["revoke_reason"] = reason
+            count += 1
+        return count
+
+    async def get_edges(
+        self,
+        vertex_id: str,
+        edge_type: str | None = None,
+        direction: str = "out",
+        include_revoked: bool = False,
+    ) -> list[Edge]:
+        results: list[Edge] = []
+        for edge in self._edges:
+            if not include_revoked and edge.properties.get("revoked"):
+                continue
+            touches = False
+            if direction in ("out", "both") and edge.from_vertex_id == vertex_id:
+                touches = True
+            elif direction in ("in", "both") and edge.to_vertex_id == vertex_id:
+                touches = True
+            if touches and (edge_type is None or edge.edge_type == edge_type):
+                results.append(edge)
+        return results
+
+    async def get_vertices_for_tenant(
+        self,
+        tenant_id: str,
+        limit: int = 1000,
+        *,
+        vertex_type: str | None = None,
+    ) -> list[Vertex]:
+        matched = [
+            v
+            for v in self._vertices
+            if str(v.properties.get("tenantId") or v.properties.get("tenant_id"))
+            == tenant_id
+            and (vertex_type is None or v.vertex_type == vertex_type)
+        ]
+        return matched[:limit]
