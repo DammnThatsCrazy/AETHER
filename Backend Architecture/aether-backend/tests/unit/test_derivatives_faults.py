@@ -656,6 +656,50 @@ async def test_resolver_seam_enforces_entitlement_before_credential_use():
     assert adapter._resolved_credential.api_key == "k"
 
 
+@pytest.mark.asyncio
+async def test_async_entitlement_predicate_is_awaited_not_truthy_coroutine():
+    svc = CredentialService(backend=InMemoryCredentialBackend())
+    await svc.create("t1", "hl-ref", ApiKeyCredential(api_key=SecretStr("k")))
+    calls = []
+
+    async def async_deny(tenant_id: str) -> bool:
+        calls.append(tenant_id)
+        return False
+
+    # An async predicate returning False MUST deny: the coroutine is awaited
+    # rather than treated as a truthy object that silently bypasses the gate
+    # and proceeds to credential resolution.
+    with pytest.raises(DerivativesEntitlementError):
+        await build_read_only_adapter(
+            "hl-ref", tenant_id="t1", venue_id="hyperliquid", service=svc,
+            entitlement_check=async_deny,
+        )
+    assert calls == ["t1"]
+
+    # The same async predicate returning True grants normally.
+    async def async_allow(tenant_id: str) -> bool:
+        calls.append(tenant_id)
+        return True
+
+    adapter = await build_read_only_adapter(
+        "hl-ref", tenant_id="t1", venue_id="hyperliquid", service=svc,
+        entitlement_check=async_allow,
+    )
+    assert adapter._resolved_credential.api_key == "k"
+
+    # A synchronous predicate still works (unchanged path).
+    with pytest.raises(DerivativesEntitlementError):
+        await build_read_only_adapter(
+            "hl-ref", tenant_id="t1", venue_id="hyperliquid", service=svc,
+            entitlement_check=lambda t: t != "t1",
+        )
+    adapter = await build_read_only_adapter(
+        "hl-ref", tenant_id="t1", venue_id="hyperliquid", service=svc,
+        entitlement_check=lambda t: t == "t1",
+    )
+    assert adapter._resolved_credential.api_key == "k"
+
+
 def test_meter_hook_records_forwards_and_rejects():
     records = []
     install_derivatives_meter_sink(

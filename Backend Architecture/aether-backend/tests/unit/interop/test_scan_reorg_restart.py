@@ -404,3 +404,68 @@ async def test_build_interop_scan_coro_importable_and_is_coroutine():
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_build_interop_scan_coro_covers_all_persisted_tenants(monkeypatch):
+    """A multi-tenant deployment must scan every persisted tenant — the
+    runtime-wired builder must not bind the interop scan to the 'public'
+    default tenant."""
+    import asyncio
+    import inspect
+
+    from services.interop.scan_worker import (
+        ALL_TENANTS,
+        build_interop_scan_coro,
+    )
+
+    # The runtime worker spec calls build_interop_scan_coro() with no argument:
+    # the default must be the ALL_TENANTS enumeration scope, never "public".
+    sig = inspect.signature(build_interop_scan_coro)
+    assert sig.parameters["tenant_id"].default == ALL_TENANTS
+
+    # Two tenants already hold durable interop checkpoints.
+    repo = InteropProviderCheckpointRepo()
+    for tid, cid in (("tenant-alpha", "cp-alpha"), ("tenant-beta", "cp-beta")):
+        await repo.insert(
+            {
+                "tenant_id": tid,
+                "checkpoint_id": cid,
+                "provider_id": "debridge",
+                "network_id": "*",
+                "last_scanned_block": 0,
+                "confirmed_block": 0,
+                "advanced_at": "2026-08-08T00:00:00+00:00",
+                "evidence": {},
+                "execution_by_aether": False,
+            }
+        )
+
+    class _SpyScanWorker:
+        instances: list = []
+
+        def __init__(self, tenant_id="public"):
+            self.tenant_id = tenant_id
+            self.seen: set[str] = set()
+            _SpyScanWorker.instances.append(self)
+
+        async def run_cycle(self, provider_id):
+            self.seen.add(self.tenant_id)
+            return {"status": "ok", "observations": 0, "dead_lettered": 0}
+
+    monkeypatch.setattr(
+        "services.interop.scan_worker.ScanWorker",
+        _SpyScanWorker,
+    )
+
+    coro = build_interop_scan_coro(poll_interval_seconds=0.01)
+    task = asyncio.create_task(coro)
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    swept: set[str] = set()
+    for inst in _SpyScanWorker.instances:
+        swept |= inst.seen
+    # Every persisted tenant was scanned — not just the 'public' default.
+    assert swept == {"tenant-alpha", "tenant-beta"}

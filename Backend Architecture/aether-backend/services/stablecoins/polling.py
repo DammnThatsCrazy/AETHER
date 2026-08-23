@@ -335,10 +335,29 @@ async def _poll_tenant_once(
     for deployment_id, deployment in deployment_items:
         try:
             connector = connector_registry.build_ingestion_connector(deployment_id)
+            source_execution_id = f"poll:{deployment_id}"
+            # Resume from the durable polling checkpoint: a connector that
+            # paginates past its first page persisted a non-empty next_cursor
+            # on the previous pass. Pass it back in so this pass picks up where
+            # the last one stopped instead of re-fetching page one forever (the
+            # key mirrors ``_record_poll_checkpoint``'s provider format).
+            checkpoint_id = (
+                "stablecoin_poll:{tenant_id}:provider:{provider}:"
+                "{source_execution_id}"
+            ).format(
+                tenant_id=tid,
+                provider=connector.provider,
+                source_execution_id=source_execution_id,
+            )
+            cursor = ""
+            checkpoint = await scheduler.checkpoints.find_by_id(checkpoint_id)
+            if checkpoint:
+                cursor = str(checkpoint.get("cursor") or "")
             result = await scheduler.poll_provider(
                 tenant_id=tid,
                 connector=connector,
-                source_execution_id=f"poll:{deployment_id}",
+                source_execution_id=source_execution_id,
+                cursor=cursor,
             )
             if result.status in ("entitlement_denied", "readiness_denied"):
                 denied += 1

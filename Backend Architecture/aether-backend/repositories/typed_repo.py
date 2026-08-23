@@ -227,6 +227,33 @@ class TypedTableRepository:
         )
         return int(row["n"]) if row else 0
 
+    async def distinct_tenant_ids(self, limit: int = 10000) -> list[str]:
+        """Distinct tenant_ids present in this table (cross-tenant enumeration).
+
+        Mirrors ``BaseRepository.distinct_tenant_ids`` for Alembic-owned typed
+        tables (interop provider checkpoints, derivatives connector checkpoints):
+        supervised workers that must scan/sweep *every* tenant (rather than a
+        single process-wide default) discover their working set from real
+        persisted state. Legacy unscoped rows (``tenant_id`` null/empty) are
+        excluded — they are not tenants. Order is deterministic (ascending
+        tenant_id) for reproducible passes.
+        """
+        pool = await self._pool()
+        if pool is None:
+            seen: list[str] = []
+            for row in self._rows:
+                tid = row.get("tenant_id")
+                if tid and tid not in seen:
+                    seen.append(tid)
+            return seen[:limit]
+        rows = await pool.fetch(
+            f"SELECT DISTINCT tenant_id FROM {self.table_name} "
+            "WHERE tenant_id IS NOT NULL AND tenant_id <> '' "
+            "ORDER BY tenant_id LIMIT $1",
+            limit,
+        )
+        return [r["tenant_id"] for r in rows]
+
     def _decode_row(self, row: dict) -> dict:
         for col in self.jsonb_columns:
             value = row.get(col)

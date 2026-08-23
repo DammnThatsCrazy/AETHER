@@ -299,11 +299,13 @@ async def test_resolver_raise_is_isolated_as_unavailable():
 async def test_default_engine_fail_closed_for_fresh_tenant():
     result = await build_default_engine().resolve("commerce.orders.read", "t-fresh")
     statuses = {n.status for n in result.nodes}
-    # credential authority is missing; worker nodes fail closed (no provider)
+    # credential authority is missing; unwired worker nodes resolve to
+    # NOT_CONFIGURED (non-blocking) — an unwired node must never fabricate a
+    # WORKER_UNHEALTHY blocker that could drive a readiness demotion.
     assert NodeStatus.CREDENTIAL_MISSING in statuses
-    assert NodeStatus.WORKER_UNHEALTHY in statuses
+    assert NodeStatus.NOT_CONFIGURED in statuses
+    assert NodeStatus.WORKER_UNHEALTHY not in statuses
     assert result.overall in (
-        NodeStatus.WORKER_UNHEALTHY,
         NodeStatus.CREDENTIAL_MISSING,
         NodeStatus.LIVE_EVIDENCE_ABSENT,
     )
@@ -557,6 +559,63 @@ async def test_revalidation_loop_survives_capability_failure():
     for capability in (CAP, "market.prices.read"):
         state = await authority.get_state("t1", P, E, capability)
         assert state["readiness_state"] == CredentialReadiness.REVOKED.value
+
+
+@pytest.mark.asyncio
+async def test_revalidation_without_worker_provider_does_not_demote_live():
+    """A live capability whose only non-READY nodes are unwired worker-backed
+    nodes must NOT be auto-demoted when no worker-health provider is wired (an
+    unwired node must not drive a mutation), while a genuinely blocking node
+    (expired credential) still demotes."""
+    authority = await _authority()
+    await _seed_live(authority, "t1", CAP)
+
+    async def _ready_credential(capability, tenant_id, context=None):
+        return NodeResolution(
+            node=CRED,
+            status=NodeStatus.READY,
+            evidence={"ref": "cred://ok"},
+        )
+
+    # Default engine with NO worker_status_provider: worker-backed nodes are
+    # unwired and must resolve to NOT_CONFIGURED (non-blocking), never
+    # WORKER_UNHEALTHY.
+    engine = build_default_engine(credential_resolver=_ready_credential)
+    result = await engine.resolve(CAP, "t1")
+    worker_nodes = {
+        DependencyNode.OBSERVER_WORKER.value,
+        DependencyNode.FINALITY_ENGINE.value,
+        DependencyNode.REORG_RECOVERY.value,
+        DependencyNode.RECONCILIATION.value,
+    }
+    worker_statuses = {n.status for n in result.nodes if n.node in worker_nodes}
+    assert NodeStatus.WORKER_UNHEALTHY not in worker_statuses
+    assert worker_statuses == {NodeStatus.NOT_CONFIGURED}
+
+    # Revalidation pass over that engine: nothing blocks, so the live
+    # capability stays PARTNER_LIVE — it is NOT auto-demoted to DEGRADED by an
+    # unwired worker node.
+    await _revalidate_one(
+        engine, CapabilityReadinessAdapter(), "t1", CAP, ReadinessRevalidationConfig()
+    )
+    state = await authority.get_state("t1", P, E, CAP)
+    assert state["readiness_state"] == CredentialReadiness.PARTNER_LIVE.value
+
+    # A genuinely blocking node (expired credential) still demotes even with
+    # no worker provider wired.
+    async def _invalid_credential(capability, tenant_id, context=None):
+        return NodeResolution(
+            node=CRED,
+            status=NodeStatus.CREDENTIAL_INVALID,
+            blocker="expired",
+        )
+
+    engine2 = build_default_engine(credential_resolver=_invalid_credential)
+    await _revalidate_one(
+        engine2, CapabilityReadinessAdapter(), "t1", CAP, ReadinessRevalidationConfig()
+    )
+    state = await authority.get_state("t1", P, E, CAP)
+    assert state["readiness_state"] == CredentialReadiness.REVOKED.value
 
 
 # ══════════════════════════════════════════════════════════════════════════

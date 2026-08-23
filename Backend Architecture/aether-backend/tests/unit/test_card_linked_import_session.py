@@ -541,3 +541,96 @@ async def test_commit_budget_exhaustion_dead_letters(monkeypatch):
     assert (await _repo().get_session_any(import_id))["lifecycle_state"] == "DEAD_LETTERED"
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. transient validation failures leave a retryable (not wedged) session
+# ═══════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_validate_transient_failure_is_retryable(monkeypatch):
+    """A transient failure after entering VALIDATING must not leave the session
+    pinned there — the FSM forbids VALIDATING -> VALIDATING, so a wedged
+    session could only be dead-lettered. The fallback to UPLOADED keeps the
+    import retryable: the retry re-enters VALIDATING legally and succeeds."""
+    import services.imports.analyzer as analyzer
+    import services.imports.service as svc
+
+    tenant = "t_retry_validating"
+    session = await svc.create_import(tenant)
+    import_id = session["id"]
+    await svc.store_file(
+        tenant, import_id, filename="batch.csv", content=CSV, content_type="text/csv"
+    )
+    await svc.analyze_import(tenant, import_id)
+    await svc.set_mapping(tenant, import_id, MAPPING)
+
+    calls = {"n": 0}
+    real_read_rows = analyzer.read_rows
+
+    def _flaky_read_rows(content, fmt):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("transient storage failure")
+        return real_read_rows(content, fmt)
+
+    monkeypatch.setattr(analyzer, "read_rows", _flaky_read_rows)
+    with pytest.raises(RuntimeError):
+        await svc.validate_import(tenant, import_id)
+
+    session = await _repo().get_session_any(import_id)
+    assert session["lifecycle_state"] == "UPLOADED"  # retryable, not VALIDATING
+    assert "transient storage failure" in session["failure_reason"]
+
+    # Retry: UPLOADED -> VALIDATING is legal, and the same import validates
+    # end to end (no forbidden VALIDATING -> VALIDATING was attempted).
+    monkeypatch.setattr(analyzer, "read_rows", real_read_rows)
+    result = await svc.validate_import(tenant, import_id)
+    assert result["status"] == "validated"
+    session = await _repo().get_session_any(import_id)
+    assert session["lifecycle_state"] == "VALIDATED"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. mid-finalization commit resumability (PROJECTING / RECONCILING)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_commit_finalization_transient_failure_resumes(monkeypatch):
+    """A transient failure on PROJECTING -> RECONCILING leaves a successfully
+    staged import stranded at PROJECTING. The retry entry guard must accept
+    mid-finalization states so the commit resumes to COMPLETED instead of being
+    rejected — and must not re-stage or duplicate the commit row."""
+    import services.imports.session_persistence as sp
+
+    import_id = await _drive_to_approved(TENANT)
+
+    real_transition = sp.transition_session
+    calls = {"n": 0}
+
+    async def _flaky_transition(repo, tenant_id, import_id, target, *args, **kwargs):
+        if target is ImportSessionState.RECONCILING:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("reconciling transition failed transiently")
+        return await real_transition(repo, tenant_id, import_id, target, *args, **kwargs)
+
+    monkeypatch.setattr(sp, "transition_session", _flaky_transition)
+    with pytest.raises(RuntimeError):
+        await commit_import(TENANT, import_id)
+
+    session = await _repo().get_session_any(import_id)
+    assert session["lifecycle_state"] == "PROJECTING"  # stranded mid-finalization
+    assert session["active_commit_id"]  # staging was already done under this id
+
+    # Retry: PROJECTING is commit-eligible; the resume advances to COMPLETED
+    # without re-running staging or creating a second commit row.
+    monkeypatch.setattr(sp, "transition_session", real_transition)
+    record = await commit_import(TENANT, import_id)
+    assert record["status"] == "committed"
+
+    session = await _repo().get_session_any(import_id)
+    assert session["lifecycle_state"] == "COMPLETED"
+    assert session["status"] == "committed"
+    assert session["reconciliation_state"] == "pending_provider_corroboration"
+    assert len(await _repo().list_commits(TENANT, import_id)) == 1
+
+

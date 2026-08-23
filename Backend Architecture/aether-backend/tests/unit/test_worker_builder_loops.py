@@ -32,6 +32,8 @@ from typing import Optional
 import pytest
 
 from repositories.repos import reset_in_memory_stores
+from repositories.stablecoin_repos import StablecoinPollingCheckpointRepository
+from repositories.typed_repo import reset_typed_in_memory_stores
 from services.rewards.delivery_outbox import RewardDeliveryJobRepository
 from services.runtime import dead_letter_sweeper as dls
 from services.derivatives import multi_venue as multi_venue
@@ -101,6 +103,9 @@ def test_stablecoin_iteration_returns_deterministic_summary():
         def __init__(self) -> None:
             self.provider_calls = 0
             self.finality_calls = 0
+            # The supervised loop reads the durable polling checkpoint before
+            # each provider pass, so the double needs a real checkpoint repo.
+            self.checkpoints = StablecoinPollingCheckpointRepository()
 
         async def poll_provider(self, **kwargs):
             self.provider_calls += 1
@@ -171,6 +176,71 @@ def test_stablecoin_loop_graceful_shutdown_and_heartbeat(monkeypatch):
 
     asyncio.run(_drive())
     assert any(name == "stablecoin_provider_polling_heartbeat" for name, *_ in recorder.gauges)
+
+
+def test_stablecoin_iteration_resumes_from_persisted_cursor():
+    """A connector that paginates beyond its first page must resume from the
+    durable polling checkpoint on the next supervised pass — not re-fetch page
+    one forever with the default empty cursor."""
+    reset_in_memory_stores()
+
+    class _PaginatingConnector:
+        provider = "usdc"
+        source_manifest_id = "manifest"
+
+        def __init__(self):
+            self.received_cursors: list[str] = []
+
+        async def fetch_observations(self, *, tenant_id, cursor="", limit=100):
+            self.received_cursors.append(cursor)
+            if not cursor:
+                return ["page1-obs"], "page-2"
+            return ["page2-obs"], ""
+
+    class _FakeRunner:
+        async def run_execution(self, **kwargs):
+            rows = list(kwargs.get("observations") or [])
+            return SimpleNamespace(
+                health_status="healthy",
+                rows_observed=len(rows),
+                rows_accepted=len(rows),
+                rows_rejected=0,
+            )
+
+        async def record_provider_failure(self, **kwargs):
+            return None
+
+    connector = _PaginatingConnector()
+    deployment = SimpleNamespace(chain_id="", token_standard="ERC-20")
+    registry = SimpleNamespace(
+        deployments=SimpleNamespace(deployments={"usdc:eth": deployment}),
+        build_ingestion_connector=lambda deployment_id: connector,
+    )
+    scheduler = stable_polling.StablecoinPollingScheduler(
+        runner=_FakeRunner(),
+        evm_verifier=SimpleNamespace(),
+        solana_verifier=SimpleNamespace(),
+    )
+    kwargs = dict(
+        tenant_id="tenant-test",
+        scheduler=scheduler,
+        connector_registry=registry,
+        provider_cooldown_seconds=0,
+        finality_cooldown_seconds=0,
+    )
+
+    summary = asyncio.run(stable_polling.run_stablecoin_poll_iteration(**kwargs))
+    assert summary["providers_polled"] == 1
+    assert summary["errors"] == []
+    assert connector.received_cursors == [""]  # first pass starts fresh
+
+    summary2 = asyncio.run(stable_polling.run_stablecoin_poll_iteration(**kwargs))
+    assert summary2["providers_polled"] == 1
+    assert summary2["errors"] == []
+    # The second pass resumed at page 2 from the persisted checkpoint cursor.
+    assert connector.received_cursors == ["", "page-2"]
+
+    reset_in_memory_stores()
 
 
 # ── derivatives venue sweep loop ───────────────────────────────────────────
@@ -246,6 +316,54 @@ def test_venue_sweep_loop_graceful_shutdown_and_heartbeat(monkeypatch):
 
     asyncio.run(_drive())
     assert any(name == "derivatives_venue_sweep_heartbeat" for name, *_ in recorder.gauges)
+
+
+def test_venue_sweep_covers_every_persisted_checkpoint_tenant(monkeypatch):
+    """The sweep loop must discover every tenant that holds a durable
+    connector checkpoint — not bind to the local-dev default tenant."""
+    from repositories.derivatives_repos import ConnectorCheckpointRepo
+    from services.derivatives.durable_cursor import persist_connector_checkpoint
+
+    reset_typed_in_memory_stores()
+
+    async def _seed():
+        repo = ConnectorCheckpointRepo()
+        for tid, connector in (("tenant-alpha", "dydx"), ("tenant-beta", "gmx")):
+            await persist_connector_checkpoint(
+                repo,
+                tenant_id=tid,
+                connector_id=connector,
+                checkpoint_value='{"stream": 1}',
+                state="ok",
+            )
+
+    asyncio.run(_seed())
+
+    seen: list[str] = []
+
+    async def _spy(*, tenant_id, venue_ids=None, **kwargs):
+        seen.append(tenant_id)
+        return {
+            "tenant_id": tenant_id,
+            "venues_targeted": 0,
+            "venues_scanned": 0,
+            "completed": 0,
+            "skipped": 0,
+            "errors": [],
+        }
+
+    monkeypatch.setattr(multi_venue, "run_venue_sweep_iteration", _spy)
+
+    async def _drive():
+        task = asyncio.create_task(multi_venue.venue_sweep_loop(interval_s=0.001))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(_drive())
+    assert "tenant-alpha" in seen and "tenant-beta" in seen
+    reset_typed_in_memory_stores()
 
 
 # ── dead-letter sweeper loop ───────────────────────────────────────────────

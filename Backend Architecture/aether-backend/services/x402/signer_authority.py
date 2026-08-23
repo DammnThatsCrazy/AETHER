@@ -106,25 +106,43 @@ class SignerAuthority:
         """Number of active signer refs for the tenant (for audit/diagnostics)."""
         return len(await self._store.list_signer_refs(tenant_id, active=True))
 
+    async def has_configured_signers(self, tenant_id: str) -> bool:
+        """True when the tenant has EVER registered a signer reference.
+
+        Counts active AND inactive rows: a revoked registry (all references
+        deactivated) still counts as "configured", so the payer gate stays
+        enforced rather than reopening when the last active signer is revoked.
+        """
+        return len(await self._store.list_signer_refs(tenant_id)) > 0
+
     async def is_payer_authorized(
         self, tenant_id: str, address: str
     ) -> tuple[bool, Optional[str]]:
         """Fail-closed signer gate for the payment proof-verification boundary.
 
-        Returns ``(authorized, reason)``. A tenant that has NOT registered any
-        signer references (the default for every fresh tenant) is UNAFFECTED:
+        Returns ``(authorized, reason)``. A tenant that has NEVER registered any
+        signer reference (the default for every fresh tenant) is UNAFFECTED:
         the gate returns ``(True, None)`` — the authority never "invents" an
         authorized signer, so a tenant with no signer registry keeps the
-        existing verification path untouched. When the tenant HAS registered
+        existing verification path untouched. When the tenant HAS configured
         signer references, an address that is not an active, tenant-authorized
         signer (unregistered, or a deactivated reference) is rejected
         fail-closed with a clear reason — even when chain/facilitator
-        verification would otherwise succeed.
+        verification would otherwise succeed. Deactivating the last (or only)
+        active signer does NOT reopen the gate: a configured registry with zero
+        active signers rejects EVERY payer fail-closed.
         """
-        if await self.count_active(tenant_id) == 0:
+        if not await self.has_configured_signers(tenant_id):
             return True, None
         if await self.is_authorized_signer(tenant_id, address):
             return True, None
+        if await self.count_active(tenant_id) == 0:
+            return (
+                False,
+                f"tenant {tenant_id!r} has no active signer references (all "
+                f"configured signers are deactivated); rejecting all payers "
+                f"fail-closed",
+            )
         return (
             False,
             f"payer {_norm_address(address)} is not an active tenant-authorized signer",

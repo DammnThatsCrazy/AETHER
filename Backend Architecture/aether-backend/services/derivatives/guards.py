@@ -40,6 +40,7 @@ guards):
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
@@ -253,8 +254,12 @@ async def resolve_read_only_credential(
         raise CredentialReferenceNotFound("credential_reference_id is empty")
     if entitlement_check is not None:
         # The resolver is the enforcement point for the pull path: no entitled
-        # tenant, no client.
+        # tenant, no client. An async predicate returns a coroutine object —
+        # which is truthy — so it MUST be awaited before truthiness is used,
+        # otherwise a denied tenant silently bypasses the gate.
         allowed = entitlement_check(tenant_id)
+        if inspect.isawaitable(allowed):
+            allowed = await allowed
         if not allowed:
             raise DerivativesEntitlementError(
                 f"tenant {tenant_id!r} is not entitled to derivatives observation"

@@ -472,6 +472,32 @@ def test_signer_authority_role_filter_and_deactivate():
     assert _run(authority.count_active("tenant_s")) == 1
 
 
+def test_signer_authority_payer_gate_fail_closed_when_all_signers_revoked():
+    authority = SignerAuthority()
+
+    # (a) A tenant with NO signer registry is unaffected: the gate allows.
+    assert _run(authority.is_payer_authorized("tenant_empty", "0xaaa")) == (True, None)
+
+    # (b) A tenant WITH an active signer: only that signer passes.
+    _run(authority.register_signer("tenant_gated", "0xa11ce"))
+    assert _run(authority.is_payer_authorized("tenant_gated", "0xa11ce")) == (True, None)
+    ok, reason = _run(authority.is_payer_authorized("tenant_gated", "0xstranger"))
+    assert ok is False
+    assert "not an active tenant-authorized signer" in reason
+
+    # (c) Deactivating the tenant's ONLY signer keeps the gate fail-closed:
+    #     every payer — including the former signer — is now rejected, instead
+    #     of the count_active()==0 branch reopening the gate for every payer.
+    refs = _run(authority.list_signers("tenant_gated"))
+    assert len(refs) == 1
+    _run(authority.deactivate_signer("tenant_gated", refs[0].signer_ref_id))
+    assert _run(authority.count_active("tenant_gated")) == 0
+    for payer in ("0xa11ce", "0xstranger"):
+        ok, reason = _run(authority.is_payer_authorized("tenant_gated", payer))
+        assert ok is False
+        assert "no active signer references" in reason
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # SIGNER AUTHORITY ENFORCEMENT AT THE PROOF-VERIFICATION BOUNDARY
 # ═══════════════════════════════════════════════════════════════════════════

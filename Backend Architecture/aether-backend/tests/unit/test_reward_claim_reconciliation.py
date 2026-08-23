@@ -233,6 +233,54 @@ def test_reconcile_receipt_wrong_tenant_proof_not_marked():
     assert stored["status"] == "created"
 
 
+def test_reconcile_retries_action_transition_after_proof_used(monkeypatch):
+    """Proof-used/action-undelivered is resumable: after a transient transition
+    failure on the first pass, the next reconcile retries the delivery transition
+    (never re-marking the proof) so the action converges to ``delivered``."""
+    reconciler = _make_reconciler()
+    proof = _make_proof()
+    action = _run(reconciler._actions.create(TENANT, {
+        "decision_id": "dec_1",
+        "rail": "onchain_claim",
+        "payload": {"proof": {"nonce": proof["nonce"]}},
+        "status": "created",
+    }))
+    receipt = _run(reconciler._receipts.create(TENANT, {
+        "status": "success",
+        "rail": "onchain_claim",
+        "proof_id": proof["id"],
+        "action_payload_id": action["id"],
+    }))
+
+    real_transition = reconciler._actions.transition
+    transition_calls = {"count": 0}
+
+    async def flaky_transition(action_id, tenant_id, new_status, **kwargs):
+        transition_calls["count"] += 1
+        if transition_calls["count"] == 1:
+            raise RuntimeError("transient store failure")
+        return await real_transition(action_id, tenant_id, new_status, **kwargs)
+
+    monkeypatch.setattr(reconciler._actions, "transition", flaky_transition)
+
+    # First pass: the proof is marked used; the action transition fails silently.
+    first = _run(reconciler.reconcile_receipt(TENANT, receipt))
+    assert first["changed"] is True
+    proof_before = _run(reconciler._proofs.find_by_id(proof["id"]))
+    assert proof_before["status"] == "used"
+    assert _run(reconciler._actions.get(action["id"], TENANT))["status"] != "delivered"
+
+    # Second pass: proof_already_used is resumable — retry the transition.
+    second = _run(reconciler.reconcile_receipt(TENANT, receipt))
+    assert second["changed"] is True
+    assert second["reason"] == "proof_already_used_action_delivered"
+    assert _run(reconciler._actions.get(action["id"], TENANT))["status"] == "delivered"
+    # The proof was NOT re-marked (single-use preserved, used_at unchanged).
+    proof_after = _run(reconciler._proofs.find_by_id(proof["id"]))
+    assert proof_after["status"] == "used"
+    assert proof_after.get("used_at") == proof_before.get("used_at")
+
+
 # ── reconcile_tenant / status ───────────────────────────────────────────────
 
 def test_reconcile_tenant_summary_counts():

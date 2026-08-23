@@ -327,36 +327,58 @@ async def validate_import(tenant_id: str, import_id: str) -> dict:
     storage = get_import_storage()
     from services.imports.analyzer import detect_format  # lazy
 
-    # Program-spec lifecycle: the dry-run is VALIDATING.
+    # Program-spec lifecycle: the dry-run is VALIDATING. A transient failure
+    # AFTER this transition (retrieval / parse / schema / validate_mapping /
+    # save_validation) must not leave the session pinned in VALIDATING — the
+    # FSM forbids a VALIDATING -> VALIDATING retry, which would permanently
+    # wedge the import until the sweeper dead-letters it. Fall back to UPLOADED
+    # (the re-validate entry — the FSM explicitly supports VALIDATING ->
+    # UPLOADED) and record the reason for audit, so the job retry re-enters
+    # VALIDATING legally instead of being rejected.
     await transition_session(
         repo, tenant_id, import_id, ImportSessionState.VALIDATING
     )
 
-    # Aggregate rows + columns across files (single-file is the common case).
-    all_rows: list[dict] = []
-    all_columns = []
-    for schema in schemas:
-        profile = schema.get("profile", {})
-        from services.imports.contracts import ColumnProfile
+    try:
+        # Aggregate rows + columns across files (single-file is the common case).
+        all_rows: list[dict] = []
+        all_columns = []
+        for schema in schemas:
+            profile = schema.get("profile", {})
+            from services.imports.contracts import ColumnProfile
 
-        all_columns.extend(ColumnProfile(**c) for c in profile.get("columns", []))
-        file_id = schema.get("file_id")
-        if not file_id:
-            continue
-        _meta, content = await storage.get_content(tenant_id, file_id)
-        fmt = detect_format(_meta["filename"], _meta.get("content_type", ""), content)
-        rows, _info = read_rows(content, fmt)
-        all_rows.extend(rows[:MAX_VALIDATION_ROWS])
+            all_columns.extend(ColumnProfile(**c) for c in profile.get("columns", []))
+            file_id = schema.get("file_id")
+            if not file_id:
+                continue
+            _meta, content = await storage.get_content(tenant_id, file_id)
+            fmt = detect_format(_meta["filename"], _meta.get("content_type", ""), content)
+            rows, _info = read_rows(content, fmt)
+            all_rows.extend(rows[:MAX_VALIDATION_ROWS])
 
-    result = validate_mapping(
-        import_id=import_id,
-        mapping_version=int(mapping.get("version", 1)),
-        fields=fields,
-        rows=all_rows,
-        columns=all_columns,
-    )
-    result_dict = result.model_dump(mode="json")
-    await repo.save_validation(tenant_id, import_id, result_dict)
+        result = validate_mapping(
+            import_id=import_id,
+            mapping_version=int(mapping.get("version", 1)),
+            fields=fields,
+            rows=all_rows,
+            columns=all_columns,
+        )
+        result_dict = result.model_dump(mode="json")
+        await repo.save_validation(tenant_id, import_id, result_dict)
+    except Exception as exc:
+        await transition_session(
+            repo,
+            tenant_id,
+            import_id,
+            ImportSessionState.UPLOADED,
+            patch={
+                "failure_reason": (
+                    f"validation dry-run failed transiently: "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            },
+        )
+        raise
 
     review_required, reasons = mapping_requires_review(fields, all_columns)
     schema_version = int(mapping.get("version", 1))

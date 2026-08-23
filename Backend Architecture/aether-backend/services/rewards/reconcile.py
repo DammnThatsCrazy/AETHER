@@ -14,7 +14,10 @@ Nonce / replay protection lives here:
         issued twice.
     reconcile_receipt / reconcile_tenant
         Idempotent: a receipt that is already linked to a used proof is a no-op,
-        and a proof is only ever marked ``used`` once.
+        and a proof is only ever marked ``used`` once. Proof-used-but-action-
+        undelivered is a RESUMABLE state: a later reconcile retries the action
+        ``delivered`` transition (never re-marking the proof) so the state
+        converges even when the first transition failed transiently.
 
 The reconciler is read-mostly: it mutates only proof status and action status,
 never receipt payloads. ``reconcile_loop`` is the supervised worker builder the
@@ -108,6 +111,42 @@ class RewardClaimReconciler:
             existing = await self._proofs.find_by_id(proof_id)
             if existing is not None and existing.get("tenant_id") == tenant_id:
                 if existing.get("status") == "used":
+                    # Proof already used is a RESUMABLE state, not a dead-end: the
+                    # first pass may have marked the proof used and then failed the
+                    # action transition transiently, leaving the action undelivered.
+                    # Retry the transition before returning so the state converges;
+                    # the proof is NEVER re-marked (single-use is idempotent).
+                    if action_id:
+                        try:
+                            action = await self._actions.get(action_id, tenant_id)
+                        except Exception:  # noqa: BLE001 - action missing is a non-change
+                            action = None
+                        if action is not None and action.get("status") != "delivered":
+                            try:
+                                await self._actions.transition(action_id, tenant_id, "delivered")
+                            except Exception as exc:  # noqa: BLE001 - retried next pass
+                                logger.warning(
+                                    "action transition retry failed after proof-used "
+                                    "pid=%s aid=%s: %s",
+                                    proof_id, action_id, exc,
+                                )
+                                return {
+                                    "changed": False,
+                                    "reason": "proof_already_used",
+                                    "proof_id": proof_id,
+                                    "action_payload_id": action_id,
+                                }
+                            metrics.increment(
+                                "rewards_claims_reconciled_total",
+                                labels={"tenant_id": tenant_id, "changed": "True"},
+                            )
+                            return {
+                                "changed": True,
+                                "reason": "proof_already_used_action_delivered",
+                                "proof_id": proof_id,
+                                "action_payload_id": action_id,
+                                "receipt_id": receipt.get("id"),
+                            }
                     return {"changed": False, "reason": "proof_already_used", "proof_id": proof_id}
                 await self._proofs.mark_used(proof_id, tenant_id)
                 marked = True

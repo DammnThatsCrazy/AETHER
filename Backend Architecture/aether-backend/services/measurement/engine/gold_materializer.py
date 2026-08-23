@@ -325,10 +325,38 @@ async def materialize_journey_economics(
         ) or Decimal("0")
         journey_conv = journey_conv_by_campaign.get(cid, Decimal("0"))
         journey_fractional_conversions += journey_conv
-        weights = {
-            journey_id: journey_conv,
-            f"{journey_id}:other_journeys": max(campaign_total_conv - journey_conv, Decimal("0")),
-        }
+
+        # ── COORDINATED allocation: a campaign shared by several journeys must be
+        # allocated across ALL of them in one operation. Each journey previously
+        # ran its own two-target allocation against an artificial ``other_journeys``
+        # bucket and independently rounded to cents — two equal journeys over
+        # $10.01 each persisted $5.01, so the journey totals became $10.02. One
+        # allocation over the real journey targets conserves spend exactly, with
+        # the rounding residual assigned deterministically to the
+        # lexicographically-first positive-weight journey (never to a journey with
+        # no attributed conversions).
+        peers = await journey_repo.list_by_campaign(tenant_id, cid)
+        peer_ids = {jid for jid in (j.get("journey_id") for j in peers) if jid}
+        coordinated = bool(peer_ids - {journey_id})
+        if coordinated:
+            weights: dict[str, Decimal] = {journey_id: journey_conv}
+            for j in peers:
+                jid = j.get("journey_id")
+                if not jid or jid in weights:
+                    continue
+                peer_conv = await _journey_campaign_conversions(tenant_id, j, run_repo)
+                weights[jid] = peer_conv.get(cid, Decimal("0"))
+        else:
+            # No peer journey found via list_by_campaign (e.g. the campaign's other
+            # conversions belong to no journey): fall back to the two-target
+            # allocation against an artificial other_journeys bucket, conserving the
+            # allocated share and disclosing the unallocated remainder as residual.
+            weights = {
+                journey_id: journey_conv,
+                f"{journey_id}:other_journeys": max(
+                    campaign_total_conv - journey_conv, Decimal("0")
+                ),
+            }
         allocation, per_journey = canonical_journey_allocated_cost(
             context,
             campaign_cost=str(campaign_spend),
@@ -337,8 +365,25 @@ async def materialize_journey_economics(
             policy=AllocationPolicy.ATTRIBUTION_CREDIT,
         )
         this_journey = per_journey.get(journey_id)
-        if this_journey is not None and this_journey.value is not None:
-            total_allocated_spend += _to_decimal(this_journey.value) or Decimal("0")
+        allocated = (
+            _to_decimal(this_journey.value)
+            if this_journey is not None and this_journey.value is not None
+            else None
+        )
+        if (
+            coordinated
+            and allocated is not None
+            and _residual_receiver_journey(weights) == journey_id
+        ):
+            residual = _to_decimal(allocation.residual) or Decimal("0")
+            if residual != 0:
+                allocated += residual
+                # Reflect the deterministic residual assignment on the persisted
+                # canonical result so it matches the gold total.
+                this_journey.value = float(allocated)
+                this_journey.numerator = str(allocated)
+        if allocated is not None:
+            total_allocated_spend += allocated
         if this_journey is not None:
             allocated_results.append(this_journey)
 
@@ -536,3 +581,52 @@ def _parse_ts(value: Any) -> Optional[datetime]:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         return None
+
+
+async def _journey_campaign_conversions(
+    tenant_id: str,
+    journey: dict[str, Any],
+    run_repo: AttributionRunRepository,
+) -> dict[str, Decimal]:
+    """Map campaign_id -> attributed conversions for one journey version.
+
+    Mirrors the conversion-credit aggregation the materializer performs for the
+    current journey (per-conversion, active-only credits), so a peer journey's
+    weight is computed identically whether it is materializing itself or being
+    counted by a sibling journey during a coordinated campaign allocation.
+    """
+    conversion_ids = journey.get("conversion_ids") or []
+    if isinstance(conversion_ids, str):
+        import json
+        conversion_ids = json.loads(conversion_ids)
+    if not conversion_ids:
+        return {}
+    credits = await run_repo.list_active_credits_for_conversions(
+        tenant_id, conversion_ids
+    )
+    by_campaign: dict[str, Decimal] = {}
+    for credit in credits:
+        cid = credit.get("campaign_id")
+        if not cid:
+            continue
+        raw_conv = (
+            credit.get("attributed_conversions")
+            if credit.get("attributed_conversions") is not None
+            else (credit.get("weight") or "0")
+        )
+        conv_w = _to_decimal(raw_conv) or Decimal("0")
+        by_campaign[cid] = by_campaign.get(cid, Decimal("0")) + conv_w
+    return by_campaign
+
+
+def _residual_receiver_journey(weights: dict[str, Decimal]) -> Optional[str]:
+    """The journey that deterministically receives the rounding residual.
+
+    The lexicographically-first positive-weight journey — a stable rule across
+    every journey's materialization, so the residual is applied exactly once and
+    the persisted journey totals sum to the campaign spend. A zero-weight target
+    never receives the residual (that would fabricate spend for a journey with no
+    attributed conversions).
+    """
+    positive = sorted(jid for jid, w in weights.items() if w > 0)
+    return positive[0] if positive else None

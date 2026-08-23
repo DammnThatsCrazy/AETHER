@@ -17,7 +17,10 @@ survive restarts inside the checkpoint.
 
 ``build_interop_scan_coro`` is the poll loop the runtime worker spec imports
 from ``services.interop.scan_worker`` (gated on
-``settings.interop.adapters_enabled``).
+``settings.interop.adapters_enabled``). Its default ``ALL_TENANTS`` scope
+enumerates the tenants that hold durable interop state on every pass — never a
+hard-coded ``"public"`` sentinel — so a multi-tenant deployment updates every
+tenant's scoped state, not just the public scope.
 
 This module also re-homes the branch-only scan wiring that main never carried:
 :class:`InteropGraphProjector` (drives main's
@@ -62,6 +65,13 @@ logger = get_logger("aether.interop.scan_worker")
 
 POLL_INTERVAL_SECONDS = 30.0
 SENTINEL_NETWORK = "*"
+
+#: Sentinel tenant scope for ``build_interop_scan_coro``: enumerate the tenants
+#: that hold durable interop state on every pass instead of binding the scan to
+#: the public-scope sentinel tenant ``"public"``. A multi-tenant deployment must
+#: never scan only ``"public"`` while every other tenant's interop checkpoints,
+#: correlations, graph projections and reconciliation evidence go unstirred.
+ALL_TENANTS = "__all__"
 
 _SOURCE_SERVICE = "interoperability_intelligence"
 
@@ -547,8 +557,32 @@ class ScanWorker:
         }
 
 
+async def _enabled_scan_tenants() -> list[str]:
+    """Tenants that already hold durable interop state (checkpoints or
+    correlated messages/events).
+
+    ``distinct_tenant_ids`` is best-effort per repository; a repository that
+    raises (e.g. an unprovisioned table in a fresh deployment) is skipped so a
+    single failure cannot abort enumeration. Rows are ordered ascending by
+    tenant_id for a deterministic pass.
+    """
+    seen: list[str] = []
+    for repo in (
+        InteropProviderCheckpointRepo(),
+        InteropMessageRepo(),
+        InteropMessageEventRepo(),
+    ):
+        try:
+            for tid in await repo.distinct_tenant_ids():
+                if tid and tid not in seen:
+                    seen.append(tid)
+        except Exception:  # noqa: BLE001 - best-effort enumeration
+            continue
+    return seen
+
+
 def build_interop_scan_coro(
-    tenant_id: str = "public",
+    tenant_id: str = ALL_TENANTS,
     poll_interval_seconds: float = POLL_INTERVAL_SECONDS,
 ) -> Any:
     """Poll-loop coroutine over every registered interop adapter.
@@ -556,20 +590,43 @@ def build_interop_scan_coro(
     Consumed by the runtime worker registry (``services/runtime/specs.py``),
     gated on ``settings.interop.adapters_enabled``. Runs until cancelled;
     a failed provider cycle is logged and never aborts the loop.
+
+    When ``tenant_id == ALL_TENANTS`` (the default) the loop discovers the
+    tenants that hold durable interop state on every pass and runs one full
+    provider scan cycle per tenant — a multi-tenant deployment must never bind
+    the worker to the public-scope sentinel ``"public"`` while every other
+    tenant's checkpoints/correlations/graph projections/reconciliation evidence
+    sit unstirred. An empty tenant set (fresh deployment, nothing persisted yet)
+    idles the pass rather than fabricating state for ``"public"``: real tenant
+    scopes are scanned once their first checkpoint or message exists. Pass an
+    explicit tenant_id to preserve single-tenant scanning.
     """
 
     async def _loop() -> None:
-        worker = ScanWorker(tenant_id=tenant_id)
-        logger.info("Interop scan loop started (tenant=%s)", tenant_id)
+        scope = tenant_id
+        worker = ScanWorker(tenant_id=scope)
+        logger.info("Interop scan loop started (tenant=%s)", scope)
         while True:
             try:
-                for provider_id in list(INTEROP_PROVIDERS):
-                    summary = await worker.run_cycle(provider_id)
-                    if summary.get("status") == "ok":
-                        logger.info(
-                            "interop scan %s: %s obs, %s dead-lettered",
-                            provider_id, summary["observations"], summary["dead_lettered"],
-                        )
+                tids = await _enabled_scan_tenants() if scope == ALL_TENANTS else [scope]
+                if scope == ALL_TENANTS and not tids:
+                    # Bootstrap: no tenant-scoped interop state persisted yet.
+                    # Skip rather than fabricate state for the 'public'
+                    # sentinel — real tenant scopes are scanned once their
+                    # first checkpoint/message exists.
+                    logger.debug("interop scan pass: no persisted tenants to scan")
+                for tid in tids:
+                    worker.tenant_id = tid
+                    for provider_id in list(INTEROP_PROVIDERS):
+                        summary = await worker.run_cycle(provider_id)
+                        if summary.get("status") == "ok":
+                            logger.info(
+                                "interop scan %s tenant=%s: %s obs, %s dead-lettered",
+                                provider_id,
+                                tid,
+                                summary["observations"],
+                                summary["dead_lettered"],
+                            )
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # noqa: BLE001 — supervisor keeps polling

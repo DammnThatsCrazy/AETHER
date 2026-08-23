@@ -10,10 +10,12 @@ overall readiness verdict.
 The engine is resolver-driven: each canonical node has an async resolver
 ``(capability, tenant_id, context) -> NodeResolution``. Default resolvers
 consult the canonical credential facade and the persisted capability-readiness
-probe; worker-backed nodes fail closed (absence of health signal is not
-health); config-declared nodes read per-capability declarations. Operators may
-inject real resolvers (worker-supervisor health, provider reachability, …) via
-:meth:`ReadinessGraphEngine.register` or :func:`build_default_engine`.
+probe; worker-backed nodes resolve to NOT_CONFIGURED (non-blocking) when no
+worker-health provider is wired — an unwired node must not drive a demotion —
+and fail closed (WORKER_UNHEALTHY) only once a provider IS wired and reports
+unhealthy; config-declared nodes read per-capability declarations. Operators
+may inject real resolvers (worker-supervisor health, provider reachability, …)
+via :meth:`ReadinessGraphEngine.register` or :func:`build_default_engine`.
 
 Node status vocabulary matches program sec7:
 ``READY | UNAVAILABLE | DISABLED | NOT_CONFIGURED | CREDENTIAL_MISSING |
@@ -127,7 +129,10 @@ CANONICAL_DEPENDENCY_NODES: tuple[str, ...] = tuple(
     node.value for node in DependencyNode
 )
 
-#: Nodes backed by a supervised worker (fail closed when no health evidence).
+#: Nodes backed by a supervised worker. Without a wired worker-health provider
+#: they resolve to NOT_CONFIGURED (non-blocking — an unwired node must not
+#: drive a demotion); with one, they fail closed (WORKER_UNHEALTHY) when the
+#: provider reports unhealthy.
 WORKER_NODES: frozenset[str] = frozenset(
     {
         DependencyNode.OBSERVER_WORKER.value,
@@ -555,14 +560,22 @@ async def _worker_node_resolver(
     context: ResolveContext,
     provider: Optional[Callable[[str], Optional[dict[str, Any]]]] = None,
 ) -> NodeResolution:
-    """Fail-closed worker node: no health signal is not health."""
+    """Resolve a worker-backed node against the wired worker-health provider.
+
+    When NO ``provider`` is wired, the node resolves to NOT_CONFIGURED (a
+    non-blocking status): an unwired node is not part of this deployment's
+    runtime contract and must not fabricate a WORKER_UNHEALTHY blocker that
+    drives a readiness demotion. Once a provider IS wired, the node fails
+    closed on an actual health signal: a provider that reports unhealthy (or
+    raises) resolves to WORKER_UNHEALTHY.
+    """
     if provider is None:
         return NodeResolution(
             node=node,
-            status=NodeStatus.WORKER_UNHEALTHY,
+            status=NodeStatus.NOT_CONFIGURED,
             blocker=(
-                f"no worker-health evidence wired for {node}; absence of a "
-                f"health signal is not health"
+                f"no worker-health provider wired for {node}; the worker is not "
+                f"part of this deployment's runtime contract"
             ),
         )
     try:
@@ -709,8 +722,11 @@ def build_default_engine(
     * credential authority — canonical credential facade;
     * readiness probe — persisted capability readiness (via
       :class:`CapabilityReadinessAdapter`);
-    * worker-backed nodes — fail closed unless ``worker_status_provider`` is
-      wired (the integration pass should supply a live worker-health map);
+    * worker-backed nodes — resolve to NOT_CONFIGURED (non-blocking) when no
+      ``worker_status_provider`` is wired, so an unwired node cannot drive a
+      readiness demotion; fail closed (WORKER_UNHEALTHY) when a provider IS
+      wired and reports unhealthy (the integration pass should supply the
+      supervisor's live worker-health map);
     * config-declared nodes — resolved from ``config_declarations``
       (``{node: {...evidence}}``), else NOT_CONFIGURED.
     """
