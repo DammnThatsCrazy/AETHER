@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
   - packages/shared/graph-contract.ts
 canonical_owner: platform@aether
-last_synced_commit: "15b8889"
+last_synced_commit: "1dd1c642"
 ---
 
 # Graph Projection Model
@@ -82,3 +82,14 @@ and 9 edge types (`CAME_FROM`, `PARTICIPATED_IN`, `USED_PROVIDER`,
 never usable as deterministic identity-merge evidence. PaymentScan
 benchmark rows are never projected to the graph at all
 (`services/card_linked_payments/graph_projector.py`).
+
+Semantic Gold relationship state is now projected as directed
+`SEMANTIC_RELATES_TO` edges, mapped to `RelationshipLayer.EXCLUDED` — a
+derived entity→entity analytics overlay, not a human/agent interaction.
+The flag-gated `semantic_graph_projector` worker
+(`SEMANTIC_GRAPH_PROJECTOR_ENABLED`, default off) sweeps each
+`gold_relationship_semantic_state` row per tenant and writes the edge
+through the canonical `GraphMutationGateway` — never a direct graph
+write, so the mutation is governed and (when the gateway runs in
+shadow/enforce mode) ledger-recorded. The projection is idempotent
+and tenant-scoped.
