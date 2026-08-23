@@ -241,13 +241,30 @@ class ModelRouter:
             enumerate(candidates),
             key=lambda pair: (_STATUS_PRIORITY.get(str(pair[1].get("status", "")), 99), pair[0]),
         )
-        best = ordered[0][1]
-        model_id = str(best["modelId"])
-        if not await self._is_entitled(request.tenant_id, model_id):
-            return await self._fallback_selection(
-                request, RoutingMode.AUTO, "best auto model not entitled for tenant"
+
+        # Automatic routing searches the FULL ordered candidate list for the
+        # best entitled model. Testing only ``ordered[0]`` and then handing a
+        # denial to the RegistryFallbackChain (which inspects only its first
+        # few registry candidates) would fail closed with "no entitled fallback
+        # route" for a tenant entitled solely to a later recommended/stable
+        # model even though an eligible model exists. Only when NO ordered
+        # candidate is entitled does the router engage the fallback chain.
+        for pos, (_, entry) in enumerate(ordered):
+            model_id = str(entry["modelId"])
+            if not await self._is_entitled(request.tenant_id, model_id):
+                continue
+            is_best = pos == 0
+            return self._selection(
+                model_id,
+                RoutingMode.AUTO,
+                fallback=not is_best,
+                fallback_reason=(
+                    None if is_best else "best auto model not entitled for tenant"
+                ),
             )
-        return self._selection(model_id, RoutingMode.AUTO, fallback=False)
+        return await self._fallback_selection(
+            request, RoutingMode.AUTO, "best auto model not entitled for tenant"
+        )
 
     async def _route_tenant_default(self, request: RoutingRequest) -> RouteSelection:
         model_id = request.tenant_default_model
@@ -416,7 +433,14 @@ class ModelRouter:
             return False
         return bool(decision.entitled)
 
-    def _selection(self, model_id: str, mode: RoutingMode, *, fallback: bool) -> RouteSelection:
+    def _selection(
+        self,
+        model_id: str,
+        mode: RoutingMode,
+        *,
+        fallback: bool,
+        fallback_reason: str | None = None,
+    ) -> RouteSelection:
         return RoutedSelection(
             model_id=model_id,
             provider=self._provider_for(model_id),
@@ -424,7 +448,7 @@ class ModelRouter:
             mode=mode,
             entitled=True,
             fallback=fallback,
-            fallback_reason=None,
+            fallback_reason=fallback_reason,
         )
 
     def _registry_provider_name(self, model_id: str) -> str | None:

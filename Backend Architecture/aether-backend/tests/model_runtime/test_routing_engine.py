@@ -147,6 +147,85 @@ async def test_auto_best_not_entitled_falls_back():
     assert "entitled" in (sel.fallback_reason or "")
 
 
+# ---------------------------------------- auto searches ALL ordered candidates
+# Regression (Fix-thread PRRT_kwDORdw-AM6bhAIR): automatic routing must search
+# the full status-priority-ordered candidate list for an entitled model. The
+# router used to test ONLY the globally-highest-ranked model and, on denial,
+# hand straight to the default RegistryFallbackChain — which inspects only its
+# first three *registry-order* candidates. A tenant entitled solely to a later
+# recommended/stable model (beyond that window) wrongly failed closed with
+# "no entitled fallback route" even though an eligible model existed.
+
+
+@pytest.mark.asyncio
+async def test_auto_searches_all_candidates_beyond_best():
+    # Tenant entitled ONLY to gpt-4.1-mini (idx 9, stable — far beyond the
+    # first three registry candidates the default RegistryFallbackChain
+    # inspects: claude-opus-5 / claude-sonnet-5 / claude-haiku-4-5-20251001).
+    # No fallback injected, so the router lazily builds RegistryFallbackChain.
+    router = ModelRouter(
+        AllowlistEntitlementResolver(entitlements={"tenant-acme": {"gpt-4.1-mini"}}),
+    )
+    sel = await router.route(_request(mode=RoutingMode.AUTO))
+    assert sel.model_id == "gpt-4.1-mini"
+    assert sel.mode == RoutingMode.AUTO
+    assert sel.entitled is True
+    # The best-ranked model (claude-opus-5) was denied, so the selection is a
+    # recorded fallback, but it must NOT fail closed.
+    assert sel.fallback is True
+    assert "entitled" in (sel.fallback_reason or "")
+
+
+@pytest.mark.asyncio
+async def test_auto_entitled_only_to_later_recommended():
+    # Tenant entitled ONLY to gpt-4o-mini (idx 6, recommended — after the
+    # first three registry candidates). Auto routing must still reach it.
+    router = ModelRouter(
+        AllowlistEntitlementResolver(entitlements={"tenant-acme": {"gpt-4o-mini"}}),
+    )
+    sel = await router.route(_request(mode=RoutingMode.AUTO))
+    assert sel.model_id == "gpt-4o-mini"
+    assert sel.entitled is True
+    assert sel.fallback is True
+    assert "entitled" in (sel.fallback_reason or "")
+
+
+@pytest.mark.asyncio
+async def test_auto_entitled_only_to_later_stable_with_allowlist():
+    # Same later-model reachability when a request-local allowlist is present:
+    # the allowlist narrows candidates, and the resolver remains authoritative,
+    # so a later stable model inside the allowlist is still selected.
+    router = ModelRouter(
+        AllowlistEntitlementResolver(entitlements={"tenant-acme": {"gpt-4.1-mini"}}),
+    )
+    sel = await router.route(
+        _request(
+            mode=RoutingMode.AUTO,
+            entitled_model_ids={
+                "gpt-4.1-mini",
+                "gpt-4.1",
+                "gpt-4o",
+                "claude-fable-5",
+            },
+        )
+    )
+    assert sel.model_id == "gpt-4.1-mini"
+    assert sel.entitled is True
+    assert sel.fallback is True
+
+
+@pytest.mark.asyncio
+async def test_auto_still_fails_closed_when_no_candidate_entitled():
+    # No ordered candidate is entitled AND the default RegistryFallbackChain
+    # has no entitled candidate either -> the route must still fail closed with
+    # a strict policy violation (never silently route to an unentitled model).
+    router = ModelRouter(
+        AllowlistEntitlementResolver(entitlements={"tenant-acme": set()}),
+    )
+    with pytest.raises(RoutingPolicyViolation):
+        await router.route(_request(mode=RoutingMode.AUTO))
+
+
 @pytest.mark.asyncio
 async def test_auto_uses_custom_registry():
     custom_models = [
