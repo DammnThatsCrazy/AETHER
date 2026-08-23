@@ -12,11 +12,12 @@ Boundary recovery asserted:
     and the re-run collapses — the correlated message row persists exactly
     once, never duplicated.
   * publish: a broker outage at the external publish boundary raises loudly;
-    the authoritative state (message row + checkpoint) survives exactly once
-    and a replay never re-emits or duplicates. Documented finding: the
-    checkpoint is persisted BEFORE the external publish, so a post-advance
-    broker failure drops the emitted analytics events (they are not replayed);
-    the message repo remains the source of truth.
+    the correlated message row survives, but the durable checkpoint does NOT
+    advance past the undelivered batch (at-least-once). A replay rescans the
+    same window, correlation dedups, and the checkpoint then lands — the
+    emitted analytics events are never dropped at the boundary (the publish
+    now precedes the checkpoint persist, so an undelivered batch is re-driven,
+    not skipped past).
   * reconcile: a variance between the source and destination legs counts a
     reconciliation conflict in the durable checkpoint — never silent.
 """
@@ -237,10 +238,9 @@ async def test_checkpoint_persist_boundary_failed_write_raises_and_replay_collap
 @pytest.mark.asyncio
 async def test_publish_boundary_broker_outage_keeps_authoritative_state():
     """A broker outage at the external publish raises loudly. The authoritative
-    state (message + checkpoint) survives exactly once and a replay never
-    duplicates. NOTE (adversarial finding): the checkpoint is persisted BEFORE
-    the publish, so a post-advance broker failure drops the emitted analytics
-    events (not replayed) — the message repo remains the source of truth."""
+    message row survives, but the durable checkpoint does NOT advance past the
+    undelivered batch — so a replay re-drives the publish (at-least-once).
+    Events are never dropped at the boundary."""
     observations = [
         _src("k4", {"chain": "base", "address": "0xa"}),
         _dst("k4", {"chain": "base", "address": "0xb"}),
@@ -254,18 +254,19 @@ async def test_publish_boundary_broker_outage_keeps_authoritative_state():
 
     exc = await expect_fault(worker.run_cycle(PROVIDER), BROKER_UNAVAILABLE)
     assert faultkit.classify(exc) == BROKER_UNAVAILABLE
-    # Authoritative state survived the failed publish.
+    # The correlated message row already landed (durable, before the crash);
+    # the checkpoint is NOT advanced past the undelivered batch.
     await _assert_single_message("k4")
-    assert await InteropProviderCheckpointRepo().count({}) == 1  # checkpoint advanced
+    assert await InteropProviderCheckpointRepo().count({}) == 0  # no advance past undelivered publish
 
     # Restart: the same window is rescanned, correlation dedups (no new
-    # events), so publish_batch is not called again and nothing duplicates.
+    # events), so publish_batch is not called again and the checkpoint lands.
     restore()
     replay = await worker.run_cycle(PROVIDER)
     assert replay["status"] == "ok"
     assert replay["events_published"] == 0
     await _assert_single_message("k4")
-    assert len(publisher.published) == 0  # the analytics events were dropped here
+    assert len(publisher.published) == 0  # dedup: the replay emits nothing new to re-publish
     assert await InteropProviderCheckpointRepo().count({}) == 1
 
 
