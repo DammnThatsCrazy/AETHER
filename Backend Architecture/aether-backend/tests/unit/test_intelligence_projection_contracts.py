@@ -1,10 +1,17 @@
 """Unit tests for the shared intelligence-projection contracts (P0.4, group 11).
 
 The Python twin of ``packages/shared/intelligence-projection.ts`` must stay in
-lockstep with the generated registry vocabulary (SectionState / ProjectionId
-parity), validate required fields (subject, tenantId, generatedAt), round-trip
-the contract version, and expose a catchable typed error hierarchy rooted at
-``ProjectionError``.
+lockstep with the generated registry vocabulary (SectionState / ProjectionId /
+ProjectionSubjectKind / ProjectionRegistryState parity), validate required
+fields (subject, tenantId, generatedAt, and the required list fields), reject
+unknown fields (the projection plane fails closed, unlike ContractModel),
+round-trip the contract version, and expose a catchable typed error hierarchy
+rooted at ``ProjectionError``.
+
+The C5 blocker regression: a provider for campaign360 / economic360 / outcome360
+/ population360 / connection360 / ... MUST be able to construct a
+``ProjectionRequest.subject`` — ``ProjectionSubject.kind`` is the projection
+plane's own vocab, not ``EntityRef.kind``.
 """
 
 from __future__ import annotations
@@ -31,7 +38,9 @@ from shared.intelligence_projections import (  # noqa: E402
     ContractVersionIncompatible,
     DependencyUnavailable,
     DuplicateProjection,
+    INTELLIGENCE_PROJECTION_DEFINITIONS,
     INTELLIGENCE_PROJECTION_IDS,
+    PROJECTION_IMPLEMENTATION_STATES,
     PROJECTION_SECTION_STATES,
     ProjectionContext,
     ProjectionDependencyState,
@@ -39,16 +48,18 @@ from shared.intelligence_projections import (  # noqa: E402
     ProjectionId,
     ProjectionNotFound,
     ProjectionNotImplemented,
+    ProjectionRegistryState,
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
+    ProjectionSubject,
+    ProjectionSubjectKind,
     SectionState,
 )
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
 )
 from services.operational_intelligence.models import (  # noqa: E402
-    EntityRef,
     EvidenceRef,
     TimeRangeFilter,
 )
@@ -58,15 +69,15 @@ from services.operational_intelligence.models import (  # noqa: E402
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
 
-def _entity_ref(kind: str = "user", ident: str = "usr_1") -> EntityRef:
-    return EntityRef(kind=kind, id=ident)
+def _subject(kind: str = "entity", ident: str = "ent_1") -> ProjectionSubject:
+    return ProjectionSubject(kind=kind, id=ident)
 
 
 def _request(**overrides: object) -> ProjectionRequest:
     values: dict[str, object] = {
         "projectionId": "profile360",
         "tenantId": "tenant-a",
-        "subject": _entity_ref(),
+        "subject": _subject(),
     }
     values.update(overrides)
     return ProjectionRequest(**values)
@@ -85,7 +96,7 @@ def _result(**overrides: object) -> ProjectionResult:
             ClaimEnvelope(
                 id="claim_1",
                 kind="observation",
-                subject=_entity_ref(),
+                subject=_subject(),
                 evidenceRefs=[EvidenceRef(id="ev_1", type="event", source="s1")],
                 claims=["active"],
             ),
@@ -102,7 +113,7 @@ def _result(**overrides: object) -> ProjectionResult:
 
 
 # ---------------------------------------------------------------------------
-# SectionState / ProjectionId parity with the generated registry
+# Vocab parity with the generated registry
 # ---------------------------------------------------------------------------
 
 def test_section_state_covers_exactly_the_generated_states() -> None:
@@ -116,8 +127,57 @@ def test_projection_id_derived_from_generated_ids() -> None:
     assert tuple(get_args(ProjectionId)) == INTELLIGENCE_PROJECTION_IDS
 
 
+def test_projection_subject_kind_matches_generated_registry() -> None:
+    expected = tuple(
+        sorted(
+            {
+                kind
+                for definition in INTELLIGENCE_PROJECTION_DEFINITIONS.values()
+                for kind in definition["subjectKinds"]
+            }
+        )
+    )
+    assert len(expected) == 9  # entity/relationship/campaign/episode/population/source/connection/cluster/agent
+    assert tuple(get_args(ProjectionSubjectKind)) == expected
+
+
+def test_registry_state_matches_generated_implementation_states() -> None:
+    assert tuple(get_args(ProjectionRegistryState)) == PROJECTION_IMPLEMENTATION_STATES
+
+
 # ---------------------------------------------------------------------------
-# Required-field validation
+# ProjectionSubject — the C5 blocker
+# ---------------------------------------------------------------------------
+
+def test_campaign360_subject_validates() -> None:
+    # THE C5 blocker: a provider for a non-entity projection must be able to
+    # build a ProjectionRequest.subject from the projection-plane vocab.
+    req = ProjectionRequest(
+        projectionId="campaign360",
+        tenantId="tenant-a",
+        subject=ProjectionSubject(kind="campaign", id="cmp_1"),
+    )
+    assert req.projectionId == "campaign360"
+    assert req.subject.kind == "campaign"
+    assert req.subject.id == "cmp_1"
+
+
+def test_connection360_subject_validates() -> None:
+    req = ProjectionRequest(
+        projectionId="connection360",
+        tenantId="tenant-a",
+        subject=ProjectionSubject(kind="connection", id="conn_1"),
+    )
+    assert req.subject.kind == "connection"
+
+
+def test_projection_subject_rejects_unknown_kind() -> None:
+    with pytest.raises(ValidationError):
+        ProjectionSubject(kind="silly_kind", id="x")
+
+
+# ---------------------------------------------------------------------------
+# Required-field validation + fail-closed extra fields
 # ---------------------------------------------------------------------------
 
 def test_request_requires_subject() -> None:
@@ -127,7 +187,7 @@ def test_request_requires_subject() -> None:
 
 def test_request_requires_tenant_id() -> None:
     with pytest.raises(ValidationError):
-        ProjectionRequest(projectionId="profile360", subject=_entity_ref())
+        ProjectionRequest(projectionId="profile360", subject=_subject())
 
 
 def test_request_accepts_optional_fields() -> None:
@@ -139,10 +199,21 @@ def test_request_accepts_optional_fields() -> None:
         includeClaims=True,
     )
     assert req.tenantId == "tenant-a"
-    assert req.subject.id == "usr_1"
+    assert req.subject.id == "ent_1"
     assert req.includeSections == ["summary", "timeline"]
     assert req.includeClaims is True
     assert req.timeRange is not None and req.timeRange.to == "2026-08-01T00:00:00Z"
+
+
+def test_request_rejects_extra_fields() -> None:
+    # The projection plane fails closed on typos (unlike ContractModel).
+    with pytest.raises(ValidationError):
+        ProjectionRequest(
+            projectionId="profile360",
+            tenantId="tenant-a",
+            subject=_subject(),
+            tenatId="typo",  # not a declared field
+        )
 
 
 def test_result_requires_generated_at() -> None:
@@ -155,6 +226,28 @@ def test_result_requires_generated_at() -> None:
             claims=[],
             dependencyState=[],
             degradedReasons=[],
+        )
+
+
+def test_result_requires_list_fields() -> None:
+    # MINOR-4: sections/claims/dependencyState/degradedReasons are required.
+    with pytest.raises(ValidationError):
+        ProjectionResult(
+            projectionId="profile360",
+            tenantId="tenant-a",
+            contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+            generatedAt="2026-08-23T12:00:00Z",
+        )
+
+
+def test_context_rejects_unknown_registry_state() -> None:
+    with pytest.raises(ValidationError):
+        ProjectionContext(
+            projectionId="profile360",
+            tenantId="tenant-a",
+            registryState="not_a_state",
+            dependencyState=[],
+            warnings=[],
         )
 
 
@@ -174,6 +267,7 @@ def test_result_contract_version_round_trips() -> None:
     assert reloaded.generatedAt == result.generatedAt
     assert reloaded.sections[0].state == "available"
     assert reloaded.claims[0].evidenceRefs[0].id == "ev_1"
+    assert reloaded.claims[0].subject.kind == "entity"
 
 
 def test_context_builds_with_dependency_state() -> None:
@@ -188,6 +282,7 @@ def test_context_builds_with_dependency_state() -> None:
         ],
         warnings=["temporal replay not configured"],
     )
+    assert context.registryState == "in_flight"
     assert context.dependencyState[0].state == "not_applicable"
     assert context.warnings == ["temporal replay not configured"]
 
@@ -206,13 +301,22 @@ def test_projection_errors_importable_and_catchable() -> None:
 
     for exc in (
         DuplicateProjection("already registered"),
-        ContractVersionIncompatible("contract version mismatch"),
         DependencyUnavailable("hard dependency unavailable"),
         ProjectionNotImplemented("registered but not implemented"),
     ):
         assert isinstance(exc, ProjectionError)
         assert exc.context == {}
         assert exc.projection_id is None
+        assert exc.version is None
+
+
+def test_contract_version_incompatible_carries_version() -> None:
+    exc = ContractVersionIncompatible(
+        "provider contract version 9.9.9 incompatible", version="9.9.9"
+    )
+    assert isinstance(exc, ProjectionError)
+    assert exc.version == "9.9.9"
+    assert exc.message == "provider contract version 9.9.9 incompatible"
 
 
 def test_projection_not_found_is_caught_as_base_error() -> None:

@@ -6,18 +6,19 @@
 // projection runtime (provider protocol + registry) and future 360 providers
 // implement against.
 //
-// Reuse, never redefine: EntityRef comes from ./entities; PageRequest /
-// EvidenceRef / TimeRangeFilter / PageInfo come from ./operational-intelligence.
-// Projection ids and section states are derived from the generated registry
+// Reuse, never redefine: PageRequest / EvidenceRef / TimeRangeFilter / PageInfo
+// come from ./operational-intelligence. Projection ids, section states, subject
+// kinds and implementation states are derived from the generated registry
 // (./intelligence-projections.generated) so the typed vocabulary can never
 // drift from the canonical JSON.
 // =============================================================================
 
-import type { EntityRef } from './entities';
 import type { PageRequest, EvidenceRef, TimeRangeFilter, PageInfo } from './operational-intelligence';
 import {
-  intelligenceProjectionSectionStates,
+  intelligenceProjectionDefinitions,
   intelligenceProjectionIds,
+  intelligenceProjectionImplementationStates,
+  intelligenceProjectionSectionStates,
 } from './intelligence-projections.generated';
 
 /** A registered section state a projection result section may carry (from the generated registry). */
@@ -26,6 +27,20 @@ export type SectionState = (typeof intelligenceProjectionSectionStates)[number];
 /** A registered intelligence projection id (from the generated registry). */
 export type ProjectionId = (typeof intelligenceProjectionIds)[number];
 
+/** A registered implementation state — repo metadata, NOT readiness (from the generated registry). */
+export type ProjectionRegistryState = (typeof intelligenceProjectionImplementationStates)[number];
+
+/** A subject kind a projection may be asked about, derived from the generated registry's subjectKinds. */
+export type ProjectionSubjectKind = {
+  [K in keyof typeof intelligenceProjectionDefinitions]: (typeof intelligenceProjectionDefinitions)[K]['subjectKinds'][number];
+}[keyof typeof intelligenceProjectionDefinitions];
+
+/** The subject a projection is asked about. Distinct from EntityRef by design: projections are asked about campaigns, episodes, populations, sources, connections, clusters and relationships too, which EntityKind does not cover. */
+export interface ProjectionSubject {
+  kind: ProjectionSubjectKind;
+  id: string;
+}
+
 /** Request to run an intelligence projection over canonical Aether truth. */
 export interface ProjectionRequest {
   /** Which registered projection to run. */
@@ -33,7 +48,7 @@ export interface ProjectionRequest {
   /** Tenant scope — projections are tenant-scoped by contract. */
   tenantId: string;
   /** The subject the projection is asked about. */
-  subject: EntityRef;
+  subject: ProjectionSubject;
   /** Optional pagination for section content. */
   page?: PageRequest;
   /** Optional temporal window for the projection. */
@@ -56,7 +71,7 @@ export interface ProjectionContext {
   projectionId: ProjectionId;
   tenantId: string;
   /** Registry state for the projection (e.g. "in_flight" / "implemented"). */
-  registryState: string;
+  registryState: ProjectionRegistryState;
   dependencyState: ProjectionDependencyState[];
   /** Effective as-of snapshot time for the projection run (ISO-8601). */
   asOf?: string;
@@ -76,7 +91,7 @@ export interface ProjectionSection {
 export interface ClaimEnvelope {
   id: string;
   kind: string;
-  subject: EntityRef;
+  subject: ProjectionSubject;
   evidenceRefs: EvidenceRef[];
   claims: string[];
   confidence?: number;

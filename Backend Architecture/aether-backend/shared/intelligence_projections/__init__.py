@@ -15,9 +15,12 @@ from shared.intelligence_projections.contracts import (
     ProjectionContext,
     ProjectionDependencyState,
     ProjectionId,
+    ProjectionRegistryState,
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
+    ProjectionSubject,
+    ProjectionSubjectKind,
     SectionState,
 )
 from shared.intelligence_projections.errors import (
@@ -69,8 +72,11 @@ __all__ = [
     "ProjectionContext",
     "ProjectionDependencyState",
     "ProjectionId",
+    "ProjectionRegistryState",
     "ProjectionRequest",
     "ProjectionResult",
     "ProjectionSection",
+    "ProjectionSubject",
+    "ProjectionSubjectKind",
     "SectionState",
 ]

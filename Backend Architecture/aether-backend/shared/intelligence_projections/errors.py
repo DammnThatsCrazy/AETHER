@@ -2,8 +2,10 @@
 
 Every plane failure raises a :class:`ProjectionError` subclass so a caller can
 classify and translate failures without string-matching. Subclasses carry an
-optional ``projection_id`` and a diagnostic-only ``context`` dict (never
-surfaced as a safe message) alongside the human ``message``.
+optional ``projection_id``, an optional ``version`` (the offending contract
+version, e.g. for :class:`ContractVersionIncompatible`) and a diagnostic-only
+``context`` dict (never surfaced as a safe message) alongside the human
+``message``.
 """
 
 from __future__ import annotations
@@ -20,11 +22,13 @@ class ProjectionError(Exception):
         *,
         projection_id: Optional[str] = None,
         context: Optional[dict[str, Any]] = None,
+        version: Optional[str] = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.projection_id = projection_id
         self.context = dict(context) if context else {}
+        self.version = version
 
 
 class ProjectionNotFound(ProjectionError):
