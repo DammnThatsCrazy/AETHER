@@ -33,6 +33,24 @@ _GOLD_SUBJECT_TABLES = (
     "gold_entity_sentiment_state",
 )
 
+# Directed-pair Gold projections (relationship semantic + sentiment state). A
+# subject participates in these as ``data->>'source_ref'`` or
+# ``data->>'target_ref'`` — never on the ``subject_ref`` column, which holds the
+# synthetic relationship ref — so the subject/actor predicates above cannot reach
+# them. They are therefore propagated separately, matching on BOTH endpoints.
+# On erasure the rows are hard-deleted (like the entity Gold tables). On consent
+# restriction they are also REMOVED rather than tombstoned: the relationship
+# reducer cannot persist an insufficient_data row (it only persists when
+# ``support_count > 0``, so recompute cannot degrade a stale row), and the graph
+# projector reads this table without a status filter, so a tombstone would still
+# surface as a governed edge. Removing the recomputable projection is the only
+# mechanism that guarantees an erased/restricted subject never surfaces as a
+# relationship endpoint; reversibility lives in the tombstoned Silver evidence.
+_GOLD_RELATIONSHIP_TABLES = (
+    "gold_relationship_semantic_state",
+    "gold_relationship_sentiment_state",
+)
+
 # Silver evidence tables whose Gold projections must be recomputed after a
 # retraction/erasure (state ← semantic observations, sentiment ← sentiment obs).
 _STATE_SILVER_TABLE = "silver_semantic_observations"
@@ -115,6 +133,17 @@ class SemanticPrivacyHandler:
             except Exception as exc:  # pragma: no cover — defensive
                 errors.append(f"{table}:{exc}")
                 logger.exception("semantic erasure failed for %s", table)
+        # Directed-pair Gold: erase every relationship the subject is an endpoint
+        # of (source OR target), so no overlay edge involving it can survive the
+        # DSR completing (the relationship reducer persists only observed pairs,
+        # and a deleted row is never re-created once the Silver evidence is gone).
+        for table in _GOLD_RELATIONSHIP_TABLES:
+            repo = SemanticFactRepository(table)
+            try:
+                deleted[table] = await repo.delete_by_endpoint(tenant_id, subject_ref)
+            except Exception as exc:  # pragma: no cover — defensive
+                errors.append(f"{table}:{exc}")
+                logger.exception("semantic relationship erasure failed for %s", table)
         try:
             deleted["semantic_review_queue"] = await self._review_queue.purge_by_subject(
                 tenant_id, subject_ref
@@ -161,6 +190,17 @@ class SemanticPrivacyHandler:
                 count = await repo.tombstone_by_subject(tenant_id, subject_ref)
                 count += await repo.tombstone_by_actor(tenant_id, subject_ref)
                 restricted[table] = count
+            except Exception as exc:  # pragma: no cover — defensive
+                errors.append(f"{table}:{exc}")
+        # Directed-pair Gold: remove every relationship the subject is an endpoint
+        # of (source OR target). See _GOLD_RELATIONSHIP_TABLES for why restriction
+        # removes (not tombstones) these recomputable projections — a tombstoned
+        # row would still be read and projected as a governed edge, and the
+        # relationship reducer cannot degrade a stale row to insufficient_data.
+        for table in _GOLD_RELATIONSHIP_TABLES:
+            repo = SemanticFactRepository(table)
+            try:
+                restricted[table] = await repo.delete_by_endpoint(tenant_id, subject_ref)
             except Exception as exc:  # pragma: no cover — defensive
                 errors.append(f"{table}:{exc}")
         # Recompute every affected aggregate, INCLUDING subject_ref itself: its

@@ -278,6 +278,36 @@ class SemanticFactRepository:
             )
         return _rowcount(result)
 
+    async def delete_by_endpoint(self, tenant_id: str, ref: str) -> int:
+        """Erasure: hard-delete rows where ``ref`` is a directed-pair endpoint.
+
+        Relationship Gold rows carry their participants inside ``data``
+        (``source_ref`` / ``target_ref``), not on ``subject_ref`` (which holds the
+        synthetic relationship ref), so the subject/actor predicates never match
+        them. This predicate closes that gap: a subject erased (or consent-
+        restricted) as EITHER the source or the target reference removes the whole
+        directed pair, so no overlay/read can surface a relationship it is part of.
+        """
+        pool = await self._pool()
+        if pool is None:
+            victims = [
+                rid
+                for rid, row in self._store.items()
+                if row.get("tenant_id") == tenant_id and _row_has_endpoint(row, ref)
+            ]
+            for rid in victims:
+                del self._store[rid]
+            return len(victims)
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"DELETE FROM {self.table_name} "
+                "WHERE tenant_id = $1 "
+                "AND (data->>'source_ref' = $2 OR data->>'target_ref' = $2)",
+                tenant_id,
+                ref,
+            )
+        return _rowcount(result)
+
     async def tombstone_by_actor(self, tenant_id: str, actor_ref: str) -> int:
         """Consent-restriction: mark rows a subject acted on consent_restricted."""
         pool = await self._pool()
@@ -461,7 +491,12 @@ class SemanticFactRepository:
         return {r["subject_ref"] for r in rows if r["subject_ref"] is not None}
 
     async def list_by_tenant(
-        self, tenant_id: str, subject: Optional[str] = None, *, limit: int = 500
+        self,
+        tenant_id: str,
+        subject: Optional[str] = None,
+        *,
+        limit: int = 500,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         pool = await self._pool()
         if pool is None:
@@ -472,16 +507,18 @@ class SemanticFactRepository:
                 and (subject is None or _row_subject(row) == subject)
             ]
             rows.sort(key=lambda r: str((r.get("data") or {}).get("occurred_at", "")))
-            return [r.get("data", {}) for r in rows[:limit]]
+            return [r.get("data", {}) for r in rows[offset : offset + limit]]
         conditions = ["tenant_id = $1"]
         params: list[Any] = [tenant_id]
         if subject is not None:
             conditions.append("subject_ref = $2")
             params.append(subject)
         params.append(limit)
+        params.append(offset)
         sql = (
             f"SELECT data FROM {self.table_name} WHERE {' AND '.join(conditions)} "
-            f"ORDER BY occurred_at ASC NULLS LAST, id ASC LIMIT ${len(params)}"
+            f"ORDER BY occurred_at ASC NULLS LAST, id ASC "
+            f"LIMIT ${len(params) - 1} OFFSET ${len(params)}"
         )
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
@@ -579,6 +616,16 @@ def _row_subject(row: dict[str, Any]) -> Optional[str]:
 def _row_actor(row: dict[str, Any]) -> Optional[str]:
     data = row.get("data") or {}
     return data.get("actor_ref")
+
+
+def _row_has_endpoint(row: dict[str, Any], ref: str) -> bool:
+    """Whether ``ref`` is a directed-pair endpoint (source OR target) of ``row``.
+
+    Used by ``delete_by_endpoint`` on the in-memory fallback — the SQL predicate
+    mirrors this with ``data->>'source_ref' = $2 OR data->>'target_ref' = $2``.
+    """
+    data = row.get("data") or {}
+    return data.get("source_ref") == ref or data.get("target_ref") == ref
 
 
 def _as_utc(value: datetime) -> datetime:

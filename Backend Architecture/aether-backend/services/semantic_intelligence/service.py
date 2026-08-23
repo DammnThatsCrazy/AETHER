@@ -35,6 +35,11 @@ _MODEL_VERSIONS = [
     "deterministic-sentiment-classifier@1.0.0",
 ]
 
+#: Page size for paging the complete Gold relationship set in
+#: :meth:`SemanticIntelligenceService.list_relationship_edges` (the repository
+#: primitive defaults to a 500-row limit; paging avoids silent truncation).
+_RELATIONSHIP_PAGE = 500
+
 # In-process count of active replay runs backing the
 # aether_semantic_replay_jobs_active gauge (per-process, like every Prometheus
 # gauge this collector exports).
@@ -54,6 +59,18 @@ def _record_review_queue_gauge(counts: dict[str, int]) -> None:
             float(open_count),
             labels={"queue_type": queue_type},
         )
+
+
+def _is_consent_restricted(row: dict[str, Any]) -> bool:
+    """Whether a durable Gold row is consent-restricted (must not be served).
+
+    Fail-closed: relationship reads treat any row carrying a ``consent_restricted``
+    status as absent, so a consent-restricted relationship can never surface as an
+    overlay edge even if a stale row outlives the DSR propagation. (The privacy
+    handler removes these rows outright; this is defense-in-depth for any path
+    that tombstones rather than deletes.)
+    """
+    return str((row or {}).get("status") or "").lower() == "consent_restricted"
 
 
 def _valence_sign(sentiments: list[SentimentObservation]) -> Optional[str]:
@@ -535,12 +552,19 @@ class SemanticIntelligenceService:
         sem_repo = SemanticFactRepository("gold_relationship_semantic_state")
         sent_repo = SemanticFactRepository("gold_relationship_sentiment_state")
         sem_rows = await sem_repo.list_by_tenant(tenant_id, rel, limit=1)
+        if sem_rows and _is_consent_restricted(sem_rows[0]):
+            # Fail-closed: a consent-restricted projection is served as absent.
+            sem_rows = []
         if not sem_rows:
             # No durable projection yet — recompute persists only observed pairs,
             # so an unobserved pair stays row-less (insufficient_data below).
             await self.recompute_relationship_state(tenant_id, source_ref, target_ref)
             sem_rows = await sem_repo.list_by_tenant(tenant_id, rel, limit=1)
+            if sem_rows and _is_consent_restricted(sem_rows[0]):
+                sem_rows = []
         sent_rows = await sent_repo.list_by_tenant(tenant_id, rel, limit=1)
+        if sent_rows and _is_consent_restricted(sent_rows[0]):
+            sent_rows = []
         return {
             "relationship_ref": rel,
             "source_ref": source_ref,
@@ -562,14 +586,28 @@ class SemanticIntelligenceService:
         """
         from .repositories.base_fact_repo import SemanticFactRepository
 
-        rows = await SemanticFactRepository(
-            "gold_relationship_semantic_state"
-        ).list_by_tenant(tenant_id)
+        # ``list_by_tenant`` defaults to a 500-row limit; page through the
+        # COMPLETE Gold set so a tenant with more than one page of relationships
+        # is never silently truncated (every edge is served, and a requested
+        # subject beyond the first page is found).
+        repo = SemanticFactRepository("gold_relationship_semantic_state")
+        rows: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page = await repo.list_by_tenant(
+                tenant_id, limit=_RELATIONSHIP_PAGE, offset=offset
+            )
+            rows.extend(page)
+            if len(page) < _RELATIONSHIP_PAGE:
+                break
+            offset += _RELATIONSHIP_PAGE
         edges: list[dict[str, Any]] = []
         for data in rows:
             source = data.get("source_ref")
             target = data.get("target_ref")
             if not source or not target:
+                continue
+            if _is_consent_restricted(data):
                 continue
             edges.append(
                 {

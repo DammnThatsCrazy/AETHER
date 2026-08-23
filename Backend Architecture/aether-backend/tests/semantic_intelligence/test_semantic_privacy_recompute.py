@@ -17,6 +17,9 @@ from services.semantic_intelligence.privacy import SemanticPrivacyHandler
 from services.semantic_intelligence.reducers import (
     recompute_entity_sentiment,
     recompute_entity_state,
+    recompute_relationship_sentiment,
+    recompute_relationship_state,
+    relationship_ref,
 )
 from services.semantic_intelligence.repositories.base_fact_repo import SemanticFactRepository
 from services.semantic_intelligence.service import SemanticIntelligenceService
@@ -125,3 +128,106 @@ async def test_erasure_recomputes_others_and_leaves_actor_gold_deleted():
 
     # A's Gold row is GONE — erasure deleted it and recompute must NOT recreate it.
     assert await svc.gold_entity_state(TENANT, ACTOR_A) is None
+
+
+# ── relationship Gold propagation ─────────────────────────────────────────────
+#
+# ``gold_relationship_semantic_state`` / ``gold_relationship_sentiment_state``
+# carry their participants as ``data->>'source_ref'`` / ``data->>'target_ref'``
+# (never on ``subject_ref``, which holds the synthetic relationship ref), so the
+# subject/actor erasure predicates cannot reach them. These tests pin that the
+# DSR propagation removes a subject from BOTH endpoints of every directed pair,
+# and that the overlay read (``list_relationship_edges``) never serves an
+# erased/restricted subject's edges while unaffected subjects' edges survive.
+
+async def _seed_relationship(actor: str, subject: str, event: str) -> None:
+    """Classify an actor→subject observation and persist BOTH relationship Golds."""
+    obs, sentiments = await classify_event(
+        {
+            "source_event_id": event,
+            "source_type": "feedback",
+            "actor_ref": actor,
+            "primary_subject_ref": subject,
+            "content": "great excellent recommend",
+        },
+        TENANT,
+    )
+    store = get_store()
+    await store.put_semantic(obs)
+    for s in sentiments:
+        await store.put_sentiment(s)
+    await recompute_relationship_state(TENANT, actor, subject)
+    await recompute_relationship_sentiment(TENANT, actor, subject)
+
+
+async def _edge_refs() -> set[tuple[str, str]]:
+    svc = service_mod.get_semantic_service()
+    return {
+        (e["source_ref"], e["target_ref"])
+        for e in await svc.list_relationship_edges(TENANT)
+    }
+
+
+async def test_erasure_removes_relationship_edges_involving_subject():
+    await _seed_relationship(ACTOR_A, SUBJECT_B, "e_rel_a_on_b")
+    await _seed_relationship(ACTOR_C, SUBJECT_B, "e_rel_c_on_b")
+    assert len(await _edge_refs()) == 2
+
+    result = await SemanticPrivacyHandler().handle_erasure(TENANT, ACTOR_A)
+    assert result["completed"] is True
+    # Both directed-pair Gold projections are reached by endpoint (source OR target).
+    assert result["deleted"]["gold_relationship_semantic_state"] == 1
+    assert result["deleted"]["gold_relationship_sentiment_state"] == 1
+
+    refs = await _edge_refs()
+    assert (ACTOR_A, SUBJECT_B) not in refs
+    assert (ACTOR_C, SUBJECT_B) in refs  # unaffected subject's edge survives
+
+    # The Gold row is gone, not merely hidden: a direct read finds no durable row.
+    rows = await SemanticFactRepository("gold_relationship_semantic_state").list_by_tenant(
+        TENANT, relationship_ref(ACTOR_A, SUBJECT_B)
+    )
+    assert rows == []
+
+
+async def test_erasure_removes_edges_where_subject_is_target():
+    await _seed_relationship(ACTOR_A, SUBJECT_B, "e_rel_a_on_b")
+    await _seed_relationship(ACTOR_A, ACTOR_C, "e_rel_a_on_c")
+    assert len(await _edge_refs()) == 2
+
+    result = await SemanticPrivacyHandler().handle_erasure(TENANT, SUBJECT_B)
+    assert result["completed"] is True
+    assert result["deleted"]["gold_relationship_semantic_state"] == 1
+
+    refs = await _edge_refs()
+    assert (ACTOR_A, SUBJECT_B) not in refs  # B was the TARGET — still removed
+    assert (ACTOR_A, ACTOR_C) in refs
+
+
+async def test_restriction_removes_relationship_edges_involving_subject():
+    await _seed_relationship(ACTOR_A, SUBJECT_B, "e_rel_a_on_b")
+    await _seed_relationship(ACTOR_C, SUBJECT_B, "e_rel_c_on_b")
+    assert len(await _edge_refs()) == 2
+
+    result = await SemanticPrivacyHandler().handle_restriction(TENANT, ACTOR_A)
+    assert result["completed"] is True
+    assert result["restricted"]["gold_relationship_semantic_state"] == 1
+    assert result["restricted"]["gold_relationship_sentiment_state"] == 1
+
+    refs = await _edge_refs()
+    assert (ACTOR_A, SUBJECT_B) not in refs
+    assert (ACTOR_C, SUBJECT_B) in refs  # unaffected subject's edge survives
+
+
+async def test_overlay_read_hides_stale_consent_restricted_relationship():
+    await _seed_relationship(ACTOR_A, SUBJECT_B, "e_rel_a_on_b")
+    assert len(await _edge_refs()) == 1
+
+    # Defense-in-depth: even if a tombstoned relationship row survives OUTSIDE the
+    # DSR propagation path, the overlay read must never serve it (fail-closed).
+    rel = relationship_ref(ACTOR_A, SUBJECT_B)
+    await SemanticFactRepository("gold_relationship_semantic_state").tombstone_by_subject(
+        TENANT, rel
+    )
+
+    assert await _edge_refs() == set()

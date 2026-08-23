@@ -9,18 +9,27 @@ real relationship edges instead of a hardcoded ``[]``.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from repositories.repos import reset_in_memory_stores
+from services.semantic_intelligence import graph_projector as projector_mod
 from services.semantic_intelligence import service as service_mod
 from services.semantic_intelligence.engine import classify_event, get_store, set_store
 from services.semantic_intelligence.graph_projector import (
     SEMANTIC_EDGE_TYPE,
+    edge_from_relationship,
     project_tenant,
+)
+from services.semantic_intelligence.repositories.base_fact_repo import (
+    SemanticFactRepository,
 )
 from services.semantic_intelligence.service import SemanticIntelligenceService
 from services.semantic_intelligence.store import DurableSemanticSentimentStore
-from shared.graph.graph import EdgeType, GraphClient
+from shared.graph.edge_properties import make_edge_idempotency_key
+from shared.graph.graph import Edge, EdgeType, GraphClient
+from shared.graph.write_validator import GraphWriteValidator
 
 TENANT = "tenant_projector"
 OTHER_TENANT = "tenant_projector_other"
@@ -31,6 +40,10 @@ TARGET = "prod_widget"
 @pytest.fixture(autouse=True)
 def _isolate():
     reset_in_memory_stores()
+    # Per-tenant projector locks are bound to the event loop that first used
+    # them; pytest-asyncio gives each test a fresh loop, so drop the cache
+    # between tests (production keeps one long-lived loop and never clears it).
+    projector_mod._TENANT_PROJECT_LOCKS.clear()
     original = get_store()
     set_store(DurableSemanticSentimentStore())
     service_mod.set_semantic_service(SemanticIntelligenceService())
@@ -38,6 +51,7 @@ def _isolate():
     set_store(original)
     service_mod.set_semantic_service(SemanticIntelligenceService())
     reset_in_memory_stores()
+    projector_mod._TENANT_PROJECT_LOCKS.clear()
 
 
 async def _graph() -> GraphClient:
@@ -64,16 +78,11 @@ async def _seed_relationship(
     await store.put_semantic(obs)
     for s in sentiments:
         await store.put_sentiment(s)
-    await service_mod.get_semantic_service().recompute_relationship_state(
-        tenant, source, target
-    )
+    await service_mod.get_semantic_service().recompute_relationship_state(tenant, source, target)
 
 
 async def _semantic_edges(client: GraphClient, source: str) -> list:
-    return [
-        e
-        for e in await client.get_edges(source, edge_type=EdgeType.SEMANTIC_RELATES_TO)
-    ]
+    return [e for e in await client.get_edges(source, edge_type=EdgeType.SEMANTIC_RELATES_TO)]
 
 
 async def test_projects_relationship_gold_as_governed_edge():
@@ -121,9 +130,7 @@ async def test_projection_is_tenant_scoped():
 
     await project_tenant(OTHER_TENANT, graph_client=client)
     edges = await _semantic_edges(client, SOURCE)
-    assert sorted(e.properties.get("tenantId") for e in edges) == sorted(
-        [TENANT, OTHER_TENANT]
-    )
+    assert sorted(e.properties.get("tenantId") for e in edges) == sorted([TENANT, OTHER_TENANT])
 
 
 async def test_overlay_service_returns_real_relationship_edges():
@@ -142,13 +149,197 @@ async def test_overlay_service_returns_real_relationship_edges():
 
 async def test_degenerate_pairs_are_never_projected():
     # A self-loop / unknown endpoint is skipped, never a fabricated edge.
-    from services.semantic_intelligence.graph_projector import edge_from_relationship
-
     assert edge_from_relationship(TENANT, {"source_ref": "x", "target_ref": "x"}) is None
     assert edge_from_relationship(TENANT, {"source_ref": "", "target_ref": "y"}) is None
     assert (
-        edge_from_relationship(
-            TENANT, {"source_ref": "unknown_subject", "target_ref": "y"}
+        edge_from_relationship(TENANT, {"source_ref": "unknown_subject", "target_ref": "y"}) is None
+    )
+
+
+async def test_projected_edge_is_canonical_and_passes_strict_validation():
+    # Codex P1 (line 100): the edge must be canonical BEFORE the gateway, because
+    # off-mode passes it straight to GraphClient.add_edge whose Neptune path
+    # rejects a write missing any REQUIRED_EDGE_PROPERTIES member.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    client = await _graph()
+
+    await project_tenant(TENANT, graph_client=client)
+
+    edges = await _semantic_edges(client, SOURCE)
+    assert len(edges) == 1
+    props = edges[0].properties
+    for key in (
+        "tenant_id",
+        "idempotency_key",
+        "actor_kind",
+        "actor_id",
+        "schema_version",
+        "provenance",
+        "valid_from",
+        "confidence",
+    ):
+        assert props.get(key) not in (None, ""), f"missing required edge property {key!r}"
+    # Stable, deterministic edge identity derived from the Gold row's natural key.
+    assert props["idempotency_key"] == make_edge_idempotency_key(
+        TENANT,
+        EdgeType.SEMANTIC_RELATES_TO,
+        SOURCE,
+        TARGET,
+        source_event_id=f"rel:{SOURCE}->{TARGET}",
+    )
+    assert props["actor_kind"] == "system"
+    assert props["actor_id"] == "semantic_graph_projector"
+    assert props["tenant_id"] == TENANT
+    # The canonical property set satisfies the strict production validator.
+    result = GraphWriteValidator().validate(edges[0], env="production")
+    assert result.passed, result.violations
+
+
+async def test_projects_full_gold_set_beyond_default_limit():
+    # Codex P1 (line 146): list_by_tenant defaults to a 500-row limit; a tenant
+    # with more relationships must not be truncated at the first page forever.
+    row_count = 510
+    for i in range(row_count):
+        await _seed_raw_relationship(TENANT, "sub_bulk", f"prod_{i}", i)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.relationships_seen == row_count
+    assert report.projected == row_count
+    assert report.failed == 0
+    assert len(await _semantic_edges(client, "sub_bulk")) == row_count
+
+
+async def test_overlay_service_returns_full_gold_set_beyond_default_limit():
+    # The projector non-truncation claim has a SECOND clause: the overlay read
+    # (``list_relationship_edges``) must not truncate either. It pages through
+    # ``gold_relationship_semantic_state`` at ``_RELATIONSHIP_PAGE`` (500) rows
+    # per call with an offset, so a tenant with more than one page is served in
+    # full. Every other overlay test seeds 1-2 relationships, so a revert of
+    # ``list_relationship_edges`` to a single 500-limit read would otherwise pass
+    # undetected — this seeds a second page's worth and pins the COMPLETE set.
+    row_count = 510
+    for i in range(row_count):
+        await _seed_raw_relationship(TENANT, "sub_overlay", f"prod_{i}", i)
+    service = service_mod.get_semantic_service()
+
+    edges = await service.list_relationship_edges(TENANT)
+
+    assert len(edges) == row_count
+    assert {e["source_ref"] for e in edges} == {"sub_overlay"}
+    assert {e["target_ref"] for e in edges} == {f"prod_{i}" for i in range(row_count)}
+
+
+async def test_concurrent_sweeps_produce_single_edge():
+    # Codex P1 (line 156): two projector passes racing must not both observe "no
+    # edge" and append one. The per-tenant lock serialises sweeps in-process.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    client = await _graph()
+
+    first = asyncio.create_task(project_tenant(TENANT, graph_client=client))
+    second = asyncio.create_task(project_tenant(TENANT, graph_client=client))
+    reports = await asyncio.gather(first, second)
+
+    assert sum(r.projected for r in reports) == 1
+    assert sum(r.skipped_existing for r in reports) == 1
+    assert len(await _semantic_edges(client, SOURCE)) == 1
+
+
+async def test_sweep_collapses_duplicate_projections():
+    # A pre-existing duplicate (e.g. appended by an earlier replica race) is
+    # collapsed to a single live edge by reconciliation.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    client = await _graph()
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    rows = await repo.list_by_tenant(TENANT)
+    assert len(rows) == 1
+    edge = edge_from_relationship(TENANT, rows[0])
+    assert edge is not None
+    await client.add_edge(edge)
+    await client.add_edge(edge)
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    # Reconciliation revokes both duplicates, then the sweep re-projects exactly
+    # one canonical edge.
+    assert report.revoked == 2
+    assert report.projected == 1
+    assert len(await _semantic_edges(client, SOURCE)) == 1
+
+
+async def test_revokes_projection_when_gold_relationship_removed():
+    # Codex P1 (line 160): when a Gold relationship disappears (retention /
+    # erasure / recomputation), its projection must be revoked, not left alive.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    await _seed_relationship(TENANT, SOURCE, "prod_other")
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+    assert report.projected == 2
+
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    removed = await repo.delete_by_subject(TENANT, f"rel:{SOURCE}->{TARGET}")
+    assert removed == 1
+
+    second = await project_tenant(TENANT, graph_client=client)
+    assert second.revoked == 1
+    edges = await _semantic_edges(client, SOURCE)
+    assert [e.to_vertex_id for e in edges] == ["prod_other"]
+
+
+async def test_sweep_replaces_legacy_noncanonical_edge():
+    # An edge written before canonicalisation (no idempotency key / actor /
+    # provenance) is replaced on the next sweep, not duplicated alongside.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    client = await _graph()
+    await client.add_edge(
+        Edge(
+            edge_type=EdgeType.SEMANTIC_RELATES_TO,
+            from_vertex_id=SOURCE,
+            to_vertex_id=TARGET,
+            properties={
+                "tenantId": TENANT,
+                "tenant_id": TENANT,
+                "relationship_ref": f"rel:{SOURCE}->{TARGET}",
+            },
         )
-        is None
+    )
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    # Reconciliation revokes the non-canonical legacy edge; the sweep re-projects
+    # the canonical one.
+    assert report.revoked == 1
+    assert report.projected == 1
+    edges = await _semantic_edges(client, SOURCE)
+    assert len(edges) == 1
+    assert edges[0].properties.get("idempotency_key")
+    assert edges[0].properties.get("actor_kind") == "system"
+
+
+async def _seed_raw_relationship(tenant: str, source: str, target: str, index: int) -> None:
+    """Seed one gold relationship row directly (bypasses the reducer path)."""
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    rel = f"rel:{source}->{target}"
+    await repo.upsert(
+        {
+            "id": f"raw_{tenant}_{index}",
+            "tenant_id": tenant,
+            "subject_ref": rel,
+            "occurred_at": "2026-01-01T00:00:00+00:00",
+            "idempotency_key": f"gold_relationship:{tenant}:{rel}:test",
+            "data": {
+                "source_ref": source,
+                "target_ref": target,
+                "relationship_ref": rel,
+                "relationship_layer": "EXCLUDED",
+                "stance_alignment": 0.5,
+                "trust_signal": 0.5,
+                "interaction_quality": "coherent",
+                "influence_direction": "outbound",
+                "confidence": 0.7,
+                "valid_from": "2026-01-01T00:00:00+00:00",
+            },
+        }
     )
