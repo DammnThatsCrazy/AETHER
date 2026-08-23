@@ -89,10 +89,12 @@ an operator enables it and a tenant is entitled.
 
 Per-tenant LLM credentials live in the existing `CredentialBackend`
 (`shared/credentials/interface.py`), **not** a new credential system and not
-process env vars. Backends: in-memory (dev/test only), local-encrypted (default
-self-hosted), AWS Secrets Manager scoped `aether/credentials/{tenant_id}/{ref}`
-(production). Only masked, secret-free `CredentialMetadata` ever leaves the
-backend; the provider client is built at call time and released immediately.
+process env vars. Backends: `in_memory` (dev/test only), `env` (deploy-time
+injected), AWS Secrets Manager scoped `aether/credentials/{tenant_id}/{ref}`
+(production), or `disabled`. Staging/production fail closed to `env` or
+`aws_secrets` — never `in_memory`/`disabled` (ADR-008 D5). Only masked,
+secret-free `CredentialMetadata` ever leaves the backend; the provider client
+is built at call time and released immediately.
 
 ### Observability
 
@@ -170,8 +172,8 @@ The runtime's operational surface (deploy, health/readiness, circuit-breaker
 response, credential rotation, canaries, incident response) is covered by the
 deployment and observability runbooks:
 
-- Deployment guide: [`../deploy/model-runtime/README.md`](../deploy/model-runtime/README.md)
-- Observability runbooks: [`deploy/observability/`](../deploy/observability/)
+- Deployment guide: [`../../deploy/model-runtime/README.md`](../../deploy/model-runtime/README.md)
+- Observability runbooks: [`../../deploy/observability/`](../../deploy/observability/)
 
 For the design and security rationale, see
 [ADR-008 — Multi-Model Intelligence Harness](../decisions/ADR-008-multi-model-intelligence-harness.md).

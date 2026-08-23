@@ -1467,6 +1467,28 @@ def create_app() -> FastAPI:
     else:
         logger.info("Mobile gateway disabled (AETHER_MOBILE_ENABLED=false)")
 
+    # Model Runtime — provider-neutral multi-model harness (ADR-008). The gate
+    # lives in services/model_runtime/config.py (MODEL_RUNTIME_ENABLED, default
+    # OFF per D9), not in config/settings.py. The import is lazy so the feature
+    # costs nothing while disabled; the whole block is guarded against
+    # ImportError so main stays importable while the package's remaining
+    # surfaces land in the same integration commit.
+    try:
+        from services.model_runtime.config import ModelRuntimeSettings
+
+        if ModelRuntimeSettings().enabled:
+            from services.model_runtime.routes import router as model_runtime_router
+
+            app.include_router(model_runtime_router, tags=["Model Runtime"])
+            logger.info("Model runtime mounted (/v1/model-runtime)")
+        else:
+            logger.info("Model runtime disabled (MODEL_RUNTIME_ENABLED=false)")
+    except ImportError:
+        logger.warning(
+            "Model runtime not mounted (services.model_runtime unavailable — "
+            "concurrent integration guard)"
+        )
+
     return app
 
 

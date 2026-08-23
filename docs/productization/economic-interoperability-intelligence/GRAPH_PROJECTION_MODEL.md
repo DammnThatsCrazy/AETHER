@@ -82,3 +82,13 @@ and 9 edge types (`CAME_FROM`, `PARTICIPATED_IN`, `USED_PROVIDER`,
 never usable as deterministic identity-merge evidence. PaymentScan
 benchmark rows are never projected to the graph at all
 (`services/card_linked_payments/graph_projector.py`).
+
+The semantic-intelligence relationship Gold follows the same projection
+rules: `SEMANTIC_RELATES_TO` (directed entity → entity, a derived analytics
+overlay) is mapped to `RelationshipLayer.EXCLUDED` in `_EDGE_LAYER_MAP` and is
+projected by the semantic graph projector
+(`services/semantic_intelligence/graph_projector.py`) from
+`gold_relationship_semantic_state` through the canonical `GraphMutationGateway`
+— governed (edge intent, ledger-aware in shadow/enforce mode), idempotent, and
+tenant-scoped, gated on `SEMANTIC_GRAPH_PROJECTOR_ENABLED` (default OFF). See
+[`docs/INTELLIGENCE-GRAPH.md`](../../INTELLIGENCE-GRAPH.md#semantic-relationship-overlay).

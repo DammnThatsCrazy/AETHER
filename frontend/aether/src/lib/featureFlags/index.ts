@@ -13,12 +13,15 @@ interface AetherFeatureFlags {
   readonly enableContinuations: boolean;
   /** Client-sync change-feed consumption panel (M5c). */
   readonly enableClientSyncConsumption: boolean;
+  /** Tenant model-routing preference panel (ADR-008 D4/D9, model harness). */
+  readonly enableModelHarness: boolean;
 }
 
 const DEFAULT_FLAGS: AetherFeatureFlags = {
   // D8: default OFF — no runtime behavior change until a later milestone flips it.
   enableContinuations: false,
   enableClientSyncConsumption: false,
+  enableModelHarness: false,
 };
 
 function loadFlags(): AetherFeatureFlags {
