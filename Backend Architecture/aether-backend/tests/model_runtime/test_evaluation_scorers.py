@@ -161,7 +161,12 @@ def test_exact_match_threshold_wiring():
 
 def test_faithfulness_supported_claim_passes():
     scorer = FaithfulnessScorer()
-    result = _result("Revenue grew strongly.", (_citation("r1", "revenue grew 20%"),))
+    # The claim cites ref:r1 inline, so it is checked ONLY against r1's excerpt
+    # (cite-aware grounding) and shares significant tokens with it.
+    result = _result(
+        "Revenue grew strongly [ref:r1].",
+        (_citation("r1", "revenue grew 20%"),),
+    )
     score = scorer.score(result, _case("Revenue grew strongly."))
     assert isinstance(score, EvaluationScore)
     assert score.name == "faithfulness"
@@ -176,7 +181,12 @@ def test_faithfulness_supported_claim_passes():
 
 def test_faithfulness_unsupported_claim_below_threshold():
     scorer = FaithfulnessScorer()
-    result = _result("Profit margins expanded.", (_citation("r1", "revenue grew 20%"),))
+    # The claim cites ref:r1 but r1's excerpt shares no significant token with
+    # it -> unsupported even though the claim named the row (cite-aware).
+    result = _result(
+        "Profit margins expanded [ref:r1].",
+        (_citation("r1", "revenue grew 20%"),),
+    )
     score = scorer.score(result, _case("Profit margins expanded."))
     # No significant token shared with the excerpt -> unsupported -> ratio 0.0.
     assert score.value == 0.0
@@ -186,9 +196,10 @@ def test_faithfulness_unsupported_claim_below_threshold():
 
 def test_faithfulness_empty_citations_fails_closed():
     scorer = FaithfulnessScorer()
-    result = _result("Revenue grew strongly.", ())
+    # The claim cites ref:r1, but no citation with that id is available, so its
+    # scoped set is empty: nothing retrieved, nothing verified -> 0.0.
+    result = _result("Revenue grew strongly [ref:r1].", ())
     score = scorer.score(result, _case("Revenue grew strongly."))
-    # Nothing retrieved, nothing verified: fail closed to 0.0.
     assert score.value == 0.0
     assert score.passed is False
 
@@ -205,11 +216,52 @@ def test_faithfulness_unparseable_content_fails_closed():
 
 def test_faithfulness_threshold_wiring():
     scorer = FaithfulnessScorer(threshold=0.0)
-    result = _result("Profit margins expanded.", (_citation("r1", "revenue grew 20%"),))
+    # The claim cites ref:r1 but r1's excerpt shares no significant token with
+    # it; the cited row does not support the claim -> unsupported -> 0.0.
+    result = _result(
+        "Profit margins expanded [ref:r1].",
+        (_citation("r1", "revenue grew 20%"),),
+    )
     score = scorer.score(result, _case("Profit margins expanded."))
     assert score.value == 0.0
     assert score.threshold == 0.0
     # 0.0 >= 0.0, so a threshold of 0.0 turns the unsupported run into a pass.
+    assert score.passed is True
+
+
+def test_faithfulness_claim_cannot_pass_on_uncited_citation():
+    # Cite-aware regression (Codex): a claim citing ref:r1 is verified ONLY
+    # against r1's excerpt. ref:r2 would support it under full-citation
+    # matching, but it is ignored because the claim never cited it — exactly
+    # what VerificationEngine._check_cited rejects, so the eval plane cannot
+    # promote a miscited claim.
+    scorer = FaithfulnessScorer()
+    result = _result(
+        "Gold reserves increased [ref:r1].",
+        (
+            _citation("r1", "Marketing spend declined sharply."),  # cited, no overlap
+            _citation("r2", "Gold reserves increased markedly."),  # uncited, would match
+        ),
+    )
+    score = scorer.score(result, _case("Gold reserves increased."))
+    assert score.value == 0.0
+    assert score.value < score.threshold
+    assert score.passed is False
+
+
+def test_faithfulness_claim_citing_its_row_passes():
+    # Cite-aware positive: the claim cites ref:r2 and r2's excerpt matches, so
+    # it is supported even though another (uncited) citation would also match.
+    scorer = FaithfulnessScorer()
+    result = _result(
+        "Gold reserves increased [ref:r2].",
+        (
+            _citation("r1", "Marketing spend declined sharply."),
+            _citation("r2", "Gold reserves increased markedly."),
+        ),
+    )
+    score = scorer.score(result, _case("Gold reserves increased."))
+    assert score.value == 1.0
     assert score.passed is True
 
 
@@ -314,6 +366,24 @@ def test_latency_default_call_passes_at_zero():
     scorer = LatencyScorer()
     score = scorer.score(_result("answer"), _case("x"))
     assert score.value == 0.0
+    assert score.passed is True
+
+
+def test_latency_default_budget_is_nonzero_and_accepts_real_duration():
+    # Regression (Codex): the default scorer must carry a NONZERO budget — a
+    # real run always measures a positive wall-clock duration, and a
+    # zero-duration default would fail every otherwise-faithful report (and
+    # reject the default regression suite).
+    from services.model_runtime.evaluation.scorers import (
+        DEFAULT_MAX_LATENCY_SECONDS,
+    )
+
+    scorer = LatencyScorer()
+    assert scorer.threshold == DEFAULT_MAX_LATENCY_SECONDS
+    assert scorer.threshold > 0.0
+
+    score = scorer.score(_result("answer"), _case("x"), elapsed_seconds=0.5)
+    assert score.value == 0.5
     assert score.passed is True
 
 

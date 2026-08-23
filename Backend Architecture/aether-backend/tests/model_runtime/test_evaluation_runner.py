@@ -51,6 +51,12 @@ _NOW = datetime.now(timezone.utc)
 
 _CANNED_GROUND_TRUTH = "Revenue grew strongly in the second quarter."
 
+#: The canonical benign answer with its inline citation. The cite-aware
+#: faithfulness scorer verifies each claim ONLY against the citations it names
+#: (matching VerificationEngine._check_cited), so a faithful canned answer must
+#: carry the ``[ref:ref-1]`` marker that ties it to its citation.
+_CANNED_GROUND_TRUTH_CITED = "Revenue grew strongly in the second quarter [ref:ref-1]."
+
 
 async def _raises(exc_type, awaitable_fn) -> None:
     """Assert that awaiting ``awaitable_fn()`` raises ``exc_type`` (plain asserts)."""
@@ -96,7 +102,10 @@ def _case(**overrides) -> EvaluationCase:
         "tenant_id": "tenant-acme",
         "case_id": "case-001",
         "query": "Summarize the second quarter results.",
-        "expected_ground_truth": _CANNED_GROUND_TRUTH,
+        # The default ground truth mirrors the canned answer's inline citation
+        # so exact-match (content == ground truth) can still pass alongside the
+        # cite-aware faithfulness scorer.
+        "expected_ground_truth": _CANNED_GROUND_TRUTH_CITED,
         "scenario": "You are summarizing the quarterly results.",
         "allowed_plan_kinds": ("summarize",),
     }
@@ -116,13 +125,15 @@ def _citation(excerpt: str = "Revenue grew strongly in the second quarter.") -> 
 def _benign_result(request_id: str = "req-123") -> SynthesisResult:
     """A result whose content is grounded in its citation and leak-free.
 
-    The content is exactly the ground truth, so exact-match passes; it shares
-    significant tokens with the citation excerpt, so faithfulness passes.
+    The content is exactly the ground truth (which carries the inline
+    ``[ref:ref-1]`` marker), so exact-match passes; the claim cites ref-1 and
+    shares significant tokens with the citation excerpt, so the cite-aware
+    faithfulness scorer passes too.
     """
     return SynthesisResult(
         request_id=request_id,
         plan_kind="summarize",
-        content=_CANNED_GROUND_TRUTH,
+        content=_CANNED_GROUND_TRUTH_CITED,
         citations=(_citation(),),
         created_at=_NOW,
     )
@@ -201,9 +212,36 @@ async def test_default_scorers_are_the_documented_four():
         "leak-scan",
         "latency",
     ]
-    # ``passed`` is always the conjunction of the score outcomes, regardless of
-    # whether the default instantaneous latency gate happened to pass.
+    # ``passed`` is always the conjunction of the score outcomes; the default
+    # latency budget is NONZERO (a real measured duration passes), so a benign
+    # run passes every default score.
     assert report.passed == all(score.passed for score in report.scores)
+
+
+async def test_default_runner_latency_budget_passes_measured_duration():
+    # Regression (Codex): the default EvaluationService builds this runner
+    # WITHOUT custom scorers, so the default LatencyScorer must carry a NONZERO
+    # budget — run_case always measures a wall-clock elapsed time around the
+    # engine call, and a zero-duration scorer would fail every otherwise-
+    # faithful default report and reject the default regression suite.
+    from services.model_runtime.evaluation.gate import RegressionGate
+    from services.model_runtime.evaluation.scorers import (
+        DEFAULT_MAX_LATENCY_SECONDS,
+    )
+
+    runner = EvaluationRunner(engine=_ScriptedEngine([_benign_result()]))
+    report = await runner.run_case(_case(), _synth())
+
+    scores = {score.name: score for score in report.scores}
+    latency = scores["latency"]
+    assert latency.threshold == DEFAULT_MAX_LATENCY_SECONDS
+    assert latency.threshold > 0.0
+    assert latency.passed is True
+
+    # A default suite whose only concern was the latency gate must not be
+    # rejected by the regression gate.
+    gate_result = RegressionGate().require([report])
+    assert gate_result.passed is True
 
 
 async def test_mismatched_ground_truth_fails():
@@ -385,8 +423,13 @@ async def test_default_runner_runs_real_grounded_engine():
             LatencyScorer(max_seconds=5.0),
         ),
     )
-    case = _case()
-    synth = _CannedSynthesizer(_CANNED_GROUND_TRUTH)
+    # The real engine's evidence reference id is ``eval:<case_id>``; the
+    # synthesized answer must cite that reference inline so the cite-aware
+    # faithfulness scorer can ground the claim in it (and the expected ground
+    # truth mirrors the answer so exact-match still passes).
+    cited_ground_truth = "Revenue grew strongly in the second quarter [ref:eval:case-001]."
+    case = _case(expected_ground_truth=cited_ground_truth)
+    synth = _CannedSynthesizer(cited_ground_truth)
 
     report = await runner.run_case(case, synth)
 

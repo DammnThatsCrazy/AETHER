@@ -71,7 +71,10 @@ from services.model_runtime.synthesis.models import (  # noqa: E402
 
 _NOW = datetime.now(timezone.utc)
 
-_GROUND_TRUTH = "Revenue grew over the quarter."
+#: The canned ground truth carries the inline ``[ref:ref-1]`` marker matching
+#: the fake engine's citation, so the cite-aware faithfulness scorer can ground
+#: the claim in its cited row (matching ``VerificationEngine._check_cited``).
+_GROUND_TRUTH = "Revenue grew over the quarter [ref:ref-1]."
 
 
 async def _raises(exc_type, awaitable_fn) -> None:

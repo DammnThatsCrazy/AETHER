@@ -49,6 +49,7 @@ from services.model_runtime.evaluation.models import (
     EvaluationScore,
 )
 from services.model_runtime.evaluation.scorers import (
+    DEFAULT_MAX_LATENCY_SECONDS,
     EvaluationScorer,
     ExactMatchScorer,
     FaithfulnessScorer,
@@ -148,7 +149,13 @@ class EvaluationRunner:
                 ExactMatchScorer(),
                 FaithfulnessScorer(),
                 LeakScorer(),
-                LatencyScorer(),
+                # The latency budget is the documented NONZERO default: the
+                # default EvaluationService builds this runner without custom
+                # scorers, and run_case always measures a positive wall-clock
+                # duration, so a zero-duration scorer would fail every
+                # otherwise-faithful default report (and reject the default
+                # regression suite).
+                LatencyScorer(max_seconds=DEFAULT_MAX_LATENCY_SECONDS),
             )
         )
 

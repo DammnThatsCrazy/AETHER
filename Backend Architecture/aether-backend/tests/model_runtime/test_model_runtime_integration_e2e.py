@@ -75,9 +75,16 @@ QUERY = "Summarize the quarterly revenue and cost trends."
 INSTRUCTIONS = "Answer in one sentence."
 EVIDENCE_1 = "Revenue grew strongly in the second quarter of 2026."
 EVIDENCE_2 = "Costs declined sharply during the first quarter of 2026."
+#: The e2e evaluation plane drives ``_EchoSynthesizer(cite=True)``, so the
+#: synthesized content carries inline ``[ref:ref-1]``/``[ref:ref-2]`` markers.
+#: The exact-match ground truth MUST mirror that cited content (markers and
+#: position included): a plain, uncited ground truth scores exact-match 0.0 and
+#: keeps the promotion regression gate red. Regression (PR #529 cite-scoping
+#: gap): the runner/service suites updated their ground truths consistently;
+#: this one was missed and is restored here.
 EXPECTED_GROUND_TRUTH = (
-    "Revenue grew strongly in the second quarter of 2026. "
-    "Costs declined sharply during the first quarter of 2026."
+    "Revenue grew strongly in the second quarter of 2026 [ref:ref-1]. "
+    "Costs declined sharply during the first quarter of 2026 [ref:ref-2]."
 )
 
 
@@ -362,6 +369,21 @@ class _FullPlaneEngine:
         return await self._engine.run(grounded, synthesizer)
 
 
+async def test_e2e_ground_truth_mirrors_cited_echo_content():
+    """Regression (PR #529 gap): EXPECTED_GROUND_TRUTH must mirror the content
+    the cite-aware ``_EchoSynthesizer(cite=True)`` actually produces.
+
+    The full-plane regression gate depends on exact-match scoring 1.0. Because
+    the synthesizer cites each echoed evidence block inline
+    (``[ref:ref-1]``/``[ref:ref-2]``), the ground truth must carry the same
+    markers at the same positions — a plain, uncited ground truth scores
+    exact-match 0.0 and keeps the promotion gate red.
+    """
+    bundle, request = await _build_bundle_and_request()
+    result = await GroundedSynthesisEngine().run(request, _EchoSynthesizer(cite=True))
+    assert result.content == EXPECTED_GROUND_TRUTH
+
+
 async def test_evaluation_plane_full_report_and_regression_gate():
     case = EvaluationCase(
         tenant_id=TENANT,
@@ -381,7 +403,7 @@ async def test_evaluation_plane_full_report_and_regression_gate():
         ),
     )
 
-    report = await runner.run_case(case, _EchoSynthesizer())
+    report = await runner.run_case(case, _EchoSynthesizer(cite=True))
 
     assert isinstance(report, EvaluationReport)
     assert report.case_id == "case-e2e"
