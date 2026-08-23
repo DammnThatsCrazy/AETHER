@@ -34,6 +34,7 @@ import pytest
 from repositories.repos import reset_in_memory_stores
 from repositories.stablecoin_repos import StablecoinPollingCheckpointRepository
 from repositories.typed_repo import reset_typed_in_memory_stores
+from shared.store import reset_in_memory_stores as reset_shared_in_memory_stores
 from services.rewards.delivery_outbox import RewardDeliveryJobRepository
 from services.runtime import dead_letter_sweeper as dls
 from services.derivatives import multi_venue as multi_venue
@@ -370,6 +371,12 @@ def test_venue_sweep_covers_every_persisted_checkpoint_tenant(monkeypatch):
 
 
 def test_dead_letter_sweep_iteration_returns_deterministic_summary():
+    # The summary asserts ABSOLUTE zero counts across the rewards DLQ (repos.py
+    # registry) and the payment dead-letter receipts (shared.store registry).
+    # Reset both registries so a sibling test that dead-lettered a payment
+    # receipt on the same xdist worker cannot bleed rows into this assertion.
+    reset_in_memory_stores()
+    reset_shared_in_memory_stores()
     summary = asyncio.run(dls.run_dead_letter_sweep_iteration(
         limit=1, include_interop_depth=False,
     ))
