@@ -47,16 +47,20 @@ def _emitted(reg: dict) -> dict[Path, str]:
     return {path: emit(reg) for path, emit in _EMITTERS.items()}
 
 
-def _shuffle_registry(reg: dict, rng: random.Random) -> dict:
-    """Deep-copy ``reg`` with every dict's key order and the ``projections``
-    array order shuffled. Emitters must be immune to both."""
+def _shuffle_registry(reg: dict, rng: random.Random, shuffle_lists: bool = True) -> dict:
+    """Deep-copy ``reg`` with every dict's key order, the ``projections`` array
+    order and (optionally) the element order of every list field shuffled.
+    Emitters must be immune to all of these."""
     def shuffle_value(value):
         if isinstance(value, dict):
             items = [(k, shuffle_value(v)) for k, v in value.items()]
             rng.shuffle(items)
             return {k: v for k, v in items}
         if isinstance(value, list):
-            return [shuffle_value(v) for v in value]
+            items = [shuffle_value(v) for v in value]
+            if shuffle_lists:
+                rng.shuffle(items)
+            return items
         return value
 
     top_items = [(k, shuffle_value(v)) for k, v in reg.items()]
@@ -91,21 +95,52 @@ def test_emitters_deterministic_across_runs():
 
 
 def test_key_and_order_shuffle_is_byte_identical(tmp_path):
-    """Shuffling projections order + every key order must not change output."""
+    """Shuffling projections order + every key order + list element order must
+    not change output (order-stability contract)."""
     rng = random.Random(7)
-    for _ in range(5):
-        shuffled = _shuffle_registry(REAL_REG, rng)
+    for trial in range(10):
+        shuffled = _shuffle_registry(REAL_REG, rng, shuffle_lists=True)
         # Write the shuffled registry to a temp copy and load it back (the
         # C3 spec's temp-registry path) so the emitters see a real JSON file
         # round-trip, not just the in-memory shuffle.
-        tmp = tmp_path / "intelligence-projection-registry.json"
+        tmp = tmp_path / f"intelligence-projection-registry-{trial}.json"
         tmp.write_text(json.dumps(shuffled, indent=2, sort_keys=False), encoding="utf-8")
         loaded = json.loads(tmp.read_text(encoding="utf-8"))
-        assert gpc.gen_intelligence_projection_ts(loaded) == gpc.gen_intelligence_projection_ts(REAL_REG)
-        assert gpc.gen_intelligence_projection_py(loaded) == gpc.gen_intelligence_projection_py(REAL_REG)
-        # The markdown emitters must be stable too.
-        assert gpc.gen_intelligence_projection_table_md(loaded) == gpc.gen_intelligence_projection_table_md(REAL_REG)
-        assert gpc.gen_intelligence_projection_graph_md(loaded) == gpc.gen_intelligence_projection_graph_md(REAL_REG)
+        for emit in _EMITTERS.values():
+            assert emit(loaded) == emit(REAL_REG), emit.__name__
+
+
+def test_comment_keys_are_stripped_and_do_not_reorder():
+    """A ``_comment`` annotation key must never leak into artifacts nor reorder
+    the entry's fields (M1 regression)."""
+    reg_with_comment = json.loads(json.dumps(REAL_REG))
+    entry = reg_with_comment["projections"][0]
+    entry["_comment"] = "top-level annotation that must never be emitted"
+    entry["legacyBindings"]["_comment"] = "nested annotation"
+    entry["readinessRequirements"]["_comment"] = "nested annotation 2"
+    # The whole emitted files must be byte-identical to the comment-free ones.
+    assert gpc.gen_intelligence_projection_ts(reg_with_comment) == gpc.gen_intelligence_projection_ts(REAL_REG)
+    assert gpc.gen_intelligence_projection_py(reg_with_comment) == gpc.gen_intelligence_projection_py(REAL_REG)
+    ts = gpc.gen_intelligence_projection_ts(reg_with_comment)
+    py = gpc.gen_intelligence_projection_py(reg_with_comment)
+    assert "_comment" not in ts
+    assert "_comment" not in py
+    assert "top-level annotation that must never be emitted" not in ts
+    assert "top-level annotation that must never be emitted" not in py
+
+
+def test_apply_missing_path_is_drift_in_check_mode():
+    """A missing generated file must be reported as drift by --check (M2)."""
+    missing = REPO_ROOT / "packages" / "shared" / "__missing_projection_artifact__.ts"
+    assert not missing.exists(), "test path must not already exist"
+    try:
+        diffs: list[str] = []
+        gpc._apply(missing, "content", check=True, diffs=diffs)
+        assert diffs, "a missing generated file must be reported as drift in --check mode"
+    finally:
+        # _apply never writes in check mode, but clean up defensively.
+        if missing.exists():
+            missing.unlink()
 
 
 def test_generated_check_exits_zero():

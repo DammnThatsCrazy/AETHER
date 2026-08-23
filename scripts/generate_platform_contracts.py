@@ -2379,19 +2379,31 @@ _OBJECT_FIELD_ORDERS = {
 
 
 def _projection_field_order(value: dict) -> tuple[str, ...]:
-    """Fixed schema field order for a known object; sorted otherwise."""
-    return _OBJECT_FIELD_ORDERS.get(frozenset(value), tuple(sorted(value)))
+    """Fixed schema field order for a known object; sorted otherwise.
+
+    ``_``-prefixed annotation keys (e.g. ``_comment``) are ignored so a comment
+    can never break the frozenset match nor leak into an emitted literal.
+    """
+    known = frozenset(k for k in value if not k.startswith("_"))
+    return _OBJECT_FIELD_ORDERS.get(known, tuple(sorted(known)))
 
 
 def _sorted_value(value: object) -> object:
-    """Recursively sort every list value (order-stable generation).
+    """Recursively normalize a registry value before emission.
 
-    Reordering arrays / shuffling key order across a rebase must produce zero
-    diff; sorting list fields normalizes them before emission. Lists of dicts
+    (a) Every list value is sorted (order-stable generation: reordering arrays
+    / shuffling key order across a rebase yields zero diff) — lists of dicts
     (pending declarations) sort by their ``id`` key.
+    (b) Every ``_``-prefixed key (``_comment`` and any other annotation key) is
+    dropped recursively, so annotation text never reaches the artifacts and the
+    cleaned dict matches the fixed schema field orders.
     """
     if isinstance(value, dict):
-        return {k: _sorted_value(v) for k, v in value.items()}
+        return {
+            k: _sorted_value(v)
+            for k, v in value.items()
+            if not k.startswith("_")
+        }
     if isinstance(value, list):
         items = [_sorted_value(v) for v in value]
         return sorted(
@@ -2996,6 +3008,11 @@ def _apply(path: Path, content: str, check: bool, diffs: list[str]) -> None:
         if check:
             diffs.append(str(path.relative_to(ROOT)))
             return
+    elif check:
+        # A missing generated file is real drift — --check must be blind to
+        # nothing, so a deleted artifact is reported (never silently accepted).
+        diffs.append(str(path.relative_to(ROOT)))
+        return
     if not check:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
