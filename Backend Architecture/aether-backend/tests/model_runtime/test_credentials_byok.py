@@ -17,8 +17,14 @@ from services.model_runtime.credentials.byok import (
 )
 from shared.credentials.interface import CredentialMetadata
 
-#: Fallback env var the resolver reads by name (never the key value).
-ENV_REF = "AETHER_LLM_API_KEY"
+#: Retained operator-facing env var (never the key value). Not served to tenants.
+GLOBAL_ENV_REF = "AETHER_LLM_API_KEY"
+
+#: Tenant-scoped env ref the resolver reads by name for ``tenant-a`` + ``openai``.
+TENANT_ENV_REF = "TENANT-A_OPENAI_API_KEY"
+
+#: Another tenant's env ref (cross-tenant isolation regression).
+OTHER_TENANT_ENV_REF = "TENANT-B_OPENAI_API_KEY"
 
 
 def _meta(
@@ -78,7 +84,7 @@ async def test_backend_path_resolves_configured_with_masked_id():
 @pytest.mark.asyncio
 async def test_env_fallback_resolves_configured_when_env_set(monkeypatch):
     raw = "sk-live-secret-abc123"
-    monkeypatch.setenv(ENV_REF, raw)
+    monkeypatch.setenv(TENANT_ENV_REF, raw)
     resolver = ByokCredentialResolver(NoopCredentialSource())
 
     res = await resolver.resolve("tenant-a", "openai")
@@ -86,7 +92,8 @@ async def test_env_fallback_resolves_configured_when_env_set(monkeypatch):
     assert res.resolved is True
     assert res.configured is True
     assert res.source == "env"
-    assert res.ref == ENV_REF
+    assert res.ref == TENANT_ENV_REF
+    assert res.reason == "tenant-scoped env fallback"
     suffix = hashlib.sha256(raw.encode("utf-8")).hexdigest()[-4:]
     assert res.masked_identifier == "****" + suffix
     assert raw not in res.masked_identifier
@@ -94,7 +101,8 @@ async def test_env_fallback_resolves_configured_when_env_set(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_credential_resolves_not_configured(monkeypatch):
-    monkeypatch.delenv(ENV_REF, raising=False)
+    monkeypatch.delenv(TENANT_ENV_REF, raising=False)
+    monkeypatch.delenv(GLOBAL_ENV_REF, raising=False)
     resolver = ByokCredentialResolver(NoopCredentialSource())
 
     res = await resolver.resolve("tenant-a", "openai")
@@ -104,6 +112,69 @@ async def test_no_credential_resolves_not_configured(monkeypatch):
     assert res.source == "none"
     assert res.reason == "no credential configured for provider"
     assert res.masked_identifier is None
+
+
+@pytest.mark.asyncio
+async def test_global_env_ref_never_served_to_tenants(monkeypatch):
+    # Regression: the retained operator-facing global ref (AETHER_LLM_API_KEY)
+    # and ANOTHER tenant's scoped ref must NEVER satisfy this tenant's resolve —
+    # otherwise any tenant could use the operator's/another tenant's key (IDOR).
+    monkeypatch.setenv(GLOBAL_ENV_REF, "sk-global-operator-key-0000")
+    monkeypatch.setenv(OTHER_TENANT_ENV_REF, "sk-other-tenant-key-0000")
+    monkeypatch.delenv(TENANT_ENV_REF, raising=False)
+    resolver = ByokCredentialResolver(NoopCredentialSource())
+
+    res = await resolver.resolve("tenant-a", "openai")
+
+    assert res.resolved is True
+    assert res.configured is False
+    assert res.source == "none"
+    assert res.reason == "no credential configured for provider"
+    assert res.masked_identifier is None
+
+
+@pytest.mark.asyncio
+async def test_env_ref_rejects_separator_forgery_in_tenant_id(monkeypatch):
+    # A tenant id containing ``_`` must never construct the ref of a
+    # differently-split tenant+provider pair (concatenation-forgery IDOR).
+    monkeypatch.setenv("A_B_OPENAI_API_KEY", "sk-forged-pair-key-0000")
+    resolver = ByokCredentialResolver(NoopCredentialSource())
+
+    res = await resolver.resolve("a_b", "openai")
+
+    assert res.configured is False
+    assert res.source == "none"
+    assert res.reason == "no credential configured for provider"
+    assert res.masked_identifier is None
+
+
+@pytest.mark.asyncio
+async def test_env_ref_rejects_separator_forgery_in_provider(monkeypatch):
+    # A provider-like string containing ``_`` must fail closed the same way.
+    monkeypatch.setenv("A_B_OPENAI_API_KEY", "sk-forged-pair-key-0000")
+    resolver = ByokCredentialResolver(NoopCredentialSource())
+
+    res = await resolver.resolve("a", "b_openai")
+
+    assert res.configured is False
+    assert res.source == "none"
+    assert res.masked_identifier is None
+
+
+@pytest.mark.asyncio
+async def test_env_fallback_is_tenant_scoped(monkeypatch):
+    # tenant-b's scoped key must not satisfy tenant-a's resolve, and vice-versa.
+    monkeypatch.setenv(OTHER_TENANT_ENV_REF, "sk-tenant-b-key-0000")
+    resolver = ByokCredentialResolver(NoopCredentialSource())
+
+    a = await resolver.resolve("tenant-a", "openai")
+    b = await resolver.resolve("tenant-b", "openai")
+
+    assert a.configured is False
+    assert a.source == "none"
+    assert b.configured is True
+    assert b.source == "env"
+    assert b.ref == OTHER_TENANT_ENV_REF
 
 
 @pytest.mark.asyncio
@@ -154,7 +225,7 @@ async def test_source_failure_fails_closed():
 @pytest.mark.asyncio
 async def test_resolve_never_leaks_raw_key(monkeypatch):
     raw = "sk-super-secret-raw-key-material"
-    monkeypatch.setenv(ENV_REF, raw)
+    monkeypatch.setenv(TENANT_ENV_REF, raw)
     resolver = ByokCredentialResolver(NoopCredentialSource())
 
     res = await resolver.resolve("tenant-a", "openai")
@@ -181,12 +252,14 @@ async def test_backend_resolution_never_leaks_plaintext():
     assert "zz99" in dumped  # only the masked tag surfaces
 
 
-def test_is_configured_tracks_env_ref_presence(monkeypatch):
-    monkeypatch.delenv(ENV_REF, raising=False)
+def test_is_configured_tracks_global_env_ref_presence(monkeypatch):
+    # is_configured reflects the retained operator-facing global ref only; it
+    # does not gate tenant resolution (which is tenant-scoped in resolve()).
+    monkeypatch.delenv(GLOBAL_ENV_REF, raising=False)
     resolver = ByokCredentialResolver(NoopCredentialSource())
     assert resolver.is_configured("openai") is False
 
-    monkeypatch.setenv(ENV_REF, "present")
+    monkeypatch.setenv(GLOBAL_ENV_REF, "present")
     assert resolver.is_configured("openai") is True
 
 

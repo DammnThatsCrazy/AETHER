@@ -112,9 +112,9 @@ async def test_disabled_gate_does_not_touch_resolver():
 
 
 async def test_resolve_enabled_delegates_to_resolver(monkeypatch):
-    # With a resolvable env key present, enabled=True must delegate rather than
-    # short-circuit on the (disabled) marker.
-    monkeypatch.setenv(_ENV_REF, "sk-credential-integration-test-0000")
+    # With a resolvable tenant-scoped env key present, enabled=True must
+    # delegate rather than short-circuit on the (disabled) marker.
+    monkeypatch.setenv("TENANT-1_ANTHROPIC_API_KEY", "sk-credential-integration-test-0000")
     service = CredentialService(_resolver(), config=ResolverConfig(enabled=True))
     res = await service.resolve("tenant-1", "anthropic")
     assert res.reason != "credential resolution disabled"

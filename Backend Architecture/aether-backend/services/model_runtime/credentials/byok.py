@@ -14,9 +14,16 @@ Resolution order (:meth:`ByokCredentialResolver.resolve`):
    ``configured=True`` (source=``"secret_backend"``). A missing credential is
    signalled by :class:`~services.model_runtime.credentials.models.CredentialNotResolved`
    (backend reached, nothing stored) and falls through to env.
-3. **Env fallback** — when :meth:`is_configured` is true (the env ref is set),
-   resolves as ``configured=True`` (source=``"env"``) with a masked
-   ``"****"+last4(sha256(value))`` identifier — never the value itself.
+3. **Env fallback (tenant-scoped only)** — when the *per-tenant* env ref
+   ``{TENANT_ID}_{PROVIDER}_API_KEY`` is set, resolves as ``configured=True``
+   (source=``"env"``) with a masked ``"****"+last4(sha256(value))`` identifier —
+   never the value itself. The ref embeds the tenant, so a missing per-tenant
+   key can never resolve to another tenant's key or the operator's global key
+   (cross-tenant credential use is impossible by construction). Both
+   identifiers are constrained to ``[A-Z0-9-]`` (see
+   :meth:`_tenant_env_ref`) so a tenant/provider containing ``_`` can never
+   forge a differently-split ref pair — the fallback fails closed to
+   ``source="none"`` instead.
 4. **Otherwise** — ``configured=False, resolved=True, source="none"`` with reason
    ``"no credential configured for provider"``.
 
@@ -35,6 +42,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import re
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
@@ -76,9 +84,12 @@ class CredentialUnusable(CredentialResolverError):
 class ByokCredentialResolver:
     """Resolves per-tenant LLM credentials from cache, secret backend, then env.
 
-    ``env_credential_ref`` is the *name* of the fallback env var (never the key
-    value). ``is_configured`` fail-opens the env path only when that ref is set;
-    the value never appears in any resolution, log, or prompt.
+    ``env_credential_ref`` is the *name* of the retained, operator-facing env
+    var (never the key value) — kept for health/protocol tooling and no longer
+    served to tenant resolution. The resolve-time env path keys on a
+    **tenant-scoped** ref (``{TENANT}_{PROVIDER}_API_KEY``) so one tenant can
+    never resolve another tenant's or the operator's global key. The value
+    never appears in any resolution, log, or prompt.
     """
 
     def __init__(
@@ -93,13 +104,39 @@ class ByokCredentialResolver:
         self._env_credential_ref = env_credential_ref
 
     def is_configured(self, provider: str) -> bool:
-        """True when the fallback env ref is set (fail-open only for env path).
+        """True when the retained global ``env_credential_ref`` is set.
 
-        ``provider`` is accepted to keep the surface provider-parameterized; the
-        current env path keys on the single configured ``env_credential_ref``.
-        Only presence is checked — the value is never read into a model.
+        Operator/health-facing only — this no longer gates tenant resolution,
+        which keys on a per-tenant ref (see :meth:`resolve`). Presence-only
+        check; the value is never read into a model.
         """
         return bool(os.getenv(self._env_credential_ref))
+
+    #: Allowed identifier charset for the per-tenant env ref. ``_`` (and any
+    #: other separator-looking character) is excluded so the ref cannot be
+    #: forged by concatenation: without this, a tenant ``a_b`` + provider
+    #: ``openai`` would construct the same ref as tenant ``a`` + provider
+    #: ``b_openai`` (cross-tenant/cross-provider key reach).
+    _ENV_REF_IDENTIFIER_RE = re.compile(r"^[A-Z0-9-]+$")
+
+    @staticmethod
+    def _tenant_env_ref(tenant_id: str, provider: str) -> str | None:
+        """Per-tenant env ref: ``{TENANT_ID}_{PROVIDER}_API_KEY``.
+
+        Returns ``None`` when either identifier contains a character outside
+        ``[A-Z0-9-]`` — the env fallback then fails closed instead of
+        resolving to another tenant's or provider's key.
+        """
+        tenant = tenant_id.upper()
+        provider_ref = provider.upper()
+        if not (
+            ByokCredentialResolver._ENV_REF_IDENTIFIER_RE.fullmatch(tenant)
+            and ByokCredentialResolver._ENV_REF_IDENTIFIER_RE.fullmatch(
+                provider_ref
+            )
+        ):
+            return None
+        return f"{tenant}_{provider_ref}_API_KEY"
 
     async def resolve(self, tenant_id: str, provider: str) -> CredentialResolution:
         """Resolve a per-tenant provider credential at call time (masked only)."""
@@ -157,19 +194,22 @@ class ByokCredentialResolver:
                 reason="resolved from secret backend",
             )
 
-        # 3. Env fallback (only when the env ref is set).
-        if self.is_configured(provider):
-            value = os.getenv(self._env_credential_ref)
-            if value:
-                return self._resolution(
-                    tenant_id,
-                    provider,
-                    self._env_credential_ref,
-                    configured=True,
-                    source="env",
-                    masked=mask_identifier(value),
-                    reason="env fallback",
-                )
+        # 3. Env fallback — tenant-scoped only. The ref embeds the tenant and
+        #    provider, so a missing per-tenant key can never resolve to another
+        #    tenant's (or the operator's global) key: cross-tenant credential
+        #    use (IDOR) is impossible by construction.
+        tenant_ref = self._tenant_env_ref(tenant_id, provider)
+        value = os.getenv(tenant_ref) if tenant_ref is not None else None
+        if value:
+            return self._resolution(
+                tenant_id,
+                provider,
+                tenant_ref,
+                configured=True,
+                source="env",
+                masked=mask_identifier(value),
+                reason="tenant-scoped env fallback",
+            )
 
         # 4. No credential configured for this provider.
         return self._resolution(
