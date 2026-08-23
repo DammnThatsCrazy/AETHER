@@ -14,28 +14,36 @@ Rule groups (each returns ``list[Violation]``; severity ``"error"`` gates CI):
   unique lower_snake; ids unique + lower_snake; every required per-entry field
   present and typed; ``ownsCanonicalTruth is False``; enum membership for
   kind/state/policy/migration-mode/temporal-mode/subject-kind; pending entries
-  well-formed ``{id, kind, reason, resolvesInProjection}``.
-- dependency_dag — projection deps ⊆ registry ids or declared pending; no
-  self-dependency; required ``projectionDependencies`` cycles are ``error`` (an
-  ordering deadlock — a projection can never implement); union cycles
-  (required ∪ optional) that exist only through an optional edge are ``warning``
-  (benign — the lazy runtime degrades missing optional deps to
-  ``not_applicable``); ``implemented`` ⇒ zero pending + zero unresolved;
-  dangling pending (target now resolves) ⇒ error; ``in_flight``/``registered``
-  may carry pending.
-- cross_registry — surfaceIds ⊆ surface registry; supportedTemporalModes ⊆ the
-  union of the projection's surfaces' modes; metricRefs ⊆ metric registry;
-  capabilityKeys well-formed ``<id>.<verb>``; graphMutationPolicy valid +
-  ``canonical_gateway_only`` requires a non-empty graph-mutation registry;
-  unresolved-but-declared-pending legal for non-implemented, illegal for
-  implemented; dangling pending ⇒ error. Pending-related rows are tagged
-  ``rule="order_resilience"``.
+  well-formed ``{id, kind, reason, resolvesInProjection}`` with ``kind`` ∈
+  {spine, projection, metric, surface} and ``resolvesInProjection`` a registry
+  projection id.
+- dependency_dag — projection deps ⊆ registry ids or declared pending (a dep
+  counts as declared-pending ONLY via a ``kind=="projection"`` pending entry —
+  a kind:"metric"/"spine" pending carrying the same id does not declare a
+  projection dep); no self-dependency; required ``projectionDependencies``
+  cycles are ``error`` (an ordering deadlock — a projection can never
+  implement); union cycles (required ∪ optional) that exist only through an
+  optional edge are ``warning`` (benign — the lazy runtime degrades missing
+  optional deps to ``not_applicable``); ``implemented`` ⇒ zero pending + zero
+  unresolved; dangling pending (target now resolves in the spine or projection
+  id space, whatever the declared ``kind`` label) ⇒ error; ``in_flight``/
+  ``registered`` may carry pending.
+- cross_registry — surfaceIds ⊆ surface registry (a surfaceId is declared
+  pending only via ``kind=="surface"``); supportedTemporalModes ⊆ the union of
+  the projection's surfaces' modes; metricRefs ⊆ metric registry (a metricRef is
+  declared pending only via ``kind=="metric"``); capabilityKeys well-formed
+  ``<id>.<verb>``; graphMutationPolicy valid + ``canonical_gateway_only``
+  requires a non-empty graph-mutation registry; unresolved-but-declared-pending
+  legal for non-implemented, illegal for implemented; dangling pending (target
+  resolves in the metric or surface id space, whatever the declared ``kind``
+  label) ⇒ error. Pending-related rows are tagged ``rule="order_resilience"``.
 - inventory — ``in_flight`` ⇒ legacyBindings non-empty and every binding
   resolves (routes against route_registry.yaml ``known_prefixes`` OR backend
-  Python source; surfaces against the surface registry; services exist on disk);
-  ``registered`` ⇒ non-empty blueprint; ``implemented`` ⇒ migrationMode
-  ``converged`` + zero pending; ``deprecated`` ⇒ deprecatedReason present;
-  non-deprecated ⇒ blueprint is a ``docs/**.md`` path.
+  Python source route-DECLARATION lines; surfaces against the surface registry;
+  services exist on disk); ``registered`` ⇒ non-empty blueprint; ``implemented``
+  ⇒ migrationMode ``converged`` + zero pending + implementationBlueprint exists
+  on disk; ``deprecated`` ⇒ deprecatedReason present; non-deprecated ⇒ blueprint
+  is a ``docs/**.md`` path.
 - ownership — canonicalAuthorities ⊆ AUTHORITY_INDEX or declared pending;
   ``projector-ownership`` is never a canonical authority.
 - surface_honesty — surfaceIds non-empty; ``in_flight`` resolved surfaceIds ⊆
@@ -297,8 +305,18 @@ _DICT_FIELDS = (
 _LOWER_SNAKE_RE = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
 _ROUTE_FRAGMENT_RE = re.compile(r"/v1/[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)*")
 _ROUTE_FULL_RE = re.compile(r"^/v1/[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)*$")
+# A route-declaration line: one of these markers must be present before a
+# ``/v1/...`` literal counts as evidence of a mounted router. String literals
+# in tests/assertions/config are NOT route declarations.
+_ROUTE_DECL_LINE_RE = re.compile(
+    r"APIRouter\(|include_router\(|@router\.|@app\.|add_api_route\(|prefix="
+)
 
 _PENDING_REQUIRED_KEYS = ("id", "kind", "reason", "resolvesInProjection")
+# A pending declaration's ``kind`` namespaces its ``id`` into one of the four
+# canonical id spaces (spine plane, projection registry, metric registry,
+# surface registry).
+_PENDING_KINDS = frozenset({"spine", "projection", "metric", "surface"})
 
 
 @dataclass
@@ -339,17 +357,20 @@ def _backend_py_paths() -> tuple[str, ...]:
 
 @functools.lru_cache(maxsize=1)
 def _backend_route_strings() -> frozenset[str]:
-    """Every ``/v1/...`` path literal (and each of its segment prefixes) found
-    in backend Python source.
+    """Every ``/v1/...`` path literal on a ROUTE-DECLARATION line in backend
+    Python source, plus each of its segment prefixes.
 
-    Used as the OR-rule fallback for legacy route resolution: several legacy
-    routers (``/v1/risk-overlays``, ``/v1/integrations``,
-    ``/v1/provider-connections``, ``/v1/client-sync``, ``/v1/agent``) are
-    feature-flag-gated off and legitimately absent from route_registry.yaml's
-    ``known_prefixes``, but they are real, mounted routers and appear in source
-    — sometimes only as the prefix of a longer literal (e.g. ``/v1/integrations``
-    appears as ``/v1/integrations/connectors``), which is why every segment
-    prefix is indexed.
+    Only lines carrying a route-declaration marker count — ``APIRouter(``,
+    ``include_router(``, an ``@router.``/``@app.`` decorator, ``add_api_route(``
+    or ``prefix=``. A ``/v1/...`` string that appears in a test assertion,
+    config literal or docstring is NOT evidence of a mounted route and must not
+    let a fictional legacy binding through the inventory gate. The genuinely
+    mounted but feature-flag-gated routers (``/v1/risk-overlays``,
+    ``/v1/integrations``, ``/v1/provider-connections``, ``/v1/client-sync``,
+    ``/v1/agent``) are all declared this way — sometimes only as the prefix of
+    a longer literal (e.g. ``/v1/integrations`` appears as
+    ``/v1/integrations/connectors``), which is why every segment prefix of a
+    matched declaration line is indexed.
     """
     found: set[str] = set()
     for rel in _backend_py_paths():
@@ -357,11 +378,14 @@ def _backend_route_strings() -> frozenset[str]:
             content = (ROOT / rel).read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for match in _ROUTE_FRAGMENT_RE.findall(content):
-            prefix = ""
-            for part in match.split("/")[1:]:
-                prefix += "/" + part
-                found.add(prefix)
+        for line in content.splitlines():
+            if not _ROUTE_DECL_LINE_RE.search(line):
+                continue
+            for match in _ROUTE_FRAGMENT_RE.findall(line):
+                prefix = ""
+                for part in match.split("/")[1:]:
+                    prefix += "/" + part
+                    found.add(prefix)
     return frozenset(found)
 
 
@@ -566,6 +590,7 @@ def validate_registry_schema(reg: dict) -> list[Violation]:
         ]
 
     ids = [p.get("id") for p in projections]
+    id_set = {i for i in ids if isinstance(i, str)}
     if len(set(ids)) != len(ids):
         violations.append(
             Violation("registry_schema", "error", "projection ids must be unique")
@@ -675,6 +700,31 @@ def validate_registry_schema(reg: dict) -> list[Violation]:
                         pid,
                     )
                 )
+                continue
+            kind = decl.get("kind")
+            if kind not in _PENDING_KINDS:
+                violations.append(
+                    Violation(
+                        "registry_schema",
+                        "error",
+                        f"pending kind {kind!r} must be one of {sorted(_PENDING_KINDS)}",
+                        pid,
+                    )
+                )
+            resolves = decl.get("resolvesInProjection")
+            if (
+                not isinstance(resolves, str)
+                or not _LOWER_SNAKE_RE.fullmatch(resolves)
+                or resolves not in id_set
+            ):
+                violations.append(
+                    Violation(
+                        "registry_schema",
+                        "error",
+                        f"pending resolvesInProjection {resolves!r} must be a registry projection id",
+                        pid,
+                    )
+                )
 
     return violations
 
@@ -687,7 +737,15 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
 
     for p in projections:
         pid = p.get("id")
-        declared = _pending_ids(p)
+        # A projection dependency may count as declared-pending ONLY via a
+        # pending entry whose kind namespaces the projection id space
+        # (kind=="projection"). A kind:"metric"/"spine" pending that happens to
+        # carry the same id does not declare a projection dep pending.
+        declared = {
+            d.get("id")
+            for d in _pending_decls(p)
+            if d.get("kind") == "projection"
+        }
         for dep in list(p.get("projectionDependencies", [])) + list(
             p.get("optionalProjectionDependencies", [])
         ):
@@ -773,8 +831,12 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
         pid = p.get("id")
         for decl in _pending_decls(p):
             target = decl.get("id")
-            kind = decl.get("kind")
-            if kind == "spine" and target in SPINE_INDEX:
+            # Kind-label-immune dangling ratchet: a pending declaration is
+            # dangling the moment its target resolves in the spine or projection
+            # id space, REGARDLESS of the declared ``kind``. Relabelling a
+            # now-resolved projection as kind:"spine" (or a resolved spine as
+            # kind:"projection") must not dodge the ratchet.
+            if target in SPINE_INDEX:
                 violations.append(
                     Violation(
                         "order_resilience",
@@ -783,7 +845,7 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
                         pid,
                     )
                 )
-            elif kind == "projection" and target in ids:
+            elif target in ids:
                 violations.append(
                     Violation(
                         "order_resilience",
@@ -808,12 +870,23 @@ def validate_cross_registry(reg: dict, ctx: dict) -> list[Violation]:
     for p in reg.get("projections", []):
         pid = p.get("id")
         state = p.get("implementationState")
-        declared = _pending_ids(p)
+        # Kind-namespaced declared sets: a surfaceId may be declared pending
+        # only via a kind=="surface" pending; a metricRef only via kind=="metric".
+        surface_declared = {
+            d.get("id")
+            for d in _pending_decls(p)
+            if d.get("kind") == "surface"
+        }
+        metric_declared = {
+            d.get("id")
+            for d in _pending_decls(p)
+            if d.get("kind") == "metric"
+        }
 
         for surface in p.get("surfaceIds", []):
             if surface in surface_ids:
                 continue
-            if surface in declared:
+            if surface in surface_declared:
                 if state == "implemented":
                     violations.append(
                         Violation(
@@ -852,7 +925,7 @@ def validate_cross_registry(reg: dict, ctx: dict) -> list[Violation]:
         for metric in p.get("metricRefs", []):
             if metric in metric_names:
                 continue
-            if metric in declared:
+            if metric in metric_declared:
                 if state == "implemented":
                     violations.append(
                         Violation(
@@ -902,8 +975,12 @@ def validate_cross_registry(reg: dict, ctx: dict) -> list[Violation]:
 
         for decl in _pending_decls(p):
             target = decl.get("id")
-            kind = decl.get("kind")
-            if kind == "metric" and target in metric_names:
+            # Kind-label-immune dangling ratchet over the metric/surface id
+            # spaces: a pending entry is dangling once its target resolves in
+            # either namespace, regardless of the declared ``kind``. Relabelling
+            # a resolved metric as kind:"surface" (or vice-versa) cannot dodge
+            # it. (Spine/projection ratchets live in validate_dependency_dag.)
+            if target in metric_names:
                 violations.append(
                     Violation(
                         "order_resilience",
@@ -912,7 +989,7 @@ def validate_cross_registry(reg: dict, ctx: dict) -> list[Violation]:
                         pid,
                     )
                 )
-            elif kind == "surface" and target in surface_ids:
+            elif target in surface_ids:
                 violations.append(
                     Violation(
                         "order_resilience",
@@ -1016,6 +1093,16 @@ def validate_inventory(reg: dict, ctx: dict) -> list[Violation]:
                         "inventory",
                         "error",
                         "implemented projection must have zero pending declarations",
+                        pid,
+                    )
+                )
+            blueprint = p.get("implementationBlueprint")
+            if isinstance(blueprint, str) and not (ROOT / blueprint).exists():
+                violations.append(
+                    Violation(
+                        "inventory",
+                        "error",
+                        f"implementationBlueprint {blueprint!r} does not exist on disk",
                         pid,
                     )
                 )

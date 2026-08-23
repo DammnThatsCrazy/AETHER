@@ -26,6 +26,7 @@ from lib.intelligence_projection_validation import (  # noqa: E402
     AUTHORITY_INDEX,
     PROJECTION_CAPABILITY_VERBS,
     SPINE_INDEX,
+    validate_dependency_dag,
     validate_registry_schema,
 )
 
@@ -105,6 +106,63 @@ def _registry() -> dict:
 
 def _projections() -> list[dict]:
     return _registry()["projections"]
+
+
+def _mk_reg(entries: list[dict]) -> dict:
+    """Minimal in-memory registry with the vocab arrays the schema gate needs."""
+    return {
+        "schemaVersion": "1.0.0",
+        "contractVersion": "1.0.0",
+        "projectionKinds": ["profile_360", "measurement_360", "risk_360"],
+        "implementationStates": ["registered", "in_flight", "implemented", "deprecated"],
+        "graphMutationPolicies": ["read_only", "canonical_gateway_only"],
+        "sectionStates": ["live", "deprecated", "provisioned"],
+        "temporalModes": ["window", "as_of", "compare", "relative"],
+        "migrationModes": ["adapter", "converged", "none"],
+        "subjectKinds": ["person", "company", "campaign", "measurement"],
+        "projections": entries,
+    }
+
+
+def _entry(pid: str, **overrides: object) -> dict:
+    """A fully-populated per-entry fixture; override only the field under test."""
+    base = {
+        "id": pid,
+        "displayName": pid,
+        "projectionKind": "profile_360",
+        "implementationState": "in_flight",
+        "implementationBlueprint": "docs/aether-x.md",
+        "ownsCanonicalTruth": False,
+        "subjectKinds": ["person"],
+        "canonicalAuthorities": [],
+        "hardDependencies": [],
+        "projectionDependencies": [],
+        "optionalProjectionDependencies": [],
+        "inputRefs": [],
+        "outputSections": [],
+        "supportedTemporalModes": ["window"],
+        "surfaceIds": ["surface_evolve"],
+        "capabilityKeys": [],
+        "metricRefs": [],
+        "graphMutationPolicy": "read_only",
+        "requiresEvidence": False,
+        "requiresDimensionState": False,
+        "requiresFreshness": False,
+        "requiresLimitations": False,
+        "tenantScoped": True,
+        "policyScoped": True,
+        "readinessRequirements": {},
+        "security": {},
+        "costProfile": {},
+        "commercialClassification": {},
+        "legacyBindings": {"migrationMode": "adapter"},
+        "deprecatedReason": None,
+        "successorId": None,
+        "pendingAuthority": [],
+        "pendingReference": [],
+    }
+    base.update(overrides)
+    return base
 
 
 def test_registry_has_18_projections() -> None:
@@ -205,3 +263,77 @@ def test_capability_keys_well_formed() -> None:
 
 def test_validate_registry_schema_returns_empty() -> None:
     assert validate_registry_schema(_registry()) == []
+
+
+# --- N1: schema negative fixtures (adversarial-verifier gap) -----------------
+
+
+def _schema_messages(reg: dict) -> list[str]:
+    return [v.message for v in validate_registry_schema(reg)]
+
+
+def test_negative_duplicate_id_reported() -> None:
+    reg = _mk_reg([_entry("a"), _entry("a")])
+    assert any("projection ids must be unique" in m for m in _schema_messages(reg))
+
+
+def test_negative_owns_canonical_truth_true_reported() -> None:
+    reg = _mk_reg([_entry("a", ownsCanonicalTruth=True)])
+    assert any("ownsCanonicalTruth must be False" in m for m in _schema_messages(reg))
+
+
+def test_negative_missing_required_field_reported() -> None:
+    entry = _entry("a")
+    del entry["inputRefs"]
+    reg = _mk_reg([entry])
+    assert any("missing required field 'inputRefs'" in m for m in _schema_messages(reg))
+
+
+def test_negative_bad_enum_reported() -> None:
+    reg = _mk_reg([_entry("a", projectionKind="not_a_kind")])
+    assert any("unknown projectionKind 'not_a_kind'" in m for m in _schema_messages(reg))
+
+
+def test_negative_pending_bad_kind_reported() -> None:
+    pending = {
+        "id": "future_x",
+        "kind": "not_a_real_kind",
+        "reason": "wip",
+        "resolvesInProjection": "a",
+    }
+    reg = _mk_reg([_entry("a", pendingAuthority=[pending])])
+    assert any("pending kind 'not_a_real_kind'" in m for m in _schema_messages(reg))
+
+
+def test_negative_pending_bad_resolves_in_projection_reported() -> None:
+    pending = {
+        "id": "future_x",
+        "kind": "spine",
+        "reason": "wip",
+        "resolvesInProjection": "WRONG_PROJECTION",
+    }
+    reg = _mk_reg([_entry("a", pendingAuthority=[pending])])
+    assert any(
+        "resolvesInProjection 'WRONG_PROJECTION'" in m for m in _schema_messages(reg)
+    )
+
+
+def test_negative_relabelled_dangling_pending_reported() -> None:
+    # A now-resolved projection re-declared as kind:"spine" must NOT dodge the
+    # dangling ratchet: the id-space union (SPINE_INDEX ∪ registry ids) decides,
+    # not the declared ``kind`` label. Exercises validate_dependency_dag.
+    pending = {
+        "id": "profile360",
+        "kind": "spine",
+        "reason": "stale",
+        "resolvesInProjection": "a",
+    }
+    reg = _mk_reg([_entry("a", pendingAuthority=[pending]), _entry("profile360")])
+    violations = validate_dependency_dag(reg)
+    assert any(
+        v.rule == "order_resilience"
+        and v.severity == "error"
+        and "dangling pending projection" in v.message
+        and "profile360" in v.message
+        for v in violations
+    )

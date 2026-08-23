@@ -18,7 +18,9 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from lib.intelligence_projection_validation import (  # noqa: E402
     Violation,
+    load_context,
     validate_dependency_dag,
+    validate_inventory,
 )
 
 _REGISTRY_JSON = (
@@ -42,14 +44,24 @@ def _entry(
     state: str = "in_flight",
     pending_auth: list[dict] | None = None,
     pending_ref: list[dict] | None = None,
+    blueprint: str = "docs/aether-implementation-blueprint.md",
+    routes: list[str] | None = None,
+    migration_mode: str = "adapter",
 ) -> dict:
     return {
         "id": pid,
         "implementationState": state,
+        "implementationBlueprint": blueprint,
         "projectionDependencies": deps or [],
         "optionalProjectionDependencies": optional or [],
         "pendingAuthority": pending_auth or [],
         "pendingReference": pending_ref or [],
+        "legacyBindings": {
+            "routes": routes or [],
+            "surfaceIds": [],
+            "services": [],
+            "migrationMode": migration_mode,
+        },
     }
 
 
@@ -201,3 +213,89 @@ def test_real_registry_has_no_required_cycles() -> None:
         "profile360 -> risk360(optional)",
     ):
         assert optional_edge in joined, f"missing optional-edge cycle warning for {optional_edge}"
+
+
+# --- N2: regression pins (adversarial-verifier gap) --------------------------
+
+
+def test_inventory_rejects_fictional_routes() -> None:
+    # A /v1/... string that only exists in a test assertion (not on a
+    # route-declaration line in backend source) must NOT resolve.
+    fictional = ["/v1/does-not-exist", "/v1/invented", "/v1/definitely-not-a-route"]
+    reg = _mk_reg([_entry("a", routes=fictional)])
+    violations = validate_inventory(reg, load_context())
+    errors = [v for v in violations if v.rule == "inventory" and v.severity == "error"]
+    assert len(errors) == 3
+    for route in fictional:
+        assert any(route in v.message for v in errors), f"{route} wrongly resolved"
+
+
+def test_inventory_accepts_genuine_source_only_routes() -> None:
+    # The genuinely mounted but feature-flag-gated routers are declared on
+    # APIRouter(prefix=...) lines in backend source and must keep resolving.
+    genuine = [
+        "/v1/risk-overlays",
+        "/v1/integrations",
+        "/v1/agent",
+        "/v1/provider-connections",
+        "/v1/client-sync",
+    ]
+    reg = _mk_reg([_entry("a", routes=genuine)])
+    violations = validate_inventory(reg, load_context())
+    assert not any("no known prefix" in v.message for v in violations), [
+        v.message for v in violations
+    ]
+
+
+def test_implemented_with_dangling_pending_errors() -> None:
+    # Combined M2 invariant: an implemented projection carrying a dangling
+    # pending declaration errors on BOTH the zero-pending rule and the
+    # kind-label-immune dangling ratchet (profile360 relabelled as spine).
+    pending = [
+        {"id": "profile360", "kind": "spine", "reason": "stale", "resolvesInProjection": "a"}
+    ]
+    reg = _mk_reg(
+        [_entry("a", state="implemented", pending_auth=pending), _entry("profile360")]
+    )
+    violations = validate_dependency_dag(reg)
+    errors = [v for v in violations if v.severity == "error"]
+    assert any("implemented projection must have zero pending" in v.message for v in errors)
+    assert any("dangling pending projection" in v.message for v in errors)
+
+
+# --- N5: implementationBlueprint existence for implemented -------------------
+
+
+def test_implemented_blueprint_must_exist_on_disk() -> None:
+    reg = _mk_reg(
+        [
+            _entry(
+                "a",
+                state="implemented",
+                migration_mode="converged",
+                blueprint="docs/does-not-exist-blueprint.md",
+            )
+        ]
+    )
+    violations = validate_inventory(reg, load_context())
+    assert any(
+        v.rule == "inventory"
+        and v.severity == "error"
+        and "does not exist on disk" in v.message
+        for v in violations
+    )
+
+
+def test_implemented_blueprint_existing_path_ok() -> None:
+    reg = _mk_reg(
+        [
+            _entry(
+                "a",
+                state="implemented",
+                migration_mode="converged",
+                blueprint="docs/ACCESS-CONTROL.md",
+            )
+        ]
+    )
+    violations = validate_inventory(reg, load_context())
+    assert not any("does not exist on disk" in v.message for v in violations)
