@@ -97,6 +97,119 @@ def test_query_plan_rejects_gremlin_cypher_and_graphql():
         assert any("raw query text" in error for error in result.errors)
 
 
+def test_query_plan_rejects_write_oriented_sql():
+    fragments = (
+        "DELETE FROM accounts",
+        "delete from accounts where id = 7",
+        "INSERT INTO accounts VALUES (1, 'acme')",
+        "UPDATE accounts SET balance = 0",
+        "DROP TABLE accounts",
+        "TRUNCATE TABLE accounts",
+        "ALTER TABLE accounts ADD COLUMN password TEXT",
+        "CREATE TABLE accounts (id INT)",
+        "MERGE INTO accounts USING staging ON (id)",
+        "REPLACE INTO accounts VALUES (1, 'acme')",
+        "GRANT ALL ON accounts TO app_role",
+        "REVOKE SELECT ON accounts FROM public",
+    )
+    for fragment in fragments:
+        plan = {"steps": [{"intent": fragment, "mode": "allowlisted"}]}
+        result = SchemaOutputValidator().validate("query_plan", plan)
+        assert result.valid is False, f"expected rejection for {fragment!r}"
+        assert any("raw query text" in error for error in result.errors)
+
+
+def test_query_plan_rejects_additional_gremlin_and_cypher_forms():
+    fragments = (
+        "g.E('owns').to('Account')",
+        "g.traversal().V().has('id', 'acct-1')",
+        "g.inject([1, 2]).out('owns')",
+        "MATCH (a) RETURN a",  # Cypher without the literal word "cypher"
+        "OPTIONAL MATCH (a)-[:OWNS]->(b)",
+        "CREATE (a:Account {id: 'acct-1'})",  # Cypher write
+        "MERGE (a:Account {id: 'acct-1'})",  # Cypher write
+        "UNWIND [1, 2] AS x RETURN x",
+        "mutation { deleteAccount }",  # GraphQL mutation
+        "query { accounts { id } }",  # GraphQL query
+        "fragment AccountFields on Account { id }",
+    )
+    for fragment in fragments:
+        plan = {"steps": [{"intent": fragment, "mode": "allowlisted"}]}
+        result = SchemaOutputValidator().validate("query_plan", plan)
+        assert result.valid is False, f"expected rejection for {fragment!r}"
+        assert any("raw query text" in error for error in result.errors)
+
+
+def test_query_plan_rejects_named_and_variable_graphql_operations():
+    fragments = (
+        "query Foo { accounts { id } }",
+        "mutation DeleteAccount { deleteAccount }",
+        "subscription AccountUpdates { accountUpdated }",
+        "query($id: ID!) { account(id: $id) }",
+        "query Foo($id: ID!) { account(id: $id) }",
+        "mutation DeleteAccount($id: ID!) { deleteAccount(id: $id) }",
+    )
+    for fragment in fragments:
+        plan = {"steps": [{"intent": fragment, "mode": "allowlisted"}]}
+        result = SchemaOutputValidator().validate("query_plan", plan)
+        assert result.valid is False, f"expected rejection for {fragment!r}"
+        assert any("raw query text" in error for error in result.errors)
+
+
+def test_query_plan_accepts_graphql_keyword_in_natural_language():
+    # A natural-language intent mentioning the word must not be a false positive.
+    plan = {
+        "steps": [
+            {"intent": "query the report status for the current quarter", "mode": "allowlisted"}
+        ]
+    }
+    result = SchemaOutputValidator().validate("query_plan", plan)
+    assert result.valid is True
+
+
+def test_query_plan_rejects_unexpected_step_fields():
+    plan = {
+        "steps": [
+            {
+                "intent": "Find active tenant accounts",
+                "mode": "allowlisted",
+                "note": "extra field",
+            },
+        ]
+    }
+    result = SchemaOutputValidator().validate("query_plan", plan)
+    assert result.valid is False
+    assert any("unexpected field" in error for error in result.errors)
+
+
+def test_query_plan_rejects_executable_text_smuggled_in_unknown_field():
+    # The unexpected-field check is defense in depth: even a raw write query
+    # hidden under an unknown key is still caught by the query-language gate.
+    plan = {
+        "steps": [
+            {"intent": "Find accounts", "mode": "allowlisted", "sql": "DROP TABLE accounts"},
+        ]
+    }
+    result = SchemaOutputValidator().validate("query_plan", plan)
+    assert result.valid is False
+    assert any("unexpected field" in error for error in result.errors)
+    assert any("raw query text" in error for error in result.errors)
+
+
+def test_query_plan_accepts_write_verbs_in_natural_language():
+    # The gate matches full statement heads, not bare keywords, so benign
+    # natural-language intents that merely mention write verbs still pass.
+    plan = {
+        "steps": [
+            {"intent": "Update the account status display", "mode": "allowlisted"},
+            {"intent": "Report on deleted accounts for review", "mode": "deterministic"},
+        ]
+    }
+    result = SchemaOutputValidator().validate("query_plan", plan)
+    assert result.valid is True
+    assert result.errors == ()
+
+
 # ---------------------------------------------------------------------------
 # grounded_answer
 # ---------------------------------------------------------------------------
@@ -282,6 +395,25 @@ def test_structured_json_rejects_nonserializable_value():
     )
     assert result.valid is False
     assert any("JSON" in error for error in result.errors)
+
+
+def test_structured_json_with_non_string_dict_keys_returns_verdict():
+    # Regression: {1: "value"} is JSON-serializable (json.dumps stringifies the
+    # key) but the secret sweep used to crash on the int key
+    # (SecretLeakDetector.is_clean -> int.lower() -> AttributeError). Keys are
+    # stringified before scanning so validate() returns a verdict, not a crash.
+    payload = {1: "value", 2: "other"}
+    result = SchemaOutputValidator().validate("structured_json", payload)
+    assert isinstance(result, OutputValidation)
+    assert result.valid is True
+
+
+def test_structured_json_secret_under_non_string_key_still_fails():
+    payload = {1: "the api key is sk-live-1234567890abcdef"}
+    result = SchemaOutputValidator().validate("structured_json", payload)
+    assert result.valid is False
+    assert any("credential" in error for error in result.errors)
+    assert all("sk-live" not in error for error in result.errors)
 
 
 # ---------------------------------------------------------------------------

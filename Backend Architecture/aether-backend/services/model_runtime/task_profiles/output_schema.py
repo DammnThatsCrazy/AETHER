@@ -20,9 +20,10 @@ Security constraints:
   (:class:`SecretLeakDetector` in ``verification/leaks.py``). A single
   credential-shaped marker anywhere in the output fails the whole validation
   closed, regardless of how well-formed the structure is.
-* A ``query_plan`` output must never carry raw query text: free-text SQL,
-  Gremlin traversals, or Cypher/GraphQL expressions are rejected before the
-  plan can be executed by the read-only Noesis runtime.
+* A ``query_plan`` output must never carry raw query text: free-text SQL (read
+  or write-oriented -- ``DELETE``/``UPDATE``/``INSERT``/``DROP`` are rejected
+  just like ``SELECT``), Gremlin traversals, or Cypher/GraphQL expressions are
+  rejected before the plan can be executed by the read-only Noesis runtime.
 """
 
 from __future__ import annotations
@@ -47,14 +48,76 @@ __all__ = [
 # the read-only Noesis runtime must never run.
 _ALLOWED_QUERY_PLAN_MODES = frozenset({"allowlisted", "deterministic"})
 
-# Raw query-language fragments that must never appear inside a query plan. The
-# plan is a data contract (``intent`` + ``mode``), not a query text dump. The
-# strings are lowercase because the whole output is lowercased before scanning.
-_FORBIDDEN_QUERY_FRAGMENTS = (
-    "select ",  # SQL DQL/DML head
-    "g.v(",  # Gremlin traversal step (normalized: "g.v(")
-    "cypher",  # Neo4j/Cypher query language
-    "graphql",  # GraphQL query language
+# Fields a query-plan step may declare. A step is a data contract
+# (``intent`` + ``mode``), not an execution frame -- a field that could smuggle
+# executable text (``sql``, ``query``, ``statement``, ``gremlin``, ...) is
+# rejected outright by the unexpected-field check in ``_check_query_plan``.
+_ALLOWED_QUERY_PLAN_STEP_FIELDS = frozenset({"intent", "mode"})
+
+# Raw query-language constructs that must never appear inside a query plan.
+# The plan is a data contract (``intent`` + ``mode``), not a query text dump,
+# so ANY executable query text is rejected -- not just a handful of fragments.
+# Each pattern names a full statement/traversal head (not a bare keyword) so a
+# natural-language intent like "update the report" is not a false positive
+# while "UPDATE accounts SET ..." is caught. Matched case-insensitively against
+# the string form of the whole output.
+_QUERY_LANGUAGE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # SQL -- DQL (SELECT) and write-oriented DML/DDL/DCL heads alike.
+    re.compile(r"\bselect\s+", re.IGNORECASE),
+    re.compile(r"\binsert\s+into\b", re.IGNORECASE),
+    re.compile(r"\bupdate\s+\w+\s+set\b", re.IGNORECASE),
+    re.compile(r"\bdelete\s+from\b", re.IGNORECASE),
+    re.compile(
+        r"\bdrop\s+(table|database|schema|view|index|trigger|function|procedure)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\btruncate\s+table\b", re.IGNORECASE),
+    re.compile(r"\balter\s+table\b", re.IGNORECASE),
+    re.compile(
+        r"\bcreate\s+(table|database|schema|view|index|trigger|function|procedure|sequence)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bmerge\s+into\b", re.IGNORECASE),
+    re.compile(r"\breplace\s+into\b", re.IGNORECASE),
+    re.compile(r"\bgrant\s+(select|insert|update|delete|all|usage)\b", re.IGNORECASE),
+    re.compile(r"\brevoke\b", re.IGNORECASE),
+    # Gremlin traversal heads and the common step vocabulary.
+    re.compile(r"\bg\s*\.\s*v\s*\(", re.IGNORECASE),
+    re.compile(r"\bg\s*\.\s*e\s*\(", re.IGNORECASE),
+    re.compile(r"\bg\s*\.\s*traversal\s*\(", re.IGNORECASE),
+    re.compile(r"\bg\s*\.\s*inject\s*\(", re.IGNORECASE),
+    re.compile(
+        r"\b__\s*\.\s*(out|in|both|has|where|values|select|dedup|drop)\s*\(",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\.(out|in|both|outE|inE|bothE|outV|inV|bothV|has|where|values|select|dedup|drop)\s*\(",
+        re.IGNORECASE,
+    ),
+    # Cypher (Neo4j).
+    re.compile(r"\bmatch\s*\(", re.IGNORECASE),
+    re.compile(r"\boptional\s+match\s*\(", re.IGNORECASE),
+    re.compile(r"\bcreate\s*\(", re.IGNORECASE),
+    re.compile(r"\bmerge\s*\(", re.IGNORECASE),
+    re.compile(r"\bunwind\s+", re.IGNORECASE),
+    re.compile(r"\bdetach\s+delete\b", re.IGNORECASE),
+    re.compile(r"\bcypher\b", re.IGNORECASE),
+    # GraphQL -- operation heads, with or without an operation name and/or a
+    # variable-definitions group, plus the language keyword. The name/vars
+    # alternatives require whitespace after the keyword so a natural-language
+    # token like ``queryFoo`` is never a false positive, while ``query{`` and
+    # ``query Foo($id: ID!) {`` are both caught.
+    re.compile(
+        r"\b(?:query|mutation|subscription)(?:"
+        r"\s*\{"                                   # bare: ``query {``
+        r"|\s*\([^)]*\)\s*\{"                      # vars only: ``query($id: ID!) {``
+        r"|\s+\w+\s*\{"                            # name only: ``query Foo {``
+        r"|\s+\w+\s*\([^)]*\)\s*\{"                # name + vars: ``query Foo($id: ID!) {``
+        r")",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bfragment\s+\w+\s+on\b", re.IGNORECASE),
+    re.compile(r"\bgraphql\b", re.IGNORECASE),
 )
 
 # A citation marker embedded in a grounded answer: ``[ref:<reference_id>]``.
@@ -109,15 +172,16 @@ class OutputValidator(Protocol):
 def _contains_forbidden_query_text(output: object) -> bool:
     """True when the output's string form contains raw query-language text.
 
-    The whole output is stringified and lowercased so a single embedded query
-    fragment anywhere in the plan (any step) is caught. Any serialization
-    surprise fails closed (returns True).
+    The whole output is stringified so a single embedded query construct
+    anywhere in the plan (any step) is caught by the compiled
+    :data:`_QUERY_LANGUAGE_PATTERNS` gate. Any serialization surprise fails
+    closed (returns True).
     """
     try:
-        text = repr(output).lower()
+        text = repr(output)
     except Exception:  # pragma: no cover - fail closed on any repr surprise
         return True
-    return any(fragment in text for fragment in _FORBIDDEN_QUERY_FRAGMENTS)
+    return any(pattern.search(text) is not None for pattern in _QUERY_LANGUAGE_PATTERNS)
 
 
 def _contains_secret_marker(output: object) -> bool:
@@ -125,7 +189,9 @@ def _contains_secret_marker(output: object) -> bool:
 
     Recurses into nested dicts/lists so an arbitrarily deep ``structured_json``
     payload (or any other output kind) is fully covered: every label, content
-    field, dict key, and list item is scanned. Matching is delegated to
+    field, dict key, and list item is scanned. Dict keys are stringified first
+    (JSON object keys may be non-strings in Python, e.g. ``{1: "v"}``) so the
+    scanner never crashes on a non-string key. Matching is delegated to
     :class:`SecretLeakDetector` -- a case-insensitive substring scan against the
     canonical ``LEAK_MARKERS`` used across the model_runtime package. Fail
     closed: any marker found (or any scan surprise) rejects the whole output.
@@ -135,7 +201,7 @@ def _contains_secret_marker(output: object) -> bool:
         current = stack.pop()
         if isinstance(current, dict):
             for key, value in current.items():
-                if not _SECRET_LEAK_DETECTOR.is_clean(key):
+                if not _SECRET_LEAK_DETECTOR.is_clean(str(key)):
                     return True
                 stack.append(value)
         elif isinstance(current, (list, tuple)):
@@ -194,6 +260,10 @@ class SchemaOutputValidator:
                     if not isinstance(step, dict):
                         errors.append(f"query_plan step {index} must be a dict")
                         continue
+                    if set(step) - _ALLOWED_QUERY_PLAN_STEP_FIELDS:
+                        errors.append(
+                            f"query_plan step {index} declares unexpected field(s)"
+                        )
                     intent = step.get("intent")
                     if not isinstance(intent, str) or not intent.strip():
                         errors.append(
