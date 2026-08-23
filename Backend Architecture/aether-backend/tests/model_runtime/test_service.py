@@ -18,6 +18,7 @@ import pytest
 
 from services.model_runtime import (
     BaseModelProvider,
+    ConfigError,
     CredentialResolution,
     CredentialService,
     DeterministicModelProvider,
@@ -26,6 +27,7 @@ from services.model_runtime import (
     ModelProviderError,
     ModelRequest,
     ModelRuntimeService,
+    ModelRuntimeSettings,
 )
 from services.model_runtime import service as service_module
 from services.model_runtime.credentials.models import ResolverConfig, mask_identifier
@@ -761,3 +763,189 @@ async def test_credential_rejection_records_runtime_metric(monkeypatch):
     with pytest.raises(ModelNotConfigured, match="not configured for tenant"):
         await svc.complete("t1", _req(), provider="bindable")
     assert ("record_credential_rejection", ("bindable",), {}) in recording.calls
+
+
+# ---------------------------------------------------------------------------
+# Settings-backed factory wiring (Codex P1): adapters_dir / estimated_request_tokens
+# / max_providers are CONSUMED by ModelRuntimeService.from_settings, with
+# explicit constructor kwargs winning over the settings.
+# ---------------------------------------------------------------------------
+
+# Env vars that could leak into ModelRuntimeSettings between tests; the factory
+# tests construct settings directly with explicit kwargs (init kwargs win over
+# env), but clearing avoids a stale AETHER_ENV/MODEL_RUNTIME_ENABLED pair
+# tripping the fail-closed validator.
+_FACTORY_MODEL_RUNTIME_VARS = (
+    "MODEL_RUNTIME_ENABLED",
+    "MODEL_RUNTIME_ADAPTERS_DIR",
+    "MODEL_RUNTIME_DEFAULT_PROVIDER",
+    "MODEL_RUNTIME_ESTIMATED_REQUEST_TOKENS",
+    "MODEL_RUNTIME_MAX_PROVIDERS",
+    "MODEL_RUNTIME_CREDENTIAL_BACKEND",
+    "MODEL_RUNTIME_CREDENTIAL_AWS_REGION",
+    "MODEL_RUNTIME_CREDENTIAL_AWS_PREFIX",
+    "MODEL_RUNTIME_CREDENTIAL_CACHE_TTL_SECONDS",
+    "MODEL_RUNTIME_OBSERVABILITY_ENABLED",
+    "MODEL_RUNTIME_CIRCUIT_FAILURE_THRESHOLD",
+    "MODEL_RUNTIME_CIRCUIT_RECOVERY_TIMEOUT_S",
+)
+
+
+def _fresh_settings(monkeypatch, **overrides) -> ModelRuntimeSettings:
+    """A permissive, env-free ModelRuntimeSettings for factory wiring tests."""
+    monkeypatch.delenv("AETHER_ENV", raising=False)
+    for var in _FACTORY_MODEL_RUNTIME_VARS:
+        monkeypatch.delenv(var, raising=False)
+    return ModelRuntimeSettings(_env_file=None, **overrides)
+
+
+def _write_adapter_module(
+    adapters_dir: Path, module_name: str, provider_name: str, content: str = "from-dir"
+) -> Path:
+    """Write a single-provider adapter module into ``adapters_dir``."""
+    module_file = adapters_dir / f"{module_name}.py"
+    module_file.write_text(
+        "from services.model_runtime.provider import BaseModelProvider\n"
+        "from services.model_runtime.models import ModelProvider, "
+        "ModelResponse, TokenUsage\n"
+        f"class {module_name.title()}Adapter(BaseModelProvider):\n"
+        f"    provider_name = {provider_name!r}\n"
+        "    def is_configured(self):\n"
+        "        return True\n"
+        "    async def complete(self, request):\n"
+        f"        return ModelResponse(content={content!r}, model=request.model,\n"
+        "            provider=ModelProvider.DETERMINISTIC, usage=TokenUsage(),\n"
+        "            latency_ms=0.0)\n"
+    )
+    return module_file
+
+
+class _NamedProvider:
+    """Minimal AsyncModelProvider with a configurable name (factory wiring)."""
+
+    def __init__(self, name: str, content: str = "ok") -> None:
+        self.provider_name = name
+        self.content = content
+
+    def is_configured(self) -> bool:
+        return True
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        return ModelResponse(
+            content=self.content,
+            model=request.model,
+            provider=ModelProvider.DETERMINISTIC,
+            usage=TokenUsage(),
+            latency_ms=0.0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_from_settings_loads_adapters_from_dir(tmp_path, monkeypatch):
+    # MODEL_RUNTIME_ADAPTERS_DIR is effective: adapters in the directory are
+    # discovered, instantiated, and registered.
+    _write_adapter_module(tmp_path, "custom", "custom", "from-dir")
+    settings = _fresh_settings(
+        monkeypatch,
+        adapters_dir=str(tmp_path),
+        default_provider="custom",
+        estimated_request_tokens=1200,
+        max_providers=4,
+    )
+    svc = ModelRuntimeService.from_settings(settings)
+    assert "custom" in svc.provider_names()
+    resp = await svc.complete("t1", _req())
+    assert resp.content == "from-dir"
+
+
+@pytest.mark.asyncio
+async def test_from_settings_consumes_estimated_request_tokens(tmp_path, monkeypatch):
+    # MODEL_RUNTIME_ESTIMATED_REQUEST_TOKENS feeds the budget reservation size.
+    _write_adapter_module(tmp_path, "custom", "custom", "ok")
+    budget = FakeBudget()
+    settings = _fresh_settings(
+        monkeypatch,
+        adapters_dir=str(tmp_path),
+        default_provider="custom",
+        estimated_request_tokens=1200,
+    )
+    svc = ModelRuntimeService.from_settings(settings, budget=budget)
+    await svc.complete("t1", _req())
+    assert budget.reserved == [("t1", 1200)]
+
+
+def test_from_settings_max_providers_bounds_registry(tmp_path, monkeypatch):
+    # MODEL_RUNTIME_MAX_PROVIDERS bounds the provider registry: the initial
+    # population is capped and register() refuses to exceed the bound.
+    _write_adapter_module(tmp_path, "aa", "a", "A")
+    _write_adapter_module(tmp_path, "bb", "b", "B")
+    _write_adapter_module(tmp_path, "cc", "c", "C")
+    settings = _fresh_settings(
+        monkeypatch,
+        adapters_dir=str(tmp_path),
+        default_provider="a",
+        max_providers=2,
+    )
+    svc = ModelRuntimeService.from_settings(settings)
+    # Capped to the 2 lowest provider names (deterministic order).
+    assert svc.provider_names() == ["a", "b"]
+    # Registering a NEW provider beyond the cap fails closed.
+    with pytest.raises(RuntimeError, match="max_providers"):
+        svc.register(_NamedProvider("d"))
+    # Replacing an already-registered name is always allowed.
+    svc.register(_NamedProvider("a", "replaced"))
+    assert "a" in svc.provider_names()
+
+
+@pytest.mark.asyncio
+async def test_from_settings_kwargs_override_settings(tmp_path, monkeypatch):
+    # Explicit kwargs win over the settings (env-precedence pattern).
+    _write_adapter_module(tmp_path, "aa", "a", "A")
+    _write_adapter_module(tmp_path, "bb", "b", "B")
+    budget = FakeBudget()
+    settings = _fresh_settings(
+        monkeypatch,
+        adapters_dir=str(tmp_path),
+        default_provider="a",
+        estimated_request_tokens=100,
+        max_providers=1,
+    )
+    svc = ModelRuntimeService.from_settings(
+        settings,
+        budget=budget,
+        estimated_request_tokens=500,
+        max_providers=2,
+    )
+    # Overridden cap keeps BOTH providers (settings cap was 1).
+    assert svc.provider_names() == ["a", "b"]
+    # Overridden reservation size is used at dispatch.
+    await svc.complete("t1", _req())
+    assert budget.reserved == [("t1", 500)]
+
+
+@pytest.mark.asyncio
+async def test_from_settings_explicit_providers_win_over_dir(tmp_path, monkeypatch):
+    # Explicitly passed providers override same-named dir-loaded adapters.
+    _write_adapter_module(tmp_path, "custom", "custom", "from-dir")
+    settings = _fresh_settings(
+        monkeypatch,
+        adapters_dir=str(tmp_path),
+        default_provider="custom",
+    )
+    svc = ModelRuntimeService.from_settings(
+        settings, providers={"custom": _NamedProvider("custom", "explicit")}
+    )
+    resp = await svc.complete("t1", _req())
+    assert resp.content == "explicit"
+
+
+def test_from_settings_missing_adapters_dir_fails_closed(tmp_path, monkeypatch):
+    # A missing MODEL_RUNTIME_ADAPTERS_DIR fails closed rather than silently
+    # loading no adapters.
+    settings = _fresh_settings(
+        monkeypatch,
+        adapters_dir=str(tmp_path / "does-not-exist"),
+        default_provider="custom",
+    )
+    with pytest.raises(ConfigError, match="adapters_dir"):
+        ModelRuntimeService.from_settings(settings)

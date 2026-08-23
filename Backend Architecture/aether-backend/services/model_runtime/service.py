@@ -16,16 +16,33 @@ router and no routing kwargs the legacy deterministic path is unchanged.
 ADR-008 D8: provider/model dispatch is gated through a fail-closed
 :class:`CircuitRegistry` wired from ``ModelRuntimeSettings`` — an OPEN circuit
 raises :class:`ModelCircuitOpen` instead of hammering an unhealthy provider.
+
+Deployment wiring (ADR-008): :meth:`ModelRuntimeService.from_settings` builds a
+runtime from :class:`ModelRuntimeSettings` so the advertised deployment controls
+are EFFECTIVE rather than inert — ``adapters_dir`` actually loads provider
+adapters (:func:`load_provider_adapters`), ``estimated_request_tokens`` feeds
+the budget reservation size, ``max_providers`` bounds the provider registry, and
+``default_provider`` plus the circuit settings feed dispatch. Explicit
+constructor kwargs win over the settings (env-precedence pattern); the plain
+constructor is unchanged, so existing callers are unaffected.
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import inspect
+import os
 import time
 import typing
 from collections.abc import Mapping
+from pathlib import Path
 
-from services.model_runtime.config import get_settings
+from services.model_runtime.config import (
+    ConfigError,
+    ModelRuntimeSettings,
+    get_settings,
+)
 from services.model_runtime.models import (
     ModelBudgetExceeded,
     ModelInvocationError,
@@ -88,6 +105,78 @@ class ModelCircuitOpen(ModelInvocationError):
 _DISPATCH_REJECTIONS = (ModelNotConfigured, ModelBudgetExceeded, ModelCircuitOpen)
 
 
+def load_provider_adapters(
+    adapters_dir: str | os.PathLike[str],
+) -> dict[str, AsyncModelProvider]:
+    """Discover and instantiate provider adapters from a directory of modules.
+
+    The consumer for ``MODEL_RUNTIME_ADAPTERS_DIR``: every ``*.py`` module in
+    ``adapters_dir`` (excluding ``__init__.py`` and underscore-private modules)
+    is imported; each concrete class the module defines that carries a string
+    ``provider_name`` is instantiated with no arguments and collected under that
+    name. Adapters read their own environment in ``__init__`` (unconfigured
+    providers remain registered but fail closed at dispatch), matching the
+    package convention.
+
+    FAILS CLOSED with :class:`ConfigError` on a missing/unreadable directory, a
+    module that fails to import, or a provider class that cannot be constructed
+    — a misconfigured ``MODEL_RUNTIME_ADAPTERS_DIR`` never silently loads no
+    adapters.
+
+    Relative paths resolve against the backend root (``Path(__file__).parents[2]``
+    = the directory containing ``services/``), so the default
+    ``services/model_runtime/adapters`` works regardless of the process working
+    directory.
+    """
+    backend_root = Path(__file__).resolve().parents[2]
+    path = Path(adapters_dir)
+    if not path.is_absolute():
+        path = backend_root / path
+    path = path.resolve()
+    if not path.is_dir():
+        raise ConfigError(f"adapters_dir is not a directory: {path}")
+
+    loaded: dict[str, AsyncModelProvider] = {}
+    for module_file in sorted(path.glob("*.py")):
+        if module_file.name == "__init__.py" or module_file.name.startswith("_"):
+            continue
+        module_name = f"aether_adapter_{module_file.stem}"
+        spec = importlib.util.spec_from_file_location(module_name, module_file)
+        if spec is None or spec.loader is None:
+            raise ConfigError(f"cannot import adapter module: {module_file}")
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception as exc:  # noqa: BLE001 — bad adapters fail closed
+            raise ConfigError(
+                f"failed to import adapter module {module_file.name}: {exc}"
+            ) from exc
+        for attr_name, obj in vars(module).items():
+            if not isinstance(obj, type):
+                continue
+            # Only classes DEFINED by this module (not re-exported imports).
+            if getattr(obj, "__module__", None) != module.__name__:
+                continue
+            if inspect.isabstract(obj):
+                continue
+            if not isinstance(getattr(obj, "provider_name", None), str):
+                continue
+            try:
+                provider = obj()
+            except Exception as exc:  # noqa: BLE001 — bad adapters fail closed
+                raise ConfigError(
+                    f"adapter class {attr_name!r} in {module_file.name} failed "
+                    f"to construct: {exc}"
+                ) from exc
+            if not callable(getattr(provider, "complete", None)):
+                raise ConfigError(
+                    f"adapter class {attr_name!r} in {module_file.name} exposes "
+                    "no complete(); not an AsyncModelProvider"
+                )
+            loaded[provider.provider_name] = provider
+    return loaded
+
+
 class TokenBudget(typing.Protocol):
     """Per-tenant token budget hook (same shape as NoesisTokenBudget)."""
 
@@ -119,6 +208,7 @@ class ModelRuntimeService:
         circuit_recovery_timeout_s: float | None = None,
         credential_service: CredentialService | None = None,
         max_dispatch_fallback_depth: int = 2,
+        max_providers: int | None = None,
     ) -> None:
         """Build the runtime; default_provider must exist in providers.
 
@@ -152,8 +242,26 @@ class ModelRuntimeService:
         dispatch rejection (unconfigured provider, denied budget, open circuit)
         may fall back through before the original error propagates (default 2;
         ``0`` disables runtime fallback entirely).
+
+        ``max_providers`` (deployment wiring, default ``None`` = unbounded)
+        bounds the provider registry: the initial ``providers`` mapping is
+        capped to the ``max_providers`` lowest provider names (deterministic
+        order) and :meth:`register` refuses to add a NEW provider once the cap
+        is reached (replacing an existing name is always allowed). The
+        settings-backed :meth:`from_settings` factory feeds
+        ``ModelRuntimeSettings.max_providers`` here, so
+        ``MODEL_RUNTIME_MAX_PROVIDERS`` actually bounds routing fan-out.
         """
-        self._providers: dict[str, AsyncModelProvider] = dict(providers or {})
+        providers_init = dict(providers or {})
+        if max_providers is not None:
+            cap = max(1, int(max_providers))
+            self._max_providers = cap
+            if len(providers_init) > cap:
+                keep = sorted(providers_init)[:cap]
+                providers_init = {name: providers_init[name] for name in keep}
+        else:
+            self._max_providers = None
+        self._providers: dict[str, AsyncModelProvider] = providers_init
         self._default = default_provider
         self._budget = budget
         self._estimated_request_tokens = estimated_request_tokens
@@ -181,13 +289,111 @@ class ModelRuntimeService:
         )
         self._metrics = RuntimeMetricsRecorder()
 
+    @classmethod
+    def from_settings(
+        cls,
+        settings: ModelRuntimeSettings | None = None,
+        *,
+        providers: Mapping[str, AsyncModelProvider] | None = None,
+        adapters_dir: str | os.PathLike[str] | None = None,
+        max_providers: int | None = None,
+        estimated_request_tokens: int | None = None,
+        default_provider: str | None = None,
+        circuit_failure_threshold: int | None = None,
+        circuit_recovery_timeout_s: float | None = None,
+        **kwargs: object,
+    ) -> "ModelRuntimeService":
+        """Build a runtime backed by :class:`ModelRuntimeSettings`.
+
+        The deployment wiring seam (ADR-008): construct the service from the
+        settings singleton (or an explicit ``settings`` object) so the
+        advertised ``MODEL_RUNTIME_*`` controls are EFFECTIVE instead of inert:
+
+        * ``adapters_dir`` — provider adapters are discovered and instantiated
+          from the configured directory via :func:`load_provider_adapters` and
+          merged into the registry (explicitly passed ``providers`` win by
+          name).
+        * ``estimated_request_tokens`` — the per-request budget reservation
+          size used at dispatch.
+        * ``max_providers`` — bounds the provider registry (the initial
+          population is capped and :meth:`register` refuses to exceed the cap).
+        * ``default_provider`` and the circuit settings — fed from settings so
+          the given ``settings`` object is authoritative.
+
+        Precedence mirrors the env-override pattern used throughout the
+        codebase: an explicit kwarg wins over the settings value. Pass
+        ``providers`` / ``adapters_dir`` / ``estimated_request_tokens`` /
+        ``max_providers`` / ``default_provider`` / circuit kwargs to override.
+        ``budget``, ``router``, credential wiring, and other constructor kwargs
+        pass through unchanged. ``settings`` defaults to :func:`get_settings`.
+
+        The service's default provider must be present in the registry (loaded
+        from ``adapters_dir`` or passed via ``providers``) before dispatch —
+        the same contract as the plain constructor. To build an unbounded
+        registry, construct :class:`ModelRuntimeService` directly.
+        """
+        settings = settings if settings is not None else get_settings()
+        providers_out = dict(providers or {})
+        adapters_path = (
+            adapters_dir if adapters_dir is not None else settings.adapters_dir
+        )
+        loaded = load_provider_adapters(adapters_path)
+        for name, provider in loaded.items():
+            # Explicitly passed providers win over dir-loaded adapters.
+            providers_out.setdefault(name, provider)
+        return cls(
+            providers=providers_out,
+            default_provider=(
+                default_provider
+                if default_provider is not None
+                else settings.default_provider
+            ),
+            estimated_request_tokens=(
+                estimated_request_tokens
+                if estimated_request_tokens is not None
+                else settings.estimated_request_tokens
+            ),
+            max_providers=(
+                max_providers if max_providers is not None else settings.max_providers
+            ),
+            circuit_failure_threshold=(
+                circuit_failure_threshold
+                if circuit_failure_threshold is not None
+                else settings.circuit_failure_threshold
+            ),
+            circuit_recovery_timeout_s=(
+                circuit_recovery_timeout_s
+                if circuit_recovery_timeout_s is not None
+                else settings.circuit_recovery_timeout_s
+            ),
+            **kwargs,
+        )
+
     @property
     def circuit_registry(self) -> CircuitRegistry:
         """The per-provider/model fail-closed circuit registry gating dispatch."""
         return self._circuit_registry
 
     def register(self, provider: AsyncModelProvider) -> None:
-        """Add or replace a provider by its provider_name."""
+        """Add or replace a provider by its provider_name.
+
+        When the service was constructed with a ``max_providers`` bound, the
+        registry is capped: registering a provider NOT already present once the
+        cap is reached raises :class:`RuntimeError` (fail-closed), so a
+        misconfigured deployment that exceeds ``MODEL_RUNTIME_MAX_PROVIDERS``
+        fails loudly at startup wiring instead of silently growing past the
+        bound. Replacing an already-registered name is always allowed.
+        """
+        if (
+            self._max_providers is not None
+            and provider.provider_name not in self._providers
+            and len(self._providers) >= self._max_providers
+        ):
+            raise RuntimeError(
+                f"provider registry is full (max_providers="
+                f"{self._max_providers}); cannot register "
+                f"{provider.provider_name!r}"
+            )
         self._providers[provider.provider_name] = provider
 
     def provider_names(self) -> list[str]:

@@ -207,3 +207,56 @@ def test_local_env_in_memory_enabled_is_valid(monkeypatch):
     assert s.enabled is True
     assert s.credential_backend == "in_memory"
     assert s.default_provider == "deterministic"
+
+
+# ---------------------------------------------------------------------------
+# Deployment tuning controls are parsed and validated fail-closed
+# (adapters_dir / estimated_request_tokens / max_providers are CONSUMED by
+# ModelRuntimeService.from_settings — reject unusable values at config time).
+# ---------------------------------------------------------------------------
+
+
+def test_tuning_controls_read_from_env(monkeypatch):
+    _clear_model_runtime_env(monkeypatch)
+    monkeypatch.setenv("MODEL_RUNTIME_ADAPTERS_DIR", "/tmp/custom-adapters")
+    monkeypatch.setenv("MODEL_RUNTIME_ESTIMATED_REQUEST_TOKENS", "1200")
+    monkeypatch.setenv("MODEL_RUNTIME_MAX_PROVIDERS", "4")
+    s = ModelRuntimeSettings()
+    assert s.adapters_dir == "/tmp/custom-adapters"
+    assert s.estimated_request_tokens == 1200
+    assert s.max_providers == 4
+
+
+def test_estimated_request_tokens_zero_raises(monkeypatch):
+    _clear_model_runtime_env(monkeypatch)
+    monkeypatch.setenv("MODEL_RUNTIME_ESTIMATED_REQUEST_TOKENS", "0")
+    err = _raises(ConfigError, ModelRuntimeSettings)
+    assert "estimated_request_tokens" in str(err)
+
+
+def test_estimated_request_tokens_negative_raises(monkeypatch):
+    _clear_model_runtime_env(monkeypatch)
+    monkeypatch.setenv("MODEL_RUNTIME_ESTIMATED_REQUEST_TOKENS", "-5")
+    err = _raises(ConfigError, ModelRuntimeSettings)
+    assert "estimated_request_tokens" in str(err)
+
+
+def test_max_providers_zero_raises(monkeypatch):
+    _clear_model_runtime_env(monkeypatch)
+    monkeypatch.setenv("MODEL_RUNTIME_MAX_PROVIDERS", "0")
+    err = _raises(ConfigError, ModelRuntimeSettings)
+    assert "max_providers" in str(err)
+
+
+def test_max_providers_negative_raises(monkeypatch):
+    _clear_model_runtime_env(monkeypatch)
+    monkeypatch.setenv("MODEL_RUNTIME_MAX_PROVIDERS", "-1")
+    err = _raises(ConfigError, ModelRuntimeSettings)
+    assert "max_providers" in str(err)
+
+
+def test_adapters_dir_blank_raises(monkeypatch):
+    _clear_model_runtime_env(monkeypatch)
+    monkeypatch.setenv("MODEL_RUNTIME_ADAPTERS_DIR", "   ")
+    err = _raises(ConfigError, ModelRuntimeSettings)
+    assert "adapters_dir" in str(err)

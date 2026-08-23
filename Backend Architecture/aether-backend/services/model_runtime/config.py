@@ -21,6 +21,17 @@ Rules implemented by :meth:`ModelRuntimeSettings._fail_closed`:
 * Circuit-breaker settings are wired into :class:`~services.model_runtime.service.ModelRuntimeService`
   dispatch (ADR-008 D8): ``circuit_failure_threshold`` must be ``>= 1`` and
   ``circuit_recovery_timeout_s`` non-negative, or the settings fail closed.
+
+Deployment tuning controls are CONSUMED, not inert: the settings-backed factory
+:meth:`ModelRuntimeService.from_settings
+<services.model_runtime.service.ModelRuntimeService.from_settings>` feeds
+``adapters_dir`` into :func:`services.model_runtime.service.load_provider_adapters`
+(provider adapters are actually loaded), ``estimated_request_tokens`` into the
+budget reservation size, and ``max_providers`` into the provider-registry
+bound. Each is validated fail-closed here so a misconfigured deployment fails
+at startup instead of silently ignoring the control: ``estimated_request_tokens``
+and ``max_providers`` must be ``>= 1`` and ``adapters_dir`` must be a non-empty
+path.
 """
 
 from __future__ import annotations
@@ -120,6 +131,22 @@ class ModelRuntimeSettings(BaseSettings):
                 "circuit_recovery_timeout_s must be >= 0, got "
                 f"{self.circuit_recovery_timeout_s}"
             )
+        # Deployment tuning controls are consumed by
+        # ModelRuntimeService.from_settings (adapters_dir -> adapter loading,
+        # estimated_request_tokens -> budget reservation size, max_providers ->
+        # provider-registry bound). Reject unusable values fail-closed here so
+        # a misconfigured control can never be silently ignored at runtime.
+        if self.estimated_request_tokens < 1:
+            raise ConfigError(
+                "estimated_request_tokens must be >= 1, got "
+                f"{self.estimated_request_tokens}"
+            )
+        if self.max_providers < 1:
+            raise ConfigError(
+                "max_providers must be >= 1, got " f"{self.max_providers}"
+            )
+        if not self.adapters_dir.strip():
+            raise ConfigError("adapters_dir must be a non-empty path")
         return self
 
 
