@@ -9,7 +9,7 @@
 // Reuse, never redefine: PageRequest / EvidenceRef / TimeRangeFilter / PageInfo
 // come from ./operational-intelligence. Projection ids, section states, subject
 // kinds and implementation states are derived from the generated registry
-// (./intelligence-projections.generated) so the typed vocabulary can never
+// (./intelligence-projections_generated) so the typed vocabulary can never
 // drift from the canonical JSON.
 // =============================================================================
 
@@ -19,7 +19,7 @@ import {
   intelligenceProjectionImplementationStates,
   intelligenceProjectionSectionStates,
   intelligenceProjectionSubjectKinds,
-} from './intelligence-projections.generated';
+} from './intelligence-projections_generated';
 
 /** A registered section state a projection result section may carry (from the generated registry). */
 export type SectionState = (typeof intelligenceProjectionSectionStates)[number];

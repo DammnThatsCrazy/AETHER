@@ -222,7 +222,7 @@ P0 blueprint).
   `scripts/lib/intelligence_projection_validation.py` — the architecture
   validator (schema, DAG, cross-registry, inventory honesty, ownership,
   surface/metric honesty).
-- `packages/shared/intelligence-projections.generated.ts`,
+- `packages/shared/intelligence-projections_generated.ts`,
   `Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py`,
   `docs/_generated/intelligence-projection-registry-table.md`,
   `docs/_generated/intelligence-projection-dependency-graph.md` — generated

@@ -41,6 +41,12 @@ _Describe only what changed:_
 - [ ] I verified no generated diff remains
 - [ ] I ran `make release-gate` if this PR claims release readiness
 
+## 360 vertical slice
+
+Follow-up 360 projection PRs must satisfy the vertical-slice Definition-of-Done
+before their registry row flips to `implemented`:
+`docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md`.
+
 ## Known Risks
 
 *

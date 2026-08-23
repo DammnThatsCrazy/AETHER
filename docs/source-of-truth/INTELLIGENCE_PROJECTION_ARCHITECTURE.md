@@ -126,7 +126,7 @@ Generated artifacts (via `scripts/generate_platform_contracts.py`, the
 
 | Artifact | Contents |
 |---|---|
-| `packages/shared/intelligence-projections.generated.ts` | `intelligenceProjectionsContractVersion`, `intelligenceProjectionIds`/`IntelligenceProjectionId`, kinds/states/section-states, `intelligenceProjectionDefinitions` (sorted by id), `projectionDependencyGraph`, `pendingAuthorities`, `pendingReferences` |
+| `packages/shared/intelligence-projections_generated.ts` | `intelligenceProjectionsContractVersion`, `intelligenceProjectionIds`/`IntelligenceProjectionId`, kinds/states/section-states, `intelligenceProjectionDefinitions` (sorted by id), `projectionDependencyGraph`, `pendingAuthorities`, `pendingReferences` |
 | `Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py` | `INTELLIGENCE_PROJECTION_DEFINITIONS`, `PROJECTION_DEPENDENCY_GRAPH`, `PROJECTION_SURFACE_MAP`, `PROJECTION_CAPABILITY_MAP`, vocab constants, `__all__` (sorted) |
 | `docs/_generated/intelligence-projection-registry-table.md` | per-projection table: id/kind/state/spines/proj-deps/surfaces/capability keys/graph policy/authorities/legacy routes/blueprint link |
 | `docs/_generated/intelligence-projection-dependency-graph.md` | Mermaid `flowchart LR`; hard-dep solid, proj-dep dashed, optional dotted; `## Pending resolutions` table |

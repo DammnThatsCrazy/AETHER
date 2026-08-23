@@ -83,7 +83,66 @@ SDKs + Kyber
 - **Tenant isolation:** tenant ID is included in API auth context, event topics,
   storage partition keys, graph labels/properties, cache keys, and object paths.
 
-## 3. Service boundaries
+## 3. Intelligence Projection Plane
+
+A **360** is an **intelligence projection over canonical Aether truth** — it
+is **not a competing system of record**. The decision record is
+`docs/decisions/ADR-010-intelligence-projection-plane.md`; the enforceable
+source of truth for the plane's contracts, inventory, migration rules, and
+anti-patterns is
+`docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md`. The plane is
+additive, order-resilient, and reversible (data-migration free), and it makes
+the projection doctrine mechanically enforced:
+
+- **One canonical registry.** `packages/shared/contracts/intelligence-projection-registry.json`
+  is the single canonical registry for the eighteen 360 projections — profile,
+  relationship, campaign, outcome, and the rest. Every row today carries
+  `implementationState: "in_flight"` (existing shipped work, not yet converged
+  onto the projection plane) with `legacyBindings` resolving to the real
+  routes, surfaces, and services it already mounts; **zero** rows claim
+  `implemented`. `ownsCanonicalTruth` is structurally `false` for every
+  projection — no 360 is a second system of record.
+- **`implementationState` is repo metadata, not readiness.** It records how
+  far a projection has converged onto the plane; it never states production
+  readiness. Readiness keeps its own vocabulary
+  (`packages/shared/contracts/readiness-vocabulary.json`), and the plane's
+  `readiness.py` is presentation-only — it maps `implementationState` to
+  display tokens and is asserted to never emit a certification token or
+  `production_ready`.
+- **Shared contracts reuse canonical primitives.** `ProjectionRequest`,
+  `ProjectionContext`, `ProjectionResult`, `ProjectionSection`, and
+  `ClaimEnvelope` are defined once in TypeScript
+  (`packages/shared/intelligence-projection.ts`) and Python
+  (`Backend Architecture/aether-backend/shared/intelligence_projections/contracts.py`),
+  importing the existing `EntityRef`, `EvidenceRef`, `PageRequest`,
+  `PageInfo`, and `TimeRangeFilter` — no redefinitions.
+- **Fail-isolated runtime provider protocol.** An
+  `IntelligenceProjectionProvider` (`typing.Protocol`, no `Base360`
+  superclass) registers in a `ProviderRegistry`; a missing or incompatible
+  dependency yields a typed `missing` / `degraded` / `not_applicable` section
+  state, and one failing provider degrades only its own result. The runtime
+  ships as a library — **P0 mounts no projection route**, and app wiring plus
+  feature-flag settings land with the first real provider.
+- **Architecture validator + CI enforcement.**
+  `scripts/validate_intelligence_projections.py` (core in
+  `scripts/lib/intelligence_projection_validation.py`) enforces registry
+  integrity, dependency-DAG acyclicity, cross-registry resolution with
+  `pendingAuthority` / `pendingReference` escape hatches, inventory honesty,
+  and ownership / surface / metric honesty. It runs inside `make ci-check`
+  via `scripts/repo_doctor.py`, alongside generated-artifact drift checks and
+  the `intelligence_projection_architecture` ownership category.
+
+Projections **read** canonical authorities — identity, relationship facts,
+graph, evidence, temporal, measurement, and UPR — and, when they write, write
+only through the Graph Mutation Gateway (`MutationIntent` →
+`GraphMutationGateway.apply`); the default `graphMutationPolicy` is
+`read_only`. The Silver projector-ownership registry remains a separate
+authority: projectors write Silver, projections read Gold. Each future 360
+lands as a vertical slice that satisfies
+`docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md`
+before its registry row flips to `implemented`.
+
+## 4. Service boundaries
 
 | Bounded service | Owns | Storage | Emits | Primary APIs |
 |---|---|---|---|---|
@@ -105,7 +164,7 @@ SDKs + Kyber
 | Governance Engine | RBAC, ABAC, policy enforcement, audit, consent, retention, tenant isolation. | Postgres policy/audit, object retention manifests. | `governance.policy.evaluated`. | `/v1/governance/*`, existing consent/admin/audit. |
 | Alerting Engine | Anomaly/risk/trust thresholds, notification routing, escalations. | Postgres rules, Redis state, Kafka topics. | `alert.created`. | `/v1/alerts/*`, existing notification routes. |
 
-## 4. Data model architecture
+## 5. Data model architecture
 
 ### Canonical relational tables
 
@@ -161,7 +220,7 @@ s3://aether-{env}/{tenant_id}/{domain}/{yyyy}/{mm}/{dd}/{object_id}.jsonl|parque
   to `EvidenceRef` or `EntityRef`; never store policy-unsafe raw data without a
   retention manifest.
 
-## 5. Graph schema architecture
+## 6. Graph schema architecture
 
 Reuse existing graph labels from `shared/graph/graph.py` and map user-requested
 entity types as follows:
@@ -207,7 +266,7 @@ The TypeScript payloads are defined in
 `packages/shared/operational-intelligence.ts` and should be mirrored by FastAPI
 Pydantic models before enabling routes.
 
-## 6. Event schemas and pipeline
+## 7. Event schemas and pipeline
 
 ### Event envelope
 
@@ -250,7 +309,7 @@ Examples:
 8. **Fanout realtime:** websocket cursor events and alert/escalation triggers.
 9. **Replay:** rebuild silver/gold projections from bronze with schema adapters.
 
-## 7. API and frontend integration contracts
+## 8. API and frontend integration contracts
 
 ### API standards
 
@@ -292,7 +351,7 @@ Examples:
 4. Keep shared contracts as hand-authored source-of-truth types for frontend
    safety and SDK parity.
 
-## 8. Realtime architecture
+## 9. Realtime architecture
 
 Use existing realtime router as the compatibility mount and standardize the
 protocol around these channels:
@@ -320,7 +379,7 @@ protocol around these channels:
 5. Server emits heartbeat every 25-30 seconds.
 6. Client can unsubscribe or reconnect with last cursor.
 
-## 9. Investigation architecture
+## 10. Investigation architecture
 
 Investigation cases are graph-native workspaces:
 
@@ -334,7 +393,7 @@ Investigation cases are graph-native workspaces:
 - Evidence search uses OpenSearch and optional vector retrieval, always returning
   evidence refs rather than unbounded raw payloads.
 
-## 10. Governance architecture
+## 11. Governance architecture
 
 The governance engine should centralize:
 
@@ -350,7 +409,7 @@ The governance engine should centralize:
 - Sovereign mode configuration: disable external providers, pin object storage,
   use tenant-local keys, and support air-gapped model artifacts.
 
-## 11. Deployment and local development architecture
+## 12. Deployment and local development architecture
 
 ### Local development
 
@@ -385,7 +444,7 @@ Add optional compose profiles later:
 - Air-gapped artifact registry and model registry.
 - Disaster recovery with object-store replay and Postgres/ClickHouse backups.
 
-## 12. Observability architecture
+## 13. Observability architecture
 
 Every service and engine should emit:
 
@@ -399,7 +458,7 @@ Every service and engine should emit:
 - Tracing spans: `ingest -> normalize -> enrich -> persist -> graph -> score -> realtime`.
 - Structured logs with request ID, tenant ID, event ID, correlation ID, policy ID.
 
-## 13. Testing architecture
+## 14. Testing architecture
 
 - **Contract tests:** shared TypeScript types compile, OpenAPI compatibility,
   websocket message fixtures.
@@ -416,7 +475,7 @@ Every service and engine should emit:
 - **Security tests:** auth bypass, tenant boundary checks, provider BYOK, audit
   integrity, model extraction defenses.
 
-## 14. CI/CD architecture
+## 15. CI/CD architecture
 
 Pipeline stages:
 
@@ -433,7 +492,7 @@ Pipeline stages:
 10. Promote production with migration gates, replay checkpoint, and governance
     approval.
 
-## 15. Incremental implementation roadmap
+## 16. Incremental implementation roadmap
 
 ### Phase 0 — preserve and codify
 
@@ -469,7 +528,7 @@ Pipeline stages:
 - Add sovereign/air-gapped mode config profile.
 - Add OpenSearch/object/vector profiles when required by customers.
 
-## 16. Compatibility contract
+## 17. Compatibility contract
 
 - Do not rename existing SDK `EventType` values.
 - Do not remove existing `EntityKind` values.

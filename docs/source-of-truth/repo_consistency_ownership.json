@@ -136,7 +136,7 @@
       "source_globs": [
         "packages/shared/contracts/intelligence-projection-registry.json",
         "packages/shared/intelligence-projection.ts",
-        "packages/shared/intelligence-projections.generated.ts",
+        "packages/shared/intelligence-projections_generated.ts",
         "Backend Architecture/aether-backend/shared/intelligence_projections/**",
         "scripts/validate_intelligence_projections.py",
         "scripts/lib/intelligence_projection_validation.py"

@@ -49,7 +49,7 @@ Generated outputs:
   packages/shared/task-profile.ts
   Backend Architecture/aether-backend/shared/model_governance/generated_task_profiles.py
   docs/_generated/task-profile-table.md
-  packages/shared/intelligence-projections.generated.ts
+  packages/shared/intelligence-projections_generated.ts
   Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py
   docs/_generated/intelligence-projection-registry-table.md
   docs/_generated/intelligence-projection-dependency-graph.md
@@ -2333,7 +2333,7 @@ def _summary_task_profiles(reg: dict) -> str:
 # ---------------------------------------------------------------------------
 
 INTELLIGENCE_PROJECTION_JSON = CONTRACTS / "intelligence-projection-registry.json"
-INTELLIGENCE_PROJECTION_TS = ROOT / "packages" / "shared" / "intelligence-projections.generated.ts"
+INTELLIGENCE_PROJECTION_TS = ROOT / "packages" / "shared" / "intelligence-projections_generated.ts"
 INTELLIGENCE_PROJECTION_PY = BACKEND / "shared" / "intelligence_projections" / "generated_registry.py"
 INTELLIGENCE_PROJECTION_TABLE_MD = ROOT / "docs" / "_generated" / "intelligence-projection-registry-table.md"
 INTELLIGENCE_PROJECTION_GRAPH_MD = ROOT / "docs" / "_generated" / "intelligence-projection-dependency-graph.md"

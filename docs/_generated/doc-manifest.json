@@ -4783,6 +4783,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/decisions/ADR-010-intelligence-projection-plane.md",
+      "title": "ADR-010: Intelligence Projection Plane",
+      "slug": "decisions/adr-010-intelligence-projection-plane",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/deployment/model-runtime-deployment.md",
       "title": "Model Runtime Deployment",
       "slug": "operations/model-runtime-deployment",
@@ -6993,6 +7007,39 @@
     {
       "path": "docs/source-of-truth/INTEGRATION_CONSENT_REGISTRY.md",
       "title": "Integration Consent Registry Source of Truth"
+    },
+    {
+      "path": "docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md",
+      "title": "Intelligence Projection Architecture",
+      "slug": "source-of-truth/intelligence-projection-architecture",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md",
+      "title": "Intelligence Projection Vertical Slice Checklist",
+      "slug": "source-of-truth/intelligence-projection-vertical-slice-checklist",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/INTEROP_CONSENT_MODEL.md",
