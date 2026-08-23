@@ -1,0 +1,41 @@
+# =============================================================================
+# Model Runtime — local/staging service manifest
+#
+# ADR-008 D5/D8/D9 — model runtime deployment & config.
+#   D5: the model runtime runs INSIDE the aether-backend service (it is a
+#       package, not a separate binary). This manifest documents how to run the
+#       harness service in local/staging with the fail-closed posture.
+#   D8: fail-closed on missing config — required configuration is validated by
+#       the service itself and raises ConfigError on misconfiguration. No
+#       MODEL_RUNTIME_* value is inlined below.
+#   D9: no secrets in this file — all configuration is passed through from
+#       env_file (.env, copied from .env.example). Key rotation is handled by
+#       the credential backend, never by editing this manifest.
+#
+# Usage:
+#   cp deploy/model-runtime/.env.example deploy/model-runtime/.env
+#   docker compose -f deploy/model-runtime/docker-compose.model-runtime.yml up
+# =============================================================================
+
+services:
+  model-runtime:
+    # The model runtime ships inside the aether-backend image (D5). The
+    # aether-backend Dockerfile copies repo-root-relative paths
+    # (Backend Architecture/aether-backend/...), so the build context is the
+    # repository root and the dockerfile path is quoted (contains spaces) —
+    # matching the root docker-compose.yml x-backend-build anchor.
+    build:
+      context: ../..
+      dockerfile: "Backend Architecture/aether-backend/Dockerfile"
+    # All MODEL_RUNTIME_* configuration is passed through from the deploy-scoped
+    # .env (copied from .env.example). Nothing is inlined here (D9). The service
+    # fails closed (ConfigError) when required config is missing.
+    env_file:
+      # Copied from deploy/model-runtime/.env.example. A fresh checkout has
+      # none, so `docker compose config` still parses; the service itself fails
+      # closed (ConfigError) when required config is missing.
+      - path: .env
+        required: false
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
