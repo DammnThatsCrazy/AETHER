@@ -203,6 +203,87 @@ def test_tenant_mismatch_raises_grounding_violation() -> None:
     )
 
 
+def test_foreign_item_tenant_raises_grounding_violation() -> None:
+    # REGRESSION (Codex PRRT_kwDORdw-AM6bhAIV): EvidenceSet.tenant_id alone is
+    # NOT authoritative. EvidenceSet does not enforce item/set tenant
+    # homogeneity, so a caller can build a set labeled "tenant-a" that carries
+    # an item from "tenant-b". The gate compared only EvidenceSet.tenant_id
+    # with the request tenant, the set-level check passed, and the foreign item
+    # reached the model as a citation. EVERY item must be tenant-scoped: a
+    # mixed set with one foreign item must fail the whole gate closed.
+    now = datetime.now(timezone.utc)
+    evidence = _evidence(
+        tenant_id="tenant-a",
+        items=(
+            _item("r-own", tenant_id="tenant-a", now=now),
+            _item("r-foreign", tenant_id="tenant-b", now=now),
+        ),
+        now=now,
+    )
+    _raises(
+        GroundingViolation,
+        lambda: GroundingPolicy(now=now).check(
+            _request(tenant_id="tenant-a", evidence=evidence, now=now)
+        ),
+    )
+
+
+def test_foreign_item_rejected_before_freshness() -> None:
+    # REGRESSION (Codex PRRT_kwDORdw-AM6bhAIV): the per-item tenant check runs
+    # BEFORE freshness. A foreign item that is also stale must be reported as a
+    # tenant violation (GroundingViolation), not as StaleEvidence — the gate's
+    # first failing condition wins so the failure mode is precise and the
+    # foreign data can never be grounded on, even when it is also out of the
+    # freshness bound.
+    now = datetime.now(timezone.utc)
+    evidence = _evidence(
+        tenant_id="tenant-a",
+        items=(_item("r-foreign", tenant_id="tenant-b", age_seconds=3600, now=now),),
+        now=now,
+    )
+    _raises(
+        GroundingViolation,
+        lambda: GroundingPolicy(now=now).check(
+            _request(tenant_id="tenant-a", evidence=evidence, now=now)
+        ),
+    )
+
+
+def test_ready_false_for_foreign_item_tenant() -> None:
+    # The non-raising ``ready`` mirror must also fail closed when a single item
+    # carries a foreign tenant_id, even though the set label matches.
+    now = datetime.now(timezone.utc)
+    evidence = _evidence(
+        tenant_id="tenant-a",
+        items=(
+            _item("r-own", tenant_id="tenant-a", now=now),
+            _item("r-foreign", tenant_id="tenant-b", now=now),
+        ),
+        now=now,
+    )
+    assert GroundingPolicy(now=now).ready(
+        _request(tenant_id="tenant-a", evidence=evidence, now=now)
+    ) is False
+
+
+def test_homogeneous_item_tenants_pass() -> None:
+    # Guard against over-rejection: a set whose every item matches the set and
+    # request tenant still passes the gate (no false positives from the new
+    # per-item check).
+    now = datetime.now(timezone.utc)
+    evidence = _evidence(
+        tenant_id="tenant-a",
+        items=(
+            _item("r-1", tenant_id="tenant-a", now=now),
+            _item("r-2", tenant_id="tenant-a", now=now),
+        ),
+        now=now,
+    )
+    assert GroundingPolicy(now=now).check(
+        _request(tenant_id="tenant-a", evidence=evidence, now=now)
+    ) is None
+
+
 def test_all_stale_items_raise_stale() -> None:
     now = datetime.now(timezone.utc)
     evidence = _evidence(

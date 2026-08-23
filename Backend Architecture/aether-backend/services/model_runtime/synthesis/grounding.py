@@ -7,14 +7,20 @@ synthesis engine must pass BEFORE a model may produce a response.
 
 :class:`GroundingPolicy.check` enforces, in fixed order (all fail-closed):
 
-1. **Tenant scope** — ``request.evidence.tenant_id`` must equal
+1. **Tenant scope (set)** — ``request.evidence.tenant_id`` must equal
    ``request.tenant_id``. The requested tenant is server-authoritative; a
    mismatch raises :class:`GroundingViolation` so cross-tenant evidence can
    never reach a model.
-2. **Presence / count** — evidence must exist (``None`` is rejected), be
+2. **Tenant scope (per item)** — EVERY evidence item's ``tenant_id`` must equal
+   the requested tenant. ``EvidenceSet`` does not enforce item/set tenant
+   homogeneity, so a caller can build a set labeled ``tenant-a`` that carries
+   an item from ``tenant-b``; the set-level check alone would pass and the
+   foreign item would reach a model as a citation. Any foreign item fails the
+   whole gate (:class:`GroundingViolation`) before freshness is judged.
+3. **Presence / count** — evidence must exist (``None`` is rejected), be
    non-empty, and carry at least ``min_evidence`` items. Missing or thin
    evidence raises :class:`InsufficientEvidence`.
-3. **Freshness** — every item must be within ``max_age_seconds`` of the policy
+4. **Freshness** — every item must be within ``max_age_seconds`` of the policy
    ``now``. ANY item older than the bound fails the whole gate
    (:class:`StaleEvidence`): synthesis must not ground on a mixed set that
    includes stale evidence.
@@ -66,8 +72,9 @@ class StaleEvidence(Exception):
 class GroundingViolation(Exception):
     """Raised when evidence belongs to a tenant other than the request.
 
-    The requested ``tenant_id`` is server-authoritative: a cross-tenant
-    evidence set fails the whole gate (fail-closed) so out-of-tenant data can
+    The requested ``tenant_id`` is server-authoritative: either the
+    ``EvidenceSet`` as a whole or ANY single evidence item carrying a foreign
+    ``tenant_id`` fails the whole gate (fail-closed) so out-of-tenant data can
     never reach a model.
     """
 
@@ -104,28 +111,46 @@ class GroundingPolicy:
         self._now = now
 
     def check(self, request) -> None:
-        """Fail-closed D6 gate, enforced tenant scope -> presence/count -> freshness.
+        """Fail-closed D6 gate: set tenant -> item tenant -> presence/count -> freshness.
 
         Raises:
-            GroundingViolation: ``request.evidence.tenant_id != request.tenant_id``.
+            GroundingViolation: ``request.evidence.tenant_id != request.tenant_id``,
+                or any single evidence item's ``tenant_id`` differs from the
+                requested tenant.
             InsufficientEvidence: evidence is ``None``, empty, or below ``min_evidence``.
             StaleEvidence: any evidence item is older than ``max_age_seconds``.
         """
         evidence = request.evidence
-        # 1. Tenant scope (server-authoritative; checked before anything else).
+        # 1. Tenant scope (set) — server-authoritative; checked before anything
+        #    else. The requested tenant is the only tenant a model may ground on.
         if evidence is not None and evidence.tenant_id != request.tenant_id:
             raise GroundingViolation(
                 f"evidence belongs to tenant {evidence.tenant_id!r}, "
                 f"not requested tenant {request.tenant_id!r}"
             )
-        # 2. Presence / count.
+        # 2. Tenant scope (per item) — EVERY item must belong to the requested
+        #    tenant. EvidenceSet does not enforce item/set homogeneity, so a
+        #    caller can build a set labeled tenant-a carrying an item from
+        #    tenant-b; the set-level check alone would pass and the foreign
+        #    item would reach the model as a citation. Rejected fail-closed
+        #    here, before presence/count and freshness, so the violation is
+        #    reported as tenant-scope, never masked by another gate failure.
+        if evidence is not None:
+            for item in evidence.items:
+                if item.tenant_id != request.tenant_id:
+                    raise GroundingViolation(
+                        f"evidence item {item.reference_id!r} belongs to tenant "
+                        f"{item.tenant_id!r}, not requested tenant "
+                        f"{request.tenant_id!r}"
+                    )
+        # 3. Presence / count.
         if evidence is None or len(evidence.items) < self._min_evidence:
             present = 0 if evidence is None else len(evidence.items)
             raise InsufficientEvidence(
                 f"grounding requires at least {self._min_evidence} evidence "
                 f"item(s); got {present}"
             )
-        # 3. Freshness — EVERY item must be within the bound. One stale item
+        # 4. Freshness — EVERY item must be within the bound. One stale item
         #    fails the whole set: synthesis must not ground on a mixed set.
         #    The clock is read per check (real UTC when ``now`` was not
         #    injected) so evidence collected after process startup is judged
