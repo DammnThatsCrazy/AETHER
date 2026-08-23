@@ -5,11 +5,19 @@ revoked subject's semantic observations, sentiment, aggregate state and review
 items do not persist. Produces a verifiable result (per-table counts + errors)
 that binds into the DSR propagation record. Imitates
 ``services/measurement/privacy.py``.
+
+Graph projections: the durable Gold relationship rows are the *source of truth*
+the semantic graph projector turns into governed ``SEMANTIC_RELATES_TO`` edges.
+A DSR that only removed the Gold rows would leave those projected edges LIVE in
+the graph until the projector's next reconciliation sweep (a default six-hour
+interval) — so both handlers revoke the subject's projections through the
+canonical mutation gateway (the same path the projector uses) before they can
+report ``completed=True``. A revocation failure is a DSR error (fail-closed).
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from shared.logger.logger import get_logger
 
@@ -58,8 +66,19 @@ _SENTIMENT_SILVER_TABLE = "silver_sentiment_observations"
 
 
 class SemanticPrivacyHandler:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        graph_client: Optional[Any] = None,
+        gateway: Optional[Any] = None,
+    ) -> None:
         self._review_queue = SemanticReviewQueueRepository()
+        # Injectable graph client + mutation gateway so tests can bind the DSR
+        # to a private in-memory graph. Production passes neither: the graph
+        # revocation path falls back to the process-wide client/gateway — the
+        # same graph the semantic graph projector writes through.
+        self._graph_client = graph_client
+        self._gateway = gateway
 
     async def _affected_subjects(
         self, tenant_id: str, ref: str, table: str, sink: list[str]
@@ -107,6 +126,64 @@ class SemanticPrivacyHandler:
                 sink.append(f"recompute_sentiment:{subject}:{exc}")
                 logger.exception("semantic gold sentiment recompute failed for %s", subject)
         return recomputed
+
+    async def _revoke_subject_projections(
+        self, tenant_id: str, subject_ref: str, errors: list[str]
+    ) -> int:
+        """Revoke every live ``SEMANTIC_RELATES_TO`` projection touching the subject.
+
+        Deleting the durable Gold relationship rows is NOT enough: a previously
+        projected graph edge (written by the semantic graph projector through the
+        canonical mutation gateway) stays LIVE in the graph until the projector's
+        next reconciliation sweep — a default six-hour interval. Direct graph
+        consumers read the projected edge, not the Gold row, so a DSR that
+        reported ``completed=True`` while the subject's relationship was still
+        projected would leave an erased/restricted subject exposed as a graph
+        relationship endpoint.
+
+        This revokes — through the canonical mutation gateway, the SAME path
+        ``graph_projector._revoke_projection`` uses (never a direct graph write)
+        — every live projection for which ``subject_ref`` is an endpoint (source
+        OR target). Fail-closed: a listing failure or any revocation failure is
+        appended to ``errors`` and therefore flips the DSR ``completed`` to
+        False, so a DSR never reports complete while a governed edge can still
+        surface the subject.
+
+        Returns the number of projections revoked.
+        """
+        from .graph_projector import _list_projected_edges_for_tenant, _revoke_projection
+        from shared.graph.graph import get_graph_client
+        from shared.graph.mutation_gateway import GraphMutationGateway
+
+        graph_client = self._graph_client or get_graph_client()
+        gateway = self._gateway or GraphMutationGateway(graph_client=graph_client)
+        try:
+            edges = await _list_projected_edges_for_tenant(graph_client, tenant_id)
+        except Exception as exc:  # noqa: BLE001 — DSR must fail closed on graph errors
+            errors.append(f"graph_list:{exc}")
+            logger.exception("semantic graph projection list failed for %s", subject_ref)
+            return 0
+        # One gateway revocation per (source, target) pair; duplicate replica
+        # projections of the same pair collapse to a single (idempotent) revoke.
+        pairs: set[tuple[str, str]] = {
+            (edge.from_vertex_id, edge.to_vertex_id)
+            for edge in edges
+            if subject_ref in (edge.from_vertex_id, edge.to_vertex_id)
+        }
+        revoked = 0
+        for source, target in sorted(pairs):
+            try:
+                await _revoke_projection(gateway, tenant_id, source, target)
+                revoked += 1
+            except Exception as exc:  # noqa: BLE001 — one failed revoke fails the DSR
+                errors.append(f"graph_revoke:{source}->{target}:{exc}")
+                logger.exception(
+                    "semantic graph revocation failed for %s (%s->%s)",
+                    subject_ref,
+                    source,
+                    target,
+                )
+        return revoked
 
     async def handle_erasure(self, tenant_id: str, subject_ref: str) -> dict[str, Any]:
         """Hard-delete a subject's semantic data; return a verification result."""
@@ -160,12 +237,23 @@ class SemanticPrivacyHandler:
             tenant_id, state_subjects, sentiment_subjects, recompute_errors
         )
 
+        # The Gold relationship rows are gone, but a previously projected graph
+        # edge (written by the semantic graph projector) remains LIVE until the
+        # projector's next reconciliation sweep — a default six-hour interval.
+        # Revoke the subject's projections through the canonical mutation
+        # gateway BEFORE reporting the DSR complete; a revocation failure is a
+        # DSR error (fail-closed), never a silent ``completed=True``.
+        graph_revocations = await self._revoke_subject_projections(
+            tenant_id, subject_ref, errors
+        )
+
         return {
             "tenant_id": tenant_id,
             "subject_ref": subject_ref,
             "deleted": deleted,
             "deleted_total": sum(deleted.values()),
             "recomputed": recomputed,
+            "graph_revocations": graph_revocations,
             "recompute_errors": recompute_errors,
             "errors": errors,
             "completed": not errors,
@@ -210,12 +298,19 @@ class SemanticPrivacyHandler:
         recomputed = await self._recompute_gold(
             tenant_id, state_subjects, sentiment_subjects, recompute_errors
         )
+        # Same as erasure: a restricted subject must not remain projected as a
+        # graph relationship endpoint. Revoke its live projections through the
+        # mutation gateway before `completed` can be reported (fail-closed).
+        graph_revocations = await self._revoke_subject_projections(
+            tenant_id, subject_ref, errors
+        )
         return {
             "tenant_id": tenant_id,
             "subject_ref": subject_ref,
             "restricted": restricted,
             "restricted_total": sum(restricted.values()),
             "recomputed": recomputed,
+            "graph_revocations": graph_revocations,
             "recompute_errors": recompute_errors,
             "status": ObservationStatus.CONSENT_RESTRICTED.value,
             "errors": errors,
