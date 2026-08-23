@@ -193,7 +193,7 @@ from typing import AsyncGenerator
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import settings
@@ -724,6 +724,38 @@ def _mount_demo_seed_routes(app: FastAPI, environment: str) -> None:
         from services.demo_seed.routes import build_demo_seed_mutation_router
 
         app.include_router(build_demo_seed_mutation_router())
+
+
+def _model_runtime_disabled_router() -> APIRouter:
+    """Build the fail-closed HTTP 503 surface for ``/v1/model-runtime/*``.
+
+    Serves the documented ``model_runtime_disabled`` contract (ADR-008 D9) while
+    the feature gate is OFF or the harness package is unavailable — the same
+    shape ``services.model_runtime.routes._gate_guard`` raises for an enabled
+    surface whose gate is closed. Mounting this instead of leaving the prefix
+    unrouted means callers receive the public 503 rather than a bare FastAPI
+    404. Deliberately imports nothing from ``services.model_runtime`` so the
+    disabled path can never fail at startup on a harness import.
+    """
+    router = APIRouter(prefix="/v1/model-runtime", tags=["Model Runtime"])
+
+    @router.api_route(
+        "/{path:path}",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        include_in_schema=False,
+    )
+    async def _model_runtime_disabled_handler(path: str) -> None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "disabled",
+                "code": "model_runtime_disabled",
+                "message": "model-runtime HTTP surface is disabled "
+                "(MODEL_RUNTIME_ENABLED=false)",
+            },
+        )
+
+    return router
 
 
 def create_app() -> FastAPI:
@@ -1473,6 +1505,13 @@ def create_app() -> FastAPI:
     # costs nothing while disabled; the whole block is guarded against
     # ImportError so main stays importable while the package's remaining
     # surfaces land in the same integration commit.
+    #
+    # The /v1/model-runtime surface is ALWAYS mounted so the documented
+    # fail-closed contract holds at the app boundary: when the gate is ON it is
+    # the real guarded router (which 503s via _gate_guard while the gate is
+    # closed); when the gate is OFF — or the harness package is not yet
+    # importable — a lightweight disabled-prefix router serves the same
+    # ``model_runtime_disabled`` HTTP 503 instead of a bare FastAPI 404.
     try:
         from services.model_runtime.config import ModelRuntimeSettings
 
@@ -1482,11 +1521,16 @@ def create_app() -> FastAPI:
             app.include_router(model_runtime_router, tags=["Model Runtime"])
             logger.info("Model runtime mounted (/v1/model-runtime)")
         else:
-            logger.info("Model runtime disabled (MODEL_RUNTIME_ENABLED=false)")
+            app.include_router(_model_runtime_disabled_router(), tags=["Model Runtime"])
+            logger.info(
+                "Model runtime disabled — /v1/model-runtime serves 503 "
+                "model_runtime_disabled (MODEL_RUNTIME_ENABLED=false)"
+            )
     except ImportError:
+        app.include_router(_model_runtime_disabled_router(), tags=["Model Runtime"])
         logger.warning(
             "Model runtime not mounted (services.model_runtime unavailable — "
-            "concurrent integration guard)"
+            "concurrent integration guard); /v1/model-runtime serves 503"
         )
 
     return app

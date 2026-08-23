@@ -17,7 +17,7 @@ dashboards.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Literal
 
 from pydantic import BaseModel
@@ -70,9 +70,19 @@ class ProviderHealthCheck:
 class RuntimeHealthProbe:
     """Aggregate runtime status probe over provider health plus extra checks.
 
-    Status resolution: ``ok`` when every provider is healthy; ``degraded`` when
-    at least one provider is healthy but at least one is not; ``unhealthy``
-    when zero providers are healthy (including an empty provider set).
+    Status resolution: ``ok`` when every provider is healthy and every
+    *required* extra check passes; ``degraded`` when at least one provider is
+    healthy but at least one is not (and all required extra checks pass);
+    ``unhealthy`` when zero providers are healthy (including an empty provider
+    set) or a required extra check is false.
+
+    Extra checks are required by default. Pass their names via
+    ``optional_checks`` to make them informational only: a false optional check
+    is still surfaced in ``checks`` but never changes the aggregate status. A
+    false *required* check fails the aggregate to ``unhealthy`` — a failed
+    database, migration, or other injected readiness dependency must never
+    yield an ``ok`` aggregate, and :class:`RuntimeReadiness` (which treats only
+    ``unhealthy`` as blocking) must gate on it.
     """
 
     def __init__(
@@ -80,15 +90,22 @@ class RuntimeHealthProbe:
         health_check: ProviderHealthCheck,
         *,
         extra_checks: Mapping[str, bool] | None = None,
+        optional_checks: Collection[str] = (),
     ) -> None:
         self._health_check = health_check
         self._extra_checks = dict(extra_checks) if extra_checks else {}
+        self._optional_checks = frozenset(optional_checks)
 
     def status(self) -> RuntimeHealth:
         provider_healths = self._health_check.check()
         healthy_count = sum(1 for p in provider_healths if p.healthy)
 
-        if not provider_healths or healthy_count == 0:
+        required_failed = any(
+            name not in self._optional_checks and not ok
+            for name, ok in self._extra_checks.items()
+        )
+
+        if required_failed or not provider_healths or healthy_count == 0:
             status: Literal["ok", "degraded", "unhealthy"] = "unhealthy"
         elif healthy_count == len(provider_healths):
             status = "ok"

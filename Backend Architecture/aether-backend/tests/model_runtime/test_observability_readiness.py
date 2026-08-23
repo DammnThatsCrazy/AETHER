@@ -252,3 +252,32 @@ def test_checks_snapshot_normalizes_health_checks():
     assert state.checks["migrations"] is True
     assert state.checks["workers"] is False
     assert state.checks["cache"] is True
+
+
+def test_real_probe_false_required_extra_check_fails_readiness():
+    # Commit 12-B interop: a real RuntimeHealthProbe whose required extra check
+    # (e.g. database/migrations) is false must yield an aggregate status that
+    # the readiness gate fails closed on — not ready even with providers
+    # configured.
+    from services.model_runtime.observability.health import (
+        ProviderHealthCheck,
+        RuntimeHealthProbe,
+    )
+
+    class _Provider:
+        def __init__(self, name, configured):
+            self.provider_name = name
+            self._configured = configured
+
+        def is_configured(self):
+            return self._configured
+
+    probe = RuntimeHealthProbe(
+        ProviderHealthCheck({"anthropic": _Provider("anthropic", True)}),
+        extra_checks={"runtime.database": False},
+    )
+    state = RuntimeReadiness(probe).evaluate()
+    assert state.ready is False
+    assert "runtime unhealthy" in state.blockers
+    assert state.checks["health"] is False
+    assert state.checks["runtime.database"] is False

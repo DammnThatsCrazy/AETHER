@@ -17,6 +17,7 @@ while the rest of the ``observability`` package lands concurrently.
 from __future__ import annotations
 
 import hashlib
+from collections import OrderedDict
 from typing import NamedTuple
 
 from pydantic import BaseModel, field_validator
@@ -109,30 +110,44 @@ class CanarySelector:
         return bucket < fraction
 
 
-class _Sample(NamedTuple):
-    """A single recorded canary outcome."""
+class _Accumulator(NamedTuple):
+    """Running aggregates for a single canary candidate.
 
-    latency_ms: float
-    ok: bool
-    verified: bool
+    Fixed four-scalar state regardless of sample volume, so a long-running
+    deployment's retained state never grows with canary traffic.
+    """
+
+    samples: int
+    ok_count: int
+    verify_count: int
+    latency_sum: float
 
 
 class CanaryTracker:
-    """In-memory, per-candidate accumulation of canary outcomes.
+    """In-memory, per-candidate accumulation of canary outcomes (bounded).
 
-    A single tracker may follow several candidate labels; ``record`` appends
-    each outcome to the bucket for the given candidate string. ``metrics()``
-    reports the bucket for the policy's candidate by default — the canonical
-    label ``f"{candidate_model}@{candidate_provider}"`` — and an explicit
+    A single tracker may follow several candidate labels; ``record`` folds each
+    outcome into the running aggregate for the given candidate string (counts
+    and summed latencies — never the raw samples), so memory per candidate is
+    O(1) no matter how many requests are canaried. ``metrics()`` reports the
+    bucket for the policy's candidate by default — the canonical label
+    ``f"{candidate_model}@{candidate_provider}"`` — and an explicit
     ``candidate`` argument can inspect any other tracked bucket.
+
+    Candidate-label buckets are bounded by ``max_candidates``: when a new
+    non-canonical label would exceed the cap, the least-recently recorded
+    non-canonical bucket is evicted to make room, so arbitrary labels cannot
+    grow the bucket map without limit. The canonical (policy) bucket is never
+    evicted — promotion evidence must survive.
 
     The tracker stores only outcome counts and summed latencies — never
     tenant/trace ids — so it holds no secrets and no request-identifying data.
     """
 
-    def __init__(self, policy: CanaryPolicy) -> None:
+    def __init__(self, policy: CanaryPolicy, *, max_candidates: int = 16) -> None:
         self._policy = policy
-        self._buckets: dict[str, list[_Sample]] = {}
+        self._max_candidates = max(int(max_candidates), 1)
+        self._buckets: OrderedDict[str, _Accumulator] = OrderedDict()
 
     @property
     def candidate(self) -> str:
@@ -145,9 +160,46 @@ class CanaryTracker:
     ) -> None:
         """Record one outcome for a candidate."""
 
-        self._buckets.setdefault(candidate, []).append(
-            _Sample(latency_ms=latency_ms, ok=ok, verified=verified)
+        key = candidate
+        if key in self._buckets:
+            acc = self._buckets[key]
+            self._buckets[key] = _Accumulator(
+                samples=acc.samples + 1,
+                ok_count=acc.ok_count + (1 if ok else 0),
+                verify_count=acc.verify_count + (1 if verified else 0),
+                latency_sum=acc.latency_sum + latency_ms,
+            )
+            self._buckets.move_to_end(key)  # recency order for LRU eviction
+            return
+
+        if key == self.candidate:
+            # Canonical bucket is never evicted: make room if the map is full.
+            if len(self._buckets) >= self._max_candidates:
+                self._evict_non_canonical()
+        elif len(self._buckets) >= self._max_candidates:
+            if not self._evict_non_canonical():
+                # Capacity is entirely the canonical bucket (e.g. a cap of 1);
+                # drop this overflow candidate rather than evict promotion
+                # evidence or grow without bound.
+                return
+        self._buckets[key] = _Accumulator(
+            samples=1,
+            ok_count=1 if ok else 0,
+            verify_count=1 if verified else 0,
+            latency_sum=latency_ms,
         )
+        self._buckets.move_to_end(key)
+
+    def _evict_non_canonical(self) -> bool:
+        """Evict the least-recently recorded non-canonical bucket.
+
+        Returns False when no evictable (non-canonical) bucket exists.
+        """
+        for key in tuple(self._buckets):
+            if key != self.candidate:
+                del self._buckets[key]
+                return True
+        return False
 
     def metrics(self, candidate: str | None = None) -> CanaryMetrics:
         """Compute a metrics snapshot for a candidate's accumulation.
@@ -160,11 +212,17 @@ class CanaryTracker:
         """
 
         key = candidate if candidate is not None else self.candidate
-        samples = self._buckets.get(key, [])
-        sample_count = len(samples)
-        ok_count = sum(1 for s in samples if s.ok)
-        verify_count = sum(1 for s in samples if s.verified)
-        latency_sum = sum(s.latency_ms for s in samples)
+        acc = self._buckets.get(key)
+        if acc is None:
+            sample_count = 0
+            ok_count = 0
+            verify_count = 0
+            latency_sum = 0.0
+        else:
+            sample_count = acc.samples
+            ok_count = acc.ok_count
+            verify_count = acc.verify_count
+            latency_sum = acc.latency_sum
 
         if sample_count:
             error_rate = (sample_count - ok_count) / sample_count

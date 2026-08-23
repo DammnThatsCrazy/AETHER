@@ -287,3 +287,70 @@ def test_promote_ignores_latency_when_no_limit():
     for _ in range(5):
         tracker.record(tracker.candidate, latency_ms=9999.0, ok=True, verified=True)
     assert tracker.metrics().promote is True
+
+
+# ---------------------------------------------------------------------------
+# Bounded state (no unbounded sample list / unbounded candidate buckets)
+# ---------------------------------------------------------------------------
+
+
+def test_tracker_retained_state_bounded_and_promotion_correct():
+    # Many canary runs must not grow retained state: each bucket is a fixed
+    # running aggregate (counts + latency sum), never a growing sample list.
+    policy = _policy(
+        promote_after_samples=100, min_samples=50, max_error_rate=0.05, max_latency_ms=40.0
+    )
+    tracker = CanaryTracker(policy)
+    n = 10_000
+    for _ in range(n):
+        tracker.record(tracker.candidate, latency_ms=20.0, ok=True, verified=True)
+
+    bucket = tracker._buckets[tracker.candidate]
+    assert len(tracker._buckets) == 1  # one O(1) accumulator, not n samples
+    assert tuple(bucket) == (n, n, n, n * 20.0)
+
+    metrics = tracker.metrics()
+    assert metrics.samples == n
+    assert metrics.error_rate == 0.0
+    assert metrics.avg_latency_ms == 20.0
+    assert metrics.verify_pass_rate == 1.0
+    assert metrics.promote is True  # promotion still computes from the aggregate
+
+
+def test_tracker_bounds_candidate_label_buckets():
+    # Arbitrary candidate labels must not grow the bucket map without limit.
+    tracker = CanaryTracker(_policy(), max_candidates=4)
+    for i in range(100):
+        tracker.record(f"candidate-{i}", latency_ms=10.0, ok=True, verified=True)
+    assert len(tracker._buckets) <= 4
+    # The canonical (promotion) bucket is never evicted by overflow traffic.
+    tracker.record(tracker.candidate, latency_ms=10.0, ok=True, verified=True)
+    assert tracker.candidate in tracker._buckets
+    assert len(tracker._buckets) <= 4
+    assert tracker.metrics().samples == 1
+
+
+def test_tracker_never_evicts_canonical_at_minimum_capacity():
+    tracker = CanaryTracker(_policy(), max_candidates=1)
+    tracker.record("spam-1", latency_ms=5.0, ok=True, verified=True)
+    tracker.record(tracker.candidate, latency_ms=5.0, ok=True, verified=True)
+    for i in range(50):
+        tracker.record(f"spam-{i + 2}", latency_ms=5.0, ok=True, verified=True)
+    # Overflow candidates are dropped; the canonical bucket survives with its
+    # single recorded sample intact and the map stays bounded.
+    assert tracker.candidate in tracker._buckets
+    assert len(tracker._buckets) == 1
+    assert tracker.metrics().samples == 1
+
+
+def test_tracker_evicts_least_recently_recorded_non_canonical():
+    tracker = CanaryTracker(_policy(), max_candidates=2)
+    tracker.record("a", latency_ms=1.0, ok=True, verified=True)
+    tracker.record("b", latency_ms=1.0, ok=True, verified=True)
+    tracker.record("a", latency_ms=1.0, ok=True, verified=True)  # refresh "a"
+    tracker.record("c", latency_ms=1.0, ok=True, verified=True)  # evicts LRU "b"
+    assert "b" not in tracker._buckets
+    assert "a" in tracker._buckets
+    assert "c" in tracker._buckets
+    assert tracker.metrics("a").samples == 2
+    assert tracker.metrics("c").samples == 1

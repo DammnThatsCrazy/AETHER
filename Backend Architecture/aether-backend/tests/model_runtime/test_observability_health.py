@@ -144,9 +144,13 @@ def test_runtime_health_fields_and_extra_checks():
         "anthropic": FakeProvider("anthropic", True),
         "openai": FakeProvider("openai", True),
     }
+    # runtime.registry is explicitly optional here so its false value is
+    # surfaced without degrading the aggregate (false extra checks are
+    # required and fail the aggregate by default).
     probe = RuntimeHealthProbe(
         ProviderHealthCheck(providers),
         extra_checks={"runtime.config.loaded": True, "runtime.registry": False},
+        optional_checks=("runtime.registry",),
     )
     health = probe.status()
     assert isinstance(health, RuntimeHealth)
@@ -159,6 +163,66 @@ def test_runtime_health_fields_and_extra_checks():
         "runtime.config.loaded": True,
         "runtime.registry": False,
     }
+
+
+def test_false_required_extra_check_fails_aggregate_status():
+    # Providers configured but a required readiness dependency (database,
+    # migrations, ...) is down: the aggregate must leave "ok" so the readiness
+    # gate fails closed instead of serving traffic.
+    providers = {"anthropic": FakeProvider("anthropic", True)}
+    health = RuntimeHealthProbe(
+        ProviderHealthCheck(providers),
+        extra_checks={"runtime.database": False},
+    ).status()
+    assert health.status == "unhealthy"
+    assert health.checks["runtime.database"] is False
+    assert health.checks["anthropic"] is True
+
+
+def test_all_extra_checks_required_by_default():
+    providers = {"anthropic": FakeProvider("anthropic", True)}
+    health = RuntimeHealthProbe(
+        ProviderHealthCheck(providers),
+        extra_checks={"runtime.migrations": False},
+    ).status()
+    assert health.status == "unhealthy"
+
+
+def test_true_extra_checks_keep_aggregate_ok():
+    providers = {"anthropic": FakeProvider("anthropic", True)}
+    health = RuntimeHealthProbe(
+        ProviderHealthCheck(providers),
+        extra_checks={"runtime.database": True},
+    ).status()
+    assert health.status == "ok"
+    assert health.checks["runtime.database"] is True
+
+
+def test_false_optional_extra_check_keeps_status():
+    # An explicitly-optional check is surfaced in checks but never degrades the
+    # aggregate status.
+    providers = {"anthropic": FakeProvider("anthropic", True)}
+    health = RuntimeHealthProbe(
+        ProviderHealthCheck(providers),
+        extra_checks={"runtime.cache.warm": False},
+        optional_checks=("runtime.cache.warm",),
+    ).status()
+    assert health.status == "ok"
+    assert health.checks["runtime.cache.warm"] is False
+
+
+def test_false_required_extra_check_overrides_provider_degraded():
+    # Even when the provider mix alone would be "degraded" (non-blocking for
+    # readiness), a failed required check must fail the aggregate instead.
+    providers = {
+        "anthropic": FakeProvider("anthropic", True),
+        "openai": FakeProvider("openai", False),
+    }
+    health = RuntimeHealthProbe(
+        ProviderHealthCheck(providers),
+        extra_checks={"runtime.database": False},
+    ).status()
+    assert health.status == "unhealthy"
 
 
 def test_describe_contains_status():

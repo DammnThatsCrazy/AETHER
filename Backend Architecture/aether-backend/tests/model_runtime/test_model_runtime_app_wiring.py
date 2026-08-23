@@ -3,8 +3,10 @@
 The gate is ``ModelRuntimeSettings().enabled`` (reads ``MODEL_RUNTIME_ENABLED``,
 default ``False`` per ADR-008 D9) and lives in
 ``services/model_runtime/config.py`` — **not** in ``config/settings.py`` (a
-shared file owned by other teams).  ``main.create_app()`` mounts the router only
-when the gate is ON and logs the disabled path otherwise.
+shared file owned by other teams).  ``main.create_app()`` mounts the real
+guarded router when the gate is ON and a lightweight 503 disabled-prefix router
+otherwise; the app-boundary TestClient contract is covered in
+``test_model_runtime_app_disabled_surface.py``.
 
 Why this suite does **not** import ``main`` wholesale:
 ``main`` runs ``create_app()`` at module level, which builds the entire app
@@ -50,11 +52,13 @@ def _clear_model_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _model_runtime_gate_status() -> str:
-    """Return the mount decision main.create_app() makes for model_runtime.
+    """Return the gate decision main.create_app() makes for model_runtime.
 
-    Mirrors the exact block added to ``main.create_app()`` (feature-gated
+    Mirrors the gate decision inside ``main.create_app()`` (feature-gated
     router mount guarded against ``ImportError``) so the wiring logic is
-    exercised without importing ``main`` itself.
+    exercised without importing ``main`` itself. Whether the gate is ON or OFF
+    the surface is always mounted (real guarded router vs. the 503
+    disabled-prefix router).
 
     Returns:
         ``"mounted"``    — gate ON and ``services.model_runtime.routes``
