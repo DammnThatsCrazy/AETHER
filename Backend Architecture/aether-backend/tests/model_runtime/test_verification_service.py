@@ -15,6 +15,7 @@ package depends on it through ``verifier.py``.
 
 from __future__ import annotations
 
+import traceback
 from datetime import datetime, timezone
 
 import pytest
@@ -196,6 +197,39 @@ def test_secret_violation_error_message_contains_no_sk():
     except VerificationServiceError as err:
         assert "sk-" not in str(err)
         assert "sk-live-42" not in str(err)
+
+
+def test_secret_violation_chain_never_echoes_rejected_credential():
+    # The VerificationUnsafe raised when an extracted claim trips the guard is
+    # retained as __cause__ on the VerificationServiceError. The wrapper's own
+    # message is already content-free; this regression test pins that the WHOLE
+    # exception chain — everything traceback / exc_info logging renders — stays
+    # free of the rejected credential.
+    secret = "s3cretValue42"
+    service = VerificationService()
+    # "password=" is a verification marker but NOT a synthesis content marker,
+    # so a real SynthesisResult carries it past the synthesis guard and the
+    # verification guard rejects it during claim extraction (no model_construct
+    # needed here).
+    result = _result(content=f"The deployment password={secret} must rotate.")
+
+    try:
+        service.verify(result)
+        raise AssertionError("expected VerificationServiceError to be raised")
+    except VerificationServiceError as err:
+        rendered = "".join(
+            traceback.format_exception(type(err), err, err.__traceback__)
+        )
+        assert secret not in rendered
+        # Walk __cause__ explicitly: format_exception folds it into the chain,
+        # but asserting both surfaces catches a regression in either.
+        node = err
+        seen: set[int] = set()
+        while node is not None and id(node) not in seen:
+            seen.add(id(node))
+            assert secret not in str(node)
+            assert secret not in repr(node)
+            node = node.__cause__
 
 
 def test_barrel_all_matches_spec():

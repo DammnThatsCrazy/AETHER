@@ -1,6 +1,7 @@
 """Tests for ADR-008 D7 verification/faithfulness models (fail-closed)."""
 from __future__ import annotations
 
+import traceback
 from datetime import datetime
 
 import pytest
@@ -51,6 +52,53 @@ def test_secret_marker_check_is_case_insensitive():
     _raises(VerificationUnsafe, ClaimStatement, text="api key Sk-1234")
     _raises(VerificationUnsafe, ClaimStatement, text="access key akiaEXAMPLE")
     _raises(VerificationUnsafe, ClaimStatement, text="authorization: Bearer xyz")
+
+
+def test_secret_marker_error_never_embeds_rejected_value():
+    # Security guard: the raised VerificationUnsafe reports only the matched
+    # marker, never the full rejected value. If the value were embedded
+    # verbatim, traceback / exc_info logging would print the raw credential
+    # the guard is meant to contain (the value survives as __cause__ on any
+    # wrapper, so the rendered chain must stay value-free too).
+    secret = "sk-live-ABC123secret"
+    try:
+        ClaimStatement(text=f"the value {secret} leaked")
+    except VerificationUnsafe as err:
+        rendered = "".join(
+            traceback.format_exception(type(err), err, err.__traceback__)
+        )
+        assert secret not in str(err)
+        assert secret not in repr(err)
+        assert secret not in rendered
+        # The matched marker is still reported (operators see WHICH pattern
+        # tripped) — but the credential after it never is.
+        assert "sk-" in str(err)
+        assert "sk-live" not in str(err)
+    else:  # pragma: no cover - test integrity
+        raise AssertionError("expected VerificationUnsafe to be raised")
+
+
+def test_secret_marker_error_hides_value_for_assignment_markers():
+    # Assignment-style markers ("password=" / "secret=" / "key=") are unique
+    # to the verification guard, so the credential after the "=" must never
+    # surface in the exception chain for claim OR citation text.
+    secret = "s3cretValu3"
+    try:
+        CitationCheck(
+            reference_id="ref-1",
+            claim_text=f"password={secret}",
+            supported=True,
+            method="token-overlap",
+        )
+    except VerificationUnsafe as err:
+        rendered = "".join(
+            traceback.format_exception(type(err), err, err.__traceback__)
+        )
+        assert secret not in str(err)
+        assert secret not in rendered
+        assert "password=" in str(err)  # marker reported, payload hidden
+    else:  # pragma: no cover - test integrity
+        raise AssertionError("expected VerificationUnsafe to be raised")
 
 
 def test_claim_text_plain_marker_substring_is_not_enough():

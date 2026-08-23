@@ -33,13 +33,18 @@ class VerificationUnsafe(Exception):
 
 
 def _reject_secret_markers(value: str) -> str:
-    """Reject text containing any ``VERIFICATION_SECRET_MARKERS`` entry, case-insensitively."""
+    """Reject text containing any ``VERIFICATION_SECRET_MARKERS`` entry, case-insensitively.
+
+    The raised :class:`VerificationUnsafe` reports ONLY the matched marker —
+    never the rejected ``value`` — so a credential that trips the guard cannot
+    leak through ``__cause__``/traceback or ``exc_info`` logging. This matches
+    the other model-runtime leak guards (``synthesis``, ``evaluation``,
+    ``context``), which all identify the marker rather than echo the payload.
+    """
     lowered = value.casefold()
     for marker in VERIFICATION_SECRET_MARKERS:
         if marker.casefold() in lowered:
-            raise VerificationUnsafe(
-                f"text contains a secret marker ({marker!r}): {value!r}"
-            )
+            raise VerificationUnsafe(f"text contains a secret marker ({marker!r})")
     return value
 
 
