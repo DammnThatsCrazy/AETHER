@@ -184,6 +184,35 @@ async def test_orchestrator_rotate_failure_raises_and_keeps_cache():
     assert cache.invalidated == []
 
 
+async def test_orchestrator_rotate_without_cache_succeeds():
+    # CredentialService forwards cache=None (ByokCredentialResolver permits an
+    # absent cache); invalidation must be a no-op, never an AttributeError that
+    # fails a rotation after the source already changed the credential.
+    source = NoopCredentialSource()
+    source.put("tenant-1", "llm-default", _meta(version=1))
+    orchestrator = RotationOrchestrator(source, None, policy=ExpiryBasedRotationPolicy())
+
+    rotated = await orchestrator.rotate("tenant-1", "llm-default")
+
+    assert rotated.ref == "llm-default"
+    assert rotated.version == 2
+    loaded = await source.load("tenant-1", "llm-default")
+    assert loaded.version == 2  # source rotation actually happened
+
+
+async def test_orchestrator_revoke_without_cache_succeeds():
+    # Same absent-cache configuration on the revoke path.
+    source = NoopCredentialSource()
+    source.put("tenant-1", "llm-default", _meta())
+    orchestrator = RotationOrchestrator(source, None, policy=ExpiryBasedRotationPolicy())
+
+    result = await orchestrator.revoke("tenant-1", "llm-default")
+
+    assert result is True
+    loaded = await source.load("tenant-1", "llm-default")
+    assert loaded.version == 1  # revoked, not rotated
+
+
 async def test_orchestrator_revoke_success_invalidates_cache():
     source = NoopCredentialSource()
     source.put("tenant-1", "llm-default", _meta())

@@ -9,9 +9,12 @@ never fetches or returns raw secret payloads (only masked
 ``CredentialMetadata`` is read from the backend).
 
 Fail-closed by construction: when AWS is not configured, the region env var is
-absent, the backend is unhealthy/raising, or a resolution misses, ``resolve``
-returns a ``CredentialResolution`` with ``configured=False``/``resolved=False``
-— it never raises and never leaks secret material.
+absent, the backend is unhealthy/raising, a resolution misses, or the stored
+metadata is revoked/expired, ``resolve`` returns a ``CredentialResolution`` with
+``configured=False`` — it never raises and never leaks secret material.
+Revoked/expired metadata (``DISABLED``/``DEGRADED`` readiness, or an aware
+``expires_at`` in the past) is rejected before it can be cached or reported as
+serviceable, mirroring :meth:`ByokCredentialResolver`'s rejection semantics.
 """
 
 from __future__ import annotations
@@ -19,8 +22,10 @@ from __future__ import annotations
 import os
 import re
 import typing
+from datetime import datetime, timezone
 from typing import Optional
 
+from shared.certification.readiness import CredentialReadiness
 from shared.credentials.interface import CredentialBackendHealth, CredentialMetadata
 from shared.credentials.types import StructuredCredential
 
@@ -39,6 +44,9 @@ _REASON_OK = "resolved from aws secrets manager"
 _REASON_UNAVAILABLE = "aws backend unavailable"
 _REASON_MISSING = "no aws secret"
 _REASON_UNSAFE = "invalid provider ref"
+_REASON_REVOKED = "aws secret revoked"
+_REASON_DEGRADED = "aws secret degraded"
+_REASON_EXPIRED = "aws secret expired"
 
 
 class CredentialBackendLike(typing.Protocol):
@@ -119,7 +127,10 @@ class AwsSecretsCredentialResolver:
         """Resolve masked metadata for ``tenant_id``/``provider`` (fail-closed).
 
         Never raises on backend failure and never reads the raw secret payload.
-        A cached resolution short-circuits the backend entirely.
+        A cached resolution short-circuits the backend entirely. Revoked or
+        expired metadata (``DISABLED``/``DEGRADED`` readiness, or an aware
+        ``expires_at`` in the past) is rejected before it can be cached or
+        reported as ``configured=True`` — it resolves as ``configured=False``.
         """
         if not self._token_safe(tenant_id) or not self._token_safe(provider):
             return self._resolution(
@@ -134,6 +145,17 @@ class AwsSecretsCredentialResolver:
         ref = self._ref_for(provider)
         cached = await self._cache_get(tenant_id, ref)
         if cached is not None:
+            # A cached revoked/expired credential must never be served as usable.
+            unusable = self._unusable_reason(cached)
+            if unusable is not None:
+                return self._resolution(
+                    tenant_id=tenant_id,
+                    provider=provider,
+                    resolved=True,
+                    configured=False,
+                    source="none",
+                    reason=unusable,
+                )
             return self._resolution_from_metadata(tenant_id, provider, ref, cached)
 
         if not self._region():
@@ -165,6 +187,19 @@ class AwsSecretsCredentialResolver:
                 configured=False,
                 source="none",
                 reason=_REASON_MISSING,
+            )
+
+        # Fail closed on revoked/expired metadata BEFORE it can be cached or
+        # returned as usable — never serve a disabled or expired credential.
+        unusable = self._unusable_reason(metadata)
+        if unusable is not None:
+            return self._resolution(
+                tenant_id=tenant_id,
+                provider=provider,
+                resolved=True,
+                configured=False,
+                source="none",
+                reason=unusable,
             )
 
         await self._cache_put(metadata)
@@ -217,6 +252,26 @@ class AwsSecretsCredentialResolver:
             masked_identifier=metadata.masked_identifier or mask_identifier(f"{tenant_id}:{ref}"),
             reason=_REASON_OK,
         )
+
+    @staticmethod
+    def _unusable_reason(metadata: CredentialMetadata) -> Optional[str]:
+        """Fail-closed check for revoked/expired credential metadata.
+
+        Mirrors :meth:`ByokCredentialResolver._reject_unusable`: ``DISABLED``
+        (revoked) and ``DEGRADED`` (expired) readiness are off-ramp states that
+        must never yield a usable credential, and an aware ``expires_at`` in the
+        past is rejected even when the status snapshot predates the expiry.
+        Returns a reason string when unusable, ``None`` when usable.
+        """
+        status = getattr(metadata, "status", None)
+        if status == CredentialReadiness.DISABLED:
+            return _REASON_REVOKED
+        if status == CredentialReadiness.DEGRADED:
+            return _REASON_DEGRADED
+        exp = getattr(metadata, "expires_at", None)
+        if exp is not None and exp.tzinfo is not None and datetime.now(timezone.utc) >= exp:
+            return _REASON_EXPIRED
+        return None
 
     def _region(self) -> Optional[str]:
         return self._aws_region or os.getenv("AWS_REGION")

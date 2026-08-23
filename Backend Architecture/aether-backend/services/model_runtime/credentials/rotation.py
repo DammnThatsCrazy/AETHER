@@ -150,7 +150,7 @@ class RotationOrchestrator:
     def __init__(
         self,
         source: CredentialSource,
-        cache: CredentialCache,
+        cache: CredentialCache | None,
         *,
         policy: RotationPolicy,
     ) -> None:
@@ -163,7 +163,10 @@ class RotationOrchestrator:
 
         Returns the new (masked) metadata. The cache is invalidated only AFTER
         a successful source rotation, and never on failure — so a stale entry
-        is never discarded while the source is degraded.
+        is never discarded while the source is degraded. An absent cache
+        (``None``) is a valid configuration and makes invalidation a no-op: the
+        source rotation still succeeds and is never failed retroactively by a
+        missing cache.
 
         Rotation safety: the runtime must re-resolve the credential after a
         rotation; an in-flight call that already resolved the old version keeps
@@ -179,7 +182,8 @@ class RotationOrchestrator:
             raise CredentialBackendUnavailable(
                 f"credential rotation failed for tenant={tenant_id!r} ref={ref!r}"
             ) from exc
-        await self._cache.invalidate(tenant_id, ref)
+        if self._cache is not None:
+            await self._cache.invalidate(tenant_id, ref)
         return new_meta
 
     async def revoke(self, tenant_id: str, ref: str) -> bool:
@@ -196,7 +200,8 @@ class RotationOrchestrator:
             return False
         if not revoked:
             return False
-        await self._cache.invalidate(tenant_id, ref)
+        if self._cache is not None:
+            await self._cache.invalidate(tenant_id, ref)
         return True
 
     async def evaluate_all(

@@ -9,7 +9,7 @@ strings.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pydantic import SecretStr
 
@@ -18,8 +18,10 @@ from services.model_runtime.credentials.aws_secrets import (
 )
 from services.model_runtime.credentials.interface import CredentialCache
 from services.model_runtime.credentials.models import assert_no_raw_secrets
+from shared.certification.readiness import CredentialReadiness
 from shared.credentials.interface import (
     STATUS_ACTIVE,
+    STATUS_REVOKED,
     CredentialBackendHealth,
     CredentialMetadata,
     make_metadata,
@@ -36,9 +38,18 @@ class FakeBackend:
     touch.
     """
 
-    def __init__(self, *, ready: bool = True, stored: dict[str, tuple[str, str]] | None = None):
+    def __init__(
+        self,
+        *,
+        ready: bool = True,
+        stored: dict[str, tuple[str, str]] | None = None,
+        metadata_overrides: dict[str, CredentialMetadata] | None = None,
+    ):
         self._ready = ready
         self._stored = dict(stored or {})
+        # ref -> pre-built CredentialMetadata returned verbatim by metadata()
+        # (lets tests simulate revoked / expired / degraded records directly).
+        self._metadata_overrides = dict(metadata_overrides or {})
         self.metadata_calls: list[tuple[str, str]] = []
         self.get_calls: list[tuple[str, str]] = []
         self.health_calls = 0
@@ -75,13 +86,18 @@ class FakeBackend:
 
     async def metadata(self, tenant_id: str, ref: str):
         self.metadata_calls.append((tenant_id, ref))
+        override = self._metadata_overrides.get(ref)
+        if override is not None:
+            return override
         entry = self._stored.get(ref)
         if entry is None:
             return None
         return self._meta(tenant_id, ref, entry[0])
 
     async def list(self, tenant_id: str):
-        return [self._meta(tenant_id, ref, entry[0]) for ref, entry in self._stored.items()]
+        items = [self._meta(tenant_id, ref, entry[0]) for ref, entry in self._stored.items()]
+        items.extend(self._metadata_overrides.values())
+        return items
 
     async def health_check(self) -> CredentialBackendHealth:
         self.health_calls += 1
@@ -268,3 +284,158 @@ async def test_health_delegates_to_backend():
 
     unhealthy = AwsSecretsCredentialResolver(FakeBackend(ready=False))
     assert await unhealthy.health() is False
+
+
+# ---------------------------------------------- revoked / expired rejection
+
+
+def _revoked_meta(ref: str, masked: str = "****a1b2") -> CredentialMetadata:
+    """Metadata carrying a revoked lifecycle status (readiness=DISABLED)."""
+    now = datetime.now(timezone.utc)
+    return make_metadata(
+        tenant_id="t1",
+        ref=ref,
+        credential_type="api_key",
+        version=1,
+        lifecycle_status=STATUS_REVOKED,
+        masked_identifier=masked,
+        created_at=now,
+        updated_at=now,
+        revoked_at=now,
+    )
+
+
+def _degraded_meta(ref: str, masked: str = "****1111") -> CredentialMetadata:
+    """Metadata whose past expiry projects to readiness=DEGRADED."""
+    now = datetime.now(timezone.utc)
+    return make_metadata(
+        tenant_id="t1",
+        ref=ref,
+        credential_type="api_key",
+        version=1,
+        lifecycle_status=STATUS_ACTIVE,
+        masked_identifier=masked,
+        created_at=now - timedelta(days=2),
+        updated_at=now - timedelta(days=2),
+        expires_at=now - timedelta(days=1),
+    )
+
+
+def _expired_live_meta(ref: str, masked: str = "****2222") -> CredentialMetadata:
+    """A status snapshot that predates expiry: status still live, but the aware
+    ``expires_at`` has already passed (rejected on the expiry check alone)."""
+    now = datetime.now(timezone.utc)
+    return CredentialMetadata(
+        tenant_id="t1",
+        ref=ref,
+        credential_type="api_key",
+        version=1,
+        status=CredentialReadiness.PARTNER_LIVE,
+        masked_identifier=masked,
+        created_at=now - timedelta(days=2),
+        updated_at=now - timedelta(days=2),
+        expires_at=now - timedelta(days=1),
+    )
+
+
+async def test_revoked_metadata_is_not_serviceable():
+    fake = FakeBackend(metadata_overrides={"llm/anthropic": _revoked_meta("llm/anthropic")})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+
+    resolution = await resolver.resolve("t1", "anthropic")
+
+    assert resolution.configured is False
+    assert resolution.resolved is True
+    assert resolution.source == "none"
+    assert resolution.reason == "aws secret revoked"
+    assert resolution.masked_identifier is None
+
+
+async def test_degraded_metadata_is_not_serviceable():
+    fake = FakeBackend(metadata_overrides={"llm/openai": _degraded_meta("llm/openai")})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+
+    resolution = await resolver.resolve("t1", "openai")
+
+    assert resolution.configured is False
+    assert resolution.resolved is True
+    assert resolution.reason == "aws secret degraded"
+
+
+async def test_expired_metadata_is_not_serviceable():
+    # status is live (PARTNER_LIVE) but the aware expires_at has passed.
+    fake = FakeBackend(metadata_overrides={"llm/openai": _expired_live_meta("llm/openai")})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+
+    resolution = await resolver.resolve("t1", "openai")
+
+    assert resolution.configured is False
+    assert resolution.resolved is True
+    assert resolution.reason == "aws secret expired"
+
+
+async def test_live_metadata_with_future_expiry_is_serviceable():
+    now = datetime.now(timezone.utc)
+    live = make_metadata(
+        tenant_id="t1",
+        ref="llm/openai",
+        credential_type="api_key",
+        version=1,
+        lifecycle_status=STATUS_ACTIVE,
+        masked_identifier="****1111",
+        created_at=now - timedelta(days=2),
+        updated_at=now - timedelta(days=2),
+        expires_at=now + timedelta(days=30),
+    )
+    fake = FakeBackend(metadata_overrides={"llm/openai": live})
+    resolver = AwsSecretsCredentialResolver(fake, aws_region="us-east-1")
+
+    resolution = await resolver.resolve("t1", "openai")
+
+    assert resolution.configured is True
+    assert resolution.resolved is True
+    assert resolution.source == "secret_backend"
+    assert resolution.reason == "resolved from aws secrets manager"
+
+
+async def test_unusable_metadata_is_not_cached():
+    cache = CredentialCache()
+    fake = FakeBackend(metadata_overrides={"llm/anthropic": _revoked_meta("llm/anthropic")})
+    resolver = AwsSecretsCredentialResolver(fake, cache=cache, aws_region="us-east-1")
+
+    r1 = await resolver.resolve("t1", "anthropic")
+    r2 = await resolver.resolve("t1", "anthropic")
+
+    assert r1.configured is False
+    assert r2.configured is False
+    # The unusable metadata was never cached, so the second resolve re-hit the
+    # backend instead of being served from a stale cache.
+    assert fake.metadata_calls == [("t1", "llm/anthropic"), ("t1", "llm/anthropic")]
+
+
+async def test_cached_revoked_metadata_is_not_serviceable():
+    cache = CredentialCache()
+    await cache.put(_revoked_meta("llm/anthropic"))
+    fake = FakeBackend()  # nothing stored; the (revoked) cache must not serve
+    resolver = AwsSecretsCredentialResolver(fake, cache=cache, aws_region="us-east-1")
+
+    resolution = await resolver.resolve("t1", "anthropic")
+
+    assert resolution.configured is False
+    assert resolution.resolved is True
+    assert resolution.reason == "aws secret revoked"
+    assert fake.metadata_calls == []  # cache short-circuited, but rejected
+
+
+async def test_cached_expired_metadata_is_not_serviceable():
+    cache = CredentialCache()
+    await cache.put(_expired_live_meta("llm/openai"))
+    fake = FakeBackend()
+    resolver = AwsSecretsCredentialResolver(fake, cache=cache, aws_region="us-east-1")
+
+    resolution = await resolver.resolve("t1", "openai")
+
+    assert resolution.configured is False
+    assert resolution.resolved is True
+    assert resolution.reason == "aws secret expired"
+    assert fake.metadata_calls == []  # cache short-circuited, but rejected
