@@ -41,6 +41,16 @@ def _definition(case_id: str = "custom") -> ScenarioDefinition:
     )
 
 
+class _CannedSynthesizer:
+    """Tiny provider-neutral synthesizer returning a fixed string."""
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+    async def synthesize(self, prompt: str, *, plan_kind: str) -> str:
+        return self.content
+
+
 # ---------------------------------------------------------------------------
 # Default seed
 # ---------------------------------------------------------------------------
@@ -77,6 +87,43 @@ def test_custom_tenant_propagates_to_cases():
 def test_default_case_ids_unique():
     cases = _default().all_cases()
     assert len({case.case_id for case in cases}) == len(cases)
+
+
+def test_default_ground_truths_carry_generated_reference_marker():
+    # Regression (Codex): every default ground truth must carry the runner's
+    # generated inline ``[ref:eval:<case_id>]`` marker (the default evidence
+    # builder in evaluation/runner.py seeds reference id ``eval:<case_id>``).
+    # A plain, uncited ground truth can never pass the default regression
+    # suite: exact-match requires content == ground truth, while the cite-aware
+    # faithfulness scorer fails a claim that cites nothing.
+    for case in _default().all_cases():
+        marker = f"[ref:eval:{case.case_id}]"
+        assert marker in case.expected_ground_truth, (
+            f"default scenario {case.case_id!r} ground truth omits its "
+            f"generated reference marker {marker!r}: "
+            f"{case.expected_ground_truth!r}"
+        )
+
+
+async def test_default_scenarios_pass_the_real_default_regression_suite():
+    # End-to-end regression (Codex): run EVERY default case through the real
+    # default runner (real grounded-synthesis engine + the four default scorers)
+    # with a compliant synthesizer that mirrors the expected ground truth. If
+    # any default ground truth is not citation-compatible (missing or stale
+    # reference marker), the report fails (faithfulness 0.0 and/or exact-match
+    # 0.0) and this test fails — no compliant synthesis could ever pass the
+    # default suite.
+    from services.model_runtime.evaluation.runner import EvaluationRunner
+    from services.model_runtime.synthesis.engine import GroundedSynthesisEngine
+
+    runner = EvaluationRunner(engine=GroundedSynthesisEngine())
+    for case in _default().all_cases():
+        synth = _CannedSynthesizer(case.expected_ground_truth)
+        report = await runner.run_case(case, synth)
+        assert report.passed is True, (
+            f"default scenario {case.case_id!r} is not citation-compatible "
+            f"(passed={report.passed}); ground truth {case.expected_ground_truth!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,16 @@ evaluation runner executes. Each scenario is a plain-language summarize task
 paired with a short, neutral expected ground truth; content is generic, holds
 no real company or tenant data, and is deliberately secret-free.
 
+Citation compatibility: the default runner scores every case with BOTH
+exact-match AND cite-aware faithfulness, so a compliant synthesis must mirror
+the expected ground truth exactly while citing, inline, the evidence reference
+the runner seeds (``eval:<case_id>``). Each default ground truth therefore
+carries that generated ``[ref:eval:<case_id>]`` marker INSIDE its sentence. A
+plain, uncited ground truth could never pass the default regression suite: a
+synthesis that returns the exact string passes exact-match but fails
+faithfulness (the claim cites nothing), while an answer that appends the marker
+without the ground truth mirroring it passes faithfulness but fails exact-match.
+
 Security: scenarios must never contain credentials. The models layer
 (``evaluation.models``) fails closed when an ``EvaluationCase`` is built from
 secret-shaped material, so a leaked scenario can never reach an evaluation run.
@@ -49,42 +59,50 @@ class ScenarioDefinition:
 
 #: The default seed — generic summarize tasks, tenant-scoped and secret-free.
 #: Each expected ground truth is a short neutral sentence a faithful summary
-#: should match; queries vary so the evaluation plane exercises diverse input.
+#: should match, and it carries the runner's generated inline reference marker
+#: (``[ref:eval:<case_id>]`` — the default evidence builder seeds reference id
+#: ``eval:<case_id>``) INSIDE the sentence. The marker is part of the ground
+#: truth so the default regression suite (exact-match AND cite-aware
+#: faithfulness) is satisfiable: a synthesis that returns the ground truth
+#: verbatim matches exactly, and its claim cites a reference that exists.
+#: Regression (Codex): an uncited ground truth could never pass — faithfulness
+#: fails a claim that cites nothing. Queries vary so the evaluation plane
+#: exercises diverse input.
 _DEFAULT_SCENARIOS: tuple[ScenarioDefinition, ...] = (
     ScenarioDefinition(
         case_id="revenue-trend",
         query="Summarize the quarterly revenue trend.",
-        expected_ground_truth="Revenue grew over the quarter.",
+        expected_ground_truth="Revenue grew over the quarter [ref:eval:revenue-trend].",
         scenario="summarize",
     ),
     ScenarioDefinition(
         case_id="churn-drivers",
         query="Summarize the top churn drivers from the retention report.",
-        expected_ground_truth="Churn is driven mostly by onboarding friction.",
+        expected_ground_truth="Churn is driven mostly by onboarding friction [ref:eval:churn-drivers].",
         scenario="summarize",
     ),
     ScenarioDefinition(
         case_id="cloud-cost-forecast",
         query="Summarize the cloud spend forecast for the next fiscal year.",
-        expected_ground_truth="Cloud spend is projected to rise next fiscal year.",
+        expected_ground_truth="Cloud spend is projected to rise next fiscal year [ref:eval:cloud-cost-forecast].",
         scenario="summarize",
     ),
     ScenarioDefinition(
         case_id="support-volume",
         query="Summarize how support ticket volume changed this month.",
-        expected_ground_truth="Support ticket volume declined month over month.",
+        expected_ground_truth="Support ticket volume declined month over month [ref:eval:support-volume].",
         scenario="summarize",
     ),
     ScenarioDefinition(
         case_id="feature-adoption",
         query="Summarize the adoption trend for the latest release.",
-        expected_ground_truth="Adoption of the latest release climbed steadily.",
+        expected_ground_truth="Adoption of the latest release climbed steadily [ref:eval:feature-adoption].",
         scenario="summarize",
     ),
     ScenarioDefinition(
         case_id="headcount-mix",
         query="Summarize the headcount mix across engineering and sales.",
-        expected_ground_truth="Engineering and sales headcount both grew.",
+        expected_ground_truth="Engineering and sales headcount both grew [ref:eval:headcount-mix].",
         scenario="summarize",
     ),
 )
