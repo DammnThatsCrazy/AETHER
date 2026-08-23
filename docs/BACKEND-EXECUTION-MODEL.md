@@ -16,7 +16,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "afde8d7d"
+last_synced_commit: "b5d4ce33"
 ---
 
 # Backend Execution Model
@@ -174,8 +174,10 @@ production validation.
 The provider-neutral multi-model harness
 (`Backend Architecture/aether-backend/services/model_runtime/`, ADR-008) runs
 **in-process via a feature-flagged router mount — not a runtime role.** `main.py`
-includes the `services/model_runtime/routes.py` router only when
-`ModelRuntimeSettings().enabled` is true; the gate lives in
+mounts `/v1/model-runtime` **unconditionally**: the real guarded router from
+`services/model_runtime/routes.py` when `ModelRuntimeSettings().enabled` is
+true, otherwise a `model_runtime_disabled` surface that returns 503 for every
+route (so the disabled state is explicit, never a 404). The gate lives in
 `services/model_runtime/config.py` (`MODEL_RUNTIME_ENABLED`, default OFF per
 ADR-008 D9) rather than `config/settings.py`, and the import is lazy and
 `ImportError`-guarded so `main` stays importable. There is no model-runtime
@@ -195,8 +197,9 @@ planes".
 Fail-closed settings (`services/model_runtime/config.py`, `MODEL_RUNTIME_*`):
 
 - `MODEL_RUNTIME_ENABLED=false` by default (ADR-008 D9) — fail-closed while
-  OFF: `main.py` does not mount the router, and every route also carries a 503
-  dependency, so the surface never serves data and never leaks response shape.
+  OFF: `main.py` still mounts `/v1/model-runtime`, but as the disabled surface
+  that returns 503 `model_runtime_disabled` for every route (never a 404, never
+  a leak of response shape or data).
 - A non-local environment (`staging`/`production`/`test`) with
   `MODEL_RUNTIME_ENABLED=true` must use a production-safe credential backend
   (`env` or `aws_secrets`, never `in_memory`/`disabled`) and a real default

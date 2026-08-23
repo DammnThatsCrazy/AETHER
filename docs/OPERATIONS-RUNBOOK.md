@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "afde8d7d"
+last_synced_commit: "b5d4ce33"
 ---
 # Operations Runbook v8.12.0
 
@@ -225,10 +225,18 @@ variables are declared in `.env.example` and
 `deploy/model-runtime/.env.example`; `services/model_runtime/config.py` is the
 single source for defaults and the fail-closed rules.
 
-**Tenant scoping.** Tenant scope is server-authoritative: every route derives
-it from the authenticated request state (bound by the auth middleware) — a
-client can never select tenant scope from headers, body, or query. An enabled
-surface with no authenticated tenant rejects with HTTP 400 (fail-closed).
+**Tenant scoping.** Tenant scope is server-authoritative: the tenant is derived
+from the authenticated request state (bound by the auth middleware) — a client
+can never select tenant scope from headers, body, or query. The Aether tenant
+surfaces (`models`, `tenant-default`) reject with HTTP 400 `tenant_required`
+when no authenticated tenant is present (fail-closed). The Kyber operator
+surfaces `registry`/`health`/`usage` are global — operator-authorized only, no
+per-tenant data, no tenant scope required — so a tenantless workforce operator
+is served. The tenant-scoped Kyber surfaces (`entitlements`, `traces`) resolve
+their scope from the Kyber workforce access context when a workforce session is
+present (a workforce actor is intentionally tenantless), else the legacy tenant
+binding; a workforce session whose access context carries no tenant scope fails
+closed with HTTP 403 `tenant_scope_required`.
 
 **Credential hygiene.** Responses are credential-free; health/entitlement
 reasons are sanitized. Never place API keys or secrets in the env templates —

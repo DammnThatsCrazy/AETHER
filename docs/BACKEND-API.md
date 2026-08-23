@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "afde8d7d"
+last_synced_commit: "b5d4ce33"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -3324,16 +3324,24 @@ credential backend and a real (non-test-only) default provider. The router is
 mounted in `main.py` only when the gate is on (lazy import, ImportError-guarded
 — the surface costs nothing while disabled).
 
-**Tenant scope is server-authoritative.** Every route requires an
-authenticated tenant: the auth middleware binds `request.state.tenant` from
-the verified session, and a client can never select tenant scope via headers,
-body, or query. An enabled surface with no authenticated tenant is rejected
-(HTTP 400 `{"status":"error","code":"tenant_required"}`, fail-closed). The
-Aether tenant surfaces (`models`, `tenant-default`) need only that tenant
-identity; the Kyber operator surfaces (`registry`, `health`, `entitlements`,
-`usage`, `traces`) additionally require a Kyber operator (`require_operator`,
-mirroring the repo's `require_kyber_operator` gate; non-operators receive
-HTTP 401/403 `operator_required`).
+**Tenant scope is server-authoritative.** The tenant is derived from the
+authenticated request state (bound by the auth middleware from the verified
+session), and a client can never select tenant scope via headers, body, or
+query. The Aether tenant surfaces (`models`, `tenant-default`) require an
+authenticated tenant (fail-closed HTTP 400
+`{"status":"error","code":"tenant_required"}`). The Kyber operator surfaces
+(`registry`, `health`, `usage`) are global — they carry no per-tenant data, so
+only `require_operator` is applied (mirroring the repo's
+`require_kyber_operator` gate; non-operators receive HTTP 401/403
+`operator_required`). The tenant-scoped Kyber surfaces (`entitlements`,
+`traces`) are operator-authorized and then resolve their tenant scope from the
+Kyber workforce access context when a workforce session is present — a
+workforce actor is intentionally tenantless, so `request.state.tenant` is never
+bound for it and it must not be rejected for lacking one; a workforce session
+whose access context carries no tenant scope fails closed (HTTP 403
+`{"status":"error","code":"tenant_scope_required"}`), while a non-workforce
+request with no authenticated tenant is rejected as before (HTTP 400
+`tenant_required`).
 
 **Credential-free responses.** Health and entitlement reasons pass through a
 sanitizer that blanks secret-shaped material (`sk-`, `pk_`, `rk_live_`,
@@ -3353,11 +3361,11 @@ non-durable in-memory seed.
 |---|---|---|---|
 | GET | `/v1/model-runtime/models` | Tenant model registry + default | Aether `ModelSelectionPanel`. `tenantDefaultModel` comes from a non-durable in-memory seed (`null` for unknown tenants). |
 | PUT | `/v1/model-runtime/tenant-default` | Set the tenant default model | Body `{ "modelId" }`; unknown model id → HTTP 400 `unknown_model`; a model the tenant is not entitled to → HTTP 403 `model_not_entitled`; persists to the in-memory seed only; returns 204. |
-| GET | `/v1/model-runtime/registry` | Full model catalog | Kyber `ModelRegistryPage`. Operator-authorized. No per-tenant data. |
-| GET | `/v1/model-runtime/health` | Provider health summary | Kyber `ModelRuntimeHealthPage`. `status` ∈ `ok` / `degraded` / `unhealthy`; reasons sanitized. Operator-authorized. |
-| GET | `/v1/model-runtime/entitlements` | Per-model entitlement rows | Kyber `EntitlementsPage`. Resolved by `AllowlistEntitlementResolver` for the requesting tenant only. Operator-authorized. |
-| GET | `/v1/model-runtime/usage` | Aggregate + per-model usage | Kyber `UsagePage`. Deterministic all-zero seed data (fail-closed) until metering is wired. Operator-authorized. |
-| GET | `/v1/model-runtime/traces` | Routing trace summaries | Kyber `TracesPage`. Tenant-scoped, content-free decision summaries only. Operator-authorized. |
+| GET | `/v1/model-runtime/registry` | Full model catalog | Kyber `ModelRegistryPage`. Global surface — operator-authorized, no per-tenant data, no tenant scope required (workforce operators served). |
+| GET | `/v1/model-runtime/health` | Provider health summary | Kyber `ModelRuntimeHealthPage`. Global surface — operator-authorized, no tenant scope required. `status` ∈ `ok` / `degraded` / `unhealthy`; reasons sanitized. |
+| GET | `/v1/model-runtime/entitlements` | Per-model entitlement rows | Kyber `EntitlementsPage`. Operator-authorized; tenant scope resolved from the workforce access context when present, else the legacy tenant binding (403 `tenant_scope_required` for a tenantless workforce session). |
+| GET | `/v1/model-runtime/usage` | Aggregate + per-model usage | Kyber `UsagePage`. Global surface — operator-authorized, no tenant scope required. Deterministic all-zero seed data (fail-closed) until metering is wired. |
+| GET | `/v1/model-runtime/traces` | Routing trace summaries | Kyber `TracesPage`. Operator-authorized; content-free decision summaries only; tenant scope resolved from the workforce access context when present, else the legacy tenant binding. |
 
 All routes share the `tags=["model-runtime"]` group and carry the D9 gate
 dependency; the Aether (`models`, `tenant-default`) and Kyber (`registry`,

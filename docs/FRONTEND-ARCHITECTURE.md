@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "afde8d7d"
+last_synced_commit: "b5d4ce33"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -751,6 +751,12 @@ return 503 while OFF). Typed contracts carry no credential material.
 - **Credential-free by contract**: entitlement rows, health reasons, and trace
   summaries are server-sanitized (secret-shaped markers blanked); the pages
   never render keys or tokens.
+- **Authenticated transport**: the Aether model-selection client attaches the
+  same cookie + `Authorization: Bearer` token as the shared `restClient` (so
+  the backend can populate `request.state.tenant`); the Kyber model-runtime
+  admin client routes every call through a credentialed fetch
+  (`credentials: 'include'`) so the HttpOnly `__Host-kyber_session` cookie
+  crosses origins and `require_operator` passes for signed-in operators.
 
 Neither app adds a route or nav entry for these surfaces — no `router.tsx` or
 sidebar changes — and the typed fetch clients are self-contained in their
