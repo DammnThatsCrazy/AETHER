@@ -47,6 +47,9 @@ _EXPECTED_SURFACES = {
     "product_intelligence",
     "temporal_observatory",
     "comparison_workbench",
+    "outcome360",
+    "economic360",
+    "connection360",
 }
 
 

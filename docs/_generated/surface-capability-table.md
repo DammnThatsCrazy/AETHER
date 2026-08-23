@@ -24,9 +24,12 @@ Contract version: `1.0.0`
 | `campaign360` | `entity`, `time`, `geography`, `campaign`, `economic`, `truth` | `window`, `compare`, `relative` | `table`, `flow`, `timeline` | yes | yes | yes | yes | yes |
 | `cluster360` | `entity`, `time`, `graph`, `risk`, `truth` | `window`, `as_of` | `graph`, `table` | yes | yes | yes | no | yes |
 | `comparison_workbench` | `entity`, `time`, `geography`, `device`, `graph`, `risk`, `campaign`, `economic`, `truth` | `window`, `as_of`, `compare`, `relative` | `comparison`, `table`, `graph`, `timeline` | yes | yes | yes | yes | yes |
+| `connection360` | `entity`, `time`, `graph`, `truth` | `window`, `as_of`, `relative` | `table`, `flow` | no | no | no | yes | yes |
+| `economic360` | `entity`, `time`, `device`, `campaign`, `economic`, `truth` | `window`, `compare`, `relative` | `table`, `graph` | yes | yes | yes | yes | yes |
 | `geo` | `entity`, `time`, `geography`, `campaign`, `risk` | `window`, `compare`, `relative` | `map`, `table` | yes | yes | yes | yes | yes |
 | `graph` | `entity`, `time`, `geography`, `device`, `graph`, `risk`, `campaign`, `economic`, `truth` | `window`, `as_of`, `relative` | `graph`, `table` | yes | no | yes | yes | yes |
 | `journeys` | `entity`, `time`, `device`, `campaign`, `truth` | `window`, `relative` | `flow`, `table`, `timeline` | yes | yes | yes | yes | yes |
+| `outcome360` | `entity`, `time`, `geography`, `campaign`, `economic`, `truth` | `window`, `compare`, `relative` | `table`, `graph` | yes | yes | yes | yes | yes |
 | `product_intelligence` | `entity`, `time`, `device`, `campaign`, `economic`, `truth` | `window`, `compare`, `relative` | `table`, `timeline`, `flow` | yes | yes | yes | yes | yes |
 | `profile360` | `entity`, `time`, `geography`, `device`, `campaign`, `economic`, `risk`, `truth` | `window`, `as_of`, `relative` | `table`, `timeline` | no | yes | no | no | yes |
 | `temporal_observatory` | `entity`, `time`, `truth` | `window`, `as_of`, `compare`, `relative` | `timeline`, `table` | no | yes | no | yes | yes |

@@ -115,6 +115,39 @@
       "supportsSelectionSets": true,
       "supportsSavedViews": true,
       "supportsExport": true
+    },
+    {
+      "surfaceId": "outcome360",
+      "supportedFieldCategories": ["entity", "time", "geography", "campaign", "economic", "truth"],
+      "supportedTemporalModes": ["window", "compare", "relative"],
+      "supportedViews": ["table", "graph"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "economic360",
+      "supportedFieldCategories": ["entity", "time", "device", "campaign", "economic", "truth"],
+      "supportedTemporalModes": ["window", "compare", "relative"],
+      "supportedViews": ["table", "graph"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "connection360",
+      "supportedFieldCategories": ["entity", "time", "graph", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "relative"],
+      "supportedViews": ["table", "flow"],
+      "supportsFacets": false,
+      "supportsComparison": false,
+      "supportsSelectionSets": false,
+      "supportsSavedViews": true,
+      "supportsExport": true
     }
   ]
 }
