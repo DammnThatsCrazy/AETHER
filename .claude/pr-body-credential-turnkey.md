@@ -97,13 +97,14 @@ re-cut of the unique surface onto main's head:
 
 ## Boot fixes carried on this cut
 
-Four fixes that make the carried surface deterministic and correct against main's
+Five fixes that make the carried surface deterministic and correct against main's
 architecture (each verified by the tests it unblocks):
 
 1. **Money-wire coercion** — [ai_costs.py](Backend%20Architecture/aether-backend/services/economic/ai_costs.py) coerces the observed Decimal costs to float at the `CostSelection` boundary (`test_costs` 9/9).
 2. **Commerce tenant isolation** — [models.py](Backend%20Architecture/aether-backend/services/commerce/models.py) adds `tenant_id` to `PaymentRecord`; [service.py](Backend%20Architecture/aether-backend/services/commerce/service.py) persists it on every `record_payment` (tenant-isolation suite green).
 3. **FX snapshot re-assertion** — [routes.py](Backend%20Architecture/aether-backend/services/economic/routes.py) re-registers the FX provider in `_aggregate_spend` so the USD conversion never depends on import order or a cleared provider registry.
 4. **Store-reset hygiene (flake root cause)** — [conftest.py](Backend%20Architecture/aether-backend/tests/adversarial/conftest.py) now resets `shared.store`'s registry alongside `repositories.repos`/`typed_repo`, matching the repo's own documented dual-reset convention (the adversarial receipt suite was leaking `payment_provider_receipts` rows into `tests/payment_rails/test_alert_eval.py`, causing an intermittent empty-plane failure under xdist).
+5. **Stale x402 store singletons (suite-order flake root cause)** — [test_commerce_domain_closure.py](Backend%20Architecture/aether-backend/tests/unit/test_commerce_domain_closure.py) now also resets the control plane + facilitator/asset registries, which capture the commerce store at construction. `reset_commerce_store()` replaces the store singleton, so leaving those singletons alive made routing read an old cleared store ("No facilitator for asset/chain/environment") whenever a prior test file constructed the control plane first. Fix verified deterministic: `unit/` and full backend suite both green single-process (`-n 0`) and under xdist.
 
 ---
 
@@ -141,8 +142,8 @@ architecture (each verified by the tests it unblocks):
 |---|---|
 | `make docs-fix` | **42/42** |
 | `make ci-check` | **62/62** (canonical completion gate) |
-| backend pytest (`Backend Architecture/aether-backend/tests`) | **5191 passed / 2 skipped** |
-| root pytest | **5281 passed / 6 skipped** |
+| backend pytest (`Backend Architecture/aether-backend/tests`) | **5614 passed / 2 skipped** |
+| root pytest | **5282 passed / 6 skipped** |
 | `make credential-turnkey` | **38 rows — 36 pass / 0 fail / 2 advisory** |
 | `make credential-turnkey-strict` | **PASS (no FAIL rows)** |
 
