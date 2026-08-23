@@ -80,6 +80,14 @@ backend = [
     "pycryptodome>=3.20.0",
     "boto3>=1.34.0",
     "anthropic>=0.25",
+    # services/model_runtime/config.py imports pydantic_settings.BaseSettings at
+    # import time, and services/noesis/provider.py reaches it through the
+    # model_runtime package barrel — so a fresh CI bootstrap that skips the
+    # transitive install leaves every backend+noesis test ModuleNotFoundError
+    # (it was only ever present locally by accident). Declared explicitly: it is
+    # genuine production behavior for the harness control plane, not a
+    # transitive accident.
+    "pydantic-settings>=2.4.0",
     "croniter>=2",   # jobs platform cron schedules (services/jobs/scheduler.py)
     "tzdata",        # IANA tz database for zoneinfo on slim images
     "alembic>=1.13", # migrations + /v1/ready migrations-head check + RUN_MIGRATIONS
