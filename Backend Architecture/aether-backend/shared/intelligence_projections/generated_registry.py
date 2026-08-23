@@ -61,6 +61,19 @@ PROJECTION_SECTION_STATES: tuple[str, ...] = (
 # Graph-mutation policies a projection may declare.
 GRAPH_MUTATION_POLICIES: tuple[str, ...] = ("canonical_gateway_only", "read_only")
 
+# Subject kinds a projection may be asked about.
+PROJECTION_SUBJECT_KINDS: tuple[str, ...] = (
+    "agent",
+    "campaign",
+    "cluster",
+    "connection",
+    "entity",
+    "episode",
+    "population",
+    "relationship",
+    "source",
+)
+
 # Full projection definitions (sorted by projection id).
 INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
     "agent360": {
@@ -1357,5 +1370,6 @@ __all__ = [
     "PROJECTION_IMPLEMENTATION_STATES",
     "PROJECTION_KINDS",
     "PROJECTION_SECTION_STATES",
+    "PROJECTION_SUBJECT_KINDS",
     "PROJECTION_SURFACE_MAP",
 ]

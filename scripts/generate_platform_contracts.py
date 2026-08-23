@@ -2520,6 +2520,12 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
         sorted(reg["sectionStates"]),
         "Section states a projection result section may carry (sorted).",
     )
+    lines += _ts_const_array(
+        "intelligenceProjectionSubjectKinds",
+        "IntelligenceProjectionSubjectKind",
+        sorted(reg["subjectKinds"]),
+        "Subject kinds a projection may be asked about (sorted).",
+    )
     lines.append("/** One pending declaration ({id, kind, reason, resolvesInProjection}). */")
     lines.append("export interface PendingResolution {")
     lines.append("  id: string;")
@@ -2571,7 +2577,7 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
     lines.append("  implementationState: IntelligenceProjectionImplementationState;")
     lines.append("  implementationBlueprint: string;")
     lines.append("  ownsCanonicalTruth: false;")
-    lines.append("  subjectKinds: readonly string[];")
+    lines.append("  subjectKinds: readonly IntelligenceProjectionSubjectKind[];")
     lines.append("  canonicalAuthorities: readonly string[];")
     lines.append("  hardDependencies: readonly string[];")
     lines.append("  projectionDependencies: readonly string[];")
@@ -2682,6 +2688,11 @@ def gen_intelligence_projection_py(reg: dict) -> str:
         sorted(reg["graphMutationPolicies"]),
         "Graph-mutation policies a projection may declare.",
     )
+    lines += _py_tuple(
+        "PROJECTION_SUBJECT_KINDS",
+        sorted(reg["subjectKinds"]),
+        "Subject kinds a projection may be asked about.",
+    )
     lines.append("# Full projection definitions (sorted by projection id).")
     lines.append("INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {")
     for projection in projections:
@@ -2743,6 +2754,7 @@ def gen_intelligence_projection_py(reg: dict) -> str:
         "PROJECTION_KINDS",
         "PROJECTION_IMPLEMENTATION_STATES",
         "PROJECTION_SECTION_STATES",
+        "PROJECTION_SUBJECT_KINDS",
         "GRAPH_MUTATION_POLICIES",
         "PENDING_AUTHORITIES",
         "PENDING_REFERENCES",

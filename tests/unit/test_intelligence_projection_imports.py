@@ -147,7 +147,7 @@ def test_ts_contract_imports_used_primitives_from_operational_intelligence() -> 
     assert "intelligenceProjectionSectionStates" in source
     assert "intelligenceProjectionIds" in source
     assert "intelligenceProjectionImplementationStates" in source
-    assert "intelligenceProjectionDefinitions" in source
+    assert "intelligenceProjectionSubjectKinds" in source
 
 
 # ---------------------------------------------------------------------------

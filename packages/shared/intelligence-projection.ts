@@ -15,10 +15,10 @@
 
 import type { PageRequest, EvidenceRef, TimeRangeFilter, PageInfo } from './operational-intelligence';
 import {
-  intelligenceProjectionDefinitions,
   intelligenceProjectionIds,
   intelligenceProjectionImplementationStates,
   intelligenceProjectionSectionStates,
+  intelligenceProjectionSubjectKinds,
 } from './intelligence-projections.generated';
 
 /** A registered section state a projection result section may carry (from the generated registry). */
@@ -30,10 +30,8 @@ export type ProjectionId = (typeof intelligenceProjectionIds)[number];
 /** A registered implementation state — repo metadata, NOT readiness (from the generated registry). */
 export type ProjectionRegistryState = (typeof intelligenceProjectionImplementationStates)[number];
 
-/** A subject kind a projection may be asked about, derived from the generated registry's subjectKinds. */
-export type ProjectionSubjectKind = {
-  [K in keyof typeof intelligenceProjectionDefinitions]: (typeof intelligenceProjectionDefinitions)[K]['subjectKinds'][number];
-}[keyof typeof intelligenceProjectionDefinitions];
+/** A subject kind a projection may be asked about (from the generated registry's top-level subjectKinds vocab). */
+export type ProjectionSubjectKind = (typeof intelligenceProjectionSubjectKinds)[number];
 
 /** The subject a projection is asked about. Distinct from EntityRef by design: projections are asked about campaigns, episodes, populations, sources, connections, clusters and relationships too, which EntityKind does not cover. */
 export interface ProjectionSubject {

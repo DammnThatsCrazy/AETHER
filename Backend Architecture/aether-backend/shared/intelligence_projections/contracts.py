@@ -29,10 +29,10 @@ from pydantic import ConfigDict, Field
 
 # Generated registry vocab — never hand-maintained here (derived below).
 from shared.intelligence_projections.generated_registry import (
-    INTELLIGENCE_PROJECTION_DEFINITIONS,
     INTELLIGENCE_PROJECTION_IDS,
     PROJECTION_IMPLEMENTATION_STATES,
     PROJECTION_SECTION_STATES,
+    PROJECTION_SUBJECT_KINDS,
 )
 
 # Reused canonical primitives (single-monolith reuse — never redefined here).
@@ -51,20 +51,10 @@ SectionState = Literal[tuple(PROJECTION_SECTION_STATES)]
 ProjectionId = Literal[tuple(INTELLIGENCE_PROJECTION_IDS)]
 ProjectionRegistryState = Literal[tuple(PROJECTION_IMPLEMENTATION_STATES)]
 
-# Union of every subject kind any registered projection declares. Distinct from
-# EntityKind by design: projections are asked about campaigns, episodes,
+# Union of every subject kind the registry declares (top-level vocab). Distinct
+# from EntityKind by design: projections are asked about campaigns, episodes,
 # populations, sources, connections, clusters and relationships too.
-ProjectionSubjectKind = Literal[
-    tuple(
-        sorted(
-            {
-                kind
-                for definition in INTELLIGENCE_PROJECTION_DEFINITIONS.values()
-                for kind in definition["subjectKinds"]
-            }
-        )
-    )
-]
+ProjectionSubjectKind = Literal[tuple(PROJECTION_SUBJECT_KINDS)]
 
 
 class ProjectionContract(ContractModel):

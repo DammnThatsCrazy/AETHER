@@ -61,6 +61,20 @@ export const intelligenceProjectionSectionStates = [
 ] as const;
 export type IntelligenceProjectionSectionState = typeof intelligenceProjectionSectionStates[number];
 
+/** Subject kinds a projection may be asked about (sorted). */
+export const intelligenceProjectionSubjectKinds = [
+  'agent',
+  'campaign',
+  'cluster',
+  'connection',
+  'entity',
+  'episode',
+  'population',
+  'relationship',
+  'source',
+] as const;
+export type IntelligenceProjectionSubjectKind = typeof intelligenceProjectionSubjectKinds[number];
+
 /** One pending declaration ({id, kind, reason, resolvesInProjection}). */
 export interface PendingResolution {
   id: string;
@@ -112,7 +126,7 @@ export interface IntelligenceProjectionDefinition {
   implementationState: IntelligenceProjectionImplementationState;
   implementationBlueprint: string;
   ownsCanonicalTruth: false;
-  subjectKinds: readonly string[];
+  subjectKinds: readonly IntelligenceProjectionSubjectKind[];
   canonicalAuthorities: readonly string[];
   hardDependencies: readonly string[];
   projectionDependencies: readonly string[];
