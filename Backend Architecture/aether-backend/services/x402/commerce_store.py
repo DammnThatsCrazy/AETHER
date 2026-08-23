@@ -35,6 +35,7 @@ from .commerce_models import (
     ProtectedResource,
     Settlement,
     SettlementState,
+    SignerRef,
     StablecoinAsset,
     Treasury,
 )
@@ -199,6 +200,15 @@ class CommerceStore:
             self.grants = _RepoCollection(AccessGrantsRepository(), "grant_id", AccessGrant)
             self.fulfillments = _RepoCollection(FulfillmentsRepository(), "fulfillment_id", Fulfillment)
             self.treasuries = _RepoCollection(TreasuriesRepository(), "tenant_id", Treasury)
+
+        # signer_refs: tenant-scoped signer references for the signer authority.
+        # Repo lives in services/x402/signer_repos.py (table commerce_signer_refs).
+        if _is_local():
+            self.signer_refs = TenantCollection("signer_ref_id")
+        else:
+            from .signer_repos import SignerRefsRepository
+
+            self.signer_refs = _RepoCollection(SignerRefsRepository(), "signer_ref_id", SignerRef)
 
         # budget_policies: durable Postgres outside local (a budget cap that
         # vanishes on restart is a real gap); in-memory only in local dev.
@@ -409,6 +419,24 @@ class CommerceStore:
 
     async def list_budget_policies(self, tenant_id: str) -> "list[BudgetPolicy]":
         return await self.budget_policies.list(tenant_id, active=True)
+
+    # ── Tenant signer refs ───────────────────────────────────────────
+
+    async def put_signer_ref(self, ref: SignerRef) -> SignerRef:
+        return await self.signer_refs.put(ref.tenant_id, ref)
+
+    async def get_signer_ref(self, tenant_id: str, signer_ref_id: str) -> Optional[SignerRef]:
+        return await self.signer_refs.get(tenant_id, signer_ref_id)
+
+    async def list_signer_refs(self, tenant_id: str, active: Optional[bool] = None) -> "list[SignerRef]":
+        return await self.signer_refs.list(tenant_id, active=active)
+
+    async def deactivate_signer_ref(self, tenant_id: str, signer_ref_id: str) -> Optional[SignerRef]:
+        ref = await self.signer_refs.get(tenant_id, signer_ref_id)
+        if ref is None:
+            return None
+        ref.active = False
+        return await self.signer_refs.put(tenant_id, ref)
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────

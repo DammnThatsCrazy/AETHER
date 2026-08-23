@@ -7,9 +7,12 @@ runtime sample records and performs no provider I/O.
 """
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from shared.logger.logger import get_logger, metrics
 
 from services.derivatives.models import (
     BronzeObservation,
@@ -19,6 +22,8 @@ from services.derivatives.models import (
     SourceRef,
     decimal_from_provider,
 )
+
+logger = get_logger("aether.derivatives.multi_venue")
 
 NORMALIZATION_VERSION = "derivatives-multivenue-normalization-v1"
 SUPPORTED_VENUES = ("hyperliquid", "dydx", "gmx", "drift", "centralized_futures")
@@ -140,3 +145,105 @@ def cross_venue_parity_report(adapters: Mapping[str, VenueNormalizationAdapter])
         "availability": "scaffolded",
         "operational_observations": None,
     }
+
+
+# ── Supervised venue reconciliation sweep loop ───────────────────────────────
+#
+# Drives :class:`SupervisedStreamWorker` (services/derivatives/sequence.py) per
+# registered venue on an interval for the runtime WorkerSpec: heartbeat,
+# per-pass exception isolation, graceful shutdown. Each venue cycle restores the
+# durable cursor -> streams -> persists the advanced cursor (at-least-once).
+
+DEFAULT_SWEEP_TENANT = "tenant_local_dev"
+DEFAULT_SWEEP_INTERVAL_SECONDS = 300.0
+
+
+def _supported_venue_ids() -> tuple[str, ...]:
+    """Venues currently registered in the derivatives adapters registry."""
+    try:
+        from services.derivatives.adapters import ADAPTER_REGISTRY
+
+        return tuple(sorted(ADAPTER_REGISTRY))
+    except Exception:  # noqa: BLE001 - registry absence must not crash the sweep
+        return SUPPORTED_VENUES
+
+
+async def run_venue_sweep_iteration(
+    *,
+    tenant_id: str = DEFAULT_SWEEP_TENANT,
+    venue_ids: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """One supervised venue sweep pass: restore cursor -> stream -> persist.
+
+    Returns a deterministic summary dict — counters only, never fabricated
+    success. Each venue is swept through :class:`SupervisedStreamWorker`, which
+    restarts from the last persisted cursor (at-least-once) and persists the
+    advanced cursor before returning. A venue whose adapter is unavailable, or
+    whose cycle raises, is counted and logged — never allowed to abort the pass.
+    """
+    from services.derivatives.sequence import SupervisedStreamWorker
+
+    targets = venue_ids if venue_ids is not None else _supported_venue_ids()
+    summary: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "venues_targeted": len(targets),
+        "venues_scanned": 0,
+        "completed": 0,
+        "skipped": 0,
+        "errors": [],
+    }
+
+    for venue_id in targets:
+        try:
+            from services.derivatives.adapters import get_adapter
+
+            adapter = get_adapter(venue_id)
+            if adapter is None:
+                summary["skipped"] += 1
+                continue
+            worker = SupervisedStreamWorker(
+                adapter, tenant_id=tenant_id, connector_id=venue_id
+            )
+            result = await worker.run_once()
+            summary["venues_scanned"] += 1
+            if bool(getattr(result, "completed", False)):
+                summary["completed"] += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — one venue must not abort the sweep
+            summary["errors"].append(f"{venue_id}:{exc}")
+
+    return summary
+
+
+async def venue_sweep_loop(
+    interval_s: float = DEFAULT_SWEEP_INTERVAL_SECONDS,
+) -> None:
+    """Supervised derivatives venue reconciliation sweep (heartbeat, isolated)."""
+    logger.info("derivatives_venue_sweep_loop started interval=%ss", interval_s)
+    while True:
+        try:
+            summary = await run_venue_sweep_iteration()
+            metrics.gauge("derivatives_venue_sweep_heartbeat", 1.0)
+            if summary["errors"]:
+                logger.warning(
+                    "venue sweep pass errors=%d scanned=%d skipped=%d",
+                    len(summary["errors"]), summary["venues_scanned"], summary["skipped"],
+                )
+            elif summary["venues_scanned"]:
+                logger.debug(
+                    "venue sweep pass scanned=%d completed=%d",
+                    summary["venues_scanned"], summary["completed"],
+                )
+        except asyncio.CancelledError:
+            logger.info("derivatives_venue_sweep_loop stopped")
+            raise
+        except Exception as exc:  # noqa: BLE001 — loop survives a bad pass
+            metrics.increment("derivatives_venue_sweep_error_total")
+            logger.error("venue sweep iteration failed: %s", exc)
+        await asyncio.sleep(interval_s)
+
+
+def build_venue_sweep_coro() -> Any:
+    """Zero-arg coroutine factory for the runtime WorkerSpec (INT-C wires it)."""
+    return venue_sweep_loop()

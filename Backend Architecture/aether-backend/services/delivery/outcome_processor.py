@@ -182,7 +182,13 @@ class WebhookInboxProcessor:
     async def process_pending(self, limit: int = 20) -> int:
         """Claim pending WebhookInbox records, verify, normalise, persist, route.
 
-        Returns the count of records processed (successfully or with error).
+        Returns the count of records attempted.
+
+        Zero Silent Failure (program sec7): a record is marked processed ONLY on
+        a terminal disposition — signature unverified, or nothing to normalise.
+        A persist or routing failure is RETRYABLE: the record's claim is
+        released (``processing=False``, ``processed=False``) so the next tick
+        re-queues it instead of silently dropping the hand-off.
         """
         try:
             records = await self._inbox_repo.claim_pending(limit=limit)
@@ -201,7 +207,9 @@ class WebhookInboxProcessor:
                 except Exception:
                     pass  # best-effort status update
 
-                # Reject unverified records — do not route forged payloads
+                # Reject unverified records — do not route forged payloads.
+                # Terminal: retrying cannot change the signature result, so the
+                # record is dead-lettered with an error rather than re-queued.
                 if not sig_verified:
                     logger.warning(
                         "inbox_signature_unverified id=%s provider=%s — skipping routing",
@@ -214,29 +222,34 @@ class WebhookInboxProcessor:
                 # 2. Normalise
                 outcome = await self._normalize(record)
                 if outcome is None:
+                    # Nothing to process (e.g. URL verification challenge) — terminal.
                     await self._inbox_repo.mark_processed(record_id)
                     count += 1
                     continue
 
-                # 3. Persist ExternalOutcomeEvent — re-raise on failure so the inbox
-                #    record is NOT marked processed and will be retried
+                # 3. Persist ExternalOutcomeEvent. A failure here must NOT mark the
+                #    record processed — it will be retried on the next tick.
                 await self._outcome_repo.insert(outcome.id, outcome.model_dump())
 
-                # 4. Route
+                # 4. Route. A routing/publish failure is likewise RETRYABLE — the
+                #    outcome is already persisted, but the hand-off failed, so the
+                #    inbox record is re-queued (never marked processed) instead of
+                #    losing the delivery silently.
                 if self._router is not None:
-                    try:
-                        await self._router.route(outcome)
-                    except Exception as exc:
-                        logger.warning("outcome_route_failed id=%s: %s", record_id, exc)
+                    await self._router.route(outcome)
 
-                # 5. Mark processed
+                # 5. Mark processed (only reached on full success)
                 await self._inbox_repo.mark_processed(record_id)
                 count += 1
 
             except Exception as exc:
+                # Persist or route failure: release the claim for retry. Do NOT
+                # mark processed — that would silently drop the outcome.
                 logger.warning("inbox_process_failed id=%s: %s", record_id, exc)
                 try:
-                    await self._inbox_repo.mark_processed(record_id, error=str(exc)[:500])
+                    await self._inbox_repo.update(
+                        record_id, {"processing": False, "processed": False}
+                    )
                 except Exception:
                     pass
                 count += 1

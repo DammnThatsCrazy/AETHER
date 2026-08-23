@@ -27,6 +27,15 @@ from shared.logger.logger import get_logger
 logger = get_logger("aether.pnl.calculator")
 
 
+class PNLUnavailableError(RuntimeError):
+    """Raised when PNL cannot be computed because a data source is unavailable.
+
+    Distinct from a genuinely empty dataset (which legitimately yields zero):
+    a provider/store failure is LOUD so a consumer can never present an
+    unavailable value as a real zero (program sec7 / sec19).
+    """
+
+
 @dataclass
 class CostBasisLot:
     """A FIFO cost basis lot: quantity acquired at a specific price."""
@@ -203,7 +212,11 @@ class PNLCalculator:
             )
         except Exception as exc:
             logger.error(f"TVL snapshot query failed for {entity_id}: {exc}")
-            return Decimal("0"), Decimal("0"), []
+            # Store failure is NOT an empty store — raise so the caller can never
+            # present a 0 TVL delta as a real value.
+            raise PNLUnavailableError(
+                f"TVL snapshot query unavailable for {entity_id}: {exc}"
+            ) from exc
 
         if not rows:
             return Decimal("0"), Decimal("0"), []
@@ -246,9 +259,11 @@ class PNLCalculator:
             )
         except Exception as exc:
             logger.error(f"PNL tx query failed for {entity_id}: {exc}")
-            # Query failure is NOT a flat/zero P&L — signal unavailability so the
-            # caller does not present 0 as a real, trustworthy value.
-            return Decimal("0"), "unavailable"
+            # Query failure is NOT a flat/zero P&L — raise so the caller can
+            # never present 0 as a real, trustworthy value.
+            raise PNLUnavailableError(
+                f"Realized PNL tx history unavailable for {entity_id}: {exc}"
+            ) from exc
 
         # FIFO ledgers keyed by token_address
         ledgers: dict[str, FIFOLedger] = {}
@@ -300,15 +315,25 @@ class PNLCalculator:
         the lifetime window. For windowed views, it represents the change in
         unrealized value over the window.
         """
+        if self.moralis is None:
+            raise PNLUnavailableError(
+                f"Moralis provider is not configured for {entity_id} — "
+                "unrealized PNL is unavailable, not zero"
+            )
         try:
             result = await self.moralis.execute(
                 "portfolio_by_address",
                 {"entity_id": entity_id},
             )
-            if result and result.get("data"):
-                return Decimal(str(result["data"].get("unrealized_pnl_usd", 0)))
         except Exception as exc:
             logger.warning(f"Moralis portfolio fetch failed for {entity_id}: {exc}")
+            raise PNLUnavailableError(
+                f"Unrealized PNL unavailable for {entity_id} (Moralis failed): {exc}"
+            ) from exc
+        # A successful response with no portfolio data is a genuinely empty
+        # portfolio — zero value is correct. A provider that FAILED raised above.
+        if result and result.get("data"):
+            return Decimal(str(result["data"].get("unrealized_pnl_usd", 0)))
         return Decimal("0")
 
     @staticmethod

@@ -171,6 +171,17 @@ class X402ControlPlane:
         await self._mutations.write_resource(resource)
         await self._mutations.write_challenge(requirement, resource)
 
+        # Meter the challenged usage (immutable audit fact).
+        await self._meter_challenged(
+            tenant_id,
+            resource_id=resource_id,
+            holder_id=requester_id,
+            amount_usd=price,
+            chain=chain,
+            asset_symbol=asset_symbol,
+            challenge_id=requirement.challenge_id,
+        )
+
         await self._producer.publish(
             Event(
                 topic=Topic.COMMERCE_CHALLENGE_ISSUED,
@@ -448,6 +459,19 @@ class X402ControlPlane:
         settlement = await self._settle.start(tenant_id, receipt, auth.facilitator_id)
         await self._mutations.write_receipt_and_settlement(receipt, settlement)
 
+        # Meter the paid usage (immutable audit fact).
+        requirement = await self._store.get_requirement(tenant_id, auth.challenge_id)
+        await self._meter_paid(
+            tenant_id,
+            resource_id=requirement.resource_id if requirement else "",
+            holder_id=auth.payer,
+            amount_usd=auth.amount_usd,
+            chain=auth.chain,
+            asset_symbol=auth.asset_symbol,
+            challenge_id=auth.challenge_id,
+            authorization_id=auth.authorization_id,
+        )
+
         # Mint the entitlement ONLY once the settlement is SETTLED — i.e. on-chain
         # finality is confirmed. Outside local/test _settle.start parks the
         # settlement in PENDING pending reconciliation; granting an ACTIVE
@@ -498,6 +522,18 @@ class X402ControlPlane:
             settlement=settlement,
         )
         await self._mutations.write_entitlement(entitlement)
+
+        # Meter the entitled usage (immutable audit fact). Idempotent: the
+        # early-return above (existing entitlement for this settlement) means a
+        # reconciled/retried mint never double-counts.
+        await self._meter_entitled(
+            tenant_id,
+            resource_id=requirement.resource_id if requirement else "",
+            holder_id=entitlement.holder_id,
+            amount_usd=auth.amount_usd,
+            challenge_id=auth.challenge_id,
+            entitlement_id=entitlement.entitlement_id,
+        )
         return entitlement
 
     async def mint_entitlement_for_reconciled_settlement(
@@ -599,12 +635,50 @@ class X402ControlPlane:
             )
         )
         metrics.increment("commerce_access_granted")
+
+        # Meter the granted access (immutable audit fact).
+        await self._meter_access_granted(
+            tenant_id,
+            resource_id=entitlement.resource_id,
+            holder_id=entitlement.holder_id,
+            amount_usd=0.0,
+            challenge_id="",
+            entitlement_id=entitlement.entitlement_id,
+        )
+
         return {
             "grant_id": grant.grant_id,
             "fulfillment_id": fulfillment.fulfillment_id,
             "resource_id": entitlement.resource_id,
             "status": "granted",
         }
+
+    # ─── Commerce metering (write-side audit facts) ───────────────────
+    # Each stage records one immutable MeterRecord so challenged/paid/entitled
+    # usage is auditable and reconcilable against silver facts. Best-effort: a
+    # metering write failure must never break the commerce lifecycle.
+
+    async def _meter(self, meter_type: str, tenant_id: str, **kw: Any) -> None:
+        try:
+            from services.commerce.metering import get_metering_service
+
+            await get_metering_service().record(tenant_id, meter_type, **kw)
+        except Exception as exc:  # noqa: BLE001 - metering is best-effort
+            logger.warning(
+                "commerce metering failed type=%s tenant=%s: %s", meter_type, tenant_id, exc
+            )
+
+    async def _meter_challenged(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("challenge_issued", tenant_id, **kw)
+
+    async def _meter_paid(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("payment_paid", tenant_id, **kw)
+
+    async def _meter_entitled(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("entitled", tenant_id, **kw)
+
+    async def _meter_access_granted(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("access_granted", tenant_id, **kw)
 
     # ─── Explainability ───────────────────────────────────────────────
 

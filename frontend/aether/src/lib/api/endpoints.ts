@@ -398,6 +398,12 @@ export const api = {
       restClient.get('/v1/demo-seed/status', wrap(demoSeedStatusSchema)).then(r => r.data),
   },
 
+  // ── Tenant launch readiness (read-only, tenant-scoped) ─────────────────────
+  readiness: {
+    snapshot: () => restClient.get('/v1/tenant/readiness', wrap(unknownSchema)).then(r => r.data),
+    trustStates: () => restClient.get('/v1/tenant/readiness/trust-states', wrap(unknownSchema)).then(r => r.data),
+  },
+
   // ── System status — tenant-safe reliability visibility ────────────────────
   status: {
     overview: () => restClient.get('/v1/status', wrap(unknownSchema)).then(r => r.data),

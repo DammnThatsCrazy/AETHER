@@ -8,6 +8,8 @@ sign, submit, route, or simulate transactions.
 """
 from __future__ import annotations
 
+import asyncio
+import os
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -16,12 +18,15 @@ from repositories.stablecoin_repos import (
     StablecoinPollingCheckpointRepository,
 )
 from shared.common.common import utc_now
+from shared.logger.logger import get_logger, metrics
 
 from .ingestion import ProviderObservation
 from .models import FinalityState
 from .providers import StablecoinProviderExecutionReport, StablecoinProviderIngestionRunner
 from .rpc_observer import StablecoinEVMReceiptVerifier, StablecoinRPCVerificationResult
 from .solana_observer import StablecoinSolanaTransactionVerifier, StablecoinSolanaVerificationResult
+
+logger = get_logger("aether.stablecoins.polling")
 
 
 class StablecoinProviderConnector(Protocol):
@@ -275,3 +280,142 @@ class StablecoinPollingScheduler:
         else:
             await self.checkpoints.insert(checkpoint_id, record)
         return checkpoint_id
+
+
+# ── Supervised provider + finality polling loop ──────────────────────────────
+#
+# The scheduler above is the unit-of-work API (connector-neutral, durable
+# checkpoints). The loop layer drives it on an interval for the runtime
+# WorkerSpec: heartbeat, per-pass exception isolation, graceful shutdown.
+# Best-effort by construction — a failed pass is logged and counted, never
+# allowed to crash the supervised loop.
+
+DEFAULT_POLL_INTERVAL_SECONDS = 300.0
+PROVIDER_COOLDOWN_SECONDS = 300
+FINALITY_COOLDOWN_SECONDS = 600
+
+
+def _default_poll_tenant() -> str:
+    return os.getenv("DEFAULT_TENANT_ID", "tenant_local_dev")
+
+
+async def run_stablecoin_poll_iteration(
+    *,
+    tenant_id: str | None = None,
+    scheduler: StablecoinPollingScheduler | None = None,
+    connector_registry: Any = None,
+    provider_cooldown_seconds: int = PROVIDER_COOLDOWN_SECONDS,
+    finality_cooldown_seconds: int = FINALITY_COOLDOWN_SECONDS,
+) -> dict[str, Any]:
+    """Run one supervised provider + finality polling pass for the tenant.
+
+    Returns a deterministic summary dict — counters only, never fabricated
+    success. Every provider/finality poll flows through the scheduler's durable
+    checkpoint, and the scheduler's own cooldown makes a re-pass inside the
+    window a no-op (idempotent). A failing provider/chain is counted and logged —
+    never allowed to abort the pass.
+    """
+    tid = tenant_id or _default_poll_tenant()
+    scheduler = scheduler or StablecoinPollingScheduler()
+    if connector_registry is None:
+        from .registry import PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+
+        connector_registry = PLATFORM_STABLECOIN_CONNECTOR_REGISTRY
+
+    deployment_registry = getattr(connector_registry, "deployments", None)
+    deployment_items = list(getattr(deployment_registry, "deployments", {}).items())
+
+    providers_polled = 0
+    denied = 0
+    finality_scanned = 0
+    errors: list[str] = []
+
+    for deployment_id, deployment in deployment_items:
+        try:
+            connector = connector_registry.build_ingestion_connector(deployment_id)
+            result = await scheduler.poll_provider(
+                tenant_id=tid,
+                connector=connector,
+                source_execution_id=f"poll:{deployment_id}",
+            )
+            if result.status in ("entitlement_denied", "readiness_denied"):
+                denied += 1
+            elif result.status == "failed":
+                errors.append(f"{deployment_id}:{result.status}")
+            else:
+                providers_polled += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — one deployment must not abort the pass
+            errors.append(f"{deployment_id}:{exc}")
+
+    # Finality re-checks are per-chain; the verifier family follows the chain's
+    # token standard (SPL -> solana, everything else EVM).
+    chains: dict[str, str] = {}
+    for _, deployment in deployment_items:
+        vm = (
+            "solana"
+            if str(getattr(deployment, "token_standard", "")).lower().startswith("spl")
+            else "evm"
+        )
+        chain_id = getattr(deployment, "chain_id", "")
+        if chain_id:
+            chains.setdefault(str(chain_id), vm)
+    for chain_id, verifier in chains.items():
+        try:
+            fresult = await scheduler.poll_finality(
+                tenant_id=tid,
+                chain_id=chain_id,
+                verifier=verifier,
+            )
+            if fresult.status == "failed":
+                errors.append(f"finality:{chain_id}:failed")
+            else:
+                finality_scanned += fresult.scanned
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — one chain must not abort the pass
+            errors.append(f"finality:{chain_id}:{exc}")
+
+    return {
+        "tenant_id": tid,
+        "deployments": len(deployment_items),
+        "providers_polled": providers_polled,
+        "denied": denied,
+        "finality_scanned": finality_scanned,
+        "errors": errors,
+    }
+
+
+async def stablecoin_polling_loop(
+    interval_s: float = DEFAULT_POLL_INTERVAL_SECONDS,
+) -> None:
+    """Supervised provider + finality polling loop (heartbeat, isolated errors)."""
+    logger.info("stablecoin_provider_polling_loop started interval=%ss", interval_s)
+    while True:
+        try:
+            summary = await run_stablecoin_poll_iteration()
+            metrics.gauge("stablecoin_provider_polling_heartbeat", 1.0)
+            if summary["errors"] or summary["denied"]:
+                logger.warning(
+                    "stablecoin poll pass errors=%d denied=%d providers=%d finality=%d",
+                    len(summary["errors"]), summary["denied"],
+                    summary["providers_polled"], summary["finality_scanned"],
+                )
+            elif summary["providers_polled"] or summary["finality_scanned"]:
+                logger.debug(
+                    "stablecoin poll pass providers=%d finality=%d",
+                    summary["providers_polled"], summary["finality_scanned"],
+                )
+        except asyncio.CancelledError:
+            logger.info("stablecoin_provider_polling_loop stopped")
+            raise
+        except Exception as exc:  # noqa: BLE001 — loop survives a bad pass
+            metrics.increment("stablecoin_provider_polling_error_total")
+            logger.error("stablecoin poll iteration failed: %s", exc)
+        await asyncio.sleep(interval_s)
+
+
+def build_stablecoin_polling_loop() -> Any:
+    """Zero-arg coroutine factory for the runtime WorkerSpec (INT-C wires it)."""
+    return stablecoin_polling_loop()

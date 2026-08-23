@@ -312,6 +312,10 @@ class ProviderAccountRepository:
         await self._store.set(self._key(tenant_id, provider), existing)
         return existing
 
+    async def list_all(self) -> list[dict]:
+        """Cross-tenant listing — operator aggregates + readiness demotion sweep."""
+        return await self._store.find()
+
 
 class DepositAddressRepository:
     """Provider-issued crypto deposit address references."""

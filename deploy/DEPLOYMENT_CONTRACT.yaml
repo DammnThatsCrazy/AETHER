@@ -1,0 +1,189 @@
+# Unified Integration Control Plane — deployment contract inputs (deploy copy).
+#
+# Per-capability required-inputs a deployment operator must supply so each
+# capability runs turnkey WITHOUT application code changes. Shape conforms to
+# shared.integration_contracts.deployment.DeploymentContract (§14, §33):
+#
+#   <capability>:
+#     application_code_ready: bool
+#     required_services: []          # infra services to provision
+#     required_public_urls: []       # callback + webhook URLs the operator must route
+#     required_secrets: []           # secret slots to supply
+#     provider_registration_steps: []  # provider-side app/webhook registration
+#     deployment_blockers: []        # known blockers (empty when none)
+#     migration: "..."               # alembic migration to apply, or null
+#
+# NOTE: this file is the deploy-time copy authored with the provider-manifest
+# conformance wave (§8). The docs-side copy
+# (docs/integration-control-plane/DEPLOYMENT_CONTRACT.yaml) should receive the
+# SAME per-capability entries for parity — that file is owned by the docs /
+# integration layer and is not edited here.
+
+turnkey_definition: >
+  Level-4 turnkey means an operator only provisions infra, supplies secrets, configures
+  public URLs, registers provider apps, applies migrations, deploys, certifies, and flips
+  flags. No Python/TS code change, no new DB fields, no new routes, no new forms.
+
+# ---------------------------------------------------------------------------
+# Provisioning-ready infrastructure definitions (program sec20).
+#
+# The pieces below exist as Terraform modules and generated artifacts, gated on
+# the deployment profile. They are provisioning-READY, not provisioned: a plan
+# run creates/validates them; the apply that turns them into AWS resources is a
+# separate, credential-gated step. Where a piece needs a data-plane action that
+# Terraform does not own (topic creation, DDL), the contract names the mechanism
+# that must run at apply/deploy time.
+# ---------------------------------------------------------------------------
+infrastructure_provisioning:
+  kafka_topics:
+    selector: "event_broker == kafka (production-scale / enterprise-isolated)"
+    module: "AWS Deployment/aether-aws/terraform/modules/kafka_topic_provisioner"
+    registry_source: "shared/events/events.py Topic enum -> deploy/kafka/topics.json (regeneration drift-tested)"
+    mechanism: >
+      One-shot Lambda invoked via aws_lambda_invocation after the MSK cluster
+      exists (depends_on module.msk). MSK runs auto.create.topics.enable=false,
+      so the provisioner is what creates every declared topic before any
+      producer connects. Idempotent (TopicAlreadyExistsError is a no-op).
+    operator_inputs: []        # nothing beyond the infra apply; registry is enum-derived
+    required_env_injected_by_terraform:
+      - KAFKA_BOOTSTRAP_SERVERS
+      - KAFKA_TOPIC_PARTITIONS      # default 3, matches MSK num.partitions
+      - KAFKA_TOPIC_REPLICATION_FACTOR  # default 3, matches MSK default.replication.factor
+    deployment_blockers: []    # none code-side; depends only on MSK being reachable
+
+  clickhouse:
+    selector: "analytics_backend == clickhouse (production-scale / enterprise-isolated)"
+    module: "AWS Deployment/aether-aws/terraform/modules/clickhouse (self-managed EC2 + EBS)"
+    endpoints:
+      native: "CLICKHOUSE_HOST:9000 (TCP, runtime protocol)"
+      http:   "CLICKHOUSE_HOST:8123 (HTTP interface)"
+    ddl_application: "deploy/clickhouse/schemas/001_*.sql ... 008_*.sql applied in numeric order by a migration job (not Terraform)"
+    required_env_injected_by_terraform:
+      - CLICKHOUSE_HOST            # only when analytics_backend == clickhouse
+      - CLICKHOUSE_PORT            # fixed 9000
+    operator_inputs:
+      - clickhouse_ami_id          # AL2023 AMI, per-region override
+      - clickhouse_instance_type   # default m6i.large
+      - clickhouse_data_volume_size  # default 100 GiB
+    deployment_blockers:
+      - "appliance and disk carry lifecycle.prevent_destroy; retiring analytics state is a documented release-from-state procedure"
+
+  dns_tls_and_webhooks:
+    selector: "every cloud profile (staging/production-scale/enterprise-isolated)"
+    required_terraform_root_variables:   # no defaults; plan fails until supplied
+      - acm_certificate_arn
+      - domain_name
+      - aether_app_url
+      - kyber_app_url
+      - alert_email
+    webhook_env_inputs:
+      - "public webhook ingest endpoint per rail (see capabilities.payment_rails.required_public_urls)"
+      - "webhook_signing_secret per rail (manifest field webhook_secret)"
+    deployment_blockers: []       # DNS/TLS must be pointed at the ALB before public URLs go live
+
+credential_backend:
+  selector_env: AETHER_CREDENTIAL_BACKEND        # config-only switch; no provider code change (§13.3, §32.20)
+  implementations: [in_memory, local_encrypted, aws_secrets_manager]
+  by_environment:
+    local:       local_encrypted
+    integration: local_encrypted
+    staging:     aws_secrets_manager
+    production:  aws_secrets_manager
+  required_secrets:
+    local_encrypted:
+      - BYOK_ENCRYPTION_KEY            # Fernet key; base64 fallback only when AETHER_ENV=local
+      - BYOK_ENCRYPTION_KEY_PREVIOUS   # optional; rotation window
+    aws_secrets_manager:
+      - AETHER_CREDENTIAL_AWS_PREFIX   # e.g. aether/credentials
+      - AWS credentials via standard provider chain (IAM role preferred)
+
+capabilities:
+  credential_platform:            # W2 — landed
+    application_code_ready: true
+    required_services:
+      - postgres                  # tenant_credentials table (local_encrypted / production)
+    required_public_urls: []
+    required_secrets:
+      - AETHER_CREDENTIAL_BACKEND        # in_memory | local_encrypted | aws_secrets_manager
+      - BYOK_ENCRYPTION_KEY              # required when backend=local_encrypted in non-local envs
+      - AETHER_CREDENTIAL_AWS_PREFIX     # only when backend=aws_secrets_manager (default aether/credentials)
+    provider_registration_steps: []
+    deployment_blockers:
+      - "staging/production: set AETHER_CREDENTIAL_BACKEND=aws_secrets_manager and supply AWS access"
+      - "or keep local_encrypted and supply BYOK_ENCRYPTION_KEY"
+    migration: "alembic upgrade head (creates tenant_credentials; single head)"
+
+  payment_rails:                # §8 observe-only payment rails (privy/stripe/coinbase/moonpay/bridge)
+    application_code_ready: true
+    required_services:
+      - postgres                  # funding_sessions / payment_rail_* tables
+    required_public_urls:
+      - "public webhook ingest endpoint per rail (e.g. /webhooks/payments/{provider})"
+      - "callback URL registered with each provider app (live + sandbox)"
+    required_secrets:
+      - webhook_signing_secret    # per rail (manifest field webhook_secret); rotation-overlap supported
+      - onramp_api_key            # polling rails (moonpay/coinbase/bridge) read-only API key
+    provider_registration_steps:
+      - "register the public webhook endpoint with each rail provider app"
+      - "obtain and store each provider's webhook signing secret in the credential authority"
+      - "obtain read-only provider API keys for polling rails"
+    deployment_blockers: []       # none code-side: observe-only, credential-gated, local-mode offline-safe
+    migration: "alembic upgrade head (payment_rails tables; single head)"
+
+  stablecoin_chain:             # §8 stablecoin chain data capability
+    application_code_ready: false
+    required_services:
+      - postgres                  # chain/asset reference + normalized event stores
+    required_public_urls:
+      - "chain RPC / indexer endpoints (read-only) configured per network"
+      - "webhook/callback URLs for on-chain event delivery where used"
+    required_secrets:
+      - rpc_api_key               # indexer/node API key (read-only)
+    provider_registration_steps:
+      - "provision read-only chain RPC / indexer access keys"
+      - "register callback URLs with the indexer/relayer if push delivery is used"
+    deployment_blockers:
+      - "staging/production: live chain data requires signed data agreements / rate-limit review"
+    migration: null
+
+  derivatives:                  # §8 derivatives data capability
+    application_code_ready: false
+    required_services:
+      - postgres                  # derivatives market + tick/trade normalized stores
+    required_public_urls:
+      - "public market-data REST/websocket endpoints (exchange-owned, read-only)"
+    required_secrets:
+      - exchange_api_key          # read-only exchange API key where private market data is used
+    provider_registration_steps:
+      - "register read-only API keys with the exchange/venue"
+      - "confirm data-license terms for private/aggregated feeds"
+    deployment_blockers: []       # none code-side once keys are supplied
+    migration: null
+
+  interop:                      # §8 interop capability (cross-provider message/identity bridge)
+    application_code_ready: false
+    required_services:
+      - postgres                  # interop ledger / identity bridge tables
+    required_public_urls:
+      - "public callback URLs for inbound interop messages"
+    required_secrets:
+      - interop_signing_secret    # inbound message signature verification
+    provider_registration_steps:
+      - "register the public callback URL with peer interop providers"
+      - "exchange signing public keys / webhook secrets with peers"
+    deployment_blockers: []       # none code-side; depends on peer registration
+    migration: null
+
+environments:
+  matrix_source: ".env.example / .env.staging.example / .env.production.example"
+  credential_backend_default_local: local_encrypted
+
+remaining_external_work:            # after this program (§1) — infra/creds/registration only
+  - provision cloud infrastructure
+  - supply environment-specific secrets
+  - configure public URLs and OAuth redirect URIs
+  - register provider applications
+  - supply provider sandbox/production credentials
+  - run deployment + migration commands
+  - run live external certification
+  - enable certified provider feature flags

@@ -374,6 +374,25 @@ class Treasury(BaseModel):
     updated_at: str = Field(default_factory=_now_iso)
 
 
+class SignerRef(BaseModel):
+    """A tenant-scoped signer reference (public address only — never a key).
+
+    The signer authority is observation-only: it records and resolves which
+    addresses a tenant authorizes to present payment proofs / sign challenges,
+    but it holds NO private key material and performs NO signing. Only the
+    control plane may mutate commerce state.
+    """
+    signer_ref_id: str = Field(default_factory=lambda: _new_id("sgn"))
+    tenant_id: str
+    address: str  # public address (EVM hex or SVM base58)
+    chain: str = "eip155:8453"  # CAIP-2
+    label: str = ""
+    role: str = "payment"  # payment|challenge|observer
+    active: bool = True
+    added_by: str = "operator"
+    added_at: str = Field(default_factory=_now_iso)
+
+
 class ServicePlan(BaseModel):
     plan_id: str = Field(default_factory=lambda: _new_id("pln"))
     tenant_id: str

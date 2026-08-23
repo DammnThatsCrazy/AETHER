@@ -10,11 +10,22 @@ from typing import Any, Optional
 from uuid import UUID
 
 from shared.cis.clickhouse import ClickHouseClient
+from services.computation.campaign import (
+    CampaignAggregates,
+    canonical_campaign_metrics,
+    canonical_journey_allocated_cost,
+)
+from services.economic.computed_results import (
+    campaign_computation_context,
+    persist_computed_results,
+)
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
 from services.measurement.repositories.spend_repo import SpendRepository
 from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+from shared.computation.allocation import AllocationPolicy
+from shared.computation.result import CanonicalResult
 
 logger = logging.getLogger("aether.measurement.gold_materializer")
 
@@ -86,7 +97,11 @@ async def materialize_campaign_performance_daily(
                 "conversions_fractional": Decimal("0"),
             }
         rec = by_campaign[key]
-        rec["spend_usd"] += _to_decimal(sr.get("total_cost")) or Decimal("0")
+        # total_cost is the row's NATIVE amount — convert to USD via the recorded
+        # exchange_rate (program sec19). A row not normalized to USD raises, so a
+        # non-USD spend is never written into spend_usd as a silent 1:1. Legacy
+        # USD rows (no rate) remain identity.
+        rec["spend_usd"] += _usd_total_cost(sr)
         rec["impressions"] += int(sr.get("impressions", 0))
         rec["clicks"] += int(sr.get("clicks", 0))
 
@@ -252,7 +267,6 @@ async def materialize_journey_economics(
         conversion_ids = json.loads(conversion_ids)
 
     total_attributed_revenue = Decimal("0")
-    total_spend = Decimal("0")
     conversion_count = 0
     # Journey's attributed conversions per campaign — the weights used to ALLOCATE
     # campaign spend to this journey below.
@@ -279,10 +293,24 @@ async def materialize_journey_economics(
     started_at = _parse_ts(journey.get("started_at"))
     ended_at = _parse_ts(journey.get("ended_at")) or datetime.now(timezone.utc)
 
-    # ALLOCATE each campaign's spend to this journey by the journey's share of the
-    # campaign's attributed conversions — instead of duplicating the FULL campaign
-    # spend onto every journey (which triple-counts a shared campaign). The result
-    # is ESTIMATED/allocated, and conserves campaign spend across journeys.
+    context = campaign_computation_context(
+        tenant_id,
+        subject_type="journey",
+        subject_id=journey_id,
+        event_time_start=started_at.isoformat() if started_at else None,
+        event_time_end=ended_at.isoformat() if ended_at else None,
+        native_currency="USD",
+        journey_version=journey.get("journey_version") or None,
+    )
+
+    # ── CANONICAL allocation: each campaign's USD spend allocated to this journey
+    # by the journey's share of the campaign's attributed conversions — instead of
+    # duplicating the FULL campaign spend onto every journey (which triple-counts
+    # a shared campaign). The result is ESTIMATED/allocated and conserves campaign
+    # spend across journeys (residual disclosed).
+    total_allocated_spend = Decimal("0")
+    journey_fractional_conversions = Decimal("0")
+    allocated_results: list[CanonicalResult] = []
     for cid in campaign_ids:
         campaign_spend = await spend_repo.total_spend(
             tenant_id, cid,
@@ -296,13 +324,61 @@ async def materialize_journey_economics(
             summary.get("total_attributed_conversions") or "0"
         ) or Decimal("0")
         journey_conv = journey_conv_by_campaign.get(cid, Decimal("0"))
-        total_spend += _allocate_journey_campaign_spend(
-            campaign_spend, campaign_total_conv, journey_conv
+        journey_fractional_conversions += journey_conv
+        weights = {
+            journey_id: journey_conv,
+            f"{journey_id}:other_journeys": max(campaign_total_conv - journey_conv, Decimal("0")),
+        }
+        allocation, per_journey = canonical_journey_allocated_cost(
+            context,
+            campaign_cost=str(campaign_spend),
+            currency="USD",
+            journey_weights=weights,
+            policy=AllocationPolicy.ATTRIBUTION_CREDIT,
+        )
+        this_journey = per_journey.get(journey_id)
+        if this_journey is not None and this_journey.value is not None:
+            total_allocated_spend += _to_decimal(this_journey.value) or Decimal("0")
+        if this_journey is not None:
+            allocated_results.append(this_journey)
+
+    # ── CANONICAL journey-level metrics (ROAS/CPA/AOV on ALLOCATED spend). The
+    # journey is expressed as a campaign-scope aggregate; the substrate's honest
+    # rate_result turns an undefined denominator into missing_inputs (None), so an
+    # unmeasurable ROAS/CPA/AOV is never written as a fake 0.0.
+    journey_agg = CampaignAggregates(
+        impressions=0,
+        clicks=0,
+        media_spend=str(total_allocated_spend) if total_allocated_spend > 0 else None,
+        total_cost=str(total_allocated_spend) if total_allocated_spend > 0 else None,
+        currency="USD",
+        attributed_conversions=str(journey_fractional_conversions)
+        if journey_fractional_conversions > 0 else None,
+        attributed_gross_revenue=str(total_attributed_revenue)
+        if total_attributed_revenue > 0 else None,
+        attributed_net_revenue=str(total_attributed_revenue)
+        if total_attributed_revenue > 0 else None,
+        first_party_conversions=0,
+        extra_lineage={"journey_id": journey_id, "window_days": None},
+    )
+    metrics_by_id = canonical_campaign_metrics(context, journey_agg)
+    journey_results = list(metrics_by_id.values())
+
+    # ── Persist the canonical results (idempotent; best-effort — a persisted-write
+    # failure must not abort gold materialization).
+    try:
+        await persist_computed_results(
+            allocated_results + journey_results,
+            tenant_id=tenant_id,
+        )
+    except Exception as exc:  # pragma: no cover - best-effort telemetry
+        logger.warning(
+            "computed_results persist skipped for journey %s: %s", journey_id, exc,
         )
 
-    # roas/cpa here are journey-level economics computed on ALLOCATED spend.
-    roas = float(total_attributed_revenue / total_spend) if total_spend > Decimal("0") else None
-    cpa = float(total_spend / conversion_count) if conversion_count > 0 else None
+    roas = _canonical_value(metrics_by_id.get("campaign.net_roas"))
+    cpa = _canonical_value(metrics_by_id.get("campaign.cpa"))
+    aov = _canonical_value(metrics_by_id.get("campaign.aov"))
 
     now = datetime.now(timezone.utc)
     gold_row = {
@@ -314,12 +390,12 @@ async def materialize_journey_economics(
         "channel": None,
         "platform": None,
         "revenue_attributed_usd": float(total_attributed_revenue),
-        "ad_spend_usd": float(total_spend),
+        "ad_spend_usd": float(total_allocated_spend),
         "roas": roas,
         "cpa_usd": cpa,
         "ltv_predicted_usd": 0.0,
         "ltv_actual_usd": float(total_attributed_revenue),
-        "aov_usd": float(total_attributed_revenue / conversion_count) if conversion_count > 0 else None,
+        "aov_usd": aov,
         "repeat_count": conversion_count,
         "retarget_score": 0.0,
         "retarget_recommendation_id": None,
@@ -415,6 +491,32 @@ async def backfill_tenant(
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _canonical_value(result: Optional[CanonicalResult]) -> Optional[float]:
+    """Extract the canonical result's float value — None when the metric was
+    unmeasurable (honest missing_inputs) so a gold column is never faked as 0.0."""
+    if result is None or result.value is None:
+        return None
+    return float(result.value)
+
+
+def _usd_total_cost(row: dict[str, Any]) -> Decimal:
+    """Convert a row's native ``total_cost`` to USD via its recorded rate.
+
+    Raises when the row is not normalized to USD (mixed/un-normalized money is
+    never silently summed). A USD-normalized row with no rate is treated as
+    identity (legacy rows always carried rate 1.0).
+    """
+    amount = _to_decimal(row.get("total_cost")) or Decimal("0")
+    norm = str(row.get("normalized_currency") or "USD").strip().upper()
+    if norm != "USD":
+        raise ValueError(
+            f"spend row {row.get('spend_record_id')!r} is normalized to {norm!r}, "
+            "not USD — refusing to total mixed currencies"
+        )
+    rate = _to_decimal(row.get("exchange_rate"))
+    return amount * rate if rate is not None else amount
+
 
 def _to_decimal(value: Any) -> Optional[Decimal]:
     if value is None:

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "dc3eaecf"
+last_synced_commit: "7cd46446"
 ---
 # Commerce Operator Runbook
 
@@ -31,8 +31,12 @@ last_synced_commit: "dc3eaecf"
 **Symptom:** Diagnostics page shows settlement failure rate climbing, or explicit `commerce.settlement.failed` event.
 
 **Steps:**
-1. Fetch failure list: `GET /v1/diagnostics/commerce/stuck-approvals` (reuses sweep endpoint; extend with settlement-specific if needed).
-2. Inspect: `GET /v1/x402/settlements/{id}` returns state + `failure_reason` + attempts.
+1. Fetch failure list: `GET /v1/diagnostics/commerce/health` reports aggregate
+   settlement counts (`pending`, lifetime `failed`, and `recent_failed` within the
+   health window); `GET /v1/diagnostics/commerce/stuck-approvals` sweeps expired
+   approvals.
+2. Inspect per-settlement state + `failure_reason` + `attempts`:
+   `GET /v1/admin/operator/agentic/settlements` (Kyber operator, all tenants).
 3. Retry via `SettlementTracker.retry(tenant_id, settlement_id)` or equivalent API.
 4. If facilitator is unhealthy: update health via internal API, select alternate facilitator on retry.
 

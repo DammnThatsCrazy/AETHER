@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 class PaymentRecord(BaseModel):
     """A payment between any combination of humans, agents, and services."""
     payment_id: str = ""
+    tenant_id: Optional[str] = None
     payer_id: str
     payer_type: str = Field(..., pattern="^(human|agent|service)$")
     payee_id: str

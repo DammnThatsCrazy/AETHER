@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/kyber_routes.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
   - Backend Architecture/aether-backend/shared/graph/graph.py
-last_synced_commit: "99da74c0"
+last_synced_commit: "7cd46446"
 ---
 
 # Runbook — Tenant Import Failures
@@ -34,6 +34,14 @@ commit stages every row to Bronze (`BronzeRepository("tenant_import")`, tagged b
 commit id) and to the graph (entity/identifier/resource vertices + relationship
 edges, each carrying `import_commit_id`).
 
+The **authoritative** lifecycle is the import-session FSM (`lifecycle_state`:
+`CREATED → UPLOADED → VALIDATING → VALIDATED → NORMALIZING → COMMITTING →
+PROJECTING → RECONCILING → COMPLETED`, plus `REJECTED`, `FAILED`, and the
+terminal `DEAD_LETTERED`). The lowercase `status` above is a **parity-locked
+legacy projection** (`services/card_linked_payments/import_session.py`), kept so
+the frontend and existing commit/approve surfaces keep parsing. When the two
+could disagree, trust `lifecycle_state`.
+
 ## Triage
 
 1. **Find the import.** `GET /v1/kyber/imports/timeline` (newest-first, all
@@ -48,13 +56,19 @@ A commit job is in-flight or its worker died mid-flight. Check the job platform:
 `GET /v1/kyber/jobs/timeline?tenant_id=…` for the `import.commit` job. If the job
 is `failed`/`expired`, the import session will be `failed` — recover it (below).
 If the job is genuinely running, wait; the commit is idempotent (edge creation is
-existence-checked, Bronze ingest de-dupes on `provider_record_id`).
+existence-checked, Bronze ingest de-dupes on `provider_record_id`). A session that
+has sat in `committing` past its requeue window with no live worker is
+**stranded**: requeue it (below) to **resume** — never restart — the commit.
 
 ### Import in `failed`
 The commit raised before completing. **Recover:** `POST /v1/kyber/imports/{id}/requeue`
-— this resets the session to `approved` and re-enqueues `import.commit`. The
-mapping and validation are stored and unchanged, so the replay is safe. Confirm
-via the detail endpoint that a new commit lands `committed`.
+— this re-stages the session into `COMMITTING` (legacy `status` projects
+`committing`) and re-enqueues `import.commit` under the same id. The mapping and
+validation are stored and unchanged, so the replay is safe; `failure_reason` and
+`retry_count` are preserved for audit. A **stranded** `committing` session (worker
+died mid-commit) is requeueable the same way once its requeue window elapses — the
+commit resumes, it never restarts from scratch. Confirm via the detail endpoint
+that the session lands `committed`.
 
 ### `partially_committed`
 Some rows failed a transform at commit time (rare — validation runs first). The
@@ -83,7 +97,11 @@ support). Have the tenant export to CSV/JSON.
 
 If a requeue does not resolve a `failed` import after two attempts, capture the
 commit's `row_errors` and the `import.commit` job's `job_events`, and escalate to
-`platform@aether` — do not hand-edit graph edges or Bronze rows.
+`platform@aether` — do not hand-edit graph edges or Bronze rows. A session that
+exhausts its retry budget is **dead-lettered** (`lifecycle_state` =
+`DEAD_LETTERED`, terminal — `status` projects `failed`) and has no transition
+out: it needs an operator decision (root-cause, then re-drive), never a silent
+auto-retry.
 ## Rollback vertex garbage collection
 
 Rollback and replay now attempt conservative vertex cleanup after revoking the

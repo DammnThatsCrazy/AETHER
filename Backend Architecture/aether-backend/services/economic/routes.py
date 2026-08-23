@@ -148,6 +148,100 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _aggregate_spend(spend_by_currency: dict[str, Any]) -> tuple[
+    Optional[EconomicAmountResponse],
+    dict[str, EconomicAmountResponse],
+    list[str],
+]:
+    """Aggregate native per-currency spend into a labeled USD total.
+
+    Never sums mixed native currencies into one scalar (program sec19):
+    - per-currency native amounts are returned verbatim;
+    - the USD total is computed by converting EACH currency through the FX seam
+      (``services/value/fx_provider`` snapshot);
+    - a currency with no available rate is flagged and excluded from the total
+      — if ANY currency is unpriced, ``spend.usd_amount`` is None so an
+      incomplete total is never presented as a complete one.
+    """
+    from decimal import Decimal as _Decimal
+
+    from services.value import fx_provider as _fx
+    from services.value.price_sources import price as _price
+
+    # Self-registration is an import-time side effect; re-assert it so this
+    # function never depends on import order (a prior clear_price_providers()
+    # in another test/process would otherwise leave EUR/GBP unpriced).
+    _fx.register()
+
+    per_currency: dict[str, EconomicAmountResponse] = {}
+    usd_total = _Decimal("0")
+    priced_any = False
+    unpriced: list[str] = []
+
+    for currency, amount_value in spend_by_currency.items():
+        try:
+            amount = _Decimal(str(amount_value))
+        except Exception:
+            continue  # skip unparseable amounts
+        per_currency[currency] = EconomicAmountResponse(
+            native_amount=float(amount),
+            native_currency=currency,
+            price_source="aether_intent_aggregation",
+        )
+        valuation = _price(amount, currency)
+        if valuation is None or valuation.get("usd_value") is None:
+            unpriced.append(currency)
+            continue
+        usd_total += _Decimal(str(valuation["usd_value"]))
+        per_currency[currency].usd_amount = float(valuation["usd_value"])
+        priced_any = True
+
+    warnings: list[str] = []
+    if unpriced:
+        warnings.append(
+            "FX rate unavailable for currency(ies) "
+            f"{', '.join(sorted(set(unpriced)))} — USD total is incomplete"
+        )
+
+    if not per_currency:
+        return None, {}, warnings
+
+    # A converted total is only trustworthy when every currency priced.
+    spend = EconomicAmountResponse(
+        usd_amount=float(usd_total) if priced_any and not unpriced else None,
+        normalized_amount=float(usd_total) if priced_any and not unpriced else None,
+        normalized_currency="USD",
+        native_currency=None,
+        price_source="aether_intent_aggregation_fx",
+    )
+    return spend, per_currency, warnings
+
+
+def _spend_rows_to_usd_total(rows: list[dict[str, Any]]) -> Decimal:
+    """Convert a list of spend rows to a single USD total via each row's
+    recorded ``exchange_rate`` (program sec19).
+
+    ``total_cost`` is the row's NATIVE amount; the USD total is
+    ``total_cost * exchange_rate`` per row — never a raw sum of mixed native
+    currencies. A row not normalized to USD raises: un-normalized money is
+    never silently summed (callers surface the error loudly).
+    """
+    from decimal import Decimal as _Decimal
+
+    total = _Decimal("0")
+    for row in rows:
+        amount = _Decimal(str(row.get("total_cost") or "0"))
+        norm = str(row.get("normalized_currency") or "USD").strip().upper()
+        if norm != "USD":
+            raise ValueError(
+                f"spend row {row.get('spend_record_id')!r} is normalized to "
+                f"{norm!r}, not USD — refusing to total mixed currencies"
+            )
+        rate = _Decimal(str(row.get("exchange_rate") or "1"))
+        total += amount * rate
+    return total
+
+
 # ── Profile-scoped routes ────────────────────────────────────────────
 
 @router.get("/v1/profile/{entity_id}/economic")

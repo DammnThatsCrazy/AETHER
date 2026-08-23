@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/rewards/delivery_outbox.py
   - Backend Architecture/aether-backend/services/rewards/rails.py
 canonical_owner: platform@aether
-last_synced_commit: "e610a8df"
+last_synced_commit: "7cd46446"
 ---
 
 # Reward Delivery Runbook

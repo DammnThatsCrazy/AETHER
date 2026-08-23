@@ -407,8 +407,8 @@ class DeliveryWorker:
     async def _advance_suggestion_delivered(self, suggestion_id: str, receipt_id: str) -> None:
         """Transition a suggestion to DELIVERED status after confirmed provider receipt."""
         try:
-            from repositories.repos import SuggestionsRepository
-            repo = SuggestionsRepository()
+            from services.suggestions.repository import SuggestionRepository
+            repo = SuggestionRepository()
             await repo.update(suggestion_id, {
                 "status": "delivered",
                 "delivery_receipt_id": receipt_id,

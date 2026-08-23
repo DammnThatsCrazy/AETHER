@@ -137,12 +137,17 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "outbox-relay": frozenset(
         {"notification_outbox", "event_outbox_relay", "reward_delivery_outbox"}
     ),
-    "stream-worker": frozenset({"event_replay", "dune_polling"}),
+    # Provider-truth polling ingestion rides the stream worker alongside the
+    # canonical observation spine (dune_polling): stablecoin provider polling and
+    # the interop scan are polling/observation loops, not materialization.
+    "stream-worker": frozenset(
+        {"event_replay", "dune_polling", "stablecoin_provider_polling", "interop_scan"}
+    ),
     "identity-worker": frozenset(),
     # The Kyber Graph projector consumes the graph mutation ledger into platform
-    # topology. It is the first loop spec this role owns; the role was otherwise
-    # consumer-attached only.
-    "graph-writer": frozenset({"kyber_graph_projector"}),
+    # topology. The card-linked graph outbox projects card-linked ingestion
+    # graph writes the same way, so it rides graph-writer.
+    "graph-writer": frozenset({"kyber_graph_projector", "card_linked_graph_outbox"}),
     "measurement-worker": frozenset(),
     # Stream consumer is owned by consumer_specs.py; the reconciler + retention
     # supervised loop specs (each gated on its settings flag) are owned here.
@@ -159,8 +164,11 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "materializer": frozenset(
         {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
          "bronze_object_compaction", "x402_settlement_reconciliation",
-         "payment_alert_eval", "provider_sync_scheduler"}
-
+         "payment_alert_eval", "provider_sync_scheduler",
+         # Derivatives venue reconciliation sweep + the shared dead-letter
+         # requeue sweeper: both reconcile durable state the same way as the
+         # payment-rail sync/repair loops that ride this role.
+         "derivatives_venue_sweep", "dead_letter_sweeper"}
     ),
     "maintenance": frozenset(
         {
@@ -195,6 +203,15 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             "reward_reservation_release",
             "reward_dlq_sweeper",
             "credential_expiry_sweep",
+            # Capability-readiness revalidation: periodically revalidates that
+            # the tenant's launch-readiness gates still hold. A low-frequency
+            # periodic loop, so it rides maintenance.
+            "readiness_revalidation",
+            # Reward-plane claim reconciliation + receipt-evidence sweep:
+            # low-frequency periodic loops, so they ride maintenance like the
+            # other reward sweeps above rather than justifying dedicated roles.
+            "reward_claim_reconciliation",
+            "reward_receipt_evidence",
             # Truth-chain ledger verifier (LEDGER M3): a periodic, opt-in Bronze
             # hash-chain re-verification sweep that alerts on tamper evidence. It
             # is a scheduled safety-net loop, so it rides maintenance like the
