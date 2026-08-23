@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "b5d4ce33"
+last_synced_commit: "08cb1a6e"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -758,9 +758,24 @@ return 503 while OFF). Typed contracts carry no credential material.
   (`credentials: 'include'`) so the HttpOnly `__Host-kyber_session` cookie
   crosses origins and `require_operator` passes for signed-in operators.
 
-Neither app adds a route or nav entry for these surfaces — no `router.tsx` or
-sidebar changes — and the typed fetch clients are self-contained in their
-feature modules, not wired into `lib/api/endpoints.ts`.
+Both apps register their model-runtime surfaces on the signed-in route tree —
+all of it behind `enableModelHarness` (default OFF):
+
+- **Kyber** (`frontend/kyber/src/app/router.tsx`): the five operator pages are
+  routed at `/model-runtime/registry`, `/model-runtime/health`,
+  `/model-runtime/entitlements`, `/model-runtime/usage`,
+  `/model-runtime/traces`, with discoverable sidebar entries
+  (`frontend/kyber/src/components/layout/sidebar.tsx`). While the feature flag
+  is OFF the routes stay registered but inert — every page renders the
+  backend's `model_runtime_disabled` 503 surface.
+- **Aether** (`frontend/aether/src/pages/home/home-page.tsx`): the
+  `ModelSelectionPanel` is mounted on the authenticated tenant home page. While
+  `enableModelHarness` is OFF the panel is absent (feature-flag gated); when ON
+  it drives `getModels` + `setTenantDefault` against the tenant model-runtime
+  surfaces.
+
+The typed fetch clients stay self-contained in their feature modules, not
+wired into `lib/api/endpoints.ts`.
 
 ---
 
