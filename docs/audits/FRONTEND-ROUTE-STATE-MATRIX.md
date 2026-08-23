@@ -141,6 +141,11 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/measurement/attribution` | attribution models and runs | no | I | A | — | — | I | `kyber-measurement-empty-routes.test.tsx` |
 | `/measurement/journeys` | journey explorer | no | I | A | — | — | I | `kyber-measurement-empty-routes.test.tsx` |
 | `/measurement/conversions` | conversion explorer | no | I | A | — | — | I | `kyber-measurement-empty-routes.test.tsx` |
+| `/model-runtime/registry` | model-runtime provider registry | no | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
+| `/model-runtime/health` | model-runtime provider health | no | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
+| `/model-runtime/entitlements` | model-runtime tenant entitlements | no | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
+| `/model-runtime/usage` | model-runtime usage meters | no | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
+| `/model-runtime/traces` | model-runtime provider traces | no | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
 | `/measurement/campaigns` | campaign fleet | no | I | A | — | — | I | `kyber-measurement-empty-routes.test.tsx` |
 | `/measurement/campaigns/:campaignId` | campaign detail | no | I | — | — | — | I | gap |
 | `/measurement/ops` | measurement operations | no | I | — | — | — | I | gap |
@@ -159,15 +164,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 130 data-bearing route patterns above: 51 Aether and
-79 Kyber routes.
+The denominator is the 135 data-bearing route patterns above: 51 Aether and
+84 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 18 / 130 (13.8%) | tracked for every route |
-| Empty-state assertions | 118 / 130 (90.8%) | at least 90% overall |
-| Error/unavailable assertions | 100 / 130 (76.9%) | 100% of critical routes |
-| Populated-state assertions | 33 / 130 (25.4%) | tracked for every route |
+| Explicit loading-state assertions | 18 / 135 (13.3%) | tracked for every route |
+| Empty-state assertions | 123 / 135 (91.1%) | at least 90% overall |
+| Error/unavailable assertions | 105 / 135 (77.8%) | 100% of critical routes |
+| Populated-state assertions | 33 / 135 (24.4%) | tracked for every route |
 | Critical routes with both empty and error assertions | 62 / 62 (100%) | 62 / 62 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
