@@ -421,11 +421,30 @@ async def project_once() -> list[ProjectionReport]:
     Tenants are enumerated from the durable relationship-Gold table; a deployment
     on the in-memory store (local/CI) has no rows there, so the pass is a no-op —
     matching the flag being off by default.
+
+    A tenant whose sweep RAISES (e.g. the reconciliation list/revoke phase
+    fails) is isolated into a per-tenant :class:`ProjectionReport` marked failed
+    and the pass CONTINUES with the remaining tenants. Without this, one
+    persistently failing early tenant would abort the whole pass — the outer
+    supervised loop only catches after ``project_once`` exits — and starve every
+    later tenant until the next interval.
     """
     tenants = await SemanticFactRepository(reducers._GOLD_RELATIONSHIP_TABLE).distinct_tenants()
     reports: list[ProjectionReport] = []
     for tenant_id in tenants:
-        report = await project_tenant(tenant_id)
+        try:
+            report = await project_tenant(tenant_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — isolate one tenant's failure
+            metrics.increment("semantic_graph_projection_error_total")
+            logger.error(
+                "semantic graph projector tenant sweep failed tenant=%s: %s",
+                tenant_id,
+                exc,
+                exc_info=True,
+            )
+            report = ProjectionReport(tenant_id=tenant_id, failed=1, errors=[str(exc)])
         if report.failed:
             logger.warning("semantic graph projector partial: %s", report.to_dict())
         reports.append(report)

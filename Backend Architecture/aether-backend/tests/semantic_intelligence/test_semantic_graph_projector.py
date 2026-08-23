@@ -318,6 +318,49 @@ async def test_sweep_replaces_legacy_noncanonical_edge():
     assert edges[0].properties.get("actor_kind") == "system"
 
 
+async def test_project_once_continues_past_tenant_sweep_failure():
+    # Codex P1 (graph_projector.py project_once): a tenant whose sweep RAISES
+    # during its unguarded reconciliation phase (e.g. listing/revoking one
+    # tenant's stale graph edges fails) must not abort the whole pass and starve
+    # later tenants until the next interval. project_once isolates the failure
+    # into a per-tenant failed report and keeps processing the rest. If the bug
+    # returns, the RuntimeError escapes project_once and this test fails.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    await _seed_relationship(OTHER_TENANT, SOURCE, "prod_other")
+    client = await _graph()
+
+    original_reconcile = projector_mod._reconcile_projections
+    original_get_graph_client = projector_mod.get_graph_client
+
+    async def flaky_reconcile(graph_client, gateway, tenant_id, expected, report):
+        if tenant_id == TENANT:
+            raise RuntimeError("reconciliation list failed for TENANT")
+        return await original_reconcile(graph_client, gateway, tenant_id, expected, report)
+
+    projector_mod._reconcile_projections = flaky_reconcile
+    # project_once uses the process-wide get_graph_client(); point it at the
+    # local client so the surviving tenant's edge is inspectable afterwards.
+    projector_mod.get_graph_client = lambda: client
+    try:
+        reports = await projector_mod.project_once()
+    finally:
+        projector_mod._reconcile_projections = original_reconcile
+        projector_mod.get_graph_client = original_get_graph_client
+
+    by_tenant = {r.tenant_id: r for r in reports}
+    # Every tenant is represented in the pass result — the loop did not abort.
+    assert set(by_tenant) == {TENANT, OTHER_TENANT}
+    # The failing tenant is reported as failed with its error recorded.
+    assert by_tenant[TENANT].failed == 1
+    assert by_tenant[TENANT].errors
+    assert any("reconciliation list failed" in e for e in by_tenant[TENANT].errors)
+    # The later tenant is still swept and its edge really landed in the graph.
+    assert by_tenant[OTHER_TENANT].failed == 0
+    assert by_tenant[OTHER_TENANT].projected == 1
+    edges = await _semantic_edges(client, SOURCE)
+    assert [e.properties.get("tenantId") for e in edges] == [OTHER_TENANT]
+
+
 async def _seed_raw_relationship(tenant: str, source: str, target: str, index: int) -> None:
     """Seed one gold relationship row directly (bypasses the reducer path)."""
     repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
