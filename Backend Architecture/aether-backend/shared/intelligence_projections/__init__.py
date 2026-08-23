@@ -3,7 +3,9 @@
 A 360 is an intelligence projection over canonical Aether truth — never a
 competing system of record. This package holds the shared request / context /
 result contracts (Python twin of ``packages/shared/intelligence-projection.ts``),
-the typed error hierarchy, and re-exports the generated registry constants.
+the typed error hierarchy, the re-exported generated registry constants, and
+the hand-written PRESENTATION-ONLY readiness mapping (implementationState is
+repo metadata, NOT readiness).
 
 Importable as ``from shared.intelligence_projections import ...``.
 """
@@ -46,6 +48,11 @@ from shared.intelligence_projections.generated_registry import (
     PROJECTION_SURFACE_MAP,
 )
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
+from shared.intelligence_projections.readiness import (
+    IMPLEMENTATION_STATE_PRESENTATION,
+    PRESENTATION_TOKENS,
+    presentation_token,
+)
 from shared.intelligence_projections.registry import (
     ProviderRegistry,
     projection_registry,
@@ -72,6 +79,10 @@ __all__ = [
     "ProviderRegistry",
     "projection_registry",
     "registry",
+    # capability / readiness join (presentation-only)
+    "IMPLEMENTATION_STATE_PRESENTATION",
+    "PRESENTATION_TOKENS",
+    "presentation_token",
     # errors
     "ContractVersionIncompatible",
     "DependencyUnavailable",

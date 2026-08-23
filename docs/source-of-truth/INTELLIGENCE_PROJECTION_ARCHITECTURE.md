@@ -149,6 +149,19 @@ rows stay byte-stable.
 | **Temporal kernel + bitemporal ledger** | An authority (`shared/temporal/`, graph mutation gateway ledger). `temporal360` reads bitemporal `as_of`/`compare`; the `graph_history_replay` spine is pending (ledger exists, no replay API). |
 | **Fraud engines / governance / CIS / model governance** | Authorities the risk projections (`risk360`, `fraud360`) read. The projection plane re-implements none of them. |
 
+**Presentation-only readiness, on paper.** The projection plane's presentation
+tokens — `queued`, `converging`, `converged`, `retired` (from `readiness.py`) —
+are projection-CONVERGENCE tokens in the projection plane's OWN namespace, NOT
+readiness tokens. They are therefore deliberately excluded from
+`packages/shared/contracts/readiness-vocabulary.json`: that file's `singleSource`
+rule governs the readiness/certification token consumers (the Python
+`CredentialReadiness` enum and the TypeScript `CapabilityState` union) only, and
+the projection plane is none of those consumers. The plane never emits a
+certification token and never emits `production_ready` (a claim dimension, not a
+state); `readiness.py` asserts both at import time, and the test suite proves
+disjointness from `CredentialReadiness` without importing the certification
+plane at runtime.
+
 ## 5. Runtime provider protocol
 
 The runtime lives in `Backend Architecture/aether-backend/shared/intelligence_projections/`
