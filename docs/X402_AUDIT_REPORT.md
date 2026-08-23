@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "1c1b7416"
+last_synced_commit: "74086291"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -81,6 +81,7 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **On-chain verification** | Implemented | `services/x402/verification.py` — facilitator-delegated verification (primary); direct on-chain RPC fallback via `_verify_evm()` (Base: `eth_getTransactionReceipt` + ERC-20 Transfer log) and `_verify_solana()` (Solana: `getTransaction` + SPL token transfer). Active when `AETHER_ENV != "local"`. Fail-closed on RPC error/timeout. |
 | **Entitlement / access gating** | Latent | Reward eligibility engine exists (`services/rewards/eligibility.py`) but x402 does not gate access — it is observational/capture-only |
 | **HTTP 402 response middleware** | Implemented | `services/x402/challenge_middleware.py` — `X402ChallengeMiddleware` intercepts requests to registered protected resources, returns HTTP 402 with `PAYMENT-REQUIRED` header, honors `X-Payment-Identifier` idempotency and active entitlements (SIWX reuse). Wired via `register_challenge_middleware()` controlled by `commerce_enable_challenge_middleware` setting. |
+| **Signer-authority enforcement** | Implemented | `services/x402/signer_authority.py` + `services/x402/verification.py` — fail-closed payer gate at the proof-verification boundary: a tenant that has registered signer references only accepts payment proofs from an active, tenant-authorized signer (unregistered or deactivated payer → `unauthorized_signer` verdict), while a tenant with no signer registry (the default) is unaffected |
 
 ---
 
@@ -212,7 +213,8 @@ Aether's x402 support is now **full-stack**: challenge-side (returning HTTP 402 
 | `Backend Architecture/aether-backend/services/x402/challenge_middleware.py` | X402ChallengeMiddleware — challenge-side HTTP 402 gating with idempotency and SIWX entitlement reuse |
 | `Backend Architecture/aether-backend/services/x402/economic_graph.py` | X402EconomicGraph — in-memory subgraph, Neptune snapshots, spending patterns |
 | `Backend Architecture/aether-backend/services/x402/facilitators.py` | FacilitatorRegistry — per-chain facilitator lookup and HTTP endpoint resolution |
-| `Backend Architecture/aether-backend/services/x402/verification.py` | VerificationEngine — facilitator-delegated verification (x402 wire format) + USDC/Base, USDC/Solana local fallback |
+| `Backend Architecture/aether-backend/services/x402/verification.py` | VerificationEngine — facilitator-delegated verification (x402 wire format) + USDC/Base, USDC/Solana local fallback; consults the signer authority at the proof boundary |
+| `Backend Architecture/aether-backend/services/x402/signer_authority.py` | SignerAuthority — tenant signer registry; fail-closed `is_payer_authorized()` gate consulted at proof verification |
 | `Backend Architecture/aether-backend/services/x402/idempotency.py` | Async idempotency store — in-memory (local) or Redis-backed (staging/prod) deduplication |
 | `Backend Architecture/aether-backend/services/x402/settlement.py` | SettlementEngine — multi-state settlement lifecycle (pending → clearing → settled / failed) |
 | `Backend Architecture/aether-backend/services/x402/routes.py` | FastAPI routes: /v1/x402/capture, /graph, /agent/{id}, /graph/snapshot |
@@ -294,6 +296,12 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
   or compromised credentials. Each `BudgetPolicy` carries
   `daily_cap_usd`, `monthly_cap_usd`, `per_transaction_cap_usd`. See
   `COMMERCE-CONTROL-PLANE.md §9` and `COMMERCE-OPERATOR-RUNBOOK.md §8`.
+- **Signer-authority enforcement at proof verification** — a tenant that has
+  registered signer references is enforced fail-closed at the proof-verification
+  boundary (`services/x402/signer_authority.py` consulted by `verification.py`):
+  proofs from an unregistered or deactivated payer are rejected with an
+  `unauthorized_signer` verdict even when chain/facilitator verification would
+  otherwise succeed; tenants with no signer registry are unaffected.
 
 **Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
 

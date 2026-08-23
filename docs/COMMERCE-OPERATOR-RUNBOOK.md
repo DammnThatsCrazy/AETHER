@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: "1c1b7416"
+last_synced_commit: "74086291"
 ---
 # Commerce Operator Runbook
 
@@ -147,3 +147,16 @@ charges. Set a tight `per_transaction_cap_usd` first (immediate
 limitation), then a tighter `daily_cap_usd` for cumulative protection.
 Re-issue the same `POST` with new caps to replace; there's no separate
 PATCH/DELETE — an absent policy means no caps.
+
+## 9. Signer-authority enforcement at verification
+
+A tenant that has **registered** signer references (via the x402 signer
+authority) is enforced **fail-closed** at payment-proof verification: a proof
+from an unregistered or deactivated payer is rejected with verdict
+`unauthorized_signer` even when on-chain/facilitator verification would
+otherwise succeed. A tenant with **no** signer references (the default) is
+unaffected — the authority never invents an authorized signer.
+
+If a previously-valid payment starts failing with
+`verification_verdict="unauthorized_signer"`, re-check the tenant's signer
+registry (a deactivated/rotated reference), not the facilitator or RPC.

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "1c1b7416"
+last_synced_commit: "74086291"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -1008,6 +1008,17 @@ Get a single registered contract by ID.
 ### POST /v1/rewards/contracts/{id}/verify
 
 **Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the tenant's **resolved reward signer** (`services/rewards/signing.py`, credential-authority backed) — returns 422 if they diverge, 422 if no signer resolves, and 503 if `eth_account` is unavailable (fail-closed; never passes unverified). After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
+
+### Kyber operator reward pages (`/v1/admin/kyber`, `require_kyber_operator`)
+
+Read-only operator surfaces consumed by the Kyber UI (fail-closed: non-operator
+requests are rejected). All are GET-only and never mutate reward state:
+
+- `GET /v1/admin/kyber/rewards/health` — operator reward-subsystem health summary.
+- `GET /v1/admin/kyber/tenants/{tenant_id}/campaigns` — a tenant's campaigns.
+- `GET /v1/admin/kyber/tenants/{tenant_id}/decisions` — a tenant's eligibility decisions.
+- `GET /v1/admin/kyber/tenants/{tenant_id}/actions` — a tenant's action payloads.
+- `GET /v1/admin/kyber/tenants/{tenant_id}/audit` — a tenant's reward audit entries.
 
 ---
 
