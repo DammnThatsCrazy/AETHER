@@ -15,7 +15,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "78b69dec"
+last_synced_commit: "bee65298"
 ---
 
 # Aether Web SDK v8.12.0 — Integration Guide
@@ -312,6 +312,13 @@ emits `order_completed`. The retired legacy names `product_added` /
 `product_removed` are no longer emitted; the deprecated `productAdded()` /
 `productRemoved()` aliases now emit the canonical payloads.
 
+Alongside the manual helpers, an opt-out **commerce auto-detection engine**
+(`modules.commerceDetection`, default on) watches the DOM for product views,
+cart changes, checkout starts and confirmations, and emits raw
+`SDKCommerceSignal`s that are bridged into the canonical event plane (see
+[SDK-COMMERCE-BRIDGES.md](SDK-COMMERCE-BRIDGES.md)). Confirmation is
+server-owned; the SDK plane never re-emits runtime-domain `commerce.*` types.
+
 ```typescript
 // Product view — emits canonical product_viewed
 aether.ecommerce.trackProductView({
@@ -468,6 +475,7 @@ interface AetherConfig {
     autoDiscovery?: boolean;               // Auto-track clicks (default: true)
     navigationCorrelation?: boolean;       // navigation_intent/arrival events (default: true, requires autoDiscovery)
     ecommerce?: boolean;                   // Ecommerce tracking (default: true)
+    commerceDetection?: boolean;           // DOM commerce auto-detection → SDK signals (default: true)
     featureFlags?: boolean;                // Feature flags (default: false)
     heatmaps?: boolean;                    // Heatmap collection (default: false)
     funnels?: boolean;                     // Funnel tagging (default: false)
