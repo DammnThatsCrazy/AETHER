@@ -242,6 +242,44 @@ async def test_secret_marker_in_record_content_surfaces_evidence_unsafe():
         )
 
 
+async def test_instructions_with_secret_marker_rejected_before_bundle():
+    # Caller-supplied instructions must pass the same secret-marker gate as
+    # every other context field. ``model_copy(update=...)`` skips field
+    # validators, so the assembler rebuilds the bundle through ContextBundle
+    # validation: an ``sk-``-style marker or a PEM ``-----BEGIN`` header must
+    # abort (EvidenceUnsafe) before any bundle exists (fail-closed).
+    assembler = ContextAssembler(retriever=_BoomSource())
+    for marker in ("sk-live-1234", "-----BEGIN RSA PRIVATE KEY-----"):
+        await _raises(
+            EvidenceUnsafe,
+            lambda marker=marker: assemble_from_records(
+                assembler,
+                tenant_id="t1",
+                profile_id="p1",
+                query="q",
+                records=[_record(reference_id="r1")],
+                instructions=f"please use {marker}",
+            ),
+        )
+
+
+async def test_instructions_secret_marker_rejected_on_direct_assemble_path():
+    # The direct assemble() seam applies the same validated attachment, so PEM
+    # material supplied through instructions never reaches the synthesizer.
+    for marker in ("sk-live-1234", "-----BEGIN PRIVATE KEY-----"):
+        retriever = NoopRetriever([_record(reference_id="r1")])
+        assembler = ContextAssembler(retriever=retriever)
+        await _raises(
+            EvidenceUnsafe,
+            lambda marker=marker: assembler.assemble(
+                tenant_id="t1",
+                profile_id="p1",
+                query="q",
+                instructions=f"echo {marker}",
+            ),
+        )
+
+
 async def test_builder_context_scope_violation_propagates_fail_closed():
     # Defense in depth: even if the seam is bypassed, the builder rejects a
     # foreign-tenant item and the exception propagates — never a bundle.

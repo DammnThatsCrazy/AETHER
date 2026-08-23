@@ -305,6 +305,43 @@ def test_now_injection_determinism_at_boundary() -> None:
     )
 
 
+def test_real_clock_read_per_check_when_now_not_injected() -> None:
+    """A policy with no injected ``now`` reads the real clock on every check.
+
+    The freshness gate must use the clock at check time, not at construction: a
+    long-lived policy (``SynthesisService`` reuses its engine) must reject
+    evidence that aged past ``max_age_seconds`` after the policy was built. The
+    previous implementation captured ``datetime.now(timezone.utc)`` once at
+    init and reused it forever, so evidence collected after startup appeared
+    future-dated and never went stale. This test swaps the module's ``datetime``
+    binding to a fixed clock and advances it between two ``check`` calls on the
+    SAME policy + evidence: the second call must see the evidence as stale.
+    """
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    t1 = t0 + timedelta(seconds=301)
+
+    class _FixedClock:
+        current = t0
+
+        @classmethod
+        def now(cls, tz=timezone.utc):
+            return cls.current
+
+    real_datetime = grounding_module.datetime
+    grounding_module.datetime = _FixedClock
+    try:
+        policy = GroundingPolicy(max_age_seconds=300)  # now intentionally omitted
+        evidence = _evidence(items=(_item("r-1", age_seconds=100, now=t0),), now=t0)
+        # Fresh at construction time (age 100s < max_age 300s).
+        assert policy.check(_request(evidence=evidence, now=t0)) is None
+        # Time advances past the freshness bound; the SAME policy + evidence is
+        # now stale — proving the real clock is read per check.
+        _FixedClock.current = t1
+        _raises(StaleEvidence, lambda: policy.check(_request(evidence=evidence, now=t1)))
+    finally:
+        grounding_module.datetime = real_datetime
+
+
 # ---------------------------------------------------------------------------
 # Init validation, model_construct edge sets, exports
 # ---------------------------------------------------------------------------

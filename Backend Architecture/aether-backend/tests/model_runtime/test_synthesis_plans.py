@@ -111,6 +111,24 @@ def test_clean_proposal_passes_secret_screen():
     assert proposal.rationale == "no secrets here"
 
 
+def test_secret_markers_match_case_insensitively_in_rationale():
+    # Case variants that bypassed the old case-sensitive substring check must
+    # all fail closed: "SK-..." (marker "sk-" is stored lowercase), "akia..."
+    # (marker "AKIA" is stored uppercase), and "bearer ..." (marker "Bearer "
+    # is stored capitalized).
+    for rationale in (
+        "rotated to SK-live-1234",
+        "credential akiaEXAMPLE123",
+        "authorize via bearer abc123",
+    ):
+        assert _raises(PlanUnsafe, PlanProposal, plan_kind="classify", rationale=rationale), rationale
+
+
+def test_secret_markers_match_case_insensitively_in_target_schema():
+    for target in ("SK-live-1234", "akiaEXAMPLE123", "Bearer abc123"):
+        assert _raises(PlanUnsafe, PlanProposal, plan_kind="classify", target_schema=target), target
+
+
 # ---------------------------------------------------------------------------
 # PlanProposal -- target_schema URL rejection
 # ---------------------------------------------------------------------------

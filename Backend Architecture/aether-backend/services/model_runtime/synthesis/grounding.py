@@ -75,9 +75,12 @@ class GroundingViolation(Exception):
 class GroundingPolicy:
     """Fail-closed D6 gate: retrieval-before-synthesis grounding check.
 
-    ``now`` is injected at construction for deterministic tests; it defaults to
-    ``datetime.now(timezone.utc)``. ``min_evidence`` and ``max_age_seconds``
-    are validated at init (must be positive).
+    ``now`` is injected at construction for deterministic tests; when it is
+    left ``None`` the real UTC clock (``datetime.now(timezone.utc)``) is read
+    fresh inside each :meth:`check` call, so a long-lived policy never grounds
+    on evidence that goes stale after the policy was constructed.
+    ``min_evidence`` and ``max_age_seconds`` are validated at init (must be
+    positive).
     """
 
     def __init__(
@@ -93,7 +96,12 @@ class GroundingPolicy:
             raise ValueError(f"max_age_seconds must be positive; got {max_age_seconds!r}")
         self._min_evidence = min_evidence
         self._max_age_seconds = max_age_seconds
-        self._now = now if now is not None else datetime.now(timezone.utc)
+        # ``None`` means "read the real UTC clock per check", NOT "capture it
+        # once at construction": the policy is long-lived (SynthesisService
+        # reuses its engine), so evidence that ages past max_age_seconds after
+        # startup must become stale on the very next check. An injected fixed
+        # clock (deterministic tests) is preserved verbatim.
+        self._now = now
 
     def check(self, request) -> None:
         """Fail-closed D6 gate, enforced tenant scope -> presence/count -> freshness.
@@ -119,10 +127,14 @@ class GroundingPolicy:
             )
         # 3. Freshness — EVERY item must be within the bound. One stale item
         #    fails the whole set: synthesis must not ground on a mixed set.
+        #    The clock is read per check (real UTC when ``now`` was not
+        #    injected) so evidence collected after process startup is judged
+        #    against the current time and goes stale once it exceeds the bound.
+        now = self._now if self._now is not None else datetime.now(timezone.utc)
         stale_count = sum(
             1
             for item in evidence.items
-            if (self._now - item.collected_at).total_seconds() > self._max_age_seconds
+            if (now - item.collected_at).total_seconds() > self._max_age_seconds
         )
         if stale_count:
             raise StaleEvidence(

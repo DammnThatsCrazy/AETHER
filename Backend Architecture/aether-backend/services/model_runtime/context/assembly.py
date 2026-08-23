@@ -71,7 +71,15 @@ class ContextAssembler:
             tenant_id=tenant_id, profile_id=profile_id, query=query, items=items
         )
         # 4) Attach synthesis instructions as a bounded field — no injection vector.
-        bundle = bundle.model_copy(update={"synthesis_instructions": instructions})
+        #    ``model_copy(update=...)`` does NOT re-run field validators, so
+        #    caller-supplied instructions would bypass ContextBundle's
+        #    secret-marker rejection. Rebuild through ContextBundle validation
+        #    so instructions (including PEM ``-----BEGIN`` material) pass the
+        #    same EvidenceUnsafe gate as every other context field before they
+        #    can reach the synthesizer.
+        bundle = ContextBundle.model_validate(
+            {**bundle.model_dump(), "synthesis_instructions": instructions}
+        )
         # 5) Return the bundle — the ONLY input a downstream synthesis call may use.
         return bundle
 

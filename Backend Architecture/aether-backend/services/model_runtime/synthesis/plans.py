@@ -41,8 +41,14 @@ ALLOWED_PLAN_KINDS: tuple[str, ...] = (
 )
 
 #: Substring markers that must never appear in model-authored proposal content.
-#: They match common provider secret/credential and signed-token prefixes so the
-#: gate fails closed before a proposal could be persisted or executed.
+#: They match the canonical marker set used by the other leak guards (context
+#: evidence, synthesis models, verification ``LEAK_MARKERS``) — common provider
+#: secret/credential prefixes, PEM blocks, auth headers, password/secret/key
+#: assignments, and JWT-shaped blobs — so the gate fails closed before a
+#: proposal could be persisted or executed. Values are matched
+#: case-insensitively (see ``_reject_secret_markers``), so "SK-", "akia",
+#: "bearer " etc. all trip the gate just as they do in the context and
+#: verification leak guards.
 _SECRET_MARKERS: tuple[str, ...] = (
     "sk-",
     "AKIA",
@@ -50,6 +56,9 @@ _SECRET_MARKERS: tuple[str, ...] = (
     "-----BEGIN",
     "Authorization:",
     "X-Api-Key:",
+    "password=",
+    "secret=",
+    "key=",
     "eyJ",
 )
 
@@ -102,9 +111,16 @@ class PlanProposal(BaseModel):
 
 
 def _reject_secret_markers(field_name: str, value: str) -> None:
-    """Raise ``PlanUnsafe`` when ``value`` carries any secret marker."""
+    """Raise ``PlanUnsafe`` when ``value`` carries any secret marker.
+
+    Matching is case-insensitive (both the value and each marker are
+    casefolded), mirroring the context and verification leak guards. Without
+    normalization, case variants such as ``SK-...``, ``akia...``, or
+    ``bearer ...`` would bypass the module's security contract.
+    """
+    lowered = value.casefold()
     for marker in _SECRET_MARKERS:
-        if marker in value:
+        if marker.casefold() in lowered:
             raise PlanUnsafe(
                 f"{field_name} contains a secret marker {marker!r} and is "
                 "not permitted in a plan proposal"

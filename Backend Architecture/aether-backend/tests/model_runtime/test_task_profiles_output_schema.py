@@ -285,6 +285,65 @@ def test_structured_json_rejects_nonserializable_value():
 
 
 # ---------------------------------------------------------------------------
+# secret-marker sweep (applies to EVERY output kind, fail-closed)
+# ---------------------------------------------------------------------------
+def test_evidence_set_with_secret_shaped_content_fails():
+    evidence = [
+        {"reference_id": "e-1", "content": "the api key is sk-live-1234567890abcdef"},
+    ]
+    result = SchemaOutputValidator().validate("evidence_set", evidence)
+    assert result.valid is False
+    assert any("credential" in error for error in result.errors)
+    # Content-free: the matched secret is never echoed into an error string.
+    assert all("sk-live" not in error for error in result.errors)
+
+
+def test_classification_label_with_secret_shaped_value_fails():
+    result = SchemaOutputValidator().validate(
+        "classification", {"label": "sk-live-1234567890abcdef", "confidence": 0.9}
+    )
+    assert result.valid is False
+    assert any("credential" in error for error in result.errors)
+    assert all("sk-live" not in error for error in result.errors)
+
+
+def test_structured_json_with_secret_shaped_field_fails():
+    payload = {"credentials": {"access": "AKIAIOSFODNN7EXAMPLE"}}
+    result = SchemaOutputValidator().validate("structured_json", payload)
+    assert result.valid is False
+    assert any("credential" in error for error in result.errors)
+    assert all("AKIA" not in error for error in result.errors)
+
+
+def test_structured_json_nested_secret_in_list_fails():
+    payload = {"items": ["plain", {"token": "-----BEGIN PRIVATE KEY-----"}]}
+    result = SchemaOutputValidator().validate("structured_json", payload)
+    assert result.valid is False
+    assert any("credential" in error for error in result.errors)
+
+
+def test_query_plan_with_secret_shaped_intent_fails():
+    plan = {
+        "steps": [
+            {"intent": "lookup access key AKIAIOSFODNN7EXAMPLE", "mode": "allowlisted"},
+        ]
+    }
+    result = SchemaOutputValidator().validate("query_plan", plan)
+    assert result.valid is False
+    assert any("credential" in error for error in result.errors)
+
+
+def test_grounded_answer_with_secret_shaped_answer_fails():
+    answer = {
+        "answer": "the token is sk-live-1234567890abcdef [ref:acct-1]",
+        "evidence": [{"reference_id": "acct-1", "source": "accounts/ACME-100"}],
+    }
+    result = SchemaOutputValidator().validate("grounded_answer", answer)
+    assert result.valid is False
+    assert any("credential" in error for error in result.errors)
+
+
+# ---------------------------------------------------------------------------
 # unknown kinds / error paths / public surface
 # ---------------------------------------------------------------------------
 def test_unknown_kind_fails():

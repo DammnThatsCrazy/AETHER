@@ -13,7 +13,11 @@ enforce them.
 Security constraints: ``describe`` projects through :func:`profile_summary`
 so the facade never emits secrets or un-allowlisted profile metadata, and
 ``prompt`` returns raw template text only from the catalog (no rendering, no
-interpolation of caller-supplied tenant/instructions content).
+interpolation of caller-supplied tenant/instructions content). Before a
+(custom or versioned) catalog entry is returned as a system prompt, it must
+pass :class:`PromptSafety.validate` and the package's canonical
+credential-marker scan (:class:`SecretLeakDetector`); unsafe entries fail
+closed with a content-free :class:`ProfileResolutionError`.
 """
 
 from __future__ import annotations
@@ -26,13 +30,22 @@ from services.model_runtime.task_profiles.output_schema import (
     OutputValidation,
     SchemaOutputValidator,
 )
-from services.model_runtime.task_profiles.prompt_loader import PromptCatalog
+from services.model_runtime.task_profiles.prompt_loader import (
+    PromptCatalog,
+    PromptSafety,
+)
 from services.model_runtime.task_profiles.registry_api import profile_summary
 from services.model_runtime.task_profiles.versioning import (
     VersionedProfileStore,
     VersionPolicy,
     VersionResolver,
 )
+from services.model_runtime.verification.leaks import SecretLeakDetector
+
+#: Canonical credential-marker scanner shared across the model_runtime package
+#: (verification/leaks.py). Stateless and cheap, so one module-level instance
+#: is safe to share across every facade.
+_SECRET_LEAK_DETECTOR = SecretLeakDetector()
 
 __all__ = ["ProfileResolutionError", "TaskProfileService"]
 
@@ -111,7 +124,16 @@ class TaskProfileService:
         Composed from :class:`PromptCatalog` keyed by ``view.model_role`` with
         the version taken from ``view.version``. Raises
         :class:`ProfileResolutionError` when the catalog cannot supply a
-        non-empty prompt for that composition.
+        non-empty prompt for that composition, or when the catalog entry is
+        unsafe to use as a system prompt.
+
+        The prompt gate runs the (possibly custom) catalog template through
+        :class:`PromptSafety.validate` -- rejecting system-override tokens,
+        embedded ``<script>``, and secret placeholders -- and through the
+        package's canonical credential-marker scan. This protects callers that
+        inject versioned/custom prompts through the constructor: an unsafe
+        template is never returned as a system prompt, and the rejection error
+        is static and content-free (the offending secret is never echoed).
         """
         try:
             prompt = self._prompt_catalog.get(view.model_role, version=view.version)
@@ -123,6 +145,12 @@ class TaskProfileService:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ProfileResolutionError(
                 f"empty prompt for task profile {view.profile_id!r} "
+                f"(role {view.model_role!r}, version {view.version})"
+            )
+        violations = PromptSafety.validate(prompt)
+        if violations or not _SECRET_LEAK_DETECTOR.is_clean(prompt):
+            raise ProfileResolutionError(
+                f"unsafe prompt for task profile {view.profile_id!r} "
                 f"(role {view.model_role!r}, version {view.version})"
             )
         return prompt
