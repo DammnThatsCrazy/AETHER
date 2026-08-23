@@ -100,6 +100,7 @@ export * from './filter-fields';
 export * from './surface-capabilities';
 export * from './comparison-contract';
 export * from './intelligence-projections.generated';
+export * from './intelligence-projection';
 
 // Multi-model intelligence harness contracts (8.12.0)
 export * from './model-registry';
