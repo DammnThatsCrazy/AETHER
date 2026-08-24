@@ -7309,6 +7309,20 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/PROJECTION_ENGINE_ARCHITECTURE.md",
+      "title": "Projection Engine Architecture",
+      "slug": "source-of-truth/projection-engine-architecture",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0"
+    },
+    {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
       "title": "Repo Consistency Ownership",
       "slug": "source-of-truth/repo-consistency-ownership",
