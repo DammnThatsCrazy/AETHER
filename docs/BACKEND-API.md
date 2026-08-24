@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "01ee3877"
+last_synced_commit: "ae973059"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -1445,6 +1445,30 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 **Query params:** entity endpoints accept `?window=realtime|24h|7d|30d|90d|lifetime` (default `lifetime`; tenant overview defaults to `30d`).
 
 **Permissions:** `read` for all economic endpoints
+
+---
+
+### Intelligence Projection Plane (v8.12.0)
+
+A **360** is an intelligence projection over canonical Aether truth — never a
+competing system of record. The plane is a fail-isolated `ProviderRegistry` of
+`IntelligenceProjectionProvider`s over the shared
+`ProjectionRequest`/`ProjectionContext`/`ProjectionResult` contracts (TS +
+Python). Three 360s are implemented native providers (`outcome360`,
+`economic360`, `infrastructure360`); the rest are `in_flight`. `implementationState`
+is repo metadata, **not** readiness. `infrastructure360` is the first projection
+to expose a classified public route (read-only, every route a GET, tenant-scoped
+from the authenticated tenant, capability-gated on `infrastructure360.read`):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/infrastructure/{subject_kind}/{subject_id}` | Run the infrastructure360 projection for the requesting tenant (summary / state / deployments / evidence / findings sections; `subject_kind` ∈ `deployment` \| `infrastructure`) |
+| GET | `/v1/infrastructure/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
+
+**Permissions:** `read` + the projection's `infrastructure360.read` capability key
+(fail-closed). The provider reads the `infrastructure_facts` /
+`infrastructure_state` / `deployments` authorities; the projection is
+`graphMutationPolicy: read_only` — there is no write path.
 
 ---
 
