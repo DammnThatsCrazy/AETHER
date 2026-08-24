@@ -17,6 +17,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/projector-ownership-registry.json
   packages/shared/contracts/model-registry.json
   packages/shared/contracts/task-profile-registry.json
+  packages/shared/contracts/intelligence-projection-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -48,6 +49,10 @@ Generated outputs:
   packages/shared/task-profile.ts
   Backend Architecture/aether-backend/shared/model_governance/generated_task_profiles.py
   docs/_generated/task-profile-table.md
+  packages/shared/intelligence-projections_generated.ts
+  Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py
+  docs/_generated/intelligence-projection-registry-table.md
+  docs/_generated/intelligence-projection-dependency-graph.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -62,6 +67,7 @@ Guarantees:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import sys
@@ -70,6 +76,19 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 CONTRACTS = ROOT / "packages" / "shared" / "contracts"
 BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+
+# The intelligence-projection validator lives in scripts/lib and shares the
+# cross-registry context computed here — delegate to it (see _projection_context)
+# so the generator's validation and the standalone validator can never drift.
+# Invoked as `python scripts/generate_platform_contracts.py`, sys.path[0] is
+# scripts/ — the repo root must be present for the scripts.lib package import
+# (same pattern as repo_doctor.py).
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from scripts.lib.intelligence_projection_validation import (  # noqa: E402
+    load_context as _projection_load_context,
+    validate_all as _projection_validate_all,
+)
 
 TEMPORAL_POLICY_JSON = CONTRACTS / "temporal-policy-registry.json"
 EVENT_REGISTRY_JSON = CONTRACTS / "event-registry.json"
@@ -2310,6 +2329,545 @@ def _summary_task_profiles(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: intelligence-projection (P0 — 360 intelligence projection plane)
+# ---------------------------------------------------------------------------
+
+INTELLIGENCE_PROJECTION_JSON = CONTRACTS / "intelligence-projection-registry.json"
+INTELLIGENCE_PROJECTION_TS = ROOT / "packages" / "shared" / "intelligence-projections_generated.ts"
+INTELLIGENCE_PROJECTION_PY = BACKEND / "shared" / "intelligence_projections" / "generated_registry.py"
+INTELLIGENCE_PROJECTION_TABLE_MD = ROOT / "docs" / "_generated" / "intelligence-projection-registry-table.md"
+INTELLIGENCE_PROJECTION_GRAPH_MD = ROOT / "docs" / "_generated" / "intelligence-projection-dependency-graph.md"
+
+# Fixed schema field orders for deterministic emission (order-stable generation:
+# reordering arrays / shuffling key order across a rebase yields zero diff).
+# These mirror the per-entry schema enforced by
+# scripts/lib/intelligence_projection_validation.py.
+_PROJECTION_FIELD_ORDER = (
+    "id", "displayName", "projectionKind", "implementationState",
+    "implementationBlueprint", "ownsCanonicalTruth", "subjectKinds",
+    "canonicalAuthorities", "hardDependencies", "projectionDependencies",
+    "optionalProjectionDependencies", "inputRefs", "outputSections",
+    "supportedTemporalModes", "surfaceIds", "capabilityKeys", "metricRefs",
+    "graphMutationPolicy", "requiresEvidence", "requiresDimensionState",
+    "requiresFreshness", "requiresLimitations", "tenantScoped", "policyScoped",
+    "readinessRequirements", "security", "costProfile",
+    "commercialClassification", "legacyBindings", "deprecatedReason",
+    "successorId", "pendingAuthority", "pendingReference",
+)
+_READINESS_REQUIREMENTS_FIELD_ORDER = (
+    "requiresImplementation", "requiresDependencies", "requiresTenantEntitlement",
+    "requiresProviderReadiness", "requiresEvidenceHealth",
+)
+_SECURITY_FIELD_ORDER = (
+    "tenantScoped", "requiresAuthorization", "requiresHistoricalConsentEvaluation",
+    "exportClass", "distillationRisk",
+)
+_COST_PROFILE_FIELD_ORDER = ("class", "supportsAsync")
+_COMMERCIAL_CLASSIFICATION_FIELD_ORDER = ("sellableCapability", "meterRefs", "costClassRefs")
+_LEGACY_BINDINGS_FIELD_ORDER = ("routes", "surfaceIds", "services", "migrationMode", "migrationBlueprint")
+_PENDING_FIELD_ORDER = ("id", "kind", "reason", "resolvesInProjection")
+
+_OBJECT_FIELD_ORDERS = {
+    frozenset(_PROJECTION_FIELD_ORDER): _PROJECTION_FIELD_ORDER,
+    frozenset(_READINESS_REQUIREMENTS_FIELD_ORDER): _READINESS_REQUIREMENTS_FIELD_ORDER,
+    frozenset(_SECURITY_FIELD_ORDER): _SECURITY_FIELD_ORDER,
+    frozenset(_COST_PROFILE_FIELD_ORDER): _COST_PROFILE_FIELD_ORDER,
+    frozenset(_COMMERCIAL_CLASSIFICATION_FIELD_ORDER): _COMMERCIAL_CLASSIFICATION_FIELD_ORDER,
+    frozenset(_LEGACY_BINDINGS_FIELD_ORDER): _LEGACY_BINDINGS_FIELD_ORDER,
+    frozenset(_PENDING_FIELD_ORDER): _PENDING_FIELD_ORDER,
+}
+
+
+def _projection_field_order(value: dict) -> tuple[str, ...]:
+    """Fixed schema field order for a known object; sorted otherwise.
+
+    ``_``-prefixed annotation keys (e.g. ``_comment``) are ignored so a comment
+    can never break the frozenset match nor leak into an emitted literal.
+    """
+    known = frozenset(k for k in value if not k.startswith("_"))
+    return _OBJECT_FIELD_ORDERS.get(known, tuple(sorted(known)))
+
+
+def _sorted_value(value: object) -> object:
+    """Recursively normalize a registry value before emission.
+
+    (a) Every list value is sorted (order-stable generation: reordering arrays
+    / shuffling key order across a rebase yields zero diff) — lists of dicts
+    (pending declarations) sort by their ``id`` key.
+    (b) Every ``_``-prefixed key (``_comment`` and any other annotation key) is
+    dropped recursively, so annotation text never reaches the artifacts and the
+    cleaned dict matches the fixed schema field orders.
+    """
+    if isinstance(value, dict):
+        return {
+            k: _sorted_value(v)
+            for k, v in value.items()
+            if not k.startswith("_")
+        }
+    if isinstance(value, list):
+        items = [_sorted_value(v) for v in value]
+        return sorted(
+            items,
+            key=lambda v: v["id"] if isinstance(v, dict) and "id" in v else repr(v),
+        )
+    return value
+
+
+def _ts_literal(value: object, depth: int = 0) -> str:
+    """Deterministic TypeScript literal for a JSON value."""
+    pad = "  " * depth
+    child_pad = "  " * (depth + 1)
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        if all(isinstance(v, str) for v in value):
+            return "[" + ", ".join(_ts_literal(v) for v in value) + "]"
+        parts = [child_pad + _ts_literal(v, depth + 1) for v in value]
+        return "[\n" + ",\n".join(parts) + "\n" + pad + "]"
+    if isinstance(value, dict):
+        parts = [
+            f"{child_pad}{key}: {_ts_literal(value[key], depth + 1)}"
+            for key in _projection_field_order(value)
+        ]
+        return "{\n" + ",\n".join(parts) + "\n" + pad + "}"
+    raise TypeError(f"cannot render TS literal for {value!r}")
+
+
+def _py_literal(value: object, depth: int = 0) -> str:
+    """Deterministic Python literal for a JSON value.
+
+    String lists become tuples (matching generated_surfaces.py); lists of dicts
+    (pending declarations) stay lists.
+    """
+    pad = "    " * depth
+    child_pad = "    " * (depth + 1)
+    if value is None:
+        return "None"
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, str):
+        return _py_str(value)
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        if all(isinstance(v, str) for v in value):
+            return _py_tuple_literal(value)
+        parts = [child_pad + _py_literal(v, depth + 1) for v in value]
+        return "[\n" + ",\n".join(parts) + "\n" + pad + "]"
+    if isinstance(value, dict):
+        parts = [
+            f"{child_pad}{_py_str(key)}: {_py_literal(value[key], depth + 1)}"
+            for key in _projection_field_order(value)
+        ]
+        return "{\n" + ",\n".join(parts) + "\n" + pad + "}"
+    raise TypeError(f"cannot render Python literal for {value!r}")
+
+
+def validate_intelligence_projection_registry(reg: dict, ctx: dict) -> list[str]:
+    """Validate the intelligence-projection registry (thin lib wrapper).
+
+    Returns ONLY messages with severity == "error". The real registry
+    legitimately carries optional-edge dependency-cycle WARNINGS (union cycles
+    are benign — the lazy runtime degrades missing optional deps to
+    not_applicable); those must NOT fail generation. Like the other registry
+    validators, any error exits non-zero (fail-closed) before any artifact is
+    emitted.
+    """
+    errors = [
+        v.message
+        for v in _projection_validate_all(reg, ctx)
+        if v.severity == "error"
+    ]
+    if errors:
+        for message in errors:
+            print(f"ERROR: {message}", file=sys.stderr)
+        sys.exit(1)
+    return errors
+
+
+def gen_intelligence_projection_ts(reg: dict) -> str:
+    projections = sorted(reg["projections"], key=lambda p: p["id"])
+    lines = _ts_header(INTELLIGENCE_PROJECTION_JSON)
+    lines.append(
+        f"export const intelligenceProjectionsContractVersion = '{reg['contractVersion']}' as const;"
+    )
+    lines.append("")
+    lines += _ts_const_array(
+        "intelligenceProjectionIds", "IntelligenceProjectionId",
+        [p["id"] for p in projections],
+        "Registered intelligence projections (sorted).",
+    )
+    lines += _ts_const_array(
+        "intelligenceProjectionKinds", "IntelligenceProjectionKind",
+        sorted(reg["projectionKinds"]),
+        "Projection kinds a 360 may be (sorted).",
+    )
+    lines += _ts_const_array(
+        "intelligenceProjectionImplementationStates",
+        "IntelligenceProjectionImplementationState",
+        sorted(reg["implementationStates"]),
+        "Implementation states — repo metadata, NOT readiness (sorted).",
+    )
+    lines += _ts_const_array(
+        "intelligenceProjectionSectionStates",
+        "IntelligenceProjectionSectionState",
+        sorted(reg["sectionStates"]),
+        "Section states a projection result section may carry (sorted).",
+    )
+    lines += _ts_const_array(
+        "intelligenceProjectionSubjectKinds",
+        "IntelligenceProjectionSubjectKind",
+        sorted(reg["subjectKinds"]),
+        "Subject kinds a projection may be asked about (sorted).",
+    )
+    lines.append("/** One pending declaration ({id, kind, reason, resolvesInProjection}). */")
+    lines.append("export interface PendingResolution {")
+    lines.append("  id: string;")
+    lines.append("  kind: string;")
+    lines.append("  reason: string;")
+    lines.append("  resolvesInProjection: string;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export interface ProjectionReadinessRequirements {")
+    lines.append("  requiresImplementation: boolean;")
+    lines.append("  requiresDependencies: boolean;")
+    lines.append("  requiresTenantEntitlement: boolean;")
+    lines.append("  requiresProviderReadiness: boolean;")
+    lines.append("  requiresEvidenceHealth: boolean;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export interface ProjectionSecurity {")
+    lines.append("  tenantScoped: boolean;")
+    lines.append("  requiresAuthorization: boolean;")
+    lines.append("  requiresHistoricalConsentEvaluation: boolean;")
+    lines.append("  exportClass: string;")
+    lines.append("  distillationRisk: string;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export interface ProjectionCostProfile {")
+    lines.append("  class: string;")
+    lines.append("  supportsAsync: boolean;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export interface ProjectionCommercialClassification {")
+    lines.append("  sellableCapability: boolean;")
+    lines.append("  meterRefs: readonly string[];")
+    lines.append("  costClassRefs: readonly string[];")
+    lines.append("}")
+    lines.append("")
+    lines.append("export interface ProjectionLegacyBindings {")
+    lines.append("  routes: readonly string[];")
+    lines.append("  surfaceIds: readonly string[];")
+    lines.append("  services: readonly string[];")
+    lines.append("  migrationMode: string;")
+    lines.append("  migrationBlueprint: string;")
+    lines.append("}")
+    lines.append("")
+    lines.append("/** One registered intelligence projection (mirrors the registry schema). */")
+    lines.append("export interface IntelligenceProjectionDefinition {")
+    lines.append("  id: IntelligenceProjectionId;")
+    lines.append("  displayName: string;")
+    lines.append("  projectionKind: IntelligenceProjectionKind;")
+    lines.append("  implementationState: IntelligenceProjectionImplementationState;")
+    lines.append("  implementationBlueprint: string;")
+    lines.append("  ownsCanonicalTruth: false;")
+    lines.append("  subjectKinds: readonly IntelligenceProjectionSubjectKind[];")
+    lines.append("  canonicalAuthorities: readonly string[];")
+    lines.append("  hardDependencies: readonly string[];")
+    lines.append("  projectionDependencies: readonly string[];")
+    lines.append("  optionalProjectionDependencies: readonly string[];")
+    lines.append("  inputRefs: readonly string[];")
+    lines.append("  outputSections: readonly string[];")
+    lines.append("  supportedTemporalModes: readonly string[];")
+    lines.append("  surfaceIds: readonly string[];")
+    lines.append("  capabilityKeys: readonly string[];")
+    lines.append("  metricRefs: readonly string[];")
+    lines.append("  graphMutationPolicy: 'read_only' | 'canonical_gateway_only';")
+    lines.append("  requiresEvidence: boolean;")
+    lines.append("  requiresDimensionState: boolean;")
+    lines.append("  requiresFreshness: boolean;")
+    lines.append("  requiresLimitations: boolean;")
+    lines.append("  tenantScoped: boolean;")
+    lines.append("  policyScoped: boolean;")
+    lines.append("  readinessRequirements: ProjectionReadinessRequirements;")
+    lines.append("  security: ProjectionSecurity;")
+    lines.append("  costProfile: ProjectionCostProfile;")
+    lines.append("  commercialClassification: ProjectionCommercialClassification;")
+    lines.append("  legacyBindings: ProjectionLegacyBindings;")
+    lines.append("  deprecatedReason: string | null;")
+    lines.append("  successorId: string | null;")
+    lines.append("  pendingAuthority: readonly PendingResolution[];")
+    lines.append("  pendingReference: readonly PendingResolution[];")
+    lines.append("}")
+    lines.append("")
+    lines.append("export const intelligenceProjectionDefinitions: Record<")
+    lines.append("  IntelligenceProjectionId,")
+    lines.append("  IntelligenceProjectionDefinition")
+    lines.append("> = {")
+    for projection in projections:
+        lines.append(f"  {projection['id']}: {_ts_literal(_sorted_value(projection), 1)},")
+    lines.append("};")
+    lines.append("")
+    lines.append("export interface ProjectionDependencyGraphEntry {")
+    lines.append("  required: readonly IntelligenceProjectionId[];")
+    lines.append("  optional: readonly IntelligenceProjectionId[];")
+    lines.append("}")
+    lines.append("")
+    lines.append("export const projectionDependencyGraph: Record<")
+    lines.append("  IntelligenceProjectionId,")
+    lines.append("  ProjectionDependencyGraphEntry")
+    lines.append("> = {")
+    for projection in projections:
+        required = sorted(projection["projectionDependencies"])
+        optional = sorted(projection["optionalProjectionDependencies"])
+        lines.append(
+            f"  {projection['id']}: {{ required: {_ts_literal(required)}, "
+            f"optional: {_ts_literal(optional)} }},"
+        )
+    lines.append("};")
+    lines.append("")
+    lines.append("export const pendingAuthorities: Partial<")
+    lines.append("  Record<IntelligenceProjectionId, readonly PendingResolution[]>")
+    lines.append("> = {")
+    for projection in projections:
+        entries = sorted(projection["pendingAuthority"], key=lambda d: d["id"])
+        if not entries:
+            continue
+        lines.append(f"  {projection['id']}: {_ts_literal(_sorted_value(entries), 1)},")
+    lines.append("};")
+    lines.append("")
+    lines.append("export const pendingReferences: Partial<")
+    lines.append("  Record<IntelligenceProjectionId, readonly PendingResolution[]>")
+    lines.append("> = {")
+    for projection in projections:
+        entries = sorted(projection["pendingReference"], key=lambda d: d["id"])
+        if not entries:
+            continue
+        lines.append(f"  {projection['id']}: {_ts_literal(_sorted_value(entries), 1)},")
+    lines.append("};")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_intelligence_projection_py(reg: dict) -> str:
+    projections = sorted(reg["projections"], key=lambda p: p["id"])
+    lines = _py_header(
+        INTELLIGENCE_PROJECTION_JSON,
+        "Generated intelligence-projection registry (360 projection plane).",
+    )
+    lines.append(f'INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple(
+        "INTELLIGENCE_PROJECTION_IDS",
+        [p["id"] for p in projections],
+        "Registered intelligence projections (sorted).",
+    )
+    lines += _py_tuple(
+        "PROJECTION_KINDS",
+        sorted(reg["projectionKinds"]),
+        "Projection kinds a 360 may be.",
+    )
+    lines += _py_tuple(
+        "PROJECTION_IMPLEMENTATION_STATES",
+        sorted(reg["implementationStates"]),
+        "Implementation states — repo metadata, NOT readiness.",
+    )
+    lines += _py_tuple(
+        "PROJECTION_SECTION_STATES",
+        sorted(reg["sectionStates"]),
+        "Section states a projection result section may carry.",
+    )
+    lines += _py_tuple(
+        "GRAPH_MUTATION_POLICIES",
+        sorted(reg["graphMutationPolicies"]),
+        "Graph-mutation policies a projection may declare.",
+    )
+    lines += _py_tuple(
+        "PROJECTION_SUBJECT_KINDS",
+        sorted(reg["subjectKinds"]),
+        "Subject kinds a projection may be asked about.",
+    )
+    lines.append("# Full projection definitions (sorted by projection id).")
+    lines.append("INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {")
+    for projection in projections:
+        lines.append(f'    "{projection["id"]}": {_py_literal(_sorted_value(projection), 1)},')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Required/optional projection dependencies (sorted by projection id).")
+    lines.append("PROJECTION_DEPENDENCY_GRAPH: dict[str, dict] = {")
+    for projection in projections:
+        required = _py_tuple_literal(sorted(projection["projectionDependencies"]))
+        optional = _py_tuple_literal(sorted(projection["optionalProjectionDependencies"]))
+        lines.append(
+            f'    "{projection["id"]}": {{"required": {required}, "optional": {optional}}},'
+        )
+    lines.append("}")
+    lines.append("")
+    lines.append("# projection id -> registered surfaces (sorted).")
+    lines.append("PROJECTION_SURFACE_MAP: dict[str, tuple] = {")
+    for projection in projections:
+        lines.append(
+            f'    "{projection["id"]}": {_py_tuple_literal(sorted(projection["surfaceIds"]))},'
+        )
+    lines.append("}")
+    lines.append("")
+    lines.append("# projection id -> capability keys (sorted).")
+    lines.append("PROJECTION_CAPABILITY_MAP: dict[str, tuple] = {")
+    for projection in projections:
+        lines.append(
+            f'    "{projection["id"]}": {_py_tuple_literal(sorted(projection["capabilityKeys"]))},'
+        )
+    lines.append("}")
+    lines.append("")
+    lines.append("# Pending canonical-authority declarations (sorted by projection id).")
+    lines.append("PENDING_AUTHORITIES: dict[str, list] = {")
+    for projection in projections:
+        entries = sorted(projection["pendingAuthority"], key=lambda d: d["id"])
+        if not entries:
+            continue
+        lines.append(f'    "{projection["id"]}": {_py_literal(_sorted_value(entries), 1)},')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Pending reference declarations (sorted by projection id).")
+    lines.append("PENDING_REFERENCES: dict[str, list] = {")
+    for projection in projections:
+        entries = sorted(projection["pendingReference"], key=lambda d: d["id"])
+        if not entries:
+            continue
+        lines.append(f'    "{projection["id"]}": {_py_literal(_sorted_value(entries), 1)},')
+    lines.append("}")
+    lines.append("")
+    lines.append("__all__ = [")
+    for name in sorted((
+        "INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION",
+        "INTELLIGENCE_PROJECTION_IDS",
+        "INTELLIGENCE_PROJECTION_DEFINITIONS",
+        "PROJECTION_DEPENDENCY_GRAPH",
+        "PROJECTION_SURFACE_MAP",
+        "PROJECTION_CAPABILITY_MAP",
+        "PROJECTION_KINDS",
+        "PROJECTION_IMPLEMENTATION_STATES",
+        "PROJECTION_SECTION_STATES",
+        "PROJECTION_SUBJECT_KINDS",
+        "GRAPH_MUTATION_POLICIES",
+        "PENDING_AUTHORITIES",
+        "PENDING_REFERENCES",
+    )):
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_intelligence_projection_table_md(reg: dict) -> str:
+    projections = sorted(reg["projections"], key=lambda p: p["id"])
+    lines = _md_header(INTELLIGENCE_PROJECTION_JSON)
+    lines.append("# Intelligence Projection Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append(
+        "A 360 is an intelligence projection over canonical Aether truth — never a "
+        "competing system of record. `implementationState` is repo metadata, NOT readiness."
+    )
+    lines.append("")
+    lines += _md_vocab_section("Projection kinds", sorted(reg["projectionKinds"]))
+    lines += _md_vocab_section("Implementation states", sorted(reg["implementationStates"]))
+    lines += _md_vocab_section("Section states", sorted(reg["sectionStates"]))
+    lines += _md_vocab_section("Graph mutation policies", sorted(reg["graphMutationPolicies"]))
+    lines.append("## Projections")
+    lines.append("")
+    lines.append(
+        "| Projection | Kind | State | Hard spines | Projection deps | Surfaces | "
+        "Capability keys | Graph policy | Authorities | Legacy routes | Blueprint |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    for projection in projections:
+        spines = ", ".join(f"`{s}`" for s in sorted(projection["hardDependencies"]))
+        required = [f"`{d}`" for d in sorted(projection["projectionDependencies"])]
+        optional = [f"`{d}`(opt)" for d in sorted(projection["optionalProjectionDependencies"])]
+        deps = ", ".join(required + optional)
+        surfaces = ", ".join(f"`{s}`" for s in sorted(projection["surfaceIds"]))
+        caps = ", ".join(f"`{c}`" for c in sorted(projection["capabilityKeys"]))
+        authorities = ", ".join(f"`{a}`" for a in sorted(projection["canonicalAuthorities"]))
+        routes = ", ".join(f"`{r}`" for r in sorted(projection["legacyBindings"]["routes"]))
+        blueprint = projection["implementationBlueprint"]
+        lines.append(
+            f"| `{projection['id']}` | {projection['projectionKind']} | "
+            f"{projection['implementationState']} | {spines} | {deps} | {surfaces} | "
+            f"{caps} | {projection['graphMutationPolicy']} | {authorities} | {routes} | "
+            f"`{blueprint}` |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_intelligence_projection_graph_md(reg: dict) -> str:
+    projections = sorted(reg["projections"], key=lambda p: p["id"])
+    lines = _md_header(INTELLIGENCE_PROJECTION_JSON)
+    lines.append("# Intelligence Projection Dependency Graph")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append(
+        "Hard spines (solid `-->`), required projection dependencies (dashed "
+        "`-.->`) and optional projection dependencies (dotted `-.-o`). Cycles "
+        "are intentional (optional unions); Mermaid renders them fine."
+    )
+    lines.append("")
+    lines.append("## Dependency graph")
+    lines.append("")
+    lines.append("```mermaid")
+    lines.append("flowchart LR")
+    for projection in projections:
+        pid = projection["id"]
+        for spine in sorted(projection["hardDependencies"]):
+            lines.append(f"  {pid} --> {spine}")
+        for dep in sorted(projection["projectionDependencies"]):
+            lines.append(f"  {pid} -.-> {dep}")
+        for dep in sorted(projection["optionalProjectionDependencies"]):
+            lines.append(f"  {pid} -.-o {dep}")
+    lines.append("```")
+    lines.append("")
+    pending: list[tuple[str, str, dict]] = []
+    for projection in projections:
+        for kind, entries in (
+            ("authority", projection.get("pendingAuthority", [])),
+            ("reference", projection.get("pendingReference", [])),
+        ):
+            for entry in sorted(entries, key=lambda d: d["id"]):
+                pending.append((projection["id"], kind, entry))
+    if pending:
+        lines.append("## Pending resolutions")
+        lines.append("")
+        lines.append("| Projection | Kind | Id | Reason | Resolves in projection |")
+        lines.append("|---|---|---|---|---|")
+        for pid, kind, entry in pending:
+            lines.append(
+                f"| `{pid}` | {kind} | `{entry['id']}` | {entry['reason']} | "
+                f"`{entry['resolvesInProjection']}` |"
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_intelligence_projections(reg: dict) -> str:
+    pending_authorities = sum(len(p.get("pendingAuthority", [])) for p in reg["projections"])
+    pending_references = sum(len(p.get("pendingReference", [])) for p in reg["projections"])
+    return (
+        f"intelligence-projection v{reg['contractVersion']} — "
+        f"{len(reg['projections'])} projections, "
+        f"{pending_authorities} pending authorities, {pending_references} pending references"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -2406,7 +2964,32 @@ REGISTRIES: tuple = (
         ),
         _summary_task_profiles,
     ),
+    (
+        INTELLIGENCE_PROJECTION_JSON,
+        validate_intelligence_projection_registry,
+        (
+            (INTELLIGENCE_PROJECTION_TS, gen_intelligence_projection_ts),
+            (INTELLIGENCE_PROJECTION_PY, gen_intelligence_projection_py),
+            (INTELLIGENCE_PROJECTION_TABLE_MD, gen_intelligence_projection_table_md),
+            (INTELLIGENCE_PROJECTION_GRAPH_MD, gen_intelligence_projection_graph_md),
+        ),
+        _summary_intelligence_projections,
+    ),
 )
+
+
+@functools.lru_cache(maxsize=1)
+def _projection_context() -> dict:
+    """Cross-registry context for the intelligence-projection validator.
+
+    Delegates to scripts/lib/intelligence_projection_validation.load_context()
+    (surface_ids, surface_temporal_modes, metric_names, graph_mutation_types,
+    route_prefixes, backend_source_paths) so this generator's validation and
+    the standalone validator (scripts/validate_intelligence_projections.py)
+    compute the SAME facts and can never drift. Cached (maxsize=1) so a single
+    generator run loads the cross-registry facts exactly once.
+    """
+    return _projection_load_context()
 
 
 def _load_context() -> dict:
@@ -2414,12 +2997,19 @@ def _load_context() -> dict:
     event_reg = json.loads(EVENT_REGISTRY_JSON.read_text())
     consent_reg = json.loads(CONSENT_REGISTRY_JSON.read_text())
     filter_reg = json.loads(FILTER_FIELD_JSON.read_text())
-    return {
+    ctx = {
         "event_families": {e["family"] for e in event_reg["events"]},
         "consent_purposes": {p["key"] for p in consent_reg["purposes"]},
         "filter_operators": _ts_filter_operators(),
         "filter_field_categories": set(filter_reg["categories"]),
     }
+    # The intelligence-projection validator receives the SAME cross-registry
+    # context the standalone lib computes. Delegating (and caching) means the
+    # generator's validation and the standalone validator can never drift —
+    # documented per the P0 plan. Existing keys stay intact for the registries
+    # that depend on them.
+    ctx.update(_projection_context())
+    return ctx
 
 
 def _apply(path: Path, content: str, check: bool, diffs: list[str]) -> None:
@@ -2430,6 +3020,11 @@ def _apply(path: Path, content: str, check: bool, diffs: list[str]) -> None:
         if check:
             diffs.append(str(path.relative_to(ROOT)))
             return
+    elif check:
+        # A missing generated file is real drift — --check must be blind to
+        # nothing, so a deleted artifact is reported (never silently accepted).
+        diffs.append(str(path.relative_to(ROOT)))
+        return
     if not check:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)

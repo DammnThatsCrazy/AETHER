@@ -20,6 +20,7 @@ def test_ownership_map_has_required_categories() -> None:
         "generated_docs_source",
         "source_linked_docs",
         "workflow_check_command",
+        "intelligence_projection_architecture",
     } <= ids
 
 
@@ -49,3 +50,13 @@ def test_all_required_commands_available() -> None:
 def test_required_commands_are_available() -> None:
     assert ownership._command_available("python scripts/repo_doctor.py --check")
     assert ownership._command_available("make ci-check")
+
+
+def test_intelligence_projection_architecture_commands_available() -> None:
+    """The projection-plane ownership category's validators must all resolve."""
+    data = json.loads(ownership.MAP_PATH.read_text(encoding="utf-8"))
+    category = next(
+        c for c in data["change_categories"] if c["id"] == "intelligence_projection_architecture"
+    )
+    for command in category["required_commands"]:
+        assert ownership._command_available(command), command

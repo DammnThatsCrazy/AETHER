@@ -39,6 +39,7 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | tenant import engine changed | imports contract twin, `IMPORT_FAILURES.md`, generated docs, import tests |
 | measurement integrity plane changed | metric registry contract (TS/Py/doc mirrors), `MEASUREMENT_RESTATEMENT.md`, measurement tests |
 | computation substrate changed | `config/computation_inventory.yaml`, `COMPUTATION_SUBSTRATE.md`, regenerated registry twin, substrate tests |
+| intelligence projection architecture changed | generated projection artifacts (TS/Py/doc mirrors), SOT docs, `REPO-INDEX.md`/`AUTOMATION.md`, `packages/shared/index.ts`, projection tests |
 | workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
 | Aether/Kyber production data source changed | `scripts/validate_frontend_data_truth.py` source guardrail and explicit production-bundle scan |
 | deployment profile / Terraform topology changed | per-profile plan tests, plan-policy and cost-model gates, plan fixtures, delivery-topology validator, profile docs |

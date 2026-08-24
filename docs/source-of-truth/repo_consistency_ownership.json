@@ -129,6 +129,35 @@
       "required_changed_globs": ["config/computation_inventory.yaml", "docs/source-of-truth/COMPUTATION_SUBSTRATE.md", "Backend Architecture/**/tests/computation/**", "tests/**"],
       "required_commands": ["python scripts/validate_computation_substrate.py", "python scripts/generate_computation_registry.py"],
       "remediation": "Regenerate the registry twin (python scripts/generate_computation_registry.py), keep config/computation_inventory.yaml in sync, review docs/source-of-truth/COMPUTATION_SUBSTRATE.md, and update tests under Backend Architecture/aether-backend/tests/computation."
+    },
+    {
+      "id": "intelligence_projection_architecture",
+      "name": "intelligence projection architecture changed",
+      "source_globs": [
+        "packages/shared/contracts/intelligence-projection-registry.json",
+        "packages/shared/intelligence-projection.ts",
+        "packages/shared/intelligence-projections_generated.ts",
+        "Backend Architecture/aether-backend/shared/intelligence_projections/**",
+        "scripts/validate_intelligence_projections.py",
+        "scripts/lib/intelligence_projection_validation.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/index.ts",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_platform_contracts.py --check",
+        "python scripts/validate_intelligence_projections.py",
+        "python scripts/docs_drift.py --strict",
+        "make intelligence-projection-check",
+        "python -m pytest tests/unit/test_intelligence_projection_*.py -q"
+      ],
+      "remediation": "Align the intelligence projection registry with its shared contracts, generated artifacts, runtime package, and the real routes/surfaces/services its legacyBindings reference; declare any unresolved cross-registry ref in pendingAuthority/pendingReference; regenerate via python scripts/generate_platform_contracts.py; and update the projection tests."
     }
   ]
 }

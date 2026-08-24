@@ -439,6 +439,9 @@ generate-contracts: ## Regenerate all contract artifacts from JSON canonical reg
 generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts differ from committed
 	python scripts/generate_contracts.py --check
 
+intelligence-projection-check: ## CI gate — intelligence projection architecture (registry integrity, DAG, cross-registry, inventory, order-resilience)
+	$(GATE_PY) scripts/validate_intelligence_projections.py --check
+
 # ---------------------------------------------------------------------------
 # Mobile / continuity / notification productization gates (program C0-C8)
 # ---------------------------------------------------------------------------
