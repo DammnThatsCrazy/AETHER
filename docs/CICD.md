@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "b9828011"
+last_synced_commit: "18f6d3bc"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -110,6 +110,8 @@ enforced by any workflow in `.github/workflows/`.
 ### 6. Build
 
 - Docker images built and pushed to ECR (tagged with the commit SHA)
+- The shared `@aether/shared` workspace is compiled before the Aether and Kyber
+  frontend builds so their local contract imports resolve deterministically
 - TypeScript packages compiled; `packages/web/dist/` populated
 - SDK artefacts staged for release (see SDK Release below)
 - Gate: **all builds succeed, images < 500 MB compressed**
